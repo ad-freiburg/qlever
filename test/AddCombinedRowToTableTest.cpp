@@ -112,7 +112,7 @@ TEST(AddCombinedRowToTable, setInput) {
       // It is okay to flush even if no inputs were specified, as long as we
       // haven't pushed any rows yet.
       EXPECT_NO_THROW(adder.flush());
-      if constexpr (ad_utility::areExpensiveChecksEnabled()) {
+      if constexpr (ad_utility::areExpensiveChecksEnabled) {
         EXPECT_ANY_THROW(adder.addRow(0, 0));
       } else {
         adder.addRow(0, 0);
