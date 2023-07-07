@@ -117,11 +117,11 @@ void testLazyScanForJoinWithColumn(
   testLazyScan(std::move(lazyScan), scan, expectedRows);
 }
 
-// Tests the same scenario as the previous function, but assumes that the
+// Test the same scenario as the previous function, but assumes that the
 // setting up of the lazy scan fails with an exception.
 void testLazyScanWithColumnThrows(
     const std::string& kg, const SparqlTriple& scanTriple,
-    std::vector<std::string> columnEntries,
+    const std::vector<std::string>& columnEntries,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
@@ -144,7 +144,7 @@ void testLazyScanWithColumnThrows(
 
 TEST(IndexScan, lazyScanForJoinOfTwoScans) {
   SparqlTriple xpy{Tc{Var{"?x"}}, "<p>", Tc{Var{"?y"}}};
-  SparqlTriple xpz{Tc{Var{"?x"}}, "<x>", Tc{Var{"?z"}}};
+  SparqlTriple xqz{Tc{Var{"?x"}}, "<q>", Tc{Var{"?z"}}};
   {
     // In the tests we have a blocksize of two triples per block, and a new
     // block is started for a new relation. That explains the spacing of the
@@ -153,21 +153,21 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<a> <p> <A>. <a> <p> <A2>. "
         "<a> <p> <A3> . <b> <p> <B>. "
         "<b> <p> <B2> ."
-        "<b> <x> <xb>. <b> <x> <xb2> .";
+        "<b> <q> <xb>. <b> <q> <xb2> .";
 
     // When joining the <p> and <x> relations, we only need to read the last two
     // blocks of the <p> relation, as <a> never appears as a subject in <x>.
     // This means that the lazy partial scan can skip the first two triples.
-    testLazyScanForJoinOfTwoScans(kg, xpy, xpz, {{2, 5}}, {{0, 2}});
+    testLazyScanForJoinOfTwoScans(kg, xpy, xqz, {{2, 5}}, {{0, 2}});
   }
   {
     std::string kg =
         "<a> <p2> <A>. <a> <p2> <A2>. "
         "<a> <p2> <A3> . <b> <p2> <B>. "
-        "<b> <x> <xb>. <b> <x> <xb2> .";
+        "<b> <q2> <xb>. <b> <q2> <xb2> .";
     // No triple for relation <p> (which doesn't even appear in the knowledge
     // graph), so both lazy scans are empty.
-    testLazyScanForJoinOfTwoScans(kg, xpy, xpz, {}, {});
+    testLazyScanForJoinOfTwoScans(kg, xpy, xqz, {}, {});
   }
   {
     // No triple for relation <x> (which does appear in the knowledge graph, but
@@ -176,7 +176,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<a> <p> <A>. <a> <p> <A2>. "
         "<a> <p> <A3> . <b> <p> <B>. "
         "<b> <x2> <x>. <b> <x2> <xb2> .";
-    testLazyScanForJoinOfTwoScans(kg, xpy, xpz, {}, {});
+    testLazyScanForJoinOfTwoScans(kg, xpy, xqz, {}, {});
   }
   SparqlTriple bpx{Tc{"<b>"}, "<p>", Tc{Var{"?x"}}};
   {
@@ -185,33 +185,33 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<a> <p> <a3> . <b> <p> <x1>. "
         "<b> <p> <x2> . <b> <p> <x3>. "
         "<b> <p> <x4> . <b> <p> <x7>. "
-        "<x2> <x> <xb>. <x5> <x> <xb2> ."
-        "<x5> <x> <xb>. <x9> <x> <xb2> ."
-        "<x91> <x> <xb>. <x93> <x> <xb2> .";
-    testLazyScanForJoinOfTwoScans(kg, bpx, xpz, {{1, 5}}, {{0, 4}});
+        "<x2> <q> <xb>. <x5> <q> <xb2> ."
+        "<x5> <q> <xb>. <x9> <q> <xb2> ."
+        "<x91> <q> <xb>. <x93> <q> <xb2> .";
+    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{1, 5}}, {{0, 4}});
   }
   {
     std::string kg =
         "<a> <p> <a1>. <a> <p> <a2>. "
         "<a> <p> <a3> . <b> <p> <x1>. "
-        "<x2> <x> <xb>. <x5> <x> <xb2> ."
-        "<x5> <x> <xb>. <x9> <x> <xb2> ."
-        "<x91> <x> <xb>. <x93> <x> <xb2> .";
+        "<x2> <q> <xb>. <x5> <q> <xb2> ."
+        "<x5> <q> <xb>. <x9> <q> <xb2> ."
+        "<x91> <q> <xb>. <x93> <q> <xb2> .";
     // Scan for a fixed subject that appears in the kg but not as the subject of
     // the <p> predicate.
     SparqlTriple xb2px{Tc{"<xb2>"}, "<p>", Tc{Var{"?x"}}};
-    testLazyScanForJoinOfTwoScans(kg, bpx, xpz, {}, {});
+    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {}, {});
   }
   {
     std::string kg =
         "<a> <p> <a1>. <a> <p> <a2>. "
         "<a> <p> <a3> . <b> <p> <x1>. "
-        "<x2> <x> <xb>. <x5> <x> <xb2> ."
-        "<x5> <x> <xb>. <x9> <x> <xb2> ."
-        "<x91> <x> <xb>. <x93> <x> <xb2> .";
+        "<x2> <q> <xb>. <x5> <q> <xb2> ."
+        "<x5> <q> <xb>. <x9> <q> <xb2> ."
+        "<x91> <q> <xb>. <x93> <q> <xb2> .";
     // Scan for a fixed subject that is not even in the knowledge graph.
     SparqlTriple xb2px{Tc{"<notInKg>"}, "<p>", Tc{Var{"?x"}}};
-    testLazyScanForJoinOfTwoScans(kg, bpx, xpz, {}, {});
+    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {}, {});
   }
 
   // Corner cases
@@ -219,13 +219,13 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
     std::string kg = "<a> <b> <c> .";
     // Triples with three variables are not supported.
     SparqlTriple xyz{Tc{Var{"?x"}}, "?y", Tc{Var{"?z"}}};
-    testLazyScanThrows(kg, xyz, xpz);
+    testLazyScanThrows(kg, xyz, xqz);
     testLazyScanThrows(kg, xyz, xyz);
-    testLazyScanThrows(kg, xpz, xyz);
+    testLazyScanThrows(kg, xqz, xyz);
 
     // The first variable must be matching (subject variable is ?a vs ?x)
     SparqlTriple abc{Tc{Var{"?a"}}, "<b>", Tc{Var{"?c"}}};
-    testLazyScanThrows(kg, abc, xpz);
+    testLazyScanThrows(kg, abc, xqz);
 
     // If both scans have two variables, then the second variable must not
     // match.
@@ -242,26 +242,26 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanTwoVariables) {
       "<a> <p> <A>. <a> <p> <A2>. "
       "<a> <p> <A3> . <b> <p> <B>. "
       "<b> <p> <B2> ."
-      "<b> <x> <xb>. <b> <x> <xb2> .";
+      "<b> <q> <xb>. <b> <q> <xb2> .";
   {
-    std::vector<std::string> column{"<a>", "<b>", "<x>", "<xb>"};
+    std::vector<std::string> column{"<a>", "<b>", "<q>", "<xb>"};
     // We need to scan all the blocks that contain the `<p>` predicate.
     testLazyScanForJoinWithColumn(kg, xpy, column, {{0, 5}});
   }
   {
-    std::vector<std::string> column{"<b>", "<x>", "<xb>"};
+    std::vector<std::string> column{"<b>", "<q>", "<xb>"};
     // The first block only contains <a> which doesn't appear in the first
     // block.
     testLazyScanForJoinWithColumn(kg, xpy, column, {{2, 5}});
   }
   {
-    std::vector<std::string> column{"<a>", "<x>", "<xb>"};
+    std::vector<std::string> column{"<a>", "<q>", "<xb>"};
     // The first block only contains <a> which only appears in the first two
     // blocks.
     testLazyScanForJoinWithColumn(kg, xpy, column, {{0, 4}});
   }
   {
-    std::vector<std::string> column{"<a>", "<x>", "<xb>"};
+    std::vector<std::string> column{"<a>", "<q>", "<xb>"};
     // <f> does not appear as a predicate, so the result is empty.
     SparqlTriple efg{Tc{Var{"?e"}}, "<f>", Tc{Var{"?g"}}};
     testLazyScanForJoinWithColumn(kg, efg, column, {});
@@ -275,7 +275,7 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanOneVariable) {
       "<a> <p> <s99> . <b> <p> <s1>. "
       "<b> <p> <s2> . <b> <p> <s3>. "
       "<b> <p> <s6> . <b> <p> <s9>. "
-      "<b> <x> <s3>. <b> <x> <s5> .";
+      "<b> <q> <s3>. <b> <q> <s5> .";
   {
     // The subject (<b>) and predicate (<b>) are fixed, so the object is the
     // join column
@@ -291,10 +291,10 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanCornerCases) {
       "<a> <p> <A>. <a> <p> <A2>. "
       "<a> <p> <A3> . <b> <p> <B>. "
       "<b> <p> <B2> ."
-      "<b> <x> <xb>. <b> <x> <xb2> .";
+      "<b> <q> <xb>. <b> <q> <xb2> .";
 
   // Full index scans (three variables) are not supported.
-  std::vector<std::string> column{"<a>", "<b>", "<x>", "<xb>"};
+  std::vector<std::string> column{"<a>", "<b>", "<q>", "<xb>"};
   testLazyScanWithColumnThrows(kg, threeVars, column);
 
   // The join column must be sorted.
