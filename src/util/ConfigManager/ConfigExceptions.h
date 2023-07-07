@@ -16,11 +16,13 @@ namespace ad_utility {
 builds a string message, which will be later returned.
 */
 class ExceptionWithMessage : public std::exception {
- protected:
   // The error message.
   std::string message_;
 
  public:
+  std::string& getMessage();
+  const std::string& getMessage() const;
+
   const char* what() const throw() final;
 };
 
