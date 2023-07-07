@@ -86,21 +86,73 @@ TEST(IdTableHelpersHelpersTest, calculateAllSubSets) {
                            {4uL, 2uL}});
 }
 
-// Overload, who multiple join columns each have their own generators.
-TEST(IdTableHelpersTest, createRandomlyFilledIdTable) {
-  // Creates a 'generator', that counts one up, everytime it's called.
-  auto createCountUpGenerator = []() {
-    return [i = 0]() mutable { return ad_utility::testing::VocabId(i++); };
-  };
+// Checks, if a given `IdTable` has all it's entries set.
+void checkIfAllEntriesSet(const IdTable& table) {
+  ASSERT_TRUE(std::ranges::all_of(table, [](const auto& row) {
+    return std::ranges::all_of(row, [](const ValueId& entry) {
+      return ad_utility::testing::VocabId(0) <= entry &&
+             entry <= ad_utility::testing::VocabId(ValueId::maxIndex);
+    });
+  }));
+};
 
-  // Checks, if a given `IdTable` has all it's entries set.
-  auto checkIfAllEntriesSet = [](const IdTable& table) {
+// Checks, if the given `IdTable` fulfills all wanted criteria.
+void generalIdTableCheck(const IdTable& table,
+                         const size_t& expectedNumberOfRows,
+                         const size_t& expectedNumberOfColumns,
+                         bool allEntriesWereSet) {
+  ASSERT_EQ(table.numRows(), expectedNumberOfRows);
+  ASSERT_EQ(table.numColumns(), expectedNumberOfColumns);
+
+  if (allEntriesWereSet) {
     ASSERT_TRUE(std::ranges::all_of(table, [](const auto& row) {
       return std::ranges::all_of(row, [](const ValueId& entry) {
         return ad_utility::testing::VocabId(0) <= entry &&
                entry <= ad_utility::testing::VocabId(ValueId::maxIndex);
       });
     }));
+  }
+}
+
+// Overload, who doesn't uses generators for creating the content of the
+// join columns.
+TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGeneratos) {
+  // Table with zero rows/columns.
+  ASSERT_ANY_THROW(createRandomlyFilledIdTable(0, 0, 0, 0, 1));
+  ASSERT_ANY_THROW(createRandomlyFilledIdTable(1, 0, 0, 0, 1));
+  ASSERT_ANY_THROW(createRandomlyFilledIdTable(0, 1, 0, 0, 1));
+
+  // Table with out of bounds join column.
+  ASSERT_ANY_THROW(createRandomlyFilledIdTable(5, 5, 6, 0, 1));
+
+  // Table with lower bound, that is higher than the upper bound.
+  ASSERT_ANY_THROW(createRandomlyFilledIdTable(5, 5, 0, 3, 2));
+
+  // Checks, if all entries of are within a given inclusive range.
+  auto checkColumn = [](const IdTable& table, const size_t& columnNumber,
+                        const size_t& lowerBound, const size_t& upperBound) {
+    ASSERT_TRUE(std::ranges::all_of(
+        table.getColumn(columnNumber),
+        [&lowerBound, &upperBound](const ValueId& entry) {
+          return ad_utility::testing::VocabId(lowerBound) <= entry &&
+                 entry <= ad_utility::testing::VocabId(upperBound);
+        }));
+  };
+
+  IdTable result{createRandomlyFilledIdTable(5, 5, 0, 0, 10)};
+  generalIdTableCheck(result, 5, 5, true);
+  checkColumn(result, 0, 0, 10);
+
+  result = createRandomlyFilledIdTable(50, 58, 0, 30, 42);
+  generalIdTableCheck(result, 5, 5, true);
+  checkColumn(result, 0, 30, 42);
+}
+
+// Overloads, who use generators for creating the content of the join columns.
+TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGeneratos) {
+  // Creates a 'generator', that counts one up, everytime it's called.
+  auto createCountUpGenerator = []() {
+    return [i = 0]() mutable { return ad_utility::testing::VocabId(i++); };
   };
 
   // Compares the content of a specific column with a given vector.
@@ -140,8 +192,8 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTable) {
   // regardless of the amount of join columns and their position.
   std::ranges::for_each(
       calculateAllSubSets(std::vector<size_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}),
-      [&createCountUpGenerator, &compareColumnsWithVectors,
-       &checkIfAllEntriesSet](const std::vector<size_t>& joinColumns) {
+      [&createCountUpGenerator,
+       &compareColumnsWithVectors](const std::vector<size_t>& joinColumns) {
         IdTable resultMultiGenerator = createRandomlyFilledIdTable(
             10, 10,
             ad_utility::transform(
