@@ -140,7 +140,6 @@ between a collection of benchmarks of any type (single, group, table) and
 the processing/management of those benchmarks.
 */
 class BenchmarkInterface {
- protected:
   /*
   For adding configuration options and getting the values passed at runtime.
   If you want to add configuration options, do it in the constructor of your
