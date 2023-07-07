@@ -86,16 +86,6 @@ TEST(IdTableHelpersHelpersTest, calculateAllSubSets) {
                            {4uL, 2uL}});
 }
 
-// Checks, if a given `IdTable` has all it's entries set.
-void checkIfAllEntriesSet(const IdTable& table) {
-  ASSERT_TRUE(std::ranges::all_of(table, [](const auto& row) {
-    return std::ranges::all_of(row, [](const ValueId& entry) {
-      return ad_utility::testing::VocabId(0) <= entry &&
-             entry <= ad_utility::testing::VocabId(ValueId::maxIndex);
-    });
-  }));
-};
-
 // Checks, if the given `IdTable` fulfills all wanted criteria.
 void generalIdTableCheck(const IdTable& table,
                          const size_t& expectedNumberOfRows,
@@ -206,8 +196,8 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGeneratos) {
 
         // Check, if every entry of the tables was set and if the join columns
         // have the correct content.
-        checkIfAllEntriesSet(resultMultiGenerator);
-        checkIfAllEntriesSet(resultSingleGenerator);
+        generalIdTableCheck(resultMultiGenerator, 10, 10, true);
+        generalIdTableCheck(resultSingleGenerator, 10, 10, true);
         std::ranges::for_each(
             joinColumns,
             [&resultMultiGenerator, &resultSingleGenerator, &joinColumns,
@@ -237,7 +227,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGeneratos) {
       10, 10,
       {{0, createCountUpGenerator()},
        {1, []() { return ad_utility::testing::VocabId(42); }}});
-  checkIfAllEntriesSet(result);
+  generalIdTableCheck(result, 10, 10, true);
   compareColumnsWithVectors(result, 0, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
   compareColumnsWithVectors(result, 1,
                             {42, 42, 42, 42, 42, 42, 42, 42, 42, 42});
@@ -281,6 +271,7 @@ TEST(IdTableHelpersTest, generateIdTable) {
 
   // Create a `IdTable` and check it's content.
   IdTable table{generateIdTable(5, 5, createCountUpGenerator(5))};
+  generalIdTableCheck(table, 5, 5, true);
   for (size_t row = 0; row < 5; row++) {
     ASSERT_TRUE(std::ranges::all_of(table[row], [&row](const auto& entry) {
       return entry == ad_utility::testing::VocabId(row);
