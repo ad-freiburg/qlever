@@ -126,9 +126,13 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
 // check should be used when checking has a significant and measurable runtime
 // overhead, but is still feasible for a release build on a large dataset.
 #if (!defined(NDEBUG) || defined(AD_ENABLE_EXPENSIVE_CHECKS))
-#define AD_EXPENSIVE_CHECK(condition) \
-  AD_CORRECTNESS_CHECK(condition);    \
-  void(0)
+namespace ad_utility {
+static constexpr bool areExpensiveChecksEnabled = true;
+}
+#define AD_EXPENSIVE_CHECK(condition) AD_CORRECTNESS_CHECK(condition)
 #else
+namespace ad_utility {
+static constexpr bool areExpensiveChecksEnabled = false;
+}
 #define AD_EXPENSIVE_CHECK(condition) void(0)
 #endif
