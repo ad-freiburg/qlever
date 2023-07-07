@@ -73,10 +73,10 @@ class generator_promise {
   template <typename U>
   std::suspend_never await_transform(U&& value) = delete;
 
-  void rethrow_if_exception() {
-    if (m_exception) const {
-        std::rethrow_exception(m_exception);
-      }
+  void rethrow_if_exception() const {
+    if (m_exception) {
+      std::rethrow_exception(m_exception);
+    }
   }
 
   // The machinery to expose the stored `Details` via
