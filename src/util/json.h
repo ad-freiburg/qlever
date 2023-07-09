@@ -33,6 +33,9 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 
 /*
 @brief Read the specified json file and build a json object out of it.
+
+@param jsonFileName Name of the file, or path to the file. Must describe a
+`.json` file.
 */
 inline nlohmann::json fileToJson(std::string_view jsonFileName) {
   // Check, if the filename/-path ends with ".json". Checking, if it's a valid
