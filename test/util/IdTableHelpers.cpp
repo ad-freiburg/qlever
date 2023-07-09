@@ -2,9 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (Januar of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include <absl/strings/str_cat.h>
-
 #include "../test/util/IdTableHelpers.h"
+
+#include <absl/strings/str_cat.h>
 
 // ____________________________________________________________________________
 void compareIdTableWithExpectedContent(
