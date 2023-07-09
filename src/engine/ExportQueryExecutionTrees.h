@@ -5,9 +5,9 @@
 #include <cstdlib>
 
 #include "engine/QueryExecutionTree.h"
-#include "nlohmann/json.hpp"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/http/MediaTypes.h"
+#include "util/json.h"
 
 #pragma once
 

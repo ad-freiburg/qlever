@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Copyright (c) Lewis Baker
+// Copyright (c) Lewis Baker, Johannes Kalmbach (functionality to add details).
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 #ifndef CPPCORO_GENERATOR_HPP_INCLUDED
@@ -13,14 +13,26 @@
 
 // Coroutines are still experimental in clang libcpp, therefore adapt the
 // appropriate namespaces by including the convenience header.
-#include "./Coroutines.h"
+#include "util/Coroutines.h"
+#include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 namespace cppcoro {
-template <typename T>
+// This struct can be `co_await`ed inside a `generator` to obtain a reference to
+// the details object (the value of which is a template parameter to the
+// generator). For an example see `GeneratorTest.cpp`.
+struct GetDetails {};
+static constexpr GetDetails getDetails;
+
+// This struct is used as the default of the details object for the case that
+// there are no details
+struct NoDetails {};
+
+template <typename T, typename Details = NoDetails>
 class generator;
 
 namespace detail {
-template <typename T>
+template <typename T, typename Details = NoDetails>
 class generator_promise {
  public:
   // Even if the generator only yields `const` values, the `value_type`
@@ -32,7 +44,7 @@ class generator_promise {
 
   generator_promise() = default;
 
-  generator<T> get_return_object() noexcept;
+  generator<T, Details> get_return_object() noexcept;
 
   constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
   constexpr std::suspend_always final_suspend() const noexcept { return {}; }
@@ -61,31 +73,63 @@ class generator_promise {
   template <typename U>
   std::suspend_never await_transform(U&& value) = delete;
 
-  void rethrow_if_exception() {
+  void rethrow_if_exception() const {
     if (m_exception) {
       std::rethrow_exception(m_exception);
     }
   }
 
+  // The machinery to expose the stored `Details` via
+  // `co_await cppcoro::getDetails`.
+  struct DetailAwaiter {
+    generator_promise& promise_;
+    bool await_ready() const { return true; }
+    bool await_suspend(std::coroutine_handle<>) const noexcept { return false; }
+    Details& await_resume() noexcept { return promise_.details(); }
+  };
+
+  DetailAwaiter await_transform(
+      [[maybe_unused]] ad_utility::SimilarTo<GetDetails> auto&& detail) {
+    return {*this};
+  }
+
+  static constexpr bool hasDetails = !std::is_same_v<Details, NoDetails>;
+  Details& details() requires hasDetails {
+    return std::holds_alternative<Details>(m_details)
+               ? std::get<Details>(m_details)
+               : *std::get<Details*>(m_details);
+  }
+
+  void setDetailsPointer(Details* pointer) requires hasDetails {
+    AD_CONTRACT_CHECK(pointer != nullptr);
+    m_details = pointer;
+  }
+
  private:
   pointer_type m_value;
   std::exception_ptr m_exception;
+
+  using DetailStorage =
+      std::conditional_t<hasDetails, std::variant<Details, Details*>, Details>;
+  // If the `Details` type is empty, we don't need it to occupy any space.
+  [[no_unique_address]] DetailStorage m_details{};
 };
 
 struct generator_sentinel {};
 
-template <typename T>
+template <typename T, typename Details>
 class generator_iterator {
-  using coroutine_handle = std::coroutine_handle<generator_promise<T>>;
+  using promise_type = generator_promise<T, Details>;
+  using coroutine_handle = std::coroutine_handle<promise_type>;
 
  public:
   using iterator_category = std::input_iterator_tag;
   // What type should we use for counting elements of a potentially infinite
   // sequence?
   using difference_type = std::ptrdiff_t;
-  using value_type = typename generator_promise<T>::value_type;
-  using reference = typename generator_promise<T>::reference_type;
-  using pointer = typename generator_promise<T>::pointer_type;
+  using value_type = typename promise_type::value_type;
+  using reference = typename promise_type::reference_type;
+  using pointer = typename promise_type::pointer_type;
 
   // Iterator needs to be default-constructible to satisfy the Range concept.
   generator_iterator() noexcept : m_coroutine(nullptr) {}
@@ -134,11 +178,11 @@ class generator_iterator {
 };
 }  // namespace detail
 
-template <typename T>
+template <typename T, typename Details>
 class [[nodiscard]] generator {
  public:
-  using promise_type = detail::generator_promise<T>;
-  using iterator = detail::generator_iterator<T>;
+  using promise_type = detail::generator_promise<T, Details>;
+  using iterator = detail::generator_iterator<T, Details>;
   using value_type = typename iterator::value_type;
 
   generator() noexcept : m_coroutine(nullptr) {}
@@ -179,8 +223,26 @@ class [[nodiscard]] generator {
     std::swap(m_coroutine, other.m_coroutine);
   }
 
+  const Details& details() const {
+    return m_coroutine ? m_coroutine.promise().details()
+                       : m_details_if_default_constructed;
+  }
+  Details& details() {
+    return m_coroutine ? m_coroutine.promise().details()
+                       : m_details_if_default_constructed;
+  }
+
+  void setDetailsPointer(Details* pointer) {
+    m_coroutine.promise().setDetailsPointer(pointer);
+  }
+
  private:
-  friend class detail::generator_promise<T>;
+  friend class detail::generator_promise<T, Details>;
+
+  // In the case of an empty, default-constructed `generator` object we still
+  // want the call to `details` to return a valid object that in this case is
+  // owned directly by the generator itself.
+  [[no_unique_address]] Details m_details_if_default_constructed;
 
   explicit generator(std::coroutine_handle<promise_type> coroutine) noexcept
       : m_coroutine(coroutine) {}
@@ -194,10 +256,11 @@ void swap(generator<T>& a, generator<T>& b) {
 }
 
 namespace detail {
-template <typename T>
-generator<T> generator_promise<T>::get_return_object() noexcept {
-  using coroutine_handle = std::coroutine_handle<generator_promise<T>>;
-  return generator<T>{coroutine_handle::from_promise(*this)};
+template <typename T, typename Details>
+generator<T, Details>
+generator_promise<T, Details>::get_return_object() noexcept {
+  using coroutine_handle = std::coroutine_handle<generator_promise<T, Details>>;
+  return generator<T, Details>{coroutine_handle::from_promise(*this)};
 }
 }  // namespace detail
 

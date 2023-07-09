@@ -337,3 +337,5 @@ addLinkAndDiscoverTest(ComparisonWithNanTest)
 addLinkAndDiscoverTest(ThreadSafeQueueTest)
 
 addLinkAndDiscoverTest(JsonUtilTest)
+
+addLinkAndDiscoverTest(GeneratorTest)

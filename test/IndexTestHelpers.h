@@ -21,6 +21,11 @@ namespace ad_utility::testing {
 inline Index makeIndexWithTestSettings() {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
+  // This is enough for 2 triples per block. This is deliberately chosen as a
+  // small value, s.t. the tiny knowledge graphs from unit tests also contain
+  // multiple blocks. Should this value or the semantics of it (how many triples
+  // it may store) ever change, then some unit tests might have to be adapted.
+  index.blocksizePermutationsInBytes() = 32;
   index.stxxlMemoryInBytes() = 1024ul * 1024ul * 50;
   return index;
 }

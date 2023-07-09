@@ -158,9 +158,7 @@ class CompressedRelationWriter {
 
  public:
   /// Create using a filename, to which the relation data will be written.
-  explicit CompressedRelationWriter(
-      ad_utility::File f,
-      size_t numBytesPerBlock = BLOCKSIZE_COMPRESSED_METADATA)
+  explicit CompressedRelationWriter(ad_utility::File f, size_t numBytesPerBlock)
       : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock} {}
 
   /**

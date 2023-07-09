@@ -14,13 +14,13 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "index/Index.h"
-#include "nlohmann/json.hpp"
 #include "parser/ParseException.h"
 #include "parser/SparqlParser.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Timer.h"
 #include "util/http/HttpServer.h"
 #include "util/http/streamable_body.h"
+#include "util/json.h"
 
 using nlohmann::json;
 using std::string;
