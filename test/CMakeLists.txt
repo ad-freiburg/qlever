@@ -336,3 +336,5 @@ addLinkAndDiscoverTest(ComparisonWithNanTest)
 addLinkAndDiscoverTest(ThreadSafeQueueTest)
 
 addLinkAndDiscoverTest(IdTableHelpersTest engine testUtil)
+
+addLinkAndDiscoverTest(GeneratorTest)
