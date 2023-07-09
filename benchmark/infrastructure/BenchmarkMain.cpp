@@ -40,18 +40,6 @@ static void writeJsonToFile(nlohmann::json j, const std::string& fileName,
       << j;
 }
 
-static std::string readFileToString(const std::string& fileName) {
-  // The string gets build using a string stream.
-  std::ostringstream transcribedString{};
-
-  // Adding a buffer using `<<` causes the content of the buffer to be
-  // individually added to the string stream. In other words: The entire
-  // content of the opened file will be added.
-  transcribedString << ad_utility::makeIfstream(fileName).rdbuf();
-
-  return transcribedString.str();
-}
-
 /*
  * @brief Goes through all types of registered benchmarks, measures their time
  * and prints their measured time in a fitting format.
@@ -115,7 +103,9 @@ int main(int argc, char** argv) {
   BenchmarkConfiguration config{};
 
   if (vm.count("configuration-json")) {
-    config.setJsonString(readFileToString(jsonConfigurationFileName));
+    // TODO Get rid of the `dump()`, once the branch for general configuration
+    // options was merged.
+    config.setJsonString(fileToJson(jsonConfigurationFileName).dump());
   }
   if (vm.count("configuration-shorthand")) {
     config.addShortHand(shortHandConfigurationString);

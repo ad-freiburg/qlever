@@ -12,6 +12,9 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 
 // Disallow implicit conversions from nlohmann::json to other types,
 // most notably to std::string.
+#include <stdexcept>
+
+#include "util/File.h"
 #define JSON_USE_IMPLICIT_CONVERSIONS 0
 
 #include <absl/strings/str_cat.h>
@@ -27,6 +30,21 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/SourceLocation.h"
+
+/*
+@brief Read the specified json file and build a json object out of it.
+*/
+inline nlohmann::json fileToJson(std::string_view jsonFileName) {
+  // Check, if the filename/-path ends with ".json". Checking, if it's a valid
+  // file, is done by `ad_utility::makeIfstream`.
+  if (!jsonFileName.ends_with(".json")) {
+    throw std::runtime_error(absl::StrCat("The given filename/-path '",
+                                          jsonFileName,
+                                          "' doesn't describe a json file."));
+  }
+
+  return nlohmann::json::parse(ad_utility::makeIfstream(jsonFileName));
+}
 
 /*
 Added support for serializing `std::optional` using `nlohmann::json`.
