@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (Januar of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include <absl/strings/str_cat.h>
+
 #include "../test/util/IdTableHelpers.h"
 
 // ____________________________________________________________________________
@@ -72,9 +74,10 @@ IdTable generateIdTable(
     IdTable::row_type row = rowGenerator();
 
     if (row.numColumns() != numberColumns) {
-      throw std::runtime_error(
-          "The row generator generated a IdTable::row_type, which didn't have "
-          "the wanted size.");
+      throw std::runtime_error(absl::StrCat(
+          "The row generator generated a IdTable::row_type of size ",
+          row.numColumns(), ", which is not the wanted size ", numberColumns,
+          "."));
     }
 
     return row;
@@ -95,21 +98,24 @@ IdTable createRandomlyFilledIdTable(
   auto joinColumnGeneratorView = std::views::values(joinColumnWithGenerator);
 
   // Are all the join column numbers within the max column number?
-  if (std::ranges::any_of(joinColumnNumberView,
-                          [&numberColumns](const size_t& num) {
-                            return num >= numberColumns;
-                          })) {
+  if (auto column = std::ranges::find_if(
+          joinColumnNumberView,
+          [&numberColumns](const size_t& num) { return num >= numberColumns; });
+      column != joinColumnNumberView.end()) {
     throw std::runtime_error(
-        "At least one of the join columns is out of bounds.");
+        absl::StrCat("The join columns", *column, " is out of bounds."));
   }
 
   // Are there no duplicates in the join column numbers?
   for (auto it = joinColumnNumberView.begin(); it != joinColumnNumberView.end();
        it++) {
-    if (std::ranges::any_of(it + 1, joinColumnNumberView.end(),
-                            [&it](const size_t& num) { return *it == num; })) {
+    if (auto column = std::ranges::find_if(
+            it + 1, joinColumnNumberView.end(),
+            [&it](const size_t& num) { return *it == num; });
+        column != joinColumnNumberView.end()) {
       throw std::runtime_error(
-          "A join column got at least two generator assigned to it.");
+          absl::StrCat("Join column ", *column,
+                       " got at least two generator assigned to it."));
     }
   }
 
