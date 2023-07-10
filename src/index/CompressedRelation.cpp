@@ -315,6 +315,30 @@ auto getRelevantIdFromTriple(
                                metadataAndBlocks.col1Id_.value())
       .value_or(triple.col2Id_);
 }
+
+// Set the first triple of the first block in `blocks` and the last triple of
+// the last block according to the `firstAndLastTriple`.
+void setFirstAndLastTriple(
+    std::vector<CompressedBlockMetadata>& blocks,
+    const std::optional<
+        CompressedRelationReader::MetadataAndBlocks::FirstAndLastTriple>&
+        firstAndLastTriple) {
+  if (blocks.empty() || !firstAndLastTriple.has_value()) {
+    return;
+  }
+
+  // Check that the `newTriple` can be safely set as the first or last triple of
+  // either the `block` without breaking the ordering of the first block.
+  auto check = [](const auto& newTriple, const auto& block) {
+    AD_CORRECTNESS_CHECK(block.firstTriple_ <= newTriple);
+    AD_CORRECTNESS_CHECK(newTriple <= block.lastTriple_);
+  };
+  check(firstAndLastTriple.value().firstTriple_, blocks.front());
+  blocks.front().firstTriple_ = firstAndLastTriple.value().firstTriple_;
+
+  check(firstAndLastTriple.value().lastTriple_, blocks.back());
+  blocks.back().lastTriple_ = firstAndLastTriple.value().lastTriple_;
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -325,11 +349,7 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   auto relevantBlocksSpan = getBlocksFromMetadata(metadataAndBlocks);
   std::vector relevantBlocks(relevantBlocksSpan.begin(),
                              relevantBlocksSpan.end());
-  if (metadataAndBlocks.firstTriple_.has_value()) {
-    relevantBlocks.front().firstTriple_ =
-        metadataAndBlocks.firstTriple_.value();
-    relevantBlocks.back().lastTriple_ = metadataAndBlocks.lastTriple_.value();
-  }
+  setFirstAndLastTriple(relevantBlocks, metadataAndBlocks.firstAndLastTriple_);
 
   // We need symmetric comparisons between Ids and blocks.
   auto idLessThanBlock = [&metadataAndBlocks](
@@ -378,30 +398,16 @@ CompressedRelationReader::getBlocksForJoin(
   auto relevantBlocks1Span = getBlocksFromMetadata(metadataAndBlocks1);
   auto relevantBlocks2Span = getBlocksFromMetadata(metadataAndBlocks2);
 
+  // TODO<
   std::vector relevantBlocks1(relevantBlocks1Span.begin(),
                               relevantBlocks1Span.end());
   std::vector relevantBlocks2(relevantBlocks2Span.begin(),
                               relevantBlocks2Span.end());
 
-  // TODO<joka921> This is rather hacky, make it a little cleaner with
-  // assertions etc. Also we need less code in the `getRelevantIdFromTriple`
-  // function if we enfore the first and last triple to be present.
-  if (relevantBlocks1.empty() || relevantBlocks2.empty()) {
-    return {};
-  }
-
-  if (metadataAndBlocks1.firstTriple_.has_value()) {
-    relevantBlocks1.front().firstTriple_ =
-        metadataAndBlocks1.firstTriple_.value();
-    relevantBlocks1.back().lastTriple_ = metadataAndBlocks1.lastTriple_.value();
-  }
-
-  if (metadataAndBlocks2.firstTriple_.has_value()) {
-    relevantBlocks2.front().firstTriple_ =
-        metadataAndBlocks2.firstTriple_.value();
-    relevantBlocks2.back().lastTriple_ = metadataAndBlocks2.lastTriple_.value();
-  }
-
+  setFirstAndLastTriple(relevantBlocks1,
+                        metadataAndBlocks1.firstAndLastTriple_);
+  setFirstAndLastTriple(relevantBlocks2,
+                        metadataAndBlocks2.firstAndLastTriple_);
   auto metadataForBlock =
       [&](const CompressedBlockMetadata& block) -> decltype(auto) {
     if (relevantBlocks1.data() <= &block &&
@@ -936,10 +942,9 @@ CompressedRelationReader::getBlocksFromMetadata(
 }
 
 // _____________________________________________________________________________
-std::array<CompressedBlockMetadata::PermutedTriple, 2>
-CompressedRelationReader::getFirstAndLastTriple(
+auto CompressedRelationReader::getFirstAndLastTriple(
     const CompressedRelationReader::MetadataAndBlocks& metadataAndBlocks,
-    ad_utility::File& file) const {
+    ad_utility::File& file) const -> MetadataAndBlocks::FirstAndLastTriple {
   auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
   AD_CONTRACT_CHECK(!relevantBlocks.empty());
 

@@ -55,6 +55,17 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   _sizeEstimate = 0;
   _sizeEstimateComputed = false;
   _multiplicities.clear();
+  auto findJoinVar = [](const QueryExecutionTree& tree,
+                        ColumnIndex joinCol) -> Variable {
+    for (auto p : tree.getVariableColumns()) {
+      if (p.second.columnIndex_ == joinCol) {
+        return p.first;
+      }
+    }
+    AD_FAIL();
+  };
+  _joinVar = findJoinVar(*_left, _leftJoinCol);
+  AD_CONTRACT_CHECK(_joinVar == findJoinVar(*_right, _rightJoinCol));
 }
 
 // _____________________________________________________________________________
@@ -83,16 +94,7 @@ string Join::asStringImpl(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-string Join::getDescriptor() const {
-  std::string joinVar = "";
-  for (auto p : _left->getVariableColumns()) {
-    if (p.second.columnIndex_ == _leftJoinCol) {
-      joinVar = p.first.name();
-      break;
-    }
-  }
-  return "Join on " + joinVar;
-}
+string Join::getDescriptor() const { return "Join on " + _joinVar.name(); }
 
 // _____________________________________________________________________________
 ResultTable Join::computeResult() {
@@ -114,15 +116,29 @@ ResultTable Join::computeResult() {
     return computeResultForJoinWithFullScanDummy();
   }
 
-  auto getCachedOrSmallResult = [](QueryExecutionTree& tree) {
+  // Always materialize results that meet one of the following criteria:
+  // * They are already present in the cache
+  // * Their result is small
+  // * They might contain UNDEF values in the join column
+  // The first two conditions are for performance reasons, the last one is
+  // because we currently cannot perform the optimized lazy joins when UNDEF
+  // values are involved.
+  auto getCachedOrSmallResult = [](QueryExecutionTree& tree,
+                                   ColumnIndex joinCol) {
     bool readOnlyCachedResult =
         tree.getRootOperation()->getSizeEstimate() >
         RuntimeParameters().get<"lazy-index-scan-max-size-materialization">();
+    auto undefStatus =
+        tree.getVariableAndInfoByColumnIndex(joinCol).second.mightContainUndef_;
+    readOnlyCachedResult =
+        readOnlyCachedResult &&
+        undefStatus == ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+
     return tree.getRootOperation()->getResult(false, readOnlyCachedResult);
   };
 
-  auto leftResIfCached = getCachedOrSmallResult(*_left);
-  auto rightResIfCached = getCachedOrSmallResult(*_right);
+  auto leftResIfCached = getCachedOrSmallResult(*_left, _leftJoinCol);
+  auto rightResIfCached = getCachedOrSmallResult(*_right, _rightJoinCol);
 
   if (_left->getType() == QueryExecutionTree::SCAN &&
       _right->getType() == QueryExecutionTree::SCAN) {
@@ -154,7 +170,13 @@ ResultTable Join::computeResult() {
 
   // Note: If only one of the children is a scan, then we have made sure in the
   // constructor that it is the right child.
-  if (_right->getType() == QueryExecutionTree::SCAN && !rightResIfCached) {
+  // We currently cannot use this optimized lazy scan if the result from `_left`
+  // contains UNDEF values.
+  const auto& leftIdTable = leftRes->idTable();
+  auto leftHasUndef =
+      !leftIdTable.empty() && leftIdTable.at(0, _leftJoinCol).isUndefined();
+  if (_right->getType() == QueryExecutionTree::SCAN && !rightResIfCached &&
+      !leftHasUndef) {
     idTable = computeResultForIndexScanAndIdTable<false>(
         leftRes->idTable(), _leftJoinCol,
         dynamic_cast<IndexScan&>(*_right->getRootOperation()), _rightJoinCol);

@@ -207,11 +207,22 @@ TEST(JoinTest, joinTest) {
   runTestCasesForAllJoinAlgorithms(createJoinTestSet());
 };
 
+// Several helpers for the test cases below.
 namespace {
 
+// The exact order of the columns of a join result might change over time, for
+// example we reorder inputs for simplicity or to more easily find them in the
+// cache. That's why we only assert that the column associated with a given
+// variabel contains the expected contents, independent of the concrete column
+// index that variable is assigned to.
+
+// A hash map that connects variables to the expected contents of the
+// corresponding result column and the `UndefStatus`.
 using ExpectedColumns = ad_utility::HashMap<
     Variable,
     std::pair<std::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
+
+// Test that the result of the `join` matches the `expected` outcome.
 void testJoinOperation(Join& join, const ExpectedColumns& expected) {
   auto res = join.getResult();
   const auto& varToCols = join.getExternallyVisibleVariableColumns();
@@ -227,23 +238,30 @@ void testJoinOperation(Join& join, const ExpectedColumns& expected) {
   }
 }
 
+// Convert a `VariableToColumnMap` (which assumes a fixed ordering of the
+// columns), and an `idTable` to the `ExpectedColumns` format that is
+// independent of the concrete assignment from variables to columns indices
 ExpectedColumns makeExpectedColumns(const VariableToColumnMap& varToColMap,
-                                    const IdTable& table) {
+                                    const IdTable& idTable) {
   ExpectedColumns result;
   for (const auto& [var, colIndexAndStatus] : varToColMap) {
-    result[var] = {table.getColumn(colIndexAndStatus.columnIndex_),
+    result[var] = {idTable.getColumn(colIndexAndStatus.columnIndex_),
                    colIndexAndStatus.mightContainUndef_};
   }
   return result;
 }
 
+// Create a `Values` clause with a single `variable` that stores the given
+// `values`. The values must all be vocabulary entries (IRIs or literals) that
+// are contained in the index of the `qec`, otherwise `std::bad_optional_access`
+// will be thrown.
 std::shared_ptr<QueryExecutionTree> makeValuesForSingleVariable(
-    QueryExecutionContext* qec, std::string var,
+    QueryExecutionContext* qec, std::string variable,
     std::vector<std::string> values) {
   parsedQuery::SparqlValues sparqlValues;
-  sparqlValues._variables.emplace_back(var);
-  for (const auto& value : values) {
-    sparqlValues._values.push_back({TripleComponent{value}});
+  sparqlValues._variables.emplace_back(std::move(variable));
+  for (auto& value : values) {
+    sparqlValues._values.push_back({TripleComponent{std::move(value)}});
   }
   return ad_utility::makeExecutionTree<Values>(qec, sparqlValues);
 }
@@ -280,48 +298,61 @@ TEST(JoinTest, joinWithFullScanPSO) {
   EXPECT_ANY_THROW(Join(qec, fullScanPSO, fullScanPSO, 0, 0));
 }
 
+// The following two tests run different code depending on the setting of the
+// maximal size for materialized index scans. That's why they are run twice with
+// different settings.
 TEST(JoinTest, joinWithColumnAndScan) {
-  auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
-  auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
-      qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
-  auto valuesTree = makeValuesForSingleVariable(qec, "?s", {"<x>"});
+  auto test = [](bool materializeIndexScans) {
+    auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
+    RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(
+        materializeIndexScans ? 1'000'000 : 0);
+    auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
+        qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
+    auto valuesTree = makeValuesForSingleVariable(qec, "?s", {"<x>"});
 
-  auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
+    auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
 
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  auto idX = getId("<x>");
-  auto expected = makeIdTableFromVector({{idX, I(1)}});
-  VariableToColumnMap expectedVariables{
-      {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
-      {Variable{"?o"}, makeAlwaysDefinedColumn(1)}};
-  testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
+    auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+    auto idX = getId("<x>");
+    auto expected = makeIdTableFromVector({{idX, I(1)}});
+    VariableToColumnMap expectedVariables{
+        {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
+        {Variable{"?o"}, makeAlwaysDefinedColumn(1)}};
+    testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
 
-  auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0};
-  testJoinOperation(joinSwitched,
-                    makeExpectedColumns(expectedVariables, expected));
+    auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0};
+    testJoinOperation(joinSwitched,
+                      makeExpectedColumns(expectedVariables, expected));
+  };
+  test(true);
+  test(false);
 }
 
 TEST(JoinTest, joinTwoScans) {
-  auto qec = ad_utility::testing::getQec(
-      "<x> <p> 1. <x2> <p> 2. <x> <p2> 3 . <x2> <p2> 4. ");
-  auto scanP = ad_utility::makeExecutionTree<IndexScan>(
-      qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
-  // TODO<joka921> Who should catch the case that there are too many variables
-  // in common?
-  auto scanP2 = ad_utility::makeExecutionTree<IndexScan>(
-      qec, PSO, SparqlTriple{Var{"?s"}, "<p2>", Var{"?q"}});
-  auto join = Join{qec, scanP2, scanP, 0, 0};
+  auto test = [](bool materializeIndexScans) {
+    auto qec = ad_utility::testing::getQec(
+        "<x> <p> 1. <x2> <p> 2. <x> <p2> 3 . <x2> <p2> 4. ");
+    RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(
+        materializeIndexScans ? 1'000'000 : 0);
+    auto scanP = ad_utility::makeExecutionTree<IndexScan>(
+        qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
+    auto scanP2 = ad_utility::makeExecutionTree<IndexScan>(
+        qec, PSO, SparqlTriple{Var{"?s"}, "<p2>", Var{"?q"}});
+    auto join = Join{qec, scanP2, scanP, 0, 0};
 
-  auto id = ad_utility::testing::makeGetId(qec->getIndex());
-  auto expected = makeIdTableFromVector(
-      {{id("<x>"), I(3), I(1)}, {id("<x2>"), I(4), I(2)}});
-  VariableToColumnMap expectedVariables{
-      {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
-      {Variable{"?q"}, makeAlwaysDefinedColumn(1)},
-      {Variable{"?o"}, makeAlwaysDefinedColumn(2)}};
-  testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
+    auto id = ad_utility::testing::makeGetId(qec->getIndex());
+    auto expected = makeIdTableFromVector(
+        {{id("<x>"), I(3), I(1)}, {id("<x2>"), I(4), I(2)}});
+    VariableToColumnMap expectedVariables{
+        {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
+        {Variable{"?q"}, makeAlwaysDefinedColumn(1)},
+        {Variable{"?o"}, makeAlwaysDefinedColumn(2)}};
+    testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
 
-  auto joinSwitched = Join{qec, scanP2, scanP, 0, 0};
-  testJoinOperation(joinSwitched,
-                    makeExpectedColumns(expectedVariables, expected));
+    auto joinSwitched = Join{qec, scanP2, scanP, 0, 0};
+    testJoinOperation(joinSwitched,
+                      makeExpectedColumns(expectedVariables, expected));
+  };
+  test(true);
+  test(false);
 }

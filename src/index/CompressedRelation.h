@@ -79,6 +79,17 @@ struct CompressedBlockMetadata {
     Id col1Id_;
     Id col2Id_;
     bool operator==(const PermutedTriple&) const = default;
+    // Convert to a plain array.
+    std::array<Id, 3> toArray() const { return {col0Id_, col1Id_, col2Id_}; }
+
+    // Compare lexicographically.
+    auto operator<=>(const PermutedTriple& other) const {
+      auto arr1 = toArray();
+      auto arr2 = other.toArray();
+      return std::lexicographical_compare_three_way(arr1.begin(), arr1.end(),
+                                                    arr2.begin(), arr2.end());
+    }
+
     friend std::true_type allowTrivialSerialization(PermutedTriple, auto);
   };
   PermutedTriple firstTriple_;
@@ -238,8 +249,17 @@ class CompressedRelationReader {
     const std::span<const CompressedBlockMetadata> blockMetadata_;
     std::optional<Id> col1Id_;
 
-    std::optional<CompressedBlockMetadata::PermutedTriple> firstTriple_;
-    std::optional<CompressedBlockMetadata::PermutedTriple> lastTriple_;
+    // If set, then those contain the first and the last triple of the specified
+    // relation (and being filtered by the `col1Id` if specified). This might be
+    // different from the first triple in the first block (in the case of the
+    // `firstTriple_`, similarly for `lastTriple_`) because the first and last
+    // block might also contain other relations, or the same relation but with
+    // different `col1Id`s.
+    struct FirstAndLastTriple {
+      CompressedBlockMetadata::PermutedTriple firstTriple_;
+      CompressedBlockMetadata::PermutedTriple lastTriple_;
+    };
+    std::optional<FirstAndLastTriple> firstAndLastTriple_;
   };
 
   struct LazyScanMetadata {
@@ -365,7 +385,12 @@ class CompressedRelationReader {
   static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
       const MetadataAndBlocks& metadataAndBlocks);
 
-  std::array<CompressedBlockMetadata::PermutedTriple, 2> getFirstAndLastTriple(
+  // Get the first and the last triple that the result of a `scan` with the
+  // given argument would lead to. Throw an exception if the scan result would
+  // be empty. This function is used to more efficiently filter the blocks of
+  // index scans between joining them to get better estimates for the begginning
+  // and end of incomplete blocks.
+  MetadataAndBlocks::FirstAndLastTriple getFirstAndLastTriple(
       const MetadataAndBlocks& metadataAndBlocks, ad_utility::File& file) const;
 
   // Get access to the underlying allocator

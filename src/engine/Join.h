@@ -25,6 +25,8 @@ class Join : public Operation {
   ColumnIndex _leftJoinCol;
   ColumnIndex _rightJoinCol;
 
+  Variable _joinVar{"?notSet"};
+
   bool _keepJoinColumn;
 
   bool _sizeEstimateComputed;
