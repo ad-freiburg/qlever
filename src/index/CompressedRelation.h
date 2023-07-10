@@ -82,12 +82,14 @@ struct CompressedBlockMetadata {
     // Convert to a plain array.
     std::array<Id, 3> toArray() const { return {col0Id_, col1Id_, col2Id_}; }
 
-    // Compare lexicographically.
-    auto operator<=>(const PermutedTriple& other) const {
+    // Compare lexicographically. We currently only need less equal for
+    // assertions. We could use `std::lexicographical_compare_three_way` as soon
+    // as it is supported by Clang's libc++.
+    auto operator<=(const PermutedTriple& other) const {
       auto arr1 = toArray();
       auto arr2 = other.toArray();
-      return std::lexicographical_compare_three_way(arr1.begin(), arr1.end(),
-                                                    arr2.begin(), arr2.end());
+      return !std::lexicographical_compare(arr2.begin(), arr2.end(),
+                                                    arr1.begin(), arr1.end());
     }
 
     friend std::true_type allowTrivialSerialization(PermutedTriple, auto);
