@@ -46,7 +46,13 @@ inline nlohmann::json fileToJson(std::string_view jsonFileName) {
         "' doesn't end with '.json'. Therefore, it can't be a json file."));
   }
 
-  return nlohmann::json::parse(ad_utility::makeIfstream(jsonFileName));
+  try {
+    return nlohmann::json::parse(ad_utility::makeIfstream(jsonFileName));
+  } catch (const nlohmann::json::exception& e) {
+    throw std::runtime_error(absl::StrCat(
+        "The contents of the file ", jsonFileName,
+        " could not be parsed as JSON. The error was: ", e.what()));
+  }
 }
 
 /*

@@ -12,6 +12,14 @@
 #include "util/json.h"
 
 TEST(JsonUtilityFunctionTests, fileToJson) {
+  // Creates a file with the given name and content. Can be deleted with
+  // `ad_utility::deleteFile(fileName)`.
+  auto createFile = [](std::string_view fileName, auto fileContent) {
+    std::ofstream tempStream{ad_utility::makeOfstream(fileName)};
+    tempStream << fileContent << std::endl;
+    tempStream.close();
+  };
+
   // The helper function only wants `.json` files.
   AD_EXPECT_THROW_WITH_MESSAGE(
       fileToJson("NotAJsonFile.txt"),
@@ -28,14 +36,19 @@ TEST(JsonUtilityFunctionTests, fileToJson) {
       fileToJson("FileINeverCreated.json"),
       ::testing::ContainsRegex(R"(Could not open file)"));
 
+  // File exists, but doesn't contain valid json.
+  createFile("NotJson.json", R"("d":4)");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      fileToJson("NotJson.json"),
+      ::testing::ContainsRegex("could not be parsed as JSON"));
+  ad_utility::deleteFile("NotJson.json");
+
   // Creates a temporare file, containing the given json object, and checks, if
   // `fileToJson` recreates it correctly.
-  auto makeTempFileAndCompare = [](const nlohmann::json& j) {
+  auto makeTempFileAndCompare = [&createFile](const nlohmann::json& j) {
     // Creating the file.
     constexpr std::string_view fileName{"TempTestFile.json"};
-    std::ofstream tempStream{ad_utility::makeOfstream(fileName)};
-    tempStream << j << std::endl;
-    tempStream.close();
+    createFile(fileName, j);
 
     EXPECT_EQ(j, fileToJson(fileName));
 
