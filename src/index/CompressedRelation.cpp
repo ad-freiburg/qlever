@@ -322,7 +322,14 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
     std::span<const Id> joinColumn,
     const MetadataAndBlocks& metadataAndBlocks) {
   // Get all the blocks where `col0FirstId_ <= col0Id <= col0LastId_`.
-  auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
+  auto relevantBlocksSpan = getBlocksFromMetadata(metadataAndBlocks);
+  std::vector relevantBlocks(relevantBlocksSpan.begin(),
+                             relevantBlocksSpan.end());
+  if (metadataAndBlocks.firstTriple_.has_value()) {
+    relevantBlocks.front().firstTriple_ =
+        metadataAndBlocks.firstTriple_.value();
+    relevantBlocks.back().lastTriple_ = metadataAndBlocks.lastTriple_.value();
+  }
 
   // We need symmetric comparisons between Ids and blocks.
   auto idLessThanBlock = [&metadataAndBlocks](
@@ -368,8 +375,32 @@ std::array<std::vector<CompressedBlockMetadata>, 2>
 CompressedRelationReader::getBlocksForJoin(
     const MetadataAndBlocks& metadataAndBlocks1,
     const MetadataAndBlocks& metadataAndBlocks2) {
-  auto relevantBlocks1 = getBlocksFromMetadata(metadataAndBlocks1);
-  auto relevantBlocks2 = getBlocksFromMetadata(metadataAndBlocks2);
+  auto relevantBlocks1Span = getBlocksFromMetadata(metadataAndBlocks1);
+  auto relevantBlocks2Span = getBlocksFromMetadata(metadataAndBlocks2);
+
+  std::vector relevantBlocks1(relevantBlocks1Span.begin(),
+                              relevantBlocks1Span.end());
+  std::vector relevantBlocks2(relevantBlocks2Span.begin(),
+                              relevantBlocks2Span.end());
+
+  // TODO<joka921> This is rather hacky, make it a little cleaner with
+  // assertions etc. Also we need less code in the `getRelevantIdFromTriple`
+  // function if we enfore the first and last triple to be present.
+  if (relevantBlocks1.empty() || relevantBlocks2.empty()) {
+    return {};
+  }
+
+  if (metadataAndBlocks1.firstTriple_.has_value()) {
+    relevantBlocks1.front().firstTriple_ =
+        metadataAndBlocks1.firstTriple_.value();
+    relevantBlocks1.back().lastTriple_ = metadataAndBlocks1.lastTriple_.value();
+  }
+
+  if (metadataAndBlocks2.firstTriple_.has_value()) {
+    relevantBlocks2.front().firstTriple_ =
+        metadataAndBlocks2.firstTriple_.value();
+    relevantBlocks2.back().lastTriple_ = metadataAndBlocks2.lastTriple_.value();
+  }
 
   auto metadataForBlock =
       [&](const CompressedBlockMetadata& block) -> decltype(auto) {
@@ -424,7 +455,7 @@ CompressedRelationReader::getBlocksForJoin(
 // _____________________________________________________________________________
 IdTable CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata, Id col1Id,
-    const vector<CompressedBlockMetadata>& blocks, ad_utility::File& file,
+    std::span<const CompressedBlockMetadata> blocks, ad_utility::File& file,
     const TimeoutTimer& timer) const {
   IdTable result(1, allocator_);
 
@@ -902,4 +933,30 @@ CompressedRelationReader::getBlocksFromMetadata(
     const MetadataAndBlocks& metadata) {
   return getBlocksFromMetadata(metadata.relationMetadata_, metadata.col1Id_,
                                metadata.blockMetadata_);
+}
+
+// _____________________________________________________________________________
+std::array<CompressedBlockMetadata::PermutedTriple, 2>
+CompressedRelationReader::getFirstAndLastTriple(
+    const CompressedRelationReader::MetadataAndBlocks& metadataAndBlocks,
+    ad_utility::File& file) const {
+  auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
+  AD_CONTRACT_CHECK(!relevantBlocks.empty());
+
+  auto scanBlock = [&](const CompressedBlockMetadata& block) {
+    return readPossiblyIncompleteBlock(metadataAndBlocks.relationMetadata_,
+                                       metadataAndBlocks.col1Id_, file, block,
+                                       std::nullopt);
+  };
+
+  auto rowToTriple =
+      [&](const auto& row) -> CompressedBlockMetadata::PermutedTriple {
+    return {metadataAndBlocks.relationMetadata_.col0Id_, row[0], row[1]};
+  };
+
+  auto firstBlock = scanBlock(relevantBlocks.front());
+  auto lastBlock = scanBlock(relevantBlocks.back());
+  AD_CORRECTNESS_CHECK(!firstBlock.empty());
+  AD_CORRECTNESS_CHECK(!lastBlock.empty());
+  return {rowToTriple(firstBlock.front()), rowToTriple(lastBlock.back())};
 }

@@ -237,6 +237,9 @@ class CompressedRelationReader {
     const CompressedRelationMetadata relationMetadata_;
     const std::span<const CompressedBlockMetadata> blockMetadata_;
     std::optional<Id> col1Id_;
+
+    std::optional<CompressedBlockMetadata::PermutedTriple> firstTriple_;
+    std::optional<CompressedBlockMetadata::PermutedTriple> lastTriple_;
   };
 
   struct LazyScanMetadata {
@@ -328,7 +331,7 @@ class CompressedRelationReader {
    * The same `CompressedRelationWriter` (see below).
    */
   IdTable scan(const CompressedRelationMetadata& metadata, Id col1Id,
-               const vector<CompressedBlockMetadata>& blocks,
+               std::span<const CompressedBlockMetadata> blocks,
                ad_utility::File& file,
                const TimeoutTimer& timer = nullptr) const;
 
@@ -361,6 +364,9 @@ class CompressedRelationReader {
   // struct.
   static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
       const MetadataAndBlocks& metadataAndBlocks);
+
+  std::array<CompressedBlockMetadata::PermutedTriple, 2> getFirstAndLastTriple(
+      const MetadataAndBlocks& metadataAndBlocks, ad_utility::File& file) const;
 
   // Get access to the underlying allocator
   const Allocator& allocator() const { return allocator_; }

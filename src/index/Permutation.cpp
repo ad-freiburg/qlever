@@ -118,10 +118,17 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
   }
 
   auto metadata = meta_.getMetaData(col0Id);
-  return MetadataAndBlocks{meta_.getMetaData(col0Id),
+
+  MetadataAndBlocks result{meta_.getMetaData(col0Id),
                            CompressedRelationReader::getBlocksFromMetadata(
                                metadata, col1Id, meta_.blockData()),
-                           col1Id};
+                           col1Id, std::nullopt, std::nullopt};
+
+  auto [firstTriple, lastTriple] = reader_.getFirstAndLastTriple(result, file_);
+
+  result.firstTriple_ = std::move(firstTriple);
+  result.lastTriple_ = std::move(lastTriple);
+  return result;
 }
 
 // _____________________________________________________________________

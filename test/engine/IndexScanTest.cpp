@@ -272,7 +272,7 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanOneVariable) {
   SparqlTriple bpy{Tc{"<b>"}, "<p>", Tc{Var{"?x"}}};
   std::string kg =
       "<a> <p> <s0>. <a> <p> <s7>. "
-      "<a> <p> <s99> . <b> <p> <s1>. "
+      "<a> <p> <s99> . <b> <p> <s0>. "
       "<b> <p> <s2> . <b> <p> <s3>. "
       "<b> <p> <s6> . <b> <p> <s9>. "
       "<b> <q> <s3>. <b> <q> <s5> .";
