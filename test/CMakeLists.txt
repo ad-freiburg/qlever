@@ -321,7 +321,11 @@ addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
 addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
 
-addLinkAndDiscoverTest(BenchmarkConfigurationTest benchmark)
+addLinkAndDiscoverTest(ConfigManagerTest configManager)
+
+addLinkAndDiscoverTest(ConfigOptionTest configManager)
+
+addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 
@@ -336,5 +340,7 @@ addLinkAndDiscoverTest(ComparisonWithNanTest)
 addLinkAndDiscoverTest(ThreadSafeQueueTest)
 
 addLinkAndDiscoverTest(IdTableHelpersTest engine testUtil)
+
+addLinkAndDiscoverTest(JsonUtilTest)
 
 addLinkAndDiscoverTest(GeneratorTest)
