@@ -114,8 +114,15 @@ ResultTable Join::computeResult() {
     return computeResultForJoinWithFullScanDummy();
   }
 
-  auto leftResIfCached = _left->getRootOperation()->getResult(false, true);
-  auto rightResIfCached = _right->getRootOperation()->getResult(false, true);
+  auto getCachedOrSmallResult = [](QueryExecutionTree& tree) {
+    bool readOnlyCachedResult =
+        tree.getRootOperation()->getSizeEstimate() >
+        RuntimeParameters().get<"lazy-index-scan-max-size-materialization">();
+    return tree.getRootOperation()->getResult(false, readOnlyCachedResult);
+  };
+
+  auto leftResIfCached = getCachedOrSmallResult(*_left);
+  auto rightResIfCached = getCachedOrSmallResult(*_right);
 
   if (_left->getType() == QueryExecutionTree::SCAN &&
       _right->getType() == QueryExecutionTree::SCAN) {
@@ -698,6 +705,11 @@ IdTable Join::computeResultForTwoIndexScans() {
 
   updateRuntimeInfoForLazyScan(leftScan, leftBlocks.details());
   updateRuntimeInfoForLazyScan(rightScan, rightBlocks.details());
+
+  AD_CORRECTNESS_CHECK(leftBlocks.details().numBlocksRead_ <=
+                       rightBlocks.details().numElementsRead_);
+  AD_CORRECTNESS_CHECK(rightBlocks.details().numBlocksRead_ <=
+                       leftBlocks.details().numElementsRead_);
 
   return std::move(rowAdder).resultTable();
 }
