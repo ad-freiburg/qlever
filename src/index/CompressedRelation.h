@@ -89,7 +89,7 @@ struct CompressedBlockMetadata {
       auto arr1 = toArray();
       auto arr2 = other.toArray();
       return !std::lexicographical_compare(arr2.begin(), arr2.end(),
-                                                    arr1.begin(), arr1.end());
+                                           arr1.begin(), arr1.end());
     }
 
     friend std::true_type allowTrivialSerialization(PermutedTriple, auto);
