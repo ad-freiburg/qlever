@@ -29,6 +29,27 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include "util/SourceLocation.h"
 
 /*
+@brief Returns the string representation of the type of the given
+`nlohmann::json`. Only supports official json types.
+*/
+inline std::string jsonToTypeString(const nlohmann::json& j) {
+  if (j.is_array()) {
+    return "array";
+  } else if (j.is_boolean()) {
+    return "boolean";
+  } else if (j.is_null()) {
+    return "null";
+  } else if (j.is_number()) {
+    return "number";
+  } else if (j.is_object()) {
+    return "object";
+  } else {
+    AD_CONTRACT_CHECK(j.is_string());
+    return "string";
+  }
+}
+
+/*
 Added support for serializing `std::optional` using `nlohmann::json`.
 The serialized format of a `std::optional<T>` is simply the serialized format
 of the contained value of type `T`, if `std::optional<T>` contains a value.

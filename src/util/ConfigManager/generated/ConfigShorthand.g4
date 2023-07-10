@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-grammar BenchmarkConfigurationShorthand;
+grammar ConfigShorthand;
 
 // Parser rules
 

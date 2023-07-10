@@ -2,9 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (November of 2022,
 // schlegea@informatik.uni-freiburg.de)
+
 #include <algorithm>
 #include <boost/program_options.hpp>
 #include <boost/program_options/value_semantic.hpp>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <ios>
@@ -14,11 +16,11 @@
 #include <vector>
 
 #include "../benchmark/infrastructure/Benchmark.h"
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkToJson.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/File.h"
 #include "util/json.h"
 
@@ -84,7 +86,9 @@ int main(int argc, char** argv) {
       "configuration-shorthand,s",
       po::value<std::string>(&shortHandConfigurationString),
       "Allows you to add options to configuration of the benchmarks using the"
-      " short hand described in `BenchmarkConfiguration.h:parseShortHand`.");
+      " short hand described in `BenchmarkConfiguration.h:parseShortHand`.")(
+      "configuration-options,o",
+      "Prints all available benchmark configuration options.");
 
   // Prints how to use the file correctly and exits.
   auto printUsageAndExit = [&options]() {
@@ -95,7 +99,7 @@ int main(int argc, char** argv) {
   // Calling without using ANY arguments makes no sense.
   if (argc == 1) {
     std::cerr << "You have to specify at least one of the options of `--print`,"
-                 " or `--write`.\n";
+                 "`--configuration-options` or `--write`.\n";
     printUsageAndExit();
   }
 
@@ -107,22 +111,41 @@ int main(int argc, char** argv) {
   // Did they set any option, that would require anything to actually happen?
   // If not, don't do anything. This should also happen, if they explicitly
   // wanted to see the `help` option.
-  if (vm.count("help") || !(vm.count("print") || vm.count("write"))) {
+  if (vm.count("help") || !(vm.count("print") || vm.count("write") ||
+                            vm.count("configuration-options"))) {
     printUsageAndExit();
   }
 
-  // Did we get any configuration?
-  BenchmarkConfiguration config{};
+  // Set all the configuration options, if there was any runtime configuration
+  // given.
+  if (vm.count("configuration-json") || vm.count("configuration-shorthand")) {
+    nlohmann::json jsonConfig(nlohmann::json::value_t::object);
 
-  if (vm.count("configuration-json")) {
-    config.setJsonString(readFileToString(jsonConfigurationFileName));
-  }
-  if (vm.count("configuration-shorthand")) {
-    config.addShortHand(shortHandConfigurationString);
+    if (vm.count("configuration-json")) {
+      jsonConfig.update(
+          nlohmann::json::parse(readFileToString(jsonConfigurationFileName)));
+    }
+    if (vm.count("configuration-shorthand")) {
+      jsonConfig.update(ad_utility::ConfigManager::parseShortHand(
+          shortHandConfigurationString));
+    }
+
+    BenchmarkRegister::parseConfigWithAllRegisteredBenchmarks(jsonConfig);
   }
 
-  // Pass the configuration, even if it is empty.
-  BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(config);
+  // Print all the available configuration options, if wanted.
+  if (vm.count("configuration-options")) {
+    std::ranges::for_each(
+        BenchmarkRegister::getAllRegisteredBenchmarks(),
+        [](const BenchmarkInterface* bench) {
+          std::cerr << createCategoryTitle(absl::StrCat("Benchmark class '",
+                                                        bench->name(), "'"))
+                    << "\n"
+                    << bench->getConfigManager().printConfigurationDoc(false)
+                    << "\n\n";
+        });
+    exit(0);
+  }
 
   // Measuring the time for all registered benchmarks.
   // For measuring and saving the times.
@@ -140,6 +163,7 @@ int main(int argc, char** argv) {
 
   // Actually processing the arguments.
   if (vm.count("print")) {
+    // Print the results and metadata.
     std::ranges::for_each(benchmarkClassAndResults,
                           [](const auto& pair) {
                             std::cout << benchmarkResultsToString(pair.first,
