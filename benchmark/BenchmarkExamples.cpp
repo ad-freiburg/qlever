@@ -7,10 +7,10 @@
 #include <vector>
 
 #include "../benchmark/infrastructure/Benchmark.h"
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
-#include "engine/ResultTable.h"
+#include "util/ConfigManager/ConfigManager.h"
+#include "util/ConfigManager/ConfigOption.h"
 #include "util/Random.h"
 
 namespace ad_benchmark {
@@ -29,14 +29,46 @@ Using the functions described there would require including
 `Google Benchmark` as a  third-party library.
 */
 
+/*
+The general configuration options. Only used by
+`BMConfigurationAndMetadataExample`, but because of how we pass the
+configuration, every benchmark needs to have them, even if they don't use it.
+*/
+class ConfigOptions : public BenchmarkInterface {
+ protected:
+  // For storing the configuration option values.
+  std::string dateString_;
+  int numberOfStreetSigns_;
+  std::vector<bool> wonOnTryX_;
+  float balanceOnStevesSavingAccount_;
+
+ public:
+  /*
+  Just adds some arbitrary configuration options.
+  */
+  ConfigOptions() {
+    ad_utility::ConfigManager& manager = getConfigManager();
+
+    manager.createConfigOption<std::string>("date", "The current date.",
+                                            &dateString_, "22.3.2023");
+
+    manager.createConfigOption<int>("numSigns", "The number of street signs.",
+                                    &numberOfStreetSigns_, 10);
+
+    manager.createConfigOption<std::vector<bool>>(
+        "CoinFlipTry", "The number of succesful coin flips.", &wonOnTryX_,
+        std::vector{false, false, false, false, false});
+
+    manager.createConfigOption<float>({"Accounts", "Personal", "Steve"},
+                                      "Steves saving account balance.",
+                                      &balanceOnStevesSavingAccount_, -41.9);
+  }
+};
+
 // Single Measurements
-class BMSingleMeasurements : public BenchmarkInterface {
+class BMSingleMeasurements : public ConfigOptions {
  public:
   std::string name() const final { return "Example for single measurements"; }
-
-  void parseConfiguration(const BenchmarkConfiguration&) final {
-    // Nothing to actually do here.
-  }
 
   BenchmarkMetadata getMetadata() const final {
     // Again, nothing to really do here.
@@ -76,13 +108,9 @@ class BMSingleMeasurements : public BenchmarkInterface {
 };
 
 // Groups
-class BMGroups : public BenchmarkInterface {
+class BMGroups : public ConfigOptions {
  public:
   std::string name() const final { return "Example for group benchmarks"; }
-
-  void parseConfiguration(const BenchmarkConfiguration&) final {
-    // Nothing to actually do here.
-  }
 
   BenchmarkMetadata getMetadata() const final {
     // Again, nothing to really do here.
@@ -164,13 +192,9 @@ class BMGroups : public BenchmarkInterface {
 };
 
 // Tables
-class BMTables : public BenchmarkInterface {
+class BMTables : public ConfigOptions {
  public:
   std::string name() const final { return "Example for table benchmarks"; }
-
-  void parseConfiguration(const BenchmarkConfiguration&) final {
-    // Nothing to actually do here.
-  }
 
   BenchmarkMetadata getMetadata() const final {
     // Again, nothing to really do here.
@@ -241,48 +265,27 @@ class BMTables : public BenchmarkInterface {
   }
 };
 
-// A simple example of the usage of the `BenchmarkConfiguration` and the
+// A simple example of the usage of the `ad_utility::ConfigManager` and the
 // general `BenchmarkMetadata`.
-class BMConfigurationAndMetadataExample : public BenchmarkInterface {
-  // This class will simply transcribe specific configuration options
-  // to this `BenchmarkMetadta` object and return it later with the
-  // `getMetadata()` function.
-  BenchmarkMetadata generalMetadata_;
-
+class BMConfigurationAndMetadataExample : public ConfigOptions {
  public:
   std::string name() const final {
     return "Example for the usage of configuration and metadata";
   }
 
-  void parseConfiguration(const BenchmarkConfiguration& config) final {
-    // Collect some arbitrary values.
-    std::string dateString{
-        config.getValueByNestedKeys<std::string>("exampleDate")
-            .value_or("22.3.2023")};
-    size_t numberOfStreetSigns{
-        config.getValueByNestedKeys<size_t>("numSigns").value_or(10)};
+  BenchmarkMetadata getMetadata() const final {
+    // This class will simply transcribe the data of the configuration options
+    // to this `BenchmarkMetadta` object.
+    BenchmarkMetadata meta{};
 
-    std::vector<bool> wonOnTryX{};
-    wonOnTryX.reserve(5);
-    for (size_t i = 0; i < 5; i++) {
-      wonOnTryX.push_back(config.getValueByNestedKeys<bool>("Coin_flip_try", i)
-                              .value_or(false));
-    }
+    meta.addKeyValuePair("date", dateString_);
+    meta.addKeyValuePair("numberOfStreetSigns", numberOfStreetSigns_);
+    meta.addKeyValuePair("wonOnTryX", wonOnTryX_);
+    meta.addKeyValuePair("Balance on Steves saving account",
+                         balanceOnStevesSavingAccount_);
 
-    float balanceOnStevesSavingAccount{
-        config.getValueByNestedKeys<float>("Accounts", "Personal", "Steve")
-            .value_or(-41.9)};
-
-    // Transcribe the collected values.
-    generalMetadata_.addKeyValuePair("date", dateString);
-    generalMetadata_.addKeyValuePair("numberOfStreetSigns",
-                                     numberOfStreetSigns);
-    generalMetadata_.addKeyValuePair("wonOnTryX", wonOnTryX);
-    generalMetadata_.addKeyValuePair("Balance on Steves saving account",
-                                     balanceOnStevesSavingAccount);
+    return meta;
   }
-
-  BenchmarkMetadata getMetadata() const final { return generalMetadata_; }
 
   // This is just a dummy, because this class is only an example for other
   // features of the benchmark infrastructure.

@@ -5,35 +5,47 @@
 
 #include <antlr4-runtime.h>
 
-#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandParser.h"
+#include "util/ConfigManager/generated/ConfigShorthandParser.h"
 #include "util/json.h"
 
 /*
 This visitor will translate the parsed short hand into a `nlohmann::json`
 object.
 */
-class ToJsonBenchmarkConfigurationShorthandVisitor final {
+class ToJsonConfigShorthandVisitor final {
  public:
-  using Parser = BenchmarkConfigurationShorthandParser;
+  using Parser = ConfigShorthandParser;
 
-  // __________________________________________________________________________
   nlohmann::json::object_t visitShortHandString(
       Parser::ShortHandStringContext* context) const;
 
-  // __________________________________________________________________________
   nlohmann::json::object_t visitAssignments(
       const Parser::AssignmentsContext* context) const;
 
-  // __________________________________________________________________________
+  /*
+  @brief A custom exception, the `ConfigShortHandVisitor` runs into a key
+  collision.
+  */
+  class ConfigShortHandVisitorKeyCollisionException : public std::exception {
+    // The error message.
+    std::string message_;
+
+   public:
+    /*
+    @param keyName The string representation of the key.
+    */
+    explicit ConfigShortHandVisitorKeyCollisionException(
+        std::string_view keyName);
+
+    const char* what() const throw() override;
+  };
+
   std::pair<std::string, nlohmann::json> visitAssignment(
       Parser::AssignmentContext* context) const;
 
-  // __________________________________________________________________________
   nlohmann::json::object_t visitObject(Parser::ObjectContext* context) const;
 
-  // __________________________________________________________________________
   nlohmann::json::array_t visitList(const Parser::ListContext* context) const;
 
-  // __________________________________________________________________________
   nlohmann::json visitContent(Parser::ContentContext* context) const;
 };
