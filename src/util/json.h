@@ -41,9 +41,9 @@ inline nlohmann::json fileToJson(std::string_view jsonFileName) {
   // Check, if the filename/-path ends with ".json". Checking, if it's a valid
   // file, is done by `ad_utility::makeIfstream`.
   if (!jsonFileName.ends_with(".json")) {
-    throw std::runtime_error(absl::StrCat("The given filename/-path '",
-                                          jsonFileName,
-                                          "' doesn't describe a json file."));
+    throw std::runtime_error(absl::StrCat(
+        "The given filename/-path '", jsonFileName,
+        "' doesn't end with '.json'. Therefore, it can't be a json file."));
   }
 
   return nlohmann::json::parse(ad_utility::makeIfstream(jsonFileName));
