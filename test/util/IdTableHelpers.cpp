@@ -107,7 +107,7 @@ IdTable createRandomlyFilledIdTable(
           [&numberColumns](const size_t& num) { return num >= numberColumns; });
       column != joinColumnNumberView.end()) {
     throw std::runtime_error(
-        absl::StrCat("The join columns", *column, " is out of bounds."));
+        absl::StrCat("The join column", *column, " is out of bounds."));
   }
 
   // Are there no duplicates in the join column numbers?
