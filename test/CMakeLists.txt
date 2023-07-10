@@ -3,10 +3,11 @@ include(GoogleTest)
 # Needed for creating the `testUil`-library.
 add_subdirectory(util)
 
-# Link binary ${basename} against `gmock_main`, the threading library,
-# and all libraries that are specified as additional arguments.
+# Link binary ${basename} against `gmock_main`, the threading library, the
+# general test utilities and all libraries that are specified as additional
+# arguments.
 function (linkTest basename)
-    qlever_target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(${basename} ${ARGN} gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
 
 # Add the exectutable ${basename} that is compiled from the source file
@@ -105,13 +106,13 @@ addLinkAndDiscoverTest(IndexMetaDataTest index)
 # Stxxl currently always uses a file ./-stxxl.disk for all indices, which
 # makes it impossible to run the test cases for the Index class in parallel.
 # TODO<qup42, joka921> fix this
-addLinkAndDiscoverTestSerial(IndexTest index testUtil)
+addLinkAndDiscoverTestSerial(IndexTest index)
 
 addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
-addLinkAndDiscoverTest(EngineTest engine testUtil)
+addLinkAndDiscoverTest(EngineTest engine)
 
-addLinkAndDiscoverTest(JoinTest engine testUtil)
+addLinkAndDiscoverTest(JoinTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
@@ -119,7 +120,7 @@ addLinkAndDiscoverTest(HashMapTest)
 
 addLinkAndDiscoverTest(HashSetTest)
 
-addLinkAndDiscoverTestSerial(GroupByTest engine testUtil)
+addLinkAndDiscoverTestSerial(GroupByTest engine)
 
 addLinkAndDiscoverTest(VocabularyGeneratorTest index)
 
@@ -130,7 +131,7 @@ addLinkAndDiscoverTest(MmapVectorTest)
 # BufferedVectorTest also uses conflicting filenames.
 addLinkAndDiscoverTestSerial(BufferedVectorTest)
 
-addLinkAndDiscoverTest(UnionTest engine testUtil)
+addLinkAndDiscoverTest(UnionTest engine)
 
 if (SINGLE_TEST_BINARY)
     target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
@@ -339,7 +340,7 @@ addLinkAndDiscoverTest(ComparisonWithNanTest)
 
 addLinkAndDiscoverTest(ThreadSafeQueueTest)
 
-addLinkAndDiscoverTest(IdTableHelpersTest engine testUtil)
+addLinkAndDiscoverTest(IdTableHelpersTest engine)
 
 addLinkAndDiscoverTest(JsonUtilTest)
 
