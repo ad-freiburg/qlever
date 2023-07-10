@@ -133,7 +133,8 @@ ResultTable Join::computeResult() {
     bool containsUndef =
         undefStatus == ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
     // The third argument means "only get the result if it can be read from the
-    // cache".
+    // cache". So effectively, this returns the result if it is small, contains
+    // UNDEF values, or is contained in the cache, otherwise `nullptr`.
     return tree.getRootOperation()->getResult(false,
                                               !(isSmall || containsUndef));
   };
