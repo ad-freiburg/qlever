@@ -293,51 +293,41 @@ namespace {
 auto getRelevantIdFromTriple(
     CompressedBlockMetadata::PermutedTriple triple,
     const CompressedRelationReader::MetadataAndBlocks& metadataAndBlocks) {
-  auto idForNonMatchingBlock = [](Id fromTriple, Id key) -> std::optional<Id> {
+  auto idForNonMatchingBlock = [](Id fromTriple, Id key, Id minKey,
+                                  Id maxKey) -> std::optional<Id> {
     if (fromTriple < key) {
-      return Id::min();
+      return minKey;
     }
     if (fromTriple > key) {
-      return Id::max();
+      return maxKey;
     }
     return std::nullopt;
   };
 
+  auto [minKey, maxKey] = [&]() {
+    if (!metadataAndBlocks.firstAndLastTriple_.has_value()) {
+      return std::array{Id::min(), Id::max()};
+    }
+    const auto& [first, last] = metadataAndBlocks.firstAndLastTriple_.value();
+    if (metadataAndBlocks.col1Id_.has_value()) {
+      return std::array{first.col2Id_, last.col2Id_};
+    } else {
+      return std::array{first.col1Id_, last.col1Id_};
+    }
+  }();
+
   if (auto optId = idForNonMatchingBlock(
-          triple.col0Id_, metadataAndBlocks.relationMetadata_.col0Id_)) {
+          triple.col0Id_, metadataAndBlocks.relationMetadata_.col0Id_, minKey,
+          maxKey)) {
     return optId.value();
   }
   if (!metadataAndBlocks.col1Id_.has_value()) {
     return triple.col1Id_;
   }
 
-  return idForNonMatchingBlock(triple.col1Id_,
-                               metadataAndBlocks.col1Id_.value())
+  return idForNonMatchingBlock(
+             triple.col1Id_, metadataAndBlocks.col1Id_.value(), minKey, maxKey)
       .value_or(triple.col2Id_);
-}
-
-// Set the first triple of the first block in `blocks` and the last triple of
-// the last block according to the `firstAndLastTriple`.
-void setFirstAndLastTriple(
-    std::vector<CompressedBlockMetadata>& blocks,
-    const std::optional<
-        CompressedRelationReader::MetadataAndBlocks::FirstAndLastTriple>&
-        firstAndLastTriple) {
-  if (blocks.empty() || !firstAndLastTriple.has_value()) {
-    return;
-  }
-
-  // Check that the `newTriple` can be safely set as the first or last triple of
-  // either the `block` without breaking the ordering of the first block.
-  auto check = [](const auto& newTriple, const auto& block) {
-    AD_CORRECTNESS_CHECK(block.firstTriple_ <= newTriple);
-    AD_CORRECTNESS_CHECK(newTriple <= block.lastTriple_);
-  };
-  check(firstAndLastTriple.value().firstTriple_, blocks.front());
-  blocks.front().firstTriple_ = firstAndLastTriple.value().firstTriple_;
-
-  check(firstAndLastTriple.value().lastTriple_, blocks.back());
-  blocks.back().lastTriple_ = firstAndLastTriple.value().lastTriple_;
 }
 }  // namespace
 
@@ -346,10 +336,7 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
     std::span<const Id> joinColumn,
     const MetadataAndBlocks& metadataAndBlocks) {
   // Get all the blocks where `col0FirstId_ <= col0Id <= col0LastId_`.
-  auto relevantBlocksSpan = getBlocksFromMetadata(metadataAndBlocks);
-  std::vector relevantBlocks(relevantBlocksSpan.begin(),
-                             relevantBlocksSpan.end());
-  setFirstAndLastTriple(relevantBlocks, metadataAndBlocks.firstAndLastTriple_);
+  auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
 
   // We need symmetric comparisons between Ids and blocks.
   auto idLessThanBlock = [&metadataAndBlocks](
@@ -395,19 +382,9 @@ std::array<std::vector<CompressedBlockMetadata>, 2>
 CompressedRelationReader::getBlocksForJoin(
     const MetadataAndBlocks& metadataAndBlocks1,
     const MetadataAndBlocks& metadataAndBlocks2) {
-  auto relevantBlocks1Span = getBlocksFromMetadata(metadataAndBlocks1);
-  auto relevantBlocks2Span = getBlocksFromMetadata(metadataAndBlocks2);
+  auto relevantBlocks1 = getBlocksFromMetadata(metadataAndBlocks1);
+  auto relevantBlocks2 = getBlocksFromMetadata(metadataAndBlocks2);
 
-  // TODO<
-  std::vector relevantBlocks1(relevantBlocks1Span.begin(),
-                              relevantBlocks1Span.end());
-  std::vector relevantBlocks2(relevantBlocks2Span.begin(),
-                              relevantBlocks2Span.end());
-
-  setFirstAndLastTriple(relevantBlocks1,
-                        metadataAndBlocks1.firstAndLastTriple_);
-  setFirstAndLastTriple(relevantBlocks2,
-                        metadataAndBlocks2.firstAndLastTriple_);
   auto metadataForBlock =
       [&](const CompressedBlockMetadata& block) -> decltype(auto) {
     if (relevantBlocks1.data() <= &block &&
@@ -949,6 +926,8 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   AD_CONTRACT_CHECK(!relevantBlocks.empty());
 
   auto scanBlock = [&](const CompressedBlockMetadata& block) {
+    // Note: the following call only returns the part of the block that actually
+    // matches the col0 and col1.
     return readPossiblyIncompleteBlock(metadataAndBlocks.relationMetadata_,
                                        metadataAndBlocks.col1Id_, file, block,
                                        std::nullopt);

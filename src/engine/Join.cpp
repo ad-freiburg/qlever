@@ -125,16 +125,17 @@ ResultTable Join::computeResult() {
   // values are involved.
   auto getCachedOrSmallResult = [](QueryExecutionTree& tree,
                                    ColumnIndex joinCol) {
-    bool readOnlyCachedResult =
-        tree.getRootOperation()->getSizeEstimate() >
+    bool isSmall =
+        tree.getRootOperation()->getSizeEstimate() <
         RuntimeParameters().get<"lazy-index-scan-max-size-materialization">();
     auto undefStatus =
         tree.getVariableAndInfoByColumnIndex(joinCol).second.mightContainUndef_;
-    readOnlyCachedResult =
-        readOnlyCachedResult &&
-        undefStatus == ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
-
-    return tree.getRootOperation()->getResult(false, readOnlyCachedResult);
+    bool containsUndef =
+        undefStatus == ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
+    // The third argument means "only get the result if it can be read from the
+    // cache".
+    return tree.getRootOperation()->getResult(false,
+                                              !(isSmall || containsUndef));
   };
 
   auto leftResIfCached = getCachedOrSmallResult(*_left, _leftJoinCol);

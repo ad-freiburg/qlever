@@ -251,12 +251,12 @@ class CompressedRelationReader {
     const std::span<const CompressedBlockMetadata> blockMetadata_;
     std::optional<Id> col1Id_;
 
-    // If set, then those contain the first and the last triple of the specified
-    // relation (and being filtered by the `col1Id` if specified). This might be
-    // different from the first triple in the first block (in the case of the
-    // `firstTriple_`, similarly for `lastTriple_`) because the first and last
-    // block might also contain other relations, or the same relation but with
-    // different `col1Id`s.
+    // If set, `firstAndLastTriple_` contains the first and the last triple
+    // of the specified relation (and being filtered by the `col1Id` if
+    // specified). This might be different from the first triple in the first
+    // block (in the case of the `firstTriple_`, similarly for `lastTriple_`)
+    // because the first and last block might also contain other relations, or
+    // the same relation but with different `col1Id`s.
     struct FirstAndLastTriple {
       CompressedBlockMetadata::PermutedTriple firstTriple_;
       CompressedBlockMetadata::PermutedTriple lastTriple_;
@@ -388,7 +388,7 @@ class CompressedRelationReader {
       const MetadataAndBlocks& metadataAndBlocks);
 
   // Get the first and the last triple that the result of a `scan` with the
-  // given argument would lead to. Throw an exception if the scan result would
+  // given arguments would lead to. Throw an exception if the scan result would
   // be empty. This function is used to more efficiently filter the blocks of
   // index scans between joining them to get better estimates for the begginning
   // and end of incomplete blocks.

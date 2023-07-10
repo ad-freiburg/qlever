@@ -213,7 +213,7 @@ namespace {
 // The exact order of the columns of a join result might change over time, for
 // example we reorder inputs for simplicity or to more easily find them in the
 // cache. That's why we only assert that the column associated with a given
-// variabel contains the expected contents, independent of the concrete column
+// variable contains the expected contents, independent of the concrete column
 // index that variable is assigned to.
 
 // A hash map that connects variables to the expected contents of the
