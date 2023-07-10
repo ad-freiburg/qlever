@@ -104,19 +104,33 @@ void generalIdTableCheck(const IdTable& table,
   }
 }
 
-// Overload, who doesn't uses generators for creating the content of the
-// join columns.
-TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGeneratos) {
+// Overloads, who don't take generators.
+TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
   // Table with zero rows/columns.
-  ASSERT_ANY_THROW(createRandomlyFilledIdTable(0, 0, 0, 0, 1));
-  ASSERT_ANY_THROW(createRandomlyFilledIdTable(1, 0, 0, 0, 1));
-  ASSERT_ANY_THROW(createRandomlyFilledIdTable(0, 1, 0, 0, 1));
+  ASSERT_ANY_THROW(
+      createRandomlyFilledIdTable(0, 0, JoinColumnAndBounds{0, 0, 1}));
+  ASSERT_ANY_THROW(
+      createRandomlyFilledIdTable(1, 0, JoinColumnAndBounds{0, 0, 1}));
+  ASSERT_ANY_THROW(
+      createRandomlyFilledIdTable(0, 1, JoinColumnAndBounds{0, 0, 1}));
+  ASSERT_ANY_THROW(createRandomlyFilledIdTable(
+      0, 0, std::vector{JoinColumnAndBounds{0, 0, 1}}));
+  ASSERT_ANY_THROW(createRandomlyFilledIdTable(
+      1, 0, std::vector{JoinColumnAndBounds{0, 0, 1}}));
+  ASSERT_ANY_THROW(createRandomlyFilledIdTable(
+      0, 1, std::vector{JoinColumnAndBounds{0, 0, 1}}));
 
   // Table with out of bounds join column.
-  ASSERT_ANY_THROW(createRandomlyFilledIdTable(5, 5, 6, 0, 1));
+  ASSERT_ANY_THROW(
+      createRandomlyFilledIdTable(5, 5, JoinColumnAndBounds{6, 0, 1}));
+  ASSERT_ANY_THROW(createRandomlyFilledIdTable(
+      5, 5, std::vector{JoinColumnAndBounds{6, 0, 1}}));
 
   // Table with lower bound, that is higher than the upper bound.
-  ASSERT_ANY_THROW(createRandomlyFilledIdTable(5, 5, 0, 3, 2));
+  ASSERT_ANY_THROW(
+      createRandomlyFilledIdTable(5, 5, JoinColumnAndBounds{0, 3, 2}));
+  ASSERT_ANY_THROW(createRandomlyFilledIdTable(
+      5, 5, std::vector{JoinColumnAndBounds{0, 3, 2}}));
 
   // Checks, if all entries of are within a given inclusive range.
   auto checkColumn = [](const IdTable& table, const size_t& columnNumber,
@@ -129,16 +143,47 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGeneratos) {
         }));
   };
 
-  IdTable result{createRandomlyFilledIdTable(5, 5, 0, 0, 10)};
+  // Sample request for the overload, that takes a single `JoinColumnAndBounds`.
+  IdTable result{
+      createRandomlyFilledIdTable(5, 5, JoinColumnAndBounds{0, 0, 10})};
   generalIdTableCheck(result, 5, 5, true);
   checkColumn(result, 0, 0, 10);
 
-  result = createRandomlyFilledIdTable(50, 58, 0, 30, 42);
+  result = createRandomlyFilledIdTable(50, 58, JoinColumnAndBounds{0, 30, 42});
   generalIdTableCheck(result, 50, 58, true);
   checkColumn(result, 0, 30, 42);
+
+  // Empty std::vector for the overload with the , who takes a vector of
+  // `JoinColumnAndBounds`.
+  result =
+      createRandomlyFilledIdTable(50, 58, std::vector<JoinColumnAndBounds>{});
+  generalIdTableCheck(result, 50, 58, true);
+
+  /*
+  Exhaustive input test for the overload, who takes a vector of
+  `JoinColumnAndBounds`, in the case of generating tables with 40 rows and
+  10 columns.
+  */
+  std::ranges::for_each(
+      calculateAllSubSets(std::vector<size_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}),
+      [&checkColumn, &result](const std::vector<size_t>& joinColumns) {
+        result = createRandomlyFilledIdTable(
+            40, 10, ad_utility::transform(joinColumns, [](const size_t& jc) {
+              return JoinColumnAndBounds{jc, jc * 10, jc * 10 + 9};
+            }));
+
+        // General check.
+        generalIdTableCheck(result, 40, 10, true);
+
+        // Are the join columns like we wanted them?
+        std::ranges::for_each(joinColumns,
+                              [&result, &checkColumn](const size_t& jc) {
+                                checkColumn(result, jc, jc * 10, jc * 10 + 9);
+                              });
+      });
 }
 
-// Overloads, who use generators for creating the content of the join columns.
+// Overloads, who take generators for creating the content of the join columns.
 TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGeneratos) {
   // Creates a 'generator', that counts one up, everytime it's called.
   auto createCountUpGenerator = []() {

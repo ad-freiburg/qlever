@@ -103,7 +103,7 @@ IdTable generateIdTable(const size_t numberRows, const size_t numberColumns,
                         const std::function<IdTable::row_type()>& rowGenerator);
 
 /*
-@brief Creates a `IdTable`, where the content of the join column is given via
+@brief Creates a `IdTable`, where the content of the join columns is given via
 functions and all other columns are randomly filled with numbers.
 
 @param numberRows numberColumns The number of rows and columns, the table should
@@ -132,19 +132,36 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
                                     const std::vector<size_t>& joinColumns,
                                     const std::function<ValueId()>& generator);
 
+// Describes a join column together with an inclusive range of numbers, defined
+// as [lowerBound, upperBound];
+struct JoinColumnAndBounds {
+  const size_t joinColumn;
+  const size_t lowerBound;
+  const size_t upperBound;
+};
+
 /*
  * @brief Return a IdTable, that is randomly filled. The range of numbers
  *  being entered in the join column can be defined.
  *
  * @param numberRows, numberColumns The size of the IdTable, that is to be
  *  returned.
- * @param joinColumn The joinColumn of the IdTable, that is to be returned.
- * @param joinColumnLowerBound, joinColumnUpperBound The range of the entries
- *  in the join column, definied as
- *  [joinColumnLowerBound, joinColumnUpperBound].
+ * @param joinColumnAndBounds The given join column will be filled with random
+ * number, that are all inside the given range.
  */
-IdTable createRandomlyFilledIdTable(const size_t numberRows,
-                                    const size_t numberColumns,
-                                    const size_t joinColumn,
-                                    const size_t joinColumnLowerBound,
-                                    const size_t joinColumnUpperBound);
+IdTable createRandomlyFilledIdTable(
+    const size_t numberRows, const size_t numberColumns,
+    const JoinColumnAndBounds& joinColumnAndBounds);
+
+/*
+ * @brief Return a IdTable, that is randomly filled. The range of numbers
+ *  being entered in the join columns can be defined.
+ *
+ * @param numberRows, numberColumns The size of the IdTable, that is to be
+ *  returned.
+ * @param joinColumnsAndBounds Every join columns will be filled with random
+ * number, that are inside their corresponding range.
+ */
+IdTable createRandomlyFilledIdTable(
+    const size_t numberRows, const size_t numberColumns,
+    const std::vector<JoinColumnAndBounds>& joinColumnsAndBounds);

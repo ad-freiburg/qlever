@@ -2,9 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (Januar of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../test/util/IdTableHelpers.h"
-
 #include <absl/strings/str_cat.h>
+
+#include <utility>
+
+#include "../test/util/IdTableHelpers.h"
+#include "util/Algorithm.h"
+#include "util/Exception.h"
 
 // ____________________________________________________________________________
 void compareIdTableWithExpectedContent(
@@ -181,27 +185,48 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
 }
 
 // ____________________________________________________________________________
-IdTable createRandomlyFilledIdTable(const size_t numberRows,
-                                    const size_t numberColumns,
-                                    const size_t joinColumn,
-                                    const size_t joinColumnLowerBound,
-                                    const size_t joinColumnUpperBound) {
+IdTable createRandomlyFilledIdTable(
+    const size_t numberRows, const size_t numberColumns,
+    const std::vector<JoinColumnAndBounds>& joinColumnsAndBounds) {
   // Entries in IdTables have a max size.
   constexpr size_t maxIdSize = ValueId::maxIndex;
 
-  // Is the lower bound smaller, or equal, to the upper bound?
-  AD_CONTRACT_CHECK(joinColumnLowerBound <= joinColumnUpperBound);
-  // Is the upper bound smaller, or equal, to the maximum size of an IdTable
-  // entry?
-  AD_CONTRACT_CHECK(joinColumnUpperBound <= maxIdSize);
+  /*
+  Is the lower bound smaller, or equal, to the upper bound? And is the upper
+  bound smaller, or equal, to the maximum size of an IdTable entry?
+  */
+  AD_CONTRACT_CHECK(std::ranges::all_of(
+      joinColumnsAndBounds, [](const JoinColumnAndBounds& j) {
+        return j.lowerBound <= j.upperBound && j.upperBound <= maxIdSize;
+      }));
 
-  // The random number generators for join column entries.
-  SlowRandomIntGenerator<size_t> joinColumnEntryGenerator(joinColumnLowerBound,
-                                                          joinColumnUpperBound);
-
-  return createRandomlyFilledIdTable(
-      numberRows, numberColumns, {joinColumn}, [&joinColumnEntryGenerator]() {
-        // `IdTable`s don't take raw numbers, you have to transform them first.
-        return ad_utility::testing::VocabId(joinColumnEntryGenerator());
+  /*
+  Instead of doing things ourselves, we will call the overload, who takes pairs
+  of column indexes and functions.
+  */
+  const auto& joinColumnAndGenerator = ad_utility::transform(
+      joinColumnsAndBounds, [](const JoinColumnAndBounds& j) {
+        return std::make_pair(
+            j.joinColumn,
+            // We don't use a static variable for generator, because static
+            // variables are shared between different instances of the lambda.
+            std::function{[generator = SlowRandomIntGenerator<size_t>(
+                               j.lowerBound, j.upperBound)]() mutable {
+              // `IdTable`s don't take raw numbers, you have to transform
+              // them first.
+              return ad_utility::testing::VocabId(generator());
+            }});
       });
+
+  return createRandomlyFilledIdTable(numberRows, numberColumns,
+                                     joinColumnAndGenerator);
+}
+
+// ____________________________________________________________________________
+IdTable createRandomlyFilledIdTable(
+    const size_t numberRows, const size_t numberColumns,
+    const JoinColumnAndBounds& joinColumnAndBounds) {
+  // Just call the other overload.
+  return createRandomlyFilledIdTable(numberRows, numberColumns,
+                                     std::vector{joinColumnAndBounds});
 }
