@@ -104,21 +104,22 @@ int main(int argc, char** argv) {
     printUsageAndExit();
   }
 
-  // Set all the configuration options, if there was any runtime configuration
-  // given.
-  if (vm.count("configuration-json") || vm.count("configuration-shorthand")) {
-    nlohmann::json jsonConfig(nlohmann::json::value_t::object);
+  /*
+  Set all the configuration options.
+  Because the `configManager` also checks, if mandatory options were set, when
+  it parses, we always have to call this. Even if it is empty.
+  */
+  nlohmann::json jsonConfig(nlohmann::json::value_t::object);
 
-    if (vm.count("configuration-json")) {
-      jsonConfig.update(fileToJson(jsonConfigurationFileName));
-    }
-    if (vm.count("configuration-shorthand")) {
-      jsonConfig.update(ad_utility::ConfigManager::parseShortHand(
-          shortHandConfigurationString));
-    }
-
-    BenchmarkRegister::parseConfigWithAllRegisteredBenchmarks(jsonConfig);
+  if (vm.count("configuration-json")) {
+    jsonConfig.update(fileToJson(jsonConfigurationFileName));
   }
+  if (vm.count("configuration-shorthand")) {
+    jsonConfig.update(ad_utility::ConfigManager::parseShortHand(
+        shortHandConfigurationString));
+  }
+
+  BenchmarkRegister::parseConfigWithAllRegisteredBenchmarks(jsonConfig);
 
   // Print all the available configuration options, if wanted.
   if (vm.count("configuration-options")) {
