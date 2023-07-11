@@ -26,7 +26,6 @@ Index::WordEntityPostings FTSAlgorithms::filterByRange(
              << " elements by ID range...\n";
 
   Index::WordEntityPostings wepResult;
-  wepResult.wids_.resize(1);
   wepResult.cids_.resize(wepPreFilter.cids_.size() + 2);
   wepResult.scores_.resize(wepPreFilter.cids_.size() + 2);
   wepResult.wids_[0].resize(wepPreFilter.cids_.size() + 2);
@@ -77,13 +76,12 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersect(
   AD_CONTRACT_CHECK(matchingContextsWep.wids_.size() == 1);
   LOG(DEBUG)
       << "Intersection to filter the word-entity postings from a block so that "
-      << "only entries remain where the entity matches. If there are multiple "
-      << "entries with the same eid, then the crossproduct of them remains.\n";
+      << "only entries remain where the context matches. If there are multiple "
+      << "entries with the same cid, then the crossproduct of them remains.\n";
   LOG(DEBUG) << "matchingContextsWep.cids_ size: "
              << matchingContextsWep.cids_.size() << '\n';
   LOG(DEBUG) << "eBlockWep.cids_ size: " << eBlockWep.cids_.size() << '\n';
   Index::WordEntityPostings resultWep;
-  resultWep.wids_.resize(1);
   // Handle trivial empty case
   if (matchingContextsWep.cids_.empty() || eBlockWep.cids_.empty()) {
     return resultWep;
@@ -114,13 +112,10 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersect(
       }
     }
     while (matchingContextsWep.cids_[i] == eBlockWep.cids_[j]) {
-      // Make sure we get all matching elements from the entity list (l2)
-      // that match the current context.
-      // If there are multiple elements for that context in l1,
-      // we can safely skip them unless we want to incorporate the scores
-      // later on.
       size_t k = 0;
       while (matchingContextsWep.cids_[i + k] == matchingContextsWep.cids_[i]) {
+        // Make sure that we get every combination of eids and wid where their
+        // cids match.
         resultWep.wids_[0].push_back(matchingContextsWep.wids_[0][i + k]);
         resultWep.cids_.push_back(eBlockWep.cids_[j]);
         resultWep.eids_.push_back(eBlockWep.eids_[j]);
@@ -138,52 +133,6 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersect(
     ++i;
   }
   return resultWep;
-}
-
-// _____________________________________________________________________________
-void FTSAlgorithms::intersectTwoPostingLists(
-    const vector<TextRecordIndex>& cids1, const vector<Score>& scores1,
-    const vector<TextRecordIndex>& cids2, const vector<Score>& scores2,
-    vector<TextRecordIndex>& resultCids, vector<Score>& resultScores) {
-  LOG(DEBUG) << "Intersection of words lists of sizes " << cids1.size()
-             << " and " << cids2.size() << '\n';
-  // Handle trivial empty case
-  if (cids1.empty() || cids2.empty()) {
-    return;
-  }
-  // TODO(schnelle): Need clear because a test reuses the result
-  // vectors. we should probably just specify that it appends
-  resultCids.reserve(cids1.size());
-  resultCids.clear();
-  resultScores.reserve(cids1.size());
-  resultScores.clear();
-
-  size_t i = 0;
-  size_t j = 0;
-
-  while (i < cids1.size() && j < cids2.size()) {
-    while (cids1[i] < cids2[j]) {
-      ++i;
-      if (i >= cids1.size()) {
-        return;
-      }
-    }
-    while (cids2[j] < cids1[i]) {
-      ++j;
-      if (j >= cids2.size()) {
-        return;
-      }
-    }
-    while (cids1[i] == cids2[j]) {
-      resultCids.push_back(cids2[j]);
-      resultScores.push_back(scores1[i] + scores2[j]);
-      ++i;
-      ++j;
-      if (i >= cids1.size() || j >= cids2.size()) {
-        break;
-      }
-    }
-  }
 }
 
 // _____________________________________________________________________________
@@ -210,7 +159,7 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
   if (entityMode) {
     minSize = lastListEids->size();
   } else {
-    for (size_t i = 0; i < wepVecs.size(); ++i) {
+    for (size_t i = 0; i < k; ++i) {
       if (wepVecs[i].cids_.empty()) {
         return resultWep;
       }

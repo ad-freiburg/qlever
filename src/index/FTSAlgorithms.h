@@ -36,13 +36,6 @@ class FTSAlgorithms {
       const Index::WordEntityPostings& matchingContextsWep,
       const Index::WordEntityPostings& eBlockWep);
 
-  static void intersectTwoPostingLists(const vector<TextRecordIndex>& cids1,
-                                       const vector<Score>& scores1,
-                                       const vector<TextRecordIndex>& cids2,
-                                       const vector<Score>& scores2,
-                                       vector<TextRecordIndex>& resultCids,
-                                       vector<Score>& resultScores);
-
   template <int WIDTH>
   static void aggScoresAndTakeTopKContexts(const Index::WordEntityPostings& wep,
                                            size_t k, IdTable* dynResult);

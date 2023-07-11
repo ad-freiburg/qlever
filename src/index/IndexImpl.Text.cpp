@@ -729,23 +729,24 @@ void IndexImpl::getContextListForWords(const string& words,
     for (auto& term : terms) {
       wepVecs.push_back(getWordPostingsForTerm(term));
     }
-    if (wepVecs.size() == 2) {
-      FTSAlgorithms::intersectTwoPostingLists(
-          wepVecs[0].cids_, wepVecs[1].scores_, wepVecs[1].cids_,
-          wepVecs[1].scores_, wep.cids_, wep.scores_);
-    } else {
-      wep = FTSAlgorithms::crossIntersectKWay(wepVecs, nullptr);
-    }
+    wep = FTSAlgorithms::crossIntersectKWay(wepVecs, nullptr);
   } else {
     wep = getWordPostingsForTerm(terms[0]);
   }
 
   LOG(DEBUG) << "Packing lists into a ResultTable\n...";
-  IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
-  result.resize(wep.cids_.size());
+  IdTableStatic<3> result = std::move(*dynResult).toStatic<3>();
+  result.reserve(wep.cids_.size());
+  std::vector<ValueId> row;
+  row.resize(result.numColumns());
   for (size_t i = 0; i < wep.cids_.size(); ++i) {
-    result(i, 0) = Id::makeFromTextRecordIndex(wep.cids_[i]);
-    result(i, 1) = Id::makeFromInt(wep.scores_[i]);
+    row[0] = Id::makeFromTextRecordIndex(wep.cids_[i]);
+    row[1] = Id::makeFromInt(wep.scores_[i]);
+    for (size_t j = 0; j < terms.size(); j++) {
+      row[2 + j] =
+          Id::makeFromWordVocabIndex(WordVocabIndex::make(wep.wids_[j][i]));
+    }
+    result.push_back(row);
   }
   *dynResult = std::move(result).toDynamic();
   LOG(DEBUG) << "Done with getContextListForWords.\n";
@@ -755,7 +756,6 @@ void IndexImpl::getContextListForWords(const string& words,
 Index::WordEntityPostings IndexImpl::readWordCl(
     const TextBlockMetaData& tbmd) const {
   Index::WordEntityPostings wep;
-  wep.wids_.resize(1);
   wep.cids_ = readGapComprList<TextRecordIndex>(
       tbmd._cl._nofElements, tbmd._cl._startContextlist,
       static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),

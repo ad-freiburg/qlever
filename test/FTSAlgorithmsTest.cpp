@@ -99,42 +99,6 @@ TEST(FTSAlgorithmsTest, crossIntersectTest) {
   ASSERT_EQ(8u, resultWep.wids_[0][1]);
 };
 
-TEST(FTSAlgorithmsTest, intersectTwoPostingListsTest) {
-  vector<TextRecordIndex> cids1;
-  vector<Score> scores1;
-  vector<TextRecordIndex> cids2;
-  vector<Score> scores2;
-  vector<TextRecordIndex> resCids;
-  vector<Score> resScores;
-  FTSAlgorithms::intersectTwoPostingLists(cids1, scores1, cids2, scores2,
-                                          resCids, resScores);
-  ASSERT_EQ(0u, resCids.size());
-  ASSERT_EQ(0u, resScores.size());
-
-  cids1.push_back(T(0));
-  cids1.push_back(T(2));
-  scores1.push_back(1);
-  scores1.push_back(1);
-  FTSAlgorithms::intersectTwoPostingLists(cids1, scores1, cids2, scores2,
-                                          resCids, resScores);
-  ASSERT_EQ(0u, resCids.size());
-  ASSERT_EQ(0u, resScores.size());
-
-  cids2.push_back(T(2));
-  scores2.push_back(1);
-  FTSAlgorithms::intersectTwoPostingLists(cids1, scores1, cids2, scores2,
-                                          resCids, resScores);
-  ASSERT_EQ(1u, resCids.size());
-  ASSERT_EQ(1u, resScores.size());
-
-  cids2.push_back(T(4));
-  scores2.push_back(1);
-  FTSAlgorithms::intersectTwoPostingLists(cids1, scores1, cids2, scores2,
-                                          resCids, resScores);
-  ASSERT_EQ(1u, resCids.size());
-  ASSERT_EQ(1u, resScores.size());
-};
-
 TEST(FTSAlgorithmsTest, intersectKWayTest) {
   vector<Index::WordEntityPostings> wepVecs;
   Index::WordEntityPostings resultWep;
