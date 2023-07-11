@@ -210,7 +210,7 @@ namespace detail {
 // is called repeatedly, and the resulting values are pushed to the queue. If
 // the producer returns `nullopt`, `numThreads` is decremented, and the queue is
 // finished if `numThreads <= 0`. All exceptions that happen during the
-// execution of `prodducer` are propagated to the queue.
+// execution of `producer` are propagated to the queue.
 template <IsThreadsafeQueue Queue, std::invocable Producer>
 auto makeQueueTask(Queue& queue, Producer producer,
                    std::atomic<int64_t>& numThreads) {
@@ -238,7 +238,7 @@ auto makeQueueTask(Queue& queue, Producer producer,
 
 // This helper function makes the usage of the (Ordered)ThreadSafeQueue above
 // much easier. It takes the size of the queue, the number of producer threads,
-// and a `producer` (A callable that produces values). The `producer` is called
+// and a `producer` (a callable that produces values). The `producer` is called
 // repeatedly in `numThreads` many concurrent threads. It needs to return
 // `std::optional<SomethingThatCanBePushedToTheQueue>` and has the following
 // semantics: If `nullopt` is returned, then the thread is finished. The queue
