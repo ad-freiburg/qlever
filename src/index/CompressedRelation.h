@@ -121,12 +121,6 @@ struct CompressedRelationMetadata {
 
   size_t getNofElements() const { return numRows_; }
 
-  // We currently always store two columns (the second and third column of a
-  // triple). This might change in the future when we might also store
-  // patterns and functional relations. Factor out this magic constant already
-  // now to make the code more readable.
-  static constexpr size_t numColumns() { return NumColumns; }
-
   // Setters and getters for the multiplicities.
   float getCol1Multiplicity() const { return multiplicityCol1_; }
   float getCol2Multiplicity() const { return multiplicityCol2_; }

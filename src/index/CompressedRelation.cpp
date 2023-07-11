@@ -128,10 +128,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     // all the blocks is long enough, so a `const&` would suffice), but the
     // copy is cheap and makes the code more robust.
     auto block = *blockIterator;
-    // Note: The order of the following three lines is important: The index
+    // Note: The order of the following two lines is important: The index
     // of the current block depends on the current value of `blockIterator`,
-    // but we have to increment `blockIterator` to determine whether this
-    // was the last block.
+    // so we have to compute it before incrementing the iterator.
     auto myIndex = static_cast<size_t>(blockIterator - beginBlock);
     ++blockIterator;
     // Note: the reading of the block could also happen without holding the
@@ -152,7 +151,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   auto setTimer = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
       [&details, &popTimer]() { details.blockingTimeMs_ = popTimer.msecs(); });
 
-  auto queue = ad_utility::data_structures::QueueManager<
+  auto queue = ad_utility::data_structures::queueManager<
       ad_utility::data_structures::OrderedThreadSafeQueue<IdTable>>(
       queueSize, numThreads, readAndDecompressBlock);
   for (IdTable& block : queue) {
