@@ -9,6 +9,12 @@
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <ranges>
+
+#include "absl/cleanup/cleanup.h"
+#include "util/Exception.h"
+#include "util/Generator.h"
+#include "util/jthread.h"
 
 namespace ad_utility::data_structures {
 
@@ -24,6 +30,7 @@ class ThreadSafeQueue {
   size_t maxSize_;
 
  public:
+  using value_type = T;
   explicit ThreadSafeQueue(size_t maxSize) : maxSize_{maxSize} {}
 
   // We can neither copy nor move this class
@@ -123,6 +130,7 @@ class OrderedThreadSafeQueue {
   bool finish_ = false;
 
  public:
+  using value_type = T;
   // Construct from the maximal queue size (see `ThreadSafeQueue` for details).
   explicit OrderedThreadSafeQueue(size_t maxSize) : queue_{maxSize} {}
 
@@ -150,6 +158,10 @@ class OrderedThreadSafeQueue {
     return result;
   }
 
+  bool push(std::pair<size_t, T> indexAndValue) {
+    push(indexAndValue.first, std::move(indexAndValue.second));
+  }
+
   // See `ThreadSafeQueue` for details.
   void pushException(std::exception_ptr exception) {
     std::unique_lock l{mutex_};
@@ -175,5 +187,81 @@ class OrderedThreadSafeQueue {
   // ascending consecutive order wrt the index with which they were pushed.
   std::optional<T> pop() { return queue_.pop(); }
 };
+
+template <typename Queue>
+class ThreadsafeQueueManager {
+  Queue queue_;
+  std::vector<ad_utility::JThread> threads_;
+
+  ~ThreadsafeQueueManager() { queue_.finish(); }
+};
+
+// A concept for one of the thread-safe queue types above
+template <typename T>
+concept IsThreadsafeQueue =
+    ad_utility::similarToInstantiation<T, ThreadSafeQueue> ||
+    ad_utility::similarToInstantiation<T, OrderedThreadSafeQueue>;
+
+namespace detail {
+// A helper function for setting up a producer task for one of the threadsafe
+// queues above. Takes a reference to a  queue and a `task`. The task must
+// return `std::optional<somethingThatCanBePushedToTheQueue>`. The task is
+// called repeatedly, and the resulting values are pushed to the queue. If the
+// task returns `nullopt`, `numThreads` is decremented, and the queue is
+// finished if `numThreads <= 0`. All exceptions that happen during the
+// execution of `task` are propagated to the queue.
+template <IsThreadsafeQueue Queue, std::invocable Task>
+auto makeQueueTask(Queue& queue, Task task, std::atomic<int64_t>& numThreads) {
+  return [&queue, task = std::move(task), &numThreads] {
+    try {
+      while (auto opt = task()) {
+        if (!queue.push(std::move(opt.value()))) {
+          break;
+        }
+      }
+    } catch (...) {
+      try {
+        queue.pushException(std::current_exception());
+      } catch (...) {
+        queue.finish();
+      }
+    }
+    --numThreads;
+    if (numThreads <= 0) {
+      queue.finish();
+    }
+  };
+}
+}  // namespace detail
+
+// This helper function makes the usage of the (Ordered)ThreadSafeQueue above
+// much easier. It takes the size of the queue, the number of producer threads,
+// and a task that produces values. The `producerTask` is called repeatedly in
+// `numThreads` many concurrent threads. It needs to return
+// `std::optional<SomethingThatCanBePushedToTheQueue>` and has the following
+// semantics: If `nullopt` is returned, then the thread is finished. The queue
+// is finished, when all the producer threads have finished by yielding
+// `nullopt`, or if any call to `producerTask` in any thread throws an
+// exception. In that case the exception is propagated to the resulting
+// generator. The resulting generator yields all the values that have been
+// pushed to the queue.
+template <typename Queue>
+cppcoro::generator<typename Queue::value_type> QueueManager(size_t queueSize,
+                                                            size_t numThreads,
+                                                            auto producerTask) {
+  Queue queue{queueSize};
+  AD_CONTRACT_CHECK(numThreads > 0u);
+  std::vector<ad_utility::JThread> threads;
+  std::atomic<int64_t> numUnfinishedThreads{static_cast<int64_t>(numThreads)};
+  absl::Cleanup queueFinisher{[&queue] { queue.finish(); }};
+  for ([[maybe_unused]] auto i : std::views::iota(0u, numThreads)) {
+    threads.emplace_back(
+        detail::makeQueueTask(queue, producerTask, numUnfinishedThreads));
+  }
+
+  while (auto opt = queue.pop()) {
+    co_yield (opt.value());
+  }
+}
 
 }  // namespace ad_utility::data_structures

@@ -31,6 +31,17 @@ auto makePush(Queue& queue) {
   };
 }
 
+template <typename Queue>
+auto makeQueueValue() {
+  return [](size_t i) {
+    if constexpr (ad_utility::similarToInstantiation<Queue, ThreadSafeQueue>) {
+      return i;
+    } else {
+      return std::pair{i, i};
+    }
+  };
+}
+
 // Some constants that are used in almost every test case.
 constexpr size_t queueSize = 5;
 constexpr size_t numThreads = 20;
@@ -233,6 +244,44 @@ TEST(ThreadSafeQueue, DisablePush) {
         queue.finish();
         break;
       }
+    }
+    if (ad_utility::similarToInstantiation<Queue, ThreadSafeQueue>) {
+      // When terminating early, we cannot actually say much about the result,
+      // other than that it contains no duplicate values
+      std::ranges::sort(result);
+      EXPECT_TRUE(std::unique(result.begin(), result.end()) == result.end());
+    } else {
+      // For the ordered queue we have the guarantee that all the pushed values
+      // were in order.
+      EXPECT_THAT(result,
+                  ::testing::ElementsAreArray(std::views::iota(0U, 400U)));
+    }
+  };
+  runWithBothQueueTypes(runTest);
+}
+
+// ________________________________________________________________
+TEST(ThreadSafeQueue, QueueManager) {
+  auto runTest = []<typename Queue>(Queue) {
+    std::atomic<size_t> numPushed = 0;
+    auto task =
+        [&numPushed]() -> std::optional<decltype(makeQueueValue<Queue>()(3))> {
+      auto makeValue = makeQueueValue<Queue>();
+      while (true) {
+        auto value = ++numPushed;
+        if (value < numValues) {
+          return makeValue(value);
+        } else {
+          return std::nullopt;
+        }
+      }
+    };
+    std::vector<size_t> result;
+    size_t numPopped = 0;
+    for (size_t value : QueueManager<Queue>(queueSize, numThreads, task)) {
+      ++numPopped;
+      result.push_back(value);
+      EXPECT_LE(numPushed, numPopped + queueSize + 1 + numThreads);
     }
     if (ad_utility::similarToInstantiation<Queue, ThreadSafeQueue>) {
       // When terminating early, we cannot actually say much about the result,
