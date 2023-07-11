@@ -1,11 +1,11 @@
 
-// Generated from BenchmarkConfigurationShorthand.g4 by ANTLR 4.12.0
+// Generated from ConfigShorthand.g4 by ANTLR 4.13.0
 
 #pragma once
 
 #include "antlr4-runtime.h"
 
-class BenchmarkConfigurationShorthandParser : public antlr4::Parser {
+class ConfigShorthandParser : public antlr4::Parser {
  public:
   enum {
     T__0 = 1,
@@ -32,13 +32,12 @@ class BenchmarkConfigurationShorthandParser : public antlr4::Parser {
     RuleContent = 5
   };
 
-  explicit BenchmarkConfigurationShorthandParser(antlr4::TokenStream* input);
+  explicit ConfigShorthandParser(antlr4::TokenStream* input);
 
-  BenchmarkConfigurationShorthandParser(
-      antlr4::TokenStream* input,
-      const antlr4::atn::ParserATNSimulatorOptions& options);
+  ConfigShorthandParser(antlr4::TokenStream* input,
+                        const antlr4::atn::ParserATNSimulatorOptions& options);
 
-  ~BenchmarkConfigurationShorthandParser() override;
+  ~ConfigShorthandParser() override;
 
   std::string getGrammarFileName() const override;
 
@@ -64,25 +63,18 @@ class BenchmarkConfigurationShorthandParser : public antlr4::Parser {
     virtual size_t getRuleIndex() const override;
     AssignmentsContext* assignments();
     antlr4::tree::TerminalNode* EOF();
-
-    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
-    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
   };
 
   ShortHandStringContext* shortHandString();
 
   class AssignmentsContext : public antlr4::ParserRuleContext {
    public:
-    BenchmarkConfigurationShorthandParser::AssignmentContext*
-        assignmentContext = nullptr;
+    ConfigShorthandParser::AssignmentContext* assignmentContext = nullptr;
     std::vector<AssignmentContext*> listOfAssignments;
     AssignmentsContext(antlr4::ParserRuleContext* parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     std::vector<AssignmentContext*> assignment();
     AssignmentContext* assignment(size_t i);
-
-    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
-    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
   };
 
   AssignmentsContext* assignments();
@@ -93,9 +85,6 @@ class BenchmarkConfigurationShorthandParser : public antlr4::Parser {
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode* NAME();
     ContentContext* content();
-
-    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
-    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
   };
 
   AssignmentContext* assignment();
@@ -105,25 +94,18 @@ class BenchmarkConfigurationShorthandParser : public antlr4::Parser {
     ObjectContext(antlr4::ParserRuleContext* parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     AssignmentsContext* assignments();
-
-    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
-    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
   };
 
   ObjectContext* object();
 
   class ListContext : public antlr4::ParserRuleContext {
    public:
-    BenchmarkConfigurationShorthandParser::ContentContext* contentContext =
-        nullptr;
+    ConfigShorthandParser::ContentContext* contentContext = nullptr;
     std::vector<ContentContext*> listElement;
     ListContext(antlr4::ParserRuleContext* parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     std::vector<ContentContext*> content();
     ContentContext* content(size_t i);
-
-    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
-    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
   };
 
   ListContext* list();
@@ -135,9 +117,6 @@ class BenchmarkConfigurationShorthandParser : public antlr4::Parser {
     antlr4::tree::TerminalNode* LITERAL();
     ListContext* list();
     ObjectContext* object();
-
-    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
-    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
   };
 
   ContentContext* content();

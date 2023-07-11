@@ -16,16 +16,17 @@
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "util/Algorithm.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/Timer.h"
 
 namespace ad_benchmark {
 // ____________________________________________________________________________
-void BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(
-    const BenchmarkConfiguration& config) {
+void BenchmarkRegister::parseConfigWithAllRegisteredBenchmarks(
+    const nlohmann::json& j) {
   for (BenchmarkPointer& instance : registeredBenchmarks) {
-    instance->parseConfiguration(config);
+    instance->getConfigManager().parseConfig(j);
   }
 }
 
