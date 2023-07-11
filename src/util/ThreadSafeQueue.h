@@ -204,13 +204,13 @@ concept IsThreadsafeQueue =
     ad_utility::similarToInstantiation<T, OrderedThreadSafeQueue>;
 
 namespace detail {
-// A helper function for setting up a producer task for one of the threadsafe
-// queues above. Takes a reference to a queue and a `task`. The task must
-// return `std::optional<somethingThatCanBePushedToTheQueue>`. The task is
-// called repeatedly, and the resulting values are pushed to the queue. If the
-// task returns `nullopt`, `numThreads` is decremented, and the queue is
+// A helper function for setting up a producer for one of the threadsafe
+// queues above. Takes a reference to a queue and a `producer`. The producer
+// must return `std::optional<somethingThatCanBePushedToTheQueue>`. The producer
+// is called repeatedly, and the resulting values are pushed to the queue. If
+// the producer returns `nullopt`, `numThreads` is decremented, and the queue is
 // finished if `numThreads <= 0`. All exceptions that happen during the
-// execution of `task` are propagated to the queue.
+// execution of `prodducer` are propagated to the queue.
 template <IsThreadsafeQueue Queue, std::invocable Producer>
 auto makeQueueTask(Queue& queue, Producer producer,
                    std::atomic<int64_t>& numThreads) {
@@ -238,8 +238,8 @@ auto makeQueueTask(Queue& queue, Producer producer,
 
 // This helper function makes the usage of the (Ordered)ThreadSafeQueue above
 // much easier. It takes the size of the queue, the number of producer threads,
-// and a task that produces values. The `producer` is called repeatedly in
-// `numThreads` many concurrent threads. It needs to return
+// and a `producer` (A callable that produces values). The `producer` is called
+// repeatedly in `numThreads` many concurrent threads. It needs to return
 // `std::optional<SomethingThatCanBePushedToTheQueue>` and has the following
 // semantics: If `nullopt` is returned, then the thread is finished. The queue
 // is finished, when all the producer threads have finished by yielding
