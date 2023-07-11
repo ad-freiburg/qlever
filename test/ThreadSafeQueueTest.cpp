@@ -33,6 +33,20 @@ auto makePush(Queue& queue) {
   };
 }
 
+// Similar to `makePush` above, but the returned lambda doesn't push directly to
+// the queue, but simply returns a value that can then be pushed to the queue.
+// This is useful when testing the `queueManager` template.
+template <typename Queue>
+auto makeQueueValue() {
+  return [](size_t i) {
+    if constexpr (ad_utility::similarToInstantiation<Queue, ThreadSafeQueue>) {
+      return i;
+    } else {
+      return std::pair{i, i};
+    }
+  };
+}
+
 // Some constants that are used in almost every test case.
 constexpr size_t queueSize = 5;
 constexpr size_t numThreads = 20;
@@ -315,4 +329,82 @@ TEST(ThreadSafeQueue, SafeExceptionHandling) {
   };
   runWithBothQueueTypes(std::bind_front(runTest, true));
   runWithBothQueueTypes(std::bind_front(runTest, false));
+}
+
+// ________________________________________________________________
+TEST(ThreadSafeQueue, queueManager) {
+  enum class TestType {
+    producerThrows,
+    consumerThrows,
+    normalExecution,
+    consumerFinishesEarly,
+  };
+  auto runTest = []<typename Queue>(TestType testType, Queue&&) {
+    std::atomic<size_t> numPushed = 0;
+    auto task =
+        [&numPushed,
+         &testType]() -> std::optional<decltype(makeQueueValue<Queue>()(3))> {
+      auto makeValue = makeQueueValue<Queue>();
+      while (true) {
+        auto value = numPushed++;
+        if (testType == TestType::producerThrows && value > numValues / 2) {
+          throw std::runtime_error{"Producer"};
+        }
+        if (value < numValues) {
+          return makeValue(value);
+        } else {
+          return std::nullopt;
+        }
+      }
+    };
+    std::vector<size_t> result;
+    size_t numPopped = 0;
+    try {
+      for (size_t value : queueManager<Queue>(queueSize, numThreads, task)) {
+        ++numPopped;
+        if (numPopped > numValues / 2) {
+          if (testType == TestType::consumerThrows) {
+            throw std::runtime_error{"Consumer"};
+          } else if (testType == TestType::consumerFinishesEarly) {
+            break;
+          }
+        }
+        result.push_back(value);
+        EXPECT_LE(numPushed, numPopped + queueSize + 1 + numThreads);
+      }
+      if (testType == TestType::consumerThrows ||
+          testType == TestType::producerThrows) {
+        FAIL() << "Should have thrown";
+      }
+    } catch (const std::runtime_error& e) {
+      if (testType == TestType::consumerThrows) {
+        EXPECT_STREQ(e.what(), "Consumer");
+      } else if (testType == TestType::producerThrows) {
+        EXPECT_STREQ(e.what(), "Producer");
+      } else {
+        FAIL() << "Should not have throwns";
+      }
+    }
+
+    if (testType == TestType::consumerFinishesEarly) {
+      EXPECT_EQ(result.size(), numValues / 2);
+    } else if (testType == TestType::normalExecution) {
+      EXPECT_EQ(result.size(), numValues);
+      // For the `OrderedThreadSafeQueue` we expect the result to already be in
+      // order, for the `ThreadSafeQueue` the order is unspecified and we only
+      // check the content.
+      if (ad_utility::isInstantiation<Queue, ThreadSafeQueue>) {
+        std::ranges::sort(result);
+      }
+      EXPECT_THAT(result, ::testing::ElementsAreArray(
+                              std::views::iota(0UL, numValues)));
+    }
+    // The probably most important test of all is that the destructors which are
+    // run at the following closing brace never lead to a deadlock.
+  };
+  using enum TestType;
+  runWithBothQueueTypes(std::bind_front(runTest, consumerThrows));
+  runWithBothQueueTypes(std::bind_front(runTest, producerThrows));
+  runWithBothQueueTypes(std::bind_front(runTest, consumerFinishesEarly));
+  runWithBothQueueTypes(std::bind_front(runTest, normalExecution));
 }
