@@ -42,18 +42,6 @@ static void writeJsonToFile(nlohmann::json j, const std::string& fileName,
       << j;
 }
 
-static std::string readFileToString(const std::string& fileName) {
-  // The string gets build using a string stream.
-  std::ostringstream transcribedString{};
-
-  // Adding a buffer using `<<` causes the content of the buffer to be
-  // individually added to the string stream. In other words: The entire
-  // content of the opened file will be added.
-  transcribedString << ad_utility::makeIfstream(fileName).rdbuf();
-
-  return transcribedString.str();
-}
-
 /*
  * @brief Goes through all types of registered benchmarks, measures their time
  * and prints their measured time in a fitting format.
@@ -116,22 +104,22 @@ int main(int argc, char** argv) {
     printUsageAndExit();
   }
 
-  // Set all the configuration options, if there was any runtime configuration
-  // given.
-  if (vm.count("configuration-json") || vm.count("configuration-shorthand")) {
-    nlohmann::json jsonConfig(nlohmann::json::value_t::object);
+  /*
+  Set all the configuration options.
+  Because the `configManager` also checks, if mandatory options were set, when
+  it parses, we always have to call this. Even if it is empty.
+  */
+  nlohmann::json jsonConfig(nlohmann::json::value_t::object);
 
-    if (vm.count("configuration-json")) {
-      jsonConfig.update(
-          nlohmann::json::parse(readFileToString(jsonConfigurationFileName)));
-    }
-    if (vm.count("configuration-shorthand")) {
-      jsonConfig.update(ad_utility::ConfigManager::parseShortHand(
-          shortHandConfigurationString));
-    }
-
-    BenchmarkRegister::parseConfigWithAllRegisteredBenchmarks(jsonConfig);
+  if (vm.count("configuration-json")) {
+    jsonConfig.update(fileToJson(jsonConfigurationFileName));
   }
+  if (vm.count("configuration-shorthand")) {
+    jsonConfig.update(ad_utility::ConfigManager::parseShortHand(
+        shortHandConfigurationString));
+  }
+
+  BenchmarkRegister::parseConfigWithAllRegisteredBenchmarks(jsonConfig);
 
   // Print all the available configuration options, if wanted.
   if (vm.count("configuration-options")) {
