@@ -76,14 +76,7 @@ IdTable generateIdTable(
     // Make sure, that the generated row has the right size, before passing it
     // on.
     IdTable::row_type row = rowGenerator();
-
-    if (row.numColumns() != numberColumns) {
-      throw std::runtime_error(absl::StrCat(
-          "The row generator generated a IdTable::row_type of size ",
-          row.numColumns(), ", which is not the wanted size ", numberColumns,
-          "."));
-    }
-
+    AD_CONTRACT_CHECK(row.numColumns() == numberColumns);
     return row;
   });
 
@@ -102,33 +95,19 @@ IdTable createRandomlyFilledIdTable(
   auto joinColumnGeneratorView = std::views::values(joinColumnWithGenerator);
 
   // Are all the join column numbers within the max column number?
-  if (auto column = std::ranges::find_if(
-          joinColumnNumberView,
-          [&numberColumns](const size_t& num) { return num >= numberColumns; });
-      column != joinColumnNumberView.end()) {
-    throw std::runtime_error(
-        absl::StrCat("The join column", *column, " is out of bounds."));
-  }
+  AD_CONTRACT_CHECK(std::ranges::all_of(
+      joinColumnNumberView,
+      [&numberColumns](const size_t& num) { return num < numberColumns; }));
 
   // Are there no duplicates in the join column numbers?
-  for (auto it = joinColumnNumberView.begin(); it != joinColumnNumberView.end();
-       it++) {
-    if (auto column = std::ranges::find_if(
-            it + 1, joinColumnNumberView.end(),
-            [&it](const size_t& num) { return *it == num; });
-        column != joinColumnNumberView.end()) {
-      throw std::runtime_error(
-          absl::StrCat("Join column ", *column,
-                       " got at least two generator assigned to it."));
-    }
-  }
+  std::vector<size_t> sortedJoinColumnNumbers =
+      ad_utility::transform(joinColumnNumberView, std::identity{});
+  std::ranges::sort(sortedJoinColumnNumbers, {}, {});
+  AD_CONTRACT_CHECK(std::ranges::unique(sortedJoinColumnNumbers).empty());
 
   // Are all the functions for generating join column entries not nullptr?
-  if (std::ranges::any_of(joinColumnGeneratorView,
-                          [](auto func) { return func == nullptr; })) {
-    throw std::runtime_error(
-        "At least one of the generator function pointer was a nullptr.");
-  }
+  AD_CONTRACT_CHECK(std::ranges::all_of(
+      joinColumnGeneratorView, [](auto func) { return func != nullptr; }));
 
   // The random number generators for normal entries.
   SlowRandomIntGenerator<size_t> randomNumberGenerator(0, ValueId::maxIndex);
@@ -165,9 +144,7 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
                                     const std::vector<size_t>& joinColumns,
                                     const std::function<ValueId()>& generator) {
   // Is the generator not empty?
-  if (generator == nullptr) {
-    throw std::runtime_error("The generator function was empty.");
-  }
+  AD_CONTRACT_CHECK(generator != nullptr);
 
   // Creating the table.
   return createRandomlyFilledIdTable(
