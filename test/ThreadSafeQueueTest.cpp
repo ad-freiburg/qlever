@@ -338,6 +338,7 @@ TEST(ThreadSafeQueue, queueManager) {
     consumerThrows,
     normalExecution,
     consumerFinishesEarly,
+    bothThrowImmediately
   };
   auto runTest = []<typename Queue>(TestType testType, Queue&&) {
     std::atomic<size_t> numPushed = 0;
@@ -345,24 +346,28 @@ TEST(ThreadSafeQueue, queueManager) {
         [&numPushed,
          &testType]() -> std::optional<decltype(makeQueueValue<Queue>()(3))> {
       auto makeValue = makeQueueValue<Queue>();
-      while (true) {
-        auto value = numPushed++;
-        if (testType == TestType::producerThrows && value > numValues / 2) {
-          throw std::runtime_error{"Producer"};
-        }
-        if (value < numValues) {
-          return makeValue(value);
-        } else {
-          return std::nullopt;
-        }
+      if (testType == TestType::bothThrowImmediately) {
+        throw std::runtime_error{"Producer"};
+      }
+      auto value = numPushed++;
+      if (testType == TestType::producerThrows && value > numValues / 2) {
+        throw std::runtime_error{"Producer"};
+      }
+      if (value < numValues) {
+        return makeValue(value);
+      } else {
+        return std::nullopt;
       }
     };
     std::vector<size_t> result;
     size_t numPopped = 0;
     try {
+      if (testType == TestType::bothThrowImmediately) {
+        throw std::runtime_error{"Consumer"};
+      }
       for (size_t value : queueManager<Queue>(queueSize, numThreads, task)) {
         ++numPopped;
-        if (numPopped > numValues / 2) {
+        if (numPopped > numValues / 3) {
           if (testType == TestType::consumerThrows) {
             throw std::runtime_error{"Consumer"};
           } else if (testType == TestType::consumerFinishesEarly) {
@@ -374,20 +379,21 @@ TEST(ThreadSafeQueue, queueManager) {
       }
       if (testType == TestType::consumerThrows ||
           testType == TestType::producerThrows) {
-        FAIL() << "Should have thrown";
+        FAIL() << "Should have thrown" << static_cast<unsigned>(testType);
       }
     } catch (const std::runtime_error& e) {
-      if (testType == TestType::consumerThrows) {
+      if (testType == TestType::consumerThrows ||
+          testType == TestType::bothThrowImmediately) {
         EXPECT_STREQ(e.what(), "Consumer");
       } else if (testType == TestType::producerThrows) {
         EXPECT_STREQ(e.what(), "Producer");
       } else {
-        FAIL() << "Should not have throwns";
+        FAIL() << "Should not have thrown";
       }
     }
 
     if (testType == TestType::consumerFinishesEarly) {
-      EXPECT_EQ(result.size(), numValues / 2);
+      EXPECT_EQ(result.size(), numValues / 3);
     } else if (testType == TestType::normalExecution) {
       EXPECT_EQ(result.size(), numValues);
       // For the `OrderedThreadSafeQueue` we expect the result to already be in
@@ -407,4 +413,5 @@ TEST(ThreadSafeQueue, queueManager) {
   runWithBothQueueTypes(std::bind_front(runTest, producerThrows));
   runWithBothQueueTypes(std::bind_front(runTest, consumerFinishesEarly));
   runWithBothQueueTypes(std::bind_front(runTest, normalExecution));
+  runWithBothQueueTypes(std::bind_front(runTest, bothThrowImmediately));
 }

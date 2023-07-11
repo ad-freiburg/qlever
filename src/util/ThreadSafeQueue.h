@@ -205,17 +205,18 @@ concept IsThreadsafeQueue =
 
 namespace detail {
 // A helper function for setting up a producer task for one of the threadsafe
-// queues above. Takes a reference to a  queue and a `task`. The task must
+// queues above. Takes a reference to a queue and a `task`. The task must
 // return `std::optional<somethingThatCanBePushedToTheQueue>`. The task is
 // called repeatedly, and the resulting values are pushed to the queue. If the
 // task returns `nullopt`, `numThreads` is decremented, and the queue is
 // finished if `numThreads <= 0`. All exceptions that happen during the
 // execution of `task` are propagated to the queue.
-template <IsThreadsafeQueue Queue, std::invocable Task>
-auto makeQueueTask(Queue& queue, Task task, std::atomic<int64_t>& numThreads) {
-  return [&queue, task = std::move(task), &numThreads] {
+template <IsThreadsafeQueue Queue, std::invocable Producer>
+auto makeQueueTask(Queue& queue, Producer producer,
+                   std::atomic<int64_t>& numThreads) {
+  return [&queue, producer = std::move(producer), &numThreads] {
     try {
-      while (auto opt = task()) {
+      while (auto opt = producer()) {
         if (!queue.push(std::move(opt.value()))) {
           break;
         }
@@ -237,19 +238,19 @@ auto makeQueueTask(Queue& queue, Task task, std::atomic<int64_t>& numThreads) {
 
 // This helper function makes the usage of the (Ordered)ThreadSafeQueue above
 // much easier. It takes the size of the queue, the number of producer threads,
-// and a task that produces values. The `producerTask` is called repeatedly in
+// and a task that produces values. The `producer` is called repeatedly in
 // `numThreads` many concurrent threads. It needs to return
 // `std::optional<SomethingThatCanBePushedToTheQueue>` and has the following
 // semantics: If `nullopt` is returned, then the thread is finished. The queue
 // is finished, when all the producer threads have finished by yielding
-// `nullopt`, or if any call to `producerTask` in any thread throws an
+// `nullopt`, or if any call to `producer` in any thread throws an
 // exception. In that case the exception is propagated to the resulting
 // generator. The resulting generator yields all the values that have been
 // pushed to the queue.
 template <typename Queue>
 cppcoro::generator<typename Queue::value_type> queueManager(size_t queueSize,
                                                             size_t numThreads,
-                                                            auto producerTask) {
+                                                            auto producer) {
   Queue queue{queueSize};
   AD_CONTRACT_CHECK(numThreads > 0u);
   std::vector<ad_utility::JThread> threads;
@@ -257,7 +258,7 @@ cppcoro::generator<typename Queue::value_type> queueManager(size_t queueSize,
   absl::Cleanup queueFinisher{[&queue] { queue.finish(); }};
   for ([[maybe_unused]] auto i : std::views::iota(0u, numThreads)) {
     threads.emplace_back(
-        detail::makeQueueTask(queue, producerTask, numUnfinishedThreads));
+        detail::makeQueueTask(queue, producer, numUnfinishedThreads));
   }
 
   while (auto opt = queue.pop()) {
