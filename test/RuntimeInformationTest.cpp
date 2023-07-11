@@ -76,7 +76,8 @@ TEST(RuntimeInformation, setColumnNames) {
 TEST(RuntimeInformation, statusToString) {
   using enum RuntimeInformation::Status;
   using R = RuntimeInformation;
-  EXPECT_EQ(R::toString(completed), "completed");
+  EXPECT_EQ(R::toString(fullyMaterialized), "fully materialized");
+  EXPECT_EQ(R::toString(lazilyMaterialized), "lazily materialized");
   EXPECT_EQ(R::toString(notStarted), "not started");
   EXPECT_EQ(R::toString(optimizedOut), "optimized out");
   EXPECT_EQ(R::toString(failed), "failed");
@@ -135,7 +136,7 @@ TEST(RuntimeInformation, toStringAndJson) {
   parent.columnNames_.push_back("?alpha");
   parent.totalTime_ = 6.2;
   parent.cacheStatus_ = ad_utility::CacheStatus::computed;
-  parent.status_ = RuntimeInformation::Status::completed;
+  parent.status_ = RuntimeInformation::Status::fullyMaterialized;
 
   parent.children_.push_back(child);
 
@@ -147,7 +148,7 @@ TEST(RuntimeInformation, toStringAndJson) {
 │  columns: ?alpha
 │  total_time: 6.20 ms
 │  operation_time: 2.80 ms
-│  status: completed
+│  status: fully materialized
 │  cache_status: computed
 │  ┬
 │  │
@@ -181,7 +182,7 @@ TEST(RuntimeInformation, toStringAndJson) {
 "estimated_operation_cost": 0,
 "estimated_column_multiplicities": [],
 "estimated_size": 0,
-"status": "completed",
+"status": "fully materialized",
 "children": [
     {
         "description": "child",

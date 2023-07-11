@@ -1,11 +1,11 @@
 
-// Generated from BenchmarkConfigurationShorthand.g4 by ANTLR 4.12.0
+// Generated from ConfigShorthand.g4 by ANTLR 4.13.0
 
 #pragma once
 
 #include "antlr4-runtime.h"
 
-class BenchmarkConfigurationShorthandLexer : public antlr4::Lexer {
+class ConfigShorthandLexer : public antlr4::Lexer {
  public:
   enum {
     T__0 = 1,
@@ -23,9 +23,9 @@ class BenchmarkConfigurationShorthandLexer : public antlr4::Lexer {
     WHITESPACE = 13
   };
 
-  explicit BenchmarkConfigurationShorthandLexer(antlr4::CharStream* input);
+  explicit ConfigShorthandLexer(antlr4::CharStream* input);
 
-  ~BenchmarkConfigurationShorthandLexer() override;
+  ~ConfigShorthandLexer() override;
 
   std::string getGrammarFileName() const override;
 

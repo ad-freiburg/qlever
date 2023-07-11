@@ -26,7 +26,8 @@ class RuntimeInformation {
   /// The computation status of an operation.
   enum struct Status {
     notStarted,
-    completed,
+    fullyMaterialized,
+    lazilyMaterialized,
     optimizedOut,
     failed,
     failedBecauseChildFailed
