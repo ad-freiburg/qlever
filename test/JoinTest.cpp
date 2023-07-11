@@ -306,6 +306,7 @@ TEST(JoinTest, joinWithColumnAndScan) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
     RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(
         materializeIndexScans ? 1'000'000 : 0);
+    qec->getQueryTreeCache().clearAll();
     auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
         qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
     auto valuesTree = makeValuesForSingleVariable(qec, "?s", {"<x>"});
@@ -324,16 +325,20 @@ TEST(JoinTest, joinWithColumnAndScan) {
     testJoinOperation(joinSwitched,
                       makeExpectedColumns(expectedVariables, expected));
   };
-  test(true);
-  test(false);
+  test(0);
+  test(1);
+  test(2);
+  test(3);
+  test(1'000'000);
 }
 
 TEST(JoinTest, joinTwoScans) {
-  auto test = [](bool materializeIndexScans) {
+  auto test = [](size_t materializationThreshold) {
     auto qec = ad_utility::testing::getQec(
-        "<x> <p> 1. <x2> <p> 2. <x> <p2> 3 . <x2> <p2> 4. ");
+        "<x> <p> 1. <x2> <p> 2. <x> <p2> 3 . <x2> <p2> 4. <x3> <p2> 7. ");
     RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(
-        materializeIndexScans ? 1'000'000 : 0);
+        materializationThreshold);
+    qec->getQueryTreeCache().clearAll();
     auto scanP = ad_utility::makeExecutionTree<IndexScan>(
         qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
     auto scanP2 = ad_utility::makeExecutionTree<IndexScan>(
@@ -353,6 +358,9 @@ TEST(JoinTest, joinTwoScans) {
     testJoinOperation(joinSwitched,
                       makeExpectedColumns(expectedVariables, expected));
   };
-  test(true);
-  test(false);
+  test(0);
+  test(1);
+  test(2);
+  test(3);
+  test(1'000'000);
 }
