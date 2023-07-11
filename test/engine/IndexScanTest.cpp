@@ -68,9 +68,10 @@ void testLazyScanForJoinOfTwoScans(
     const std::string& kgTurtle, const SparqlTriple& tripleLeft,
     const SparqlTriple& tripleRight, const std::vector<IndexPair>& leftRows,
     const std::vector<IndexPair>& rightRows,
+    size_t blocksizePermutationsInBytes = 32,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  auto qec = getQec(kgTurtle);
+  auto qec = getQec(kgTurtle, true, true, true, blocksizePermutationsInBytes);
   IndexScan s1{qec, Permutation::PSO, tripleLeft};
   IndexScan s2{qec, Permutation::PSO, tripleRight};
   auto implForSwitch = [](IndexScan& l, IndexScan& r, const auto& expectedL,
@@ -189,6 +190,19 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<x5> <q> <xb>. <x9> <q> <xb2> ."
         "<x91> <q> <xb>. <x93> <q> <xb2> .";
     testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{1, 5}}, {{0, 4}});
+  }
+  {
+    // In this example we use 3 triples per block (48 bytes) and the `<p>`
+    // permutation is standing in a single block together with the previous
+    // `<o>` relation. The lazy scans are however still aware that the relevant
+    // part of the block (`<b> <p> ?x`) only  goes from `<x80>` through `<x90>`,
+    // so it is not necessary to scan the first block of the `<q>` relation
+    // which only has subsects <= `<x5>`.
+    std::string kg =
+        "<a> <o> <a1>. <b> <p> <x80>. <b> <p> <x90>. "
+        "<x2> <q> <xb>. <x5> <q> <xb2> . <x5> <q> <xb>. "
+        "<x9> <q> <xb2> . <x91> <q> <xb>. <x93> <q> <xb2> .";
+    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 1}}, {{3, 6}}, 48);
   }
   {
     std::string kg =

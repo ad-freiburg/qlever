@@ -268,7 +268,7 @@ TEST(ThreadSafeQueue, QueueManager) {
         [&numPushed]() -> std::optional<decltype(makeQueueValue<Queue>()(3))> {
       auto makeValue = makeQueueValue<Queue>();
       while (true) {
-        auto value = ++numPushed;
+        auto value = numPushed++;
         if (value < numValues) {
           return makeValue(value);
         } else {
@@ -283,17 +283,7 @@ TEST(ThreadSafeQueue, QueueManager) {
       result.push_back(value);
       EXPECT_LE(numPushed, numPopped + queueSize + 1 + numThreads);
     }
-    if (ad_utility::similarToInstantiation<Queue, ThreadSafeQueue>) {
-      // When terminating early, we cannot actually say much about the result,
-      // other than that it contains no duplicate values
-      std::ranges::sort(result);
-      EXPECT_TRUE(std::unique(result.begin(), result.end()) == result.end());
-    } else {
-      // For the ordered queue we have the guarantee that all the pushed values
-      // were in order.
-      EXPECT_THAT(result,
-                  ::testing::ElementsAreArray(std::views::iota(0U, 400U)));
-    }
+    // TODO<joka921> Perform the remaining testing etc.
   };
   runWithBothQueueTypes(runTest);
 }

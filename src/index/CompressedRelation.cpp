@@ -115,83 +115,52 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   }
   const size_t queueSize =
       RuntimeParameters().get<"lazy-index-scan-queue-size">();
-  ad_utility::data_structures::OrderedThreadSafeQueue<DecompressedBlock> queue{
-      queueSize};
   auto blockIterator = beginBlock;
   std::mutex blockIteratorMutex;
-  auto readAndDecompressBlock = [&]() {
-    try {
-      while (true) {
-        std::unique_lock lock{blockIteratorMutex};
-        if (blockIterator == endBlock) {
-          // Note: We cannot call `queue.finish()` here, as the last block might
-          // not yet be pushed because it is handled by another thread.
-          return;
-        }
-        // Note: taking a copy here is probably not necessary (the lifetime of
-        // all the blocks is long enough, so a `const&` would suffice), but the
-        // copy is cheap and makes the code more robust.
-        auto block = *blockIterator;
-        // Note: The order of the following three lines is important: The index
-        // of the current block depends on the current value of `blockIterator`,
-        // but we have to increment `blockIterator` to determine whether this
-        // was the last block.
-        auto myIndex = static_cast<size_t>(blockIterator - beginBlock);
-        ++blockIterator;
-        bool isLastBlock = blockIterator == endBlock;
-        // Note: the reading of the block could also happen without holding the
-        // lock. We still perform it inside the lock to avoid contention of the
-        // file. On a fast SSD we could possibly change this, but this has to be
-        // investigated.
-        CompressedBlock compressedBlock =
-            readCompressedBlockFromFile(block, file, columnIndices);
-        lock.unlock();
-        bool pushWasSuccessful = queue.push(
-            myIndex, decompressBlock(compressedBlock, block.numRows_));
-        checkTimeout(timer);
-        if (!pushWasSuccessful) {
-          return;
-        }
-        // Note: Only the thread that actually pushes the last block knows when
-        // it is safe to call `finish` to signal that all blocks have been
-        // succesfully pushed to the queue.
-        if (isLastBlock) {
-          queue.finish();
-        }
-      }
-    } catch (...) {
-      try {
-        queue.pushException(std::current_exception());
-      } catch (...) {
-        queue.finish();
-      }
+  auto readAndDecompressBlock =
+      [&]() -> std::optional<std::pair<size_t, DecompressedBlock>> {
+    checkTimeout(timer);
+    std::unique_lock lock{blockIteratorMutex};
+    if (blockIterator == endBlock) {
+      return std::nullopt;
     }
+    // Note: taking a copy here is probably not necessary (the lifetime of
+    // all the blocks is long enough, so a `const&` would suffice), but the
+    // copy is cheap and makes the code more robust.
+    auto block = *blockIterator;
+    // Note: The order of the following three lines is important: The index
+    // of the current block depends on the current value of `blockIterator`,
+    // but we have to increment `blockIterator` to determine whether this
+    // was the last block.
+    auto myIndex = static_cast<size_t>(blockIterator - beginBlock);
+    ++blockIterator;
+    // Note: the reading of the block could also happen without holding the
+    // lock. We still perform it inside the lock to avoid contention of the
+    // file. On a fast SSD we could possibly change this, but this has to be
+    // investigated.
+    CompressedBlock compressedBlock =
+        readCompressedBlockFromFile(block, file, columnIndices);
+    lock.unlock();
+    return std::pair{myIndex, decompressBlock(compressedBlock, block.numRows_)};
   };
-  // Note: The order of the following declarations is very important at the time
-  // of destruction: First, the `Cleanup` is destroyed, which finishes the
-  // queue. This allows the destructor of `threads` to join the threads, as the
-  // threads are able to complete once they cannot access the queue anymore.
-  // Only then the `blockIteratorMutex` and the `queue` can be safely destroyed,
-  // as the threads that were using them have already been destroyed.
-  std::vector<ad_utility::JThread> threads;
-  absl::Cleanup finishQueue{[&queue] { queue.finish(); }};
   const size_t numThreads =
       RuntimeParameters().get<"lazy-index-scan-num-threads">();
-  for ([[maybe_unused]] auto j : std::views::iota(0u, numThreads)) {
-    threads.emplace_back(readAndDecompressBlock);
-  }
 
   ad_utility::Timer popTimer{ad_utility::timer::Timer::InitialStatus::Started};
   // In case the coroutine is destroyed early we still want to have this
   // information.
   auto setTimer = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
       [&details, &popTimer]() { details.blockingTimeMs_ = popTimer.msecs(); });
-  while (auto opt = queue.pop()) {
+
+  auto queue = ad_utility::data_structures::QueueManager<
+      ad_utility::data_structures::OrderedThreadSafeQueue<IdTable>>(
+      queueSize, numThreads, readAndDecompressBlock);
+  for (IdTable& block : queue) {
     popTimer.stop();
     checkTimeout(timer);
     ++details.numBlocksRead_;
-    details.numElementsRead_ += opt.value().numRows();
-    co_yield opt.value();
+    details.numElementsRead_ += block.numRows();
+    co_yield block;
     popTimer.cont();
   }
   // The `OnDestruction...` above might be called too late, so we manually set

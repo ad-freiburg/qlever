@@ -57,12 +57,7 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   _multiplicities.clear();
   auto findJoinVar = [](const QueryExecutionTree& tree,
                         ColumnIndex joinCol) -> Variable {
-    for (auto p : tree.getVariableColumns()) {
-      if (p.second.columnIndex_ == joinCol) {
-        return p.first;
-      }
-    }
-    AD_FAIL();
+    return tree.getVariableAndInfoByColumnIndex(joinCol).first;
   };
   _joinVar = findJoinVar(*_left, _leftJoinCol);
   AD_CONTRACT_CHECK(_joinVar == findJoinVar(*_right, _rightJoinCol));
@@ -71,8 +66,8 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
 // _____________________________________________________________________________
 Join::Join(InvalidOnlyForTestingJoinTag, QueryExecutionContext* qec)
     : Operation(qec) {
-  // Needed, so that the time out checker in Join::join doesn't create a seg
-  // fault if it tries to create a message about the time out.
+  // Needed, so that the timeout checker in Join::join doesn't create a seg
+  // fault if it tries to create a message about the timeout.
   _left = std::make_shared<QueryExecutionTree>(qec);
   _right = _left;
 }

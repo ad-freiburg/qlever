@@ -159,7 +159,7 @@ class OrderedThreadSafeQueue {
   }
 
   bool push(std::pair<size_t, T> indexAndValue) {
-    push(indexAndValue.first, std::move(indexAndValue.second));
+    return push(indexAndValue.first, std::move(indexAndValue.second));
   }
 
   // See `ThreadSafeQueue` for details.
