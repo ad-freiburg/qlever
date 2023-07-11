@@ -197,7 +197,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
     // `<o>` relation. The lazy scans are however still aware that the relevant
     // part of the block (`<b> <p> ?x`) only  goes from `<x80>` through `<x90>`,
     // so it is not necessary to scan the first block of the `<q>` relation
-    // which only has subsects <= `<x5>`.
+    // which only has subjects <= `<x5>`.
     std::string kg =
         "<a> <o> <a1>. <b> <p> <x80>. <b> <p> <x90>. "
         "<x2> <q> <xb>. <x5> <q> <xb2> . <x5> <q> <xb>. "
