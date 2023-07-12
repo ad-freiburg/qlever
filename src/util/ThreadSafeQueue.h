@@ -14,6 +14,7 @@
 #include "absl/cleanup/cleanup.h"
 #include "util/Exception.h"
 #include "util/Generator.h"
+#include "util/Log.h"
 #include "util/jthread.h"
 
 namespace ad_utility::data_structures {
@@ -105,14 +106,28 @@ class ThreadSafeQueue {
   /// empty optional, whatever happens first
   std::optional<T> pop() {
     std::unique_lock lock{mutex_};
-    pushNotification_.wait(lock, [this] {
-      return !queue_.empty() || finish_.test() || pushedException_;
-    });
+    // The setting of the atomic `finish_` variable is deliberately not under a
+    // mutex. But this means that the setting of `finish_` and the notification
+    // of the condition variable can happen after the stop condition for `wait`
+    // was checked, but before the thread is registered as waiting on the
+    // condition variable. That's why we have to use `wait_for` to explicitly
+    // check `finish_` every 10ms to not miss this update. Note that this subtle
+    // race condition is not purely theoretical but occurs in practice when only
+    // using `wait` and running the `CompressedRelationsTest`s repeatedly in
+    // release builds.
+    while (true) {
+      if (pushNotification_.wait_for(
+              lock, std::chrono::milliseconds(10), [this] {
+                return !queue_.empty() || finish_.test() || pushedException_;
+              })) {
+        break;
+      }
+    }
     if (pushedException_) {
       std::rethrow_exception(pushedException_);
     }
     if (finish_.test() && queue_.empty()) {
-      return {};
+      return std::nullopt;
     }
     std::optional<T> value = std::move(queue_.front());
     queue_.pop();
