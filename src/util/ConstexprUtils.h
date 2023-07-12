@@ -63,8 +63,7 @@ void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
  *  `operator()` which is templated on a single `size_t`.
  */
 template <size_t MaxValue, typename Function>
-void RuntimeValueToCompileTimeValue(const size_t& value,
-                                    const Function& function) {
+void RuntimeValueToCompileTimeValue(const size_t& value, Function function) {
   AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
   ConstexprForLoop(std::make_index_sequence<MaxValue + 1>{},
                    [&function, &value]<size_t Index>() {
@@ -72,6 +71,34 @@ void RuntimeValueToCompileTimeValue(const size_t& value,
                        function.template operator()<Index>();
                      }
                    });
+}
+
+/*
+@brief Returns the index of the first given type, that passes the given check.
+
+@tparam checkFunction A `constexpr` function, that takes one template
+parameter and return a bool.
+@tparam Args The list of types, that should be checked over.
+
+@return An index out of `[0, sizeof...(Args))`, if there was type, that passed
+the check. Otherwise, returns `sizeof...(Args)`.
+*/
+template <auto checkFunction, typename... Args>
+constexpr size_t getIndexOfFirstTypeToPassCheck() {
+  size_t index = 0;
+
+  auto l = [&index]<typename T>() {
+    if constexpr (checkFunction.template operator()<T>()) {
+      return true;
+    } else {
+      ++index;
+      return false;
+    }
+  };
+
+  ((l.template operator()<Args>()) || ...);
+
+  return index;
 }
 
 // An `ad_utility::ValueSequence<T, values...>` has the same functionality as

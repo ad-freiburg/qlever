@@ -17,6 +17,14 @@
 namespace ad_benchmark {
 
 /*
+ * @brief Return a string of the form
+ * "#################
+ * # categoryTitle #
+ * #################"
+ */
+std::string createCategoryTitle(std::string_view categoryTitle);
+
+/*
 @brief If `meta` is a non empty metadata object, return it's non compact
 json string representation. Otherwise, return an empty string.
 

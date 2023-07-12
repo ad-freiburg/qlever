@@ -599,12 +599,14 @@ class IdTable {
   // TODO<joka921> We should probably change the names of all those
   // typedefs (`iterator` as well as `row_type` etc.) to `PascalCase` for
   // consistency.
-  using iterator = ad_utility::IteratorForAccessOperator<
-      IdTable, IteratorHelper<row_reference_restricted>,
-      ad_utility::IsConst::False, row_type, row_reference>;
   using const_iterator = ad_utility::IteratorForAccessOperator<
       IdTable, IteratorHelper<const_row_reference_restricted>,
       ad_utility::IsConst::True, row_type, const_row_reference>;
+  using iterator = std::conditional_t<
+      isView, const_iterator,
+      ad_utility::IteratorForAccessOperator<
+          IdTable, IteratorHelper<row_reference_restricted>,
+          ad_utility::IsConst::False, row_type, row_reference>>;
 
   // The usual overloads of `begin()` and `end()` for const and mutable
   // `IdTable`s.

@@ -12,9 +12,9 @@
 #include <variant>
 #include <vector>
 
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/CopyableUniquePtr.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -140,16 +140,16 @@ between a collection of benchmarks of any type (single, group, table) and
 the processing/management of those benchmarks.
 */
 class BenchmarkInterface {
+  /*
+  For adding configuration options and getting the values passed at runtime.
+  If you want to add configuration options, do it in the constructor of your
+  class.
+  */
+  ad_utility::ConfigManager manager_;
+
  public:
   // A human-readable name that will be printed as part of the output.
   virtual std::string name() const = 0;
-
-  // Used to transport values, that you want to set at runtime.
-  virtual void parseConfiguration(
-      [[maybe_unused]] const BenchmarkConfiguration& config) {
-    // Default behaviour.
-    return;
-  };
 
   /*
   For the general metadata of a class. Mostly information, that is the same
@@ -176,6 +176,10 @@ class BenchmarkInterface {
 
   // Without this, we get memory problems.
   virtual ~BenchmarkInterface() = default;
+
+  // Needed for manipulation by the infrastructure.
+  ad_utility::ConfigManager& getConfigManager() { return manager_; }
+  const ad_utility::ConfigManager& getConfigManager() const { return manager_; }
 };
 
 /*
@@ -204,11 +208,10 @@ class BenchmarkRegister {
   explicit BenchmarkRegister(BenchmarkPointer&& benchmarkClasseInstance);
 
   /*
-  @brief Passes the `BenchmarkConfiguration` to the `parseConfiguration`
-   function of all the registered instances of benchmark classes.
+  @brief Passes the `nlohmann::json` object to the
+  `ConfigManager::parseConfig()` of every registered benchmark class.
   */
-  static void passConfigurationToAllRegisteredBenchmarks(
-      const BenchmarkConfiguration& config = BenchmarkConfiguration{});
+  static void parseConfigWithAllRegisteredBenchmarks(const nlohmann::json& j);
 
   /*
    * @brief Measures all the registered benchmarks and returns the resulting

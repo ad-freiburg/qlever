@@ -11,18 +11,17 @@
 
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
+#include "util/ConfigManager/ConfigManager.h"
+#include "util/ConfigManager/ConfigOption.h"
+#include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/StringUtils.h"
 
 namespace ad_benchmark {
 
-/*
- * @brief Return a string of the form
- * "#################
- * # categoryTitle #
- * #################"
- */
-static std::string createCategoryTitle(std::string_view categoryTitle) {
+// ___________________________________________________________________________
+std::string createCategoryTitle(std::string_view categoryTitle) {
   // The bar above and below the title.
   const size_t barLength = categoryTitle.size() + 4;
   const std::string bar(barLength, '#');
@@ -75,6 +74,11 @@ std::string benchmarkResultsToString(
   } else {
     visualization << "General metadata: None";
   }
+
+  // Visualize the configuration options of this class.
+  visualization << "\n\n"
+                << benchmarkClass->getConfigManager().printConfigurationDoc(
+                       true);
 
   /*
   @brief Adds a category to the string steam, if it is not empty. Mainly

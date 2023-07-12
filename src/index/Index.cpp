@@ -352,24 +352,17 @@ vector<float> Index::getMultiplicities(const TripleComponent& key,
 }
 
 // ____________________________________________________________________________
-void Index::scan(Id key, IdTable* result, Permutation::Enum p,
-                 ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return pimpl_->scan(key, result, p, std::move(timer));
+IdTable Index::scan(
+    const TripleComponent& col0String,
+    std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+    Permutation::Enum p, ad_utility::SharedConcurrentTimeoutTimer timer) const {
+  return pimpl_->scan(col0String, col1String, p, std::move(timer));
 }
 
 // ____________________________________________________________________________
-void Index::scan(const TripleComponent& key, IdTable* result,
-                 const Permutation::Enum& p,
-                 ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return pimpl_->scan(key, result, p, std::move(timer));
-}
-
-// ____________________________________________________________________________
-void Index::scan(const TripleComponent& col0String,
-                 const TripleComponent& col1String, IdTable* result,
-                 Permutation::Enum p,
-                 ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return pimpl_->scan(col0String, col1String, result, p, std::move(timer));
+IdTable Index::scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+                    ad_utility::SharedConcurrentTimeoutTimer timer) const {
+  return pimpl_->scan(col0Id, col1Id, p, std::move(timer));
 }
 
 // ____________________________________________________________________________

@@ -8,6 +8,8 @@
 #include <atomic>
 #include <ranges>
 
+#include "./util/GTestHelpers.h"
+#include "absl/cleanup/cleanup.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/TypeTraits.h"
 #include "util/jthread.h"
@@ -27,6 +29,20 @@ auto makePush(Queue& queue) {
       return queue.push(i);
     } else {
       return queue.push(i, i);
+    }
+  };
+}
+
+// Similar to `makePush` above, but the returned lambda doesn't push directly to
+// the queue, but simply returns a value that can then be pushed to the queue.
+// This is useful when testing the `queueManager` template.
+template <typename Queue>
+auto makeQueueValue() {
+  return [](size_t i) {
+    if constexpr (ad_utility::similarToInstantiation<Queue, ThreadSafeQueue>) {
+      return i;
+    } else {
+      return std::pair{i, i};
     }
   };
 }
@@ -247,4 +263,155 @@ TEST(ThreadSafeQueue, DisablePush) {
     }
   };
   runWithBothQueueTypes(runTest);
+}
+
+// Demonstrate the safe way to handle exceptions and early destruction in the
+// worker threads as well as in the consumer threads. By `safe` we mean that the
+// program is neither terminated nor does it run into a deadlock.
+TEST(ThreadSafeQueue, SafeExceptionHandling) {
+  auto runTest = []<typename Queue>(bool workerThrows, Queue&& queue) {
+    auto throwingProcedure = [&]() {
+      auto threadFunction = [&queue, workerThrows] {
+        try {
+          auto push = makePush(queue);
+          size_t numPushed = 0;
+          // We have to finish the threadas soon as `push` returns false.
+          while (push(numPushed++)) {
+            // Manually throw an exception if `workerThrows` was specified.
+            if (numPushed >= numValues / 2 && workerThrows) {
+              throw std::runtime_error{"Producer died"};
+            }
+          }
+        } catch (...) {
+          // We have to catch all exceptions in the worker thread(s), otherwise
+          // the program will immediately terminate. When there was an exception
+          // and the queue still expects results from this worker thread
+          // (especially if the queue is ordered), we have to finish the queue.
+          // If we just call `finish` then the producer will see a noop when
+          // popping from the queue. When we use `pushException` the call to
+          // `pop` will rethrow the exception.
+          try {
+            // In theory, `pushException` might throw if something goes really
+            // wrong with the underlying mutex. In practice this should never
+            // happen, but we demonstrate the really safe way here.
+            queue.pushException(std::current_exception());
+          } catch (...) {
+            // `finish()` can never fail.
+            queue.finish();
+          }
+        }
+      };
+      ad_utility::JThread thread{threadFunction};
+      // This cleanup is important in case the consumer throws an exception. We
+      // then first have to `finish` the queue, s.t. the producer threads can
+      // join. We then can join and destroy the worker threads and finally
+      // destroy the queue. So the order of declaration is important:
+      // 1. Queue, 2. WorkerThreads, 3. `Cleanup` that finishes the queue.
+      absl::Cleanup cleanup{[&queue] { queue.finish(); }};
+
+      for ([[maybe_unused]] auto i : std::views::iota(0u, numValues)) {
+        auto opt = queue.pop();
+        if (!opt) {
+          return;
+        }
+      }
+      // When throwing, the `Cleanup` calls `finish` and the producers can run
+      // to completion because their calls to `push` will return false.
+      throw std::runtime_error{"Consumer died"};
+    };
+    if (workerThrows) {
+      AD_EXPECT_THROW_WITH_MESSAGE(throwingProcedure(),
+                                   ::testing::StartsWith("Producer"));
+    } else {
+      AD_EXPECT_THROW_WITH_MESSAGE(throwingProcedure(),
+                                   ::testing::StartsWith("Consumer"));
+    }
+  };
+  runWithBothQueueTypes(std::bind_front(runTest, true));
+  runWithBothQueueTypes(std::bind_front(runTest, false));
+}
+
+// ________________________________________________________________
+TEST(ThreadSafeQueue, queueManager) {
+  enum class TestType {
+    producerThrows,
+    consumerThrows,
+    normalExecution,
+    consumerFinishesEarly,
+    bothThrowImmediately
+  };
+  auto runTest = []<typename Queue>(TestType testType, Queue&&) {
+    std::atomic<size_t> numPushed = 0;
+    auto task =
+        [&numPushed,
+         &testType]() -> std::optional<decltype(makeQueueValue<Queue>()(3))> {
+      auto makeValue = makeQueueValue<Queue>();
+      if (testType == TestType::bothThrowImmediately) {
+        throw std::runtime_error{"Producer"};
+      }
+      auto value = numPushed++;
+      if (testType == TestType::producerThrows && value > numValues / 2) {
+        throw std::runtime_error{"Producer"};
+      }
+      if (value < numValues) {
+        return makeValue(value);
+      } else {
+        return std::nullopt;
+      }
+    };
+    std::vector<size_t> result;
+    size_t numPopped = 0;
+    try {
+      if (testType == TestType::bothThrowImmediately) {
+        throw std::runtime_error{"Consumer"};
+      }
+      for (size_t value : queueManager<Queue>(queueSize, numThreads, task)) {
+        ++numPopped;
+        if (numPopped > numValues / 3) {
+          if (testType == TestType::consumerThrows) {
+            throw std::runtime_error{"Consumer"};
+          } else if (testType == TestType::consumerFinishesEarly) {
+            break;
+          }
+        }
+        result.push_back(value);
+        EXPECT_LE(numPushed, numPopped + queueSize + 1 + numThreads);
+      }
+      if (testType == TestType::consumerThrows ||
+          testType == TestType::producerThrows) {
+        FAIL() << "Should have thrown" << static_cast<unsigned>(testType);
+      }
+    } catch (const std::runtime_error& e) {
+      if (testType == TestType::consumerThrows ||
+          testType == TestType::bothThrowImmediately) {
+        EXPECT_STREQ(e.what(), "Consumer");
+      } else if (testType == TestType::producerThrows) {
+        EXPECT_STREQ(e.what(), "Producer");
+      } else {
+        FAIL() << "Should not have thrown";
+      }
+    }
+
+    if (testType == TestType::consumerFinishesEarly) {
+      EXPECT_EQ(result.size(), numValues / 3);
+    } else if (testType == TestType::normalExecution) {
+      EXPECT_EQ(result.size(), numValues);
+      // For the `OrderedThreadSafeQueue` we expect the result to already be in
+      // order, for the `ThreadSafeQueue` the order is unspecified and we only
+      // check the content.
+      if (ad_utility::isInstantiation<Queue, ThreadSafeQueue>) {
+        std::ranges::sort(result);
+      }
+      EXPECT_THAT(result, ::testing::ElementsAreArray(
+                              std::views::iota(0UL, numValues)));
+    }
+    // The probably most important test of all is that the destructors which are
+    // run at the following closing brace never lead to a deadlock.
+  };
+  using enum TestType;
+  runWithBothQueueTypes(std::bind_front(runTest, consumerThrows));
+  runWithBothQueueTypes(std::bind_front(runTest, producerThrows));
+  runWithBothQueueTypes(std::bind_front(runTest, consumerFinishesEarly));
+  runWithBothQueueTypes(std::bind_front(runTest, normalExecution));
+  runWithBothQueueTypes(std::bind_front(runTest, bothThrowImmediately));
 }

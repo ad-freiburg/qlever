@@ -45,6 +45,20 @@ class IndexScan : public Operation {
   // can be read from the Metadata.
   size_t getExactSize() const { return sizeEstimate_; }
 
+  // Return two generators that lazily yield the results of `s1` and `s2` in
+  // blocks, but only the blocks that can theoretically contain matching rows
+  // when performing a join on the first column of the result of `s1` with the
+  // first column of the result of `s2`.
+  static std::array<Permutation::IdTableGenerator, 2> lazyScanForJoinOfTwoScans(
+      const IndexScan& s1, const IndexScan& s2);
+
+  // Return a generator that lazily yields the result of `s` in blocks, but only
+  // the blocks that can theoretically contain matching rows when performing a
+  // join between the first column of the result of `s`  with the `joinColumn`.
+  // Requires that the `joinColumn` is sorted, else the behavior is undefined.
+  static Permutation::IdTableGenerator lazyScanForJoinOfColumnWithScan(
+      std::span<const Id> joinColumn, const IndexScan& s);
+
  private:
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
   // ALL the `Operations`.
@@ -89,4 +103,10 @@ class IndexScan : public Operation {
   // `permutation_`. For example if `permutation_ == PSO` then the result is
   // {&predicate_, &subject_, &object_}
   std::array<const TripleComponent* const, 3> getPermutedTriple() const;
+
+  //  Helper functions for the public `getLazyScanFor...` functions (see above).
+  static Permutation::IdTableGenerator getLazyScan(
+      const IndexScan& s, std::vector<CompressedBlockMetadata> blocks);
+  static std::optional<Permutation::MetadataAndBlocks> getMetadataForScan(
+      const IndexScan& s);
 };
