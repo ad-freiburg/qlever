@@ -73,8 +73,15 @@ class TextOperationWithFilter : public Operation {
     return _variables.size() - 1;
   }
 
-  size_t getNofTerms() const {
-    return std::vector<std::string>(absl::StrSplit(_words, ' ')).size();
+  size_t getNofPrefixedTerms() const {
+    size_t nPrefixedTerms = 0;
+    for (std::string s :
+         std::vector<std::string>(absl::StrSplit(_words, ' '))) {
+      if (s.back() == '*') {
+        nPrefixedTerms++;
+      }
+    }
+    return nPrefixedTerms;
   }
 
   const SetOfVariables& getVars() const { return _variables; }

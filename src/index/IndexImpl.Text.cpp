@@ -714,7 +714,19 @@ std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
   return textVocab_[WordVocabIndex::make(wordIndex)].value();
 }
 
+void IndexImpl::callFixedGetContextListForWords(const string& words,
+                                                IdTable* result) const {
+  int width = result->numColumns();
+  ad_utility::callFixedSize(
+      width,
+      [&]<int I>(auto&&... args) {
+        getContextListForWords<I>(AD_FWD(args)...);
+      },
+      words, result);
+}
+
 // _____________________________________________________________________________
+template <int WIDTH>
 void IndexImpl::getContextListForWords(const string& words,
                                        IdTable* dynResult) const {
   LOG(DEBUG) << "In getContextListForWords...\n";
@@ -735,7 +747,7 @@ void IndexImpl::getContextListForWords(const string& words,
   }
 
   LOG(DEBUG) << "Packing lists into a ResultTable\n...";
-  IdTableStatic<3> result = std::move(*dynResult).toStatic<3>();
+  IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
   result.reserve(wep.cids_.size());
   std::vector<ValueId> row;
   row.resize(result.numColumns());

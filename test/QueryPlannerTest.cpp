@@ -763,7 +763,7 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
       "\"edible leaves\" and 1 variables with textLimit = 5 "
       "filtered by\n  {\n    SCAN POS with P = \"<is-a>\", "
       "O = \"<Plant>\"\n    qet-width: 1 \n  }\n   filtered on "
-      "column 0\n  qet-width: 4 \n}",
+      "column 0\n  qet-width: 3 \n}",
       qet.asString());
 }
 
@@ -776,7 +776,7 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
   ASSERT_EQ(absl::StrCat(
                 "{\n  TEXT OPERATION WITHOUT FILTER: co-occurrence with words:",
                 " \"search engine\" and 0 variables with textLimit = ",
-                TEXT_LIMIT_DEFAULT, "\n", "  qet-width: 3 \n}"),
+                TEXT_LIMIT_DEFAULT, "\n", "  qet-width: 2 \n}"),
             qet.asString());
 }
 
@@ -799,7 +799,7 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
       "O = \"<Europe>\"\n      qet-width: 1 \n    } join-column: [0]\n"
       "    |X|\n    {\n      SCAN POS with P = \"<Place_of_birth>\"\n"
       "      qet-width: 2 \n    } join-column: [0]\n    qet-width: 2 \n"
-      "  }\n   filtered on column 1\n  qet-width: 5 \n}",
+      "  }\n   filtered on column 1\n  qet-width: 4 \n}",
       qet.asString());
   auto c = Variable{"?c"};
   ASSERT_EQ(0u, qet.getVariableColumn(c));
@@ -853,7 +853,7 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
       "= \"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n        "
       "}\n         filtered on column 0\n        qet-width: 5 \n      }\n    "
       "  qet-width: 5 \n    } join-column: [2]\n    qet-width: 5 \n  }\n   "
-      "filtered on column 0\n  qet-width: 8 \n}",
+      "filtered on column 0\n  qet-width: 7 \n}",
       qet.asString());
 }
 

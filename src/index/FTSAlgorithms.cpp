@@ -224,8 +224,10 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
         for (size_t i = 0; i < k; ++i) {
           size_t index =
               (i == currentList ? nextIndices[i] : nextIndices[i] - 1);
-          s += wepVecs[i].scores_[index];
           currentIndices[i] = index;
+          if (i != k - 1) {
+            s += wepVecs[i].scores_[index];
+          }
         }
         int kIndex = k - 1;
         vector<size_t> offsets;
@@ -531,7 +533,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
     for (size_t j = 0; j < widsVec.size(); j++) {
       for (size_t l = 0; l < numOfTerms; l++) {
         row[3 + l] =
-            Id::makeFromWordVocabIndex(WordVocabIndex::make(widsVec[l][j]));
+            Id::makeFromWordVocabIndex(WordVocabIndex::make(widsVec[j][l]));
       }
       result.push_back(row);
     }

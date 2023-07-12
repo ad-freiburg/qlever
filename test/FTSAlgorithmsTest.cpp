@@ -99,83 +99,77 @@ TEST(FTSAlgorithmsTest, crossIntersectTest) {
   ASSERT_EQ(8u, resultWep.wids_[0][1]);
 };
 
-TEST(FTSAlgorithmsTest, intersectKWayTest) {
+TEST(FTSAlgorithmsTest, crossIntersectKWayTest) {
   vector<Index::WordEntityPostings> wepVecs;
   Index::WordEntityPostings resultWep;
 
-  vector<Score> fourScores;
-  fourScores.push_back(1);
-  fourScores.push_back(1);
-  fourScores.push_back(1);
-  fourScores.push_back(1);
-
-  vector<TextRecordIndex> cids1;
-  cids1.push_back(T(0));
-  cids1.push_back(T(1));
-  cids1.push_back(T(2));
-  cids1.push_back(T(10));
-
   Index::WordEntityPostings wep1;
-  wep1.cids_ = cids1;
-  wep1.scores_ = fourScores;
-  wepVecs.push_back(wep1);
+  wep1.scores_ = {1, 1, 1, 1};
+  wep1.cids_ = {T(0), T(1), T(2), T(10)};
+  wep1.wids_ = {{3, 2, 5, 3}};
 
-  wep1.cids_[2] = T(8);
-  wepVecs.push_back(wep1);
+  Index::WordEntityPostings wep2;
+  wep2.scores_ = {1, 1, 1, 1};
+  wep2.cids_ = {T(0), T(0), T(0), T(10)};
+  wep2.wids_ = {{8, 7, 6, 9}};
 
-  wep1.cids_[1] = T(6);
-  wep1.scores_[3] = 3;
+  Index::WordEntityPostings wep3;
+  wep3.scores_ = {1, 1, 1, 3};
+  wep3.cids_ = {T(0), T(6), T(8), T(10)};
+  wep3.wids_ = {{23, 22, 25, 23}};
+
   wepVecs.push_back(wep1);
+  wepVecs.push_back(wep2);
+  wepVecs.push_back(wep3);
 
   // No eids / no special case
   resultWep = FTSAlgorithms::crossIntersectKWay(wepVecs, nullptr);
-  ASSERT_EQ(2u, resultWep.cids_.size());
+  ASSERT_EQ(4u, resultWep.cids_.size());
   ASSERT_EQ(0u, resultWep.eids_.size());
-  ASSERT_EQ(2u, resultWep.scores_.size());
+  ASSERT_EQ(4u, resultWep.scores_.size());
+  ASSERT_EQ(3u, resultWep.wids_.size());
+  ASSERT_EQ(4u, resultWep.wids_[0].size());
   ASSERT_EQ(3u, resultWep.scores_[0]);
-  ASSERT_EQ(5u, resultWep.scores_[1]);
+  ASSERT_EQ(3u, resultWep.scores_[1]);
+  ASSERT_EQ(5u, resultWep.scores_[3]);
+  ASSERT_EQ(23u, resultWep.wids_[2][1]);
+  ASSERT_EQ(7u, resultWep.wids_[1][1]);
+  ASSERT_EQ(T(0), resultWep.cids_[2]);
 
   // With eids
-  vector<Id> eids;
-  eids.push_back(V(1));
-  eids.push_back(V(4));
-  eids.push_back(V(1));
-  eids.push_back(V(4));
-  eids.push_back(V(1));
-  eids.push_back(V(2));
+  vector<Id> eids = {V(1), V(4), V(1), V(4), V(1), V(2)};
 
-  vector<TextRecordIndex> cids2;
-  vector<Score> scores2;
+  Index::WordEntityPostings wep4;
+  wep4.cids_ = {T(0), T(0), T(3), T(4), T(10), T(10)};
+  wep4.scores_ = {1, 4, 1, 4, 1, 4};
+  wep4.wids_ = {{33, 29, 45, 76, 42, 31}};
 
-  cids2.push_back(T(1));
-  cids2.push_back(T(1));
-  cids2.push_back(T(3));
-  cids2.push_back(T(4));
-  cids2.push_back(T(10));
-  cids2.push_back(T(10));
-
-  scores2.push_back(1);
-  scores2.push_back(4);
-  scores2.push_back(1);
-  scores2.push_back(4);
-  scores2.push_back(1);
-  scores2.push_back(4);
-
-  Index::WordEntityPostings wep2;
-  wep2.cids_ = cids2;
-  wep2.scores_ = scores2;
-  wepVecs.push_back(wep2);
+  wepVecs.push_back(wep4);
 
   resultWep = FTSAlgorithms::crossIntersectKWay(wepVecs, &eids);
-  ASSERT_EQ(2u, resultWep.cids_.size());
-  ASSERT_EQ(2u, resultWep.eids_.size());
-  ASSERT_EQ(2u, resultWep.scores_.size());
-  ASSERT_EQ(10, resultWep.cids_[0].get());
-  ASSERT_EQ(10, resultWep.cids_[1].get());
+  ASSERT_EQ(8u, resultWep.cids_.size());
+  ASSERT_EQ(8u, resultWep.eids_.size());
+  ASSERT_EQ(8u, resultWep.scores_.size());
+  ASSERT_EQ(4u, resultWep.wids_.size());
+  ASSERT_EQ(8u, resultWep.wids_[0].size());
+  ASSERT_EQ(T(0), resultWep.cids_[0]);
+  ASSERT_EQ(T(0), resultWep.cids_[5]);
+  ASSERT_EQ(T(10), resultWep.cids_[6]);
+  ASSERT_EQ(T(10), resultWep.cids_[7]);
   ASSERT_EQ(V(1), resultWep.eids_[0]);
-  ASSERT_EQ(V(2), resultWep.eids_[1]);
-  ASSERT_EQ(6u, resultWep.scores_[0]);
-  ASSERT_EQ(9u, resultWep.scores_[1]);
+  ASSERT_EQ(V(4), resultWep.eids_[3]);
+  ASSERT_EQ(V(1), resultWep.eids_[6]);
+  ASSERT_EQ(V(2), resultWep.eids_[7]);
+  ASSERT_EQ(vector<vector<WordIndex>>(
+                {vector<WordIndex>({3, 3, 3, 3, 3, 3, 3, 3}),
+                 vector<WordIndex>({8, 8, 7, 7, 6, 6, 9, 9}),
+                 vector<WordIndex>({23, 23, 23, 23, 23, 23, 23, 23}),
+                 vector<WordIndex>({33, 29, 33, 29, 33, 29, 42, 31})}),
+            resultWep.wids_);
+  ASSERT_EQ(4u, resultWep.scores_[0]);
+  ASSERT_EQ(7u, resultWep.scores_[1]);
+  ASSERT_EQ(6u, resultWep.scores_[6]);
+  ASSERT_EQ(9u, resultWep.scores_[7]);
 };
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
@@ -248,6 +242,8 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   ASSERT_EQ(V(0u), result(0, 2));
   ASSERT_EQ(WordVocabId(2u), result(0, 3));
 
+  result.clear();
+
   wep.cids_ = {T(0), T(1), T(2), T(3)};
   wep.eids_ = {V(0), V(0), V(0), V(1)};
   wep.scores_ = {0, 1, 2, 1};
@@ -265,6 +261,8 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   ASSERT_EQ(IntId(1u), result(1, 1));
   ASSERT_EQ(V(1u), result(1, 2));
   ASSERT_EQ(WordVocabId(4u), result(1, 3));
+
+  result.clear();
 
   wep.cids_ = {T(0), T(1), T(2), T(3), T(4)};
   wep.eids_ = {V(0), V(0), V(0), V(1), V(0)};

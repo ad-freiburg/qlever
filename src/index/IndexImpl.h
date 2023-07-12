@@ -297,6 +297,10 @@ class IndexImpl {
 
   size_t getSizeEstimate(const string& words) const;
 
+  void callFixedGetContextListForWords(const string& words,
+                                       IdTable* result) const;
+
+  template <int WIDTH>
   void getContextListForWords(const string& words, IdTable* result) const;
 
   void getECListForWordsOneVar(const string& words, size_t limit,

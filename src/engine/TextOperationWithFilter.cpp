@@ -12,7 +12,8 @@ using std::string;
 
 // _____________________________________________________________________________
 size_t TextOperationWithFilter::getResultWidth() const {
-  return 1 + getNofTerms() + getNofVars() + _filterResult->getResultWidth();
+  return 1 + getNofPrefixedTerms() + getNofVars() +
+         _filterResult->getResultWidth();
 }
 
 // _____________________________________________________________________________
@@ -62,9 +63,10 @@ VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
                                varcol.second.mightContainUndef_};
   }
   for (std::string s : std::vector<std::string>(absl::StrSplit(_words, ' '))) {
-    if (s.back() == '*') {
-      s.pop_back();
+    if (s.back() != '*') {
+      continue;
     }
+    s.pop_back();
     vcmap[_cvar.getMatchingWordVariable(s)] = makeAlwaysDefinedColumn(
         ColumnIndex{colN + _filterResult->getResultWidth()});
     colN++;

@@ -142,7 +142,7 @@ size_t Index::getSizeEstimate(const std::string& words) const {
 // ____________________________________________________________________________
 void Index::getContextListForWords(const std::string& words,
                                    IdTable* result) const {
-  return pimpl_->getContextListForWords(words, result);
+  return pimpl_->callFixedGetContextListForWords(words, result);
 }
 
 // ____________________________________________________________________________
