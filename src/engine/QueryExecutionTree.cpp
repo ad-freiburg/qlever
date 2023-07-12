@@ -216,7 +216,8 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     _type = OPTIONAL_JOIN;
   } else if constexpr (std::is_same_v<Op, MultiColumnJoin>) {
     _type = MULTICOLUMN_JOIN;
-  } else if constexpr (std::is_same_v<Op, ValuesForTesting>) {
+  } else if constexpr (std::is_same_v<Op, ValuesForTesting> ||
+                       std::is_same_v<Op, ValuesForTestingNoKnownEmptyResult>) {
     _type = DUMMY;
   } else {
     static_assert(ad_utility::alwaysFalse<Op>,
@@ -251,6 +252,8 @@ template void QueryExecutionTree::setOperation(
     std::shared_ptr<MultiColumnJoin>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<ValuesForTesting>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<ValuesForTestingNoKnownEmptyResult>);
 
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(

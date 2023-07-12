@@ -38,30 +38,25 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
 }
 
 // _____________________________________________________________________
-void Permutation::scan(Id col0Id, IdTable* result,
-                       ad_utility::SharedConcurrentTimeoutTimer timer) const {
+IdTable Permutation::scan(Id col0Id, std::optional<Id> col1Id,
+                          const TimeoutTimer& timer) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
                              readableName_ + ", which was not loaded");
   }
-  if (!meta_.col0IdExists(col0Id)) {
-    return;
-  }
-  const auto& metaData = meta_.getMetaData(col0Id);
-  return reader_.scan(metaData, meta_.blockData(), file_, result,
-                      std::move(timer));
-}
 
-// _____________________________________________________________________
-void Permutation::scan(Id col0Id, Id col1Id, IdTable* result,
-                       ad_utility::SharedConcurrentTimeoutTimer timer) const {
   if (!meta_.col0IdExists(col0Id)) {
-    return;
+    size_t numColumns = col1Id.has_value() ? 1 : 2;
+    return IdTable{numColumns, reader_.allocator()};
   }
   const auto& metaData = meta_.getMetaData(col0Id);
 
-  return reader_.scan(metaData, col1Id, meta_.blockData(), file_, result,
-                      timer);
+  if (col1Id.has_value()) {
+    return reader_.scan(metaData, col1Id.value(), meta_.blockData(), file_,
+                        timer);
+  } else {
+    return reader_.scan(metaData, meta_.blockData(), file_, timer);
+  }
 }
 
 // _____________________________________________________________________
@@ -113,4 +108,45 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
       return "OSP";
   }
   AD_FAIL();
+}
+
+// _____________________________________________________________________
+std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
+    Id col0Id, std::optional<Id> col1Id) const {
+  if (!meta_.col0IdExists(col0Id)) {
+    return std::nullopt;
+  }
+
+  auto metadata = meta_.getMetaData(col0Id);
+
+  MetadataAndBlocks result{meta_.getMetaData(col0Id),
+                           CompressedRelationReader::getBlocksFromMetadata(
+                               metadata, col1Id, meta_.blockData()),
+                           col1Id, std::nullopt};
+
+  result.firstAndLastTriple_ = reader_.getFirstAndLastTriple(result, file_);
+  return result;
+}
+
+// _____________________________________________________________________
+Permutation::IdTableGenerator Permutation::lazyScan(
+    Id col0Id, std::optional<Id> col1Id,
+    std::optional<std::vector<CompressedBlockMetadata>> blocks,
+    const TimeoutTimer& timer) const {
+  if (!meta_.col0IdExists(col0Id)) {
+    return {};
+  }
+  auto relationMetadata = meta_.getMetaData(col0Id);
+  if (!blocks.has_value()) {
+    auto blockSpan = CompressedRelationReader::getBlocksFromMetadata(
+        relationMetadata, col1Id, meta_.blockData());
+    blocks = std::vector(blockSpan.begin(), blockSpan.end());
+  }
+  if (col1Id.has_value()) {
+    return reader_.lazyScan(meta_.getMetaData(col0Id), col1Id.value(),
+                            std::move(blocks.value()), file_, timer);
+  } else {
+    return reader_.lazyScan(meta_.getMetaData(col0Id),
+                            std::move(blocks.value()), file_, timer);
+  }
 }
