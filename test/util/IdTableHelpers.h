@@ -103,8 +103,8 @@ IdTable generateIdTable(const size_t numberRows, const size_t numberColumns,
                         const std::function<IdTable::row_type()>& rowGenerator);
 
 /*
-@brief Creates a `IdTable`, where the content of the join columns is given via
-functions and all other columns are randomly filled with numbers.
+@brief Create a `IdTable`, where the content of the join columns are given via
+repeatedly called generator functions (one function per join column).
 
 @param numberRows numberColumns The number of rows and columns, the table should
 have.

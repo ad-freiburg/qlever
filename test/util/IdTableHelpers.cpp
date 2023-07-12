@@ -185,8 +185,7 @@ IdTable createRandomlyFilledIdTable(
       joinColumnsAndBounds, [](const JoinColumnAndBounds& j) {
         return std::make_pair(
             j.joinColumn,
-            // We don't use a static variable for generator, because static
-            // variables are shared between different instances of the lambda.
+            // Each column gets its own random generator.
             std::function{[generator = SlowRandomIntGenerator<size_t>(
                                j.lowerBound, j.upperBound)]() mutable {
               // `IdTable`s don't take raw numbers, you have to transform

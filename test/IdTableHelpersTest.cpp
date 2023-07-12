@@ -104,7 +104,7 @@ void generalIdTableCheck(const IdTable& table,
   }
 }
 
-// Overloads, who don't take generators.
+// The overloads that don't take generators.
 TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
   // Table with zero rows/columns.
   ASSERT_ANY_THROW(
@@ -143,7 +143,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
         }));
   };
 
-  // Sample request for the overload, that takes a single `JoinColumnAndBounds`.
+  // Sample request for the overload that takes a single `JoinColumnAndBounds`.
   IdTable result{
       createRandomlyFilledIdTable(5, 5, JoinColumnAndBounds{0, 0, 10})};
   generalIdTableCheck(result, 5, 5, true);
@@ -153,14 +153,14 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
   generalIdTableCheck(result, 50, 58, true);
   checkColumn(result, 0, 30, 42);
 
-  // Empty std::vector for the overload with the , who takes a vector of
-  // `JoinColumnAndBounds`.
+  // No join columns with explicit generators are specified, so all columns are
+  // filled randomly.
   result =
       createRandomlyFilledIdTable(50, 58, std::vector<JoinColumnAndBounds>{});
   generalIdTableCheck(result, 50, 58, true);
 
   /*
-  Exhaustive input test for the overload, who takes a vector of
+  Exhaustive input test for the overload that takes a vector of
   `JoinColumnAndBounds`, in the case of generating tables with 40 rows and
   10 columns.
   */
@@ -183,7 +183,8 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
       });
 }
 
-// Overloads, who take generators for creating the content of the join columns.
+// The overloads that take generators for creating the content of the join
+// columns.
 TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGeneratos) {
   // Creates a 'generator', that counts one up, everytime it's called.
   auto createCountUpGenerator = []() {
