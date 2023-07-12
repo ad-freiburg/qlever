@@ -71,11 +71,11 @@ class ThreadSafeQueue {
     if (pushedException_ != nullptr) {
       return;
     }
-      pushedException_ = std::move(exception);
-      finish_.test_and_set();
-      lock.unlock();
-      pushNotification_.notify_all();
-      popNotification_.notify_all();
+    pushedException_ = std::move(exception);
+    finish_.test_and_set();
+    lock.unlock();
+    pushNotification_.notify_all();
+    popNotification_.notify_all();
   }
 
   // After calling this function, all calls to `push` will return `false` and no
