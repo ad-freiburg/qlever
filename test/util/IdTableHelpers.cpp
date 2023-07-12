@@ -2,11 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (Januar of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "../test/util/IdTableHelpers.h"
+
 #include <absl/strings/str_cat.h>
 
 #include <utility>
 
-#include "../test/util/IdTableHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"

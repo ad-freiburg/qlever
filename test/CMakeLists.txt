@@ -340,8 +340,8 @@ addLinkAndDiscoverTest(ComparisonWithNanTest)
 
 addLinkAndDiscoverTest(ThreadSafeQueueTest)
 
-addLinkAndDiscoverTest(IdTableHelpersTest engine)
-
-addLinkAndDiscoverTest(JsonUtilTest)
+addLinkAndDiscoverTest(IdTableHelpersTest)
 
 addLinkAndDiscoverTest(GeneratorTest)
+
+addLinkAndDiscoverTest(JsonUtilTest)
