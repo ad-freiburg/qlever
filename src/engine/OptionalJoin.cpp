@@ -21,6 +21,9 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
       _right{std::move(t2)},
       _joinColumns(jcs) {
   AD_CONTRACT_CHECK(!jcs.empty());
+  // Enforce that we always use the same order of join columns to make it more
+  // probable to find this operation in the cache.
+  std::ranges::sort(_joinColumns, std::ranges::lexicographical_compare);
 
   // If `_right` contains no UNDEF in the join columns and at most one column in
   // `_left` contains UNDEF values, and that column is the last join column,

@@ -19,6 +19,16 @@ MultiColumnJoin::MultiColumnJoin(
       _left(std::move(t1)),
       _right(std::move(t2)),
       _joinColumns(jcs) {
+  // Enforce that we always use the same order of join columns to make it more
+  // probable to find this operation in the cache.
+  std::ranges::sort(_joinColumns, std::ranges::lexicographical_compare);
+
+  // The inputs must be sorted by the join columns.
+  auto [sortedLeft, sortedRight] = QueryExecutionTree::createSortedTrees(
+      std::move(_left), std::move(_right), _joinColumns);
+  _left = std::move(sortedLeft);
+  _right = std::move(sortedRight);
+
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CONTRACT_CHECK(!jcs.empty());
   if (_left->asString() > _right->asString()) {

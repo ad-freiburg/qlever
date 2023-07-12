@@ -1245,32 +1245,22 @@ QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
                                               const SubtreePlan& b) const {
   AD_CONTRACT_CHECK(a.type != SubtreePlan::MINUS &&
                     b.type == SubtreePlan::MINUS);
-  std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
-
   // TODO: We could probably also accept permutations of the join columns
   // as the order of a here and then permute the join columns to match the
   // sorted columns of a or b (whichever is larger).
-  auto [qetA, qetB] =
-      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
-  return makeSubtreePlan<Minus>(_qec, qetA, qetB, jcs);
+  return makeSubtreePlan<Minus>(_qec, a._qet, b._qet, getJoinColumns(a, b));
 }
 
 // _____________________________________________________________________________
 QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
     const SubtreePlan& a, const SubtreePlan& b) const {
-  if (Join::isFullScanDummy(a._qet) || Join::isFullScanDummy(b._qet)) {
-    throw std::runtime_error(
-        "Trying a JOIN between two full scan dummys, this"
-        "will be handled by the calling code automatically");
-  }
-
+  AD_CORRECTNESS_CHECK(!Join::isFullScanDummy(a._qet) &&
+                       !Join::isFullScanDummy(b._qet));
   // TODO: We could probably also accept permutations of the join columns
   // as the order of a here and then permute the join columns to match the
   // sorted columns of a or b (whichever is larger).
-  std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
-  auto [qetA, qetB] =
-      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
-  return makeSubtreePlan<MultiColumnJoin>(_qec, qetA, qetB, jcs);
+  return makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet,
+                                          getJoinColumns(a, b));
 }
 
 // _____________________________________________________________________________

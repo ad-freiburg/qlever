@@ -18,15 +18,15 @@ Minus::Minus(QueryExecutionContext* qec,
       _left{std::move(left)},
       _right{std::move(right)},
       _matchedColumns{std::move(matchedColumns)} {
-  // Check that the invariant (inputs are sorted on the matched columns) holds.
-  auto l = _left->resultSortedOn();
-  auto r = _right->resultSortedOn();
-  AD_CONTRACT_CHECK(_matchedColumns.size() <= l.size());
-  AD_CONTRACT_CHECK(_matchedColumns.size() <= r.size());
-  for (size_t i = 0; i < _matchedColumns.size(); ++i) {
-    AD_CONTRACT_CHECK(_matchedColumns[i][0] == l[i]);
-    AD_CONTRACT_CHECK(_matchedColumns[i][1] == r[i]);
-  }
+  // Enforce that we always use the same order of join columns to make it more
+  // probable to find this operation in the cache.
+  std::ranges::sort(_matchedColumns, std::ranges::lexicographical_compare);
+
+  // The inputs must be sorted by the join columns.
+  auto [sortedLeft, sortedRight] = QueryExecutionTree::createSortedTrees(
+      std::move(_left), std::move(_right), _matchedColumns);
+  _left = std::move(sortedLeft);
+  _right = std::move(sortedRight);
 }
 
 // _____________________________________________________________________________
