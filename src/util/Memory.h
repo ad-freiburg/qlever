@@ -16,7 +16,36 @@
 namespace ad_utility {
 
 // An abstract class, that represents an amount of memory.
-class Memory {};
+class Memory {
+  // Because of `sizeof` we know, that any size of memory, in bytes, can be
+  // encoded as a `size_t` in cpp.
+  size_t memoryInBytes_;
+
+ public:
+  // Very simple custom constructor.
+  Memory(const size_t& amountOfMemoryInBytes = 0)
+      : memoryInBytes_{amountOfMemoryInBytes} {}
+
+  // Default assignment operator.
+  Memory& operator=(const Memory&) = default;
+  Memory& operator=(Memory&&) = default;
+
+  // Custom assignment operator, so that we can assign user literals.
+  Memory& operator=(const size_t& amountOfMemoryInBytes);
+  Memory& operator=(size_t&& amountOfMemoryInBytes);
+
+  /*
+  Return the internal memory amount in the wanted memory unit format.
+  For example: If the internal memory amount is 1024 bytes, than `kilobytes()`
+  would return `1.0`.
+  */
+  size_t bytes() const;
+  double kilobytes() const;
+  double megabytes() const;
+  double gigabytes() const;
+  double terabytes() const;
+  double petabytes() const;
+};
 
 namespace detail {
 /*

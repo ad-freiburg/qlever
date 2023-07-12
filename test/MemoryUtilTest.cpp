@@ -50,3 +50,72 @@ TEST(MemoryUtilTest, UserDefinedLiterals) {
   ASSERT_EQ(1463669878895412uL,
             1.3_PB);  // Floating point with rounding.
 }
+
+// Describes a memory size in all available memory units.
+struct MemorySize {
+  size_t bytes;
+  double kilobytes;
+  double megabytes;
+  double gigabytes;
+  double terabytes;
+  double petabytes;
+};
+
+/*
+Checks all the getters of the class with the wanted memory sizes.
+*/
+void checkAllMemoryGetter(const ad_utility::Memory& m, const MemorySize& ms) {
+  ASSERT_EQ(m.bytes(), ms.bytes);
+  ASSERT_DOUBLE_EQ(m.kilobytes(), ms.kilobytes);
+  ASSERT_DOUBLE_EQ(m.megabytes(), ms.megabytes);
+  ASSERT_DOUBLE_EQ(m.gigabytes(), ms.gigabytes);
+  ASSERT_DOUBLE_EQ(m.terabytes(), ms.terabytes);
+  ASSERT_DOUBLE_EQ(m.petabytes(), ms.petabytes);
+}
+
+TEST(MemoryUtilTest, MemoryConstructor) {
+  // Default constructor.
+  ad_utility::Memory m1;
+  checkAllMemoryGetter(m1, MemorySize{0uL, 0.0, 0.0, 0.0, 0.0, 0.0});
+
+  // Non-default constructor.
+  ad_utility::Memory m2(1024);
+  checkAllMemoryGetter(m2,
+                       MemorySize{1024uL, 1.0, 0.0009765625, 9.5367431640625e-7,
+                                  9.31322574615478515625e-10,
+                                  9.094947017729282379150390625e-13});
+}
+
+TEST(MemoryUtilTest, SizeTAssignmentOperator) {
+  ad_utility::Memory m;
+  checkAllMemoryGetter(m, MemorySize{0uL, 0.0, 0.0, 0.0, 0.0, 0.0});
+
+  m = 1_Byte;
+  checkAllMemoryGetter(m, MemorySize{1uL, 0.0009765625, 9.5367431640625e-7,
+                                     9.31322574615478515625e-10,
+                                     9.094947017729282379150390625e-13,
+                                     8.8817841970012523233890533447265625e-16});
+
+  m = 1_KB;
+  checkAllMemoryGetter(m,
+                       MemorySize{1024uL, 1.0, 0.0009765625, 9.5367431640625e-7,
+                                  9.31322574615478515625e-10,
+                                  9.094947017729282379150390625e-13});
+
+  m = 1_MB;
+  checkAllMemoryGetter(
+      m, MemorySize{1048576uL, 1024, 1.0, 0.0009765625, 9.5367431640625e-7,
+                    9.31322574615478515625e-10});
+
+  m = 1_GB;
+  checkAllMemoryGetter(m, MemorySize{1073741824uL, 1048576.0, 1024.0, 1.0,
+                                     0.0009765625, 9.5367431640625e-7});
+
+  m = 1_TB;
+  checkAllMemoryGetter(m, MemorySize{1099511627776uL, 1073741824.0, 1048576.0,
+                                     1024.0, 1.0, 0.0009765625});
+
+  m = 1_PB;
+  checkAllMemoryGetter(m, MemorySize{1125899906842624uL, 1099511627776.0,
+                                     1073741824.0, 1048576.0, 1024.0, 1.0});
+}
