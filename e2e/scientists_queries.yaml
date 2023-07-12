@@ -13,7 +13,7 @@ queries:
       ORDER BY DESC(?ql_textscore_t)
     checks:
       - num_cols: 3
-      - num_rows: 4265
+      - num_rows: 4285
       - selected: [ "?x", "?t", "?ql_textscore_t"]
       - contains_row:
           - "<Albert_Einstein>"
@@ -1149,10 +1149,10 @@ queries:
           ?t ql:contains-word "algo*"
       } TEXTLIMIT 1
     checks:
-      - num_cols: 3
+      - num_cols: 4
       - num_rows: 11
-      - selected: [ "?x", "?ql_textscore_t", "?t" ]
-      - contains_row: [ "<Grete_Hermann>",null,"Hermann's algorithm for primary decomposition is still in use now." ]
+      - selected: [ "?x", "?ql_textscore_t", "?t", "?ql_matchingword_t_algo" ]
+      - contains_row: [ "<Grete_Hermann>",null,"Hermann's algorithm for primary decomposition is still in use now.","algorithm" ]
 
 
   - query : select_asterisk_regex-lastname-stein
