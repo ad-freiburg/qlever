@@ -137,9 +137,9 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
 // Describes a join column together with an inclusive range of numbers, defined
 // as [lowerBound, upperBound];
 struct JoinColumnAndBounds {
-  const size_t joinColumn;
-  const size_t lowerBound;
-  const size_t upperBound;
+  const size_t joinColumn_;
+  const size_t lowerBound_;
+  const size_t upperBound_;
 };
 
 /*

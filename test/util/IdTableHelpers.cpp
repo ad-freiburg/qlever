@@ -182,7 +182,7 @@ IdTable createRandomlyFilledIdTable(
   */
   AD_CONTRACT_CHECK(std::ranges::all_of(
       joinColumnsAndBounds, [](const JoinColumnAndBounds& j) {
-        return j.lowerBound <= j.upperBound && j.upperBound <= maxIdSize;
+        return j.lowerBound_ <= j.upperBound_ && j.upperBound_ <= maxIdSize;
       }));
 
   /*
@@ -192,10 +192,10 @@ IdTable createRandomlyFilledIdTable(
   const auto& joinColumnAndGenerator = ad_utility::transform(
       joinColumnsAndBounds, [](const JoinColumnAndBounds& j) {
         return std::make_pair(
-            j.joinColumn,
+            j.joinColumn_,
             // Each column gets its own random generator.
             std::function{[generator = SlowRandomIntGenerator<size_t>(
-                               j.lowerBound, j.upperBound)]() mutable {
+                               j.lowerBound_, j.upperBound_)]() mutable {
               // `IdTable`s don't take raw numbers, you have to transform
               // them first.
               return ad_utility::testing::VocabId(generator());
