@@ -31,8 +31,8 @@ auto makeTestScanWidthOne = [](const IndexImpl& index) {
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
-    IdTable result(1, makeAllocator());
-    index.scan(c0, c1, &result, permutation);
+    TripleComponent c1Tc{c1};
+    IdTable result = index.scan(c0, std::cref(c1Tc), permutation);
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
 };
@@ -47,8 +47,7 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index) {
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
-    IdTable wol(2, makeAllocator());
-    index.scan(c0, &wol, permutation);
+    IdTable wol = index.scan(c0, std::nullopt, permutation);
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };

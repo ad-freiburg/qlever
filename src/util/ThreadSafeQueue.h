@@ -65,6 +65,12 @@ class ThreadSafeQueue {
   // will return `false`.
   void pushException(std::exception_ptr exception) {
     std::unique_lock lock{mutex_};
+    // It is important that we only push the first exception we encounter,
+    // otherwise there might be race conditions between rethrowing and resetting
+    // the exception.
+    if (pushedException_ != nullptr) {
+      return;
+    }
     pushedException_ = std::move(exception);
     finish_.test_and_set();
     lock.unlock();
