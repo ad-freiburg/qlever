@@ -7,6 +7,8 @@
 #include <utility>
 
 #include "../test/util/IdTableHelpers.h"
+#include "engine/idTable/IdTable.h"
+#include "global/ValueId.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 
@@ -64,7 +66,7 @@ void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
 // ____________________________________________________________________________
 IdTable generateIdTable(
     const size_t numberRows, const size_t numberColumns,
-    const std::function<IdTable::row_type()>& rowGenerator) {
+    const std::function<std::vector<ValueId>()>& rowGenerator) {
   AD_CONTRACT_CHECK(numberRows > 0 && numberColumns > 0);
 
   // Creating the table and setting it to the wanted size.
@@ -72,13 +74,19 @@ IdTable generateIdTable(
   table.resize(numberRows);
 
   // Fill the table.
-  std::ranges::generate(table, [&numberColumns, &rowGenerator]() {
-    // Make sure, that the generated row has the right size, before passing it
-    // on.
-    IdTable::row_type row = rowGenerator();
-    AD_CONTRACT_CHECK(row.numColumns() == numberColumns);
-    return row;
-  });
+  for (auto restrictedRow = table.begin(); restrictedRow != table.end();
+       restrictedRow++) {
+    // Make sure, that the generated row has the right
+    // size, before using it.
+    std::vector<ValueId> generatedRow = rowGenerator();
+    AD_CONTRACT_CHECK(generatedRow.size() == numberColumns);
+
+    // The iterators of `IdTable` never directly give write access. Instead you
+    // have to cast them, before writting to them.
+    std::ranges::copy(
+        std::move(generatedRow),
+        static_cast<IdTable::row_reference>(*restrictedRow).begin());
+  }
 
   return table;
 }
@@ -127,11 +135,11 @@ IdTable createRandomlyFilledIdTable(
   // Creating the table.
   return generateIdTable(
       numberRows, numberColumns, [&numberColumns, &columnToGenerator]() {
-        IdTable::row_type row(numberColumns);
+        std::vector<ValueId> row(numberColumns);
 
         // Filling the row.
         for (size_t column = 0; column < numberColumns; column++) {
-          row[column] = (*columnToGenerator.at(column))();
+          row.at(column) = (*columnToGenerator.at(column))();
         }
 
         return row;

@@ -288,7 +288,7 @@ TEST(IdTableHelpersTest, generateIdTable) {
   auto createCountUpGenerator = [](const size_t& width) {
     return [width, i = 0]() mutable {
       // Create the row.
-      IdTable::row_type row(width);
+      std::vector<ValueId> row(width);
 
       // Fill the row.
       std::ranges::fill(row, ad_utility::testing::VocabId(i));
@@ -306,7 +306,7 @@ TEST(IdTableHelpersTest, generateIdTable) {
   ASSERT_ANY_THROW(generateIdTable(5, 5, createCountUpGenerator(4)));
   ASSERT_ANY_THROW(generateIdTable(5, 5, [i = 0]() mutable {
     // Create the row.
-    IdTable::row_type row(i < 3 ? 5 : 20);
+    std::vector<ValueId> row(i < 3 ? 5 : 20);
 
     // Fill the row.
     std::ranges::fill(row, ad_utility::testing::VocabId(4));

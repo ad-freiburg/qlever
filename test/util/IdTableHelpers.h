@@ -21,6 +21,7 @@
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
+#include "global/ValueId.h"
 #include "util/Algorithm.h"
 #include "util/Forward.h"
 #include "util/Random.h"
@@ -99,8 +100,9 @@ have.
 generated row must ALWAYS have size `numberColumns`. Otherwise an exception will
 be thrown.
 */
-IdTable generateIdTable(const size_t numberRows, const size_t numberColumns,
-                        const std::function<IdTable::row_type()>& rowGenerator);
+IdTable generateIdTable(
+    const size_t numberRows, const size_t numberColumns,
+    const std::function<std::vector<ValueId>()>& rowGenerator);
 
 /*
 @brief Create a `IdTable`, where the content of the join columns are given via
