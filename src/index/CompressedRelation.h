@@ -15,6 +15,7 @@
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
 #include "util/File.h"
+#include "util/Generator.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeArray.h"
 #include "util/Serializer/SerializeVector.h"
@@ -78,6 +79,7 @@ struct CompressedBlockMetadata {
     Id col1Id_;
     Id col2Id_;
     bool operator==(const PermutedTriple&) const = default;
+
     friend std::true_type allowTrivialSerialization(PermutedTriple, auto);
   };
   PermutedTriple firstTriple_;
@@ -118,12 +120,6 @@ struct CompressedRelationMetadata {
   uint64_t offsetInBlock_ = std::numeric_limits<uint64_t>::max();
 
   size_t getNofElements() const { return numRows_; }
-
-  // We currently always store two columns (the second and third column of a
-  // triple). This might change in the future when we might also store
-  // patterns and functional relations. Factor out this magic constant already
-  // now to make the code more readable.
-  static constexpr size_t numColumns() { return NumColumns; }
 
   // Setters and getters for the multiplicities.
   float getCol1Multiplicity() const { return multiplicityCol1_; }
@@ -227,6 +223,37 @@ class CompressedRelationWriter {
 class CompressedRelationReader {
  public:
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
+  using TimeoutTimer = ad_utility::SharedConcurrentTimeoutTimer;
+
+  // The metadata of a single relation together with a subset of its
+  // blocks and possibly a `col1Id` for additional filtering. This is used as
+  // the input to several functions below that take such an input.
+  struct MetadataAndBlocks {
+    const CompressedRelationMetadata relationMetadata_;
+    const std::span<const CompressedBlockMetadata> blockMetadata_;
+    std::optional<Id> col1Id_;
+
+    // If set, `firstAndLastTriple_` contains the first and the last triple
+    // of the specified relation (and being filtered by the `col1Id` if
+    // specified). This might be different from the first triple in the first
+    // block (in the case of the `firstTriple_`, similarly for `lastTriple_`)
+    // because the first and last block might also contain other relations, or
+    // the same relation but with different `col1Id`s.
+    struct FirstAndLastTriple {
+      CompressedBlockMetadata::PermutedTriple firstTriple_;
+      CompressedBlockMetadata::PermutedTriple lastTriple_;
+    };
+    std::optional<FirstAndLastTriple> firstAndLastTriple_;
+  };
+
+  struct LazyScanMetadata {
+    size_t numBlocksRead_ = 0;
+    size_t numBlocksAll_ = 0;
+    size_t numElementsRead_ = 0;
+    size_t blockingTimeMs_ = 0;
+  };
+
+  using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
 
  private:
   // This cache stores a small number of decompressed blocks. Its current
@@ -252,38 +279,72 @@ class CompressedRelationReader {
    * @param blockMetadata The metadata of the on-disk blocks for the given
    * permutation.
    * @param file The file in which the permutation is stored.
-   * @param result The ID table to which we write the result. It must have
-   * exactly two columns.
    * @param timer If specified (!= nullptr) a `TimeoutException` will be thrown
    *          if the timer runs out during the exeuction of this function.
    *
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
-  void scan(const CompressedRelationMetadata& metadata,
-            const vector<CompressedBlockMetadata>& blockMetadata,
-            ad_utility::File& file, IdTable* result,
-            ad_utility::SharedConcurrentTimeoutTimer timer) const;
+  IdTable scan(const CompressedRelationMetadata& metadata,
+               std::span<const CompressedBlockMetadata> blockMetadata,
+               ad_utility::File& file, const TimeoutTimer& timer) const;
+
+  // Similar to `scan` (directly above), but the result of the scan is lazily
+  // computed and returned as a generator of the single blocks that are scanned.
+  // The blocks are guaranteed to be in order.
+  IdTableGenerator lazyScan(CompressedRelationMetadata metadata,
+                            std::vector<CompressedBlockMetadata> blockMetadata,
+                            ad_utility::File& file, TimeoutTimer timer) const;
+
+  // Get the blocks (an ordered subset of the blocks that are passed in via the
+  // `metadataAndBlocks`) where the `col1Id` can theoretically match one of the
+  // elements in the `joinColumn` (The col0Id is fixed and specified by the
+  // `metadataAndBlocks`). The join column of the scan is the first column that
+  // is not fixed by the `metadataAndBlocks`, so the middle column (col1) in
+  // case the `metadataAndBlocks` doesn't contain a `col1Id`, or the last column
+  // (col2) else.
+  static std::vector<CompressedBlockMetadata> getBlocksForJoin(
+      std::span<const Id> joinColumn,
+      const MetadataAndBlocks& metadataAndBlocks);
+
+  // For each of `metadataAndBlocks1, metadataAndBlocks2` get the blocks (an
+  // ordered subset of the blocks in the `scanMetadata` that might contain
+  // matching elements in the following scenario: The result of
+  // `metadataAndBlocks1` is joined with the result of `metadataAndBlocks2`. For
+  // each of the inputs the join column is the first column that is not fixed by
+  // the metadata, so the middle column (col1) in case the `scanMetadata`
+  // doesn't contain a `col1Id`, or the last column (col2) else.
+  static std::array<std::vector<CompressedBlockMetadata>, 2> getBlocksForJoin(
+      const MetadataAndBlocks& metadataAndBlocks1,
+      const MetadataAndBlocks& metadataAndBlocks2);
 
   /**
    * @brief For a permutation XYZ, retrieve all Z for given X and Y.
    *
    * @param metadata The metadata of the given X.
    * @param col1Id The ID for Y.
-   * @param blocks The metadata of the on-disk blocks for the given permutation.
+   * @param blocks The metadata of the on-disk blocks for the given
+   * permutation.
    * @param file The file in which the permutation is stored.
    * @param result The ID table to which we write the result. It must have
    * exactly one column.
-   * @param timer If specified (!= nullptr) a `TimeoutException` will be thrown
-   *              if the timer runs out during the exeuction of this function.
+   * @param timer If specified (!= nullptr) a `TimeoutException` will be
+   * thrown if the timer runs out during the exeuction of this function.
    *
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
-  void scan(const CompressedRelationMetadata& metadata, Id col1Id,
-            const vector<CompressedBlockMetadata>& blocks,
-            ad_utility::File& file, IdTable* result,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+  IdTable scan(const CompressedRelationMetadata& metadata, Id col1Id,
+               std::span<const CompressedBlockMetadata> blocks,
+               ad_utility::File& file,
+               const TimeoutTimer& timer = nullptr) const;
+
+  // Similar to `scan` (directly above), but the result of the scan is lazily
+  // computed and returned as a generator of the single blocks that are scanned.
+  // The blocks are guaranteed to be in order.
+  IdTableGenerator lazyScan(CompressedRelationMetadata metadata, Id col1Id,
+                            std::vector<CompressedBlockMetadata> blockMetadata,
+                            ad_utility::File& file, TimeoutTimer timer) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
   // and Y. This can be done by scanning one or two blocks. Note: The overload
@@ -302,6 +363,22 @@ class CompressedRelationReader {
   static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
       const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
       std::span<const CompressedBlockMetadata> blockMetadata);
+
+  // The same function, but specify the arguments as the `MetadataAndBlocks`
+  // struct.
+  static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
+      const MetadataAndBlocks& metadataAndBlocks);
+
+  // Get the first and the last triple that the result of a `scan` with the
+  // given arguments would lead to. Throw an exception if the scan result would
+  // be empty. This function is used to more efficiently filter the blocks of
+  // index scans between joining them to get better estimates for the begginning
+  // and end of incomplete blocks.
+  MetadataAndBlocks::FirstAndLastTriple getFirstAndLastTriple(
+      const MetadataAndBlocks& metadataAndBlocks, ad_utility::File& file) const;
+
+  // Get access to the underlying allocator
+  const Allocator& allocator() const { return allocator_; }
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
@@ -349,9 +426,29 @@ class CompressedRelationReader {
   // the blocks that actually store triples from the given `relationMetadata`'s
   // relation, else the behavior is undefined.
   DecompressedBlock readPossiblyIncompleteBlock(
-      const CompressedRelationMetadata& relationMetadata, Id col1Id,
-      ad_utility::File& file,
-      const CompressedBlockMetadata& blockMetadata) const;
+      const CompressedRelationMetadata& relationMetadata,
+      std::optional<Id> col1Id, ad_utility::File& file,
+      const CompressedBlockMetadata& blockMetadata,
+      std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata)
+      const;
+
+  // Yield all the blocks in the range `[beginBlock, endBlock)`. If the
+  // `columnIndices` are set, that only the specified columns from the blocks
+  // are yielded, else the complete blocks are yielded. The blocks are yielded
+  // in the correct order, but asynchronously read and decompressed using
+  // multiple worker threads.
+  IdTableGenerator asyncParallelBlockGenerator(
+      auto beginBlock, auto endBlock, ad_utility::File& file,
+      std::optional<std::vector<size_t>> columnIndices,
+      TimeoutTimer timer) const;
+
+  // A helper function to abstract away the timeout check:
+  static void checkTimeout(
+      const ad_utility::SharedConcurrentTimeoutTimer& timer) {
+    if (timer) {
+      timer->wlock()->checkTimeoutAndThrow("IndexScan :");
+    }
+  }
 };
 
 #endif  // QLEVER_COMPRESSEDRELATION_H

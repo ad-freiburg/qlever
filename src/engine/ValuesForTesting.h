@@ -92,3 +92,12 @@ class ValuesForTesting : public Operation {
     return m;
   }
 };
+
+// Similar to `ValuesForTesting` above, but `knownEmptyResult()` always returns
+// false. This can be used for improved test coverage in cases where we want the
+// empty result to be not optimized out by a check to `knownEmptyResult`.
+class ValuesForTestingNoKnownEmptyResult : public ValuesForTesting {
+ public:
+  using ValuesForTesting::ValuesForTesting;
+  bool knownEmptyResult() override { return false; }
+};

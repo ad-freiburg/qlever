@@ -8,6 +8,7 @@
 
 #include <list>
 
+#include "engine/IndexScan.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/HashMap.h"
@@ -23,6 +24,8 @@ class Join : public Operation {
 
   ColumnIndex _leftJoinCol;
   ColumnIndex _rightJoinCol;
+
+  Variable _joinVar{"?notSet"};
 
   bool _keepJoinColumn;
 
@@ -133,7 +136,22 @@ class Join : public Operation {
 
   ResultTable computeResultForJoinWithFullScanDummy();
 
-  using ScanMethodType = std::function<void(Id, IdTable*)>;
+  // A special implementation that is called when both children are
+  // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
+  // `IndexScan`s that is actually needed without fully materializing them.
+  IdTable computeResultForTwoIndexScans();
+
+  // A special implementation that is called when one of the children is an
+  // `IndexScan`. The argument `scanIsLeft` determines whether the `IndexScan`
+  // is the left or the right child of this `Join`. This needs to be known to
+  // determine the correct order of the columns in the result.
+  template <bool scanIsLeft>
+  IdTable computeResultForIndexScanAndIdTable(const IdTable& idTable,
+                                              ColumnIndex joinColTable,
+                                              IndexScan& scan,
+                                              ColumnIndex joinColScan);
+
+  using ScanMethodType = std::function<IdTable(Id)>;
 
   ScanMethodType getScanMethod(
       std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;

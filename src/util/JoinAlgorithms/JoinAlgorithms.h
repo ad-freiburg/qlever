@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <ranges>
 
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
@@ -92,19 +93,17 @@ concept BinaryIteratorFunction =
  * described cases leads to two sorted ranges in the output, this can possibly
  * be exploited to fix the result in a cheaper way than a full sort.
  */
-template <
-    std::ranges::random_access_range Range,
-    BinaryRangePredicate<Range> LessThan, typename FindSmallerUndefRangesLeft,
-    typename FindSmallerUndefRangesRight,
-    UnaryIteratorFunction<Range> ElFromFirstNotFoundAction = decltype(noop)>
-[[nodiscard]] size_t zipperJoinWithUndef(
-    const Range& left, const Range& right, const LessThan& lessThan,
-    const BinaryIteratorFunction<Range> auto& compatibleRowAction,
+template <std::ranges::random_access_range Range1,
+          std::ranges::random_access_range Range2, typename LessThan,
+          typename FindSmallerUndefRangesLeft,
+          typename FindSmallerUndefRangesRight,
+          typename ElFromFirstNotFoundAction = decltype(noop)>
+[[nodiscard]] auto zipperJoinWithUndef(
+    const Range1& left, const Range2& right, const LessThan& lessThan,
+    const auto& compatibleRowAction,
     const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
     const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
     ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
-  using Iterator = std::ranges::iterator_t<Range>;
-
   // If this is not an OPTIONAL join or a MINUS we can apply several
   // optimizations, so we store this information.
   static constexpr bool hasNotFoundAction =
@@ -145,8 +144,8 @@ template <
   // all elements in `left` that are smaller than `*itFromRight` to work
   // correctly. It would thus be always correct to pass in `left.begin()` and
   // `left.end()`, but passing in smaller ranges is more efficient.
-  auto mergeWithUndefLeft = [&](Iterator itFromRight, Iterator leftBegin,
-                                Iterator leftEnd) {
+  auto mergeWithUndefLeft = [&](auto itFromRight, auto leftBegin,
+                                auto leftEnd) {
     if constexpr (!isSimilar<FindSmallerUndefRangesLeft, Noop>) {
       // We need to bind the const& to a variable, else it will be
       // dangling inside the `findSmallerUndefRangesLeft` generator.
@@ -165,7 +164,10 @@ template <
   // element of `left` or `right`) constains no UNDEF values. It is used inside
   // the following `mergeWithUndefRight` function.
   auto containsNoUndefined = []<typename T>(const T& row) {
-    if constexpr (std::is_same_v<T, Id>) {
+    if constexpr (isSimilar<FindSmallerUndefRangesLeft, Noop> &&
+                  isSimilar<FindSmallerUndefRangesRight, Noop>) {
+      return true;
+    } else if constexpr (std::is_same_v<T, Id>) {
       return row != Id::makeUndefined();
     } else {
       return (std::ranges::none_of(
@@ -182,8 +184,8 @@ template <
   // correct place in the result. The condition about containing no UNDEF values
   // is important, because otherwise `*itFromLeft` may be compatible to a larger
   // element in `right` that is only discovered later.
-  auto mergeWithUndefRight = [&](Iterator itFromLeft, Iterator beginRight,
-                                 Iterator endRight, bool hasNoMatch) {
+  auto mergeWithUndefRight = [&](auto itFromLeft, auto beginRight,
+                                 auto endRight, bool hasNoMatch) {
     if constexpr (!isSimilar<FindSmallerUndefRangesRight, Noop>) {
       bool compatibleWasFound = false;
       // We need to bind the const& to a variable, else it will be
@@ -291,8 +293,9 @@ template <
   // `max()` then we can provide no guarantees about the sorting of the result.
   // Otherwise, the result consists of two consecutive sorted ranges, the second
   // of which has length `returnValue`.
-  return outOfOrderFound ? std::numeric_limits<size_t>::max()
-                         : numOutOfOrderAtEnd;
+  size_t numOutOfOrder =
+      outOfOrderFound ? std::numeric_limits<size_t>::max() : numOutOfOrderAtEnd;
+  return numOutOfOrder;
 }
 
 /**
@@ -316,12 +319,12 @@ template <
  * implement very efficient OPTIONAL or MINUS if neither of the inputs contains
  * UNDEF values, and if the left operand is much smaller.
  */
-template <std::ranges::random_access_range Range,
+template <std::ranges::random_access_range RangeSmaller,
+          std::ranges::random_access_range RangeLarger,
           typename ElementFromSmallerNotFoundAction = Noop>
 void gallopingJoin(
-    const Range& smaller, const Range& larger,
-    BinaryRangePredicate<Range> auto const& lessThan,
-    BinaryIteratorFunction<Range> auto const& action,
+    const RangeSmaller& smaller, const RangeLarger& larger,
+    auto const& lessThan, auto const& action,
     ElementFromSmallerNotFoundAction elementFromSmallerNotFoundAction = {}) {
   auto itSmall = std::begin(smaller);
   auto endSmall = std::end(smaller);
@@ -541,6 +544,357 @@ void specialOptionalJoin(
   }
   for (auto it = it1; it != end1; ++it) {
     elFromFirstNotFoundAction(it);
+  }
+}
+
+namespace detail {
+using Range = std::pair<size_t, size_t>;
+
+// Store a contiguous random-access range (e.g. `std::vector`or `std::span`,
+// together with a pair of indices `[beginIndex, endIndex)` that denote a
+// contiguous subrange of the range. Note that this approach is more robust
+// than storing iterators or subranges directly instead of indices, because many
+// containers have their iterators invalidated when they are being moved (e.g.
+// `std::string` or `IdTable`).
+template <typename Block>
+class BlockAndSubrange {
+ private:
+  std::shared_ptr<Block> block_;
+  Range subrange_;
+
+ public:
+  // The reference type of the underlying container.
+  // using reference = std::iterator_traits<typename
+  // Block::iterator>::reference;
+  using reference = std::iterator_traits<typename Block::iterator>::value_type;
+
+  // Construct from a container object, where the initial subrange will
+  // represent the whole container.
+  explicit BlockAndSubrange(Block block)
+      : block_{std::make_shared<Block>(std::move(block))},
+        subrange_{0, block_->size()} {}
+
+  // Return a reference to the last element of the currently specified subrange.
+  reference back() {
+    AD_CORRECTNESS_CHECK(subrange_.second - 1 < block_->size());
+    return (*block_)[subrange_.second - 1];
+  }
+
+  // Return the currently specified subrange as a `std::ranges::subrange`
+  // object.
+  auto subrange() {
+    return std::ranges::subrange{fullBlock().begin() + subrange_.first,
+                                 fullBlock().begin() + subrange_.second};
+  }
+
+  // The const overload of the `subrange` method (see above).
+  auto subrange() const {
+    return std::ranges::subrange{fullBlock().begin() + subrange_.first,
+                                 fullBlock().begin() + subrange_.second};
+  }
+
+  Range getIndices() const { return subrange_; }
+
+  const auto& fullBlock() const { return *block_; }
+  auto& fullBlock() { return *block_; }
+
+  // Specify the subrange by using two iterators `begin` and `end`. The
+  // iterators must be valid iterators that point into the container, this is
+  // checked by an assertion. The only legal way to obtain such iterators is to
+  // call `subrange()` and then to extract valid iterators from the returned
+  // subrange.
+  template <typename It>
+  void setSubrange(It begin, It end) {
+    // We need this function to work with `iterator` as well as
+    // `const_iterator`, so we template the actual implementation.
+    auto impl = [&begin, &end, this](auto blockBegin, auto blockEnd) {
+      auto checkIt = [&blockBegin, &blockEnd](const auto& it) {
+        AD_CONTRACT_CHECK(blockBegin <= it && it <= blockEnd);
+      };
+      checkIt(begin);
+      checkIt(end);
+      AD_CONTRACT_CHECK(begin <= end);
+      subrange_.first = begin - blockBegin;
+      subrange_.second = end - blockBegin;
+    };
+    auto& block = fullBlock();
+    if constexpr (requires { begin - block.begin(); }) {
+      impl(block.begin(), block.end());
+    } else {
+      impl(std::as_const(block).begin(), std::as_const(block).end());
+    }
+  }
+};
+}  // namespace detail
+
+/**
+ * @brief Perform a zipper/merge join between two sorted inputs that are given
+ * as blocks of inputs, e.g. `std::vector<std::vector<int>>` or
+ * `ad_utility::generator<std::vector<int>>`. The blocks can be specified via an
+ * input range (e.g. a generator), but each single block must be a random access
+ * range (e.g. vector). The blocks will be moved from. The space complexity is
+ * `O(size of result)`. The result is only correct if none of the inputs
+ * contains UNDEF values.
+ * @param leftBlocks The left input range to the join algorithm. We use this for
+ * blocks of rows of IDs (e.g.`std::vector<IdTable>` or
+ * `ad_utility::generator<IdTable>`). Each block will be moved from.
+ * @param rightBlocks The right input range to the join algorithm. Each block
+ * will be moved from.
+ * @param lessThan This function is called with one element from one of the
+ * blocks of `leftBlocks` and `rightBlocks` each and must return `true` if the
+ * first argument comes before the second one. The concatenation of all blocks
+ * in `leftBlocks` must be sorted according to this function. The same
+ * requirement holds for `rightBlocks`.
+ * @param compatibleRowAction Needs to have three member functions:
+ * `setInput(leftBlock, rightBlock)`, `addRow(size_t, size_t)`, and `flush()`.
+ * When the `i`-th element of a `leftBlock` and the `j`-th element `rightBlock`
+ * match (because they compare equal wrt the `lessThan` relation), then first
+ * `setInput(leftBlock, rightBlock)` then `addRow(i, j)`, and finally `flush()`
+ * is called. Of course `setInput` and `flush()` are only called once if there
+ * are several matching pairs of elements from the same pair of blocks. The
+ * calls to `addRow` will then all be between the calls to `setInput` and
+ * `flush`.
+ */
+template <typename LeftBlocks, typename RightBlocks, typename LessThan,
+          typename LeftProjection = std::identity,
+          typename RightProjection = std::identity>
+void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
+                                     RightBlocks&& rightBlocks,
+                                     const LessThan& lessThan,
+                                     auto& compatibleRowAction,
+                                     LeftProjection leftProjection = {},
+                                     RightProjection rightProjection = {}) {
+  // Type aliases for a single block from the left/right input
+  using LeftBlock = typename std::decay_t<LeftBlocks>::value_type;
+  using RightBlock = typename std::decay_t<RightBlocks>::value_type;
+
+  // Type aliases for a single element from a block from the left/right input.
+  using LeftEl =
+      typename std::iterator_traits<typename LeftBlock::iterator>::value_type;
+  using RightEl =
+      typename std::iterator_traits<typename RightBlock::iterator>::value_type;
+
+  // Type alias for the result of the projection. Elements from the left and
+  // right input must be projected to the same type.
+  using ProjectedEl =
+      std::decay_t<std::invoke_result_t<LeftProjection, LeftEl>>;
+  static_assert(
+      ad_utility::isSimilar<ProjectedEl,
+                            std::invoke_result_t<RightProjection, RightEl>>);
+  // Iterators for the two inputs. These iterators work on blocks.
+  auto it1 = std::begin(leftBlocks);
+  auto end1 = std::end(leftBlocks);
+  auto it2 = std::begin(rightBlocks);
+  auto end2 = std::end(rightBlocks);
+
+  // Create an equality comparison from the `lessThan` predicate.
+  auto eq = [&lessThan](const auto& el1, const auto& el2) {
+    return !lessThan(el1, el2) && !lessThan(el2, el1);
+  };
+
+  // In these buffers we will store blocks that all contain the same elements
+  // and thus their cartesian products match.
+  using LeftBlockVec = std::vector<detail::BlockAndSubrange<LeftBlock>>;
+  using RightBlockVec = std::vector<detail::BlockAndSubrange<RightBlock>>;
+  // TODO<joka921> The sameBlocksLeft/Right can possibly become very large.
+  // They should respect the memory limit.
+  LeftBlockVec sameBlocksLeft;
+  using RightBlockVec = std::vector<detail::BlockAndSubrange<RightBlock>>;
+  RightBlockVec sameBlocksRight;
+
+  auto getMinEl = [&leftProjection, &rightProjection, &sameBlocksLeft,
+                   &sameBlocksRight, &lessThan]() -> ProjectedEl {
+    return std::min(leftProjection(sameBlocksLeft.front().back()),
+                    rightProjection(sameBlocksRight.front().back()), lessThan);
+  };
+
+  // Read the minimal number of unread blocks from `leftBlocks` into
+  // `sameBlocksLeft` and from `rightBlocks` into `sameBlocksRight` s.t. at
+  // least one of these blocks can be fully processed. For example consider the
+  // inputs:
+  //   leftBlocks:  [0-3], [3-3], [3-5], ...
+  //   rightBlocks: [0-3], [3-7], ...
+  // All of these five blocks have to be processed at once in order to be able
+  // to fully process at least one block. Afterwards we have fully processed all
+  // blocks except for the [3-7] block, which has to stay in `sameBlocksRight`
+  // before the next call to `fillBuffer`. To ensure this, all the following
+  // conditions must hold.
+  // 1. All blocks that were previously read into `sameBlocksLeft/Right` but
+  // have not yet been fully processed are still stored in those buffers. This
+  // precondition is enforced by the `joinBuffers` lambda below.
+  // 2. At least one block is contained in `sameBlocksLeft` and
+  // `sameBlocksRight` each.
+  // 3. Consider the minimum of the last element in `sameBlocksLeft[0]` and the
+  // last element of `sameBlocksRight[0]` after condition 2 is fulfilled. All
+  // blocks that contain elements equal to this minimum are read into the
+  // respective buffers. Only blocks that fulfill this condition are read.
+  //
+  // The only exception to these conditions can happen if we are at the end of
+  // one of the inputs. In that case either of `sameBlocksLeft` or
+  // `sameBlocksRight` is empty after calling this function. Then we have
+  // finished processing all blocks and can finish the overall algorithm.
+  auto fillBuffer = [&]() {
+    AD_CORRECTNESS_CHECK(sameBlocksLeft.size() <= 1);
+    AD_CORRECTNESS_CHECK(sameBlocksRight.size() <= 1);
+
+    // If the `targetBuffer` is empty, read the next nonempty block from `[it,
+    // end)` if there is one.
+    auto fillWithAtLeastOne = [&lessThan](auto& targetBuffer, auto& it,
+                                          const auto& end) {
+      // `lessThan` is only needed when compiling with expensive checks enabled,
+      // so we suppress the warning about `lessThan` being unused.
+      (void)lessThan;
+      while (targetBuffer.empty() && it != end) {
+        if (!it->empty()) {
+          AD_EXPENSIVE_CHECK(std::ranges::is_sorted(*it, lessThan));
+          targetBuffer.emplace_back(std::move(*it));
+        }
+        ++it;
+      }
+    };
+    fillWithAtLeastOne(sameBlocksLeft, it1, end1);
+    fillWithAtLeastOne(sameBlocksRight, it2, end2);
+
+    if (sameBlocksLeft.empty() || sameBlocksRight.empty()) {
+      // One of the inputs was exhausted, we are done.
+      return;
+    }
+
+    // Add the remaining blocks such that condition 3 from above is fulfilled.
+    auto fillEqualToMinimum = [minEl = getMinEl(), &lessThan, &eq](
+                                  auto& targetBuffer, auto& it,
+                                  const auto& end) {
+      while (it != end && eq((*it)[0], minEl)) {
+        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it, lessThan));
+        targetBuffer.emplace_back(std::move(*it));
+        ++it;
+      }
+    };
+    fillEqualToMinimum(sameBlocksLeft, it1, end1);
+    fillEqualToMinimum(sameBlocksRight, it2, end2);
+  };
+
+  // Call `compatibleRowAction` for all pairs of elements in the cartesian
+  // product of the blocks in `blocksLeft` and `blocksRight`.
+  auto addAll = [&compatibleRowAction](const auto& blocksLeft,
+                                       const auto& blocksRight) {
+    // TODO<C++23> use `std::views::cartesian_product`.
+    for (const auto& lBlock : blocksLeft) {
+      for (const auto& rBlock : blocksRight) {
+        compatibleRowAction.setInput(lBlock.fullBlock(), rBlock.fullBlock());
+
+        for (size_t i : std::views::iota(lBlock.getIndices().first,
+                                         lBlock.getIndices().second)) {
+          for (size_t j : std::views::iota(rBlock.getIndices().first,
+                                           rBlock.getIndices().second)) {
+            compatibleRowAction.addRow(i, j);
+          }
+        }
+        compatibleRowAction.flush();
+      }
+    }
+  };
+
+  // Join the first block in `sameBlocksLeft` with the first block in
+  // `sameBlocksRight`, but ignore all elements that >= min(lastL, lastR) where
+  // `lastL` is the last element of `sameBlocksLeft[0]`, and `lastR`
+  // analogously. The fully joined parts of the block are then removed from
+  // `sameBlocksLeft/Right`, as they are not needed anymore.
+  auto joinAndRemoveBeginning = [&]() {
+    // Get the first blocks.
+    ProjectedEl minEl = getMinEl();
+    // For one of the inputs (`sameBlocksLeft` or `sameBlocksRight`) obtain a
+    // tuple of the following elements:
+    // * A reference to the first full block
+    // * The currently active subrange of that block
+    // * An iterator pointing to the position of the `minEl` in the block.
+    auto getFirstBlock = [&minEl, &lessThan](auto& sameBlocks) {
+      AD_CORRECTNESS_CHECK(!sameBlocks.empty());
+      const auto& first = sameBlocks.at(0);
+      auto it = std::ranges::lower_bound(first.subrange(), minEl, lessThan);
+      return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
+    };
+    auto [fullBlockLeft, subrangeLeft, minElItL] =
+        getFirstBlock(sameBlocksLeft);
+    auto [fullBlockRight, subrangeRight, minElItR] =
+        getFirstBlock(sameBlocksRight);
+
+    compatibleRowAction.setInput(fullBlockLeft.get(), fullBlockRight.get());
+    auto addRowIndex = [begL = fullBlockLeft.get().begin(),
+                        begR = fullBlockRight.get().begin(),
+                        &compatibleRowAction](auto itFromL, auto itFromR) {
+      compatibleRowAction.addRow(itFromL - begL, itFromR - begR);
+    };
+
+    [[maybe_unused]] auto res = zipperJoinWithUndef(
+        std::ranges::subrange{subrangeLeft.begin(), minElItL},
+        std::ranges::subrange{subrangeRight.begin(), minElItR}, lessThan,
+        addRowIndex, noop, noop);
+    compatibleRowAction.flush();
+
+    // Remove the joined elements.
+    sameBlocksLeft.at(0).setSubrange(minElItL, subrangeLeft.end());
+    sameBlocksRight.at(0).setSubrange(minElItR, subrangeRight.end());
+  };
+
+  // Remove all elements from `blocks` (either `sameBlocksLeft` or
+  // `sameBlocksRight`) s.t. only elements `> lastProcessedElement` remain. This
+  // effectively removes all blocks completely, except maybe the last one.
+  auto removeAllButUnjoined = [lessThan]<typename Blocks>(
+                                  Blocks& blocks,
+                                  ProjectedEl lastProcessedElement) {
+    // Erase all but the last block.
+    AD_CORRECTNESS_CHECK(!blocks.empty());
+    blocks.erase(blocks.begin(), blocks.end() - 1);
+
+    // Delete the part from the last block that is `<= lastProcessedElement`.
+    decltype(auto) remainingBlock = blocks.at(0).subrange();
+    auto beginningOfUnjoined = std::ranges::upper_bound(
+        remainingBlock, lastProcessedElement, lessThan);
+    remainingBlock =
+        std::ranges::subrange{beginningOfUnjoined, remainingBlock.end()};
+    // If the last block also was already handled completely, delete it (this
+    // might happen at the very end).
+    if (!remainingBlock.empty()) {
+      blocks.at(0).setSubrange(remainingBlock.begin(), remainingBlock.end());
+    } else {
+      blocks.clear();
+    }
+  };
+
+  // Combine the above functionality and perform one round of joining.
+  auto joinBuffers = [&]() {
+    // Join the beginning of the first blocks and remove it from the input.
+    joinAndRemoveBeginning();
+
+    ProjectedEl minEl = getMinEl();
+    // Return a vector of subranges of all elements in `input` that are equal to
+    // the last element that we can safely join (this is the `minEl`).
+    // Effectively, these subranges cover all the blocks completely except maybe
+    // the last one, which might contain elements `> minEl` at the end.
+    auto pushRelevantSubranges = [&minEl, &lessThan](const auto& input) {
+      auto result = input;
+      // If one of the inputs is empty, this function shouldn't have been called
+      // in the first place.
+      AD_CORRECTNESS_CHECK(!result.empty());
+      auto& last = result.back();
+      auto range = std::ranges::equal_range(last.subrange(), minEl, lessThan);
+      last.setSubrange(range.begin(), range.end());
+      return result;
+    };
+    auto l = pushRelevantSubranges(sameBlocksLeft);
+    auto r = pushRelevantSubranges(sameBlocksRight);
+    addAll(l, r);
+    removeAllButUnjoined(sameBlocksLeft, minEl);
+    removeAllButUnjoined(sameBlocksRight, minEl);
+  };
+
+  while (true) {
+    fillBuffer();
+    if (sameBlocksLeft.empty() || sameBlocksRight.empty()) {
+      return;
+    }
+    joinBuffers();
   }
 }
 }  // namespace ad_utility
