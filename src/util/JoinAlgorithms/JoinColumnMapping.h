@@ -114,7 +114,7 @@ struct IdTableAndFirstCol {
   using iterator = std::decay_t<decltype(table_.getColumn(0).begin())>;
 
   // Construct by taking ownership of the table.
-  IdTableAndFirstCol(Table t) : table_{std::move(t)} {}
+  explicit IdTableAndFirstCol(Table t) : table_{std::move(t)} {}
 
   // Get access to the first column.
   decltype(auto) col() { return table_.getColumn(0); }
