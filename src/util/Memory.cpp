@@ -3,6 +3,11 @@
 // Author: Andre Schlegel (July of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
+#include <absl/strings/str_cat.h>
+
+#include <string_view>
+#include <tuple>
+
 #include "util/Memory.h"
 
 namespace ad_utility {
@@ -30,27 +35,51 @@ static double sizetDivision(const size_t& dividend, const size_t& divisor) {
 
 // _____________________________________________________________________________
 double Memory::kilobytes() const {
-  return sizetDivision(memoryInBytes_, ad_utility::pow<size_t>(2, 10));
+  return sizetDivision(memoryInBytes_, detail::numberOfBytesPerKB);
 }
 
 // _____________________________________________________________________________
 double Memory::megabytes() const {
-  return sizetDivision(memoryInBytes_, ad_utility::pow<size_t>(2, 20));
+  return sizetDivision(memoryInBytes_, detail::numberOfBytesPerMB);
 }
 
 // _____________________________________________________________________________
 double Memory::gigabytes() const {
-  return sizetDivision(memoryInBytes_, ad_utility::pow<size_t>(2, 30));
+  return sizetDivision(memoryInBytes_, detail::numberOfBytesPerGB);
 }
 
 // _____________________________________________________________________________
 double Memory::terabytes() const {
-  return sizetDivision(memoryInBytes_, ad_utility::pow<size_t>(2, 40));
+  return sizetDivision(memoryInBytes_, detail::numberOfBytesPerTB);
 }
 
 // _____________________________________________________________________________
 double Memory::petabytes() const {
-  return sizetDivision(memoryInBytes_, ad_utility::pow<size_t>(2, 50));
+  return sizetDivision(memoryInBytes_, detail::numberOfBytesPerPB);
+}
+
+// _____________________________________________________________________________
+std::string Memory::asString() const {
+  // Convert number and memory unit name to the string, we want to return.
+  auto toString = [](const auto& number, std::string_view unitName) {
+    return absl::StrCat(number, " ", unitName);
+  };
+
+  // Just use the first unit, which is bigger/equal to `memoryInBytes_`.
+  if (memoryInBytes_ >= detail::numberOfBytesPerPB) {
+    return toString(petabytes(), "PB");
+  } else if (memoryInBytes_ >= detail::numberOfBytesPerTB) {
+    return toString(terabytes(), "TB");
+  } else if (memoryInBytes_ >= detail::numberOfBytesPerGB) {
+    return toString(gigabytes(), "GB");
+  } else if (memoryInBytes_ >= detail::numberOfBytesPerMB) {
+    return toString(megabytes(), "MB");
+  } else if (memoryInBytes_ >= detail::numberOfBytesPerKB) {
+    return toString(kilobytes(), "KB");
+  } else {
+    // Just return the amount of bytes.
+    return toString(memoryInBytes_, "Byte");
+  }
 }
 
 }  // namespace ad_utility

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <concepts>
 #include <cstddef>
+#include <string>
 #include <type_traits>
 
 #include "util/ConstexprUtils.h"
@@ -45,6 +46,14 @@ class Memory {
   double gigabytes() const;
   double terabytes() const;
   double petabytes() const;
+
+  /*
+  Return the string representation of the internal memory amount in the
+  biggest memory unit, that is equal to, or smaller than, the internal memory
+  amount.
+  Example: 1024 bytes would be returned as `"1 KB"`.
+  */
+  std::string asString() const;
 };
 
 namespace detail {
@@ -67,6 +76,13 @@ size_t constexpr convertMemoryUnitsToBytes(const T& amountOfUnits,
   }
 }
 
+// Just the number of bytes per memory unit.
+constexpr size_t numberOfBytesPerKB = ad_utility::pow<size_t>(2, 10);
+constexpr size_t numberOfBytesPerMB = ad_utility::pow<size_t>(2, 20);
+constexpr size_t numberOfBytesPerGB = ad_utility::pow<size_t>(2, 30);
+constexpr size_t numberOfBytesPerTB = ad_utility::pow<size_t>(2, 40);
+constexpr size_t numberOfBytesPerPB = ad_utility::pow<size_t>(2, 50);
+
 }  // namespace detail
 
 // User defined literals for memory units.
@@ -74,51 +90,51 @@ size_t constexpr operator""_Byte(unsigned long long int bytes) { return bytes; }
 
 size_t constexpr operator""_KB(long double kilobytes) {
   return detail::convertMemoryUnitsToBytes(kilobytes,
-                                           ad_utility::pow<size_t>(2, 10));
+                                           detail::numberOfBytesPerKB);
 }
 
 size_t constexpr operator""_KB(unsigned long long int kilobytes) {
   return detail::convertMemoryUnitsToBytes(kilobytes,
-                                           ad_utility::pow<size_t>(2, 10));
+                                           detail::numberOfBytesPerKB);
 }
 
 size_t constexpr operator""_MB(long double megabytes) {
   return detail::convertMemoryUnitsToBytes(megabytes,
-                                           ad_utility::pow<size_t>(2, 20));
+                                           detail::numberOfBytesPerMB);
 }
 
 size_t constexpr operator""_MB(unsigned long long int megabytes) {
   return detail::convertMemoryUnitsToBytes(megabytes,
-                                           ad_utility::pow<size_t>(2, 20));
+                                           detail::numberOfBytesPerMB);
 }
 
 size_t constexpr operator""_GB(long double gigabytes) {
   return detail::convertMemoryUnitsToBytes(gigabytes,
-                                           ad_utility::pow<size_t>(2, 30));
+                                           detail::numberOfBytesPerGB);
 }
 
 size_t constexpr operator""_GB(unsigned long long int gigabytes) {
   return detail::convertMemoryUnitsToBytes(gigabytes,
-                                           ad_utility::pow<size_t>(2, 30));
+                                           detail::numberOfBytesPerGB);
 }
 
 size_t constexpr operator""_TB(long double terabytes) {
   return detail::convertMemoryUnitsToBytes(terabytes,
-                                           ad_utility::pow<size_t>(2, 40));
+                                           detail::numberOfBytesPerTB);
 }
 
 size_t constexpr operator""_TB(unsigned long long int terabytes) {
   return detail::convertMemoryUnitsToBytes(terabytes,
-                                           ad_utility::pow<size_t>(2, 40));
+                                           detail::numberOfBytesPerTB);
 }
 
 size_t constexpr operator""_PB(long double petabytes) {
   return detail::convertMemoryUnitsToBytes(petabytes,
-                                           ad_utility::pow<size_t>(2, 50));
+                                           detail::numberOfBytesPerPB);
 }
 
 size_t constexpr operator""_PB(unsigned long long int petabytes) {
   return detail::convertMemoryUnitsToBytes(petabytes,
-                                           ad_utility::pow<size_t>(2, 50));
+                                           detail::numberOfBytesPerPB);
 }
 }  // namespace ad_utility

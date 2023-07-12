@@ -119,3 +119,31 @@ TEST(MemoryUtilTest, SizeTAssignmentOperator) {
   checkAllMemoryGetter(m, MemorySize{1125899906842624uL, 1099511627776.0,
                                      1073741824.0, 1048576.0, 1024.0, 1.0});
 }
+
+TEST(MemoryUtilTest, AsString) {
+  // Creates an instance with given amount of memory noted and checks the
+  // expected string representation.
+  auto doTest = [](const size_t& memoryAmount,
+                   std::string_view expectedStringRepresantation) {
+    ASSERT_STREQ(ad_utility::Memory(memoryAmount).asString().c_str(),
+                 expectedStringRepresantation.data());
+  };
+
+  doTest(50_Byte, "50 Byte");
+  doTest(2_KB, "2 KB");
+  doTest(1.5_KB, "1.5 KB");
+  doTest(2_MB, "2 MB");
+  doTest(1.5_MB, "1.5 MB");
+  doTest(2_GB, "2 GB");
+  doTest(1.5_GB, "1.5 GB");
+  doTest(2_TB, "2 TB");
+  doTest(1.5_TB, "1.5 TB");
+  doTest(2_PB, "2 PB");
+  doTest(1.5_PB, "1.5 PB");
+
+  doTest(4096_Byte, "4 KB");
+  doTest(4096_KB, "4 MB");
+  doTest(4096_MB, "4 GB");
+  doTest(4096_GB, "4 TB");
+  doTest(4096_TB, "4 PB");
+}
