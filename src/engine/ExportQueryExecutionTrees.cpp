@@ -137,18 +137,22 @@ ExportQueryExecutionTrees::idToStringAndTypeOnlyEncoded(Id id) {
   switch (id.getDatatype()) {
     case Datatype::Undefined:
       return std::nullopt;
-    case Datatype::Double: {
-      // Format as integer if fractional part is zero, let C++ decide otherwise.
-      std::stringstream ss;
-      double d = id.getDouble();
-      double dIntPart;
-      if (std::modf(d, &dIntPart) == 0.0) {
-        ss << std::fixed << std::setprecision(0) << id.getDouble();
-      } else {
-        ss << d;
-      }
-      return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
-    }
+    case Datatype::Double:
+      // We use the immediately invoked lambda here because putting this block
+      // in braces confuses the coverage tool.
+      return [id] {
+        // Format as integer if fractional part is zero, let C++ decide
+        // otherwise.
+        std::stringstream ss;
+        double d = id.getDouble();
+        double dIntPart;
+        if (std::modf(d, &dIntPart) == 0.0) {
+          ss << std::fixed << std::setprecision(0) << id.getDouble();
+        } else {
+          ss << d;
+        }
+        return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
+      }();
     case Datatype::Bool:
       return id.getBool() ? std::pair{"true", XSD_BOOLEAN_TYPE}
                           : std::pair{"false", XSD_BOOLEAN_TYPE};
@@ -367,13 +371,11 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
-  // TODO<joka921> Also add a warning to the exported result.
-  if (selectedColumnIndices.empty()) {
-    LOG(WARN) << "Exporting a SPARQL query where none of the selected "
-                 "variables is bound in the query"
-              << std::endl;
-    return {std::vector<std::string>{}};
-  }
+  // This can never happen, because empty SELECT clauses are not supported by
+  // QLever. Should we ever support triples without variables then this might
+  // theoretically happen in combination with `SELECT *`, but then this still
+  // can be changed.
+  AD_CORRECTNESS_CHECK(!selectedColumnIndices.empty());
 
   return ExportQueryExecutionTrees::idTableToQLeverJSONArray(
       qet, limitAndOffset, selectedColumnIndices, std::move(resultTable));
