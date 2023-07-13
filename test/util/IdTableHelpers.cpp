@@ -2,12 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (Januar of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../test/util/IdTableHelpers.h"
-
 #include <absl/strings/str_cat.h>
 
 #include <utility>
 
+#include "../test/util/IdTableHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
@@ -106,7 +105,7 @@ IdTable createRandomlyFilledIdTable(
   // Are all the join column numbers within the max column number?
   AD_CONTRACT_CHECK(std::ranges::all_of(
       joinColumnNumberView,
-      [&numberColumns](const size_t& num) { return num < numberColumns; }));
+      [&numberColumns](const size_t num) { return num < numberColumns; }));
 
   // Are there no duplicates in the join column numbers?
   std::vector<size_t> sortedJoinColumnNumbers =
@@ -158,7 +157,7 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
   // Creating the table.
   return createRandomlyFilledIdTable(
       numberRows, numberColumns,
-      ad_utility::transform(joinColumns, [&generator](const size_t& num) {
+      ad_utility::transform(joinColumns, [&generator](const size_t num) {
         /*
         Simply passing `generator` doesn't work, because it would be copied,
         which would lead to different behavior. After all, the columns would no
