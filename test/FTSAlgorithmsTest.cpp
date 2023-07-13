@@ -551,11 +551,11 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
   wep.scores_ = {10, 3, 3, 1, 1, 1};
 
   size_t k = 1;
-  IdTable resW4{4, makeAllocator()};
+  IdTable resW5{5, makeAllocator()};
   ad_utility::HashMap<Id, IdTable> fMap1;
 
   size_t nofVars = 2;
-  int width = resW4.numColumns();
+  int width = resW5.numColumns();
 
   // The `multVarsFilterAggScoresAndTakeTopKContexts` function is overloaded,
   // so it doesn't work with the `CALL_FIXED_SIZE` macro. We thus need
@@ -567,19 +567,19 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
           AD_FWD(args)...);
     });
   };
-  test(width, wep, fMap1, nofVars, k, &resW4);
-  ASSERT_EQ(0u, resW4.size());
+  test(width, wep, fMap1, nofVars, k, &resW5);
+  ASSERT_EQ(0u, resW5.size());
 
   auto [it, suc] = fMap1.emplace(V(1), IdTable{1, makeAllocator()});
   it->second.push_back({V(1)});
 
   test(width,
 
-       wep, fMap1, nofVars, k, &resW4);
+       wep, fMap1, nofVars, k, &resW5);
 
-  ASSERT_EQ(3u, resW4.size());  // 1-1 1-0 1-2
+  ASSERT_EQ(3u, resW5.size());  // 1-1 1-0 1-2
 
-  std::sort(resW4.begin(), resW4.end(), [](const auto& a, const auto& b) {
+  std::sort(resW5.begin(), resW5.end(), [](const auto& a, const auto& b) {
     if (a[1] == b[1]) {
       if (a[2] == b[2]) {
         return a[0] < b[0];
@@ -589,26 +589,26 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
     return a[1] > b[1];
   });
 
-  ASSERT_EQ(TextRecordId(1), resW4(0, 0));
-  ASSERT_EQ(IntId(2), resW4(0, 1));
-  ASSERT_EQ(V(0), resW4(0, 2));
-  ASSERT_EQ(V(1), resW4(0, 3));
-  ASSERT_EQ(TextRecordId(1), resW4(1, 0));
-  ASSERT_EQ(IntId(2), resW4(1, 1));
-  ASSERT_EQ(V(1), resW4(1, 2));
-  ASSERT_EQ(V(1), resW4(1, 3));
-  ASSERT_EQ(TextRecordId(2), resW4(2, 0));
-  ASSERT_EQ(IntId(1), resW4(2, 1));
-  ASSERT_EQ(V(2), resW4(2, 2));
-  ASSERT_EQ(V(1), resW4(2, 3));
+  ASSERT_EQ(TextRecordId(1), resW5(0, 0));
+  ASSERT_EQ(IntId(2), resW5(0, 1));
+  ASSERT_EQ(V(0), resW5(0, 2));
+  ASSERT_EQ(V(1), resW5(0, 3));
+  ASSERT_EQ(TextRecordId(1), resW5(1, 0));
+  ASSERT_EQ(IntId(2), resW5(1, 1));
+  ASSERT_EQ(V(1), resW5(1, 2));
+  ASSERT_EQ(V(1), resW5(1, 3));
+  ASSERT_EQ(TextRecordId(2), resW5(2, 0));
+  ASSERT_EQ(IntId(1), resW5(2, 1));
+  ASSERT_EQ(V(2), resW5(2, 2));
+  ASSERT_EQ(V(1), resW5(2, 3));
 
-  resW4.clear();
+  resW5.clear();
   test(width,
 
-       wep, fMap1, nofVars, 2, &resW4);
-  ASSERT_EQ(5u, resW4.size());  // 2x 1-1  2x 1-0   1x 1-2
+       wep, fMap1, nofVars, 2, &resW5);
+  ASSERT_EQ(5u, resW5.size());  // 2x 1-1  2x 1-0   1x 1-2
 
-  std::sort(std::begin(resW4), std::end(resW4),
+  std::sort(std::begin(resW5), std::end(resW5),
             [](const auto& a, const auto& b) {
               if (a[1] == b[1]) {
                 if (a[2] == b[2]) {
@@ -619,26 +619,26 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
               return a[1] > b[1];
             });
 
-  ASSERT_EQ(TextRecordId(1u), resW4(0, 0));
-  ASSERT_EQ(IntId(2u), resW4(0, 1));
-  ASSERT_EQ(V(0u), resW4(0, 2));
-  ASSERT_EQ(V(1u), resW4(0, 3));
-  ASSERT_EQ(TextRecordId(2u), resW4(1, 0));
-  ASSERT_EQ(IntId(2u), resW4(1, 1));
-  ASSERT_EQ(V(0u), resW4(1, 2));
-  ASSERT_EQ(V(1u), resW4(1, 3));
+  ASSERT_EQ(TextRecordId(1u), resW5(0, 0));
+  ASSERT_EQ(IntId(2u), resW5(0, 1));
+  ASSERT_EQ(V(0u), resW5(0, 2));
+  ASSERT_EQ(V(1u), resW5(0, 3));
+  ASSERT_EQ(TextRecordId(2u), resW5(1, 0));
+  ASSERT_EQ(IntId(2u), resW5(1, 1));
+  ASSERT_EQ(V(0u), resW5(1, 2));
+  ASSERT_EQ(V(1u), resW5(1, 3));
 
-  ASSERT_EQ(TextRecordId(1u), resW4(2, 0));
-  ASSERT_EQ(IntId(2u), resW4(2, 1));
-  ASSERT_EQ(V(1u), resW4(2, 2));
-  ASSERT_EQ(V(1u), resW4(2, 3));
-  ASSERT_EQ(TextRecordId(2u), resW4(3, 0));
-  ASSERT_EQ(IntId(2u), resW4(3, 1));
-  ASSERT_EQ(V(1u), resW4(3, 2));
-  ASSERT_EQ(V(1u), resW4(3, 3));
+  ASSERT_EQ(TextRecordId(1u), resW5(2, 0));
+  ASSERT_EQ(IntId(2u), resW5(2, 1));
+  ASSERT_EQ(V(1u), resW5(2, 2));
+  ASSERT_EQ(V(1u), resW5(2, 3));
+  ASSERT_EQ(TextRecordId(2u), resW5(3, 0));
+  ASSERT_EQ(IntId(2u), resW5(3, 1));
+  ASSERT_EQ(V(1u), resW5(3, 2));
+  ASSERT_EQ(V(1u), resW5(3, 3));
 
-  ASSERT_EQ(TextRecordId(2u), resW4(4, 0));
-  ASSERT_EQ(IntId(1u), resW4(4, 1));
-  ASSERT_EQ(V(2u), resW4(4, 2));
-  ASSERT_EQ(V(1u), resW4(4, 3));
+  ASSERT_EQ(TextRecordId(2u), resW5(4, 0));
+  ASSERT_EQ(IntId(1u), resW5(4, 1));
+  ASSERT_EQ(V(2u), resW5(4, 2));
+  ASSERT_EQ(V(1u), resW5(4, 3));
 }

@@ -220,7 +220,7 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
       if (++streak == k) {
         Score s = 0;
         vector<size_t> currentIndices;
-        currentIndices.reserve(k);
+        currentIndices.resize(k, 0);
         for (size_t i = 0; i < k; ++i) {
           size_t index =
               (i == currentList ? nextIndices[i] : nextIndices[i] - 1);
@@ -231,7 +231,6 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
         }
         int kIndex = k - 1;
         vector<size_t> offsets;
-        offsets.reserve(k);
         offsets.resize(k, 0);
         while (kIndex >= 0) {
           if (currentIndices[kIndex] + offsets[kIndex] >=
@@ -325,7 +324,6 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
   AggMapEntityToSaCS mapEtSaCS;
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
     vector<WordIndex> wids;
-    wids.reserve(numOfTerms);
     wids.resize(numOfTerms);
     for (size_t l = 0; l < numOfTerms; l++) {
       wids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][i];
@@ -496,7 +494,6 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
 
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
     vector<WordIndex> wids;
-    wids.reserve(numOfTerms);
     wids.resize(numOfTerms);
     for (size_t l = 0; l < numOfTerms; l++) {
       wids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][i];
@@ -774,7 +771,6 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   TextRecordIndex currentCid = wep.cids_[0];
   Score cscore = wep.scores_[0];
   vector<WordIndex> cwids;
-  cwids.reserve(numOfTerms);
   cwids.resize(numOfTerms);
   for (size_t l = 0; l < numOfTerms; l++) {
     cwids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][0];
@@ -1018,7 +1014,6 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   AggMapEntityToSaCS mapEtSaCS;
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
     vector<WordIndex> wids;
-    wids.reserve(numOfTerms);
     wids.resize(numOfTerms);
     for (size_t l = 0; l < numOfTerms; l++) {
       wids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][i];
@@ -1150,7 +1145,6 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   AggMapEntityToSaCS mapEtSaCS;
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
     vector<WordIndex> wids;
-    wids.reserve(numOfTerms);
     wids.resize(numOfTerms);
     for (size_t l = 0; l < numOfTerms; l++) {
       wids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][i];
@@ -1269,7 +1263,6 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   TextRecordIndex currentCid = wep.cids_[0];
   Score cscore = wep.scores_[0];
   vector<WordIndex> cwids;
-  cwids.reserve(numOfTerms);
   cwids.resize(numOfTerms);
   for (size_t l = 0; l < numOfTerms; l++) {
     cwids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][0];
@@ -1489,7 +1482,6 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   TextRecordIndex currentCid = wep.cids_[0];
   Score cscore = wep.scores_[0];
   vector<WordIndex> cwids;
-  cwids.reserve(numOfTerms);
   cwids.resize(numOfTerms);
   for (size_t l = 0; l < numOfTerms; l++) {
     cwids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][0];
