@@ -3,9 +3,13 @@
 // Author: Andre Schlegel (July of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <ranges>
+#include <vector>
 
 #include "util/AbstractMemory/Memory.h"
 
@@ -17,7 +21,7 @@ using ad_utility::operator""_GB;
 using ad_utility::operator""_TB;
 using ad_utility::operator""_PB;
 
-TEST(MemoryUtilTest, UserDefinedLiterals) {
+TEST(AbstractMemory, UserDefinedLiterals) {
   // Normal bytes.
   ASSERT_EQ(50uL, 50_Byte);
 
@@ -73,7 +77,7 @@ void checkAllMemoryGetter(const ad_utility::Memory& m, const MemorySize& ms) {
   ASSERT_DOUBLE_EQ(m.petabytes(), ms.petabytes);
 }
 
-TEST(MemoryUtilTest, MemoryConstructor) {
+TEST(AbstractMemory, MemoryConstructor) {
   // Default constructor.
   ad_utility::Memory m1;
   checkAllMemoryGetter(m1, MemorySize{0uL, 0.0, 0.0, 0.0, 0.0, 0.0});
@@ -86,7 +90,7 @@ TEST(MemoryUtilTest, MemoryConstructor) {
                                   9.094947017729282379150390625e-13});
 }
 
-TEST(MemoryUtilTest, SizeTAssignmentOperator) {
+TEST(AbstractMemory, SizeTAssignmentOperator) {
   ad_utility::Memory m;
   checkAllMemoryGetter(m, MemorySize{0uL, 0.0, 0.0, 0.0, 0.0, 0.0});
 
@@ -120,30 +124,86 @@ TEST(MemoryUtilTest, SizeTAssignmentOperator) {
                                      1073741824.0, 1048576.0, 1024.0, 1.0});
 }
 
-TEST(MemoryUtilTest, AsString) {
+// For tests, where one is converted into the other and vice-versa.
+struct MemoryAmountAndStringRepresentation {
+  size_t memoryAmount_;
+  std::string stringRepresentation;
+};
+
+static std::vector<MemoryAmountAndStringRepresentation>
+generalAsStringTestCases() {
+  return {{50_Byte, "50 Byte"}, {2_KB, "2 KB"},     {1.5_KB, "1.5 KB"},
+          {2_MB, "2 MB"},       {1.5_MB, "1.5 MB"}, {2_GB, "2 GB"},
+          {1.5_GB, "1.5 GB"},   {2_TB, "2 TB"},     {1.5_TB, "1.5 TB"},
+          {2_PB, "2 PB"},       {1.5_PB, "1.5 PB"}};
+}
+
+TEST(AbstractMemory, AsString) {
   // Creates an instance with given amount of memory noted and checks the
   // expected string representation.
-  auto doTest = [](const size_t& memoryAmount,
-                   std::string_view expectedStringRepresantation) {
-    ASSERT_STREQ(ad_utility::Memory(memoryAmount).asString().c_str(),
-                 expectedStringRepresantation.data());
+  auto doTest = [](const MemoryAmountAndStringRepresentation& testCase) {
+    ASSERT_STREQ(ad_utility::Memory(testCase.memoryAmount_).asString().c_str(),
+                 testCase.stringRepresentation.data());
   };
 
-  doTest(50_Byte, "50 Byte");
-  doTest(2_KB, "2 KB");
-  doTest(1.5_KB, "1.5 KB");
-  doTest(2_MB, "2 MB");
-  doTest(1.5_MB, "1.5 MB");
-  doTest(2_GB, "2 GB");
-  doTest(1.5_GB, "1.5 GB");
-  doTest(2_TB, "2 TB");
-  doTest(1.5_TB, "1.5 TB");
-  doTest(2_PB, "2 PB");
-  doTest(1.5_PB, "1.5 PB");
+  std::ranges::for_each(generalAsStringTestCases(), doTest);
 
-  doTest(4096_Byte, "4 KB");
-  doTest(4096_KB, "4 MB");
-  doTest(4096_MB, "4 GB");
-  doTest(4096_GB, "4 TB");
-  doTest(4096_TB, "4 PB");
+  // Check, if it always uses the biggest unit.
+  doTest({4096_Byte, "4 KB"});
+  doTest({4096_KB, "4 MB"});
+  doTest({4096_MB, "4 GB"});
+  doTest({4096_GB, "4 TB"});
+  doTest({4096_TB, "4 PB"});
+}
+
+TEST(AbstractMemory, Parse) {
+  // Creates an instance of `Memory`, parse the given string and compare to the
+  // expected amount of bytes.
+  auto doTest = [](const MemoryAmountAndStringRepresentation& testCase) {
+    ad_utility::Memory m;
+    m.parse(testCase.stringRepresentation);
+    ASSERT_EQ(m.bytes(), testCase.memoryAmount_);
+  };
+
+  // Check, if parsing the given string causes an exception.
+  auto doExceptionTest = [](std::string_view str) {
+    ASSERT_ANY_THROW(ad_utility::Memory{}.parse(str));
+  };
+
+  // General testing.
+  std::ranges::for_each(generalAsStringTestCases(), doTest);
+
+  // Does `B` work as a replacement for `Byte`?
+  doTest({46_Byte, "46 Byte"});
+  doTest({46_Byte, "46 B"});
+
+  // Does `Byte` only work with whole, positive numbers?
+  doExceptionTest("-46 B");
+  doExceptionTest("4.2 B");
+  doExceptionTest("-4.2 B");
+
+  // Nothing should work with negativ numbers.
+  std::ranges::for_each(
+      generalAsStringTestCases(), doExceptionTest,
+      [](const MemoryAmountAndStringRepresentation& testCase) {
+        return absl::StrCat("-", testCase.stringRepresentation);
+      });
+
+  // Is it truly case insensitive?
+  std::ranges::for_each(
+      std::vector<MemoryAmountAndStringRepresentation>{
+          {42_Byte, "42 BYTE"}, {42_Byte, "42 BYTe"}, {42_Byte, "42 BYtE"},
+          {42_Byte, "42 BYte"}, {42_Byte, "42 ByTE"}, {42_Byte, "42 ByTe"},
+          {42_Byte, "42 BytE"}, {42_Byte, "42 Byte"}, {42_Byte, "42 bYTE"},
+          {42_Byte, "42 bYTe"}, {42_Byte, "42 bYtE"}, {42_Byte, "42 bYte"},
+          {42_Byte, "42 byTE"}, {42_Byte, "42 byTe"}, {42_Byte, "42 bytE"},
+          {42_Byte, "42 byte"}, {42_Byte, "42 B"},    {42_Byte, "42 b"},
+          {42_KB, "42 KB"},     {42_KB, "42 Kb"},     {42_KB, "42 kB"},
+          {42_KB, "42 kb"},     {42_MB, "42 MB"},     {42_MB, "42 Mb"},
+          {42_MB, "42 mB"},     {42_MB, "42 mb"},     {42_GB, "42 GB"},
+          {42_GB, "42 Gb"},     {42_GB, "42 gB"},     {42_GB, "42 gb"},
+          {42_TB, "42 TB"},     {42_TB, "42 Tb"},     {42_TB, "42 tB"},
+          {42_TB, "42 tb"},     {42_PB, "42 PB"},     {42_PB, "42 Pb"},
+          {42_PB, "42 pB"},     {42_PB, "42 pb"}},
+      doTest);
 }

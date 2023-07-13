@@ -54,6 +54,15 @@ class Memory {
   Example: 1024 bytes would be returned as `"1 KB"`.
   */
   std::string asString() const;
+
+  /*
+  @brief Parse the given string and set the internal memory amount to the amount
+  described.
+
+  @param str A string following `./generated/MemoryDefinitionLanguage.g4`. In
+  short: An amount of bytes described via a user defined literal.
+  */
+  void parse(std::string_view str);
 };
 
 namespace detail {

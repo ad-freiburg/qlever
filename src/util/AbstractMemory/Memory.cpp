@@ -9,6 +9,10 @@
 #include <tuple>
 
 #include "util/AbstractMemory/Memory.h"
+#include "util/AbstractMemory/MemoryDefinitionLanguageVisitor.h"
+#include "util/AbstractMemory/generated/MemoryDefinitionLanguageLexer.h"
+#include "util/AbstractMemory/generated/MemoryDefinitionLanguageParser.h"
+#include "util/antlr/ANTLRErrorHandling.h"
 
 namespace ad_utility {
 // _____________________________________________________________________________
@@ -80,6 +84,33 @@ std::string Memory::asString() const {
     // Just return the amount of bytes.
     return toString(memoryInBytes_, "Byte");
   }
+}
+
+// _____________________________________________________________________________
+void Memory::parse(std::string_view str) {
+  antlr4::ANTLRInputStream input(str);
+  MemoryDefinitionLanguageLexer lexer(&input);
+  antlr4::CommonTokenStream tokens(&lexer);
+  MemoryDefinitionLanguageParser parser(&tokens);
+
+  // The default in ANTLR is to log all errors to the console and to continue
+  // the parsing. We need to turn parse errors into exceptions instead to
+  // propagate them to the user.
+  ThrowingErrorListener errorListener{};
+  parser.removeErrorListeners();
+  parser.addErrorListener(&errorListener);
+  lexer.removeErrorListeners();
+  lexer.addErrorListener(&errorListener);
+
+  // Get the top node. That is, the node of the first grammar rule.
+  MemoryDefinitionLanguageParser::MemoryDefinitionStringContext*
+      memoryDefinitionStringContext{parser.memoryDefinitionString()};
+
+  // Our visitor should now convert this to an amount of bytes, we can simply
+  // assign.
+  memoryInBytes_ =
+      ToSizeTMemoryDefinitionLanguageVisitor{}.visitMemoryDefinitionString(
+          memoryDefinitionStringContext);
 }
 
 }  // namespace ad_utility
