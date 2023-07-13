@@ -394,8 +394,12 @@ bool TurtleParser<T>::rdfLiteral() {
           type == XSD_UNSIGNED_LONG_TYPE || type == XSD_UNSIGNED_INT_TYPE ||
           type == XSD_UNSIGNED_SHORT_TYPE ||
           type == XSD_POSITIVE_INTEGER_TYPE) {
-        // type == XSD_BOOLEAN_TYPE) {
         parseIntegerConstant(strippedLiteral);
+      } else if (type == XSD_BOOLEAN_TYPE &&
+                 (strippedLiteral == "true" || strippedLiteral == "false")) {
+        _lastParseResult = strippedLiteral == "true";
+        // TODO<joka921> Do we want to throw an exception if the value is
+        // neither of the two?
       } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
                  type == XSD_FLOAT_TYPE) {
         parseDoubleConstant(strippedLiteral);
@@ -443,12 +447,11 @@ bool TurtleParser<T>::rdfLiteral() {
 // ______________________________________________________________________
 template <class T>
 bool TurtleParser<T>::booleanLiteral() {
-  if (parseTerminal<TurtleTokenId::True>() ||
-      parseTerminal<TurtleTokenId::False>()) {
-    _lastParseResult =
-        TripleComponent::Literal{RdfEscaping::normalizeRDFLiteral(
-                                     '"' + _lastParseResult.getString() + "\""),
-                                 absl::StrCat("^^<", XSD_BOOLEAN_TYPE, ">")};
+  if (parseTerminal<TurtleTokenId::True>()) {
+    _lastParseResult = true;
+    return true;
+  } else if (parseTerminal<TurtleTokenId::False>()) {
+    _lastParseResult = false;
     return true;
   } else {
     return false;

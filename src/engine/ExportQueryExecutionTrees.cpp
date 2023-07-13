@@ -132,19 +132,8 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
 }
 
 // ___________________________________________________________________________
-template <bool removeQuotesAndAngleBrackets, bool onlyReturnLiterals,
-          typename EscapeFunction>
 std::optional<std::pair<std::string, const char*>>
-ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
-                                             const LocalVocab& localVocab,
-                                             EscapeFunction&& escapeFunction) {
-  auto datatype = id.getDatatype();
-  if constexpr (onlyReturnLiterals) {
-    if (!(datatype == Datatype::VocabIndex ||
-          datatype == Datatype::LocalVocabIndex)) {
-      return std::nullopt;
-    }
-  }
+ExportQueryExecutionTrees::idToStringAndTypeOnlyEncoded(Id id) {
   switch (id.getDatatype()) {
     case Datatype::Undefined:
       return std::nullopt;
@@ -160,8 +149,39 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       }
       return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
     }
+    case Datatype::Bool:
+      return id.getBool() ? std::pair{"true", XSD_BOOLEAN_TYPE}
+                          : std::pair{"false", XSD_BOOLEAN_TYPE};
     case Datatype::Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
+    case Datatype::Date:
+      return id.getDate().toStringAndType();
+    default:
+      AD_FAIL();
+  }
+}
+
+// ___________________________________________________________________________
+template <bool removeQuotesAndAngleBrackets, bool onlyReturnLiterals,
+          typename EscapeFunction>
+std::optional<std::pair<std::string, const char*>>
+ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
+                                             const LocalVocab& localVocab,
+                                             EscapeFunction&& escapeFunction) {
+  auto datatype = id.getDatatype();
+  if constexpr (onlyReturnLiterals) {
+    if (!(datatype == Datatype::VocabIndex ||
+          datatype == Datatype::LocalVocabIndex)) {
+      return std::nullopt;
+    }
+  }
+  switch (id.getDatatype()) {
+    case Datatype::Undefined:
+    case Datatype::Double:
+    case Datatype::Bool:
+    case Datatype::Int:
+    case Datatype::Date:
+      return idToStringAndTypeOnlyEncoded(id);
     case Datatype::VocabIndex: {
       // TODO<joka921> As soon as we get rid of the special encoding of date
       // values, we can use `index.getVocab().indexToOptionalString()` directly.
@@ -195,8 +215,6 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
           nullptr};
-    case Datatype::Date:
-      return id.getDate().toStringAndType();
   }
   AD_FAIL();
 }

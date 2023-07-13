@@ -107,11 +107,11 @@ TEST(TripleComponent, toRdfLiteral) {
 
   TripleComponent object{42};
   ASSERT_EQ(object.toRdfLiteral(),
-            R"("42"^^<http://www.w3.org/2001/XMLSchema#integer>)");
+            R"("42"^^<http://www.w3.org/2001/XMLSchema#int>)");
 
   object = -43.3;
   ASSERT_EQ(object.toRdfLiteral(),
-            R"("-43.3"^^<http://www.w3.org/2001/XMLSchema#double>)");
+            R"("-43.3"^^<http://www.w3.org/2001/XMLSchema#decimal>)");
   object = DateOrLargeYear{123456, DateOrLargeYear::Type::Year};
   ASSERT_EQ(object.toRdfLiteral(),
             R"("123456"^^<http://www.w3.org/2001/XMLSchema#gYear>)");

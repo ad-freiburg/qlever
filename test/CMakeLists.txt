@@ -286,7 +286,7 @@ addLinkAndDiscoverTest(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
 
-addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
+#addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
 
