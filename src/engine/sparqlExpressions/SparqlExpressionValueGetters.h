@@ -19,9 +19,6 @@ namespace sparqlExpression::detail {
 
 /// Returns a numeric value.
 struct NumericValueGetter {
-  // Bools promote to integers.
-  int64_t operator()(Bool v, EvaluationContext*) const { return v._value; }
-
   // This is the current error-signalling mechanism
   double operator()(const string&, EvaluationContext*) const {
     return std::numeric_limits<double>::quiet_NaN();
@@ -45,8 +42,6 @@ struct ActualValueGetter {
 /// Returns true iff the valid is not a NULL/UNDEF value (from optional) and
 /// not a nan (signalling an error in a previous calculation).
 struct IsValidValueGetter {
-  bool operator()(Bool, EvaluationContext*) const { return true; }
-
   // check for NULL/UNDEF values.
   bool operator()(ValueId id, EvaluationContext*) const;
 
@@ -56,7 +51,7 @@ struct IsValidValueGetter {
 /// Return a boolean value that is used for AND, OR and NOT expressions.
 /// See section 17.2.2 of the Sparql Standard
 struct EffectiveBooleanValueGetter {
-  bool operator()(Bool v, EvaluationContext*) const { return v._value; }
+  // bool operator()(Bool v, EvaluationContext*) const { return v._value; }
 
   // _________________________________________________________________________
   bool operator()(ValueId id, EvaluationContext*) const;
@@ -68,11 +63,6 @@ struct EffectiveBooleanValueGetter {
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a string value.
 struct StringValueGetter {
-
-  string operator()(Bool b, EvaluationContext*) const {
-    return std::to_string(b._value);
-  }
-
   string operator()(ValueId, EvaluationContext*) const;
 
   string operator()(string s, EvaluationContext*) const { return s; }
@@ -82,8 +72,6 @@ struct StringValueGetter {
 /// templates. It produces a `std::optional<DateOrLargeYear>`.
 struct DateValueGetter {
   using Opt = std::optional<DateOrLargeYear>;
-
-  Opt operator()(Bool, const EvaluationContext*) const { return std::nullopt; }
 
   Opt operator()(ValueId id, const EvaluationContext*) const {
     if (id.getDatatype() == Datatype::Date) {

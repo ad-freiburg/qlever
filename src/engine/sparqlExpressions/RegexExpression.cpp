@@ -216,14 +216,14 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
                        ad_utility::SetOfIntervals::Union{});
   } else {
     auto resultSize = context->size();
-    VectorWithMemoryLimit<Bool> result{context->_allocator};
+    VectorWithMemoryLimit<Id> result{context->_allocator};
     result.reserve(resultSize);
     for (auto id : detail::makeGenerator(variable, resultSize, context)) {
-      result.push_back(
+      result.push_back(Id::makeFromBool(
           std::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
             return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
                    valueIdComparators::compareByBits(id, lowerUpper.second);
-          }));
+          })));
     }
     return result;
   }
@@ -235,21 +235,21 @@ ExpressionResult RegexExpression::evaluateNonPrefixRegex(
     sparqlExpression::EvaluationContext* context) const {
   AD_CONTRACT_CHECK(std::holds_alternative<RE2>(regex_));
   auto resultSize = context->size();
-  VectorWithMemoryLimit<Bool> result{context->_allocator};
+  VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(resultSize);
   if (childIsStrExpression_) {
     for (auto id : detail::makeGenerator(variable, resultSize, context)) {
-      result.push_back(RE2::PartialMatch(
-          detail::StringValueGetter{}(id, context), std::get<RE2>(regex_)));
+      result.push_back(Id::makeFromBool(RE2::PartialMatch(
+          detail::StringValueGetter{}(id, context), std::get<RE2>(regex_))));
     }
   } else {
     for (auto id : detail::makeGenerator(variable, resultSize, context)) {
       auto optionalString = detail::LiteralFromIdGetter{}(id, context);
       if (optionalString.has_value()) {
-        result.push_back(
-            RE2::PartialMatch(optionalString.value(), std::get<RE2>(regex_)));
+        result.push_back(Id::makeFromBool(
+            RE2::PartialMatch(optionalString.value(), std::get<RE2>(regex_))));
       } else {
-        result.push_back(false);
+        result.push_back(Id::makeFromBool(false));
       }
     }
   }

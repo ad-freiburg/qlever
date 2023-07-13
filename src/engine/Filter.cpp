@@ -81,8 +81,10 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
 
   auto visitor =
       [&]<sparqlExpression::SingleExpressionResult T>(T&& singleResult) {
-        if constexpr (std::is_same_v<T, sparqlExpression::VectorWithMemoryLimit<
-                                            sparqlExpression::Bool>>) {
+        if constexpr (false) {
+          // if constexpr (std::is_same_v<T,
+          // sparqlExpression::VectorWithMemoryLimit<
+          //                                    sparqlExpression::Bool>>) {
           AD_CONTRACT_CHECK(singleResult.size() == input.size());
           auto totalSize =
               std::accumulate(singleResult.begin(), singleResult.end(), 0ul);

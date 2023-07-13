@@ -28,7 +28,6 @@ namespace {
 const auto inf = std::numeric_limits<double>::infinity();
 const auto NaN = std::numeric_limits<double>::quiet_NaN();
 
-
 // Create and return a `RelationalExpression` with the given Comparison and the
 // given operands `leftValue` and `rightValue`.
 template <Comparison comp>
@@ -61,9 +60,9 @@ auto makeCopy = [](const auto& input) {
   }
 };
 
-    template<typename T>
-    VectorWithMemoryLimit<ValueId> makeValueIdVector(
-            const VectorWithMemoryLimit<T>& vec);
+template <typename T>
+VectorWithMemoryLimit<ValueId> makeValueIdVector(
+    const VectorWithMemoryLimit<T>& vec);
 
 // Convert `t` into a `ValueId`. `T` must be `double`, `int64_t`, or a
 // `VectorWithMemoryLimit` of any of those types.
@@ -81,7 +80,7 @@ auto liftToValueId = []<typename T>(const T& t) {
   } else if constexpr (std::is_same_v<T, Id>) {
     return t;
   } else if constexpr (std::is_same_v<T, VectorWithMemoryLimit<Id>>) {
-      return t.clone();
+    return t.clone();
   } else if constexpr (ad_utility::isInstantiation<T, VectorWithMemoryLimit>) {
     return makeValueIdVector(t);
   } else {
@@ -196,8 +195,7 @@ void testLessThanGreaterThanEqual(
 // Test that all comparisons between `leftValue` and `rightValue` result in a
 // single boolean that is false. The only exception is the `not equal`
 // comparison, for which true is expected.
-void testNotEqualHelper(auto leftValueIn,
-                        auto rightValueIn,
+void testNotEqualHelper(auto leftValueIn, auto rightValueIn,
                         source_location l = source_location::current()) {
   auto leftValue = liftToValueId(leftValueIn);
   auto rightValue = liftToValueId(rightValueIn);
@@ -224,8 +222,7 @@ void testNotEqualHelper(auto leftValueIn,
 // following combinations: `leftValue` is converted to a ValueID before the
 // call. `rightValue` "" both values "" Requires that both `leftValue` and
 // `rightValue` are numeric constants.
-void testNotEqual(auto leftValue,
-                  auto rightValue,
+void testNotEqual(auto leftValue, auto rightValue,
                   source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "testNotEqual was called here");
   /*
@@ -389,8 +386,7 @@ void testLessThanGreaterThanEqualMultipleValuesHelper(
 // Requires that both `leftValue` and `rightValue` are either numeric constants
 // or numeric vectors, and that at least one of them is a vector.
 void testLessThanGreaterThanEqualMultipleValues(
-    auto leftValue,
-    auto rightValue,
+    auto leftValue, auto rightValue,
     source_location l = source_location::current()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValues was called here");
@@ -577,13 +573,12 @@ TEST(RelationalExpression, StringVectorAndStringVector) {
 // Assert that the expression `leftValue Comp rightValue`, when evaluated on the
 // `TestContext` (see above), yields the `expected` result.
 template <Comparison Comp>
-void testWithExplicitResult(auto leftValue,
-                            auto rightValue,
+void testWithExplicitResult(auto leftValue, auto rightValue,
                             std::vector<Bool> expected,
                             source_location l = source_location::current()) {
   static TestContext ctx;
-  auto expression =
-      makeExpression<Comp>(liftToValueId(std::move(leftValue)), liftToValueId(std::move(rightValue)));
+  auto expression = makeExpression<Comp>(liftToValueId(std::move(leftValue)),
+                                         liftToValueId(std::move(rightValue)));
   auto trace = generateLocationTrace(l, "test lambda was called here");
   auto resultAsVariant = expression.evaluate(&ctx.context);
   const auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
@@ -673,13 +668,13 @@ TEST(RelationalExpression, VariableAndVariable) {
 // that the expression was evaluated using binary search on the sorted table.
 template <Comparison Comp>
 void testSortedVariableAndConstant(
-    Variable leftValue, auto rightValue,
-    ad_utility::SetOfIntervals expected,
+    Variable leftValue, auto rightValue, ad_utility::SetOfIntervals expected,
     source_location l = source_location::current()) {
   auto trace = generateLocationTrace(
       l, "test between sorted variable and constant was called here");
   TestContext ctx = TestContext::sortedBy(leftValue);
-  auto expression = makeExpression<Comp>(leftValue, liftToValueId(std::move(rightValue)));
+  auto expression =
+      makeExpression<Comp>(leftValue, liftToValueId(std::move(rightValue)));
   auto resultAsVariant = expression.evaluate(&ctx.context);
   const auto& result = std::get<ad_utility::SetOfIntervals>(resultAsVariant);
   ASSERT_EQ(result, expected);

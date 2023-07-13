@@ -65,21 +65,21 @@ requires isVectorResult<T> auto resultGenerator(T vector, size_t numItems)
   }
 }
 
-inline cppcoro::generator<Bool> resultGenerator(ad_utility::SetOfIntervals set,
-                                                size_t targetSize) {
+inline cppcoro::generator<Id> resultGenerator(ad_utility::SetOfIntervals set,
+                                              size_t targetSize) {
   size_t i = 0;
   for (const auto& [begin, end] : set._intervals) {
     while (i < begin) {
-      co_yield false;
+      co_yield Id::makeFromBool(false);
       ++i;
     }
     while (i < end) {
-      co_yield true;
+      co_yield Id::makeFromBool(true);
       ++i;
     }
   }
   while (i++ < targetSize) {
-    co_yield false;
+    co_yield Id::makeFromBool(false);
   }
 }
 

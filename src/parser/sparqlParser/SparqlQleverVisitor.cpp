@@ -1543,7 +1543,8 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
         ad_utility::OverloadCallOperator{integralWrapper, doubleWrapper},
         visit(ctx->numericLiteral()));
   } else if (ctx->booleanLiteral()) {
-    return make_unique<BoolExpression>(visit(ctx->booleanLiteral()));
+    return make_unique<IdExpression>(
+        Id::makeFromBool(visit(ctx->booleanLiteral())));
   } else if (ctx->var()) {
     return make_unique<VariableExpression>(visit(ctx->var()));
   } else {

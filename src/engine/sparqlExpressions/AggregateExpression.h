@@ -98,7 +98,13 @@ class AggregateExpression : public SparqlExpression {
             aggregateOperation._function(std::move(result), std::move(*it));
       }
       result = finalOperation(std::move(result), inputSize);
-      return result;
+      if constexpr (std::is_same_v<ResultType, double>) {
+        return Id::makeFromDouble(result);
+      } else if constexpr (std::integral<ResultType>) {
+        return Id::makeFromInt(result);
+      } else {
+        return result;
+      }
     } else {
       // The operands *without* applying the `valueGetter`.
       auto operands =
@@ -126,7 +132,13 @@ class AggregateExpression : public SparqlExpression {
         }
       }
       result = finalOperation(std::move(result), uniqueHashSet.size());
-      return result;
+      if constexpr (std::is_same_v<ResultType, double>) {
+        return Id::makeFromDouble(result);
+      } else if constexpr (std::integral<ResultType>) {
+        return Id::makeFromInt(result);
+      } else {
+        return result;
+      }
     }
   };
 
@@ -172,8 +184,8 @@ using SumExpression = AGG_EXP<decltype(addForSum), NumericValueGetter>;
 
 // AVG
 inline auto averageFinalOp = [](const auto& aggregation, size_t numElements) {
-  return numElements ? static_cast<double>(aggregation) /
-                           static_cast<double>(numElements)
+  return numElements ? (static_cast<double>(aggregation) /
+                        static_cast<double>(numElements))
                      : std::numeric_limits<double>::quiet_NaN();
 };
 using AvgExpression =
@@ -187,7 +199,7 @@ using AvgExpression =
 template <typename comparator, valueIdComparators::Comparison comparison>
 inline auto minMaxLambdaForAllTypes =
     []<SingleExpressionResult T>(const T& a, const T& b) {
-      if constexpr (std::is_arithmetic_v<T> || ad_utility::isSimilar<T, Bool> ||
+      if constexpr (std::is_arithmetic_v<T> ||
                     ad_utility::isSimilar<T, std::string>) {
         // TODO<joka921> Also implement correct comparisons for `std::string`
         // using ICU that respect the locale

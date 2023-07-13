@@ -109,22 +109,22 @@ class NaryExpression : public SparqlExpression {
 };
 
 // TODO<joka921> Move these helpers elsewhere
-template <typename T> requires std::integral<T> || std::floating_point<T>
-Id makeNumericId(T t) {
-if constexpr (std::integral<T>) {
-  return Id::makeFromInt(t);
-} else {
-  static_assert(std::floating_point<T>);
-  return Id::makeFromDouble(t);
-}
+template <typename T>
+requires std::integral<T> || std::floating_point<T> Id makeNumericId(T t) {
+  if constexpr (std::integral<T>) {
+    return Id::makeFromInt(t);
+  } else {
+    static_assert(std::floating_point<T>);
+    return Id::makeFromDouble(t);
+  }
 }
 
 template <typename Function>
 struct NumericIdWrapper {
-Function function{};
-Id operator()(auto&&... args) const {
-  return makeNumericId(function(AD_FWD(args)...));
-}
+  Function function{};
+  Id operator()(auto&&... args) const {
+    return makeNumericId(function(AD_FWD(args)...));
+  }
 };
 
 // Two short aliases to make the instantiations more readable.
@@ -144,18 +144,22 @@ using SET = SpecializedFunction<F, decltype(areAllSetOfIntervals)>;
 using ad_utility::SetOfIntervals;
 
 // The types for the concrete MultiBinaryExpressions and UnaryExpressions.
-inline auto orLambda = [](bool a, bool b) -> Bool { return a || b; };
+inline auto orLambda = [](bool a, bool b) -> Id {
+  return Id::makeFromBool(a || b);
+};
 using OrExpression =
     NARY<2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Union>>;
 
-inline auto andLambda = [](bool a, bool b) -> Bool { return a && b; };
+inline auto andLambda = [](bool a, bool b) -> Id {
+  return Id::makeFromBool(a && b);
+};
 using AndExpression =
     NARY<2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Intersection>>;
 
 // Unary Negation
-inline auto unaryNegate = [](bool a) -> Bool { return !a; };
+inline auto unaryNegate = [](bool a) -> Id { return Id::makeFromBool(!a); };
 using UnaryNegateExpression =
     NARY<1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Complement>>;
@@ -182,7 +186,9 @@ inline auto divide = [](const auto& a, const auto& b) -> Id {
 using DivideExpression = NARY<2, FV<decltype(divide), NumericValueGetter>>;
 
 // Addition and subtraction, currently all results are converted to double.
-inline auto add = [](const auto& a, const auto& b) -> Id { return Id::makeFromDouble(a + b); };
+inline auto add = [](const auto& a, const auto& b) -> Id {
+  return Id::makeFromDouble(a + b);
+};
 using AddExpression = NARY<2, FV<decltype(add), NumericValueGetter>>;
 
 inline auto subtract = [](const auto& a, const auto& b) -> Id {
@@ -192,11 +198,13 @@ using SubtractExpression = NARY<2, FV<decltype(subtract), NumericValueGetter>>;
 
 // Basic GeoSPARQL functions (code in util/GeoSparqlHelpers.h).
 using LongitudeExpression =
-    NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLongitude)>, StringValueGetter>>;
+    NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLongitude)>,
+               StringValueGetter>>;
 using LatitudeExpression =
-    NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLatitude)>, StringValueGetter>>;
-using DistExpression =
-    NARY<2, FV<NumericIdWrapper<decltype(ad_utility::wktDist)>, StringValueGetter>>;
+    NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLatitude)>,
+               StringValueGetter>>;
+using DistExpression = NARY<
+    2, FV<NumericIdWrapper<decltype(ad_utility::wktDist)>, StringValueGetter>>;
 
 // Date functions.
 //
@@ -240,7 +248,9 @@ using DayExpression = NARY<1, FV<decltype(extractDay), DateValueGetter>>;
 using StrExpression = NARY<1, FV<std::identity, StringValueGetter>>;
 
 // Compute string length.
-inline auto strlen = [](const auto& s) -> Id { return Id::makeFromInt(s.size()); };
+inline auto strlen = [](const auto& s) -> Id {
+  return Id::makeFromInt(s.size());
+};
 using StrlenExpression = NARY<1, FV<decltype(strlen), StringValueGetter>>;
 
 }  // namespace detail

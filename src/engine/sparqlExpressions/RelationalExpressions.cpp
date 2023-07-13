@@ -49,9 +49,7 @@ concept StoresStrings = ad_utility::SimilarTo<ValueType<T>, std::string>;
 
 // Concept that requires that `T` logically stores boolean values.
 template <typename T>
-concept StoresBoolean =
-    std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
-    std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
+concept StoresBoolean = std::is_same_v<T, ad_utility::SetOfIntervals>;
 
 // Concept that requires that `T` logically stores `ValueId`s.
 template <typename T>
@@ -266,7 +264,7 @@ ExpressionResult evaluateRelationalExpression(S1 value1, S2 value2,
       sparqlExpression::detail::getResultSize(*context, value1, value2);
   constexpr static bool resultIsConstant =
       (isConstantResult<S1> && isConstantResult<S2>);
-  VectorWithMemoryLimit<Bool> result{context->_allocator};
+  VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(resultSize);
 
   constexpr static bool value2IsString = ad_utility::isSimilar<S2, std::string>;
@@ -295,18 +293,19 @@ ExpressionResult evaluateRelationalExpression(S1 value1, S2 value2,
                     valueIdComparators::compareIds(*itA, *itB, Comp);
                   }) {
       // Compare two `ValueId`s
-      result.push_back(valueIdComparators::compareIds(*itA, *itB, Comp));
+      result.push_back(
+          Id::makeFromBool(valueIdComparators::compareIds(*itA, *itB, Comp)));
     } else if constexpr (requires {
                            valueIdComparators::compareWithEqualIds(
                                *itA, itB->first, itB->second, Comp);
                          }) {
       // Compare `ValueId` with range of equal `ValueId`s (used when `value2` is
       // `string` or `vector<string>`.
-      result.push_back(valueIdComparators::compareWithEqualIds(
-          *itA, itB->first, itB->second, Comp));
+      result.push_back(Id::makeFromBool(valueIdComparators::compareWithEqualIds(
+          *itA, itB->first, itB->second, Comp)));
     } else {
       // Compare two numeric values, or two string values.
-      result.push_back(applyComparison<Comp>(*itA, *itB));
+      result.push_back(Id::makeFromBool(applyComparison<Comp>(*itA, *itB)));
     }
     ++itA;
     ++itB;
@@ -323,7 +322,7 @@ ExpressionResult evaluateRelationalExpression(S1 value1, S2 value2,
 // The relational comparisons like `less than` are not useful for booleans and
 // thus currently throw an exception.
 template <Comparison, typename A, typename B>
-Bool evaluateRelationalExpression(const A&, const B&, EvaluationContext*)
+Id evaluateRelationalExpression(const A&, const B&, EvaluationContext*)
     requires StoresBoolean<A> || StoresBoolean<B> {
   throw std::runtime_error(
       "Relational expressions like <, >, == are currently not supported for "
@@ -332,11 +331,12 @@ Bool evaluateRelationalExpression(const A&, const B&, EvaluationContext*)
 
 template <Comparison Comp, typename A, typename B>
 requires AreIncomparable<A, B>
-Bool evaluateRelationalExpression(const A&, const B&, EvaluationContext*) {
+Id evaluateRelationalExpression(const A&, const B&, EvaluationContext*) {
+  // TODO<joka921> We should probably return `undefined` here.
   if constexpr (Comp == Comparison::NE) {
-    return true;
+    return Id::makeFromBool(true);
   } else {
-    return false;
+    return Id::makeFromBool(false);
   }
 }
 
