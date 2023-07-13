@@ -303,6 +303,9 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
       << "and at most " << k << " contexts per entity.\n";
 
   size_t numOfTerms = wep.wids_.size();
+  if (wep.wids_[0].empty()) {
+    numOfTerms = 0;
+  }
 
   // The default case where k == 1 can use a map for a O(n) solution
   if (k == 1) {
@@ -491,6 +494,9 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
   AggMapEntityToSaC mapEtSaC;
 
   size_t numOfTerms = wep.wids_.size();
+  if (wep.wids_[0].empty()) {
+    numOfTerms = 0;
+  }
 
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
     vector<WordIndex> wids;
@@ -571,6 +577,9 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
   AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
 
   size_t numOfTerms = wep.wids_.size();
+  if (wep.wids_[0].empty()) {
+    numOfTerms = 0;
+  }
 
   if (wep.cids_.empty()) {
     return;
@@ -750,6 +759,9 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   LOG(DEBUG) << "Special case with 1 contexts per entity...\n";
 
   size_t numOfTerms = wep.wids_.size();
+  if (wep.wids_[0].empty()) {
+    numOfTerms = 0;
+  }
 
   // Go over contexts.
   // For each context build a cross product of width 2.
@@ -997,6 +1009,9 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   }
 
   size_t numOfTerms = wep.wids_.size();
+  if (wep.wids_[0].empty()) {
+    numOfTerms = 0;
+  }
 
   // TODO: add code to speed up for k==1
 
@@ -1128,6 +1143,9 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   }
 
   size_t numOfTerms = wep.wids_.size();
+  if (wep.wids_[0].empty()) {
+    numOfTerms = 0;
+  }
 
   // TODO: add code to speed up for k==1
 
@@ -1242,6 +1260,9 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   }
 
   size_t numOfTerms = wep.wids_.size();
+  if (wep.wids_[0].empty()) {
+    numOfTerms = 0;
+  }
 
   // Go over contexts.
   // For each context build a cross product with one part being from the filter.
@@ -1462,6 +1483,9 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     return;
   }
   size_t numOfTerms = wep.wids_.size();
+  if (wep.wids_[0].empty()) {
+    numOfTerms = 0;
+  }
   // Go over contexts.
   // For each context build a cross product with one part being from the filter.
   // Store them in a map, use a pair of id's as key and
