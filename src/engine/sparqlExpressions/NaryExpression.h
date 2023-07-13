@@ -108,6 +108,25 @@ class NaryExpression : public SparqlExpression {
   Children _children;
 };
 
+// TODO<joka921> Move these helpers elsewhere
+template <typename T> requires std::integral<T> || std::floating_point<T>
+Id makeNumericId(T t) {
+if constexpr (std::integral<T>) {
+  return Id::makeFromInt(t);
+} else {
+  static_assert(std::floating_point<T>);
+  return Id::makeFromDouble(t);
+}
+}
+
+template <typename Function>
+struct NumericIdWrapper {
+Function function{};
+Id operator()(auto&&... args) const {
+  return makeNumericId(function(AD_FWD(args)...));
+}
+};
+
 // Two short aliases to make the instantiations more readable.
 template <typename... T>
 using FV = FunctionAndValueGetters<T...>;
@@ -142,13 +161,13 @@ using UnaryNegateExpression =
          SET<SetOfIntervals::Complement>>;
 
 // Unary Minus, currently all results are converted to double
-inline auto unaryMinus = [](auto a) -> double { return -a; };
+inline auto unaryMinus = [](auto a) -> Id { return Id::makeFromDouble(-a); };
 using UnaryMinusExpression =
     NARY<1, FV<decltype(unaryMinus), NumericValueGetter>>;
 
 // Multiplication.
-inline auto multiply = [](const auto& a, const auto& b) -> double {
-  return a * b;
+inline auto multiply = [](const auto& a, const auto& b) -> Id {
+  return Id::makeFromDouble(a * b);
 };
 using MultiplyExpression = NARY<2, FV<decltype(multiply), NumericValueGetter>>;
 
@@ -157,27 +176,27 @@ using MultiplyExpression = NARY<2, FV<decltype(multiply), NumericValueGetter>>;
 // TODO<joka921> If `b == 0` this is technically undefined behavior and
 // should lead to an expression error in SPARQL. Fix this as soon as we
 // introduce the proper semantics for expression errors.
-inline auto divide = [](const auto& a, const auto& b) -> double {
-  return static_cast<double>(a) / b;
+inline auto divide = [](const auto& a, const auto& b) -> Id {
+  return Id::makeFromDouble(static_cast<double>(a) / b);
 };
 using DivideExpression = NARY<2, FV<decltype(divide), NumericValueGetter>>;
 
 // Addition and subtraction, currently all results are converted to double.
-inline auto add = [](const auto& a, const auto& b) -> double { return a + b; };
+inline auto add = [](const auto& a, const auto& b) -> Id { return Id::makeFromDouble(a + b); };
 using AddExpression = NARY<2, FV<decltype(add), NumericValueGetter>>;
 
-inline auto subtract = [](const auto& a, const auto& b) -> double {
-  return a - b;
+inline auto subtract = [](const auto& a, const auto& b) -> Id {
+  return Id::makeFromDouble(a - b);
 };
 using SubtractExpression = NARY<2, FV<decltype(subtract), NumericValueGetter>>;
 
 // Basic GeoSPARQL functions (code in util/GeoSparqlHelpers.h).
 using LongitudeExpression =
-    NARY<1, FV<decltype(ad_utility::wktLongitude), StringValueGetter>>;
+    NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLongitude)>, StringValueGetter>>;
 using LatitudeExpression =
-    NARY<1, FV<decltype(ad_utility::wktLatitude), StringValueGetter>>;
+    NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLatitude)>, StringValueGetter>>;
 using DistExpression =
-    NARY<2, FV<decltype(ad_utility::wktDist), StringValueGetter>>;
+    NARY<2, FV<NumericIdWrapper<decltype(ad_utility::wktDist)>, StringValueGetter>>;
 
 // Date functions.
 //
@@ -221,7 +240,7 @@ using DayExpression = NARY<1, FV<decltype(extractDay), DateValueGetter>>;
 using StrExpression = NARY<1, FV<std::identity, StringValueGetter>>;
 
 // Compute string length.
-inline auto strlen = [](const auto& s) -> int64_t { return s.size(); };
+inline auto strlen = [](const auto& s) -> Id { return Id::makeFromInt(s.size()); };
 using StrlenExpression = NARY<1, FV<decltype(strlen), StringValueGetter>>;
 
 }  // namespace detail

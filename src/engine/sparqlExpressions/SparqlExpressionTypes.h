@@ -98,7 +98,7 @@ using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
 namespace detail {
 // For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
 // possible expression result types.
-using ConstantTypes = std::tuple<double, int64_t, Bool, string, ValueId>;
+using ConstantTypes = std::tuple<Bool, string, ValueId>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 

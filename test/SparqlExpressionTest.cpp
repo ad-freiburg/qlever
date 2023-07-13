@@ -8,6 +8,7 @@
 #include <string>
 
 #include "./SparqlExpressionTestHelpers.h"
+#include "./util/IdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -54,7 +55,7 @@ auto checkResultsEqual = [](const auto& a, const auto& b) {
 // Assert that the given `NaryExpression` with the given `operands` has the
 // `expected` result.
 template <typename NaryExpression>
-auto testNaryExpression = [](const auto& expected, auto&&... operands) {
+auto testNaryExpression = [](SingleExpressionResult auto& expected, SingleExpressionResult auto&&... operands) {
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   VariableToColumnMap map;
@@ -119,7 +120,8 @@ auto testDivide = testNaryExpression<DivideExpression>;
 TEST(SparqlExpression, logicalOperators) {
   V<Bool> b{{false, true, true, false}, alloc};
 
-  V<double> d{{1.0, 2.0, std::numeric_limits<double>::quiet_NaN(), 0.0}, alloc};
+  auto D = ad_utility::testing::DoubleId;
+  V<Id> d{{D(1.0), D(2.0), D(std::numeric_limits<double>::quiet_NaN()), D(0.0)}, alloc};
   V<Bool> dAsBool{{true, true, false, false}, alloc};
 
   V<std::string> s{{"true", "", "false", ""}, alloc};

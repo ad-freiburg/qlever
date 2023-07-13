@@ -19,10 +19,7 @@ namespace sparqlExpression::detail {
 
 /// Returns a numeric value.
 struct NumericValueGetter {
-  // Simply preserve the input from numeric values
-  double operator()(double v, EvaluationContext*) const { return v; }
-  int64_t operator()(int64_t v, EvaluationContext*) const { return v; }
-  // Bools promote to integers
+  // Bools promote to integers.
   int64_t operator()(Bool v, EvaluationContext*) const { return v._value; }
 
   // This is the current error-signalling mechanism
@@ -48,9 +45,6 @@ struct ActualValueGetter {
 /// Returns true iff the valid is not a NULL/UNDEF value (from optional) and
 /// not a nan (signalling an error in a previous calculation).
 struct IsValidValueGetter {
-  // Numeric constants are true iff they are non-zero and not nan.
-  bool operator()(double v, EvaluationContext*) const { return !std::isnan(v); }
-  bool operator()(int64_t, EvaluationContext*) const { return true; }
   bool operator()(Bool, EvaluationContext*) const { return true; }
 
   // check for NULL/UNDEF values.
@@ -62,11 +56,6 @@ struct IsValidValueGetter {
 /// Return a boolean value that is used for AND, OR and NOT expressions.
 /// See section 17.2.2 of the Sparql Standard
 struct EffectiveBooleanValueGetter {
-  // Numeric constants are true iff they are non-zero and not nan.
-  bool operator()(double v, EvaluationContext*) const {
-    return v && !std::isnan(v);
-  }
-  bool operator()(int64_t v, EvaluationContext*) const { return v != 0; }
   bool operator()(Bool v, EvaluationContext*) const { return v._value; }
 
   // _________________________________________________________________________
@@ -79,11 +68,6 @@ struct EffectiveBooleanValueGetter {
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a string value.
 struct StringValueGetter {
-  template <typename T>
-  requires(std::is_arithmetic_v<T>)
-  string operator()(T v, EvaluationContext*) const {
-    return std::to_string(v);
-  }
 
   string operator()(Bool b, EvaluationContext*) const {
     return std::to_string(b._value);
@@ -98,11 +82,6 @@ struct StringValueGetter {
 /// templates. It produces a `std::optional<DateOrLargeYear>`.
 struct DateValueGetter {
   using Opt = std::optional<DateOrLargeYear>;
-  template <typename T>
-  requires(std::is_arithmetic_v<T>)
-  Opt operator()(T, const EvaluationContext*) const {
-    return std::nullopt;
-  }
 
   Opt operator()(Bool, const EvaluationContext*) const { return std::nullopt; }
 
