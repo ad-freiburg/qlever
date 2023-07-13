@@ -302,9 +302,10 @@ class ValueId {
       if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
         ostr << "Undefined";
       } else if constexpr (ad_utility::isSimilar<T, double> ||
-                           ad_utility::isSimilar<T, int64_t> ||
-                           ad_utility::isSimilar<T, bool>) {
+                           ad_utility::isSimilar<T, int64_t>) {
         ostr << std::to_string(value);
+      } else if constexpr (ad_utility::isSimilar<T, bool>) {
+        ostr << (value ? "true" : "false");
       } else if constexpr (ad_utility::isSimilar<T, DateOrLargeYear>) {
         ostr << value.toStringAndType().first;
       } else {
