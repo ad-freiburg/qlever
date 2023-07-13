@@ -39,27 +39,27 @@ static double sizetDivision(const size_t& dividend, const size_t& divisor) {
 
 // _____________________________________________________________________________
 double Memory::kilobytes() const {
-  return sizetDivision(memoryInBytes_, detail::numberOfBytesPerKB);
+  return sizetDivision(memoryInBytes_, numberOfBytesPerKB);
 }
 
 // _____________________________________________________________________________
 double Memory::megabytes() const {
-  return sizetDivision(memoryInBytes_, detail::numberOfBytesPerMB);
+  return sizetDivision(memoryInBytes_, numberOfBytesPerMB);
 }
 
 // _____________________________________________________________________________
 double Memory::gigabytes() const {
-  return sizetDivision(memoryInBytes_, detail::numberOfBytesPerGB);
+  return sizetDivision(memoryInBytes_, numberOfBytesPerGB);
 }
 
 // _____________________________________________________________________________
 double Memory::terabytes() const {
-  return sizetDivision(memoryInBytes_, detail::numberOfBytesPerTB);
+  return sizetDivision(memoryInBytes_, numberOfBytesPerTB);
 }
 
 // _____________________________________________________________________________
 double Memory::petabytes() const {
-  return sizetDivision(memoryInBytes_, detail::numberOfBytesPerPB);
+  return sizetDivision(memoryInBytes_, numberOfBytesPerPB);
 }
 
 // _____________________________________________________________________________
@@ -70,15 +70,15 @@ std::string Memory::asString() const {
   };
 
   // Just use the first unit, which is bigger/equal to `memoryInBytes_`.
-  if (memoryInBytes_ >= detail::numberOfBytesPerPB) {
+  if (memoryInBytes_ >= numberOfBytesPerPB) {
     return toString(petabytes(), "PB");
-  } else if (memoryInBytes_ >= detail::numberOfBytesPerTB) {
+  } else if (memoryInBytes_ >= numberOfBytesPerTB) {
     return toString(terabytes(), "TB");
-  } else if (memoryInBytes_ >= detail::numberOfBytesPerGB) {
+  } else if (memoryInBytes_ >= numberOfBytesPerGB) {
     return toString(gigabytes(), "GB");
-  } else if (memoryInBytes_ >= detail::numberOfBytesPerMB) {
+  } else if (memoryInBytes_ >= numberOfBytesPerMB) {
     return toString(megabytes(), "MB");
-  } else if (memoryInBytes_ >= detail::numberOfBytesPerKB) {
+  } else if (memoryInBytes_ >= numberOfBytesPerKB) {
     return toString(kilobytes(), "KB");
   } else {
     // Just return the amount of bytes.

@@ -37,19 +37,19 @@ size_t ToSizeTMemoryDefinitionLanguageVisitor::visitMemoryUnitDefinition(
   size_t bytesPerUnit{0};
   switch (ad_utility::getLowercase(context->MEMORY_UNIT()->getText()).front()) {
     case 'k':
-      bytesPerUnit = ad_utility::detail::numberOfBytesPerKB;
+      bytesPerUnit = numberOfBytesPerKB;
       break;
     case 'm':
-      bytesPerUnit = ad_utility::detail::numberOfBytesPerMB;
+      bytesPerUnit = numberOfBytesPerMB;
       break;
     case 'g':
-      bytesPerUnit = ad_utility::detail::numberOfBytesPerGB;
+      bytesPerUnit = numberOfBytesPerGB;
       break;
     case 't':
-      bytesPerUnit = ad_utility::detail::numberOfBytesPerTB;
+      bytesPerUnit = numberOfBytesPerTB;
       break;
     case 'p':
-      bytesPerUnit = ad_utility::detail::numberOfBytesPerPB;
+      bytesPerUnit = numberOfBytesPerPB;
       break;
     default:
       // Whatever this is, it is false.
@@ -58,11 +58,11 @@ size_t ToSizeTMemoryDefinitionLanguageVisitor::visitMemoryUnitDefinition(
 
   // We have to interpret the amount of units.
   if (context->UNSIGNED_INTEGER()) {
-    return ad_utility::detail::convertMemoryUnitsToBytes(
+    return convertMemoryUnitsToBytes(
         std::stoul(context->UNSIGNED_INTEGER()->getText()), bytesPerUnit);
   } else {
     AD_CORRECTNESS_CHECK(context->FLOAT());
-    return ad_utility::detail::convertMemoryUnitsToBytes(
-        std::stod(context->FLOAT()->getText()), bytesPerUnit);
+    return convertMemoryUnitsToBytes(std::stod(context->FLOAT()->getText()),
+                                     bytesPerUnit);
   }
 }
