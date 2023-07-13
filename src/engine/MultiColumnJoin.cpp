@@ -11,34 +11,17 @@
 using std::string;
 
 // _____________________________________________________________________________
-MultiColumnJoin::MultiColumnJoin(
-    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
-    std::shared_ptr<QueryExecutionTree> t2,
-    const std::vector<std::array<ColumnIndex, 2>>& jcs)
-    : Operation(qec),
-      _left(std::move(t1)),
-      _right(std::move(t2)),
-      _joinColumns(jcs) {
-  // Enforce that we always use the same order of join columns to make it more
-  // probable to find this operation in the cache.
-  std::ranges::sort(_joinColumns, std::ranges::lexicographical_compare);
-
-  // The inputs must be sorted by the join columns.
-  auto [sortedLeft, sortedRight] = QueryExecutionTree::createSortedTrees(
-      std::move(_left), std::move(_right), _joinColumns);
-  _left = std::move(sortedLeft);
-  _right = std::move(sortedRight);
-
+MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
+                                 std::shared_ptr<QueryExecutionTree> t1,
+                                 std::shared_ptr<QueryExecutionTree> t2)
+    : Operation{qec} {
   // Make sure subtrees are ordered so that identical queries can be identified.
-  AD_CONTRACT_CHECK(!jcs.empty());
-  if (_left->asString() > _right->asString()) {
-    std::swap(_left, _right);
-    // As the subtrees have been swapped the join columns need to be swapped
-    // as well.
-    for (auto& [leftCol, rightCol] : _joinColumns) {
-      std::swap(leftCol, rightCol);
-    }
+  if (t1->asString() > t2->asString()) {
+    std::swap(t1, t2);
   }
+  std::tie(_left, _right, _joinColumns) =
+      QueryExecutionTree::getSortedSubtreesAndJoinColumns(std::move(t1),
+                                                          std::move(t2));
 }
 
 // _____________________________________________________________________________

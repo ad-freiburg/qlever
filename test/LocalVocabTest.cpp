@@ -206,20 +206,18 @@ TEST(LocalVocab, propagation) {
 
   // OPTIONAL JOIN operation with exactly one non-empty local vocab. The last
   // arguments are the two join columns.
-  OptionalJoin optJoin1(testQec, qet(values1), qet(values2), {{0, 0}});
+  OptionalJoin optJoin1(testQec, qet(values1), qet(values2));
   checkLocalVocab(optJoin1, std::vector<std::string>{"x", "y1", "y2"});
 
   // OPTIONAL JOIN operation with two non-empty local vocab.
-  OptionalJoin optJoin2(testQec, qet(values1), qet(values1), {{0, 0}});
+  OptionalJoin optJoin2(testQec, qet(values1), qet(values1));
   checkThrow(optJoin2);
 
   // MULTI-COLUMN JOIN operation with exactly one non-empty local vocab and with
   // two non-empty local vocabs (the fourth argument are the join-column pairs).
-  MultiColumnJoin multiJoin1(testQec, qet(values1), qet(values2),
-                             {{0, 0}, {1, 1}});
+  MultiColumnJoin multiJoin1(testQec, qet(values1), qet(values2));
   checkLocalVocab(multiJoin1, std::vector<std::string>{"x", "y1", "y2"});
-  MultiColumnJoin multiJoin2(testQec, qet(values1), qet(values1),
-                             {{0, 0}, {1, 1}});
+  MultiColumnJoin multiJoin2(testQec, qet(values1), qet(values1));
   checkThrow(multiJoin2);
 
   // ORDER BY operation (the third argument are the indices of the columns to be
@@ -271,9 +269,9 @@ TEST(LocalVocab, propagation) {
   // MINUS operation with exactly one non-empty local vocab and with
   // two non-empty local vocabs (the fourth argument are the indices of the
   // matching columns).
-  Minus minus1(testQec, qet(values1), qet(values2), {});
+  Minus minus1(testQec, qet(values1), qet(values2));
   checkLocalVocab(minus1, std::vector<std::string>{"x", "y1", "y2"});
-  Minus minus2(testQec, qet(values1), qet(values1), {});
+  Minus minus2(testQec, qet(values1), qet(values1));
   checkThrow(minus2);
 
   // FILTER operation (the third argument is an expression; which one doesn't

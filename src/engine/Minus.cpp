@@ -12,21 +12,11 @@ using std::string;
 // _____________________________________________________________________________
 Minus::Minus(QueryExecutionContext* qec,
              std::shared_ptr<QueryExecutionTree> left,
-             std::shared_ptr<QueryExecutionTree> right,
-             std::vector<std::array<ColumnIndex, 2>> matchedColumns)
-    : Operation{qec},
-      _left{std::move(left)},
-      _right{std::move(right)},
-      _matchedColumns{std::move(matchedColumns)} {
-  // Enforce that we always use the same order of join columns to make it more
-  // probable to find this operation in the cache.
-  std::ranges::sort(_matchedColumns, std::ranges::lexicographical_compare);
-
-  // The inputs must be sorted by the join columns.
-  auto [sortedLeft, sortedRight] = QueryExecutionTree::createSortedTrees(
-      std::move(_left), std::move(_right), _matchedColumns);
-  _left = std::move(sortedLeft);
-  _right = std::move(sortedRight);
+             std::shared_ptr<QueryExecutionTree> right)
+    : Operation{qec} {
+  std::tie(_left, _right, _matchedColumns) =
+      QueryExecutionTree::getSortedSubtreesAndJoinColumns(std::move(left),
+                                                          std::move(right));
 }
 
 // _____________________________________________________________________________
