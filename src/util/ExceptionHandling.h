@@ -48,7 +48,7 @@ void ignoreExceptionIfThrows(F&& f,
 // exception, and the location of the call. This can be used to make destructors
 // `noexcept()` that have to perform some non-trivial logic (e.g. writing a
 // trailer to a file), when such a failure should never occur in practice and
-// also is not easily recovarable. For an example usage see `PatternCreator.h`.
+// also is not easily recoverable. For an example usage see `PatternCreator.h`.
 // The actual termination call can be configured for testing purposes. Note that
 // this function must never throw an exception.
 template <typename F,
