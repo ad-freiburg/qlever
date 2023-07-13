@@ -396,6 +396,9 @@ bool TurtleParser<T>::rdfLiteral() {
           type == XSD_POSITIVE_INTEGER_TYPE) {
         // type == XSD_BOOLEAN_TYPE) {
         parseIntegerConstant(strippedLiteral);
+      } else if (type == XSD_BOOLEAN_TYPE && (strippedLiteral == "true" || strippedLiteral == "false")) {
+        _lastParseResult = strippedLiteral == "true";
+        // TODO<joka921> Do we want to throw an exception if the value is neither of the two?
       } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
                  type == XSD_FLOAT_TYPE) {
         parseDoubleConstant(strippedLiteral);

@@ -6,6 +6,7 @@
 #include "parser/TripleComponent.h"
 
 #include "absl/strings/str_cat.h"
+#include "engine/ExportQueryExecutionTrees.h"
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
@@ -59,6 +60,8 @@ std::optional<Id> TripleComponent::toValueIdIfNotString() const {
       return Id::makeFromInt(value);
     } else if constexpr (std::is_same_v<T, double>) {
       return Id::makeFromDouble(value);
+    } else if constexpr (std::is_same_v<T, bool>) {
+        return Id::makeFromBool(value);
     } else if constexpr (std::is_same_v<T, UNDEF>) {
       return Id::makeUndefined();
     } else if constexpr (std::is_same_v<T, DateOrLargeYear>) {
@@ -81,6 +84,9 @@ std::string TripleComponent::toRdfLiteral() const {
     return getString();
   } else if (isLiteral()) {
     return getLiteral().rawContent();
+  } else {
+    auto [value, type] = ExportQueryExecutionTrees::idToStringAndTypeOnlyEncoded(toValueIdIfNotString().value());
+      return absl::StrCat("\"", value, "\"^^<", type, ">");
   } else if (isDouble()) {
     return absl::StrCat("\"", getDouble(), "\"^^<", XSD_DOUBLE_TYPE, ">");
   } else if (isDate()) {
