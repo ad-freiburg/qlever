@@ -2,11 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (Januar of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "../test/util/IdTableHelpers.h"
+
 #include <absl/strings/str_cat.h>
 
 #include <utility>
 
-#include "../test/util/IdTableHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
@@ -110,7 +111,7 @@ IdTable createRandomlyFilledIdTable(
   // Are there no duplicates in the join column numbers?
   std::vector<size_t> sortedJoinColumnNumbers =
       ad_utility::transform(joinColumnNumberView, std::identity{});
-  std::ranges::sort(sortedJoinColumnNumbers, {}, {});
+  std::ranges::sort(sortedJoinColumnNumbers);
   AD_CONTRACT_CHECK(std::ranges::unique(sortedJoinColumnNumbers).empty());
 
   // Are all the functions for generating join column entries not nullptr?

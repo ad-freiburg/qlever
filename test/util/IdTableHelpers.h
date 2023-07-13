@@ -105,7 +105,7 @@ IdTable generateIdTable(
     const std::function<std::vector<ValueId>()>& rowGenerator);
 
 /*
-@brief Create a `IdTable`, where the content of the join columns are given via
+@brief Create an `IdTable`, where the content of the join columns are given via
 repeatedly called generator functions (one function per join column).
 
 @param numberRows numberColumns The number of rows and columns, the table should
