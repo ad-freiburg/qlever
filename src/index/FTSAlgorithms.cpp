@@ -1390,7 +1390,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
         }
         for (size_t j = 0; j < widsVec.size(); j++) {
           for (size_t l = 0; l < numOfTerms; l++) {
-            row[2 + off + l] =
+            row[off + l] =
                 Id::makeFromWordVocabIndex(WordVocabIndex::make(widsVec[j][l]));
           }
         }
@@ -1591,10 +1591,11 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>& keyEids = it->first;
     size_t off = 2;
     for (size_t i = 1; i < keyEids.size(); i++) {
-      row[2 + i] = keyEids[i];
+      row[off] = keyEids[i];
       off++;
     }
     row[off] = keyEids[0];
+    off++;
     for (auto itt = sacs.rbegin(); itt != sacs.rend(); ++itt) {
       const TextRecordIndex cid = itt->second;
       row[0] = Id::makeFromTextRecordIndex(cid);
@@ -1602,7 +1603,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
           mapEaCtW[std::make_pair(it->first, cid)];
       for (size_t j = 0; j < widsVec.size(); j++) {
         for (size_t l = 0; l < numOfTerms; l++) {
-          row[2 + off + 1 + l] =
+          row[off + l] =
               Id::makeFromWordVocabIndex(WordVocabIndex::make(widsVec[j][l]));
         }
         result.push_back(row);
