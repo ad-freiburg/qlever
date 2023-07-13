@@ -8,7 +8,7 @@
 #include <string_view>
 #include <tuple>
 
-#include "util/Memory.h"
+#include "util/AbstractMemory/Memory.h"
 
 namespace ad_utility {
 // _____________________________________________________________________________

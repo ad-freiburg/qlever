@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-#include "util/Memory.h"
+#include "util/AbstractMemory/Memory.h"
 
 // Importing all the literals.
 using ad_utility::operator""_Byte;
