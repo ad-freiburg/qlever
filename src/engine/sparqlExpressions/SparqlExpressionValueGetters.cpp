@@ -17,8 +17,9 @@ double NumericValueGetter::operator()(ValueId id, EvaluationContext*) const {
     case Datatype::Int:
       return static_cast<double>(id.getInt());
     case Datatype::Bool:
-      // TODO<joka921> Check in the specification what the correct behavior is here.
-        return static_cast<double>(id.getBool());
+      // TODO<joka921> Check in the specification what the correct behavior is
+      // here.
+      return static_cast<double>(id.getBool());
     case Datatype::Undefined:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:

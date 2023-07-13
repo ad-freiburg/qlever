@@ -82,8 +82,8 @@ class ExportQueryExecutionTrees {
   idToStringAndType(const Index& index, Id id, const LocalVocab& localVocab,
                     EscapeFunction&& escapeFunction = EscapeFunction{});
 
-    static std::optional<std::pair<std::string, const char*>>
-    idToStringAndTypeOnlyEncoded(Id id);
+  static std::optional<std::pair<std::string, const char*>>
+  idToStringAndTypeOnlyEncoded(Id id);
 
  private:
   // TODO<joka921> The following functions are all internally called by the

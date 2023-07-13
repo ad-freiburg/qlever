@@ -183,13 +183,13 @@ class ValueId {
   /// Create a `ValueId` for a boolean value
   static ValueId makeFromBool(bool b) noexcept {
     auto bits = static_cast<T>(b);
-      return addDatatypeBits(bits, Datatype::Bool);
+    return addDatatypeBits(bits, Datatype::Bool);
   }
 
   // Obtain the boolean value.
-    [[nodiscard]] bool getBool() const noexcept {
-        return static_cast<bool>(removeDatatypeBits(_bits));
-    }
+  [[nodiscard]] bool getBool() const noexcept {
+    return static_cast<bool>(removeDatatypeBits(_bits));
+  }
 
   /// Create a `ValueId` for an unsigned index of type
   /// `VocabIndex|TextRecordIndex|LocalVocabIndex`. These types can
@@ -264,7 +264,7 @@ class ValueId {
       case Datatype::Undefined:
         return std::invoke(visitor, getUndefined());
       case Datatype::Bool:
-          return std::invoke(visitor, getBool());
+        return std::invoke(visitor, getBool());
       case Datatype::Double:
         return std::invoke(visitor, getDouble());
       case Datatype::Int:
@@ -302,7 +302,8 @@ class ValueId {
       if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
         ostr << "Undefined";
       } else if constexpr (ad_utility::isSimilar<T, double> ||
-                           ad_utility::isSimilar<T, int64_t> || ad_utility::isSimilar<T, bool>) {
+                           ad_utility::isSimilar<T, int64_t> ||
+                           ad_utility::isSimilar<T, bool>) {
         ostr << std::to_string(value);
       } else if constexpr (ad_utility::isSimilar<T, DateOrLargeYear>) {
         ostr << value.toStringAndType().first;

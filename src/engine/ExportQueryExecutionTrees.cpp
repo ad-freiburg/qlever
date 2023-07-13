@@ -159,8 +159,9 @@ ExportQueryExecutionTrees::idToStringAndTypeOnlyEncoded(Id id) {
     default:
       AD_FAIL();
   }
+}
 
-  // ___________________________________________________________________________
+// ___________________________________________________________________________
 template <bool removeQuotesAndAngleBrackets, bool onlyReturnLiterals,
           typename EscapeFunction>
 std::optional<std::pair<std::string, const char*>>
@@ -177,9 +178,9 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
   switch (id.getDatatype()) {
     case Datatype::Undefined:
     case Datatype::Double:
-      case Datatype::Bool:
-      case Datatype::Int:
-      case Datatype::Date:
+    case Datatype::Bool:
+    case Datatype::Int:
+    case Datatype::Date:
       return idToStringAndTypeOnlyEncoded(id);
     case Datatype::VocabIndex: {
       // TODO<joka921> As soon as we get rid of the special encoding of date

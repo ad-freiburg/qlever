@@ -545,10 +545,8 @@ TEST(TurtleParserTest, DateLiterals) {
 
 TEST(TurtleParserTest, booleanLiteral) {
   auto runCommonTests = [](const auto& ruleChecker, const auto& ruleParser) {
-    ruleChecker("true", lit("\"true\"",
-                            "^^<http://www.w3.org/2001/XMLSchema#boolean>"));
-    ruleChecker("false", lit("\"false\"",
-                             "^^<http://www.w3.org/2001/XMLSchema#boolean>"));
+    ruleChecker("true", true);
+    ruleChecker("false", false);
     ASSERT_FALSE(ruleParser("maybe"));
   };
   runCommonTests(checkParseResult<Re2Parser, &Re2Parser::booleanLiteral>,

@@ -20,6 +20,8 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
           stream << value.rawContent();
         } else if constexpr (std::is_same_v<T, DateOrLargeYear>) {
           stream << "DATE: " << value.toStringAndType().first;
+        } else if constexpr (std::is_same_v<T, bool>) {
+          stream << (value ? "true" : "false");
         } else {
           stream << value;
         }
@@ -61,7 +63,7 @@ std::optional<Id> TripleComponent::toValueIdIfNotString() const {
     } else if constexpr (std::is_same_v<T, double>) {
       return Id::makeFromDouble(value);
     } else if constexpr (std::is_same_v<T, bool>) {
-        return Id::makeFromBool(value);
+      return Id::makeFromBool(value);
     } else if constexpr (std::is_same_v<T, UNDEF>) {
       return Id::makeUndefined();
     } else if constexpr (std::is_same_v<T, DateOrLargeYear>) {
@@ -78,22 +80,15 @@ std::optional<Id> TripleComponent::toValueIdIfNotString() const {
 
 // ____________________________________________________________________________
 std::string TripleComponent::toRdfLiteral() const {
-  // TODO<joka921> This whole method should use the logic from
-  // `ExportQueryExecutionTrees.h`
   if (isString()) {
     return getString();
   } else if (isLiteral()) {
     return getLiteral().rawContent();
   } else {
-    auto [value, type] = ExportQueryExecutionTrees::idToStringAndTypeOnlyEncoded(toValueIdIfNotString().value());
-      return absl::StrCat("\"", value, "\"^^<", type, ">");
-  } else if (isDouble()) {
-    return absl::StrCat("\"", getDouble(), "\"^^<", XSD_DOUBLE_TYPE, ">");
-  } else if (isDate()) {
-    auto [date, type] = getDate().toStringAndType();
-    return absl::StrCat("\"", date, "\"^^<", type, ">");
-  } else {
-    AD_CORRECTNESS_CHECK(isInt());
-    return absl::StrCat("\"", getInt(), "\"^^<", XSD_INTEGER_TYPE, ">");
+    auto [value, type] =
+        ExportQueryExecutionTrees::idToStringAndTypeOnlyEncoded(
+            toValueIdIfNotString().value())
+            .value();
+    return absl::StrCat("\"", value, "\"^^<", type, ">");
   }
 }
