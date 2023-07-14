@@ -82,6 +82,8 @@ IdTable generateIdTable(
       The iterator of an `IdTable` dereference to an `row_reference_restricted`,
       which only allows write access, if it is a r-value. Otherwise, we can't
       manipulate the content of the row.
+      Which is why we have to use an universal reference, `AD_FWD` and also why
+      we have to explicitly define the return type of the lambda.
       */
       table, [&rowGenerator, &numberColumns](auto&& row) -> void {
         // Make sure, that the generated row has the right
