@@ -187,7 +187,6 @@ class OrderedThreadSafeQueue {
     queue_.pushException(std::move(exception));
     std::unique_lock lock{mutex_};
     finish_ = true;
-    ;
     lock.unlock();
     cv_.notify_all();
   }
