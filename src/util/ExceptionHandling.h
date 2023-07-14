@@ -60,34 +60,33 @@ void terminateIfThrows(F&& f, std::string_view message,
                        TerminateAction terminateAction = {},
                        ad_utility::source_location l =
                            ad_utility::source_location::current()) noexcept {
-  auto getErrorMessage = [&message,
-                          &l](const auto&... messages) -> std::string {
+  auto getErrorMessage =
+      [&message, &l](const auto&... additionalMessages) -> std::string {
     return absl::StrCat(
         "A function that should never throw has thrown an exception",
-        messages..., ". The function was called in file ", l.file_name(),
-        " on line ", l.line(), ". Additional information: ", message,
+        additionalMessages..., ". The function was called in file ",
+        l.file_name(), " on line ", l.line(),
+        ". Additional information: ", message,
         ". Please report this. Terminating");
+  };
+
+  auto logAndTerminate = [&terminateAction](std::string_view msg) {
+    try {
+      LOG(ERROR) << msg << std::endl;
+      std::cerr << msg << std::endl;
+    } catch (...) {
+      std::cerr << msg << std::endl;
+    }
+    terminateAction();
   };
   try {
     std::invoke(AD_FWD(f));
   } catch (const std::exception& e) {
     auto msg = getErrorMessage(" with message \"", e.what(), "\"");
-    try {
-      LOG(ERROR) << msg << std::endl;
-      std::cerr << msg << std::endl;
-    } catch (...) {
-      std::cerr << msg << std::endl;
-    }
-    terminateAction();
+    logAndTerminate(msg);
   } catch (...) {
     auto msg = getErrorMessage();
-    try {
-      LOG(ERROR) << msg << std::endl;
-      std::cerr << msg << std::endl;
-    } catch (...) {
-      std::cerr << msg << std::endl;
-    }
-    terminateAction();
+    logAndTerminate(msg);
   }
 }
 }  // namespace ad_utility
