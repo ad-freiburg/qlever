@@ -74,7 +74,7 @@ jobs:
 
     - name: Build
         # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/build --target QLeverAllUnitTestsMain--config ${{env.build-type}} -- -j $(nproc)
+      run: cmake --build ${{github.workspace}}/build --target QLeverAllUnitTestsMain --config ${{env.build-type}} -- -j $(nproc)
     - name: Run unit tests
       working-directory: ${{github.workspace}}/build/test
       env:
