@@ -32,9 +32,9 @@ inline auto alwaysReturnFalse = [](auto&&...) { return false; };
  */
 template <typename IsTripleIgnored = decltype(detail::alwaysReturnFalse)>
 cppcoro::generator<std::array<Id, 3>> TriplesView(
-    const auto& permutation, ad_utility::AllocatorWithLimit<Id> allocator,
-    detail::IgnoredRelations ignoredRanges = {},
-    IsTripleIgnored isTripleIgnored = IsTripleIgnored{}) {
+    const auto& permutation, detail::IgnoredRelations ignoredRanges = {},
+    IsTripleIgnored isTripleIgnored = IsTripleIgnored{},
+    ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) {
   std::sort(ignoredRanges.begin(), ignoredRanges.end());
 
   const auto& metaData = permutation.meta_.data();
@@ -66,26 +66,20 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
     allowedRanges.emplace_back(beginOfAllowed, endOfAllowed);
   }
 
-  // Currently complete relations are yielded at once. This might take a lot of
-  // space for certain predicates in the Pxx permutations, so we respect the
-  // specified memory limit.
-  // TODO<joka921> Implement the scanning of large relations lazily and in
-  // blocks, making the limit here unnecessary.
-  using Tuple = std::array<Id, 2>;
-  auto tupleAllocator = allocator.as<Tuple>();
-  IdTable col1And2{2, allocator};
   for (auto& [begin, end] : allowedRanges) {
     for (auto it = begin; it != end; ++it) {
-      col1And2.clear();
       Id id = it.getId();
-      // TODO<joka921> We could also pass a timeout pointer here.
-      permutation.scan(id, &col1And2);
-      for (const auto& row : col1And2) {
-        std::array<Id, 3> triple{id, row[0], row[1]};
-        if (isTripleIgnored(triple)) [[unlikely]] {
-          continue;
+      auto blockGenerator = permutation.lazyScan(id, std::nullopt, std::nullopt,
+                                                 std::move(timer));
+      for (const IdTable& col1And2 : blockGenerator) {
+        AD_CORRECTNESS_CHECK(col1And2.numColumns() == 2);
+        for (const auto& row : col1And2) {
+          std::array<Id, 3> triple{id, row[0], row[1]};
+          if (isTripleIgnored(triple)) [[unlikely]] {
+            continue;
+          }
+          co_yield triple;
         }
-        co_yield triple;
       }
     }
   }

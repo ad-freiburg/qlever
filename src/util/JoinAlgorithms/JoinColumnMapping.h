@@ -95,4 +95,49 @@ class JoinColumnMapping {
     }
   }
 };
+
+// A class that stores a complete `IdTable`, but when being treated as a range
+// via the `begin/end/operator[]` functions, then it only gives access to the
+// first column. This is very useful for the lazy join implementations
+// (currently used in `Join.cpp`), where we need very efficient access to the
+// join column for comparing rows, but also need to store the complete table to
+// be able to write the other columns of a matching row to the result.
+// This class is templated so we can use it for `IdTable` as well as for
+// `IdTableView`.
+template <typename Table>
+struct IdTableAndFirstCol {
+ private:
+  Table table_;
+
+ public:
+  // Typedef needed for generic interfaces.
+  using iterator = std::decay_t<decltype(table_.getColumn(0).begin())>;
+
+  // Construct by taking ownership of the table.
+  explicit IdTableAndFirstCol(Table t) : table_{std::move(t)} {}
+
+  // Get access to the first column.
+  decltype(auto) col() { return table_.getColumn(0); }
+  decltype(auto) col() const { return table_.getColumn(0); }
+
+  // The following functions all refer to the same column.
+  auto begin() { return col().begin(); }
+  auto end() { return col().end(); }
+  auto begin() const { return col().begin(); }
+  auto end() const { return col().end(); }
+
+  bool empty() { return col().empty(); }
+
+  const Id& operator[](size_t idx) const { return col()[idx]; }
+
+  size_t size() const { return col().size(); }
+
+  // This interface is required in `Join.cpp` by the `AddCombinedRowToTable`
+  // class. Calling this function yields the same type, no matter if `Table` is
+  // `IdTable` or `IdTableView`.
+  template <size_t I = 0>
+  IdTableView<I> asStaticView() const {
+    return table_.template asStaticView<I>();
+  }
+};
 }  // namespace ad_utility

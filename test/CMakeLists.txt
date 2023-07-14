@@ -24,7 +24,7 @@ endfunction()
 # if a test binary requires multiple sources
 function(linkAndDiscoverTest basename)
     linkTest(${basename} ${ARGN})
-    gtest_discover_tests(${basename} ${basename})
+    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600)
 endfunction()
 
 # Usage: `linkAndDiscoverTestSerial(basename, [additionalLibraries...]`
@@ -83,6 +83,8 @@ function(addAndLinkTest basename)
     addTest(${basename})
     linkTest(${basename} ${ARGN})
 endfunction()
+
+add_subdirectory(engine)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
@@ -288,7 +290,7 @@ addLinkAndDiscoverTest(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
 
-addLinkAndDiscoverTest(CompressedRelationsTest index)
+addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
 
@@ -345,3 +347,5 @@ addLinkAndDiscoverTest(IdTableHelpersTest)
 addLinkAndDiscoverTest(GeneratorTest)
 
 addLinkAndDiscoverTest(JsonUtilTest)
+
+addLinkAndDiscoverTest(JoinAlgorithmsTest)
