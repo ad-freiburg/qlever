@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <type_traits>
 
+#include "absl/strings/str_cat.h"
 #include "util/Forward.h"
 #include "util/Log.h"
 #include "util/SourceLocation.h"
@@ -59,22 +60,33 @@ void terminateIfThrows(F&& f, std::string_view message,
                        TerminateAction terminateAction = {},
                        ad_utility::source_location l =
                            ad_utility::source_location::current()) noexcept {
+  auto getErrorMessage = [&message,
+                          &l](const auto&... messages) -> std::string {
+    return absl::StrCat(
+        "A function that should never throw has thrown an exception",
+        messages..., ". The function was called in file ", l.file_name(),
+        " on line ", l.line(), ". Additional information: ", message,
+        ". Please report this. Terminating");
+  };
   try {
     std::invoke(AD_FWD(f));
   } catch (const std::exception& e) {
-    std::cerr << "A function that should never throw has thrown an exception "
-                 "with message \""
-              << e.what() << "\". The function was called in file "
-              << l.file_name() << " on line " << l.line()
-              << ". Additional information: " << message
-              << ". Please report this. Terminating" << std::endl;
+    auto msg = getErrorMessage(" with message \"", e.what(), "\"");
+    try {
+      LOG(ERROR) << msg << std::endl;
+      std::cerr << msg << std::endl;
+    } catch (...) {
+      std::cerr << msg << std::endl;
+    }
     terminateAction();
   } catch (...) {
-    std::cerr << "A function that should never throw has thrown an exception. "
-                 "The function was called in file "
-              << l.file_name() << " on line " << l.line()
-              << ". Additional information: " << message
-              << ". Please report this. Terminating" << std::endl;
+    auto msg = getErrorMessage();
+    try {
+      LOG(ERROR) << msg << std::endl;
+      std::cerr << msg << std::endl;
+    } catch (...) {
+      std::cerr << msg << std::endl;
+    }
     terminateAction();
   }
 }
