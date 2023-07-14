@@ -13,7 +13,9 @@
 
 #include "absl/cleanup/cleanup.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/Generator.h"
+#include "util/Log.h"
 #include "util/jthread.h"
 
 namespace ad_utility::data_structures {
@@ -26,11 +28,7 @@ class ThreadSafeQueue {
   std::mutex mutex_;
   std::condition_variable pushNotification_;
   std::condition_variable popNotification_;
-  // Note: Although this class is generally synchronized via `std::mutex`, we
-  // still use `std::atomic` for the information whether it has finished. This
-  // allows the `finish()` function to be noexcept which allows a safe way to
-  // prevent deadlocks.
-  std::atomic_flag finish_ = ATOMIC_FLAG_INIT;
+  bool finish_ = false;
   size_t maxSize_;
 
  public:
@@ -50,8 +48,8 @@ class ThreadSafeQueue {
   bool push(T value) {
     std::unique_lock lock{mutex_};
     popNotification_.wait(
-        lock, [this] { return queue_.size() < maxSize_ || finish_.test(); });
-    if (finish_.test()) {
+        lock, [this] { return queue_.size() < maxSize_ || finish_; });
+    if (finish_) {
       return false;
     }
     queue_.push(std::move(value));
@@ -72,7 +70,7 @@ class ThreadSafeQueue {
       return;
     }
     pushedException_ = std::move(exception);
-    finish_.test_and_set();
+    finish_ = true;
     lock.unlock();
     pushNotification_.notify_all();
     popNotification_.notify_all();
@@ -87,11 +85,20 @@ class ThreadSafeQueue {
   // will not pop further elements from the queue.
   void finish() noexcept {
     // It is crucial that this function never throws, so that we can safely call
-    // it unconditionally in destructors to prevent deadlocks. Should the
-    // implementation ever change, make sure that it is still `noexcept`.
-    finish_.test_and_set();
-    pushNotification_.notify_all();
-    popNotification_.notify_all();
+    // it unconditionally in destructors to prevent deadlocks. In theory,
+    // locking a mutex can throw an exception, but these are `system_errors`
+    // from the underlying operating system that should never appear in practice
+    // and are almost impossible to recover from, so we terminate the program in
+    // the unlikely case.
+    ad_utility::terminateIfThrows(
+        [this] {
+          std::unique_lock lock{mutex_};
+          finish_ = true;
+          lock.unlock();
+          pushNotification_.notify_all();
+          popNotification_.notify_all();
+        },
+        "Locking or unlocking a mutex in a threadsafe queue failed.");
   }
 
   /// Always call `finish` on destruction. This makes sure that worker
@@ -106,13 +113,13 @@ class ThreadSafeQueue {
   std::optional<T> pop() {
     std::unique_lock lock{mutex_};
     pushNotification_.wait(lock, [this] {
-      return !queue_.empty() || finish_.test() || pushedException_;
+      return !queue_.empty() || finish_ || pushedException_;
     });
     if (pushedException_) {
       std::rethrow_exception(pushedException_);
     }
-    if (finish_.test() && queue_.empty()) {
-      return {};
+    if (finish_ && queue_.empty()) {
+      return std::nullopt;
     }
     std::optional<T> value = std::move(queue_.front());
     queue_.pop();
@@ -138,9 +145,7 @@ class OrderedThreadSafeQueue {
   std::condition_variable cv_;
   ThreadSafeQueue<T> queue_;
   size_t nextIndex_ = 0;
-  // For the reason why this is `atomic_flag`, see the same member in
-  // `ThreadSafeQueue`.
-  std::atomic_flag finish_ = ATOMIC_FLAG_INIT;
+  bool finish_ = false;
 
  public:
   using value_type = T;
@@ -160,9 +165,8 @@ class OrderedThreadSafeQueue {
   // equal to `ThreadSafeQueue::push`.
   bool push(size_t index, T value) {
     std::unique_lock lock{mutex_};
-    cv_.wait(lock,
-             [this, index]() { return index == nextIndex_ || finish_.test(); });
-    if (finish_.test()) {
+    cv_.wait(lock, [this, index]() { return index == nextIndex_ || finish_; });
+    if (finish_) {
       return false;
     }
     ++nextIndex_;
@@ -181,7 +185,9 @@ class OrderedThreadSafeQueue {
   // See `ThreadSafeQueue` for details.
   void pushException(std::exception_ptr exception) {
     queue_.pushException(std::move(exception));
-    finish_.test_and_set();
+    std::unique_lock lock{mutex_};
+    finish_ = true;
+    lock.unlock();
     cv_.notify_all();
   }
 
@@ -190,9 +196,15 @@ class OrderedThreadSafeQueue {
     // It is crucial that this function never throws, so that we can safely call
     // it unconditionally in destructors to prevent deadlocks. Should the
     // implementation ever change, make sure that it is still `noexcept`.
-    queue_.finish();
-    finish_.test_and_set();
-    cv_.notify_all();
+    ad_utility::terminateIfThrows(
+        [this] {
+          queue_.finish();
+          std::unique_lock lock{mutex_};
+          finish_ = true;
+          lock.unlock();
+          cv_.notify_all();
+        },
+        "Locking or unlocking a mutex in an OrderedThreadsafeQueue failed.");
   }
 
   // See `ThreadSafeQueue` for details.
