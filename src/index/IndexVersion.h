@@ -13,11 +13,8 @@ namespace qlever {
 inline const nlohmann::json& indexVersion() {
   static nlohmann::json version = []() {
     nlohmann::json j;
-    j["description"] =
-        "Add complete first and last triples to block metadata to enable lazy "
-        "joins";
-    j["pull-request-number"] = 1004;
     j["date"] = "2023-06-16";
+    j["pull-request-number"] = 1004;
     return j;
   }();
   return version;
