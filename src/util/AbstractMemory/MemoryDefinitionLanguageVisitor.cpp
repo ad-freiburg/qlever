@@ -12,7 +12,8 @@
 #include "util/StringUtils.h"
 
 // ____________________________________________________________________________
-size_t ToSizeTMemoryDefinitionLanguageVisitor::visitMemoryDefinitionString(
+ad_utility::Memory
+ToMemoryInstanceMemoryDefinitionLanguageVisitor::visitMemoryDefinitionString(
     Parser::MemoryDefinitionStringContext* context) const {
   if (context->pureByteDefinition()) {
     return visitPureByteDefinition(context->pureByteDefinition());
@@ -24,45 +25,66 @@ size_t ToSizeTMemoryDefinitionLanguageVisitor::visitMemoryDefinitionString(
 }
 
 // ____________________________________________________________________________
-size_t ToSizeTMemoryDefinitionLanguageVisitor::visitPureByteDefinition(
+ad_utility::Memory
+ToMemoryInstanceMemoryDefinitionLanguageVisitor::visitPureByteDefinition(
     Parser::PureByteDefinitionContext* context) const {
-  // We don't have to convert anything, just return the number of bytes given.
-  return std::stoul(context->UNSIGNED_INTEGER()->getText());
+  return ad_utility::Memory::bytes(
+      std::stoul(context->UNSIGNED_INTEGER()->getText()));
 }
 
 // ____________________________________________________________________________
-size_t ToSizeTMemoryDefinitionLanguageVisitor::visitMemoryUnitDefinition(
+ad_utility::Memory
+ToMemoryInstanceMemoryDefinitionLanguageVisitor::visitMemoryUnitDefinition(
     Parser::MemoryUnitDefinitionContext* context) const {
-  // Convert the memory unit name to the number of bytes per such unit.
-  size_t bytesPerUnit{0};
-  switch (ad_utility::getLowercase(context->MEMORY_UNIT()->getText()).front()) {
-    case 'k':
-      bytesPerUnit = numBytesPerKB;
-      break;
-    case 'm':
-      bytesPerUnit = numBytesPerMB;
-      break;
-    case 'g':
-      bytesPerUnit = numBytesPerGB;
-      break;
-    case 't':
-      bytesPerUnit = numBytesPerTB;
-      break;
-    case 'p':
-      bytesPerUnit = numBytesPerPB;
-      break;
-    default:
-      // Whatever this is, it is false.
-      AD_CORRECTNESS_CHECK(false);
-  }
+  /*
+  Create an instance of `Memory`.
+
+  @param memoryUnit Which memory unit to use for the creation. Must be one of:
+  - 'k' (KB)
+  - 'm' (MB)
+  - 'g' (GB)
+  - 't' (TB)
+  - 'p' (PB)
+  @param numUnits Amount of kilobytes, megabytes, etc..
+  */
+  auto createMemoryInstance = [](char memoryUnit, auto numUnits) {
+    ad_utility::Memory toReturn;
+
+    switch (memoryUnit) {
+      case 'k':
+        toReturn = ad_utility::Memory::kilobytes(numUnits);
+        break;
+      case 'm':
+        toReturn = ad_utility::Memory::megabytes(numUnits);
+        break;
+      case 'g':
+        toReturn = ad_utility::Memory::gigabytes(numUnits);
+        break;
+      case 't':
+        toReturn = ad_utility::Memory::terabytes(numUnits);
+        break;
+      case 'p':
+        toReturn = ad_utility::Memory::petabytes(numUnits);
+        break;
+      default:
+        // Whatever this is, it is false.
+        AD_CORRECTNESS_CHECK(false);
+    }
+
+    return toReturn;
+  };
+
+  // Which memory unit are we looking at?
+  const char memoryUnitType =
+      ad_utility::getLowercase(context->MEMORY_UNIT()->getText()).front();
 
   // We have to interpret the amount of units.
   if (context->UNSIGNED_INTEGER()) {
-    return convertMemoryUnitsToBytes(
-        std::stoul(context->UNSIGNED_INTEGER()->getText()), bytesPerUnit);
+    return createMemoryInstance(
+        memoryUnitType, std::stoul(context->UNSIGNED_INTEGER()->getText()));
   } else {
     AD_CORRECTNESS_CHECK(context->FLOAT());
-    return convertMemoryUnitsToBytes(std::stod(context->FLOAT()->getText()),
-                                     bytesPerUnit);
+    return createMemoryInstance(memoryUnitType,
+                                std::stod(context->FLOAT()->getText()));
   }
 }

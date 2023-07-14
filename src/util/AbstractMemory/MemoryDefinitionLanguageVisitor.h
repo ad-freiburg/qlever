@@ -5,23 +5,24 @@
 
 #include <antlr4-runtime.h>
 
+#include "util/AbstractMemory/Memory.h"
 #include "util/AbstractMemory/generated/MemoryDefinitionLanguageParser.h"
 #include "util/json.h"
 
 /*
-This visitor will translate the memory definition language to the amount of
-bytes defined.
+This visitor will translate the memory definition language to an instance of
+´Memory`, holding the memory size defined.
 */
-class ToSizeTMemoryDefinitionLanguageVisitor final {
+class ToMemoryInstanceMemoryDefinitionLanguageVisitor final {
  public:
   using Parser = MemoryDefinitionLanguageParser;
 
-  size_t visitMemoryDefinitionString(
+  ad_utility::Memory visitMemoryDefinitionString(
       Parser::MemoryDefinitionStringContext* context) const;
 
-  size_t visitPureByteDefinition(
+  ad_utility::Memory visitPureByteDefinition(
       Parser::PureByteDefinitionContext* context) const;
 
-  size_t visitMemoryUnitDefinition(
+  ad_utility::Memory visitMemoryUnitDefinition(
       Parser::MemoryUnitDefinitionContext* context) const;
 };

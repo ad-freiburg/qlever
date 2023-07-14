@@ -27,17 +27,31 @@ class Memory {
   size_t memoryInBytes_;
 
  public:
-  // Very simple custom constructor.
-  Memory(const size_t& amountOfMemoryInBytes = 0)
-      : memoryInBytes_{amountOfMemoryInBytes} {}
+  // Default constructors.
+  Memory() : memoryInBytes_(0) {}
+  Memory(const Memory&) = default;
+  Memory(Memory&&) = default;
 
   // Default assignment operator.
   Memory& operator=(const Memory&) = default;
   Memory& operator=(Memory&&) = default;
 
-  // Custom assignment operator, so that we can assign user literals.
-  Memory& operator=(const size_t& amountOfMemoryInBytes);
-  Memory& operator=(size_t&& amountOfMemoryInBytes);
+  /*
+  Factory functions for creating an instance of this class with the wanted
+  memory size saved internally. Always requries the exact memory size unit and
+  size wanted.
+  */
+  static Memory bytes(size_t numBytes);
+  static Memory kilobytes(size_t numKilobytes);
+  static Memory kilobytes(double numKilobytes);
+  static Memory megabytes(size_t numMegabytes);
+  static Memory megabytes(double numMegabytes);
+  static Memory gigabytes(size_t numGigabytes);
+  static Memory gigabytes(double numGigabytes);
+  static Memory terabytes(size_t numTerabytes);
+  static Memory terabytes(double numTerabytes);
+  static Memory petabytes(size_t numPetabytes);
+  static Memory petabytes(double numPetabytes);
 
   /*
   Return the internal memory amount in the wanted memory unit format.
@@ -63,58 +77,33 @@ class Memory {
   friend std::ostream& operator<<(std::ostream& os, const Memory& mem);
 
   /*
-  @brief Parse the given string and set the internal memory amount to the amount
-  described.
+  @brief Parse the given string and create a `Memory` object, set to the memory
+  amount described.
 
   @param str A string following `./generated/MemoryDefinitionLanguage.g4`. In
   short: An amount of bytes described via a user defined literal.
   */
-  void parse(std::string_view str);
+  static Memory parse(std::string_view str);
+
+ private:
+  // Constructor for the factory functions.
+  Memory(size_t amountOfMemoryInBytes)
+      : memoryInBytes_{amountOfMemoryInBytes} {}
 };
 
 // User defined literals for memory units.
 namespace memory_literals {
-size_t constexpr operator""_Byte(unsigned long long int bytes) { return bytes; }
-
-size_t constexpr operator""_KB(long double kilobytes) {
-  return convertMemoryUnitsToBytes(kilobytes, numBytesPerKB);
-}
-
-size_t constexpr operator""_KB(unsigned long long int kilobytes) {
-  return convertMemoryUnitsToBytes(kilobytes, numBytesPerKB);
-}
-
-size_t constexpr operator""_MB(long double megabytes) {
-  return convertMemoryUnitsToBytes(megabytes, numBytesPerMB);
-}
-
-size_t constexpr operator""_MB(unsigned long long int megabytes) {
-  return convertMemoryUnitsToBytes(megabytes, numBytesPerMB);
-}
-
-size_t constexpr operator""_GB(long double gigabytes) {
-  return convertMemoryUnitsToBytes(gigabytes, numBytesPerGB);
-}
-
-size_t constexpr operator""_GB(unsigned long long int gigabytes) {
-  return convertMemoryUnitsToBytes(gigabytes, numBytesPerGB);
-}
-
-size_t constexpr operator""_TB(long double terabytes) {
-  return convertMemoryUnitsToBytes(terabytes, numBytesPerTB);
-}
-
-size_t constexpr operator""_TB(unsigned long long int terabytes) {
-  return convertMemoryUnitsToBytes(terabytes, numBytesPerTB);
-}
-
-size_t constexpr operator""_PB(long double petabytes) {
-  return convertMemoryUnitsToBytes(petabytes, numBytesPerPB);
-}
-
-size_t constexpr operator""_PB(unsigned long long int petabytes) {
-  return convertMemoryUnitsToBytes(petabytes, numBytesPerPB);
-}
+Memory operator""_Byte(unsigned long long int bytes);
+Memory operator""_KB(long double kilobytes);
+Memory operator""_KB(unsigned long long int kilobytes);
+Memory operator""_MB(long double megabytes);
+Memory operator""_MB(unsigned long long int megabytes);
+Memory operator""_GB(long double gigabytes);
+Memory operator""_GB(unsigned long long int gigabytes);
+Memory operator""_TB(long double terabytes);
+Memory operator""_TB(unsigned long long int terabytes);
+Memory operator""_PB(long double petabytes);
+Memory operator""_PB(unsigned long long int petabytes);
 }  // namespace memory_literals
 
 }  // namespace ad_utility
