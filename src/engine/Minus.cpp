@@ -12,21 +12,11 @@ using std::string;
 // _____________________________________________________________________________
 Minus::Minus(QueryExecutionContext* qec,
              std::shared_ptr<QueryExecutionTree> left,
-             std::shared_ptr<QueryExecutionTree> right,
-             std::vector<std::array<ColumnIndex, 2>> matchedColumns)
-    : Operation{qec},
-      _left{std::move(left)},
-      _right{std::move(right)},
-      _matchedColumns{std::move(matchedColumns)} {
-  // Check that the invariant (inputs are sorted on the matched columns) holds.
-  auto l = _left->resultSortedOn();
-  auto r = _right->resultSortedOn();
-  AD_CONTRACT_CHECK(_matchedColumns.size() <= l.size());
-  AD_CONTRACT_CHECK(_matchedColumns.size() <= r.size());
-  for (size_t i = 0; i < _matchedColumns.size(); ++i) {
-    AD_CONTRACT_CHECK(_matchedColumns[i][0] == l[i]);
-    AD_CONTRACT_CHECK(_matchedColumns[i][1] == r[i]);
-  }
+             std::shared_ptr<QueryExecutionTree> right)
+    : Operation{qec} {
+  std::tie(_left, _right, _matchedColumns) =
+      QueryExecutionTree::getSortedSubtreesAndJoinColumns(std::move(left),
+                                                          std::move(right));
 }
 
 // _____________________________________________________________________________
