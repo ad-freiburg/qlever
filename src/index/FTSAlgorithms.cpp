@@ -302,10 +302,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
       << " elements to a table with distinct entities "
       << "and at most " << k << " contexts per entity.\n";
 
-  size_t numOfTerms = wep.wids_.size();
-  if (wep.wids_[0].empty()) {
-    numOfTerms = 0;
-  }
+  size_t numOfTerms = dynResult->numColumns() - 3;
 
   // The default case where k == 1 can use a map for a O(n) solution
   if (k == 1) {
@@ -493,10 +490,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
   AggMapContextAndEntityToWord mapEaCtW;
   AggMapEntityToSaC mapEtSaC;
 
-  size_t numOfTerms = wep.wids_.size();
-  if (wep.wids_[0].empty()) {
-    numOfTerms = 0;
-  }
+  size_t numOfTerms = dynResult->numColumns() - 3;
 
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
     vector<WordIndex> wids;
@@ -576,10 +570,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     IdTable* dynResult) {
   AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
 
-  size_t numOfTerms = wep.wids_.size();
-  if (wep.wids_[0].empty()) {
-    numOfTerms = 0;
-  }
+  size_t numOfTerms = dynResult->numColumns() - 2 - nofVars;
 
   if (wep.cids_.empty()) {
     return;
@@ -758,10 +749,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
   LOG(DEBUG) << "Special case with 1 contexts per entity...\n";
 
-  size_t numOfTerms = wep.wids_.size();
-  if (wep.wids_[0].empty()) {
-    numOfTerms = 0;
-  }
+  size_t numOfTerms = dynResult->numColumns() - 2 - nofVars;
 
   // Go over contexts.
   // For each context build a cross product of width 2.
@@ -1008,11 +996,9 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     return;
   }
 
-  size_t numOfTerms = wep.wids_.size();
-  if (wep.wids_[0].empty()) {
-    numOfTerms = 0;
-  }
-
+  size_t numOfTerms =
+      dynResult->numColumns() - 2 - fMap.begin()->second.numColumns();
+      
   // TODO: add code to speed up for k==1
 
   // Use a set (ordered) and keep it at size k for the context scores
@@ -1142,10 +1128,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     return;
   }
 
-  size_t numOfTerms = wep.wids_.size();
-  if (wep.wids_[0].empty()) {
-    numOfTerms = 0;
-  }
+  size_t numOfTerms = dynResult->numColumns() - 3;
 
   // TODO: add code to speed up for k==1
 
@@ -1259,10 +1242,8 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     return;
   }
 
-  size_t numOfTerms = wep.wids_.size();
-  if (wep.wids_[0].empty()) {
-    numOfTerms = 0;
-  }
+  size_t numOfTerms =
+      dynResult->numColumns() - 1 - nofVars - fMap.begin()->second.numColumns();
 
   // Go over contexts.
   // For each context build a cross product with one part being from the filter.
@@ -1482,10 +1463,8 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   if (wep.cids_.empty() || fSet.empty()) {
     return;
   }
-  size_t numOfTerms = wep.wids_.size();
-  if (wep.wids_[0].empty()) {
-    numOfTerms = 0;
-  }
+  size_t numOfTerms = dynResult->numColumns() - 2 - nofVars;
+
   // Go over contexts.
   // For each context build a cross product with one part being from the filter.
   // Store them in a map, use a pair of id's as key and

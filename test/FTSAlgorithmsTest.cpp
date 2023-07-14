@@ -441,23 +441,22 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
 TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   Index::WordEntityPostings wep;
   size_t k = 1;
-  IdTable resW4{4, makeAllocator()};
+  IdTable resW3{3, makeAllocator()};
   ad_utility::HashMap<Id, IdTable> fMap1;
 
-  int width = resW4.numColumns();
+  int width = resW3.numColumns();
   ad_utility::callFixedSize(
       width,
       []<int I>(auto&&... args) {
         FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<I>(
             AD_FWD(args)...);
       },
-      wep, fMap1, k, &resW4);
-  ASSERT_EQ(0u, resW4.size());
+      wep, fMap1, k, &resW3);
+  ASSERT_EQ(0u, resW3.size());
 
   wep.cids_ = {T(0), T(1), T(1), T(2), T(2), T(2)};
   wep.eids_ = {V(0), V(0), V(1), V(0), V(1), V(2)};
   wep.scores_ = {10, 1, 3, 1, 1, 1};
-  wep.wids_ = {{1, 1, 2, 1, 3, 5}};
 
   ad_utility::callFixedSize(
       width,
@@ -465,8 +464,13 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
         FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<I>(
             AD_FWD(args)...);
       },
-      wep, fMap1, k, &resW4);
-  ASSERT_EQ(0u, resW4.size());
+      wep, fMap1, k, &resW3);
+  ASSERT_EQ(0u, resW3.size());
+
+  wep.wids_ = {{1, 1, 2, 1, 3, 5}};
+
+  IdTable resW4{4, makeAllocator()};
+  width = resW4.numColumns();
 
   auto [it, success] = fMap1.emplace(V(1), IdTable{1, makeAllocator()});
   ASSERT_TRUE(success);
@@ -515,9 +519,9 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
     el.push_back({V(0), V(1), V(0), V(0)});
     el.push_back({V(0), V(2), V(0), V(0)});
   }
-  IdTable resVar{8, makeAllocator()};
+  IdTable resVar{7, makeAllocator()};
   k = 1;
-  width = 8;
+  width = 7;
   ad_utility::callFixedSize(
       width,
       []<int I>(auto&&... args) {
