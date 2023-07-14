@@ -998,7 +998,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
 
   size_t numOfTerms =
       dynResult->numColumns() - 2 - fMap.begin()->second.numColumns();
-      
+
   // TODO: add code to speed up for k==1
 
   // Use a set (ordered) and keep it at size k for the context scores
