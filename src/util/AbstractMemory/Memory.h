@@ -59,6 +59,9 @@ class Memory {
   */
   std::string asString() const;
 
+  // Custom `<<` overload.
+  friend std::ostream& operator<<(std::ostream& os, const Memory& mem);
+
   /*
   @brief Parse the given string and set the internal memory amount to the amount
   described.

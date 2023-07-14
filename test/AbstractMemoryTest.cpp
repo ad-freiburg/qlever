@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <ranges>
+#include <sstream>
 #include <vector>
 
 #include "util/AbstractMemory/Memory.h"
@@ -137,8 +138,15 @@ TEST(AbstractMemory, AsString) {
   // Creates an instance with given amount of memory noted and checks the
   // expected string representation.
   auto doTest = [](const MemoryAmountAndStringRepresentation& testCase) {
-    ASSERT_STREQ(ad_utility::Memory(testCase.memoryAmount_).asString().c_str(),
-                 testCase.stringRepresentation.data());
+    ad_utility::Memory mem(testCase.memoryAmount_);
+
+    // Normal `asString`.
+    ASSERT_STREQ(mem.asString().c_str(), testCase.stringRepresentation.data());
+
+    // With the `<<` operator.
+    std::ostringstream stream;
+    stream << mem;
+    ASSERT_STREQ(stream.str().c_str(), testCase.stringRepresentation.data());
   };
 
   std::ranges::for_each(generalAsStringTestCases(), doTest);

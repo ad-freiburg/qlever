@@ -113,4 +113,10 @@ void Memory::parse(std::string_view str) {
           memoryDefinitionStringContext);
 }
 
+// _____________________________________________________________________________
+std::ostream& operator<<(std::ostream& os, const ad_utility::Memory& mem) {
+  os << mem.asString();
+  return os;
+}
+
 }  // namespace ad_utility
