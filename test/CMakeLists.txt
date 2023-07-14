@@ -293,6 +293,7 @@ addLinkAndDiscoverTest(ExceptionTest)
 addLinkAndDiscoverTestSerial(RandomExpressionTest index)
 
 addLinkAndDiscoverTestSerial(SortTest engine)
+
 addLinkAndDiscoverTestSerial(OrderByTest engine)
 
 addLinkAndDiscoverTestSerial(ValuesForTestingTest index)
