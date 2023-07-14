@@ -39,27 +39,27 @@ static double sizetDivision(const size_t& dividend, const size_t& divisor) {
 
 // _____________________________________________________________________________
 double Memory::kilobytes() const {
-  return sizetDivision(memoryInBytes_, numberOfBytesPerKB);
+  return sizetDivision(memoryInBytes_, numBytesPerKB);
 }
 
 // _____________________________________________________________________________
 double Memory::megabytes() const {
-  return sizetDivision(memoryInBytes_, numberOfBytesPerMB);
+  return sizetDivision(memoryInBytes_, numBytesPerMB);
 }
 
 // _____________________________________________________________________________
 double Memory::gigabytes() const {
-  return sizetDivision(memoryInBytes_, numberOfBytesPerGB);
+  return sizetDivision(memoryInBytes_, numBytesPerGB);
 }
 
 // _____________________________________________________________________________
 double Memory::terabytes() const {
-  return sizetDivision(memoryInBytes_, numberOfBytesPerTB);
+  return sizetDivision(memoryInBytes_, numBytesPerTB);
 }
 
 // _____________________________________________________________________________
 double Memory::petabytes() const {
-  return sizetDivision(memoryInBytes_, numberOfBytesPerPB);
+  return sizetDivision(memoryInBytes_, numBytesPerPB);
 }
 
 // _____________________________________________________________________________
@@ -70,15 +70,15 @@ std::string Memory::asString() const {
   };
 
   // Just use the first unit, which is bigger/equal to `memoryInBytes_`.
-  if (memoryInBytes_ >= numberOfBytesPerPB) {
+  if (memoryInBytes_ >= numBytesPerPB) {
     return toString(petabytes(), "PB");
-  } else if (memoryInBytes_ >= numberOfBytesPerTB) {
+  } else if (memoryInBytes_ >= numBytesPerTB) {
     return toString(terabytes(), "TB");
-  } else if (memoryInBytes_ >= numberOfBytesPerGB) {
+  } else if (memoryInBytes_ >= numBytesPerGB) {
     return toString(gigabytes(), "GB");
-  } else if (memoryInBytes_ >= numberOfBytesPerMB) {
+  } else if (memoryInBytes_ >= numBytesPerMB) {
     return toString(megabytes(), "MB");
-  } else if (memoryInBytes_ >= numberOfBytesPerKB) {
+  } else if (memoryInBytes_ >= numBytesPerKB) {
     return toString(kilobytes(), "KB");
   } else {
     // Just return the amount of bytes.

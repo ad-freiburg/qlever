@@ -11,11 +11,11 @@
 #include "util/ConstexprUtils.h"
 
 // Just the number of bytes per memory unit.
-constexpr size_t numberOfBytesPerKB = ad_utility::pow<size_t>(2, 10);
-constexpr size_t numberOfBytesPerMB = ad_utility::pow<size_t>(2, 20);
-constexpr size_t numberOfBytesPerGB = ad_utility::pow<size_t>(2, 30);
-constexpr size_t numberOfBytesPerTB = ad_utility::pow<size_t>(2, 40);
-constexpr size_t numberOfBytesPerPB = ad_utility::pow<size_t>(2, 50);
+constexpr size_t numBytesPerKB = ad_utility::pow<size_t>(2, 10);
+constexpr size_t numBytesPerMB = ad_utility::pow<size_t>(2, 20);
+constexpr size_t numBytesPerGB = ad_utility::pow<size_t>(2, 30);
+constexpr size_t numBytesPerTB = ad_utility::pow<size_t>(2, 40);
+constexpr size_t numBytesPerPB = ad_utility::pow<size_t>(2, 50);
 
 /*
 @brief Calculate the amount of bytes for a given amount of untis and a given
@@ -26,12 +26,12 @@ amount of bytes per unit.
 template <typename T>
 requires std::integral<T> || std::floating_point<T>
 size_t constexpr convertMemoryUnitsToBytes(const T& amountOfUnits,
-                                           const size_t& numberOfBytesPerUnit) {
+                                           const size_t& numBytesPerUnit) {
   if constexpr (std::is_floating_point_v<T>) {
     // We (maybe) have to round up.
-    return static_cast<size_t>(std::ceil(amountOfUnits * numberOfBytesPerUnit));
+    return static_cast<size_t>(std::ceil(amountOfUnits * numBytesPerUnit));
   } else {
     AD_CORRECTNESS_CHECK(std::is_integral_v<T>);
-    return amountOfUnits * numberOfBytesPerUnit;
+    return amountOfUnits * numBytesPerUnit;
   }
 }

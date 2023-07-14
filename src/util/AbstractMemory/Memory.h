@@ -77,43 +77,43 @@ namespace memory_literals {
 size_t constexpr operator""_Byte(unsigned long long int bytes) { return bytes; }
 
 size_t constexpr operator""_KB(long double kilobytes) {
-  return convertMemoryUnitsToBytes(kilobytes, numberOfBytesPerKB);
+  return convertMemoryUnitsToBytes(kilobytes, numBytesPerKB);
 }
 
 size_t constexpr operator""_KB(unsigned long long int kilobytes) {
-  return convertMemoryUnitsToBytes(kilobytes, numberOfBytesPerKB);
+  return convertMemoryUnitsToBytes(kilobytes, numBytesPerKB);
 }
 
 size_t constexpr operator""_MB(long double megabytes) {
-  return convertMemoryUnitsToBytes(megabytes, numberOfBytesPerMB);
+  return convertMemoryUnitsToBytes(megabytes, numBytesPerMB);
 }
 
 size_t constexpr operator""_MB(unsigned long long int megabytes) {
-  return convertMemoryUnitsToBytes(megabytes, numberOfBytesPerMB);
+  return convertMemoryUnitsToBytes(megabytes, numBytesPerMB);
 }
 
 size_t constexpr operator""_GB(long double gigabytes) {
-  return convertMemoryUnitsToBytes(gigabytes, numberOfBytesPerGB);
+  return convertMemoryUnitsToBytes(gigabytes, numBytesPerGB);
 }
 
 size_t constexpr operator""_GB(unsigned long long int gigabytes) {
-  return convertMemoryUnitsToBytes(gigabytes, numberOfBytesPerGB);
+  return convertMemoryUnitsToBytes(gigabytes, numBytesPerGB);
 }
 
 size_t constexpr operator""_TB(long double terabytes) {
-  return convertMemoryUnitsToBytes(terabytes, numberOfBytesPerTB);
+  return convertMemoryUnitsToBytes(terabytes, numBytesPerTB);
 }
 
 size_t constexpr operator""_TB(unsigned long long int terabytes) {
-  return convertMemoryUnitsToBytes(terabytes, numberOfBytesPerTB);
+  return convertMemoryUnitsToBytes(terabytes, numBytesPerTB);
 }
 
 size_t constexpr operator""_PB(long double petabytes) {
-  return convertMemoryUnitsToBytes(petabytes, numberOfBytesPerPB);
+  return convertMemoryUnitsToBytes(petabytes, numBytesPerPB);
 }
 
 size_t constexpr operator""_PB(unsigned long long int petabytes) {
-  return convertMemoryUnitsToBytes(petabytes, numberOfBytesPerPB);
+  return convertMemoryUnitsToBytes(petabytes, numBytesPerPB);
 }
 }  // namespace memory_literals
 

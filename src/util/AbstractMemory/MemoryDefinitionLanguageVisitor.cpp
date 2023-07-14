@@ -37,19 +37,19 @@ size_t ToSizeTMemoryDefinitionLanguageVisitor::visitMemoryUnitDefinition(
   size_t bytesPerUnit{0};
   switch (ad_utility::getLowercase(context->MEMORY_UNIT()->getText()).front()) {
     case 'k':
-      bytesPerUnit = numberOfBytesPerKB;
+      bytesPerUnit = numBytesPerKB;
       break;
     case 'm':
-      bytesPerUnit = numberOfBytesPerMB;
+      bytesPerUnit = numBytesPerMB;
       break;
     case 'g':
-      bytesPerUnit = numberOfBytesPerGB;
+      bytesPerUnit = numBytesPerGB;
       break;
     case 't':
-      bytesPerUnit = numberOfBytesPerTB;
+      bytesPerUnit = numBytesPerTB;
       break;
     case 'p':
-      bytesPerUnit = numberOfBytesPerPB;
+      bytesPerUnit = numBytesPerPB;
       break;
     default:
       // Whatever this is, it is false.
