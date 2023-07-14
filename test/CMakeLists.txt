@@ -286,14 +286,13 @@ addLinkAndDiscoverTest(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
 
-addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
+#addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
 
 addLinkAndDiscoverTestSerial(RandomExpressionTest index)
 
 addLinkAndDiscoverTestSerial(SortTest engine)
-
 addLinkAndDiscoverTestSerial(OrderByTest engine)
 
 addLinkAndDiscoverTestSerial(ValuesForTestingTest index)

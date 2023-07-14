@@ -395,11 +395,20 @@ bool TurtleParser<T>::rdfLiteral() {
           type == XSD_UNSIGNED_SHORT_TYPE ||
           type == XSD_POSITIVE_INTEGER_TYPE) {
         parseIntegerConstant(strippedLiteral);
-      } else if (type == XSD_BOOLEAN_TYPE &&
-                 (strippedLiteral == "true" || strippedLiteral == "false")) {
-        _lastParseResult = strippedLiteral == "true";
-        // TODO<joka921> Do we want to throw an exception if the value is
-        // neither of the two?
+      } else if (type == XSD_BOOLEAN_TYPE) {
+        if (strippedLiteral == "true") {
+          _lastParseResult = true;
+        } else if (strippedLiteral == "false") {
+          _lastParseResult = false;
+        } else {
+          LOG(DEBUG)
+              << literalString.get()
+              << " could not be parsed as a boolean object of type " << typeIri
+              << ". It is treated as a plain string literal without datatype "
+                 "instead"
+              << std::endl;
+          _lastParseResult = TripleComponent::Literal{literalString};
+        }
       } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
                  type == XSD_FLOAT_TYPE) {
         parseDoubleConstant(strippedLiteral);

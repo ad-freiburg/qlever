@@ -133,13 +133,13 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
 
 // ___________________________________________________________________________
 std::optional<std::pair<std::string, const char*>>
-ExportQueryExecutionTrees::idToStringAndTypeOnlyEncoded(Id id) {
+ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
   switch (id.getDatatype()) {
     case Datatype::Undefined:
       return std::nullopt;
     case Datatype::Double:
       // We use the immediately invoked lambda here because putting this block
-      // in braces confuses the coverage tool.
+      // in braces confuses the test coverage tool.
       return [id] {
         // Format as integer if fractional part is zero, let C++ decide
         // otherwise.
@@ -185,7 +185,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     case Datatype::Bool:
     case Datatype::Int:
     case Datatype::Date:
-      return idToStringAndTypeOnlyEncoded(id);
+      return idToStringAndTypeForEncodedValue(id);
     case Datatype::VocabIndex: {
       // TODO<joka921> As soon as we get rid of the special encoding of date
       // values, we can use `index.getVocab().indexToOptionalString()` directly.

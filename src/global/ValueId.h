@@ -180,7 +180,7 @@ class ValueId {
     return IntegerType::fromNBit(_bits);
   }
 
-  /// Create a `ValueId` for a boolean value
+  /// Create a `ValueId` for a boolean value.
   static ValueId makeFromBool(bool b) noexcept {
     auto bits = static_cast<T>(b);
     return addDatatypeBits(bits, Datatype::Bool);

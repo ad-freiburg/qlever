@@ -696,7 +696,7 @@ TEST(ExportQueryExecutionTree, CornerCases) {
                                                    LocalVocab{}),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ExportQueryExecutionTrees::idToStringAndTypeOnlyEncoded(
+      ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(
           ad_utility::testing::VocabId(12)),
       ::testing::ContainsRegex("should be unreachable"));
 }
