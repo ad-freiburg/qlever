@@ -8,7 +8,6 @@
 #include <string_view>
 #include <tuple>
 
-#include "util/AbstractMemory/CalculationUtil.h"
 #include "util/AbstractMemory/Memory.h"
 #include "util/AbstractMemory/MemoryDefinitionLanguageVisitor.h"
 #include "util/AbstractMemory/generated/MemoryDefinitionLanguageLexer.h"
@@ -16,6 +15,32 @@
 #include "util/antlr/ANTLRErrorHandling.h"
 
 namespace ad_utility {
+// Just the number of bytes per memory unit.
+constexpr size_t numBytesPerKB = ad_utility::pow<size_t>(2, 10);
+constexpr size_t numBytesPerMB = ad_utility::pow<size_t>(2, 20);
+constexpr size_t numBytesPerGB = ad_utility::pow<size_t>(2, 30);
+constexpr size_t numBytesPerTB = ad_utility::pow<size_t>(2, 40);
+constexpr size_t numBytesPerPB = ad_utility::pow<size_t>(2, 50);
+
+/*
+@brief Calculate the amount of bytes for a given amount of untis and a given
+amount of bytes per unit.
+
+@return The amount of bytes. Rounded up, if needed.
+*/
+template <typename T>
+requires std::integral<T> || std::floating_point<T>
+size_t constexpr convertMemoryUnitsToBytes(const T& amountOfUnits,
+                                           const size_t& numBytesPerUnit) {
+  if constexpr (std::is_floating_point_v<T>) {
+    // We (maybe) have to round up.
+    return static_cast<size_t>(std::ceil(amountOfUnits * numBytesPerUnit));
+  } else {
+    AD_CORRECTNESS_CHECK(std::is_integral_v<T>);
+    return amountOfUnits * numBytesPerUnit;
+  }
+}
+
 // _____________________________________________________________________________
 Memory Memory::bytes(size_t numBytes) { return Memory{numBytes}; }
 

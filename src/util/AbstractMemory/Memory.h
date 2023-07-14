@@ -11,7 +11,6 @@
 #include <string>
 #include <type_traits>
 
-#include "util/AbstractMemory/CalculationUtil.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
