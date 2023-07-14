@@ -6,18 +6,6 @@
 
 #include "./IndexImpl.h"
 
-#include <CompilationInfo.h>
-#include <absl/strings/str_join.h>
-#include <index/PrefixHeuristic.h>
-#include <index/TriplesView.h>
-#include <index/VocabularyGenerator.h>
-#include <parser/ParallelParseBuffer.h>
-#include <util/BatchedPipeline.h>
-#include <util/CompressionUsingZstd/ZstdWrapper.h>
-#include <util/HashMap.h>
-#include <util/Serializer/FileSerializer.h>
-#include <util/TupleHelpers.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -26,6 +14,19 @@
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_map>
+
+#include "CompilationInfo.h"
+#include "absl/strings/str_join.h"
+#include "index/IndexVersion.h"
+#include "index/PrefixHeuristic.h"
+#include "index/TriplesView.h"
+#include "index/VocabularyGenerator.h"
+#include "parser/ParallelParseBuffer.h"
+#include "util/BatchedPipeline.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/HashMap.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/TupleHelpers.h"
 
 using std::array;
 
@@ -788,6 +789,7 @@ void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
   auto configuration = configurationJson_;
   configuration["git_hash"] = std::string(qlever::version::GitHash);
+  configuration["index-version"] = qlever::indexVersion();
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
@@ -804,6 +806,27 @@ void IndexImpl::readConfiguration() {
     LOG(INFO) << "The index was built before git commit hashes were stored in "
                  "the index meta data"
               << std::endl;
+  }
+
+  if (configurationJson_.find("index-version") != configurationJson_.end()) {
+    auto indexVersion = configurationJson_["index-version"];
+    auto currentVersion = qlever::indexVersion();
+    if (indexVersion != currentVersion) {
+      LOG(ERROR) << "The index is not compatible with this version of QLever. "
+                    "Please rebuild your index. The version of the index is \n"
+                 << indexVersion.dump(4)
+                 << "\n   The current version of Qlever's index is \n"
+                 << currentVersion << std::endl;
+      throw std::runtime_error{
+          "Incompatible index version, see log message for details"};
+    }
+  } else {
+    LOG(ERROR) << "This index was built before versioning was introduced for "
+                  "QLevers indexes. Please rebuild your index using the "
+                  "current version of QLever."
+               << std::endl;
+    throw std::runtime_error{
+        "No index version found, see log message for details"};
   }
 
   if (configurationJson_.find("prefixes") != configurationJson_.end()) {
