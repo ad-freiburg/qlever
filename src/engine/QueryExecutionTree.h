@@ -200,13 +200,14 @@ class QueryExecutionTree {
   // trees for two different trees, the sort columns of which are specified as
   // a vector of two-dimensional arrays. This format often appears in
   // `QueryPlanner.cpp`.
-  static std::array<std::shared_ptr<QueryExecutionTree>, 2> createSortedTrees(
-      std::shared_ptr<QueryExecutionTree> qetA,
-      std::shared_ptr<QueryExecutionTree> qetB,
-      const vector<std::array<ColumnIndex, 2>>& sortColumns);
+  static std::pair<std::shared_ptr<QueryExecutionTree>,
+                   shared_ptr<QueryExecutionTree>>
+  createSortedTrees(std::shared_ptr<QueryExecutionTree> qetA,
+                    std::shared_ptr<QueryExecutionTree> qetB,
+                    const vector<std::array<ColumnIndex, 2>>& sortColumns);
 
   // The return type of the `getSortedTreesAndJoinColumns` function below. It is
-  // deliberately stored as a tuple vs a struct with named members, so that we
+  // deliberately stored as a tuple vs. a struct with named members, so that we
   // can use `std::tie` on it (see for example `MultiColumnJoin.cpp`).
   using SortedTreesAndJoinColumns =
       std::tuple<std::shared_ptr<QueryExecutionTree>,
@@ -220,10 +221,10 @@ class QueryExecutionTree {
       std::shared_ptr<QueryExecutionTree> qetA,
       std::shared_ptr<QueryExecutionTree> qetB);
 
-  // Return the pairs of columns where the two `QueryExecutionTree`s have the
+  // Return the column pairs where the two `QueryExecutionTree`s have the
   // same variable. The result is sorted by the column indices, so that it is
-  // consistent between multiple calls. This is important to find qetA
-  // QueryExecutionTree in the cache.
+  // deterministic when called repeatedly. This is important to find a
+  // `QueryExecutionTree` in the cache.
   static std::vector<std::array<ColumnIndex, 2>> getJoinColumns(
       const QueryExecutionTree& qetA, const QueryExecutionTree& qetB);
 

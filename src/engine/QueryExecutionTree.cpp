@@ -280,10 +280,10 @@ std::vector<std::array<ColumnIndex, 2>> QueryExecutionTree::getJoinColumns(
   const auto& aVarCols = qetA.getVariableColumns();
   const auto& bVarCols = qetB.getVariableColumns();
   for (const auto& aVarCol : aVarCols) {
-    auto itt = bVarCols.find(aVarCol.first);
-    if (itt != bVarCols.end()) {
+    auto it = bVarCols.find(aVarCol.first);
+    if (it != bVarCols.end()) {
       jcs.push_back(std::array<ColumnIndex, 2>{
-          {aVarCol.second.columnIndex_, itt->second.columnIndex_}});
+          {aVarCol.second.columnIndex_, it->second.columnIndex_}});
     }
   }
 
@@ -292,7 +292,7 @@ std::vector<std::array<ColumnIndex, 2>> QueryExecutionTree::getJoinColumns(
 }
 
 // ____________________________________________________________________________
-std::array<std::shared_ptr<QueryExecutionTree>, 2>
+std::pair<std::shared_ptr<QueryExecutionTree>, shared_ptr<QueryExecutionTree>>
 QueryExecutionTree::createSortedTrees(
     std::shared_ptr<QueryExecutionTree> qetA,
     std::shared_ptr<QueryExecutionTree> qetB,

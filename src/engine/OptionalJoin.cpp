@@ -52,10 +52,8 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
   }
 
   // The inputs must be sorted by the join columns.
-  auto [sortedLeft, sortedRight] = QueryExecutionTree::createSortedTrees(
+  std::tie(_left, _right) = QueryExecutionTree::createSortedTrees(
       std::move(_left), std::move(_right), _joinColumns);
-  _left = std::move(sortedLeft);
-  _right = std::move(sortedRight);
 }
 
 // _____________________________________________________________________________
