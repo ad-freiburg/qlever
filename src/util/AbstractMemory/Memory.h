@@ -70,6 +70,7 @@ class Memory {
 };
 
 // User defined literals for memory units.
+namespace memory_literals {
 size_t constexpr operator""_Byte(unsigned long long int bytes) { return bytes; }
 
 size_t constexpr operator""_KB(long double kilobytes) {
@@ -111,4 +112,6 @@ size_t constexpr operator""_PB(long double petabytes) {
 size_t constexpr operator""_PB(unsigned long long int petabytes) {
   return convertMemoryUnitsToBytes(petabytes, numberOfBytesPerPB);
 }
+}  // namespace memory_literals
+
 }  // namespace ad_utility

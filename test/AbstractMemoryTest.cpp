@@ -14,12 +14,7 @@
 #include "util/AbstractMemory/Memory.h"
 
 // Importing all the literals.
-using ad_utility::operator""_Byte;
-using ad_utility::operator""_KB;
-using ad_utility::operator""_MB;
-using ad_utility::operator""_GB;
-using ad_utility::operator""_TB;
-using ad_utility::operator""_PB;
+using namespace ad_utility::memory_literals;
 
 TEST(AbstractMemory, UserDefinedLiterals) {
   // Normal bytes.
