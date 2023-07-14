@@ -2,16 +2,17 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (Januar of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../test/util/IdTableHelpers.h"
-
 #include <absl/strings/str_cat.h>
 
+#include <algorithm>
 #include <utility>
 
+#include "../test/util/IdTableHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
+#include "util/Forward.h"
 
 // ____________________________________________________________________________
 void compareIdTableWithExpectedContent(
@@ -75,19 +76,21 @@ IdTable generateIdTable(
   table.resize(numberRows);
 
   // Fill the table.
-  for (auto restrictedRow = table.begin(); restrictedRow != table.end();
-       restrictedRow++) {
-    // Make sure, that the generated row has the right
-    // size, before using it.
-    std::vector<ValueId> generatedRow = rowGenerator();
-    AD_CONTRACT_CHECK(generatedRow.size() == numberColumns);
+  std::ranges::for_each(
+      /*
+      The iterator of an `IdTable` dereference to an `row_reference_restricted`,
+      which only allows write access, if it is a r-value. Otherwise, we can't
+      manipulate the content of the row.
+      */
+      table,
+      [&rowGenerator, &numberColumns](auto&& row) -> void {
+        // Make sure, that the generated row has the right
+        // size, before using it.
+        std::vector<ValueId> generatedRow = rowGenerator();
+        AD_CONTRACT_CHECK(generatedRow.size() == numberColumns);
 
-    // The iterators of `IdTable` never directly give write access. Instead you
-    // have to cast them, before writting to them.
-    std::ranges::copy(
-        std::move(generatedRow),
-        static_cast<IdTable::row_reference>(*restrictedRow).begin());
-  }
+        std::ranges::copy(std::move(generatedRow), AD_FWD(row).begin());
+      });
 
   return table;
 }
