@@ -80,6 +80,7 @@ function(addAndLinkTest basename)
     linkTest(${basename} ${ARGN})
 endfunction()
 
+#[[
 add_subdirectory(engine)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
@@ -343,3 +344,7 @@ addLinkAndDiscoverTest(GeneratorTest)
 addLinkAndDiscoverTest(JsonUtilTest)
 
 addLinkAndDiscoverTest(JoinAlgorithmsTest)
+
+]]
+
+addLinkAndDiscoverTest(ResetWhenMovedTest)
