@@ -59,6 +59,42 @@ inline std::string_view stripDoubleQuotes(std::string_view input) {
   return input;
 }
 
+// A base class for all the different turtle parsers.
+class TurtleParserBase {
+ public:
+  // Wrapper to getLine that is expected by the rest of QLever
+  bool getLine(TurtleTriple& triple) { return getLine(&triple); }
+
+  // Main access method to the parser
+  // If a triple can be parsed (or has previously been parsed and stored
+  // Writes the triple to the argument (format subject, object predicate)
+  // returns true iff a triple can be successfully written, else the triple
+  // value is invalid and the parser is at the end of the input.
+  virtual bool getLine(TurtleTriple* triple) = 0;
+
+  // Get the offset (relative to the beginning of the file) of the first byte
+  // that has not yet been dealt with by the parser.
+  [[nodiscard]] virtual size_t getParsePosition() const = 0;
+
+  virtual std::optional<std::vector<TurtleTriple>> getBatch() {
+    std::vector<TurtleTriple> result;
+    result.reserve(100'000);
+    for (size_t i = 0; i < 100'000; ++i) {
+      result.emplace_back();
+      bool success = getLine(result.back());
+      if (!success) {
+        result.resize(result.size() - 1);
+        break;
+      }
+    }
+    if (result.empty()) {
+      return std::nullopt;
+    }
+    return result;
+  }
+};
+
+
 /**
  * @brief The actual parser class
  *
@@ -72,7 +108,7 @@ inline std::string_view stripDoubleQuotes(std::string_view input) {
  * @tparam Tokenizer_T
  */
 template <class Tokenizer_T>
-class TurtleParser {
+class TurtleParser : public TurtleParserBase {
  public:
   using ParseException = ::ParseException;
 
@@ -132,20 +168,6 @@ class TurtleParser {
   TurtleParser() = default;
   TurtleParser(TurtleParser&& rhs) noexcept = default;
   TurtleParser& operator=(TurtleParser&& rhs) noexcept = default;
-
-  // Wrapper to getLine that is expected by the rest of QLever
-  bool getLine(TurtleTriple& triple) { return getLine(&triple); }
-
-  // Main access method to the parser
-  // If a triple can be parsed (or has previously been parsed and stored
-  // Writes the triple to the argument (format subject, object predicate)
-  // returns true iff a triple can be successfully written, else the triple
-  // value is invalid and the parser is at the end of the input.
-  virtual bool getLine(TurtleTriple* triple) = 0;
-
-  // Get the offset (relative to the beginning of the file) of the first byte
-  // that has not yet been dealt with by the parser.
-  [[nodiscard]] virtual size_t getParsePosition() const = 0;
 
   // Specifies the behavior if an integer literal overflows.
   TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() {
@@ -605,7 +627,7 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
 
   bool getLine(TurtleTriple* triple) override;
 
-  std::optional<std::vector<TurtleTriple>> getBatch();
+  std::optional<std::vector<TurtleTriple>> getBatch() override;
 
   void printAndResetQueueStatistics() {
     LOG(TIMING) << parallelParser.getTimeStatistics() << '\n';
@@ -630,7 +652,7 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   // defaults to a global constant
   size_t _bufferSize = FILE_BUFFER_SIZE();
 
-  ParallelBufferWithEndRegex _fileBuffer{_bufferSize, "\\. *(\\n)"};
+  ParallelBufferWithEndRegex _fileBuffer{_bufferSize, R"-(\.[\t ]*([\r\n]+))-"};
 
   ad_utility::TaskQueue<true> tripleCollector{QUEUE_SIZE_AFTER_PARALLEL_PARSING,
                                               0, "triple collector"};

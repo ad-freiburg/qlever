@@ -238,12 +238,13 @@ template void IndexImpl::createFromFile<TurtleParserAuto>(
     const string& filename);
 
 // _____________________________________________________________________________
-template <class Parser>
-IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
-    const string& filename, size_t linesPerPartial) {
+IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(std::shared_ptr<TurtleParserBase> parser,
+    size_t linesPerPartial) {
+  /*
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
   auto parser = std::make_shared<Parser>(filename);
+   */
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   std::unique_ptr<TripleVec> idTriples(new TripleVec());
@@ -308,9 +309,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                     << std::endl;
       }
 
-      if constexpr (requires(Parser p) { p.printAndResetQueueStatistics(); }) {
-        parser->printAndResetQueueStatistics();
-      }
+      parser->printAndResetQueueStatistics();
     }
 
     // localWriter.finish();

@@ -91,11 +91,13 @@ ParallelBufferWithEndRegex::getNextBlock() {
   auto endPosition = findRegexNearEnd(rawInput.value(), _endRegex);
   if (!endPosition) {
     if (_rawBuffer.getNextBlock()) {
-      throw std::runtime_error(
-          "The regex which marks the end of a statement was not found at "
+      throw std::runtime_error(absl::StrCat(
+          "The regex \"", _endRegexAsString,
+          "\" which marks the end of a statement was not found at "
           "all within a single batch that was not the last one. Please "
           "increase the FILE_BUFFER_SIZE "
-          "or choose a different parser");
+          "or choose a different parser that parses the input files "
+          "serially."));
     }
     // This was the last (possibly incomplete) block, simply concatenate
     endPosition = rawInput->size();

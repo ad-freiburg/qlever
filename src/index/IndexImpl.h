@@ -430,8 +430,7 @@ class IndexImpl {
   IndexBuilderDataAsPsoSorter createIdTriplesAndVocab(const string& ntFile);
 
   // ___________________________________________________________________
-  template <class Parser>
-  IndexBuilderDataAsStxxlVector passFileForVocabulary(const string& ntFile,
+  IndexBuilderDataAsStxxlVector passFileForVocabulary(std::shared_ptr<TurtleParserBase> parser,
                                                       size_t linesPerPartial);
 
   /**
