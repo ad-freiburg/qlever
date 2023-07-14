@@ -2,12 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (Januar of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "../test/util/IdTableHelpers.h"
+
 #include <absl/strings/str_cat.h>
 
 #include <algorithm>
 #include <utility>
 
-#include "../test/util/IdTableHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
@@ -82,14 +83,13 @@ IdTable generateIdTable(
       which only allows write access, if it is a r-value. Otherwise, we can't
       manipulate the content of the row.
       */
-      table,
-      [&rowGenerator, &numberColumns](auto&& row) -> void {
+      table, [&rowGenerator, &numberColumns](auto&& row) -> void {
         // Make sure, that the generated row has the right
         // size, before using it.
         std::vector<ValueId> generatedRow = rowGenerator();
         AD_CONTRACT_CHECK(generatedRow.size() == numberColumns);
 
-        std::ranges::copy(std::move(generatedRow), AD_FWD(row).begin());
+        std::ranges::copy(generatedRow, AD_FWD(row).begin());
       });
 
   return table;
