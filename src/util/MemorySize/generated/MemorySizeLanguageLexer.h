@@ -1,5 +1,5 @@
 
-// Generated from MemoryDefinitionLanguage.g4 by ANTLR 4.13.0
+// Generated from MemorySizeLanguage.g4 by ANTLR 4.13.0
 
 #pragma once
 
@@ -9,15 +9,15 @@
 
 
 
-class  MemoryDefinitionLanguageLexer : public antlr4::Lexer {
+class  MemorySizeLanguageLexer : public antlr4::Lexer {
 public:
   enum {
     MEMORY_UNIT = 1, BYTE = 2, UNSIGNED_INTEGER = 3, FLOAT = 4, WHITESPACE = 5
   };
 
-  explicit MemoryDefinitionLanguageLexer(antlr4::CharStream *input);
+  explicit MemorySizeLanguageLexer(antlr4::CharStream *input);
 
-  ~MemoryDefinitionLanguageLexer() override;
+  ~MemorySizeLanguageLexer() override;
 
 
   std::string getGrammarFileName() const override;

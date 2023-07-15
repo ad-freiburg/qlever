@@ -6,38 +6,38 @@
 
 #include <string>
 
-#include "util/AbstractMemory/Memory.h"
-#include "util/AbstractMemory/MemoryDefinitionLanguageVisitor.h"
 #include "util/Exception.h"
+#include "util/MemorySize/MemorySize.h"
+#include "util/MemorySize/MemorySizeLanguageVisitor.h"
 #include "util/StringUtils.h"
 
 // ____________________________________________________________________________
-ad_utility::Memory
-ToMemoryInstanceMemoryDefinitionLanguageVisitor::visitMemoryDefinitionString(
-    Parser::MemoryDefinitionStringContext* context) const {
-  if (context->pureByteDefinition()) {
-    return visitPureByteDefinition(context->pureByteDefinition());
+ad_utility::MemorySize
+ToMemorySizeInstanceMemorySizeLanguageVisitor::visitMemorySizeString(
+    Parser::MemorySizeStringContext* context) const {
+  if (context->pureByteSize()) {
+    return visitPureByteSize(context->pureByteSize());
   } else {
-    // Must be a `memoryUnitDefinition`.
-    AD_CONTRACT_CHECK(context->memoryUnitDefinition());
-    return visitMemoryUnitDefinition(context->memoryUnitDefinition());
+    // Must be a `memoryUnitSize`.
+    AD_CONTRACT_CHECK(context->memoryUnitSize());
+    return visitMemoryUnitSize(context->memoryUnitSize());
   }
 }
 
 // ____________________________________________________________________________
-ad_utility::Memory
-ToMemoryInstanceMemoryDefinitionLanguageVisitor::visitPureByteDefinition(
-    Parser::PureByteDefinitionContext* context) const {
-  return ad_utility::Memory::bytes(
+ad_utility::MemorySize
+ToMemorySizeInstanceMemorySizeLanguageVisitor::visitPureByteSize(
+    Parser::PureByteSizeContext* context) const {
+  return ad_utility::MemorySize::bytes(
       std::stoul(context->UNSIGNED_INTEGER()->getText()));
 }
 
 // ____________________________________________________________________________
-ad_utility::Memory
-ToMemoryInstanceMemoryDefinitionLanguageVisitor::visitMemoryUnitDefinition(
-    Parser::MemoryUnitDefinitionContext* context) const {
+ad_utility::MemorySize
+ToMemorySizeInstanceMemorySizeLanguageVisitor::visitMemoryUnitSize(
+    Parser::MemoryUnitSizeContext* context) const {
   /*
-  Create an instance of `Memory`.
+  Create an instance of `MemorySize`.
 
   @param memoryUnit Which memory unit to use for the creation. Must be one of:
   - 'k' (KB)
@@ -48,23 +48,23 @@ ToMemoryInstanceMemoryDefinitionLanguageVisitor::visitMemoryUnitDefinition(
   @param numUnits Amount of kilobytes, megabytes, etc..
   */
   auto createMemoryInstance = [](char memoryUnit, auto numUnits) {
-    ad_utility::Memory toReturn;
+    ad_utility::MemorySize toReturn;
 
     switch (memoryUnit) {
       case 'k':
-        toReturn = ad_utility::Memory::kilobytes(numUnits);
+        toReturn = ad_utility::MemorySize::kilobytes(numUnits);
         break;
       case 'm':
-        toReturn = ad_utility::Memory::megabytes(numUnits);
+        toReturn = ad_utility::MemorySize::megabytes(numUnits);
         break;
       case 'g':
-        toReturn = ad_utility::Memory::gigabytes(numUnits);
+        toReturn = ad_utility::MemorySize::gigabytes(numUnits);
         break;
       case 't':
-        toReturn = ad_utility::Memory::terabytes(numUnits);
+        toReturn = ad_utility::MemorySize::terabytes(numUnits);
         break;
       case 'p':
-        toReturn = ad_utility::Memory::petabytes(numUnits);
+        toReturn = ad_utility::MemorySize::petabytes(numUnits);
         break;
       default:
         // Whatever this is, it is false.

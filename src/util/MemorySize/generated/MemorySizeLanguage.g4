@@ -2,13 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (July of 2023, schlegea@informatik.uni-freiburg.de)
 
-grammar MemoryDefinitionLanguage;
+grammar MemorySizeLanguage;
 
 // Parser rules
 
-memoryDefinitionString : (pureByteDefinition | memoryUnitDefinition) EOF;
-pureByteDefinition : UNSIGNED_INTEGER BYTE;
-memoryUnitDefinition : (UNSIGNED_INTEGER | FLOAT) MEMORY_UNIT;
+memorySizeString : (pureByteSize | memoryUnitSize) EOF;
+pureByteSize : UNSIGNED_INTEGER BYTE;
+memoryUnitSize : (UNSIGNED_INTEGER | FLOAT) MEMORY_UNIT;
 
 // Lexer rules
 

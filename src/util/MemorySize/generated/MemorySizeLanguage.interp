@@ -15,9 +15,9 @@ FLOAT
 WHITESPACE
 
 rule names:
-memoryDefinitionString
-pureByteDefinition
-memoryUnitDefinition
+memorySizeString
+pureByteSize
+memoryUnitSize
 
 
 atn:

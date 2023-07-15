@@ -12,17 +12,17 @@
 #include <sstream>
 #include <vector>
 
-#include "util/AbstractMemory/Memory.h"
 #include "util/ConstexprMap.h"
+#include "util/MemorySize/MemorySize.h"
 
 // Importing all the literals.
 using namespace ad_utility::memory_literals;
 
 // A small helper, because you can't call member functions on user defined
 // literals.
-size_t getBytes(const ad_utility::Memory& m) { return m.bytes(); };
+size_t getBytes(const ad_utility::MemorySize& m) { return m.bytes(); };
 
-TEST(AbstractMemory, UserDefinedLiterals) {
+TEST(MemorySize, UserDefinedLiterals) {
   // Normal bytes.
   ASSERT_EQ(50uL, getBytes(50_Byte));
 
@@ -103,8 +103,8 @@ constexpr ad_utility::ConstexprMap<std::string_view, AllMemoryUnitSizes, 6>
 /*
 Checks all the getters of the class with the wanted memory sizes.
 */
-void checkAllMemoryGetter(const ad_utility::Memory& m,
-                          const AllMemoryUnitSizes& ms) {
+void checkAllMemorySizeGetter(const ad_utility::MemorySize& m,
+                              const AllMemoryUnitSizes& ms) {
   ASSERT_EQ(m.bytes(), ms.bytes);
   ASSERT_DOUBLE_EQ(m.kilobytes(), ms.kilobytes);
   ASSERT_DOUBLE_EQ(m.megabytes(), ms.megabytes);
@@ -113,68 +113,69 @@ void checkAllMemoryGetter(const ad_utility::Memory& m,
   ASSERT_DOUBLE_EQ(m.petabytes(), ms.petabytes);
 }
 
-TEST(AbstractMemory, MemoryConstructor) {
+TEST(MemorySize, MemorySizeConstructor) {
   // Default constructor.
-  ad_utility::Memory m1;
-  checkAllMemoryGetter(m1, AllMemoryUnitSizes{0uL, 0.0, 0.0, 0.0, 0.0, 0.0});
+  ad_utility::MemorySize m1;
+  checkAllMemorySizeGetter(m1,
+                           AllMemoryUnitSizes{0uL, 0.0, 0.0, 0.0, 0.0, 0.0});
 
   // Factory functions for size_t overload.
-  checkAllMemoryGetter(ad_utility::Memory::bytes(1uL),
-                       singleMemoryUnitSizes.at("Byte"));
-  checkAllMemoryGetter(ad_utility::Memory::kilobytes(1uL),
-                       singleMemoryUnitSizes.at("KB"));
-  checkAllMemoryGetter(ad_utility::Memory::megabytes(1uL),
-                       singleMemoryUnitSizes.at("MB"));
-  checkAllMemoryGetter(ad_utility::Memory::gigabytes(1uL),
-                       singleMemoryUnitSizes.at("GB"));
-  checkAllMemoryGetter(ad_utility::Memory::terabytes(1uL),
-                       singleMemoryUnitSizes.at("TB"));
-  checkAllMemoryGetter(ad_utility::Memory::petabytes(1uL),
-                       singleMemoryUnitSizes.at("PB"));
+  checkAllMemorySizeGetter(ad_utility::MemorySize::bytes(1uL),
+                           singleMemoryUnitSizes.at("Byte"));
+  checkAllMemorySizeGetter(ad_utility::MemorySize::kilobytes(1uL),
+                           singleMemoryUnitSizes.at("KB"));
+  checkAllMemorySizeGetter(ad_utility::MemorySize::megabytes(1uL),
+                           singleMemoryUnitSizes.at("MB"));
+  checkAllMemorySizeGetter(ad_utility::MemorySize::gigabytes(1uL),
+                           singleMemoryUnitSizes.at("GB"));
+  checkAllMemorySizeGetter(ad_utility::MemorySize::terabytes(1uL),
+                           singleMemoryUnitSizes.at("TB"));
+  checkAllMemorySizeGetter(ad_utility::MemorySize::petabytes(1uL),
+                           singleMemoryUnitSizes.at("PB"));
 
   // Factory functions for double overload.
-  checkAllMemoryGetter(ad_utility::Memory::kilobytes(1.0),
-                       singleMemoryUnitSizes.at("KB"));
-  checkAllMemoryGetter(ad_utility::Memory::megabytes(1.0),
-                       singleMemoryUnitSizes.at("MB"));
-  checkAllMemoryGetter(ad_utility::Memory::gigabytes(1.0),
-                       singleMemoryUnitSizes.at("GB"));
-  checkAllMemoryGetter(ad_utility::Memory::terabytes(1.0),
-                       singleMemoryUnitSizes.at("TB"));
-  checkAllMemoryGetter(ad_utility::Memory::petabytes(1.0),
-                       singleMemoryUnitSizes.at("PB"));
+  checkAllMemorySizeGetter(ad_utility::MemorySize::kilobytes(1.0),
+                           singleMemoryUnitSizes.at("KB"));
+  checkAllMemorySizeGetter(ad_utility::MemorySize::megabytes(1.0),
+                           singleMemoryUnitSizes.at("MB"));
+  checkAllMemorySizeGetter(ad_utility::MemorySize::gigabytes(1.0),
+                           singleMemoryUnitSizes.at("GB"));
+  checkAllMemorySizeGetter(ad_utility::MemorySize::terabytes(1.0),
+                           singleMemoryUnitSizes.at("TB"));
+  checkAllMemorySizeGetter(ad_utility::MemorySize::petabytes(1.0),
+                           singleMemoryUnitSizes.at("PB"));
 }
 
-TEST(AbstractMemory, AssignmentOperator) {
-  ad_utility::Memory m;
-  checkAllMemoryGetter(m, AllMemoryUnitSizes{0uL, 0.0, 0.0, 0.0, 0.0, 0.0});
+TEST(MemorySize, AssignmentOperator) {
+  ad_utility::MemorySize m;
+  checkAllMemorySizeGetter(m, AllMemoryUnitSizes{0uL, 0.0, 0.0, 0.0, 0.0, 0.0});
 
   m = 1_Byte;
-  checkAllMemoryGetter(m, singleMemoryUnitSizes.at("Byte"));
+  checkAllMemorySizeGetter(m, singleMemoryUnitSizes.at("Byte"));
 
   m = 1_KB;
-  checkAllMemoryGetter(m, singleMemoryUnitSizes.at("KB"));
+  checkAllMemorySizeGetter(m, singleMemoryUnitSizes.at("KB"));
 
   m = 1_MB;
-  checkAllMemoryGetter(m, singleMemoryUnitSizes.at("MB"));
+  checkAllMemorySizeGetter(m, singleMemoryUnitSizes.at("MB"));
 
   m = 1_GB;
-  checkAllMemoryGetter(m, singleMemoryUnitSizes.at("GB"));
+  checkAllMemorySizeGetter(m, singleMemoryUnitSizes.at("GB"));
 
   m = 1_TB;
-  checkAllMemoryGetter(m, singleMemoryUnitSizes.at("TB"));
+  checkAllMemorySizeGetter(m, singleMemoryUnitSizes.at("TB"));
 
   m = 1_PB;
-  checkAllMemoryGetter(m, singleMemoryUnitSizes.at("PB"));
+  checkAllMemorySizeGetter(m, singleMemoryUnitSizes.at("PB"));
 }
 
-// For tests, where one is converted into the other and vice-versa.
-struct MemoryAmountAndStringRepresentation {
+// For tests, where `MemorySize` is converted into string and vice-versa.
+struct MemorySizeInByteAndStringRepresentation {
   size_t memoryAmount_;
   std::string stringRepresentation_;
 };
 
-static std::vector<MemoryAmountAndStringRepresentation>
+static std::vector<MemorySizeInByteAndStringRepresentation>
 generalAsStringTestCases() {
   return {{getBytes(50_Byte), "50 Byte"}, {getBytes(2_KB), "2 KB"},
           {getBytes(1.5_KB), "1.5 KB"},   {getBytes(2_MB), "2 MB"},
@@ -184,11 +185,12 @@ generalAsStringTestCases() {
           {getBytes(1.5_PB), "1.5 PB"}};
 }
 
-TEST(AbstractMemory, AsString) {
+TEST(MemorySize, AsString) {
   // Creates an instance with given amount of memory noted and checks the
   // expected string representation.
-  auto doTest = [](const MemoryAmountAndStringRepresentation& testCase) {
-    ad_utility::Memory mem(ad_utility::Memory::bytes(testCase.memoryAmount_));
+  auto doTest = [](const MemorySizeInByteAndStringRepresentation& testCase) {
+    ad_utility::MemorySize mem(
+        ad_utility::MemorySize::bytes(testCase.memoryAmount_));
 
     // Normal `asString`.
     ASSERT_STREQ(mem.asString().c_str(), testCase.stringRepresentation_.data());
@@ -209,16 +211,17 @@ TEST(AbstractMemory, AsString) {
   doTest({getBytes(4096_TB), "4 PB"});
 }
 
-TEST(AbstractMemory, Parse) {
+TEST(MemorySize, Parse) {
   // Parse the given string and compare to the expected amount of bytes.
-  auto doTest = [](const MemoryAmountAndStringRepresentation& testCase) {
-    ASSERT_EQ(ad_utility::Memory::parse(testCase.stringRepresentation_).bytes(),
-              testCase.memoryAmount_);
+  auto doTest = [](const MemorySizeInByteAndStringRepresentation& testCase) {
+    ASSERT_EQ(
+        ad_utility::MemorySize::parse(testCase.stringRepresentation_).bytes(),
+        testCase.memoryAmount_);
   };
 
   // Check, if parsing the given string causes an exception.
   auto doExceptionTest = [](std::string_view str) {
-    ASSERT_ANY_THROW(ad_utility::Memory{}.parse(str));
+    ASSERT_ANY_THROW(ad_utility::MemorySize{}.parse(str));
   };
 
   // General testing.
@@ -236,13 +239,13 @@ TEST(AbstractMemory, Parse) {
   // Nothing should work with negativ numbers.
   std::ranges::for_each(
       generalAsStringTestCases(), doExceptionTest,
-      [](const MemoryAmountAndStringRepresentation& testCase) {
+      [](const MemorySizeInByteAndStringRepresentation& testCase) {
         return absl::StrCat("-", testCase.stringRepresentation_);
       });
 
   // Is it truly case insensitive?
   std::ranges::for_each(
-      std::vector<MemoryAmountAndStringRepresentation>{
+      std::vector<MemorySizeInByteAndStringRepresentation>{
           {getBytes(42_Byte), "42 BYTE"}, {getBytes(42_Byte), "42 BYTe"},
           {getBytes(42_Byte), "42 BYtE"}, {getBytes(42_Byte), "42 BYte"},
           {getBytes(42_Byte), "42 ByTE"}, {getBytes(42_Byte), "42 ByTe"},

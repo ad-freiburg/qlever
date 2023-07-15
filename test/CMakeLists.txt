@@ -340,7 +340,7 @@ addLinkAndDiscoverTest(ThreadSafeQueueTest)
 
 addLinkAndDiscoverTest(GeneratorTest)
 
-addLinkAndDiscoverTest(AbstractMemoryTest abstractMemory)
+addLinkAndDiscoverTest(MemorySizeTest memorySize)
 
 addLinkAndDiscoverTest(JsonUtilTest)
 

@@ -1,8 +1,8 @@
 
-// Generated from MemoryDefinitionLanguage.g4 by ANTLR 4.13.0
+// Generated from MemorySizeLanguage.g4 by ANTLR 4.13.0
 
 
-#include "MemoryDefinitionLanguageLexer.h"
+#include "MemorySizeLanguageLexer.h"
 
 
 using namespace antlr4;
@@ -13,8 +13,8 @@ using namespace antlr4;
 
 namespace {
 
-struct MemoryDefinitionLanguageLexerStaticData final {
-  MemoryDefinitionLanguageLexerStaticData(std::vector<std::string> ruleNames,
+struct MemorySizeLanguageLexerStaticData final {
+  MemorySizeLanguageLexerStaticData(std::vector<std::string> ruleNames,
                           std::vector<std::string> channelNames,
                           std::vector<std::string> modeNames,
                           std::vector<std::string> literalNames,
@@ -24,10 +24,10 @@ struct MemoryDefinitionLanguageLexerStaticData final {
         symbolicNames(std::move(symbolicNames)),
         vocabulary(this->literalNames, this->symbolicNames) {}
 
-  MemoryDefinitionLanguageLexerStaticData(const MemoryDefinitionLanguageLexerStaticData&) = delete;
-  MemoryDefinitionLanguageLexerStaticData(MemoryDefinitionLanguageLexerStaticData&&) = delete;
-  MemoryDefinitionLanguageLexerStaticData& operator=(const MemoryDefinitionLanguageLexerStaticData&) = delete;
-  MemoryDefinitionLanguageLexerStaticData& operator=(MemoryDefinitionLanguageLexerStaticData&&) = delete;
+  MemorySizeLanguageLexerStaticData(const MemorySizeLanguageLexerStaticData&) = delete;
+  MemorySizeLanguageLexerStaticData(MemorySizeLanguageLexerStaticData&&) = delete;
+  MemorySizeLanguageLexerStaticData& operator=(const MemorySizeLanguageLexerStaticData&) = delete;
+  MemorySizeLanguageLexerStaticData& operator=(MemorySizeLanguageLexerStaticData&&) = delete;
 
   std::vector<antlr4::dfa::DFA> decisionToDFA;
   antlr4::atn::PredictionContextCache sharedContextCache;
@@ -41,21 +41,21 @@ struct MemoryDefinitionLanguageLexerStaticData final {
   std::unique_ptr<antlr4::atn::ATN> atn;
 };
 
-::antlr4::internal::OnceFlag memorydefinitionlanguagelexerLexerOnceFlag;
+::antlr4::internal::OnceFlag memorysizelanguagelexerLexerOnceFlag;
 #if ANTLR4_USE_THREAD_LOCAL_CACHE
 static thread_local
 #endif
-MemoryDefinitionLanguageLexerStaticData *memorydefinitionlanguagelexerLexerStaticData = nullptr;
+MemorySizeLanguageLexerStaticData *memorysizelanguagelexerLexerStaticData = nullptr;
 
-void memorydefinitionlanguagelexerLexerInitialize() {
+void memorysizelanguagelexerLexerInitialize() {
 #if ANTLR4_USE_THREAD_LOCAL_CACHE
-  if (memorydefinitionlanguagelexerLexerStaticData != nullptr) {
+  if (memorysizelanguagelexerLexerStaticData != nullptr) {
     return;
   }
 #else
-  assert(memorydefinitionlanguagelexerLexerStaticData == nullptr);
+  assert(memorysizelanguagelexerLexerStaticData == nullptr);
 #endif
-  auto staticData = std::make_unique<MemoryDefinitionLanguageLexerStaticData>(
+  auto staticData = std::make_unique<MemorySizeLanguageLexerStaticData>(
     std::vector<std::string>{
       "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", 
       "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "MEMORY_UNIT", 
@@ -134,55 +134,55 @@ void memorydefinitionlanguagelexerLexerInitialize() {
   for (size_t i = 0; i < count; i++) { 
     staticData->decisionToDFA.emplace_back(staticData->atn->getDecisionState(i), i);
   }
-  memorydefinitionlanguagelexerLexerStaticData = staticData.release();
+  memorysizelanguagelexerLexerStaticData = staticData.release();
 }
 
 }
 
-MemoryDefinitionLanguageLexer::MemoryDefinitionLanguageLexer(CharStream *input) : Lexer(input) {
-  MemoryDefinitionLanguageLexer::initialize();
-  _interpreter = new atn::LexerATNSimulator(this, *memorydefinitionlanguagelexerLexerStaticData->atn, memorydefinitionlanguagelexerLexerStaticData->decisionToDFA, memorydefinitionlanguagelexerLexerStaticData->sharedContextCache);
+MemorySizeLanguageLexer::MemorySizeLanguageLexer(CharStream *input) : Lexer(input) {
+  MemorySizeLanguageLexer::initialize();
+  _interpreter = new atn::LexerATNSimulator(this, *memorysizelanguagelexerLexerStaticData->atn, memorysizelanguagelexerLexerStaticData->decisionToDFA, memorysizelanguagelexerLexerStaticData->sharedContextCache);
 }
 
-MemoryDefinitionLanguageLexer::~MemoryDefinitionLanguageLexer() {
+MemorySizeLanguageLexer::~MemorySizeLanguageLexer() {
   delete _interpreter;
 }
 
-std::string MemoryDefinitionLanguageLexer::getGrammarFileName() const {
-  return "MemoryDefinitionLanguage.g4";
+std::string MemorySizeLanguageLexer::getGrammarFileName() const {
+  return "MemorySizeLanguage.g4";
 }
 
-const std::vector<std::string>& MemoryDefinitionLanguageLexer::getRuleNames() const {
-  return memorydefinitionlanguagelexerLexerStaticData->ruleNames;
+const std::vector<std::string>& MemorySizeLanguageLexer::getRuleNames() const {
+  return memorysizelanguagelexerLexerStaticData->ruleNames;
 }
 
-const std::vector<std::string>& MemoryDefinitionLanguageLexer::getChannelNames() const {
-  return memorydefinitionlanguagelexerLexerStaticData->channelNames;
+const std::vector<std::string>& MemorySizeLanguageLexer::getChannelNames() const {
+  return memorysizelanguagelexerLexerStaticData->channelNames;
 }
 
-const std::vector<std::string>& MemoryDefinitionLanguageLexer::getModeNames() const {
-  return memorydefinitionlanguagelexerLexerStaticData->modeNames;
+const std::vector<std::string>& MemorySizeLanguageLexer::getModeNames() const {
+  return memorysizelanguagelexerLexerStaticData->modeNames;
 }
 
-const dfa::Vocabulary& MemoryDefinitionLanguageLexer::getVocabulary() const {
-  return memorydefinitionlanguagelexerLexerStaticData->vocabulary;
+const dfa::Vocabulary& MemorySizeLanguageLexer::getVocabulary() const {
+  return memorysizelanguagelexerLexerStaticData->vocabulary;
 }
 
-antlr4::atn::SerializedATNView MemoryDefinitionLanguageLexer::getSerializedATN() const {
-  return memorydefinitionlanguagelexerLexerStaticData->serializedATN;
+antlr4::atn::SerializedATNView MemorySizeLanguageLexer::getSerializedATN() const {
+  return memorysizelanguagelexerLexerStaticData->serializedATN;
 }
 
-const atn::ATN& MemoryDefinitionLanguageLexer::getATN() const {
-  return *memorydefinitionlanguagelexerLexerStaticData->atn;
+const atn::ATN& MemorySizeLanguageLexer::getATN() const {
+  return *memorysizelanguagelexerLexerStaticData->atn;
 }
 
 
 
 
-void MemoryDefinitionLanguageLexer::initialize() {
+void MemorySizeLanguageLexer::initialize() {
 #if ANTLR4_USE_THREAD_LOCAL_CACHE
-  memorydefinitionlanguagelexerLexerInitialize();
+  memorysizelanguagelexerLexerInitialize();
 #else
-  ::antlr4::internal::call_once(memorydefinitionlanguagelexerLexerOnceFlag, memorydefinitionlanguagelexerLexerInitialize);
+  ::antlr4::internal::call_once(memorysizelanguagelexerLexerOnceFlag, memorysizelanguagelexerLexerInitialize);
 #endif
 }
