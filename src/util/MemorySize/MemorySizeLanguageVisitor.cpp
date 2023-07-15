@@ -40,11 +40,10 @@ ToMemorySizeInstanceMemorySizeLanguageVisitor::visitMemoryUnitSize(
   Create an instance of `MemorySize`.
 
   @param memoryUnit Which memory unit to use for the creation. Must be one of:
-  - 'k' (KB)
+  - 'k' (kB)
   - 'm' (MB)
   - 'g' (GB)
   - 't' (TB)
-  - 'p' (PB)
   @param numUnits Amount of kilobytes, megabytes, etc..
   */
   auto createMemoryInstance = [](char memoryUnit, auto numUnits) {
@@ -62,9 +61,6 @@ ToMemorySizeInstanceMemorySizeLanguageVisitor::visitMemoryUnitSize(
         break;
       case 't':
         toReturn = ad_utility::MemorySize::terabytes(numUnits);
-        break;
-      case 'p':
-        toReturn = ad_utility::MemorySize::petabytes(numUnits);
         break;
       default:
         // Whatever this is, it is false.

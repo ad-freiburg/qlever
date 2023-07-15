@@ -12,7 +12,7 @@
 class  MemorySizeLanguageLexer : public antlr4::Lexer {
 public:
   enum {
-    MEMORY_UNIT = 1, BYTE = 2, UNSIGNED_INTEGER = 3, FLOAT = 4, WHITESPACE = 5
+    T__0 = 1, MEMORY_UNIT = 2, UNSIGNED_INTEGER = 3, FLOAT = 4, WHITESPACE = 5
   };
 
   explicit MemorySizeLanguageLexer(antlr4::CharStream *input);

@@ -51,8 +51,6 @@ class MemorySize {
   static MemorySize gigabytes(double numGigabytes);
   static MemorySize terabytes(size_t numTerabytes);
   static MemorySize terabytes(double numTerabytes);
-  static MemorySize petabytes(size_t numPetabytes);
-  static MemorySize petabytes(double numPetabytes);
 
   /*
   Return the internal memory amount in the wanted memory unit format.
@@ -64,13 +62,12 @@ class MemorySize {
   double megabytes() const;
   double gigabytes() const;
   double terabytes() const;
-  double petabytes() const;
 
   /*
   Return the string representation of the internal memory amount in the
   biggest memory unit, that is equal to, or smaller than, the internal memory
   amount.
-  Example: 1000 bytes would be returned as `"1 KB"`.
+  Example: 1000 bytes would be returned as `"1 kB"`.
   */
   std::string asString() const;
 
@@ -94,17 +91,15 @@ class MemorySize {
 
 // User defined literals for memory units.
 namespace memory_literals {
-MemorySize operator""_Byte(unsigned long long int bytes);
-MemorySize operator""_KB(long double kilobytes);
-MemorySize operator""_KB(unsigned long long int kilobytes);
+MemorySize operator""_B(unsigned long long int bytes);
+MemorySize operator""_kB(long double kilobytes);
+MemorySize operator""_kB(unsigned long long int kilobytes);
 MemorySize operator""_MB(long double megabytes);
 MemorySize operator""_MB(unsigned long long int megabytes);
 MemorySize operator""_GB(long double gigabytes);
 MemorySize operator""_GB(unsigned long long int gigabytes);
 MemorySize operator""_TB(long double terabytes);
 MemorySize operator""_TB(unsigned long long int terabytes);
-MemorySize operator""_PB(long double petabytes);
-MemorySize operator""_PB(unsigned long long int petabytes);
 }  // namespace memory_literals
 
 }  // namespace ad_utility

@@ -12,7 +12,7 @@
 class  MemorySizeLanguageParser : public antlr4::Parser {
 public:
   enum {
-    MEMORY_UNIT = 1, BYTE = 2, UNSIGNED_INTEGER = 3, FLOAT = 4, WHITESPACE = 5
+    T__0 = 1, MEMORY_UNIT = 2, UNSIGNED_INTEGER = 3, FLOAT = 4, WHITESPACE = 5
   };
 
   enum {
@@ -58,7 +58,6 @@ public:
     PureByteSizeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *UNSIGNED_INTEGER();
-    antlr4::tree::TerminalNode *BYTE();
 
    
   };
