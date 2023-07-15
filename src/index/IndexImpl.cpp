@@ -4,8 +4,6 @@
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./IndexImpl.h"
-
 #include <CompilationInfo.h>
 #include <absl/strings/str_join.h>
 #include <index/PrefixHeuristic.h>
@@ -26,6 +24,9 @@
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_map>
+
+#include "./IndexImpl.h"
+#include "util/json.h"
 
 using std::array;
 
@@ -921,8 +922,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   json j;  // if we have no settings, we still have to initialize some default
            // values
   if (!settingsFileName_.empty()) {
-    auto f = ad_utility::makeIfstream(settingsFileName_);
-    f >> j;
+    j = fileToJson(settingsFileName_);
   }
 
   if (j.find("prefixes-external") != j.end()) {
