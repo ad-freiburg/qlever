@@ -33,7 +33,8 @@ size_t constexpr convertMemoryUnitsToBytes(const T amountOfUnits,
                                            const size_t numBytesPerUnit) {
   if constexpr (std::is_floating_point_v<T>) {
     // We (maybe) have to round up.
-    return static_cast<size_t>(std::ceil(amountOfUnits * numBytesPerUnit));
+    return static_cast<size_t>(
+        std::ceil(amountOfUnits * static_cast<double>(numBytesPerUnit)));
   } else {
     AD_CORRECTNESS_CHECK(std::is_integral_v<T>);
     return amountOfUnits * numBytesPerUnit;
@@ -87,7 +88,8 @@ MemorySize MemorySize::terabytes(double numTerabytes) {
 // code reduction.
 static double sizetDivision(const size_t dividend, const size_t divisor) {
   auto dv = std::lldiv(dividend, divisor);
-  return static_cast<double>(dv.quot) + static_cast<double>(dv.rem) / divisor;
+  return static_cast<double>(dv.quot) +
+         static_cast<double>(dv.rem) / static_cast<double>(divisor);
 }
 
 // _____________________________________________________________________________
