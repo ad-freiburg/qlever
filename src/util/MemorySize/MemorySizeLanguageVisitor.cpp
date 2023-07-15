@@ -2,13 +2,14 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (July of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "util/MemorySize/MemorySizeLanguageVisitor.h"
+
 #include <absl/container/flat_hash_map.h>
 
 #include <string>
 
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/MemorySize/MemorySizeLanguageVisitor.h"
 #include "util/StringUtils.h"
 
 // ____________________________________________________________________________

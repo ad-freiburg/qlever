@@ -3,13 +3,14 @@
 // Author: Andre Schlegel (July of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
+#include "util/MemorySize/MemorySize.h"
+
 #include <ConsoleErrorListener.h>
 #include <absl/strings/str_cat.h>
 
 #include <string_view>
 #include <tuple>
 
-#include "util/MemorySize/MemorySize.h"
 #include "util/MemorySize/MemorySizeLanguageVisitor.h"
 #include "util/MemorySize/generated/MemorySizeLanguageLexer.h"
 #include "util/MemorySize/generated/MemorySizeLanguageParser.h"
