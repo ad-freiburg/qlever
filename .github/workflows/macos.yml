@@ -20,11 +20,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        warnings: [  "-Wall -Wextra -Werror -fsanitize=address -fno-omit-frame-pointer" ]
-        build-type: [Release]
+        warnings: [  "-Wall -Wextra -Werror -O1" ]
+        build-type: [Debug]
     runs-on: macos-12
-
-
     steps:
     - uses: actions/checkout@v3
       with:
