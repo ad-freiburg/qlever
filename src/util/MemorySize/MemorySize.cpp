@@ -16,11 +16,11 @@
 
 namespace ad_utility {
 // Just the number of bytes per memory unit.
-constexpr size_t numBytesPerKB = ad_utility::pow<size_t>(2, 10);
-constexpr size_t numBytesPerMB = ad_utility::pow<size_t>(2, 20);
-constexpr size_t numBytesPerGB = ad_utility::pow<size_t>(2, 30);
-constexpr size_t numBytesPerTB = ad_utility::pow<size_t>(2, 40);
-constexpr size_t numBytesPerPB = ad_utility::pow<size_t>(2, 50);
+constexpr size_t numBytesPerKB = ad_utility::pow<size_t>(10, 3);
+constexpr size_t numBytesPerMB = ad_utility::pow<size_t>(10, 6);
+constexpr size_t numBytesPerGB = ad_utility::pow<size_t>(10, 9);
+constexpr size_t numBytesPerTB = ad_utility::pow<size_t>(10, 12);
+constexpr size_t numBytesPerPB = ad_utility::pow<size_t>(10, 15);
 
 /*
 @brief Calculate the amount of bytes for a given amount of untis and a given

@@ -17,8 +17,10 @@ namespace ad_utility {
 
 /*
 An abstract class, that represents an amount of memory.
-Note: Literals for easier usage of the class were defined after under the class
+Note:
+ - Literals for easier usage of the class were defined after under the class
 definition.
+ - Memory size units use base 10.
 */
 class MemorySize {
   // Because of `sizeof` we know, that any size of memory, in bytes, can be
@@ -54,7 +56,7 @@ class MemorySize {
 
   /*
   Return the internal memory amount in the wanted memory unit format.
-  For example: If the internal memory amount is 1024 bytes, than `kilobytes()`
+  For example: If the internal memory amount is 1000 bytes, than `kilobytes()`
   would return `1.0`.
   */
   size_t bytes() const;
@@ -68,7 +70,7 @@ class MemorySize {
   Return the string representation of the internal memory amount in the
   biggest memory unit, that is equal to, or smaller than, the internal memory
   amount.
-  Example: 1024 bytes would be returned as `"1 KB"`.
+  Example: 1000 bytes would be returned as `"1 KB"`.
   */
   std::string asString() const;
 

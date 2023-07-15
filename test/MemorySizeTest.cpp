@@ -27,34 +27,36 @@ TEST(MemorySize, UserDefinedLiterals) {
   ASSERT_EQ(50uL, getBytes(50_Byte));
 
   // Kilobytes.
-  ASSERT_EQ(2048uL, getBytes(2_KB));    // Whole number.
-  ASSERT_EQ(1536uL, getBytes(1.5_KB));  // Floating point without rounding.
-  ASSERT_EQ(1332uL, getBytes(1.3_KB));  // Floating point with rounding.
+  ASSERT_EQ(2000uL, getBytes(2_KB));       // Whole number.
+  ASSERT_EQ(1500uL, getBytes(1.5_KB));     // Floating point without rounding.
+  ASSERT_EQ(1001uL, getBytes(1.0003_KB));  // Floating point with rounding.
 
   // Megabytes.
-  ASSERT_EQ(2097152uL, getBytes(2_MB));    // Whole number.
-  ASSERT_EQ(1572864uL, getBytes(1.5_MB));  // Floating point without rounding.
-  ASSERT_EQ(1363149uL, getBytes(1.3_MB));  // Floating point with rounding.
+  ASSERT_EQ(2000000uL, getBytes(2_MB));    // Whole number.
+  ASSERT_EQ(1500000uL, getBytes(1.5_MB));  // Floating point without rounding.
+  ASSERT_EQ(1000001uL,
+            getBytes(1.0000003_MB));  // Floating point with rounding.
 
   // Gigabytes.
-  ASSERT_EQ(2147483648uL, getBytes(2_GB));  // Whole number.
-  ASSERT_EQ(1610612736uL,
+  ASSERT_EQ(2000000000uL, getBytes(2_GB));  // Whole number.
+  ASSERT_EQ(1500000000uL,
             getBytes(1.5_GB));  // Floating point without rounding.
-  ASSERT_EQ(1395864372uL, getBytes(1.3_GB));  // Floating point with rounding.
+  ASSERT_EQ(1000000001uL,
+            getBytes(1.0000000003_GB));  // Floating point with rounding.
 
   // Terabytes.
-  ASSERT_EQ(2199023255552uL, getBytes(2_TB));  // Whole number.
-  ASSERT_EQ(1649267441664uL,
+  ASSERT_EQ(2000000000000uL, getBytes(2_TB));  // Whole number.
+  ASSERT_EQ(1500000000000uL,
             getBytes(1.5_TB));  // Floating point without rounding.
-  ASSERT_EQ(1429365116109uL,
-            getBytes(1.3_TB));  // Floating point with rounding.
+  ASSERT_EQ(1000000000001uL,
+            getBytes(1.0000000000003_TB));  // Floating point with rounding.
 
   // Petabytes.
-  ASSERT_EQ(2251799813685248uL, getBytes(2_PB));  // Whole number.
-  ASSERT_EQ(1688849860263936uL,
+  ASSERT_EQ(2000000000000000uL, getBytes(2_PB));  // Whole number.
+  ASSERT_EQ(1500000000000000uL,
             getBytes(1.5_PB));  // Floating point without rounding.
-  ASSERT_EQ(1463669878895412uL,
-            getBytes(1.3_PB));  // Floating point with rounding.
+  ASSERT_EQ(1000000000000001uL,
+            getBytes(1.0000000000000003_PB));  // Floating point with rounding.
 }
 
 // Describes a memory size in all available memory units.
@@ -72,33 +74,22 @@ struct AllMemoryUnitSizes {
 constexpr ad_utility::ConstexprMap<std::string_view, AllMemoryUnitSizes, 6>
     singleMemoryUnitSizes(
         {std::pair<std::string_view, AllMemoryUnitSizes>{
-             "Byte",
-             AllMemoryUnitSizes{1uL, 0.0009765625, 9.5367431640625e-7,
-                                9.31322574615478515625e-10,
-                                9.094947017729282379150390625e-13,
-                                8.8817841970012523233890533447265625e-16}},
+             "Byte", AllMemoryUnitSizes{1uL, 1e-3, 1e-6, 1e-9, 1e-12, 1e-15}},
          std::pair<std::string_view, AllMemoryUnitSizes>{
-             "KB",
-             AllMemoryUnitSizes{1024uL, 1.0, 0.0009765625, 9.5367431640625e-7,
-                                9.31322574615478515625e-10,
-                                9.094947017729282379150390625e-13}},
+             "KB", AllMemoryUnitSizes{1000uL, 1, 1e-3, 1e-6, 1e-9, 1e-12}},
 
          std::pair<std::string_view, AllMemoryUnitSizes>{
-             "MB", AllMemoryUnitSizes{1048576uL, 1024, 1.0, 0.0009765625,
-                                      9.5367431640625e-7,
-                                      9.31322574615478515625e-10}},
+             "MB", AllMemoryUnitSizes{1000000uL, 1e3, 1, 1e-3, 1e-6, 1e-9}},
 
          std::pair<std::string_view, AllMemoryUnitSizes>{
-             "GB", AllMemoryUnitSizes{1073741824uL, 1048576.0, 1024.0, 1.0,
-                                      0.0009765625, 9.5367431640625e-7}},
+             "GB", AllMemoryUnitSizes{1000000000uL, 1e6, 1e3, 1, 1e-3, 1e-6}},
 
          std::pair<std::string_view, AllMemoryUnitSizes>{
-             "TB", AllMemoryUnitSizes{1099511627776uL, 1073741824.0, 1048576.0,
-                                      1024.0, 1.0, 0.0009765625}},
+             "TB", AllMemoryUnitSizes{1000000000000uL, 1e9, 1e6, 1e3, 1, 1e-3}},
 
          std::pair<std::string_view, AllMemoryUnitSizes>{
-             "PB", AllMemoryUnitSizes{1125899906842624uL, 1099511627776.0,
-                                      1073741824.0, 1048576.0, 1024.0, 1.0}}});
+             "PB",
+             AllMemoryUnitSizes{1000000000000000uL, 1e12, 1e9, 1e6, 1e3, 1}}});
 
 /*
 Checks all the getters of the class with the wanted memory sizes.
@@ -204,11 +195,11 @@ TEST(MemorySize, AsString) {
   std::ranges::for_each(generalAsStringTestCases(), doTest);
 
   // Check, if it always uses the biggest unit.
-  doTest({getBytes(4096_Byte), "4 KB"});
-  doTest({getBytes(4096_KB), "4 MB"});
-  doTest({getBytes(4096_MB), "4 GB"});
-  doTest({getBytes(4096_GB), "4 TB"});
-  doTest({getBytes(4096_TB), "4 PB"});
+  doTest({getBytes(4000_Byte), "4 KB"});
+  doTest({getBytes(4000_KB), "4 MB"});
+  doTest({getBytes(4000_MB), "4 GB"});
+  doTest({getBytes(4000_GB), "4 TB"});
+  doTest({getBytes(4000_TB), "4 PB"});
 }
 
 TEST(MemorySize, Parse) {
