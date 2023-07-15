@@ -85,7 +85,7 @@ class MemorySize {
 
  private:
   // Constructor for the factory functions.
-  MemorySize(size_t amountOfMemoryInBytes)
+  explicit MemorySize(size_t amountOfMemoryInBytes)
       : memoryInBytes_{amountOfMemoryInBytes} {}
 };
 
