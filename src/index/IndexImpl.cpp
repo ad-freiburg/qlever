@@ -5,6 +5,7 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include <CompilationInfo.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 #include <index/PrefixHeuristic.h>
 #include <index/TriplesView.h>
@@ -21,11 +22,13 @@
 #include <cstdio>
 #include <future>
 #include <optional>
+#include <stdexcept>
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_map>
 
 #include "./IndexImpl.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/json.h"
 
 using std::array;
@@ -919,20 +922,68 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
 // ___________________________________________________________________________
 template <class Parser>
 void IndexImpl::readIndexBuilderSettingsFromFile() {
-  json j;  // if we have no settings, we still have to initialize some default
-           // values
+  ad_utility::ConfigManager config{};
+
+  // TODO Write a description.
+  std::vector<std::string> prefixesExternal;
+  config.createConfigOption<std::vector<std::string>>(
+      "prefixes-external", "", &prefixesExternal, std::vector<std::string>{});
+
+  // TODO Write a description.
+  std::vector<std::string> languagesInternal;
+  config.createConfigOption<std::vector<std::string>>(
+      "languages-internal", "", &prefixesExternal, std::vector<std::string>{});
+
+  // TODO Write a description.
+  std::string lang;
+  config.createConfigOption<std::string>(
+      std::vector<std::string>{"locale", "language"}, "", &lang,
+      LOCALE_DEFAULT_LANG);
+
+  // TODO Write a description.
+  std::string country;
+  config.createConfigOption<std::string>(
+      std::vector<std::string>{"locale", "country"}, "", &country,
+      LOCALE_DEFAULT_COUNTRY);
+
+  // TODO Write a description.
+  bool ignorePunctuation;
+  config.createConfigOption<bool>(
+      std::vector<std::string>{"locale", "ignore-punctuation"}, "",
+      &ignorePunctuation, LOCALE_DEFAULT_IGNORE_PUNCTUATION);
+
+  // TODO Write a description.
+  bool asciiPrefixesOnly;
+  config.createConfigOption<bool>("ascii-prefixes-only", "", &asciiPrefixesOnly,
+                                  false);
+
+  // TODO Write a description.
+  size_t numTriplesPerBatch;
+  config.createConfigOption<size_t>("num-triples-per-batch", "",
+                                    &numTriplesPerBatch, 0);
+
+  // TODO Write a description.
+  size_t parserBatchSize;
+  config.createConfigOption<size_t>("parser-batch-size", "", &parserBatchSize,
+                                    0);
+
+  // TODO Write a description.
+  std::string parserIntegerOverflowBehavior;
+  config.createConfigOption<std::string>("parser-integer-overflow-behavior", "",
+                                         &parserIntegerOverflowBehavior,
+                                         "overflowing-integers-throw");
+
+  // Set the options.
   if (!settingsFileName_.empty()) {
-    j = fileToJson(settingsFileName_);
+    config.parseConfig(fileToJson(settingsFileName_));
+  } else {
+    config.parseConfig(json(json::value_t::object));
   }
 
-  if (j.find("prefixes-external") != j.end()) {
-    vocab_.initializeExternalizePrefixes(j["prefixes-external"]);
-    configurationJson_["prefixes-external"] = j["prefixes-external"];
-  }
-
-  if (j.count("ignore-case")) {
-    LOG(ERROR) << ERROR_IGNORE_CASE_UNSUPPORTED << '\n';
-    throw std::runtime_error("Deprecated key \"ignore-case\" in settings JSON");
+  if (config.getConfigurationOptionByNestedKeys({"prefixes-external"})
+          .wasSetAtRuntime()) {
+    vocab_.initializeExternalizePrefixes(prefixesExternal);
+    configurationJson_["prefixes-external"] = prefixesExternal;
   }
 
   /**
@@ -942,47 +993,49 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
    * locale setting.
    */
 
-  {
-    std::string lang = LOCALE_DEFAULT_LANG;
-    std::string country = LOCALE_DEFAULT_COUNTRY;
-    bool ignorePunctuation = LOCALE_DEFAULT_IGNORE_PUNCTUATION;
-    if (j.count("locale")) {
-      lang = std::string{j["locale"]["language"]};
-      country = std::string{j["locale"]["country"]};
-      ignorePunctuation = bool{j["locale"]["ignore-punctuation"]};
-    } else {
-      LOG(INFO) << "Locale was not specified in settings file, default is "
-                   "en_US"
-                << std::endl;
-    }
-    LOG(INFO) << "You specified \"locale = " << lang << "_" << country << "\" "
-              << "and \"ignore-punctuation = " << ignorePunctuation << "\""
-              << std::endl;
-
-    if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
-      LOG(WARN) << "You are using Locale settings that differ from the default "
-                   "language or country.\n\t"
-                << "This should work but is untested by the QLever team. If "
-                   "you are running into unexpected problems,\n\t"
-                << "Please make sure to also report your used locale when "
-                   "filing a bug report. Also note that changing the\n\t"
-                << "locale requires to completely rebuild the index\n";
-    }
-    vocab_.setLocale(lang, country, ignorePunctuation);
-    textVocab_.setLocale(lang, country, ignorePunctuation);
-    configurationJson_["locale"]["language"] = lang;
-    configurationJson_["locale"]["country"] = country;
-    configurationJson_["locale"]["ignore-punctuation"] = ignorePunctuation;
+  if (config.getConfigurationOptionByNestedKeys({"locale", "language"})
+              .wasSetAtRuntime() !=
+          config.getConfigurationOptionByNestedKeys({"locale", "country"})
+              .wasSetAtRuntime() ||
+      config.getConfigurationOptionByNestedKeys({"locale", "country"})
+              .wasSetAtRuntime() != config
+                                        .getConfigurationOptionByNestedKeys(
+                                            {"locale", "ignore-punctuation"})
+                                        .wasSetAtRuntime()) {
+    throw std::runtime_error(absl::StrCat(
+        "All three options under 'locale' must be set, or none of them.",
+        config.printConfigurationDoc(true)));
   }
 
-  if (j.find("languages-internal") != j.end()) {
-    vocab_.initializeInternalizedLangs(j["languages-internal"]);
-    configurationJson_["languages-internal"] = j["languages-internal"];
+  LOG(INFO) << "You specified \"locale = " << lang << "_" << country << "\" "
+            << "and \"ignore-punctuation = " << ignorePunctuation << "\""
+            << std::endl;
+
+  if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
+    LOG(WARN) << "You are using Locale settings that differ from the default "
+                 "language or country.\n\t"
+              << "This should work but is untested by the QLever team. If "
+                 "you are running into unexpected problems,\n\t"
+              << "Please make sure to also report your used locale when "
+                 "filing a bug report. Also note that changing the\n\t"
+              << "locale requires to completely rebuild the index\n";
   }
-  if (j.count("ascii-prefixes-only")) {
+  vocab_.setLocale(lang, country, ignorePunctuation);
+  textVocab_.setLocale(lang, country, ignorePunctuation);
+  configurationJson_["locale"]["language"] = lang;
+  configurationJson_["locale"]["country"] = country;
+  configurationJson_["locale"]["ignore-punctuation"] = ignorePunctuation;
+
+  if (config.getConfigurationOptionByNestedKeys({"languages-internal"})
+          .wasSetAtRuntime()) {
+    vocab_.initializeInternalizedLangs(languagesInternal);
+    configurationJson_["languages-internal"] = languagesInternal;
+  }
+
+  if (config.getConfigurationOptionByNestedKeys({"ascii-prefixes-only"})
+          .wasSetAtRuntime()) {
     if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
-      bool v{j["ascii-prefixes-only"]};
-      if (v) {
+      if (asciiPrefixesOnly) {
         LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
         onlyAsciiTurtlePrefixes_ = true;
       } else {
@@ -996,16 +1049,18 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     }
   }
 
-  if (j.count("num-triples-per-batch")) {
-    numTriplesPerBatch_ = size_t{j["num-triples-per-batch"]};
+  if (config.getConfigurationOptionByNestedKeys({"num-triples-per-batch"})
+          .wasSetAtRuntime()) {
+    numTriplesPerBatch_ = numTriplesPerBatch;
     LOG(INFO)
         << "You specified \"num-triples-per-batch = " << numTriplesPerBatch_
         << "\", choose a lower value if the index builder runs out of memory"
         << std::endl;
   }
 
-  if (j.count("parser-batch-size")) {
-    parserBatchSize_ = size_t{j["parser-batch-size"]};
+  if (config.getConfigurationOptionByNestedKeys({"parser-batch-size"})
+          .wasSetAtRuntime()) {
+    parserBatchSize_ = parserBatchSize;
     LOG(INFO) << "Overriding setting parser-batch-size to " << parserBatchSize_
               << " This might influence performance during index build."
               << std::endl;
@@ -1018,39 +1073,35 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   std::vector<std::string_view> allModes{overflowingIntegersThrow,
                                          overflowingIntegersBecomeDoubles,
                                          allIntegersBecomeDoubles};
-  std::string key = "parser-integer-overflow-behavior";
-  if (j.count(key)) {
-    auto value = j[key];
-    if (value == overflowingIntegersThrow) {
-      LOG(INFO) << "Integers that cannot be represented by QLever will throw "
-                   "an exception"
-                << std::endl;
-      turtleParserIntegerOverflowBehavior_ =
-          TurtleParserIntegerOverflowBehavior::Error;
-    } else if (value == overflowingIntegersBecomeDoubles) {
-      LOG(INFO) << "Integers that cannot be represented by QLever will be "
-                   "converted to doubles"
-                << std::endl;
-      turtleParserIntegerOverflowBehavior_ =
-          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
-    } else if (value == allIntegersBecomeDoubles) {
-      LOG(INFO) << "All integers will be converted to doubles" << std::endl;
-      turtleParserIntegerOverflowBehavior_ =
-          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
-    } else {
-      AD_CONTRACT_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
-                        allModes.end());
-      LOG(ERROR) << "Invalid value for " << key << std::endl;
-      LOG(INFO) << "The currently supported values are "
-                << absl::StrJoin(allModes, ",") << std::endl;
-    }
-  } else {
+  if (parserIntegerOverflowBehavior == overflowingIntegersThrow) {
+    LOG(INFO) << "Integers that cannot be represented by QLever will throw "
+                 "an exception"
+              << std::endl;
     turtleParserIntegerOverflowBehavior_ =
         TurtleParserIntegerOverflowBehavior::Error;
-    LOG(INFO) << "Integers that cannot be represented by QLever will throw an "
-                 "exception (this is the default behavior)"
+  } else if (parserIntegerOverflowBehavior ==
+             overflowingIntegersBecomeDoubles) {
+    LOG(INFO) << "Integers that cannot be represented by QLever will be "
+                 "converted to doubles"
               << std::endl;
+    turtleParserIntegerOverflowBehavior_ =
+        TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+  } else if (parserIntegerOverflowBehavior == allIntegersBecomeDoubles) {
+    LOG(INFO) << "All integers will be converted to doubles" << std::endl;
+    turtleParserIntegerOverflowBehavior_ =
+        TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+  } else {
+    AD_CONTRACT_CHECK(std::find(allModes.begin(), allModes.end(),
+                                parserIntegerOverflowBehavior) ==
+                      allModes.end());
+    LOG(ERROR) << "Invalid value for parser-integer-overflow-behavior"
+               << std::endl;
+    LOG(INFO) << "The currently supported values are "
+              << absl::StrJoin(allModes, ",") << std::endl;
   }
+
+  // Logging used configuration options.
+  LOG(INFO) << config.printConfigurationDoc(true);
 }
 
 // ___________________________________________________________________________
