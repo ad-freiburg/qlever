@@ -20,6 +20,7 @@ class ToMemorySizeInstanceMemorySizeLanguageVisitor final {
   ad_utility::MemorySize visitMemorySizeString(
       Parser::MemorySizeStringContext* context) const;
 
+ private:
   ad_utility::MemorySize visitPureByteSize(
       Parser::PureByteSizeContext* context) const;
 
