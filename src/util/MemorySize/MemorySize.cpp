@@ -29,8 +29,8 @@ amount of bytes per unit.
 */
 template <typename T>
 requires std::integral<T> || std::floating_point<T>
-size_t constexpr convertMemoryUnitsToBytes(const T& amountOfUnits,
-                                           const size_t& numBytesPerUnit) {
+size_t constexpr convertMemoryUnitsToBytes(const T amountOfUnits,
+                                           const size_t numBytesPerUnit) {
   if constexpr (std::is_floating_point_v<T>) {
     // We (maybe) have to round up.
     return static_cast<size_t>(std::ceil(amountOfUnits * numBytesPerUnit));
@@ -85,7 +85,7 @@ MemorySize MemorySize::terabytes(double numTerabytes) {
 
 // Helper function for dividing two instances of `size_t`. Mainly exists for
 // code reduction.
-static double sizetDivision(const size_t& dividend, const size_t& divisor) {
+static double sizetDivision(const size_t dividend, const size_t divisor) {
   auto dv = std::lldiv(dividend, divisor);
   return static_cast<double>(dv.quot) + static_cast<double>(dv.rem) / divisor;
 }
@@ -116,7 +116,7 @@ double MemorySize::terabytes() const {
 // _____________________________________________________________________________
 std::string MemorySize::asString() const {
   // Convert number and memory unit name to the string, we want to return.
-  auto toString = [](const auto& number, std::string_view unitName) {
+  auto toString = [](const auto number, std::string_view unitName) {
     return absl::StrCat(number, " ", unitName);
   };
 
