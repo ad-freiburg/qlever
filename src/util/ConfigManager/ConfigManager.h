@@ -139,6 +139,16 @@ class ConfigManager {
   */
   std::string printConfigurationDoc(bool printCurrentJsonConfiguration) const;
 
+  /*
+  @brief Return the underlying configuration option, if it's at the position
+  described by the `keys`. If there is no configuration option at that
+  place, an exception will be thrown.
+
+  @param keys The keys for looking up the configuration option.
+  */
+  const ConfigOption& getConfigurationOptionByNestedKeys(
+      const std::vector<std::string>& keys) const;
+
  private:
   // For testing.
   FRIEND_TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest);
@@ -172,16 +182,6 @@ class ConfigManager {
   */
   void addConfigOption(const std::vector<std::string>& pathToOption,
                        ConfigOption&& option);
-
-  /*
-  @brief Return the underlying configuration option, if it's at the position
-  described by the `keys`. If there is no configuration option at that
-  place, an exception will be thrown.
-
-  @param keys The keys for looking up the configuration option.
-  */
-  const ConfigOption& getConfigurationOptionByNestedKeys(
-      const std::vector<std::string>& keys) const;
 
   /*
   @brief Return string representation of a `std::vector<std::string>`.
