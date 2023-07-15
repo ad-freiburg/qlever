@@ -157,8 +157,7 @@ MemorySize MemorySize::parse(std::string_view str) {
       lexer.getNumberOfSyntaxErrors() > 0uL) {
     throw std::runtime_error(absl::StrCat(
         "'", str,
-        "' could not be parsed as a memory size. Examples for valid memory "
-        "sizes are \"4 B\", \"3.21 MB\", \"2.392 TB\"."));
+        R"(' could not be parsed as a memory size. Examples for valid memory sizes are "4 B", "3.21 MB", "2.392 TB".)"));
   }
 
   // Our visitor should now convert this to `Memory` with the described memory
