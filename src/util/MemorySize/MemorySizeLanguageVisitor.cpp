@@ -19,7 +19,7 @@ ToMemorySizeInstanceMemorySizeLanguageVisitor::visitMemorySizeString(
     return visitPureByteSize(context->pureByteSize());
   } else {
     // Must be a `memoryUnitSize`.
-    AD_CONTRACT_CHECK(context->memoryUnitSize());
+    AD_CORRECTNESS_CHECK(context->memoryUnitSize());
     return visitMemoryUnitSize(context->memoryUnitSize());
   }
 }
