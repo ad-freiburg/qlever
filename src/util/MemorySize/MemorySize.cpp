@@ -3,14 +3,13 @@
 // Author: Andre Schlegel (July of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
-#include "util/MemorySize/MemorySize.h"
-
-#include <ConsoleErrorListener.h>
 #include <absl/strings/str_cat.h>
 
 #include <string_view>
 #include <tuple>
 
+#include "util/ConstexprUtils.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/MemorySize/MemorySizeLanguageVisitor.h"
 #include "util/MemorySize/generated/MemorySizeLanguageLexer.h"
 #include "util/MemorySize/generated/MemorySizeLanguageParser.h"
@@ -140,30 +139,7 @@ std::string MemorySize::asString() const {
 
 // _____________________________________________________________________________
 MemorySize MemorySize::parse(std::string_view str) {
-  antlr4::ANTLRInputStream input(str);
-  MemorySizeLanguageLexer lexer(&input);
-  antlr4::CommonTokenStream tokens(&lexer);
-  MemorySizeLanguageParser parser(&tokens);
-
-  // Get the top node. That is, the node of the first grammar rule.
-  MemorySizeLanguageParser::MemorySizeStringContext* memorySizeStringContext{
-      parser.memorySizeString()};
-
-  // The default in ANTLR is to log all errors to the console and to continue
-  // the parsing. Instead we throw a hard coded, general error.
-  lexer.removeErrorListeners();
-  parser.removeErrorListeners();
-  if (parser.getNumberOfSyntaxErrors() > 0uL ||
-      lexer.getNumberOfSyntaxErrors() > 0uL) {
-    throw std::runtime_error(absl::StrCat(
-        "'", str,
-        R"(' could not be parsed as a memory size. Examples for valid memory sizes are "4 B", "3.21 MB", "2.392 TB".)"));
-  }
-
-  // Our visitor should now convert this to `Memory` with the described memory
-  // amount.
-  return ToMemorySizeInstanceMemorySizeLanguageVisitor{}.visitMemorySizeString(
-      memorySizeStringContext);
+  return ToMemorySizeInstanceMemorySizeLanguageVisitor{}.parseMemorySize(str);
 }
 
 // _____________________________________________________________________________

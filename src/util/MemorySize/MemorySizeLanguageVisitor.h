@@ -6,8 +6,8 @@
 #include <antlr4-runtime.h>
 
 #include "util/MemorySize/MemorySize.h"
+#include "util/MemorySize/generated/MemorySizeLanguageLexer.h"
 #include "util/MemorySize/generated/MemorySizeLanguageParser.h"
-#include "util/json.h"
 
 /*
 This visitor will translate the memory size language to an instance of
@@ -16,11 +16,21 @@ This visitor will translate the memory size language to an instance of
 class ToMemorySizeInstanceMemorySizeLanguageVisitor final {
  public:
   using Parser = MemorySizeLanguageParser;
+  using Lexer = MemorySizeLanguageLexer;
 
+  /*
+  @brief Parse the given string and create a `MemorySize` object, set to the
+  memory size described.
+
+  @param str A string following `./generated/MemorySizeLanguage.g4`. In short:
+  An amount of bytes described via a user defined literal.
+  */
+  ad_utility::MemorySize parseMemorySize(std::string_view str);
+
+ private:
   ad_utility::MemorySize visitMemorySizeString(
       Parser::MemorySizeStringContext* context) const;
 
- private:
   ad_utility::MemorySize visitPureByteSize(
       Parser::PureByteSizeContext* context) const;
 

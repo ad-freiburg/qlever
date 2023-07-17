@@ -2,16 +2,41 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (July of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/MemorySize/MemorySizeLanguageVisitor.h"
-
-#include <absl/container/flat_hash_map.h>
-
 #include <string>
 
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/MemorySize/MemorySizeLanguageVisitor.h"
 #include "util/StringUtils.h"
 
+// _____________________________________________________________________________
+ad_utility::MemorySize
+ToMemorySizeInstanceMemorySizeLanguageVisitor::parseMemorySize(
+    std::string_view str) {
+  antlr4::ANTLRInputStream input(str);
+  Lexer lexer(&input);
+  antlr4::CommonTokenStream tokens(&lexer);
+  Parser parser(&tokens);
+
+  // Get the top node. That is, the node of the first grammar rule.
+  MemorySizeLanguageParser::MemorySizeStringContext* memorySizeStringContext{
+      parser.memorySizeString()};
+
+  // The default in ANTLR is to log all errors to the console and to continue
+  // the parsing. Instead we throw a hard coded, general error.
+  lexer.removeErrorListeners();
+  parser.removeErrorListeners();
+  if (parser.getNumberOfSyntaxErrors() > 0uL ||
+      lexer.getNumberOfSyntaxErrors() > 0uL) {
+    throw std::runtime_error(absl::StrCat(
+        "'", str,
+        R"(' could not be parsed as a memory size. Examples for valid memory sizes are "4 B", "3.21 MB", "2.392 TB".)"));
+  }
+
+  // Our visitor should now convert this to `Memory` with the described memory
+  // amount.
+  return visitMemorySizeString(memorySizeStringContext);
+}
 // ____________________________________________________________________________
 ad_utility::MemorySize
 ToMemorySizeInstanceMemorySizeLanguageVisitor::visitMemorySizeString(
