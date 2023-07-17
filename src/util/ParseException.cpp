@@ -3,8 +3,10 @@
 //  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
 #include <Token.h>
-#include <parser/ParseException.h>
 #include <util/Exception.h>
+#include <util/ParseException.h>
+
+#include "util/StringUtils.h"
 
 // ___________________________________________________________________________
 std::string ExceptionMetadata::coloredError() const {

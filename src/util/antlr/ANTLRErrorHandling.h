@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <parser/ParseException.h>
+#include <util/ParseException.h>
 
 #include <string>
 

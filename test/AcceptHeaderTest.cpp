@@ -3,7 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
-#include <parser/ParseException.h>
+#include <util/ParseException.h>
 
 #include <string>
 
