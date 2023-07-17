@@ -6,13 +6,11 @@
 
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/MemorySize/MemorySizeLanguageVisitor.h"
+#include "util/MemorySize/MemorySizeParser.h"
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________________
-ad_utility::MemorySize
-ToMemorySizeInstanceMemorySizeLanguageVisitor::parseMemorySize(
-    std::string_view str) {
+ad_utility::MemorySize MemorySizeParser::parseMemorySize(std::string_view str) {
   antlr4::ANTLRInputStream input(str);
   Lexer lexer(&input);
   antlr4::CommonTokenStream tokens(&lexer);
@@ -38,8 +36,7 @@ ToMemorySizeInstanceMemorySizeLanguageVisitor::parseMemorySize(
   return visitMemorySizeString(memorySizeStringContext);
 }
 // ____________________________________________________________________________
-ad_utility::MemorySize
-ToMemorySizeInstanceMemorySizeLanguageVisitor::visitMemorySizeString(
+ad_utility::MemorySize MemorySizeParser::visitMemorySizeString(
     Parser::MemorySizeStringContext* context) {
   if (context->pureByteSize()) {
     return visitPureByteSize(context->pureByteSize());
@@ -51,16 +48,14 @@ ToMemorySizeInstanceMemorySizeLanguageVisitor::visitMemorySizeString(
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize
-ToMemorySizeInstanceMemorySizeLanguageVisitor::visitPureByteSize(
+ad_utility::MemorySize MemorySizeParser::visitPureByteSize(
     Parser::PureByteSizeContext* context) {
   return ad_utility::MemorySize::bytes(
       std::stoul(context->UNSIGNED_INTEGER()->getText()));
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize
-ToMemorySizeInstanceMemorySizeLanguageVisitor::visitMemoryUnitSize(
+ad_utility::MemorySize MemorySizeParser::visitMemoryUnitSize(
     Parser::MemoryUnitSizeContext* context) {
   /*
   Create an instance of `MemorySize`.

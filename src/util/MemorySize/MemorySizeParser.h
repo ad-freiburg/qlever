@@ -10,10 +10,9 @@
 #include "util/MemorySize/generated/MemorySizeLanguageParser.h"
 
 /*
-This visitor will translate the memory size language to an instance of
-`MemorySize`.
+Translate the memory size language to an instance of `MemorySize`.
 */
-class ToMemorySizeInstanceMemorySizeLanguageVisitor final {
+class MemorySizeParser final {
  public:
   using Parser = MemorySizeLanguageParser;
   using Lexer = MemorySizeLanguageLexer;

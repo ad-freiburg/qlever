@@ -10,7 +10,7 @@
 
 #include "util/ConstexprUtils.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/MemorySize/MemorySizeLanguageVisitor.h"
+#include "util/MemorySize/MemorySizeParser.h"
 #include "util/MemorySize/generated/MemorySizeLanguageLexer.h"
 #include "util/MemorySize/generated/MemorySizeLanguageParser.h"
 
@@ -139,7 +139,7 @@ std::string MemorySize::asString() const {
 
 // _____________________________________________________________________________
 MemorySize MemorySize::parse(std::string_view str) {
-  return ToMemorySizeInstanceMemorySizeLanguageVisitor::parseMemorySize(str);
+  return MemorySizeParser::parseMemorySize(str);
 }
 
 // _____________________________________________________________________________
