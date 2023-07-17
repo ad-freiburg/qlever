@@ -9,8 +9,10 @@
 #include "util/MemorySize/MemorySizeParser.h"
 #include "util/StringUtils.h"
 
+using ad_utility::MemorySize;
+
 // _____________________________________________________________________________
-ad_utility::MemorySize MemorySizeParser::parseMemorySize(std::string_view str) {
+MemorySize MemorySizeParser::parseMemorySize(std::string_view str) {
   antlr4::ANTLRInputStream input(str);
   Lexer lexer(&input);
   antlr4::CommonTokenStream tokens(&lexer);
@@ -36,7 +38,7 @@ ad_utility::MemorySize MemorySizeParser::parseMemorySize(std::string_view str) {
   return visitMemorySizeString(memorySizeStringContext);
 }
 // ____________________________________________________________________________
-ad_utility::MemorySize MemorySizeParser::visitMemorySizeString(
+MemorySize MemorySizeParser::visitMemorySizeString(
     Parser::MemorySizeStringContext* context) {
   if (context->pureByteSize()) {
     return visitPureByteSize(context->pureByteSize());
@@ -48,14 +50,13 @@ ad_utility::MemorySize MemorySizeParser::visitMemorySizeString(
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize MemorySizeParser::visitPureByteSize(
+MemorySize MemorySizeParser::visitPureByteSize(
     Parser::PureByteSizeContext* context) {
-  return ad_utility::MemorySize::bytes(
-      std::stoul(context->UNSIGNED_INTEGER()->getText()));
+  return MemorySize::bytes(std::stoul(context->UNSIGNED_INTEGER()->getText()));
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize MemorySizeParser::visitMemoryUnitSize(
+MemorySize MemorySizeParser::visitMemoryUnitSize(
     Parser::MemoryUnitSizeContext* context) {
   /*
   Create an instance of `MemorySize`.
@@ -68,24 +69,24 @@ ad_utility::MemorySize MemorySizeParser::visitMemoryUnitSize(
   @param numUnits Amount of kilobytes, megabytes, etc..
   */
   auto createMemoryInstance = [](char memoryUnit, auto numUnits) {
-    ad_utility::MemorySize toReturn;
+    MemorySize toReturn;
 
     switch (memoryUnit) {
       case 'k':
-        toReturn = ad_utility::MemorySize::kilobytes(numUnits);
+        toReturn = MemorySize::kilobytes(numUnits);
         break;
       case 'm':
-        toReturn = ad_utility::MemorySize::megabytes(numUnits);
+        toReturn = MemorySize::megabytes(numUnits);
         break;
       case 'g':
-        toReturn = ad_utility::MemorySize::gigabytes(numUnits);
+        toReturn = MemorySize::gigabytes(numUnits);
         break;
       case 't':
-        toReturn = ad_utility::MemorySize::terabytes(numUnits);
+        toReturn = MemorySize::terabytes(numUnits);
         break;
       default:
         // Whatever this is, it is false.
-        AD_CORRECTNESS_CHECK(false);
+        AD_FAIL();
     }
 
     return toReturn;
