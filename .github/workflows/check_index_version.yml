@@ -1,4 +1,4 @@
-name: Native build
+name: Check index version
 
 on:
   push:
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  check-index-version:
     strategy:
       fail-fast: false
       matrix:
@@ -49,12 +49,12 @@ jobs:
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
 
-    - name: Configure CMake
-      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run:  |
-        cmake -S ${{github.workspace}}/master -B ${{github.workspace}}/master/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true -DENABLE_EXPENSIVE_CHECKS=true
-        cmake -S ${{github.workspace}}/pr -B ${{github.workspace}}/pr/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true -DENABLE_EXPENSIVE_CHECKS=true
+    - name: Configure CMake Master
+      working-directory: ${{github.workspace}}/master
+      run:  cmake -B build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true -DENABLE_EXPENSIVE_CHECKS=true
+    - name: Configure CMake PR
+      working-directory: ${{github.workspace}}/pr
+      run:  cmake -B build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true -DENABLE_EXPENSIVE_CHECKS=true
 
     - name: Build
         # Build your program with the given configuration
@@ -65,6 +65,6 @@ jobs:
     #TODO<joka921> As soon as this works at the check if the version has changed. If true, the following check has to
     # be disabled.
     - name: E2E
-      run:  |
-        ${{github.workspace}}/master/e2e/e2e.sh && ${{github.workspace}}/master/e2e/e2e.sh -i -d ../pr/build
+      working-directory: ${{github.workspace}}/master
+      run:  e2e/e2e.sh && e2e/e2e.sh -i -d ../pr/build
 
