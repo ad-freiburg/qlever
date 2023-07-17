@@ -26,11 +26,11 @@ a megabyte has 1'000'000 bytes.
 class MemorySize {
   // Because of `sizeof` we know, that any size of memory, in bytes, can be
   // encoded as a `size_t` in cpp.
-  size_t memoryInBytes_;
+  size_t memoryInBytes_ = 0;
 
  public:
   // Default constructors.
-  MemorySize() : memoryInBytes_(0) {}
+  MemorySize() = default;
   MemorySize(const MemorySize&) = default;
   MemorySize(MemorySize&&) = default;
 
