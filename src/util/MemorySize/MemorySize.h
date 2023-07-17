@@ -20,7 +20,8 @@ An abstract class, that represents an amount of memory.
 Note:
  - Literals for easier usage of the class were defined after under the class
 definition.
- - Memory size units use base 10.
+ - Memory size units use base 10. In particular, a kilobyte has 1'000 bytes and
+a megabyte has 1'000'000 bytes.
 */
 class MemorySize {
   // Because of `sizeof` we know, that any size of memory, in bytes, can be
