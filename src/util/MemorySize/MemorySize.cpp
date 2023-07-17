@@ -139,7 +139,7 @@ std::string MemorySize::asString() const {
 
 // _____________________________________________________________________________
 MemorySize MemorySize::parse(std::string_view str) {
-  return ToMemorySizeInstanceMemorySizeLanguageVisitor{}.parseMemorySize(str);
+  return ToMemorySizeInstanceMemorySizeLanguageVisitor::parseMemorySize(str);
 }
 
 // _____________________________________________________________________________

@@ -25,15 +25,15 @@ class ToMemorySizeInstanceMemorySizeLanguageVisitor final {
   @param str A string following `./generated/MemorySizeLanguage.g4`. In short:
   An amount of bytes described via a user defined literal.
   */
-  ad_utility::MemorySize parseMemorySize(std::string_view str);
+  static ad_utility::MemorySize parseMemorySize(std::string_view str);
 
  private:
-  ad_utility::MemorySize visitMemorySizeString(
-      Parser::MemorySizeStringContext* context) const;
+  static ad_utility::MemorySize visitMemorySizeString(
+      Parser::MemorySizeStringContext* context);
 
-  ad_utility::MemorySize visitPureByteSize(
-      Parser::PureByteSizeContext* context) const;
+  static ad_utility::MemorySize visitPureByteSize(
+      Parser::PureByteSizeContext* context);
 
-  ad_utility::MemorySize visitMemoryUnitSize(
-      Parser::MemoryUnitSizeContext* context) const;
+  static ad_utility::MemorySize visitMemoryUnitSize(
+      Parser::MemoryUnitSizeContext* context);
 };

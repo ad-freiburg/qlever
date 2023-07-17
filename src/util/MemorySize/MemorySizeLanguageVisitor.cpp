@@ -40,7 +40,7 @@ ToMemorySizeInstanceMemorySizeLanguageVisitor::parseMemorySize(
 // ____________________________________________________________________________
 ad_utility::MemorySize
 ToMemorySizeInstanceMemorySizeLanguageVisitor::visitMemorySizeString(
-    Parser::MemorySizeStringContext* context) const {
+    Parser::MemorySizeStringContext* context) {
   if (context->pureByteSize()) {
     return visitPureByteSize(context->pureByteSize());
   } else {
@@ -53,7 +53,7 @@ ToMemorySizeInstanceMemorySizeLanguageVisitor::visitMemorySizeString(
 // ____________________________________________________________________________
 ad_utility::MemorySize
 ToMemorySizeInstanceMemorySizeLanguageVisitor::visitPureByteSize(
-    Parser::PureByteSizeContext* context) const {
+    Parser::PureByteSizeContext* context) {
   return ad_utility::MemorySize::bytes(
       std::stoul(context->UNSIGNED_INTEGER()->getText()));
 }
@@ -61,7 +61,7 @@ ToMemorySizeInstanceMemorySizeLanguageVisitor::visitPureByteSize(
 // ____________________________________________________________________________
 ad_utility::MemorySize
 ToMemorySizeInstanceMemorySizeLanguageVisitor::visitMemoryUnitSize(
-    Parser::MemoryUnitSizeContext* context) const {
+    Parser::MemoryUnitSizeContext* context) {
   /*
   Create an instance of `MemorySize`.
 
