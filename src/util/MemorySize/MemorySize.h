@@ -90,7 +90,11 @@ class MemorySize {
       : memoryInBytes_{amountOfMemoryInBytes} {}
 };
 
-// User defined literals for memory units.
+/*
+User defined literals for memory units.
+Note that user defined literals only allow very specific types for function
+arguments, so I couldn't use more fitting types.
+*/
 namespace memory_literals {
 MemorySize operator""_B(unsigned long long int bytes);
 MemorySize operator""_kB(long double kilobytes);

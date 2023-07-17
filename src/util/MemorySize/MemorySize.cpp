@@ -9,6 +9,7 @@
 #include <tuple>
 
 #include "util/ConstexprUtils.h"
+#include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/MemorySize/MemorySizeParser.h"
 #include "util/MemorySize/generated/MemorySizeLanguageLexer.h"
@@ -156,6 +157,7 @@ MemorySize operator""_B(unsigned long long int bytes) {
 
 // _____________________________________________________________________________
 MemorySize operator""_kB(long double kilobytes) {
+  AD_CORRECTNESS_CHECK(kilobytes >= 0);
   return MemorySize::kilobytes(static_cast<double>(kilobytes));
 }
 
@@ -166,6 +168,7 @@ MemorySize operator""_kB(unsigned long long int kilobytes) {
 
 // _____________________________________________________________________________
 MemorySize operator""_MB(long double megabytes) {
+  AD_CORRECTNESS_CHECK(megabytes >= 0);
   return MemorySize::megabytes(static_cast<double>(megabytes));
 }
 
@@ -176,6 +179,7 @@ MemorySize operator""_MB(unsigned long long int megabytes) {
 
 // _____________________________________________________________________________
 MemorySize operator""_GB(long double gigabytes) {
+  AD_CORRECTNESS_CHECK(gigabytes >= 0);
   return MemorySize::gigabytes(static_cast<double>(gigabytes));
 }
 
@@ -186,6 +190,7 @@ MemorySize operator""_GB(unsigned long long int gigabytes) {
 
 // _____________________________________________________________________________
 MemorySize operator""_TB(long double terabytes) {
+  AD_CORRECTNESS_CHECK(terabytes >= 0);
   return MemorySize::terabytes(static_cast<double>(terabytes));
 }
 
