@@ -204,10 +204,33 @@ TEST(MemorySize, Parse) {
         return absl::StrCat("-", testCase.stringRepresentation_);
       });
 
-  // Only specific keywords are allowed for memory size units.
+  // byte sizes can only be set with `B`.
+  std::ranges::for_each(std::vector{"42 BYTE", "42 BYTe", "42 BYtE", "42 BYte",
+                                    "42 ByTE", "42 ByTe", "42 BytE", "42 Byte",
+                                    "42 bYTE", "42 bYTe", "42 bYtE", "42 bYte",
+                                    "42 byTE", "42 byTe", "42 bytE", "42 byte"},
+                        doExceptionTest);
+
+  // Is our grammar truly case insensitive?
   std::ranges::for_each(
-      std::vector{"42 b", "42 bytes", "42 Bytes", "42 KB", "42 Kb", "42 kb",
-                  "42 mB", "42 Mb", "42 mb", "42 gB", "42 Gb", "42 gb", "42 tB",
-                  "42 Tb", "42 tb"},
-      doExceptionTest);
+      std::vector<MemorySizeInByteAndStringRepresentation>{
+          {getBytes(42_B), "42 B"},
+          {getBytes(42_B), "42 b"},
+          {getBytes(42_kB), "42 KB"},
+          {getBytes(42_kB), "42 Kb"},
+          {getBytes(42_kB), "42 kB"},
+          {getBytes(42_kB), "42 kb"},
+          {getBytes(42_MB), "42 MB"},
+          {getBytes(42_MB), "42 Mb"},
+          {getBytes(42_MB), "42 mB"},
+          {getBytes(42_MB), "42 mb"},
+          {getBytes(42_GB), "42 GB"},
+          {getBytes(42_GB), "42 Gb"},
+          {getBytes(42_GB), "42 gB"},
+          {getBytes(42_GB), "42 gb"},
+          {getBytes(42_TB), "42 TB"},
+          {getBytes(42_TB), "42 Tb"},
+          {getBytes(42_TB), "42 tB"},
+          {getBytes(42_TB), "42 tb"}},
+      doTest);
 }

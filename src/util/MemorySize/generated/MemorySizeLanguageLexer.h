@@ -3,21 +3,22 @@
 
 #pragma once
 
+
 #include "antlr4-runtime.h"
 
-class MemorySizeLanguageLexer : public antlr4::Lexer {
- public:
+
+
+
+class  MemorySizeLanguageLexer : public antlr4::Lexer {
+public:
   enum {
-    T__0 = 1,
-    MEMORY_UNIT = 2,
-    UNSIGNED_INTEGER = 3,
-    FLOAT = 4,
-    WHITESPACE = 5
+    MEMORY_UNIT = 1, BYTE = 2, UNSIGNED_INTEGER = 3, FLOAT = 4, WHITESPACE = 5
   };
 
-  explicit MemorySizeLanguageLexer(antlr4::CharStream* input);
+  explicit MemorySizeLanguageLexer(antlr4::CharStream *input);
 
   ~MemorySizeLanguageLexer() override;
+
 
   std::string getGrammarFileName() const override;
 
@@ -33,13 +34,16 @@ class MemorySizeLanguageLexer : public antlr4::Lexer {
 
   const antlr4::atn::ATN& getATN() const override;
 
-  // By default the static state used to implement the lexer is lazily
-  // initialized during the first call to the constructor. You can call this
-  // function if you wish to initialize the static state ahead of time.
+  // By default the static state used to implement the lexer is lazily initialized during the first
+  // call to the constructor. You can call this function if you wish to initialize the static state
+  // ahead of time.
   static void initialize();
 
- private:
+private:
+
   // Individual action functions triggered by action() above.
 
   // Individual semantic predicate functions triggered by sempred() above.
+
 };
+
