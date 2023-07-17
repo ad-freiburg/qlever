@@ -58,11 +58,11 @@ class MemorySize {
   For example: If the internal memory amount is 1000 bytes, than `kilobytes()`
   would return `1.0`.
   */
-  size_t bytes() const;
-  double kilobytes() const;
-  double megabytes() const;
-  double gigabytes() const;
-  double terabytes() const;
+  size_t getBytes() const;
+  double getKilobytes() const;
+  double getMegabytes() const;
+  double getGigabytes() const;
+  double getTerabytes() const;
 
   /*
   Return the string representation of the internal memory amount in the

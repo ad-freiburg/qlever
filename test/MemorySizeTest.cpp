@@ -20,7 +20,7 @@ using namespace ad_utility::memory_literals;
 
 // A small helper, because you can't call member functions on user defined
 // literals.
-size_t getBytes(const ad_utility::MemorySize& m) { return m.bytes(); };
+size_t getBytes(const ad_utility::MemorySize& m) { return m.getBytes(); };
 
 TEST(MemorySize, UserDefinedLiterals) {
   // Normal bytes.
@@ -81,11 +81,11 @@ Checks all the getters of the class with the wanted memory sizes.
 */
 void checkAllMemorySizeGetter(const ad_utility::MemorySize& m,
                               const AllMemoryUnitSizes& ms) {
-  ASSERT_EQ(m.bytes(), ms.bytes);
-  ASSERT_DOUBLE_EQ(m.kilobytes(), ms.kilobytes);
-  ASSERT_DOUBLE_EQ(m.megabytes(), ms.megabytes);
-  ASSERT_DOUBLE_EQ(m.gigabytes(), ms.gigabytes);
-  ASSERT_DOUBLE_EQ(m.terabytes(), ms.terabytes);
+  ASSERT_EQ(m.getBytes(), ms.bytes);
+  ASSERT_DOUBLE_EQ(m.getKilobytes(), ms.kilobytes);
+  ASSERT_DOUBLE_EQ(m.getMegabytes(), ms.megabytes);
+  ASSERT_DOUBLE_EQ(m.getGigabytes(), ms.gigabytes);
+  ASSERT_DOUBLE_EQ(m.getTerabytes(), ms.terabytes);
 }
 
 TEST(MemorySize, MemorySizeConstructor) {
@@ -179,9 +179,9 @@ TEST(MemorySize, AsString) {
 TEST(MemorySize, Parse) {
   // Parse the given string and compare to the expected amount of bytes.
   auto doTest = [](const MemorySizeInByteAndStringRepresentation& testCase) {
-    ASSERT_EQ(
-        ad_utility::MemorySize::parse(testCase.stringRepresentation_).bytes(),
-        testCase.memoryAmount_);
+    ASSERT_EQ(ad_utility::MemorySize::parse(testCase.stringRepresentation_)
+                  .getBytes(),
+              testCase.memoryAmount_);
   };
 
   // Check, if parsing the given string causes an exception.

@@ -93,25 +93,25 @@ static double sizetDivision(const size_t dividend, const size_t divisor) {
 }
 
 // _____________________________________________________________________________
-size_t MemorySize::bytes() const { return memoryInBytes_; }
+size_t MemorySize::getBytes() const { return memoryInBytes_; }
 
 // _____________________________________________________________________________
-double MemorySize::kilobytes() const {
+double MemorySize::getKilobytes() const {
   return sizetDivision(memoryInBytes_, numBytesPerkB);
 }
 
 // _____________________________________________________________________________
-double MemorySize::megabytes() const {
+double MemorySize::getMegabytes() const {
   return sizetDivision(memoryInBytes_, numBytesPerMB);
 }
 
 // _____________________________________________________________________________
-double MemorySize::gigabytes() const {
+double MemorySize::getGigabytes() const {
   return sizetDivision(memoryInBytes_, numBytesPerGB);
 }
 
 // _____________________________________________________________________________
-double MemorySize::terabytes() const {
+double MemorySize::getTerabytes() const {
   return sizetDivision(memoryInBytes_, numBytesPerTB);
 }
 
@@ -124,13 +124,13 @@ std::string MemorySize::asString() const {
 
   // Just use the first unit, which is bigger/equal to `memoryInBytes_`.
   if (memoryInBytes_ >= numBytesPerTB) {
-    return toString(terabytes(), "TB");
+    return toString(getTerabytes(), "TB");
   } else if (memoryInBytes_ >= numBytesPerGB) {
-    return toString(gigabytes(), "GB");
+    return toString(getGigabytes(), "GB");
   } else if (memoryInBytes_ >= numBytesPerMB) {
-    return toString(megabytes(), "MB");
+    return toString(getMegabytes(), "MB");
   } else if (memoryInBytes_ >= numBytesPerkB) {
-    return toString(kilobytes(), "kB");
+    return toString(getKilobytes(), "kB");
   } else {
     // Just return the amount of bytes.
     return toString(memoryInBytes_, "B");
