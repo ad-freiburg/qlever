@@ -24,8 +24,13 @@ constexpr size_t numBytesPerMB = ad_utility::pow<size_t>(10, 6);
 constexpr size_t numBytesPerGB = ad_utility::pow<size_t>(10, 9);
 constexpr size_t numBytesPerTB = ad_utility::pow<size_t>(10, 12);
 
-// Helper function for dividing two instances of `size_t`. Mainly exists for
-// code reduction.
+/*
+Helper function for dividing two instances of `size_t`.
+Needed, because there is no `std` division function, that takes unconverted
+`size_t`.This tends to lead to error and unprecise results. This function
+however, should be about as precise as possible, when having the return type
+`double`.
+*/
 static double sizeTDivision(const size_t dividend, const size_t divisor) {
   size_t quotient = dividend / divisor;
   return static_cast<double>(quotient) +
