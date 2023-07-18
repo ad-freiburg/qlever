@@ -695,61 +695,6 @@ bool TurtleStreamParser<T>::resetStateAndRead(
   return true;
 }
 
-// __________________________________________________________________________
-template <class T>
-void TurtleMmapParser<T>::initialize(const string& filename) {
-  unmapFile();
-  this->clear();
-  ad_utility::File f(filename.c_str(), "r");
-  size_t size = f.sizeOfFile();
-  LOG(INFO) << "mapping " << size << " bytes" << std::endl;
-  const int fd = f.getFileDescriptor();
-  void* ptr = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
-  AD_CONTRACT_CHECK(ptr != MAP_FAILED);
-  f.close();
-  _dataSize = size;
-  _data = static_cast<char*>(ptr);
-  // set the tokenizers input to the complete mmap range
-  _tok.reset(_data, _dataSize);
-}
-
-template <class T>
-bool TurtleMmapParser<T>::getLine(TurtleTriple* triple) {
-  if (_triples.empty()) {
-    // always try to parse a batch of triples at once to make up for the
-    // relatively expensive backup calls.
-    while (_triples.size() < PARSER_MIN_TRIPLES_AT_ONCE &&
-           !_isParserExhausted) {
-      if (this->statement()) {
-        // we cannot parse anymore from an mmaped file but there was no
-        // error. check if we are just at the end of the input, otherwise
-        // inform.
-        _tok.skipWhitespaceAndComments();
-        auto d = _tok.view();
-        if (!d.empty()) {
-          LOG(INFO) << "Parsing of line has Failed, but parseInput is not "
-                       "yet exhausted. Remaining bytes: "
-                    << d.size() << '\n';
-          auto s = std::min(size_t(1000), size_t(d.size()));
-          LOG(INFO) << "Logging first 1000 unparsed characters\n";
-          LOG(INFO) << std::string_view(d.data(), s) << std::endl;
-        }
-        _isParserExhausted = true;
-        break;
-      }
-    }
-  }
-  // if we have a triple now we can return it, else we are done parsing.
-  if (_triples.empty()) {
-    return false;
-  }
-
-  // we now have at least one triple, return it.
-  *triple = _triples.back();
-  _triples.pop_back();
-  return true;
-}
-
 template <class T>
 void TurtleStreamParser<T>::initialize(const string& filename) {
   this->clear();
@@ -967,7 +912,5 @@ template class TurtleParser<Tokenizer>;
 template class TurtleParser<TokenizerCtre>;
 template class TurtleStreamParser<Tokenizer>;
 template class TurtleStreamParser<TokenizerCtre>;
-template class TurtleMmapParser<Tokenizer>;
-template class TurtleMmapParser<TokenizerCtre>;
 template class TurtleParallelParser<Tokenizer>;
 template class TurtleParallelParser<TokenizerCtre>;

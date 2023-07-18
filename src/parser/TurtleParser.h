@@ -68,6 +68,7 @@ class TurtleParserBase {
   bool _invalidLiteralsAreSkipped = false;
 
  public:
+  virtual ~TurtleParserBase() = default;
   // Wrapper to getLine that is expected by the rest of QLever
   bool getLine(TurtleTriple& triple) { return getLine(&triple); }
 
@@ -544,60 +545,6 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   // that many bytes were already parsed before dealing with the current batch
   // in member _byteVec
   size_t _numBytesBeforeCurrentBatch = 0;
-};
-
-/**
- * This class is a TurtleParser
- * reads from an uncompressed .ttl file, that has to lie in memory.
- * It will be loaded at once using Mmap. Thus this class does not support
- * Parsing from streams like stdin
- */
-template <class Tokenizer_T>
-class TurtleMmapParser : public TurtleParser<Tokenizer_T> {
- public:
-  explicit TurtleMmapParser(const string& filename) {
-    LOG(DEBUG) << "Initialize turtle parsing from uncompressed file "
-               << filename << std::endl;
-    LOG(DEBUG) << "This must be a file on disk since it will be loaded "
-                  "using the mmap system call"
-               << std::endl;
-    initialize(filename);
-  }
-
-  ~TurtleMmapParser() { unmapFile(); }
-  TurtleMmapParser(TurtleMmapParser&& rhs) = default;
-  TurtleMmapParser& operator=(TurtleMmapParser&& rhs) = default;
-
-  size_t getParsePosition() const override {
-    return _dataSize - _tok.data().size();
-  }
-
-  // inherit the other overload
-  using TurtleParser<Tokenizer_T>::getLine;
-  // overload of the actual mmap-based parsing logic
-  bool getLine(TurtleTriple* triple) override;
-
-  // initialize parse input from a turtle file using mmap
-  void initialize(const string& filename);
-
-  // has to be called after finishing parsing of an mmaped .ttl file
-  // if no file is currently mapped this function has no effect
-  void unmapFile() {
-    if (_data) {
-      munmap(const_cast<char*>(_data), _dataSize);
-      _data = nullptr;
-      _dataSize = 0;
-    }
-  }
-
-  // used when mapping a turtle file via Mmap
-  const char* _data = nullptr;
-  // store the size of the mapped input when using the _data ptr
-  // via mmap
-  size_t _dataSize = 0;
-  using TurtleParser<Tokenizer_T>::_tok;
-  using TurtleParser<Tokenizer_T>::_isParserExhausted;
-  using TurtleParser<Tokenizer_T>::_triples;
 };
 
 /**

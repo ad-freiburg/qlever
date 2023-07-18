@@ -85,8 +85,8 @@ void IndexImpl::createFromFile(const string& filename) {
 
   readIndexBuilderSettingsFromFile();
 
-
-  auto setTokenizer = [&, this]<template<typename> typename ParserTemplate>() -> std::unique_ptr<TurtleParserBase> {
+  auto setTokenizer = [&, this]<template <typename> typename ParserTemplate>()
+      -> std::unique_ptr<TurtleParserBase> {
     if (onlyAsciiTurtlePrefixes_) {
       return std::make_unique<ParserTemplate<TokenizerCtre>>(filename);
     } else {
@@ -102,7 +102,8 @@ void IndexImpl::createFromFile(const string& filename) {
     }
   }();
 
-  IndexBuilderDataAsPsoSorter indexBuilderData = createIdTriplesAndVocab(std::move(parser));
+  IndexBuilderDataAsPsoSorter indexBuilderData =
+      createIdTriplesAndVocab(std::move(parser));
 
   // If we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
@@ -1001,7 +1002,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   if (j.count("parallel-parsing")) {
     useParallelParser_ = static_cast<bool>(j["parallel-parsing"]);
     if (useParallelParser_) {
-      LOG(INFO) << WARNING_PARALLEL_PARSING
+      LOG(INFO) << WARNING_PARALLEL_PARSING << std::endl;
     }
   }
 

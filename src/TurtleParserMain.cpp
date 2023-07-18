@@ -72,8 +72,6 @@ void writeNT(std::ostream& out, const string& fileFormat,
   if (fileFormat == "ttl" || fileFormat == "nt") {
     // writeLabel<TurtleStreamParser<Tokenizer_T>>(out, filename);
     writeNTImpl<TurtleStreamParser<Tokenizer_T>>(out, filename);
-  } else if (fileFormat == "mmap") {
-    writeNTImpl<TurtleMmapParser<Tokenizer_T>>(out, filename);
   } else {
     LOG(ERROR) << "writeNT was called with unknown file format " << fileFormat
                << ". This should never happen, terminating" << std::endl;
