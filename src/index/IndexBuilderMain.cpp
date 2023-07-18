@@ -73,7 +73,6 @@ int main(int argc, char** argv) {
   string filetype;
   string inputFile;
   bool noPrefixCompression = false;
-  bool onDiskLiterals = false;
   bool noPatterns = false;
   bool onlyAddTextIndex = false;
   bool keepTemporaryFiles = false;
@@ -119,9 +118,6 @@ int main(int argc, char** argv) {
       "the same `index-basename` already exists.");
 
   // Options for the knowledge graph index.
-  add("externalize-literals,l", po::bool_switch(&onDiskLiterals),
-      "An unused and deprecated option that will be removed from a future "
-      "version of qlever");
   add("settings-file,s", po::value(&settingsFile),
       "A JSON file, where various settings can be specified (see the QLever "
       "documentation).");
@@ -158,13 +154,6 @@ int main(int argc, char** argv) {
   if (stxxlMemoryGB.has_value()) {
     index.stxxlMemoryInBytes() =
         1024ul * 1024ul * 1024ul * stxxlMemoryGB.value();
-  }
-
-  if (onDiskLiterals) {
-    LOG(WARN) << EMPH_ON
-              << "Warning, the -l command line option has no effect anymore "
-                 "and will be removed from a future version of QLever"
-              << EMPH_OFF << std::endl;
   }
 
   // If no text index name was specified, take the part of the wordsfile after
@@ -236,18 +225,13 @@ int main(int argc, char** argv) {
       if (filetype == "ttl") {
         LOG(DEBUG) << "Parsing uncompressed TTL from: " << inputFile
                    << std::endl;
-        index.createFromFile<TurtleParserAuto>(inputFile);
+        index.createFromFile(inputFile);
       } else if (filetype == "nt") {
         LOG(DEBUG) << "Parsing uncompressed N-Triples from: " << inputFile
                    << " (using the Turtle parser)" << std::endl;
-        index.createFromFile<TurtleParserAuto>(inputFile);
-      } else if (filetype == "mmap") {
-        LOG(DEBUG) << "Parsing uncompressed TTL from from: " << inputFile
-                   << " (using mmap, which only works for files, not for "
-                   << "streams)" << std::endl;
-        index.createFromFile<TurtleMmapParser<Tokenizer>>(inputFile);
+        index.createFromFile(inputFile);
       } else {
-        LOG(ERROR) << "File format must be one of: nt ttl mmap" << std::endl;
+        LOG(ERROR) << "File format must be one of: nt ttl" << std::endl;
         std::cerr << boostOptions << std::endl;
         exit(1);
       }

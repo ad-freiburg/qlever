@@ -19,17 +19,9 @@ Index::Index(Index&&) noexcept = default;
 Index::~Index() = default;
 
 // ____________________________________________________________________________
-template <class Parser>
 void Index::createFromFile(const std::string& filename) {
-  pimpl_->template createFromFile<Parser>(filename);
+  pimpl_->createFromFile(filename);
 }
-
-// Explicit instantiations.
-template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
-    const string& filename);
-template void Index::createFromFile<TurtleMmapParser<Tokenizer>>(
-    const string& filename);
-template void Index::createFromFile<TurtleParserAuto>(const string& filename);
 
 // ____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {

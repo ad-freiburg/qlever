@@ -109,6 +109,7 @@ class IndexImpl {
   string onDiskBase_;
   string settingsFileName_;
   bool onlyAsciiTurtlePrefixes_ = false;
+  bool useParallelParser_ = false;
   TurtleParserIntegerOverflowBehavior turtleParserIntegerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
@@ -204,7 +205,6 @@ class IndexImpl {
   // Will write vocabulary and on-disk index data.
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
-  template <class Parser>
   void createFromFile(const string& filename);
 
   void addPatternsToExistingIndex();
@@ -616,7 +616,6 @@ class IndexImpl {
   void readConfiguration();
 
   // initialize the index-build-time settings for the vocabulary
-  template <class Parser>
   void readIndexBuilderSettingsFromFile();
 
   /**

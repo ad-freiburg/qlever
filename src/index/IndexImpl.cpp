@@ -78,29 +78,31 @@ void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
 }
 
 // _____________________________________________________________________________
-template <class Parser>
 void IndexImpl::createFromFile(const string& filename) {
+  LOG(INFO) << "Processing input triples from " << filename << " ..."
+            << std::endl;
   string indexFilename = onDiskBase_ + ".index";
 
-  readIndexBuilderSettingsFromFile<Parser>();
+  readIndexBuilderSettingsFromFile();
 
-  IndexBuilderDataAsPsoSorter indexBuilderData;
-  if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
+
+  auto setTokenizer = [&, this]<template<typename> typename ParserTemplate>() -> std::unique_ptr<TurtleParserBase> {
     if (onlyAsciiTurtlePrefixes_) {
-      LOG(DEBUG) << "Using the CTRE library for tokenization" << std::endl;
-      auto parser =
-          std::make_unique<TurtleParallelParser<TokenizerCtre>>(filename);
-      indexBuilderData = createIdTriplesAndVocab(std::move(parser));
+      return std::make_unique<ParserTemplate<TokenizerCtre>>(filename);
     } else {
-      LOG(DEBUG) << "Using the Google RE2 library for tokenization"
-                 << std::endl;
-      auto parser = std::make_unique<TurtleParallelParser<Tokenizer>>(filename);
-      indexBuilderData = createIdTriplesAndVocab(std::move(parser));
+      return std::make_unique<ParserTemplate<Tokenizer>>(filename);
     }
-  } else {
-    indexBuilderData =
-        createIdTriplesAndVocab(std::make_unique<Parser>(filename));
-  }
+  };
+
+  std::unique_ptr<TurtleParserBase> parser = [&setTokenizer, this]() {
+    if (useParallelParser_) {
+      return setTokenizer.template operator()<TurtleParallelParser>();
+    } else {
+      return setTokenizer.template operator()<TurtleStreamParser>();
+    }
+  }();
+
+  IndexBuilderDataAsPsoSorter indexBuilderData = createIdTriplesAndVocab(std::move(parser));
 
   // If we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
@@ -228,22 +230,9 @@ void IndexImpl::createFromFile(const string& filename) {
   LOG(INFO) << "Index build completed" << std::endl;
 }
 
-// Explicit instantiations.
-template void IndexImpl::createFromFile<TurtleStreamParser<Tokenizer>>(
-    const string& filename);
-template void IndexImpl::createFromFile<TurtleMmapParser<Tokenizer>>(
-    const string& filename);
-template void IndexImpl::createFromFile<TurtleParserAuto>(
-    const string& filename);
-
 // _____________________________________________________________________________
 IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial) {
-  /*
-  LOG(INFO) << "Processing input triples from " << filename << " ..."
-            << std::endl;
-  auto parser = std::make_shared<Parser>(filename);
-   */
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   std::unique_ptr<TripleVec> idTriples(new TripleVec());
@@ -937,7 +926,6 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
 }
 
 // ___________________________________________________________________________
-template <class Parser>
 void IndexImpl::readIndexBuilderSettingsFromFile() {
   json j;  // if we have no settings, we still have to initialize some default
            // values
@@ -1001,19 +989,19 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     configurationJson_["languages-internal"] = j["languages-internal"];
   }
   if (j.count("ascii-prefixes-only")) {
-    if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
-      bool v{j["ascii-prefixes-only"]};
-      if (v) {
-        LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
-        onlyAsciiTurtlePrefixes_ = true;
-      } else {
-        onlyAsciiTurtlePrefixes_ = false;
-      }
+    bool v{j["ascii-prefixes-only"]};
+    if (v) {
+      LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
+      onlyAsciiTurtlePrefixes_ = true;
     } else {
-      LOG(WARN) << "You specified the ascii-prefixes-only but a parser that is "
-                   "not the Turtle stream parser. This means that this setting "
-                   "is ignored."
-                << std::endl;
+      onlyAsciiTurtlePrefixes_ = false;
+    }
+  }
+
+  if (j.count("parallel-parsing")) {
+    useParallelParser_ = static_cast<bool>(j["parallel-parsing"]);
+    if (useParallelParser_) {
+      LOG(INFO) << WARNING_PARALLEL_PARSING
     }
   }
 
