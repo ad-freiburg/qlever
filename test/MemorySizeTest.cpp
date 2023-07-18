@@ -154,53 +154,50 @@ TEST(MemorySize, AssignmentOperator) {
 }
 
 // For tests, where `MemorySize` is converted into string and vice-versa.
-struct MemorySizeInByteAndStringRepresentation {
-  size_t memoryAmount_;
+struct MemorySizeAndStringRepresentation {
+  ad_utility::MemorySize memorySize_;
   std::string stringRepresentation_;
 };
 
-static std::vector<MemorySizeInByteAndStringRepresentation>
+static std::vector<MemorySizeAndStringRepresentation>
 generalAsStringTestCases() {
-  return {{(50_B).getBytes(), "50 B"},     {(1_kB).getBytes(), "1000 B"},
-          {(200_kB).getBytes(), "200 kB"}, {(150.5_kB).getBytes(), "150.5 kB"},
-          {(2_MB).getBytes(), "2 MB"},     {(1.5_MB).getBytes(), "1.5 MB"},
-          {(2_GB).getBytes(), "2 GB"},     {(1.5_GB).getBytes(), "1.5 GB"},
-          {(2_TB).getBytes(), "2 TB"},     {(1.5_TB).getBytes(), "1.5 TB"}};
+  return {{50_B, "50 B"},         {1_kB, "1000 B"},   {200_kB, "200 kB"},
+          {150.5_kB, "150.5 kB"}, {2_MB, "2 MB"},     {1.5_MB, "1.5 MB"},
+          {2_GB, "2 GB"},         {1.5_GB, "1.5 GB"}, {2_TB, "2 TB"},
+          {1.5_TB, "1.5 TB"}};
 }
 
 TEST(MemorySize, AsString) {
-  // Creates an instance with given amount of memory noted and checks the
-  // expected string representation.
-  auto doTest = [](const MemorySizeInByteAndStringRepresentation& testCase) {
-    ad_utility::MemorySize mem(
-        ad_utility::MemorySize::bytes(testCase.memoryAmount_));
-
+  // Checks the expected string representation.
+  auto doTest = [](const MemorySizeAndStringRepresentation& testCase) {
     // Normal `asString`.
-    ASSERT_STREQ(mem.asString().c_str(), testCase.stringRepresentation_.data());
+    ASSERT_STREQ(testCase.memorySize_.asString().c_str(),
+                 testCase.stringRepresentation_.data());
 
     // With the `<<` operator.
     std::ostringstream stream;
-    stream << mem;
+    stream << testCase.memorySize_;
     ASSERT_STREQ(stream.str().c_str(), testCase.stringRepresentation_.data());
   };
 
   std::ranges::for_each(generalAsStringTestCases(), doTest);
 
   // Check, if it always uses the right unit.
-  doTest({(99'999_B).getBytes(), "99999 B"});
-  doTest({(100'000_B).getBytes(), "100 kB"});
-  doTest({(400'000_B).getBytes(), "400 kB"});
-  doTest({(4'000_kB).getBytes(), "4 MB"});
-  doTest({(4'000_MB).getBytes(), "4 GB"});
-  doTest({(4'000_GB).getBytes(), "4 TB"});
+  doTest({99'999_B, "99999 B"});
+  doTest({100'000_B, "100 kB"});
+  doTest({400'000_B, "400 kB"});
+  doTest({4'000_kB, "4 MB"});
+  doTest({4'000_MB, "4 GB"});
+  doTest({4'000_GB, "4 TB"});
 }
 
 TEST(MemorySize, Parse) {
-  // Parse the given string and compare to the expected amount of bytes.
-  auto doTest = [](const MemorySizeInByteAndStringRepresentation& testCase) {
+  // Parse the given string and compare to the expected instance of
+  // `MemorySize`.
+  auto doTest = [](const MemorySizeAndStringRepresentation& testCase) {
     ASSERT_EQ(ad_utility::MemorySize::parse(testCase.stringRepresentation_)
                   .getBytes(),
-              testCase.memoryAmount_);
+              testCase.memorySize_.getBytes());
   };
 
   // Check, if parsing the given string causes an exception.
@@ -217,11 +214,11 @@ TEST(MemorySize, Parse) {
   doExceptionTest("-4.2 B");
 
   // Nothing should work with negativ numbers.
-  std::ranges::for_each(
-      generalAsStringTestCases(), doExceptionTest,
-      [](const MemorySizeInByteAndStringRepresentation& testCase) {
-        return absl::StrCat("-", testCase.stringRepresentation_);
-      });
+  std::ranges::for_each(generalAsStringTestCases(), doExceptionTest,
+                        [](const MemorySizeAndStringRepresentation& testCase) {
+                          return absl::StrCat("-",
+                                              testCase.stringRepresentation_);
+                        });
 
   // byte sizes can only be set with `B`.
   std::ranges::for_each(std::vector{"42 BYTE", "42 BYTe", "42 BYtE", "42 BYte",
@@ -232,24 +229,23 @@ TEST(MemorySize, Parse) {
 
   // Is our grammar truly case insensitive?
   std::ranges::for_each(
-      std::vector<MemorySizeInByteAndStringRepresentation>{
-          {(42_B).getBytes(), "42 B"},
-          {(42_B).getBytes(), "42 b"},
-          {(42_kB).getBytes(), "42 KB"},
-          {(42_kB).getBytes(), "42 Kb"},
-          {(42_kB).getBytes(), "42 kB"},
-          {(42_kB).getBytes(), "42 kb"},
-          {(42_MB).getBytes(), "42 MB"},
-          {(42_MB).getBytes(), "42 Mb"},
-          {(42_MB).getBytes(), "42 mB"},
-          {(42_MB).getBytes(), "42 mb"},
-          {(42_GB).getBytes(), "42 GB"},
-          {(42_GB).getBytes(), "42 Gb"},
-          {(42_GB).getBytes(), "42 gB"},
-          {(42_GB).getBytes(), "42 gb"},
-          {(42_TB).getBytes(), "42 TB"},
-          {(42_TB).getBytes(), "42 Tb"},
-          {(42_TB).getBytes(), "42 tB"},
-          {(42_TB).getBytes(), "42 tb"}},
+      std::vector<MemorySizeAndStringRepresentation>{{42_B, "42 B"},
+                                                     {42_B, "42 b"},
+                                                     {42_kB, "42 KB"},
+                                                     {42_kB, "42 Kb"},
+                                                     {42_kB, "42 kB"},
+                                                     {42_kB, "42 kb"},
+                                                     {42_MB, "42 MB"},
+                                                     {42_MB, "42 Mb"},
+                                                     {42_MB, "42 mB"},
+                                                     {42_MB, "42 mb"},
+                                                     {42_GB, "42 GB"},
+                                                     {42_GB, "42 Gb"},
+                                                     {42_GB, "42 gB"},
+                                                     {42_GB, "42 gb"},
+                                                     {42_TB, "42 TB"},
+                                                     {42_TB, "42 Tb"},
+                                                     {42_TB, "42 tB"},
+                                                     {42_TB, "42 tb"}},
       doTest);
 }
