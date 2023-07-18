@@ -41,9 +41,9 @@ std::string MemorySize::asString() const {
   */
   constexpr ad_utility::ConstexprMap<char, size_t, 4> memoryUnitLowerBound(
       {std::pair<char, size_t>{'k', ad_utility::pow(10, 5)},
-       std::pair<char, size_t>{'M', details::numBytesPerMB},
-       std::pair<char, size_t>{'G', details::numBytesPerGB},
-       std::pair<char, size_t>{'T', details::numBytesPerTB}});
+       std::pair<char, size_t>{'M', detail::numBytesPerMB},
+       std::pair<char, size_t>{'G', detail::numBytesPerGB},
+       std::pair<char, size_t>{'T', detail::numBytesPerTB}});
 
   // Go through the units from top to bottom, in terms of size, and choose the
   // first one, that is smaller/equal to `memoryInBytes_`.

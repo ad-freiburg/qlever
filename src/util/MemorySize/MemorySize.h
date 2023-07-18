@@ -49,26 +49,26 @@ class MemorySize {
   memory size saved internally. Always requries the exact memory size unit and
   size wanted.
   */
-  static constexpr MemorySize bytes(size_t numBytes);
-  static constexpr MemorySize kilobytes(size_t numKilobytes);
-  static constexpr MemorySize kilobytes(double numKilobytes);
-  static constexpr MemorySize megabytes(size_t numMegabytes);
-  static constexpr MemorySize megabytes(double numMegabytes);
-  static constexpr MemorySize gigabytes(size_t numGigabytes);
-  static constexpr MemorySize gigabytes(double numGigabytes);
-  static constexpr MemorySize terabytes(size_t numTerabytes);
-  static constexpr MemorySize terabytes(double numTerabytes);
+  constexpr static MemorySize bytes(size_t numBytes);
+  constexpr static MemorySize kilobytes(size_t numKilobytes);
+  constexpr static MemorySize kilobytes(double numKilobytes);
+  constexpr static MemorySize megabytes(size_t numMegabytes);
+  constexpr static MemorySize megabytes(double numMegabytes);
+  constexpr static MemorySize gigabytes(size_t numGigabytes);
+  constexpr static MemorySize gigabytes(double numGigabytes);
+  constexpr static MemorySize terabytes(size_t numTerabytes);
+  constexpr static MemorySize terabytes(double numTerabytes);
 
   /*
   Return the internal memory amount in the wanted memory unit format.
   For example: If the internal memory amount is 1000 bytes, than `kilobytes()`
   would return `1.0`.
   */
-  size_t constexpr getBytes() const;
-  double constexpr getKilobytes() const;
-  double constexpr getMegabytes() const;
-  double constexpr getGigabytes() const;
-  double constexpr getTerabytes() const;
+  constexpr size_t getBytes() const;
+  constexpr double getKilobytes() const;
+  constexpr double getMegabytes() const;
+  constexpr double getGigabytes() const;
+  constexpr double getTerabytes() const;
 
   /*
   Return the string representation of the internal memory amount in the
@@ -123,7 +123,7 @@ consteval MemorySize operator""_TB(unsigned long long int terabytes);
 */
 
 // Helper functions.
-namespace details {
+namespace detail {
 // Just the number of bytes per memory unit.
 constexpr size_t numBytesPerkB = ad_utility::pow<size_t>(10, 3);
 constexpr size_t numBytesPerMB = ad_utility::pow<size_t>(10, 6);
@@ -137,7 +137,7 @@ Needed, because there is no `std` division function, that takes unconverted
 however, should be about as precise as possible, when having the return type
 `double`.
 */
-static constexpr double sizeTDivision(const size_t dividend,
+constexpr static double sizeTDivision(const size_t dividend,
                                       const size_t divisor) {
   size_t quotient = dividend / divisor;
   return static_cast<double>(quotient) +
@@ -152,7 +152,7 @@ amount of bytes per unit.
 */
 template <typename T>
 requires std::integral<T> || std::floating_point<T>
-size_t constexpr convertMemoryUnitsToBytes(const T amountOfUnits,
+constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
                                            const size_t numBytesPerUnit) {
   // Negativ values makes no sense.
   AD_CONTRACT_CHECK(amountOfUnits >= 0);
@@ -175,7 +175,7 @@ size_t constexpr convertMemoryUnitsToBytes(const T amountOfUnits,
     return amountOfUnits * numBytesPerUnit;
   }
 }
-}  // namespace details
+}  // namespace detail
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::bytes(size_t numBytes) {
@@ -185,49 +185,49 @@ constexpr MemorySize MemorySize::bytes(size_t numBytes) {
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::kilobytes(size_t numKilobytes) {
   return MemorySize{
-      details::convertMemoryUnitsToBytes(numKilobytes, details::numBytesPerkB)};
+      detail::convertMemoryUnitsToBytes(numKilobytes, detail::numBytesPerkB)};
 }
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::kilobytes(double numKilobytes) {
   return MemorySize{
-      details::convertMemoryUnitsToBytes(numKilobytes, details::numBytesPerkB)};
+      detail::convertMemoryUnitsToBytes(numKilobytes, detail::numBytesPerkB)};
 }
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::megabytes(size_t numMegabytes) {
   return MemorySize{
-      details::convertMemoryUnitsToBytes(numMegabytes, details::numBytesPerMB)};
+      detail::convertMemoryUnitsToBytes(numMegabytes, detail::numBytesPerMB)};
 }
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::megabytes(double numMegabytes) {
   return MemorySize{
-      details::convertMemoryUnitsToBytes(numMegabytes, details::numBytesPerMB)};
+      detail::convertMemoryUnitsToBytes(numMegabytes, detail::numBytesPerMB)};
 }
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::gigabytes(size_t numGigabytes) {
   return MemorySize{
-      details::convertMemoryUnitsToBytes(numGigabytes, details::numBytesPerGB)};
+      detail::convertMemoryUnitsToBytes(numGigabytes, detail::numBytesPerGB)};
 }
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::gigabytes(double numGigabytes) {
   return MemorySize{
-      details::convertMemoryUnitsToBytes(numGigabytes, details::numBytesPerGB)};
+      detail::convertMemoryUnitsToBytes(numGigabytes, detail::numBytesPerGB)};
 }
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::terabytes(size_t numTerabytes) {
   return MemorySize{
-      details::convertMemoryUnitsToBytes(numTerabytes, details::numBytesPerTB)};
+      detail::convertMemoryUnitsToBytes(numTerabytes, detail::numBytesPerTB)};
 }
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::terabytes(double numTerabytes) {
   return MemorySize{
-      details::convertMemoryUnitsToBytes(numTerabytes, details::numBytesPerTB)};
+      detail::convertMemoryUnitsToBytes(numTerabytes, detail::numBytesPerTB)};
 }
 
 // _____________________________________________________________________________
@@ -235,22 +235,22 @@ constexpr size_t MemorySize::getBytes() const { return memoryInBytes_; }
 
 // _____________________________________________________________________________
 constexpr double MemorySize::getKilobytes() const {
-  return details::sizeTDivision(memoryInBytes_, details::numBytesPerkB);
+  return detail::sizeTDivision(memoryInBytes_, detail::numBytesPerkB);
 }
 
 // _____________________________________________________________________________
 constexpr double MemorySize::getMegabytes() const {
-  return details::sizeTDivision(memoryInBytes_, details::numBytesPerMB);
+  return detail::sizeTDivision(memoryInBytes_, detail::numBytesPerMB);
 }
 
 // _____________________________________________________________________________
 constexpr double MemorySize::getGigabytes() const {
-  return details::sizeTDivision(memoryInBytes_, details::numBytesPerGB);
+  return detail::sizeTDivision(memoryInBytes_, detail::numBytesPerGB);
 }
 
 // _____________________________________________________________________________
 constexpr double MemorySize::getTerabytes() const {
-  return details::sizeTDivision(memoryInBytes_, details::numBytesPerTB);
+  return detail::sizeTDivision(memoryInBytes_, detail::numBytesPerTB);
 }
 
 namespace memory_literals {

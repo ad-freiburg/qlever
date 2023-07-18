@@ -2,11 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (July of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "util/MemorySize/MemorySizeParser.h"
+
 #include <string>
 
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/MemorySize/MemorySizeParser.h"
 #include "util/StringUtils.h"
 
 using ad_utility::MemorySize;
