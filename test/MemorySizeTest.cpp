@@ -64,18 +64,20 @@ struct AllMemoryUnitSizes {
 
 // A hash map pairing up a single memory size unit with the corresponding
 // `AllMemoryUnitSizes` representations.
+using PairStringViewAndAllMemoryUnitSizes =
+    std::pair<std::string_view, AllMemoryUnitSizes>;
 constexpr ad_utility::ConstexprMap<std::string_view, AllMemoryUnitSizes, 5>
     singleMemoryUnitSizes(
-        {std::pair<std::string_view, AllMemoryUnitSizes>{
+        {PairStringViewAndAllMemoryUnitSizes{
              "B", AllMemoryUnitSizes{1uL, 1e-3, 1e-6, 1e-9, 1e-12}},
-         std::pair<std::string_view, AllMemoryUnitSizes>{
-             "kB", AllMemoryUnitSizes{1000uL, 1, 1e-3, 1e-6, 1e-9}},
-         std::pair<std::string_view, AllMemoryUnitSizes>{
-             "MB", AllMemoryUnitSizes{1000000uL, 1e3, 1, 1e-3, 1e-6}},
-         std::pair<std::string_view, AllMemoryUnitSizes>{
-             "GB", AllMemoryUnitSizes{1000000000uL, 1e6, 1e3, 1, 1e-3}},
-         std::pair<std::string_view, AllMemoryUnitSizes>{
-             "TB", AllMemoryUnitSizes{1000000000000uL, 1e9, 1e6, 1e3, 1}}});
+         PairStringViewAndAllMemoryUnitSizes{
+             "kB", AllMemoryUnitSizes{1'000uL, 1, 1e-3, 1e-6, 1e-9}},
+         PairStringViewAndAllMemoryUnitSizes{
+             "MB", AllMemoryUnitSizes{1'000'000uL, 1e3, 1, 1e-3, 1e-6}},
+         PairStringViewAndAllMemoryUnitSizes{
+             "GB", AllMemoryUnitSizes{1'000'000'000uL, 1e6, 1e3, 1, 1e-3}},
+         PairStringViewAndAllMemoryUnitSizes{
+             "TB", AllMemoryUnitSizes{1'000'000'000'000uL, 1e9, 1e6, 1e3, 1}}});
 
 /*
 Checks all the getters of the class with the wanted memory sizes.
@@ -190,12 +192,12 @@ TEST(MemorySize, AsString) {
   std::ranges::for_each(generalAsStringTestCases(), doTest);
 
   // Check, if it always uses the right unit.
-  doTest({(99999_B).getBytes(), "99999 B"});
-  doTest({(100000_B).getBytes(), "100 kB"});
-  doTest({(400000_B).getBytes(), "400 kB"});
-  doTest({(4000_kB).getBytes(), "4 MB"});
-  doTest({(4000_MB).getBytes(), "4 GB"});
-  doTest({(4000_GB).getBytes(), "4 TB"});
+  doTest({(99'999_B).getBytes(), "99999 B"});
+  doTest({(100'000_B).getBytes(), "100 kB"});
+  doTest({(400'000_B).getBytes(), "400 kB"});
+  doTest({(4'000_kB).getBytes(), "4 MB"});
+  doTest({(4'000_MB).getBytes(), "4 GB"});
+  doTest({(4'000_GB).getBytes(), "4 TB"});
 }
 
 TEST(MemorySize, Parse) {
