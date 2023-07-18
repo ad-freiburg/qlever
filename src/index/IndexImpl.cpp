@@ -814,8 +814,7 @@ void IndexImpl::readConfiguration() {
     if (indexVersion != currentVersion) {
       // TODO<joka921> Handle the case that the binary is older than the index (determine by the date).
       LOG(ERROR) << "The index is not compatible with this version of QLever. We recommend to rebuild and then start the index with the current master."
-                    " Alternatively start the engine with a compatible version of QLever (PR = TODO, Date = TODO)."
-                 << indexVersion.dump(4)
+                    " Alternatively start the engine with a compatible version of QLever (PR = TODO, Date = TODO).";
       throw std::runtime_error{
           "Incompatible index version, see log message for details"};
     }
