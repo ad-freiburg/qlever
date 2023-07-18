@@ -22,38 +22,35 @@
 // Importing all the literals.
 using namespace ad_utility::memory_literals;
 
-// A small helper, because you can't call member functions on user defined
-// literals.
-size_t getBytes(const ad_utility::MemorySize& m) { return m.getBytes(); };
-
 TEST(MemorySize, UserDefinedLiterals) {
   // Normal bytes.
-  ASSERT_EQ(50uL, getBytes(50_B));
+  ASSERT_EQ(50uL, (50_B).getBytes());
 
   // Kilobytes.
-  ASSERT_EQ(2000uL, getBytes(2_kB));       // Whole number.
-  ASSERT_EQ(1500uL, getBytes(1.5_kB));     // Floating point without rounding.
-  ASSERT_EQ(1001uL, getBytes(1.0003_kB));  // Floating point with rounding.
+  ASSERT_EQ(2000uL, (2_kB).getBytes());    // Whole number.
+  ASSERT_EQ(1500uL, (1.5_kB).getBytes());  // Floating point without rounding.
+  ASSERT_EQ(1001uL, (1.0003_kB).getBytes());  // Floating point with rounding.
 
   // Megabytes.
-  ASSERT_EQ(2000000uL, getBytes(2_MB));    // Whole number.
-  ASSERT_EQ(1500000uL, getBytes(1.5_MB));  // Floating point without rounding.
+  ASSERT_EQ(2000000uL, (2_MB).getBytes());  // Whole number.
+  ASSERT_EQ(1500000uL,
+            (1.5_MB).getBytes());  // Floating point without rounding.
   ASSERT_EQ(1000001uL,
-            getBytes(1.0000003_MB));  // Floating point with rounding.
+            (1.0000003_MB).getBytes());  // Floating point with rounding.
 
   // Gigabytes.
-  ASSERT_EQ(2000000000uL, getBytes(2_GB));  // Whole number.
+  ASSERT_EQ(2000000000uL, (2_GB).getBytes());  // Whole number.
   ASSERT_EQ(1500000000uL,
-            getBytes(1.5_GB));  // Floating point without rounding.
+            (1.5_GB).getBytes());  // Floating point without rounding.
   ASSERT_EQ(1000000001uL,
-            getBytes(1.0000000003_GB));  // Floating point with rounding.
+            (1.0000000003_GB).getBytes());  // Floating point with rounding.
 
   // Terabytes.
-  ASSERT_EQ(2000000000000uL, getBytes(2_TB));  // Whole number.
+  ASSERT_EQ(2000000000000uL, (2_TB).getBytes());  // Whole number.
   ASSERT_EQ(1500000000000uL,
-            getBytes(1.5_TB));  // Floating point without rounding.
+            (1.5_TB).getBytes());  // Floating point without rounding.
   ASSERT_EQ(1000000000001uL,
-            getBytes(1.0000000000003_TB));  // Floating point with rounding.
+            (1.0000000000003_TB).getBytes());  // Floating point with rounding.
 }
 
 // Describes a memory size in all available memory units.
@@ -167,11 +164,11 @@ struct MemorySizeInByteAndStringRepresentation {
 
 static std::vector<MemorySizeInByteAndStringRepresentation>
 generalAsStringTestCases() {
-  return {{getBytes(50_B), "50 B"},     {getBytes(1_kB), "1000 B"},
-          {getBytes(200_kB), "200 kB"}, {getBytes(150.5_kB), "150.5 kB"},
-          {getBytes(2_MB), "2 MB"},     {getBytes(1.5_MB), "1.5 MB"},
-          {getBytes(2_GB), "2 GB"},     {getBytes(1.5_GB), "1.5 GB"},
-          {getBytes(2_TB), "2 TB"},     {getBytes(1.5_TB), "1.5 TB"}};
+  return {{(50_B).getBytes(), "50 B"},     {(1_kB).getBytes(), "1000 B"},
+          {(200_kB).getBytes(), "200 kB"}, {(150.5_kB).getBytes(), "150.5 kB"},
+          {(2_MB).getBytes(), "2 MB"},     {(1.5_MB).getBytes(), "1.5 MB"},
+          {(2_GB).getBytes(), "2 GB"},     {(1.5_GB).getBytes(), "1.5 GB"},
+          {(2_TB).getBytes(), "2 TB"},     {(1.5_TB).getBytes(), "1.5 TB"}};
 }
 
 TEST(MemorySize, AsString) {
@@ -193,12 +190,12 @@ TEST(MemorySize, AsString) {
   std::ranges::for_each(generalAsStringTestCases(), doTest);
 
   // Check, if it always uses the right unit.
-  doTest({getBytes(99999_B), "99999 B"});
-  doTest({getBytes(100000_B), "100 kB"});
-  doTest({getBytes(400000_B), "400 kB"});
-  doTest({getBytes(4000_kB), "4 MB"});
-  doTest({getBytes(4000_MB), "4 GB"});
-  doTest({getBytes(4000_GB), "4 TB"});
+  doTest({(99999_B).getBytes(), "99999 B"});
+  doTest({(100000_B).getBytes(), "100 kB"});
+  doTest({(400000_B).getBytes(), "400 kB"});
+  doTest({(4000_kB).getBytes(), "4 MB"});
+  doTest({(4000_MB).getBytes(), "4 GB"});
+  doTest({(4000_GB).getBytes(), "4 TB"});
 }
 
 TEST(MemorySize, Parse) {
@@ -239,23 +236,23 @@ TEST(MemorySize, Parse) {
   // Is our grammar truly case insensitive?
   std::ranges::for_each(
       std::vector<MemorySizeInByteAndStringRepresentation>{
-          {getBytes(42_B), "42 B"},
-          {getBytes(42_B), "42 b"},
-          {getBytes(42_kB), "42 KB"},
-          {getBytes(42_kB), "42 Kb"},
-          {getBytes(42_kB), "42 kB"},
-          {getBytes(42_kB), "42 kb"},
-          {getBytes(42_MB), "42 MB"},
-          {getBytes(42_MB), "42 Mb"},
-          {getBytes(42_MB), "42 mB"},
-          {getBytes(42_MB), "42 mb"},
-          {getBytes(42_GB), "42 GB"},
-          {getBytes(42_GB), "42 Gb"},
-          {getBytes(42_GB), "42 gB"},
-          {getBytes(42_GB), "42 gb"},
-          {getBytes(42_TB), "42 TB"},
-          {getBytes(42_TB), "42 Tb"},
-          {getBytes(42_TB), "42 tB"},
-          {getBytes(42_TB), "42 tb"}},
+          {(42_B).getBytes(), "42 B"},
+          {(42_B).getBytes(), "42 b"},
+          {(42_kB).getBytes(), "42 KB"},
+          {(42_kB).getBytes(), "42 Kb"},
+          {(42_kB).getBytes(), "42 kB"},
+          {(42_kB).getBytes(), "42 kb"},
+          {(42_MB).getBytes(), "42 MB"},
+          {(42_MB).getBytes(), "42 Mb"},
+          {(42_MB).getBytes(), "42 mB"},
+          {(42_MB).getBytes(), "42 mb"},
+          {(42_GB).getBytes(), "42 GB"},
+          {(42_GB).getBytes(), "42 Gb"},
+          {(42_GB).getBytes(), "42 gB"},
+          {(42_GB).getBytes(), "42 gb"},
+          {(42_TB).getBytes(), "42 TB"},
+          {(42_TB).getBytes(), "42 Tb"},
+          {(42_TB).getBytes(), "42 tB"},
+          {(42_TB).getBytes(), "42 tb"}},
       doTest);
 }
