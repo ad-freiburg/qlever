@@ -249,3 +249,29 @@ TEST(MemorySize, Parse) {
                                                      {42_TB, "42 tb"}},
       doTest);
 }
+
+// Checks, if all the constexpr functions can actually be evaluated at compile
+// time.
+TEST(MemorySize, ConstEval) {
+  // Default constructor.
+  constexpr ad_utility::MemorySize m{};
+  static_assert(m.getBytes() == 0);
+
+  // Copy constructor.
+  static_assert(ad_utility::MemorySize(m).getBytes() == 0);
+
+  // Move constructor.
+  static_assert(ad_utility::MemorySize(ad_utility::MemorySize{}).getBytes() ==
+                0);
+
+  // Factory functions.
+  static_assert(ad_utility::MemorySize::bytes(42).getBytes() == 42);
+  static_assert(ad_utility::MemorySize::kilobytes(42uL).getKilobytes() == 42);
+  static_assert(ad_utility::MemorySize::kilobytes(4.2).getKilobytes() == 4.2);
+  static_assert(ad_utility::MemorySize::megabytes(42uL).getMegabytes() == 42);
+  static_assert(ad_utility::MemorySize::megabytes(4.2).getMegabytes() == 4.2);
+  static_assert(ad_utility::MemorySize::gigabytes(42uL).getGigabytes() == 42);
+  static_assert(ad_utility::MemorySize::gigabytes(4.2).getGigabytes() == 4.2);
+  static_assert(ad_utility::MemorySize::terabytes(42uL).getTerabytes() == 42);
+  static_assert(ad_utility::MemorySize::terabytes(4.2).getTerabytes() == 4.2);
+}
