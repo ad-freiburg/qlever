@@ -4,14 +4,19 @@
 // schlegea@informatik.uni-freiburg.de)
 
 #include <absl/strings/str_cat.h>
+#include <bits/ranges_algo.h>
+#include <bits/ranges_util.h>
 
 #include <cinttypes>
+#include <ranges>
 #include <string_view>
 #include <tuple>
 
 #include "util/Cache.h"
+#include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
+#include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/MemorySize/MemorySizeParser.h"
 #include "util/MemorySize/generated/MemorySizeLanguageLexer.h"
@@ -137,14 +142,32 @@ std::string MemorySize::asString() const {
     return absl::StrCat(number, " ", unitName);
   };
 
-  // Just use the first unit, which is bigger/equal to `memoryInBytes_`.
-  if (memoryInBytes_ >= numBytesPerTB) {
+  /*
+  Choosing the memory unit type is done by choosing the unit type, in which
+  range `memoryInBytes_` is contained.
+  A memory unit type normally has the range `[hisSize,
+  sizeOfTheNextBiggerUnit)`.
+  Only exceptions are:
+  - `TB`, which has no upper bound, because it's our biggest unit.
+  - `kB`, which has the lower bound `100'000` instead of `1'000`. Typically, for
+  such small sizes you still want the exact value because they mean something
+  ,e.g. a block size or a page size etc..
+  */
+  constexpr ad_utility::ConstexprMap<char, size_t, 4> memoryUnitLowerBound(
+      {std::pair<char, size_t>{'k', ad_utility::pow(10, 5)},
+       std::pair<char, size_t>{'M', numBytesPerMB},
+       std::pair<char, size_t>{'G', numBytesPerGB},
+       std::pair<char, size_t>{'T', numBytesPerTB}});
+
+  // Go through the units from top to bottom, in terms of size, and choose the
+  // first one, that is smaller/equal to `memoryInBytes_`.
+  if (memoryInBytes_ >= memoryUnitLowerBound.at('T')) {
     return toString(getTerabytes(), "TB");
-  } else if (memoryInBytes_ >= numBytesPerGB) {
+  } else if (memoryInBytes_ >= memoryUnitLowerBound.at('G')) {
     return toString(getGigabytes(), "GB");
-  } else if (memoryInBytes_ >= numBytesPerMB) {
+  } else if (memoryInBytes_ >= memoryUnitLowerBound.at('M')) {
     return toString(getMegabytes(), "MB");
-  } else if (memoryInBytes_ >= numBytesPerkB) {
+  } else if (memoryInBytes_ >= memoryUnitLowerBound.at('k')) {
     return toString(getKilobytes(), "kB");
   } else {
     // Just return the amount of bytes.

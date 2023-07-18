@@ -67,8 +67,11 @@ class MemorySize {
   /*
   Return the string representation of the internal memory amount in the
   biggest memory unit, that is equal to, or smaller than, the internal memory
-  amount.
-  Example: 1000 bytes would be returned as `"1 kB"`.
+  amount, with the exception of `kB`.
+  `kB` is only used, when the internal memory amount is in the range ``[10^5,
+  10^6)`.
+  Example: 10^9 bytes would be returned as `"1 GB"`, 1'000 bytes as `1000 B` and
+  100'000 as `100 kB`.
   */
   std::string asString() const;
 

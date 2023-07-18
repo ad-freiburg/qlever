@@ -167,11 +167,11 @@ struct MemorySizeInByteAndStringRepresentation {
 
 static std::vector<MemorySizeInByteAndStringRepresentation>
 generalAsStringTestCases() {
-  return {{getBytes(50_B), "50 B"},     {getBytes(2_kB), "2 kB"},
-          {getBytes(1.5_kB), "1.5 kB"}, {getBytes(2_MB), "2 MB"},
-          {getBytes(1.5_MB), "1.5 MB"}, {getBytes(2_GB), "2 GB"},
-          {getBytes(1.5_GB), "1.5 GB"}, {getBytes(2_TB), "2 TB"},
-          {getBytes(1.5_TB), "1.5 TB"}};
+  return {{getBytes(50_B), "50 B"},     {getBytes(1_kB), "1000 B"},
+          {getBytes(200_kB), "200 kB"}, {getBytes(150.5_kB), "150.5 kB"},
+          {getBytes(2_MB), "2 MB"},     {getBytes(1.5_MB), "1.5 MB"},
+          {getBytes(2_GB), "2 GB"},     {getBytes(1.5_GB), "1.5 GB"},
+          {getBytes(2_TB), "2 TB"},     {getBytes(1.5_TB), "1.5 TB"}};
 }
 
 TEST(MemorySize, AsString) {
@@ -192,8 +192,10 @@ TEST(MemorySize, AsString) {
 
   std::ranges::for_each(generalAsStringTestCases(), doTest);
 
-  // Check, if it always uses the biggest unit.
-  doTest({getBytes(4000_B), "4 kB"});
+  // Check, if it always uses the right unit.
+  doTest({getBytes(99999_B), "99999 B"});
+  doTest({getBytes(100000_B), "100 kB"});
+  doTest({getBytes(400000_B), "400 kB"});
   doTest({getBytes(4000_kB), "4 MB"});
   doTest({getBytes(4000_MB), "4 GB"});
   doTest({getBytes(4000_GB), "4 TB"});
