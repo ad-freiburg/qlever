@@ -16,6 +16,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Conversions.h"
 
+using ad_utility::source_location;
 // Some useful shortcuts for the tests below.
 using namespace sparqlExpression;
 using namespace std::literals;
@@ -34,7 +35,9 @@ AllocatorWithLimit<Id> alloc = ad_utility::testing::makeAllocator();
 // treated separately because we want to consider two elements that are both
 // `NaN` as equal for the test, but they are not equal wrt `==` (by definition,
 // a `NaN` is not equal to anything).
-auto checkResultsEqual = [](const auto& a, const auto& b) {
+auto checkResultsEqual = [](const auto& a, const auto& b,
+                            source_location l = source_location::current()) {
+  auto t = generateLocationTrace(l);
   if constexpr (ad_utility::isSimilar<decltype(a), V<double>> &&
                 ad_utility::isSimilar<decltype(b), V<double>>) {
     ASSERT_EQ(a.size(), b.size());
@@ -48,7 +51,7 @@ auto checkResultsEqual = [](const auto& a, const auto& b) {
   } else if constexpr (ad_utility::isSimilar<decltype(a), decltype(b)>) {
     ASSERT_EQ(a, b);
   } else {
-    ASSERT_TRUE(false) << "Result type does not match";
+    FAIL() << "Result type does not match";
   }
 };
 
@@ -103,7 +106,11 @@ auto testNaryExpression = [](SingleExpressionResult auto& expected,
 // in both orders of the operands `op1` and `op2`.
 template <typename NaryExpression>
 auto testBinaryExpressionCommutative =
-    [](const auto& expected, const auto& op1, const auto& op2) {
+    [](const SingleExpressionResult auto& expected,
+       const SingleExpressionResult auto& op1,
+       const SingleExpressionResult auto& op2,
+       source_location l = source_location::current()) {
+      auto t = generateLocationTrace(l);
       testNaryExpression<NaryExpression>(expected, op1, op2);
       testNaryExpression<NaryExpression>(expected, op2, op1);
     };
@@ -119,39 +126,41 @@ auto testDivide = testNaryExpression<DivideExpression>;
 //
 // TODO: Also test `UnaryNegateExpression`.
 TEST(SparqlExpression, logicalOperators) {
-  V<Bool> b{{false, true, true, false}, alloc};
-
   auto D = ad_utility::testing::DoubleId;
+  auto B = ad_utility::testing::BoolId;
+  auto I = ad_utility::testing::IntId;
+
+  V<Id> b{{B(false), B(true), B(true), B(false)}, alloc};
   V<Id> d{{D(1.0), D(2.0), D(std::numeric_limits<double>::quiet_NaN()), D(0.0)},
           alloc};
-  V<Bool> dAsBool{{true, true, false, false}, alloc};
+  V<Id> dAsBool{{B(true), B(true), B(false), B(false)}, alloc};
 
   V<std::string> s{{"true", "", "false", ""}, alloc};
-  V<Bool> sAsBool{{true, false, true, false}, alloc};
+  V<Id> sAsBool{{B(true), B(false), B(true), B(false)}, alloc};
 
-  V<int64_t> i{{32, -42, 0, 5}, alloc};
-  V<Bool> iAsBool{{true, true, false, true}, alloc};
+  V<Id> i{{I(32), I(-42), I(0), I(5)}, alloc};
+  V<Id> iAsId{{B(true), B(true), B(false), B(true)}, alloc};
 
-  V<Bool> bOrD{{true, true, true, false}, alloc};
-  V<Bool> bAndD{{false, true, false, false}, alloc};
+  V<Id> bOrD{{B(true), B(true), B(true), B(false)}, alloc};
+  V<Id> bAndD{{B(false), B(true), B(false), B(false)}, alloc};
 
-  V<Bool> bOrS{{true, true, true, false}, alloc};
-  V<Bool> bAndS{{false, false, true, false}, alloc};
+  V<Id> bOrS{{B(true), B(true), B(true), B(false)}, alloc};
+  V<Id> bAndS{{B(false), B(false), B(true), B(false)}, alloc};
 
-  V<Bool> bOrI{{true, true, true, true}, alloc};
-  V<Bool> bAndI{{false, true, false, false}, alloc};
+  V<Id> bOrI{{B(true), B(true), B(true), B(true)}, alloc};
+  V<Id> bAndI{{B(false), B(true), B(false), B(false)}, alloc};
 
-  V<Bool> dOrS{{true, true, true, false}, alloc};
-  V<Bool> dAndS{{true, false, false, false}, alloc};
+  V<Id> dOrS{{B(true), B(true), B(true), B(false)}, alloc};
+  V<Id> dAndS{{B(true), B(false), B(false), B(false)}, alloc};
 
-  V<Bool> dOrI{{true, true, false, true}, alloc};
-  V<Bool> dAndI{{true, true, false, false}, alloc};
+  V<Id> dOrI{{B(true), B(true), B(false), B(true)}, alloc};
+  V<Id> dAndI{{B(true), B(true), B(false), B(false)}, alloc};
 
-  V<Bool> sOrI{{true, true, true, true}, alloc};
-  V<Bool> sAndI{{true, false, false, false}, alloc};
+  V<Id> sOrI{{B(true), B(true), B(true), B(true)}, alloc};
+  V<Id> sAndI{{B(true), B(false), B(false), B(false)}, alloc};
 
-  V<Bool> allTrue{{true, true, true, true}, alloc};
-  V<Bool> allFalse{{false, false, false, false}, alloc};
+  V<Id> allTrue{{B(true), B(true), B(true), B(true)}, alloc};
+  V<Id> allFalse{{B(false), B(false), B(false), B(false)}, alloc};
 
   testOr(b, b, allFalse);
   testOr(allTrue, b, allTrue);
@@ -173,23 +182,23 @@ TEST(SparqlExpression, logicalOperators) {
   testAnd(dAndS, d, s);
   testAnd(sAndI, s, i);
 
-  testOr(allTrue, b, true);
-  testOr(b, b, false);
-  testAnd(allFalse, b, false);
-  testAnd(b, b, true);
+  testOr(allTrue, b, B(true));
+  testOr(b, b, B(false));
+  testAnd(allFalse, b, B(false));
+  testAnd(b, b, B(true));
 
-  testOr(allTrue, b, -42);
-  testOr(b, b, 0);
-  testAnd(allFalse, b, 0);
-  testAnd(b, b, 2839);
+  testOr(allTrue, b, I(-42));
+  testOr(b, b, I(0));
+  testAnd(allFalse, b, I(0));
+  testAnd(b, b, I(2839));
 
   auto nan = std::numeric_limits<double>::quiet_NaN();
-  testOr(allTrue, b, -42.32);
-  testOr(b, b, 0.0);
-  testOr(b, b, nan);
-  testAnd(allFalse, b, 0.0);
-  testAnd(allFalse, b, nan);
-  testAnd(b, b, 2839.123);
+  testOr(allTrue, b, D(-42.32));
+  testOr(b, b, D(0.0));
+  testOr(b, b, D(nan));
+  testAnd(allFalse, b, D(0.0));
+  testAnd(allFalse, b, D(nan));
+  testAnd(b, b, D(2839.123));
 
   testOr(allTrue, b, std::string("halo"));
   testOr(b, b, std::string(""));
@@ -201,28 +210,33 @@ TEST(SparqlExpression, logicalOperators) {
 // `DivideExpression`.
 //
 // TODO: Also test `UnaryMinusExpression`.
-TEST(SparqlExpression, arithemticOperators) {
+TEST(SparqlExpression, arithmeticOperators) {
   auto nan = std::numeric_limits<double>::quiet_NaN();
   auto inf = std::numeric_limits<double>::infinity();
   auto negInf = -inf;
 
-  V<Bool> b{{true, false, false, true}, alloc};
-  V<int64_t> bAsInt{{1, 0, 0, 1}, alloc};
+  auto D = ad_utility::testing::DoubleId;
+  auto B = ad_utility::testing::BoolId;
+  auto I = ad_utility::testing::IntId;
 
-  V<double> d{{1.0, -2.0, nan, 0.0}, alloc};
+  V<Id> b{{B(true), B(false), B(false), B(true)}, alloc};
+  V<Id> bAsInt{{I(1), I(0), I(0), I(1)}, alloc};
+
+  V<Id> d{{D(1.0), D(-2.0), D(nan), D(0.0)}, alloc};
 
   V<std::string> s{{"true", "", "false", ""}, alloc};
-  V<double> allNan{{nan, nan, nan, nan}, alloc};
 
-  V<int64_t> i{{32, -42, 0, 5}, alloc};
-  V<double> iAsDouble{{32.0, -42.0, 0.0, 5.0}, alloc};
+  V<Id> allNan{{D(nan), D(nan), D(nan), D(nan)}, alloc};
 
-  V<double> bPlusD{{2.0, -2.0, nan, 1.0}, alloc};
-  V<double> bMinusD{{0, +2.0, nan, 1}, alloc};
-  V<double> dMinusB{{0, -2.0, nan, -1}, alloc};
-  V<double> bTimesD{{1.0, 0.0, nan, 0.0}, alloc};
-  V<double> bByD{{1.0, 0, nan, inf}, alloc};
-  V<double> dByB{{1.0, negInf, nan, 0}, alloc};
+  V<Id> i{{I(32), I(-42), I(0), I(5)}, alloc};
+  V<Id> iAsDouble{{D(32.0), D(-42.0), D(0.0), D(5.0)}, alloc};
+
+  V<Id> bPlusD{{D(2.0), D(-2.0), D(nan), D(1.0)}, alloc};
+  V<Id> bMinusD{{D(0), D(2.0), D(nan), D(1)}, alloc};
+  V<Id> dMinusB{{D(0), D(-2.0), D(nan), D(-1)}, alloc};
+  V<Id> bTimesD{{D(1.0), D(-0.0), D(nan), D(0.0)}, alloc};
+  V<Id> bByD{{D(1.0), D(-0.0), D(nan), D(inf)}, alloc};
+  V<Id> dByB{{D(1.0), D(negInf), D(nan), D(0)}, alloc};
 
   testPlus(bPlusD, b, d);
   testMinus(bMinusD, b, d);
@@ -236,7 +250,8 @@ TEST(SparqlExpression, arithemticOperators) {
 //
 // TODO: The tests above could also be simplified (and made much more readable)
 // in this vein.
-template <typename UnaryExpression, typename OperandType, typename OutputType>
+template <typename UnaryExpression, SingleExpressionResult OperandType,
+          SingleExpressionResult OutputType>
 auto testUnaryExpression =
     [](std::vector<OperandType>&& operand, std::vector<OutputType>&& expected) {
       V<OperandType> operandV{std::make_move_iterator(operand.begin()),
@@ -295,25 +310,29 @@ TEST(SparqlExpression, dateOperators) {
   checkYear({Id::makeFromInt(42)}, {Id::makeUndefined()});
   checkMonth({Id::makeFromInt(42)}, {Id::makeUndefined()});
   checkDay({Id::makeFromInt(42)}, {Id::makeUndefined()});
-  testUnaryExpression<YearExpression, double, Id>({42.0},
-                                                  {Id::makeUndefined()});
-  testUnaryExpression<YearExpression, Bool, Id>({false}, {Id::makeUndefined()});
+  testUnaryExpression<YearExpression, Id, Id>({Id::makeFromDouble(42.0)},
+                                              {Id::makeUndefined()});
+  testUnaryExpression<YearExpression, Id, Id>({Id::makeFromBool(false)},
+                                              {Id::makeUndefined()});
   testUnaryExpression<YearExpression, std::string, Id>({"noDate"},
                                                        {Id::makeUndefined()});
 }
 
 // Test `StrlenExpression` and `StrExpression`.
-auto checkStrlen = testUnaryExpression<StrlenExpression, std::string, int64_t>;
-template <typename OperandType>
+auto checkStrlen = testUnaryExpression<StrlenExpression, std::string, Id>;
+template <SingleExpressionResult OperandType>
 auto checkStr = [](std::vector<OperandType>&& operand,
                    std::vector<std::string>&& expected) {
   testUnaryExpression<StrExpression, OperandType, std::string>(
       std::move(operand), std::move(expected));
 };
 TEST(SparqlExpression, stringOperators) {
-  checkStrlen({"one", "two", "three", ""}, {3, 3, 5, 0});
-  checkStr<int64_t>({1, 2, 3}, {"1", "2", "3"});
-  checkStr<double>({-1.0, 1.0}, {std::to_string(-1.0), std::to_string(1.0)});
-  checkStr<Bool>({true, false, true}, {"1", "0", "1"});
+  auto D = ad_utility::testing::DoubleId;
+  auto B = ad_utility::testing::BoolId;
+  auto I = ad_utility::testing::IntId;
+  checkStrlen({"one", "two", "three", ""}, {I(3), I(3), I(5), I(0)});
+  checkStr<Id>({I(1), I(2), I(3)}, {"1", "2", "3"});
+  checkStr<Id>({D(-1.0), D(1.0), D(2.34)}, {"-1", "1", "2.34"});
+  checkStr<Id>({B(true), B(false), B(true)}, {"true", "false", "true"});
   checkStr<std::string>({"one", "two", "three"}, {"one", "two", "three"});
 }

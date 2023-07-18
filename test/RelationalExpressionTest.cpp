@@ -100,16 +100,31 @@ VectorWithMemoryLimit<ValueId> makeValueIdVector(
   return result;
 }
 
+auto expectTrue = [](const ExpressionResult& result,
+                     source_location l = source_location::current()) {
+  auto t = generateLocationTrace(l);
+  auto id = std::get<Id>(result);
+  EXPECT_EQ(id.getDatatype(), Datatype::Bool);
+  EXPECT_TRUE(id.getBool());
+};
+
+auto expectFalse = [](const ExpressionResult& result,
+                      source_location l = source_location::current()) {
+  auto t = generateLocationTrace(l);
+  auto id = std::get<Id>(result);
+  EXPECT_EQ(id.getDatatype(), Datatype::Bool);
+  EXPECT_FALSE(id.getBool());
+};
+
 // Assert that the given `expression`, when evaluated on the `TestContext` (see
 // above), has a single boolean result that is true.
 auto expectTrueBoolean = [](const SparqlExpression& expression,
                             source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "expectTrueBoolean was called here");
   auto result = evaluateOnTestContext(expression);
-  if (!std::get<Bool>(result)) {
-    LOG(INFO) << "error" << std::endl;
-  }
-  EXPECT_TRUE(std::get<Bool>(result));
+  auto id = std::get<Id>(result);
+  EXPECT_EQ(id.getDatatype(), Datatype::Bool);
+  EXPECT_TRUE(id.getBool());
 };
 
 // Similar to `expectTrueBoolean`, but assert that the boolean is `false`.
@@ -117,7 +132,25 @@ auto expectFalseBoolean = [](const SparqlExpression& expression,
                              source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "expectFalseBoolean was called here");
   auto result = evaluateOnTestContext(expression);
-  EXPECT_FALSE(std::get<Bool>(result));
+  auto id = std::get<Id>(result);
+  EXPECT_EQ(id.getDatatype(), Datatype::Bool);
+  EXPECT_FALSE(id.getBool());
+};
+
+auto expectUndefined = [](const SparqlExpression& expression,
+                          source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(l, "expectUndefined was called here");
+  auto result = evaluateOnTestContext(expression);
+  if (std::holds_alternative<Id>(result)) {
+    auto id = std::get<Id>(result);
+    EXPECT_EQ(id, Id::makeUndefined());
+  } else {
+    AD_CORRECTNESS_CHECK(
+        (std::holds_alternative<VectorWithMemoryLimit<Id>>(result)));
+    const auto& vec = std::get<VectorWithMemoryLimit<Id>>(result);
+    EXPECT_TRUE(std::ranges::all_of(
+        vec, [](Id id) { return id == Id::makeUndefined(); }));
+  }
 };
 
 // Run tests for all the different comparisons on constants of type `T` and `U`
@@ -167,27 +200,12 @@ void testLessThanGreaterThanEqual(
   auto trace =
       generateLocationTrace(l, "testLessThanGreaterThanEqual was called here");
 
-  // Helper functions to lift only the first, only the second, or both of the
+  // Helper functions to lift both of the
   // elements of a pair to a valueId.
-  auto liftFirst = [](const auto& p) {
-    return std::pair{liftToValueId(p.first), p.second};
-  };
-  auto liftSecond = [](const auto& p) {
-    return std::pair{p.first, liftToValueId(p.second)};
-  };
   auto liftBoth = [](const auto& p) {
     return std::pair{liftToValueId(p.first), liftToValueId(p.second)};
   };
 
-  /*
-  testLessThanGreaterThanEqualHelper(lessThanPair, greaterThanPair, equalPair);
-  testLessThanGreaterThanEqualHelper(liftFirst(lessThanPair),
-                                     liftFirst(greaterThanPair),
-                                     liftFirst(equalPair));
-  testLessThanGreaterThanEqualHelper(liftSecond(lessThanPair),
-                                     liftSecond(greaterThanPair),
-                                     liftSecond(equalPair));
-                                     */
   testLessThanGreaterThanEqualHelper(
       liftBoth(lessThanPair), liftBoth(greaterThanPair), liftBoth(equalPair));
 }
@@ -218,6 +236,28 @@ void testNotEqualHelper(auto leftValueIn, auto rightValueIn,
   False(makeExpression<GE>(makeCopy(rightValue), makeCopy(leftValue)));
 }
 
+void testUndefHelper(auto leftValueIn, auto rightValueIn,
+                     source_location l = source_location::current()) {
+  auto leftValue = liftToValueId(leftValueIn);
+  auto rightValue = liftToValueId(rightValueIn);
+  auto trace = generateLocationTrace(l, "testUndefHelper was called here");
+  auto undef = expectUndefined;
+
+  undef(makeExpression<LT>(makeCopy(leftValue), makeCopy(rightValue)));
+  undef(makeExpression<LE>(makeCopy(leftValue), makeCopy(rightValue)));
+  undef(makeExpression<EQ>(makeCopy(leftValue), makeCopy(rightValue)));
+  undef(makeExpression<NE>(makeCopy(leftValue), makeCopy(rightValue)));
+  undef(makeExpression<GT>(makeCopy(leftValue), makeCopy(rightValue)));
+  undef(makeExpression<GE>(makeCopy(leftValue), makeCopy(rightValue)));
+
+  undef(makeExpression<LT>(makeCopy(rightValue), makeCopy(leftValue)));
+  undef(makeExpression<LE>(makeCopy(rightValue), makeCopy(leftValue)));
+  undef(makeExpression<EQ>(makeCopy(rightValue), makeCopy(leftValue)));
+  undef(makeExpression<NE>(makeCopy(rightValue), makeCopy(leftValue)));
+  undef(makeExpression<GT>(makeCopy(rightValue), makeCopy(leftValue)));
+  undef(makeExpression<GE>(makeCopy(rightValue), makeCopy(leftValue)));
+}
+
 // Call `testNotEqualHelper` for `leftValue` and `rightValue` and for the
 // following combinations: `leftValue` is converted to a ValueID before the
 // call. `rightValue` "" both values "" Requires that both `leftValue` and
@@ -225,11 +265,6 @@ void testNotEqualHelper(auto leftValueIn, auto rightValueIn,
 void testNotEqual(auto leftValue, auto rightValue,
                   source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "testNotEqual was called here");
-  /*
-  testNotEqualHelper(leftValue, rightValue);
-  testNotEqualHelper(liftToValueId(leftValue), rightValue);
-  testNotEqualHelper(leftValue, liftToValueId(rightValue));
-   */
   testNotEqualHelper(liftToValueId(leftValue), liftToValueId(rightValue));
 }
 
@@ -272,23 +307,21 @@ TEST(RelationalExpression, StringAndString) {
 }
 
 TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
-  auto stringVec = VectorWithMemoryLimit<std::string>({"hallo",
-                                                       "by"
-                                                       ""},
-                                                      makeAllocator());
+  auto stringVec =
+      VectorWithMemoryLimit<std::string>({"hallo", "by", ""}, makeAllocator());
   auto intVec =
       VectorWithMemoryLimit<int64_t>({-12365, 0, 12}, makeAllocator());
   auto doubleVec =
       VectorWithMemoryLimit<double>({-12.365, 0, 12.1e5}, makeAllocator());
-  testNotEqualHelper(int64_t{3}, "hallo"s);
-  testNotEqualHelper(int64_t{3}, "3"s);
-  testNotEqualHelper(-12.0, "hallo"s);
-  testNotEqualHelper(-12.0, "-12.0"s);
-  testNotEqualHelper(intVec.clone(), "someString"s);
-  testNotEqualHelper(doubleVec.clone(), "someString"s);
-  testNotEqualHelper(int64_t{3}, stringVec.clone());
-  testNotEqualHelper(intVec.clone(), stringVec.clone());
-  testNotEqualHelper(doubleVec.clone(), stringVec.clone());
+  testUndefHelper(int64_t{3}, "hallo"s);
+  testUndefHelper(int64_t{3}, "3"s);
+  testUndefHelper(-12.0, "hallo"s);
+  testUndefHelper(-12.0, "-12.0"s);
+  testUndefHelper(intVec.clone(), "someString"s);
+  testUndefHelper(doubleVec.clone(), "someString"s);
+  testUndefHelper(int64_t{3}, stringVec.clone());
+  testUndefHelper(intVec.clone(), stringVec.clone());
+  testUndefHelper(doubleVec.clone(), stringVec.clone());
 }
 
 // At least one of `leftValue`, `rightValue` must be a vector, the other one may
@@ -315,9 +348,9 @@ void testLessThanGreaterThanEqualMultipleValuesHelper(
     auto expressionInverted =
         makeExpression<comp>(makeCopy(rightValue), makeCopy(leftValue));
     auto resultAsVariantInverted = expressionInverted.evaluate(context);
-    auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
+    auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
     auto& resultInverted =
-        std::get<VectorWithMemoryLimit<Bool>>(resultAsVariantInverted);
+        std::get<VectorWithMemoryLimit<Id>>(resultAsVariantInverted);
     return std::pair{std::move(result), std::move(resultInverted)};
   };
   auto [resultLT, invertedLT] = m.template operator()<LT>();
@@ -334,49 +367,49 @@ void testLessThanGreaterThanEqualMultipleValuesHelper(
   EXPECT_EQ(resultGE.size(), 9);
   EXPECT_EQ(resultGT.size(), 9);
   for (size_t i = 0; i < 3; ++i) {
-    EXPECT_FALSE(resultLT[i]);
-    EXPECT_FALSE(resultLE[i]);
-    EXPECT_FALSE(resultEQ[i]);
-    EXPECT_TRUE(resultNE[i]);
-    EXPECT_TRUE(resultGE[i]);
-    EXPECT_TRUE(resultGT[i]);
+    expectFalse(resultLT[i]);
+    expectFalse(resultLE[i]);
+    expectFalse(resultEQ[i]);
+    expectTrue(resultNE[i]);
+    expectTrue(resultGE[i]);
+    expectTrue(resultGT[i]);
 
-    EXPECT_TRUE(invertedLT[i]);
-    EXPECT_TRUE(invertedLE[i]);
-    EXPECT_FALSE(invertedEQ[i]);
-    EXPECT_TRUE(invertedNE[i]);
-    EXPECT_FALSE(invertedGE[i]);
-    EXPECT_FALSE(invertedGT[i]);
+    expectTrue(invertedLT[i]);
+    expectTrue(invertedLE[i]);
+    expectFalse(invertedEQ[i]);
+    expectTrue(invertedNE[i]);
+    expectFalse(invertedGE[i]);
+    expectFalse(invertedGT[i]);
   }
   for (size_t i = 3; i < 6; ++i) {
-    EXPECT_TRUE(resultLT[i]);
-    EXPECT_TRUE(resultLE[i]);
-    EXPECT_FALSE(resultEQ[i]);
-    EXPECT_TRUE(resultNE[i]);
-    EXPECT_FALSE(resultGE[i]);
-    EXPECT_FALSE(resultGT[i]);
+    expectTrue(resultLT[i]);
+    expectTrue(resultLE[i]);
+    expectFalse(resultEQ[i]);
+    expectTrue(resultNE[i]);
+    expectFalse(resultGE[i]);
+    expectFalse(resultGT[i]);
 
-    EXPECT_FALSE(invertedLT[i]);
-    EXPECT_FALSE(invertedLE[i]);
-    EXPECT_FALSE(invertedEQ[i]);
-    EXPECT_TRUE(invertedNE[i]);
-    EXPECT_TRUE(invertedGE[i]);
-    EXPECT_TRUE(invertedGT[i]);
+    expectFalse(invertedLT[i]);
+    expectFalse(invertedLE[i]);
+    expectFalse(invertedEQ[i]);
+    expectTrue(invertedNE[i]);
+    expectTrue(invertedGE[i]);
+    expectTrue(invertedGT[i]);
   }
   for (size_t i = 6; i < 9; ++i) {
-    EXPECT_FALSE(resultLT[i]);
-    EXPECT_TRUE(resultLE[i]);
-    EXPECT_TRUE(resultEQ[i]);
-    EXPECT_FALSE(resultNE[i]);
-    EXPECT_TRUE(resultGE[i]);
-    EXPECT_FALSE(resultGT[i]);
+    expectFalse(resultLT[i]);
+    expectTrue(resultLE[i]);
+    expectTrue(resultEQ[i]);
+    expectFalse(resultNE[i]);
+    expectTrue(resultGE[i]);
+    expectFalse(resultGT[i]);
 
-    EXPECT_FALSE(invertedLT[i]);
-    EXPECT_TRUE(invertedLE[i]);
-    EXPECT_TRUE(invertedEQ[i]);
-    EXPECT_FALSE(invertedNE[i]);
-    EXPECT_TRUE(invertedGE[i]);
-    EXPECT_FALSE(invertedGT[i]);
+    expectFalse(invertedLT[i]);
+    expectTrue(invertedLE[i]);
+    expectTrue(invertedEQ[i]);
+    expectFalse(invertedNE[i]);
+    expectTrue(invertedGE[i]);
+    expectFalse(invertedGT[i]);
   }
 }
 
@@ -430,9 +463,9 @@ auto testNotComparableHelper(T leftValue, U rightValue,
     auto expressionInverted =
         makeExpression<comp>(makeCopy(rightValue), makeCopy(leftValue));
     auto resultAsVariantInverted = expressionInverted.evaluate(&context);
-    auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
+    auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
     auto& resultInverted =
-        std::get<VectorWithMemoryLimit<Bool>>(resultAsVariantInverted);
+        std::get<VectorWithMemoryLimit<Id>>(resultAsVariantInverted);
     return std::pair{std::move(result), std::move(resultInverted)};
   };
   auto [resultLT, invertedLT] = m.template operator()<LT>();
@@ -449,18 +482,18 @@ auto testNotComparableHelper(T leftValue, U rightValue,
   EXPECT_EQ(resultGE.size(), 5);
   EXPECT_EQ(resultGT.size(), 5);
   for (size_t i = 0; i < 5; ++i) {
-    EXPECT_FALSE(resultLT[i]);
-    EXPECT_FALSE(resultLE[i]);
-    EXPECT_FALSE(resultEQ[i]);
-    EXPECT_TRUE(resultNE[i]);
-    EXPECT_FALSE(resultGE[i]);
-    EXPECT_FALSE(resultGT[i]);
-    EXPECT_FALSE(invertedLT[i]);
-    EXPECT_FALSE(invertedLE[i]);
-    EXPECT_FALSE(invertedEQ[i]);
-    EXPECT_TRUE(invertedNE[i]);
-    EXPECT_FALSE(invertedGE[i]);
-    EXPECT_FALSE(invertedGT[i]);
+    expectFalse(resultLT[i]);
+    expectFalse(resultLE[i]);
+    expectFalse(resultEQ[i]);
+    expectTrue(resultNE[i]);
+    expectFalse(resultGE[i]);
+    expectFalse(resultGT[i]);
+    expectFalse(invertedLT[i]);
+    expectFalse(invertedLE[i]);
+    expectFalse(invertedEQ[i]);
+    expectTrue(invertedNE[i]);
+    expectFalse(invertedGE[i]);
+    expectFalse(invertedGT[i]);
   }
 }
 
@@ -572,17 +605,31 @@ TEST(RelationalExpression, StringVectorAndStringVector) {
 
 // Assert that the expression `leftValue Comp rightValue`, when evaluated on the
 // `TestContext` (see above), yields the `expected` result.
+
 template <Comparison Comp>
-void testWithExplicitResult(auto leftValue, auto rightValue,
-                            std::vector<Bool> expected,
-                            source_location l = source_location::current()) {
+void testWithExplicitIdResult(auto leftValue, auto rightValue,
+                              std::vector<Id> expected,
+                              source_location l = source_location::current()) {
   static TestContext ctx;
   auto expression = makeExpression<Comp>(liftToValueId(std::move(leftValue)),
                                          liftToValueId(std::move(rightValue)));
   auto trace = generateLocationTrace(l, "test lambda was called here");
   auto resultAsVariant = expression.evaluate(&ctx.context);
-  const auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
+  const auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+}
+
+template <Comparison Comp>
+void testWithExplicitResult(auto leftValue, auto rightValue,
+                            std::vector<bool> expectedAsBool,
+                            source_location l = source_location::current()) {
+  auto t = generateLocationTrace(l);
+  std::vector<Id> expected;
+  std::ranges::transform(expectedAsBool, std::back_inserter(expected),
+                         Id::makeFromBool);
+
+  testWithExplicitIdResult<Comp>(std::move(leftValue), std::move(rightValue),
+                                 expected);
 }
 
 TEST(RelationalExpression, VariableAndConstant) {
@@ -615,15 +662,17 @@ TEST(RelationalExpression, VariableAndConstant) {
                              {true, false, false});
 
   // ?mixed column is `1, -0.1, <x>`
-  testWithExplicitResult<GT>("<xa>"s, Variable{"?mixed"}, {false, false, true});
-  testWithExplicitResult<LT>("<u>"s, Variable{"?mixed"}, {false, false, true});
+  auto U = Id::makeUndefined();
+  auto B = ad_utility::testing::BoolId;
+  testWithExplicitIdResult<GT>("<xa>"s, Variable{"?mixed"}, {U, U, B(true)});
+  testWithExplicitIdResult<LT>("<u>"s, Variable{"?mixed"}, {U, U, B(true)});
 
   // Note: `1` and `<x>` are "not compatible", so even the "not equal"
   // comparison returns false.
-  testWithExplicitResult<NE>(int64_t{1}, Variable{"?mixed"},
-                             {false, true, false});
-  testWithExplicitResult<GE>(Variable{"?mixed"}, DoubleId(-0.1),
-                             {true, true, false});
+  testWithExplicitIdResult<NE>(int64_t{1}, Variable{"?mixed"},
+                               {B(false), B(true), U});
+  testWithExplicitIdResult<GE>(Variable{"?mixed"}, DoubleId(-0.1),
+                               {B(true), B(true), U});
 }
 
 TEST(RelationalExpression, VariableAndVariable) {

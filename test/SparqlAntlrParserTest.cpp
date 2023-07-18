@@ -206,7 +206,7 @@ TEST(SparqlExpressionParser, First) {
                                             table, alloc, localVocab};
   auto result = resultAsExpression->evaluate(&input);
   AD_CONTRACT_CHECK(std::holds_alternative<Id>(result));
-  ASSERT_FLOAT_EQ(25.0, std::get<Id>(result).getBool());
+  ASSERT_FLOAT_EQ(25.0, std::get<Id>(result).getDouble());
 }
 
 TEST(SparqlParser, ComplexConstructTemplate) {

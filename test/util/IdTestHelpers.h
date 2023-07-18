@@ -12,6 +12,7 @@ namespace ad_utility::testing {
 inline auto IntId = [](const auto& i) { return Id::makeFromInt(i); };
 
 inline auto DoubleId = [](const auto& d) { return Id::makeFromDouble(d); };
+inline auto BoolId = [](bool b) { return Id::makeFromBool(b); };
 
 inline auto VocabId = [](const auto& v) {
   return Id::makeFromVocabIndex(VocabIndex::make(v));
