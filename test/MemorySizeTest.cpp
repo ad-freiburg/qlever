@@ -7,13 +7,17 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cfloat>
 #include <cstdint>
 #include <ranges>
 #include <sstream>
 #include <vector>
 
+#include "./util/GTestHelpers.h"
+#include "util/Cache.h"
 #include "util/ConstexprMap.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/SourceLocation.h"
 
 // Importing all the literals.
 using namespace ad_utility::memory_literals;
@@ -79,8 +83,11 @@ constexpr ad_utility::ConstexprMap<std::string_view, AllMemoryUnitSizes, 5>
 /*
 Checks all the getters of the class with the wanted memory sizes.
 */
-void checkAllMemorySizeGetter(const ad_utility::MemorySize& m,
-                              const AllMemoryUnitSizes& ms) {
+void checkAllMemorySizeGetter(
+    const ad_utility::MemorySize& m, const AllMemoryUnitSizes& ms,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  auto trace{generateLocationTrace(l)};
+
   ASSERT_EQ(m.getBytes(), ms.bytes);
   ASSERT_DOUBLE_EQ(m.getKilobytes(), ms.kilobytes);
   ASSERT_DOUBLE_EQ(m.getMegabytes(), ms.megabytes);
@@ -114,6 +121,22 @@ TEST(MemorySize, MemorySizeConstructor) {
                            singleMemoryUnitSizes.at("GB"));
   checkAllMemorySizeGetter(ad_utility::MemorySize::terabytes(1.0),
                            singleMemoryUnitSizes.at("TB"));
+
+  // Negative numbers are not allowed.
+  ASSERT_ANY_THROW(ad_utility::MemorySize::kilobytes(-1.0));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::megabytes(-1.0));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::gigabytes(-1.0));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::terabytes(-1.0));
+
+  // Numbers, that lead to overflow, are not allowed.
+  ASSERT_ANY_THROW(ad_utility::MemorySize::kilobytes(ad_utility::size_t_max));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::megabytes(ad_utility::size_t_max));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::gigabytes(ad_utility::size_t_max));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::terabytes(ad_utility::size_t_max));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::kilobytes(DBL_MAX));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::megabytes(DBL_MAX));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::gigabytes(DBL_MAX));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::terabytes(DBL_MAX));
 }
 
 TEST(MemorySize, AssignmentOperator) {
