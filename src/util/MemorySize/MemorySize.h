@@ -162,9 +162,14 @@ size_t constexpr convertMemoryUnitsToBytes(const T amountOfUnits,
                         size_t_max, numBytesPerUnit)) >= amountOfUnits);
 
   if constexpr (std::is_floating_point_v<T>) {
+    // TODO<c++23> As of `c++23`, `std::ceil` is constexpr and can be used.
+    const double doubleResult =
+        amountOfUnits * static_cast<double>(numBytesPerUnit);
+    const size_t unroundedResult = static_cast<size_t>(doubleResult);
     // We (maybe) have to round up.
-    return static_cast<size_t>(
-        std::ceil(amountOfUnits * static_cast<double>(numBytesPerUnit)));
+    return doubleResult > static_cast<double>(unroundedResult)
+               ? unroundedResult + 1
+               : unroundedResult;
   } else {
     static_assert(std::is_integral_v<T>);
     return amountOfUnits * numBytesPerUnit;
