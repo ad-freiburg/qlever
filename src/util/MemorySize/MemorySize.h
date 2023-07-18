@@ -5,15 +5,21 @@
 
 #pragma once
 
-#include <cmath>
 #include <concepts>
 #include <cstddef>
 #include <string>
 #include <type_traits>
 
+#include "util/Cache.h"
+#include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
+/*
+##############
+# Definition #
+##############
+*/
 
 /*
 An abstract class, that represents an amount of memory.
@@ -30,39 +36,39 @@ class MemorySize {
 
  public:
   // Default constructors.
-  MemorySize() = default;
-  MemorySize(const MemorySize&) = default;
-  MemorySize(MemorySize&&) = default;
+  constexpr MemorySize() = default;
+  constexpr MemorySize(const MemorySize&) = default;
+  constexpr MemorySize(MemorySize&&) = default;
 
   // Default assignment operator.
-  MemorySize& operator=(const MemorySize&) = default;
-  MemorySize& operator=(MemorySize&&) = default;
+  constexpr MemorySize& operator=(const MemorySize&) = default;
+  constexpr MemorySize& operator=(MemorySize&&) = default;
 
   /*
   Factory functions for creating an instance of this class with the wanted
   memory size saved internally. Always requries the exact memory size unit and
   size wanted.
   */
-  static MemorySize bytes(size_t numBytes);
-  static MemorySize kilobytes(size_t numKilobytes);
-  static MemorySize kilobytes(double numKilobytes);
-  static MemorySize megabytes(size_t numMegabytes);
-  static MemorySize megabytes(double numMegabytes);
-  static MemorySize gigabytes(size_t numGigabytes);
-  static MemorySize gigabytes(double numGigabytes);
-  static MemorySize terabytes(size_t numTerabytes);
-  static MemorySize terabytes(double numTerabytes);
+  static constexpr MemorySize bytes(size_t numBytes);
+  static constexpr MemorySize kilobytes(size_t numKilobytes);
+  static constexpr MemorySize kilobytes(double numKilobytes);
+  static constexpr MemorySize megabytes(size_t numMegabytes);
+  static constexpr MemorySize megabytes(double numMegabytes);
+  static constexpr MemorySize gigabytes(size_t numGigabytes);
+  static constexpr MemorySize gigabytes(double numGigabytes);
+  static constexpr MemorySize terabytes(size_t numTerabytes);
+  static constexpr MemorySize terabytes(double numTerabytes);
 
   /*
   Return the internal memory amount in the wanted memory unit format.
   For example: If the internal memory amount is 1000 bytes, than `kilobytes()`
   would return `1.0`.
   */
-  size_t getBytes() const;
-  double getKilobytes() const;
-  double getMegabytes() const;
-  double getGigabytes() const;
-  double getTerabytes() const;
+  size_t constexpr getBytes() const;
+  double constexpr getKilobytes() const;
+  double constexpr getMegabytes() const;
+  double constexpr getGigabytes() const;
+  double constexpr getTerabytes() const;
 
   /*
   Return the string representation of the internal memory amount in the
@@ -89,7 +95,7 @@ class MemorySize {
 
  private:
   // Constructor for the factory functions.
-  explicit MemorySize(size_t amountOfMemoryInBytes)
+  explicit constexpr MemorySize(size_t amountOfMemoryInBytes)
       : memoryInBytes_{amountOfMemoryInBytes} {}
 };
 
@@ -99,15 +105,193 @@ Note that user defined literals only allow very specific types for function
 arguments, so I couldn't use more fitting types.
 */
 namespace memory_literals {
-MemorySize operator""_B(unsigned long long int bytes);
-MemorySize operator""_kB(long double kilobytes);
-MemorySize operator""_kB(unsigned long long int kilobytes);
-MemorySize operator""_MB(long double megabytes);
-MemorySize operator""_MB(unsigned long long int megabytes);
-MemorySize operator""_GB(long double gigabytes);
-MemorySize operator""_GB(unsigned long long int gigabytes);
-MemorySize operator""_TB(long double terabytes);
-MemorySize operator""_TB(unsigned long long int terabytes);
+constexpr MemorySize operator""_B(unsigned long long int bytes);
+constexpr MemorySize operator""_kB(long double kilobytes);
+constexpr MemorySize operator""_kB(unsigned long long int kilobytes);
+constexpr MemorySize operator""_MB(long double megabytes);
+constexpr MemorySize operator""_MB(unsigned long long int megabytes);
+constexpr MemorySize operator""_GB(long double gigabytes);
+constexpr MemorySize operator""_GB(unsigned long long int gigabytes);
+constexpr MemorySize operator""_TB(long double terabytes);
+constexpr MemorySize operator""_TB(unsigned long long int terabytes);
 }  // namespace memory_literals
 
+/*
+#######################################################
+# Implementation of the previously declared functions #
+#######################################################
+*/
+
+// Helper functions.
+namespace details {
+// Just the number of bytes per memory unit.
+constexpr size_t numBytesPerkB = ad_utility::pow<size_t>(10, 3);
+constexpr size_t numBytesPerMB = ad_utility::pow<size_t>(10, 6);
+constexpr size_t numBytesPerGB = ad_utility::pow<size_t>(10, 9);
+constexpr size_t numBytesPerTB = ad_utility::pow<size_t>(10, 12);
+
+/*
+Helper function for dividing two instances of `size_t`.
+Needed, because there is no `std` division function, that takes unconverted
+`size_t`.This tends to lead to error and unprecise results. This function
+however, should be about as precise as possible, when having the return type
+`double`.
+*/
+static constexpr double sizeTDivision(const size_t dividend,
+                                      const size_t divisor) {
+  size_t quotient = dividend / divisor;
+  return static_cast<double>(quotient) +
+         static_cast<double>(dividend % divisor) / static_cast<double>(divisor);
+}
+
+/*
+@brief Calculate the amount of bytes for a given amount of untis and a given
+amount of bytes per unit.
+
+@return The amount of bytes. Rounded up, if needed.
+*/
+template <typename T>
+requires std::integral<T> || std::floating_point<T>
+size_t constexpr convertMemoryUnitsToBytes(const T amountOfUnits,
+                                           const size_t numBytesPerUnit) {
+  // Negativ values makes no sense.
+  AD_CONTRACT_CHECK(amountOfUnits >= 0);
+
+  // Max value for `amountOfUnits`.
+  AD_CONTRACT_CHECK(static_cast<T>(sizeTDivision(
+                        size_t_max, numBytesPerUnit)) >= amountOfUnits);
+
+  if constexpr (std::is_floating_point_v<T>) {
+    // We (maybe) have to round up.
+    return static_cast<size_t>(
+        std::ceil(amountOfUnits * static_cast<double>(numBytesPerUnit)));
+  } else {
+    AD_CORRECTNESS_CHECK(std::is_integral_v<T>);
+    return amountOfUnits * numBytesPerUnit;
+  }
+}
+}  // namespace details
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::bytes(size_t numBytes) {
+  return MemorySize{numBytes};
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::kilobytes(size_t numKilobytes) {
+  return MemorySize{
+      details::convertMemoryUnitsToBytes(numKilobytes, details::numBytesPerkB)};
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::kilobytes(double numKilobytes) {
+  return MemorySize{
+      details::convertMemoryUnitsToBytes(numKilobytes, details::numBytesPerkB)};
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::megabytes(size_t numMegabytes) {
+  return MemorySize{
+      details::convertMemoryUnitsToBytes(numMegabytes, details::numBytesPerMB)};
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::megabytes(double numMegabytes) {
+  return MemorySize{
+      details::convertMemoryUnitsToBytes(numMegabytes, details::numBytesPerMB)};
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::gigabytes(size_t numGigabytes) {
+  return MemorySize{
+      details::convertMemoryUnitsToBytes(numGigabytes, details::numBytesPerGB)};
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::gigabytes(double numGigabytes) {
+  return MemorySize{
+      details::convertMemoryUnitsToBytes(numGigabytes, details::numBytesPerGB)};
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::terabytes(size_t numTerabytes) {
+  return MemorySize{
+      details::convertMemoryUnitsToBytes(numTerabytes, details::numBytesPerTB)};
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::terabytes(double numTerabytes) {
+  return MemorySize{
+      details::convertMemoryUnitsToBytes(numTerabytes, details::numBytesPerTB)};
+}
+
+// _____________________________________________________________________________
+constexpr size_t MemorySize::getBytes() const { return memoryInBytes_; }
+
+// _____________________________________________________________________________
+constexpr double MemorySize::getKilobytes() const {
+  return details::sizeTDivision(memoryInBytes_, details::numBytesPerkB);
+}
+
+// _____________________________________________________________________________
+constexpr double MemorySize::getMegabytes() const {
+  return details::sizeTDivision(memoryInBytes_, details::numBytesPerMB);
+}
+
+// _____________________________________________________________________________
+constexpr double MemorySize::getGigabytes() const {
+  return details::sizeTDivision(memoryInBytes_, details::numBytesPerGB);
+}
+
+// _____________________________________________________________________________
+constexpr double MemorySize::getTerabytes() const {
+  return details::sizeTDivision(memoryInBytes_, details::numBytesPerTB);
+}
+
+namespace memory_literals {
+// _____________________________________________________________________________
+constexpr MemorySize operator""_B(unsigned long long int bytes) {
+  return MemorySize::bytes(bytes);
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize operator""_kB(long double kilobytes) {
+  return MemorySize::kilobytes(static_cast<double>(kilobytes));
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize operator""_kB(unsigned long long int kilobytes) {
+  return MemorySize::kilobytes(static_cast<size_t>(kilobytes));
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize operator""_MB(long double megabytes) {
+  return MemorySize::megabytes(static_cast<double>(megabytes));
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize operator""_MB(unsigned long long int megabytes) {
+  return MemorySize::megabytes(static_cast<size_t>(megabytes));
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize operator""_GB(long double gigabytes) {
+  return MemorySize::gigabytes(static_cast<double>(gigabytes));
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize operator""_GB(unsigned long long int gigabytes) {
+  return MemorySize::gigabytes(static_cast<size_t>(gigabytes));
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize operator""_TB(long double terabytes) {
+  return MemorySize::terabytes(static_cast<double>(terabytes));
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize operator""_TB(unsigned long long int terabytes) {
+  return MemorySize::terabytes(static_cast<size_t>(terabytes));
+}
+}  // namespace memory_literals
 }  // namespace ad_utility
