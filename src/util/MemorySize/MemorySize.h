@@ -105,15 +105,15 @@ Note that user defined literals only allow very specific types for function
 arguments, so I couldn't use more fitting types.
 */
 namespace memory_literals {
-constexpr MemorySize operator""_B(unsigned long long int bytes);
-constexpr MemorySize operator""_kB(long double kilobytes);
-constexpr MemorySize operator""_kB(unsigned long long int kilobytes);
-constexpr MemorySize operator""_MB(long double megabytes);
-constexpr MemorySize operator""_MB(unsigned long long int megabytes);
-constexpr MemorySize operator""_GB(long double gigabytes);
-constexpr MemorySize operator""_GB(unsigned long long int gigabytes);
-constexpr MemorySize operator""_TB(long double terabytes);
-constexpr MemorySize operator""_TB(unsigned long long int terabytes);
+consteval MemorySize operator""_B(unsigned long long int bytes);
+consteval MemorySize operator""_kB(long double kilobytes);
+consteval MemorySize operator""_kB(unsigned long long int kilobytes);
+consteval MemorySize operator""_MB(long double megabytes);
+consteval MemorySize operator""_MB(unsigned long long int megabytes);
+consteval MemorySize operator""_GB(long double gigabytes);
+consteval MemorySize operator""_GB(unsigned long long int gigabytes);
+consteval MemorySize operator""_TB(long double terabytes);
+consteval MemorySize operator""_TB(unsigned long long int terabytes);
 }  // namespace memory_literals
 
 /*
@@ -166,7 +166,7 @@ size_t constexpr convertMemoryUnitsToBytes(const T amountOfUnits,
     return static_cast<size_t>(
         std::ceil(amountOfUnits * static_cast<double>(numBytesPerUnit)));
   } else {
-    AD_CORRECTNESS_CHECK(std::is_integral_v<T>);
+    static_assert(std::is_integral_v<T>);
     return amountOfUnits * numBytesPerUnit;
   }
 }
@@ -250,47 +250,47 @@ constexpr double MemorySize::getTerabytes() const {
 
 namespace memory_literals {
 // _____________________________________________________________________________
-constexpr MemorySize operator""_B(unsigned long long int bytes) {
+consteval MemorySize operator""_B(unsigned long long int bytes) {
   return MemorySize::bytes(bytes);
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize operator""_kB(long double kilobytes) {
+consteval MemorySize operator""_kB(long double kilobytes) {
   return MemorySize::kilobytes(static_cast<double>(kilobytes));
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize operator""_kB(unsigned long long int kilobytes) {
+consteval MemorySize operator""_kB(unsigned long long int kilobytes) {
   return MemorySize::kilobytes(static_cast<size_t>(kilobytes));
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize operator""_MB(long double megabytes) {
+consteval MemorySize operator""_MB(long double megabytes) {
   return MemorySize::megabytes(static_cast<double>(megabytes));
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize operator""_MB(unsigned long long int megabytes) {
+consteval MemorySize operator""_MB(unsigned long long int megabytes) {
   return MemorySize::megabytes(static_cast<size_t>(megabytes));
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize operator""_GB(long double gigabytes) {
+consteval MemorySize operator""_GB(long double gigabytes) {
   return MemorySize::gigabytes(static_cast<double>(gigabytes));
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize operator""_GB(unsigned long long int gigabytes) {
+consteval MemorySize operator""_GB(unsigned long long int gigabytes) {
   return MemorySize::gigabytes(static_cast<size_t>(gigabytes));
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize operator""_TB(long double terabytes) {
+consteval MemorySize operator""_TB(long double terabytes) {
   return MemorySize::terabytes(static_cast<double>(terabytes));
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize operator""_TB(unsigned long long int terabytes) {
+consteval MemorySize operator""_TB(unsigned long long int terabytes) {
   return MemorySize::terabytes(static_cast<size_t>(terabytes));
 }
 }  // namespace memory_literals
