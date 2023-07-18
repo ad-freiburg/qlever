@@ -689,6 +689,9 @@ TEST(RelationalExpression, VariableAndVariable) {
   testWithExplicitResult<LT>(mixed, mixed, {false, false, false});
   testWithExplicitResult<EQ>(mixed, mixed, {true, true, true});
 
+  auto U = Id::makeUndefined();
+  auto B = ad_utility::testing::BoolId;
+
   // ?ints column is `1, 0, -1`
   // ?doubles column is `0.1, -0.1, 2.8`
   // ?numeric column is 1, -0.1, 3.4
@@ -699,15 +702,15 @@ TEST(RelationalExpression, VariableAndVariable) {
   testWithExplicitResult<LE>(numeric, doubles, {false, true, false});
   // Note: `1` and `<x>` are "not compatible" so even the "not equal" comparison
   // returns false (this is the third entry in the expected result).
-  testWithExplicitResult<NE>(ints, mixed, {false, true, false});
+  testWithExplicitIdResult<NE>(ints, mixed, {B(false), B(true), U});
 
   // The same note applies here, double values and vocab entries are always
   // incompatible.
-  testWithExplicitResult<NE>(doubles, vocab, {false, false, false});
-  testWithExplicitResult<LE>(vocab, doubles, {false, false, false});
-  testWithExplicitResult<GE>(vocab, doubles, {false, false, false});
+  testWithExplicitIdResult<NE>(doubles, vocab, {U, U, U});
+  testWithExplicitIdResult<LE>(vocab, doubles, {U, U, U});
+  testWithExplicitIdResult<GE>(vocab, doubles, {U, U, U});
 
-  testWithExplicitResult<LT>(vocab, mixed, {false, false, true});
+  testWithExplicitIdResult<LT>(vocab, mixed, {U, U, B(true)});
 }
 
 // `rightValue` must be a constant. Sort the `IdTable` of the `TestContext`
