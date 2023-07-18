@@ -55,15 +55,18 @@ jobs:
       working-directory: ${{github.workspace}}/pr
       run:  cmake -B build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true -DENABLE_EXPENSIVE_CHECKS=true
 
-    - name: Build
+    - name: Build master
         # Build your program with the given configuration
-      run:  |
-        cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} -- -j $(nproc)
-        cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} -- -j $(nproc)
-
-    #TODO<joka921> As soon as this works, add the check if the version has changed. If true, the following check has to
-    # be disabled.
-    - name: E2E
+      run:  cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} -- -j $(nproc)
+      #TODO<joka921> As soon as this works, add the check if the version has changed. If true, the following check has to
+      # be disabled.
+    - name: E2E on Master
       working-directory: ${{github.workspace}}/master
-      run:  e2e/e2e.sh && e2e/e2e.sh -i -d ../pr/build
-
+      run:  e2e/e2e.sh
+    - name: Clean master
+      run:  cmake --build ${{github.workspace}}/master/build --target clean
+    - name: BuildPr
+      run:    cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} -- -j $(nproc)
+    - name: E2E on PR using index from Master
+      working-directory: ${{github.workspace}}/master
+      run:  e2e/e2e.sh -i -d ../pr/build

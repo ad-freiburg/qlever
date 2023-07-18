@@ -808,13 +808,33 @@ void IndexImpl::readConfiguration() {
               << std::endl;
   }
 
-  if (configurationJson_.find("last-change-of-index-version") != configurationJson_.end()) {
-    auto indexVersion = configurationJson_["last-change-of-index-version"];
+  if (configurationJson_.find("last-change-of-index-version") !=
+      configurationJson_.end()) {
+    auto indexVersion = static_cast<qlever::IndexVersion>(
+        configurationJson_["last-change-of-index-version"]);
     const auto& currentVersion = qlever::indexVersion();
     if (indexVersion != currentVersion) {
-      // TODO<joka921> Handle the case that the binary is older than the index (determine by the date).
-      LOG(ERROR) << "The index is not compatible with this version of QLever. We recommend to rebuild and then start the index with the current master."
-                    " Alternatively start the engine with a compatible version of QLever (PR = TODO, Date = TODO).";
+      if (indexVersion.date_.toBits() > currentVersion.date_.toBits()) {
+        LOG(ERROR) << "The version of QLever you are using is too old for this "
+                      "index. Please use a version of QLever that is "
+                      "compatible with this index"
+                      " (PR = "
+                   << indexVersion.prNumber_
+                   << ", Date = " << indexVersion.date_.toStringAndType().first
+                   << ")." << std::endl;
+        throw std::runtime_error{
+            "Incompatible index version, see log message for details"};
+      }
+      // TODO<joka921> Handle the case that the binary is older than the index
+      // (determine by the date).
+      LOG(ERROR) << "The index is not compatible with this version of QLever. "
+                    "We recommend to rebuild and then start the index with the "
+                    "current master."
+                    " Alternatively start the engine with a compatible version "
+                    "of QLever (PR = "
+                 << indexVersion.prNumber_
+                 << ", Date = " << indexVersion.date_.toStringAndType().first
+                 << ")." << std::endl;
       throw std::runtime_error{
           "Incompatible index version, see log message for details"};
     }
