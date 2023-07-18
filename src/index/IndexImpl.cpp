@@ -35,11 +35,10 @@ IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
     : allocator_{std::move(allocator)} {};
 
 // _____________________________________________________________________________
-template <class Parser>
 IndexBuilderDataAsPsoSorter IndexImpl::createIdTriplesAndVocab(
-    const string& ntFile) {
+    std::shared_ptr<TurtleParserBase> parser) {
   auto indexBuilderData =
-      passFileForVocabulary<Parser>(ntFile, numTriplesPerBatch_);
+      passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
   totalVocabularySize_ = indexBuilderData.vocabularyMetaData_.numWordsTotal_;
@@ -89,18 +88,18 @@ void IndexImpl::createFromFile(const string& filename) {
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
     if (onlyAsciiTurtlePrefixes_) {
       LOG(DEBUG) << "Using the CTRE library for tokenization" << std::endl;
-      indexBuilderData =
-          createIdTriplesAndVocab<TurtleParallelParser<TokenizerCtre>>(
-              filename);
+      auto parser =
+          std::make_unique<TurtleParallelParser<TokenizerCtre>>(filename);
+      indexBuilderData = createIdTriplesAndVocab(std::move(parser));
     } else {
       LOG(DEBUG) << "Using the Google RE2 library for tokenization"
                  << std::endl;
-      indexBuilderData =
-          createIdTriplesAndVocab<TurtleParallelParser<Tokenizer>>(filename);
+      auto parser = std::make_unique<TurtleParallelParser<Tokenizer>>(filename);
+      indexBuilderData = createIdTriplesAndVocab(std::move(parser));
     }
-
   } else {
-    indexBuilderData = createIdTriplesAndVocab<Parser>(filename);
+    indexBuilderData =
+        createIdTriplesAndVocab(std::make_unique<Parser>(filename));
   }
 
   // If we have no compression, this will also copy the whole vocabulary.
@@ -238,8 +237,8 @@ template void IndexImpl::createFromFile<TurtleParserAuto>(
     const string& filename);
 
 // _____________________________________________________________________________
-IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(std::shared_ptr<TurtleParserBase> parser,
-    size_t linesPerPartial) {
+IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
+    std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial) {
   /*
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;

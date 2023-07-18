@@ -86,7 +86,9 @@ class ParallelFileBuffer : public ParallelBuffer {
 class ParallelBufferWithEndRegex : public ParallelBuffer {
  public:
   ParallelBufferWithEndRegex(size_t blocksize, std::string endRegex)
-      : ParallelBuffer{blocksize}, _endRegex{endRegex}, _endRegexAsString{std::move(endRegex)} {}
+      : ParallelBuffer{blocksize},
+        _endRegex{endRegex},
+        _endRegexAsString{std::move(endRegex)} {}
 
   // __________________________________________________________________________
   std::optional<BufferType> getNextBlock() override;

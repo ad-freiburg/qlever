@@ -28,9 +28,11 @@ class ParserBatcher {
  public:
   /// construct from a Parser, the maximum Number of triples to parse, and the
   /// callback.
-  ParserBatcher(const std::shared_ptr<Parser>& p, size_t maxNumTriples,
+  ParserBatcher(std::shared_ptr<Parser> p, size_t maxNumTriples,
                 ExhaustedCallback c)
-      : m_parser(p), m_maxNumTriples(maxNumTriples), m_exhaustedCallback(c) {}
+      : m_parser(std::move(p)),
+        m_maxNumTriples(maxNumTriples),
+        m_exhaustedCallback(c) {}
   using Triple = std::array<std::string, 3>;
 
   /**

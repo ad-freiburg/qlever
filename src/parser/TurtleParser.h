@@ -61,9 +61,28 @@ inline std::string_view stripDoubleQuotes(std::string_view input) {
 
 // A base class for all the different turtle parsers.
 class TurtleParserBase {
+ private:
+  // How to handle integer overflow and invalid literals (see below).
+  TurtleParserIntegerOverflowBehavior _integerOverflowBehavior =
+      TurtleParserIntegerOverflowBehavior::Error;
+  bool _invalidLiteralsAreSkipped = false;
+
  public:
   // Wrapper to getLine that is expected by the rest of QLever
   bool getLine(TurtleTriple& triple) { return getLine(&triple); }
+
+  virtual TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() final {
+    return _integerOverflowBehavior;
+  }
+
+  // If true then triples with invalid literals (for example
+  // "noNumber"^^xsd:integer) are ignored. If false an exception is thrown when
+  // such literals are encountered.
+  virtual bool& invalidLiteralsAreSkipped() final {
+    return _invalidLiteralsAreSkipped;
+  }
+
+  virtual void printAndResetQueueStatistics() {}
 
   // Main access method to the parser
   // If a triple can be parsed (or has previously been parsed and stored
@@ -93,7 +112,6 @@ class TurtleParserBase {
     return result;
   }
 };
-
 
 /**
  * @brief The actual parser class
@@ -152,10 +170,6 @@ class TurtleParser : public TurtleParserBase {
   std::string _activePredicate;
   size_t _numBlankNodes = 0;
 
-  // How to handle integer overflow and invalid literals (see below).
-  TurtleParserIntegerOverflowBehavior _integerOverflowBehavior =
-      TurtleParserIntegerOverflowBehavior::Error;
-  bool _invalidLiteralsAreSkipped = false;
   bool _currentTripleIgnoredBecauseOfInvalidLiteral = false;
 
   // Make sure that each blank nodes is unique, even across different parser
@@ -168,23 +182,6 @@ class TurtleParser : public TurtleParserBase {
   TurtleParser() = default;
   TurtleParser(TurtleParser&& rhs) noexcept = default;
   TurtleParser& operator=(TurtleParser&& rhs) noexcept = default;
-
-  // Specifies the behavior if an integer literal overflows.
-  TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() {
-    return _integerOverflowBehavior;
-  }
-  [[nodiscard]] const TurtleParserIntegerOverflowBehavior&
-  integerOverflowBehavior() const {
-    return _integerOverflowBehavior;
-  }
-
-  // If true then triples with invalid literals (for example
-  // "noNumber"^^xsd:integer) are ignored. If false an exception is thrown when
-  // such literals are encountered.
-  bool& invalidLiteralsAreSkipped() { return _invalidLiteralsAreSkipped; };
-  [[nodiscard]] const bool& invalidLiteralsAreSkipped() const {
-    return _invalidLiteralsAreSkipped;
-  };
 
  protected:
   // clear all the parser's state to the initial values.
@@ -629,7 +626,7 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
 
   std::optional<std::vector<TurtleTriple>> getBatch() override;
 
-  void printAndResetQueueStatistics() {
+  void printAndResetQueueStatistics() override {
     LOG(TIMING) << parallelParser.getTimeStatistics() << '\n';
     parallelParser.resetTimers();
     LOG(TIMING) << tripleCollector.getTimeStatistics() << '\n';

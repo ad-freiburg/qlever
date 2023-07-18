@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
       "will read from stdin.");
   add("file-format,F", po::value(&filetype),
       "The format of the input file with the knowledge graph data. Must be one "
-      "of [tsv|nt|ttl]. If not set, QLever will try to deduce it from the "
+      "of [nt|ttl]. If not set, QLever will try to deduce it from the "
       "filename suffix.");
   add("kg-index-name,K", po::value(&kbIndexName),
       "The name of the knowledge graph index (default: basename of "
@@ -213,10 +213,7 @@ int main(int argc, char** argv) {
                   << ad_utility::getUppercase(filetype) << std::endl;
       } else {
         bool filetypeDeduced = false;
-        if (inputFile.ends_with(".tsv")) {
-          filetype = "tsv";
-          filetypeDeduced = true;
-        } else if (inputFile.ends_with(".nt")) {
+        if (inputFile.ends_with(".nt")) {
           filetype = "nt";
           filetypeDeduced = true;
         } else if (inputFile.ends_with(".ttl")) {

@@ -426,12 +426,12 @@ class IndexImpl {
   // permutations. Member vocab_ will be empty after this because it is not
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
-  template <class Parser>
-  IndexBuilderDataAsPsoSorter createIdTriplesAndVocab(const string& ntFile);
+  IndexBuilderDataAsPsoSorter createIdTriplesAndVocab(
+      std::shared_ptr<TurtleParserBase> parser);
 
   // ___________________________________________________________________
-  IndexBuilderDataAsStxxlVector passFileForVocabulary(std::shared_ptr<TurtleParserBase> parser,
-                                                      size_t linesPerPartial);
+  IndexBuilderDataAsStxxlVector passFileForVocabulary(
+      std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial);
 
   /**
    * @brief Everything that has to be done when we have seen all the triples
