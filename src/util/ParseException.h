@@ -33,7 +33,7 @@ struct ExceptionMetadata {
 
   // Return the query with the faulty clause highlighted using ANSI Escape
   // Sequences. The faulty clause is made bold, underlined and red.
-  [[nodiscard]] std::string coloredError() const;
+  std::string coloredError() const;
 
   // Return only the faulty clause.
   std::string_view offendingClause() const;
@@ -46,7 +46,6 @@ class ParseException : public std::exception {
       std::optional<ExceptionMetadata> metadata = std::nullopt,
       std::string_view prefix = "");
 
- public:
   const char* what() const noexcept override {
     return causeWithMetadata_.c_str();
   }

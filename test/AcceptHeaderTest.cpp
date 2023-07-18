@@ -3,10 +3,10 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
-#include <parser/ParseException.h>
 
 #include <string>
 
+#include "util/ParseException.h"
 #include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
 #include "util/http/HttpParser/generated/AcceptHeaderLexer.h"
 
