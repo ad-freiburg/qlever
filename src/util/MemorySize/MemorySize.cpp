@@ -3,6 +3,8 @@
 // Author: Andre Schlegel (July of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
+#include "util/MemorySize/MemorySize.h"
+
 #include <absl/strings/str_cat.h>
 
 #include <cinttypes>
@@ -14,7 +16,6 @@
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/MemorySize/MemorySizeParser.h"
 #include "util/MemorySize/generated/MemorySizeLanguageLexer.h"
 #include "util/MemorySize/generated/MemorySizeLanguageParser.h"
