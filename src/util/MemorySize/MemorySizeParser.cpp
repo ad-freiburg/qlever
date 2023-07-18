@@ -2,12 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (July of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/MemorySize/MemorySizeParser.h"
-
 #include <string>
 
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/MemorySize/MemorySizeParser.h"
 #include "util/StringUtils.h"
 
 using ad_utility::MemorySize;
@@ -70,27 +69,23 @@ MemorySize MemorySizeParser::visitMemoryUnitSize(
   @param numUnits Amount of kilobytes, megabytes, etc..
   */
   auto createMemoryInstance = [](char memoryUnit, auto numUnits) {
-    MemorySize toReturn;
-
     switch (memoryUnit) {
       case 'k':
-        toReturn = MemorySize::kilobytes(numUnits);
+        return MemorySize::kilobytes(numUnits);
         break;
       case 'm':
-        toReturn = MemorySize::megabytes(numUnits);
+        return MemorySize::megabytes(numUnits);
         break;
       case 'g':
-        toReturn = MemorySize::gigabytes(numUnits);
+        return MemorySize::gigabytes(numUnits);
         break;
       case 't':
-        toReturn = MemorySize::terabytes(numUnits);
+        return MemorySize::terabytes(numUnits);
         break;
       default:
         // Whatever this is, it is false.
         AD_FAIL();
     }
-
-    return toReturn;
   };
 
   // Which memory unit are we looking at?
