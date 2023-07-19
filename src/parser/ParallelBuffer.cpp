@@ -6,34 +6,34 @@
 // _________________________________________________________________________
 void ParallelFileBuffer::open(const string& filename) {
   file_.open(filename, "r");
-  _eof = false;
-  _buf.resize(_blocksize);
-  auto task = [&file = this->file_, bs = this->_blocksize,
-               &buf = this->_buf]() { return file.read(buf.data(), bs); };
-  _fut = std::async(task);
+  eof_ = false;
+  buf_.resize(blocksize_);
+  auto task = [&file = this->file_, bs = this->blocksize_,
+               &buf = this->buf_]() { return file.read(buf.data(), bs); };
+  fut_ = std::async(task);
 }
 
 // ___________________________________________________________________________
 std::optional<ParallelBuffer::BufferType> ParallelFileBuffer::getNextBlock() {
   AD_CONTRACT_CHECK(file_.isOpen());
-  if (_eof) {
+  if (eof_) {
     return std::nullopt;
   }
-  AD_CORRECTNESS_CHECK(_fut.valid());
-  auto numBytesRead = _fut.get();
+  AD_CORRECTNESS_CHECK(fut_.valid());
+  auto numBytesRead = fut_.get();
   if (numBytesRead == 0) {
-    _eof = true;
+    eof_ = true;
     return std::nullopt;
   }
-  _buf.resize(numBytesRead);
-  std::optional<BufferType> ret = std::move(_buf);
+  buf_.resize(numBytesRead);
+  std::optional<BufferType> ret = std::move(buf_);
 
-  _buf.resize(_blocksize);
-  auto getNextBlock = [&file = this->file_, bs = this->_blocksize,
-                       &buf = this->_buf]() {
+  buf_.resize(blocksize_);
+  auto getNextBlock = [&file = this->file_, bs = this->blocksize_,
+                       &buf = this->buf_]() {
     return file.read(buf.data(), bs);
   };
-  _fut = std::async(getNextBlock);
+  fut_ = std::async(getNextBlock);
 
   return ret;
 }
@@ -72,24 +72,24 @@ std::optional<size_t> ParallelBufferWithEndRegex::findRegexNearEnd(
 // _____________________________________________________________________________
 std::optional<ParallelBuffer::BufferType>
 ParallelBufferWithEndRegex::getNextBlock() {
-  auto rawInput = _rawBuffer.getNextBlock();
-  if (!rawInput || _exhausted) {
-    _exhausted = true;
-    if (_remainder.empty()) {
+  auto rawInput = rawBuffer_.getNextBlock();
+  if (!rawInput || exhausted_) {
+    exhausted_ = true;
+    if (remainder_.empty()) {
       return std::nullopt;
     }
-    auto copy = std::move(_remainder);
-    // The C++ standard does not require that _remainder is empty after the
+    auto copy = std::move(remainder_);
+    // The C++ standard does not require that remainder_ is empty after the
     // move, but we need it to be empty to make the logic above work.
-    _remainder.clear();
+    remainder_.clear();
     return copy;
   }
 
-  auto endPosition = findRegexNearEnd(rawInput.value(), _endRegex);
+  auto endPosition = findRegexNearEnd(rawInput.value(), endRegex_);
   if (!endPosition) {
-    if (_rawBuffer.getNextBlock()) {
+    if (rawBuffer_.getNextBlock()) {
       throw std::runtime_error(absl::StrCat(
-          "The regex \"", _endRegexAsString,
+          "The regex \"", endRegexAsString_,
           "\" which marks the end of a statement was not found at "
           "all within a single batch that was not the last one. Please "
           "increase the FILE_BUFFER_SIZE "
@@ -97,15 +97,15 @@ ParallelBufferWithEndRegex::getNextBlock() {
     }
     // This was the last (possibly incomplete) block, simply concatenate
     endPosition = rawInput->size();
-    _exhausted = true;
+    exhausted_ = true;
   }
   BufferType result;
-  result.reserve(_remainder.size() + *endPosition);
-  result.insert(result.end(), _remainder.begin(), _remainder.end());
+  result.reserve(remainder_.size() + *endPosition);
+  result.insert(result.end(), remainder_.begin(), remainder_.end());
   result.insert(result.end(), rawInput->begin(),
                 rawInput->begin() + *endPosition);
-  _remainder.clear();
-  _remainder.insert(_remainder.end(), rawInput->begin() + *endPosition,
+  remainder_.clear();
+  remainder_.insert(remainder_.end(), rawInput->begin() + *endPosition,
                     rawInput->end());
   return result;
 }

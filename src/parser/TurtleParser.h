@@ -84,7 +84,8 @@ class TurtleParserBase {
   }
 
   virtual void printAndResetQueueStatistics() {
-    // This function only does something for the parallel parser (where it is overridden).
+    // This function only does something for the parallel parser (where it is
+    // overridden).
   }
 
   // Main access method to the parser
@@ -221,15 +222,15 @@ class TurtleParser : public TurtleParserBase {
   // Log error message (with parse position) and throw parse exception.
   [[noreturn]] void raise(std::string_view error_message) {
     auto d = tok_.view();
-      std::stringstream errorMessage;
-      errorMessage << "Parse error at byte position " << getParsePosition()
+    std::stringstream errorMessage;
+    errorMessage << "Parse error at byte position " << getParsePosition()
                  << ": " << error_message << '\n';
-      if (!d.empty()) {
-        size_t num_bytes = 500;
-        auto s = std::min(size_t(num_bytes), size_t(d.size()));
-        errorMessage << "The next " << num_bytes << " bytes are:\n"
-                     << std::string_view(d.data(), s) << '\n';
-      }
+    if (!d.empty()) {
+      size_t num_bytes = 500;
+      auto s = std::min(size_t(num_bytes), size_t(d.size()));
+      errorMessage << "The next " << num_bytes << " bytes are:\n"
+                   << std::string_view(d.data(), s) << '\n';
+    }
     throw ParseException{std::move(errorMessage).str()};
   }
 
@@ -237,7 +238,7 @@ class TurtleParser : public TurtleParserBase {
   // setting of `invalidLiteralsAreSkipped()`.
   void raiseOrIgnoreTriple(std::string_view errorMessage) {
     if (invalidLiteralsAreSkipped()) {
-        currentTripleIgnoredBecauseOfInvalidLiteral_ = true;
+      currentTripleIgnoredBecauseOfInvalidLiteral_ = true;
     } else {
       raise(errorMessage);
     }
@@ -602,11 +603,11 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
 
   ParallelBufferWithEndRegex fileBuffer_{bufferSize_, "\\.[\\t ]*([\\r\\n]+)"};
 
-  ad_utility::TaskQueue<true> tripleCollector_{QUEUE_SIZE_AFTER_PARALLEL_PARSING,
-                                              0, "triple collector"};
-  ad_utility::TaskQueue<true> parallelParser_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
-                                             NUM_PARALLEL_PARSER_THREADS,
-                                             "parallel parser"};
+  ad_utility::TaskQueue<true> tripleCollector_{
+      QUEUE_SIZE_AFTER_PARALLEL_PARSING, 0, "triple collector"};
+  ad_utility::TaskQueue<true> parallelParser_{
+      QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS,
+      "parallel parser"};
   std::future<void> parseFuture_;
 
   ParallelBuffer::BufferType remainingBatchFromInitialization_;

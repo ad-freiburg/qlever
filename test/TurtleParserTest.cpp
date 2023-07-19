@@ -6,8 +6,8 @@
 #include <string>
 
 #include "./util/TripleComponentTestHelpers.h"
-#include "gtest/gtest.h"
 #include "gmock/gmock.h"
+#include "gtest/gtest.h"
 #include "parser/TurtleParser.h"
 #include "util/Conversions.h"
 
