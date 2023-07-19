@@ -96,6 +96,8 @@ class TurtleParserBase {
   // that has not yet been dealt with by the parser.
   [[nodiscard]] virtual size_t getParsePosition() const = 0;
 
+  // Return a batch of the next 100'000 triples at once. If the parser is
+  // exhausted, return `nullopt`.
   virtual std::optional<std::vector<TurtleTriple>> getBatch() {
     std::vector<TurtleTriple> result;
     result.reserve(100'000);
@@ -218,15 +220,16 @@ class TurtleParser : public TurtleParserBase {
   // Log error message (with parse position) and throw parse exception.
   [[noreturn]] void raise(std::string_view error_message) {
     auto d = _tok.view();
-    if (!d.empty()) {
-      size_t num_bytes = 500;
-      auto s = std::min(size_t(num_bytes), size_t(d.size()));
-      LOG(ERROR) << "Parse error at byte position " << getParsePosition()
-                 << ": " << error_message << std::endl;
-      LOG(INFO) << "The next " << num_bytes << " bytes are:\n"
-                << std::string_view(d.data(), s) << std::endl;
-    }
-    throw ParseException{"Error while parsing Turtle input"};
+      std::stringstream errorMessage;
+      errorMessage << "Parse error at byte position " << getParsePosition()
+                 << ": " << error_message << '\n';
+      if (!d.empty()) {
+        size_t num_bytes = 500;
+        auto s = std::min(size_t(num_bytes), size_t(d.size()));
+        errorMessage << "The next " << num_bytes << " bytes are:\n"
+                     << std::string_view(d.data(), s) << '\n';
+      }
+    throw ParseException{std::move(errorMessage).str()};
   }
 
   // Throw an exception or simply ignore the current triple, depending on the
@@ -596,7 +599,7 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   // defaults to a global constant
   size_t _bufferSize = FILE_BUFFER_SIZE();
 
-  ParallelBufferWithEndRegex _fileBuffer{_bufferSize, R"-(\.[\t ]*([\r\n]+))-"};
+  ParallelBufferWithEndRegex _fileBuffer{_bufferSize, "\\.[\\t ]*([\\r\\n]+)"};
 
   ad_utility::TaskQueue<true> tripleCollector{QUEUE_SIZE_AFTER_PARALLEL_PARSING,
                                               0, "triple collector"};

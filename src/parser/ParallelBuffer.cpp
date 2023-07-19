@@ -15,11 +15,11 @@ void ParallelFileBuffer::open(const string& filename) {
 
 // ___________________________________________________________________________
 std::optional<ParallelBuffer::BufferType> ParallelFileBuffer::getNextBlock() {
+  AD_CONTRACT_CHECK(_file.isOpen());
   if (_eof) {
     return std::nullopt;
   }
-
-  AD_CONTRACT_CHECK(_file.isOpen() && _fut.valid());
+  AD_CORRECTNESS_CHECK(_fut.valid());
   auto numBytesRead = _fut.get();
   if (numBytesRead == 0) {
     _eof = true;
@@ -41,15 +41,12 @@ std::optional<ParallelBuffer::BufferType> ParallelFileBuffer::getNextBlock() {
 // ____________________________________________________________________________
 std::optional<size_t> ParallelBufferWithEndRegex::findRegexNearEnd(
     const BufferType& vec, const re2::RE2& regex) {
-  size_t chunkSize = 1000;
   size_t inputSize = vec.size();
+  AD_CORRECTNESS_CHECK(inputSize > 0);
+  size_t chunkSize = std::min(1000UL, inputSize);
   re2::StringPiece regexResult;
   bool match = false;
   while (true) {
-    if (chunkSize >= inputSize) {
-      break;
-    }
-
     auto startIdx = inputSize - chunkSize;
     auto regexInput = re2::StringPiece{vec.data() + startIdx, chunkSize};
 
@@ -58,10 +55,10 @@ std::optional<size_t> ParallelBufferWithEndRegex::findRegexNearEnd(
       break;
     }
 
-    if (chunkSize == inputSize - 1) {
+    if (chunkSize == inputSize) {
       break;
     }
-    chunkSize = std::min(chunkSize * 2, inputSize - 1);
+    chunkSize = std::min(chunkSize * 2, inputSize);
   }
   if (!match) {
     return std::nullopt;
@@ -96,8 +93,7 @@ ParallelBufferWithEndRegex::getNextBlock() {
           "\" which marks the end of a statement was not found at "
           "all within a single batch that was not the last one. Please "
           "increase the FILE_BUFFER_SIZE "
-          "or choose a different parser that parses the input files "
-          "serially."));
+          "or set \"parallel-parsing: false\" in the settings file."));
     }
     // This was the last (possibly incomplete) block, simply concatenate
     endPosition = rawInput->size();

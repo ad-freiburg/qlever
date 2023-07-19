@@ -7,6 +7,7 @@
 
 #include "./util/TripleComponentTestHelpers.h"
 #include "gtest/gtest.h"
+#include "gmock/gmock.h"
 #include "parser/TurtleParser.h"
 #include "util/Conversions.h"
 
@@ -577,4 +578,49 @@ TEST(TurtleParserTest, collection) {
   };
   runCommonTests(checkParseResult<Re2Parser, &Re2Parser::collection, 22>);
   runCommonTests(checkParseResult<CtreParser, &CtreParser::collection, 22>);
+}
+
+TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
+  std::string filename{"turtleStreamAndParallelParserTest.dat"};
+  std::vector<TurtleTriple> expectedTriples;
+  {
+    auto of = ad_utility::makeOfstream(filename);
+    for (size_t i = 0; i < 1'000; ++i) {
+      auto subject = absl::StrCat("<", i / 1000, ">");
+      auto predicate = absl::StrCat("<", i / 100, ">");
+      auto object = absl::StrCat("<", i / 10, ">");
+      of << subject << ' ' << predicate << ' ' << object << ".\n";
+      expectedTriples.emplace_back(subject, predicate, object);
+    }
+  }
+  // The order of triples in not necessarily the same, so we sort them
+  auto toRef = [](const TurtleTriple& t) {
+    return std::tie(t._subject, t._predicate, t._object.getString());
+  };
+  std::ranges::sort(expectedTriples, std::less{}, toRef);
+
+  FILE_BUFFER_SIZE() = 1000;
+  auto testWithParser = [&]<typename Parser>(bool useBatchInterface) {
+    Parser parser{filename};
+
+    std::vector<TurtleTriple> result;
+    if (useBatchInterface) {
+      while (auto opt = parser.getBatch()) {
+        result.insert(result.end(), opt.value().begin(), opt.value().end());
+      }
+    } else {
+      TurtleTriple next;
+      while (parser.getLine(next)) {
+        result.push_back(next);
+      }
+    }
+    std::ranges::sort(result, std::less{}, toRef);
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expectedTriples));
+  };
+
+  testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(true);
+  testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(false);
+  testWithParser.template operator()<TurtleParallelParser<Tokenizer>>(true);
+  testWithParser.template operator()<TurtleParallelParser<Tokenizer>>(false);
+  ad_utility::deleteFile(filename);
 }
