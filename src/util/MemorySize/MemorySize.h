@@ -158,8 +158,12 @@ constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
   AD_CONTRACT_CHECK(amountOfUnits >= 0);
 
   // Max value for `amountOfUnits`.
-  AD_CONTRACT_CHECK(static_cast<T>(sizeTDivision(
-                        size_t_max, numBytesPerUnit)) >= amountOfUnits);
+  if (static_cast<T>(sizeTDivision(size_t_max, numBytesPerUnit)) <
+      amountOfUnits) {
+    throw std::runtime_error(
+        "The given amount of memory is more memory, than can be represented "
+        "and worked with in c++.");
+  }
 
   if constexpr (std::is_floating_point_v<T>) {
     // TODO<c++23> As of `c++23`, `std::ceil` is constexpr and can be used.
