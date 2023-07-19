@@ -365,6 +365,9 @@ class DateOrLargeYear {
     bits_ |= static_cast<uint64_t>(type);
   }
 
+  // Return the underlying bit representation.
+  uint64_t toBits() const { return bits_; }
+
   // True iff a complete `Date` is stored and not only a large year.
   bool isDate() const { return bits_ >> numPayloadBits == datetime; }
 
