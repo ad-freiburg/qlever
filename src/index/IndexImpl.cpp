@@ -82,7 +82,8 @@ void IndexImpl::createFromFile(const string& filename) {
 
   readIndexBuilderSettingsFromFile();
 
-  auto setTokenizer = [&, this]<template <typename> typename ParserTemplate>()
+  auto setTokenizer = [this,
+                       &filename]<template <typename> typename ParserTemplate>()
       -> std::unique_ptr<TurtleParserBase> {
     if (onlyAsciiTurtlePrefixes_) {
       return std::make_unique<ParserTemplate<TokenizerCtre>>(filename);
@@ -118,7 +119,7 @@ void IndexImpl::createFromFile(const string& filename) {
   LOG(INFO) << "Writing compressed vocabulary to disk ..." << std::endl;
 
   vocab_.buildCodebookForPrefixCompression(prefixes);
-  auto wordReader = vocab_.makeUncompressedDiskIterator(vocabFile);
+  auto wordReader = RdfsVocabulary::makeUncompressedDiskIterator(vocabFile);
   auto wordWriter = vocab_.makeCompressedWordWriter(vocabFileTmp);
   for (const auto& word : wordReader) {
     wordWriter.push(word);

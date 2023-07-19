@@ -142,10 +142,10 @@ class TurtleParser : public TurtleParserBase {
 
   // Get the result of the single rule that was parsed most recently. Used for
   // testing.
-  const TripleComponent& getLastParseResult() { return lastParseResult_; }
+  const TripleComponent& getLastParseResult() const { return lastParseResult_; }
 
   // Get the currently buffered triples. Used for testing.
-  const std::vector<TurtleTriple>& getTriples() { return triples_; }
+  const std::vector<TurtleTriple>& getTriples() const { return triples_; }
 
  protected:
   // Data members.
@@ -319,7 +319,7 @@ class TurtleParser : public TurtleParserBase {
   // ______________________________________________________________________________________
   void emitTriple() {
     if (!currentTripleIgnoredBecauseOfInvalidLiteral_) {
-      triples_.push_back({activeSubject_, activePredicate_, lastParseResult_});
+      triples_.emplace_back(activeSubject_, activePredicate_, lastParseResult_);
     }
     currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
   }
