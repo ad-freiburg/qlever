@@ -5,17 +5,17 @@
 
 // _________________________________________________________________________
 void ParallelFileBuffer::open(const string& filename) {
-  _file.open(filename, "r");
+  file_.open(filename, "r");
   _eof = false;
   _buf.resize(_blocksize);
-  auto task = [&file = this->_file, bs = this->_blocksize,
+  auto task = [&file = this->file_, bs = this->_blocksize,
                &buf = this->_buf]() { return file.read(buf.data(), bs); };
   _fut = std::async(task);
 }
 
 // ___________________________________________________________________________
 std::optional<ParallelBuffer::BufferType> ParallelFileBuffer::getNextBlock() {
-  AD_CONTRACT_CHECK(_file.isOpen());
+  AD_CONTRACT_CHECK(file_.isOpen());
   if (_eof) {
     return std::nullopt;
   }
@@ -29,7 +29,7 @@ std::optional<ParallelBuffer::BufferType> ParallelFileBuffer::getNextBlock() {
   std::optional<BufferType> ret = std::move(_buf);
 
   _buf.resize(_blocksize);
-  auto getNextBlock = [&file = this->_file, bs = this->_blocksize,
+  auto getNextBlock = [&file = this->file_, bs = this->_blocksize,
                        &buf = this->_buf]() {
     return file.read(buf.data(), bs);
   };

@@ -37,9 +37,9 @@ enum class TurtleParserIntegerOverflowBehavior {
 };
 
 struct TurtleTriple {
-  std::string _subject;
-  std::string _predicate;
-  TripleComponent _object;
+  std::string subject_;
+  std::string predicate_;
+  TripleComponent object_;
 
   bool operator==(const TurtleTriple&) const = default;
 };
@@ -63,9 +63,9 @@ inline std::string_view stripDoubleQuotes(std::string_view input) {
 class TurtleParserBase {
  private:
   // How to handle integer overflow and invalid literals (see below).
-  TurtleParserIntegerOverflowBehavior _integerOverflowBehavior =
+  TurtleParserIntegerOverflowBehavior integerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
-  bool _invalidLiteralsAreSkipped = false;
+  bool invalidLiteralsAreSkipped_ = false;
 
  public:
   virtual ~TurtleParserBase() = default;
@@ -73,17 +73,19 @@ class TurtleParserBase {
   bool getLine(TurtleTriple& triple) { return getLine(&triple); }
 
   virtual TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() final {
-    return _integerOverflowBehavior;
+    return integerOverflowBehavior_;
   }
 
   // If true then triples with invalid literals (for example
   // "noNumber"^^xsd:integer) are ignored. If false an exception is thrown when
   // such literals are encountered.
   virtual bool& invalidLiteralsAreSkipped() final {
-    return _invalidLiteralsAreSkipped;
+    return invalidLiteralsAreSkipped_;
   }
 
-  virtual void printAndResetQueueStatistics() {}
+  virtual void printAndResetQueueStatistics() {
+    // This function only does something for the parallel parser (where it is overridden).
+  }
 
   // Main access method to the parser
   // If a triple can be parsed (or has previously been parsed and stored
@@ -139,49 +141,48 @@ class TurtleParser : public TurtleParserBase {
 
   // Get the result of the single rule that was parsed most recently. Used for
   // testing.
-  const TripleComponent& getLastParseResult() { return _lastParseResult; }
+  const TripleComponent& getLastParseResult() { return lastParseResult_; }
 
   // Get the currently buffered triples. Used for testing.
-  const std::vector<TurtleTriple>& getTriples() { return _triples; }
+  const std::vector<TurtleTriple>& getTriples() { return triples_; }
 
  protected:
   // Data members.
 
   // Stores the triples that have been parsed but not retrieved yet.
-  std::vector<TurtleTriple> _triples;
+  std::vector<TurtleTriple> triples_;
 
   // If this is set, there is nothing else to parse and we will only
   // retrieve what is left in our tripleBuffer.
-  bool _isParserExhausted = false;
+  bool isParserExhausted_ = false;
 
   // The tokenizer.
-  Tokenizer_T _tok{std::string_view("")};
+  Tokenizer_T tok_{std::string_view("")};
 
   // The result of the last successful call to a parsing function (a function
   // named after a (non-)terminal of the Turtle grammar). We are using
   // `TripleComponent` since it can hold any parsing result, not only objects.
-  TripleComponent _lastParseResult;
+  TripleComponent lastParseResult_;
 
   // Maps prefixes to their expanded form, initialized with the empty base
   // (i.e. the prefix ":" maps to the empty IRI).
-  ad_utility::HashMap<std::string, std::string> _prefixMap{{"", ""}};
+  ad_utility::HashMap<std::string, std::string> prefixMap_{{"", ""}};
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
-  std::string _activePrefix;
-  std::string _activeSubject;
-  std::string _activePredicate;
-  size_t _numBlankNodes = 0;
+  std::string activePrefix_;
+  std::string activeSubject_;
+  std::string activePredicate_;
+  size_t numBlankNodes_ = 0;
 
-  bool _currentTripleIgnoredBecauseOfInvalidLiteral = false;
+  bool currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
 
   // Make sure that each blank nodes is unique, even across different parser
   // instances.
-  static inline std::atomic<size_t> _numParsers = 0;
-  size_t _blankNodePrefix = _numParsers.fetch_add(1);
+  static inline std::atomic<size_t> numParsers_ = 0;
+  size_t blankNodePrefix_ = numParsers_.fetch_add(1);
 
  public:
-  virtual ~TurtleParser() = default;
   TurtleParser() = default;
   TurtleParser(TurtleParser&& rhs) noexcept = default;
   TurtleParser& operator=(TurtleParser&& rhs) noexcept = default;
@@ -189,18 +190,18 @@ class TurtleParser : public TurtleParserBase {
  protected:
   // clear all the parser's state to the initial values.
   void clear() {
-    _lastParseResult = "";
+    lastParseResult_ = "";
 
-    _activeSubject.clear();
-    _activePredicate.clear();
-    _activePrefix.clear();
+    activeSubject_.clear();
+    activePredicate_.clear();
+    activePrefix_.clear();
 
-    _prefixMap.clear();
+    prefixMap_.clear();
 
-    _tok.reset(nullptr, 0);
-    _triples.clear();
-    _numBlankNodes = 0;
-    _isParserExhausted = false;
+    tok_.reset(nullptr, 0);
+    triples_.clear();
+    numBlankNodes_ = 0;
+    isParserExhausted_ = false;
   }
 
   // the following functions refer to the nonterminals of the turtle grammar
@@ -219,7 +220,7 @@ class TurtleParser : public TurtleParserBase {
 
   // Log error message (with parse position) and throw parse exception.
   [[noreturn]] void raise(std::string_view error_message) {
-    auto d = _tok.view();
+    auto d = tok_.view();
       std::stringstream errorMessage;
       errorMessage << "Parse error at byte position " << getParsePosition()
                  << ": " << error_message << '\n';
@@ -236,7 +237,7 @@ class TurtleParser : public TurtleParserBase {
   // setting of `invalidLiteralsAreSkipped()`.
   void raiseOrIgnoreTriple(std::string_view errorMessage) {
     if (invalidLiteralsAreSkipped()) {
-      _currentTripleIgnoredBecauseOfInvalidLiteral = true;
+        currentTripleIgnoredBecauseOfInvalidLiteral_ = true;
     } else {
       raise(errorMessage);
     }
@@ -296,19 +297,19 @@ class TurtleParser : public TurtleParserBase {
     if (!parseTerminal<TurtleTokenId::Anon>()) {
       return false;
     }
-    _lastParseResult = createAnonNode();
+    lastParseResult_ = createAnonNode();
     return true;
   }
 
   // Skip a given regex without parsing it
   template <TurtleTokenId reg>
   bool skip() {
-    _tok.skipWhitespaceAndComments();
-    return _tok.template skip<reg>();
+    tok_.skipWhitespaceAndComments();
+    return tok_.template skip<reg>();
   }
 
   // if the prefix of the current input position matches the regex argument,
-  // put the matching prefix into _lastParseResult, move the input position
+  // put the matching prefix into lastParseResult_, move the input position
   // forward by the length of the match and return true else return false and do
   // not change the parser's state
   template <TurtleTokenId terminal, bool SkipWhitespaceBefore = true>
@@ -316,10 +317,10 @@ class TurtleParser : public TurtleParserBase {
 
   // ______________________________________________________________________________________
   void emitTriple() {
-    if (!_currentTripleIgnoredBecauseOfInvalidLiteral) {
-      _triples.push_back({_activeSubject, _activePredicate, _lastParseResult});
+    if (!currentTripleIgnoredBecauseOfInvalidLiteral_) {
+      triples_.push_back({activeSubject_, activePredicate_, lastParseResult_});
     }
-    _currentTripleIgnoredBecauseOfInvalidLiteral = false;
+    currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
   }
 
   // Enforce that the argument is true: if it is false, a parse Exception is
@@ -335,19 +336,19 @@ class TurtleParser : public TurtleParserBase {
   // map a turtle prefix to its expanded form. Throws if the prefix was not
   // properly registered before
   string expandPrefix(const string& prefix) {
-    if (!_prefixMap.count(prefix)) {
+    if (!prefixMap_.count(prefix)) {
       raise("Prefix " + prefix +
             " was not previously defined using a PREFIX or @prefix "
             "declaration");
     } else {
-      return _prefixMap[prefix];
+      return prefixMap_[prefix];
     }
   }
 
   // create a new, unused, unique blank node string
   string createAnonNode() {
     return BlankNode{true,
-                     absl::StrCat(_blankNodePrefix, "_", _numBlankNodes++)}
+                     absl::StrCat(blankNodePrefix_, "_", numBlankNodes_++)}
         .toSparql();
   }
 
@@ -355,7 +356,7 @@ class TurtleParser : public TurtleParserBase {
   // To get consistent blank node labels when testing, we need to manually set
   // the prefix. This function is named `...ForTesting` so you really shouldn't
   // use it in the actual QLever code.
-  void setBlankNodePrefixOnlyForTesting(size_t id) { _blankNodePrefix = id; }
+  void setBlankNodePrefixOnlyForTesting(size_t id) { blankNodePrefix_ = id; }
 
  protected:
   FRIEND_TEST(TurtleParserTest, prefixedName);
@@ -379,7 +380,7 @@ class TurtleParser : public TurtleParserBase {
 template <class Tokenizer_T>
 class TurtleStringParser : public TurtleParser<Tokenizer_T> {
  public:
-  using TurtleParser<Tokenizer_T>::_prefixMap;
+  using TurtleParser<Tokenizer_T>::prefixMap_;
   using TurtleParser<Tokenizer_T>::getLine;
   bool getLine(TurtleTriple* triple) override {
     (void)triple;
@@ -389,7 +390,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
   }
 
   size_t getParsePosition() const override {
-    return _positionOffset + _tmpToParse.size() - this->_tok.data().size();
+    return positionOffset_ + tmpToParse_.size() - this->tok_.data().size();
   }
 
   void initialize(const string& filename) {
@@ -410,64 +411,64 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
   auto parseAndReturnAllTriples() {
     // Actually parse
     this->turtleDoc();
-    auto d = this->_tok.view();
+    auto d = this->tok_.view();
     if (!d.empty()) {
       this->raise(absl::StrCat(
           "Parsing failed before end of input, remaining bytes: ", d.size()));
     }
-    return std::move(this->_triples);
+    return std::move(this->triples_);
   }
 
   // Parse only a single object.
   static TripleComponent parseTripleObject(std::string_view objectString) {
     TurtleStringParser parser;
     parser.parseUtf8String(absl::StrCat("<a> <b> ", objectString, "."));
-    AD_CONTRACT_CHECK(parser._triples.size() == 1);
-    return std::move(parser._triples[0]._object);
+    AD_CONTRACT_CHECK(parser.triples_.size() == 1);
+    return std::move(parser.triples_[0].object_);
   }
 
-  string_view getUnparsedRemainder() const { return this->_tok.view(); }
+  string_view getUnparsedRemainder() const { return this->tok_.view(); }
 
   // Parse directive and return true if a directive was found.
   bool parseDirectiveManually() { return this->directive(); }
 
   void raiseManually(string_view message) { this->raise(message); }
 
-  void setPositionOffset(size_t offset) { _positionOffset = offset; }
+  void setPositionOffset(size_t offset) { positionOffset_ = offset; }
 
  private:
   // The complete input to this parser.
-  ParallelBuffer::BufferType _tmpToParse;
+  ParallelBuffer::BufferType tmpToParse_;
   // Used to add a certain offset to the parsing position when using this
   // in a parallel setting.
-  size_t _positionOffset = 0;
+  size_t positionOffset_ = 0;
 
  public:
   // testing interface for reusing a parser
   // only specifies the tokenizers input stream.
   // Does not alter the tokenizers state
   void setInputStream(const string& toParse) {
-    _tmpToParse.clear();
-    _tmpToParse.reserve(toParse.size());
-    _tmpToParse.insert(_tmpToParse.end(), toParse.begin(), toParse.end());
-    this->_tok.reset(_tmpToParse.data(), _tmpToParse.size());
+    tmpToParse_.clear();
+    tmpToParse_.reserve(toParse.size());
+    tmpToParse_.insert(tmpToParse_.end(), toParse.begin(), toParse.end());
+    this->tok_.reset(tmpToParse_.data(), tmpToParse_.size());
   }
 
-  void setPrefixMap(decltype(_prefixMap) m) { _prefixMap = std::move(m); }
+  void setPrefixMap(decltype(prefixMap_) m) { prefixMap_ = std::move(m); }
 
-  const auto& getPrefixMap() const { return _prefixMap; }
+  const auto& getPrefixMap() const { return prefixMap_; }
 
   // __________________________________________________________
   void setInputStream(ParallelBuffer::BufferType&& toParse) {
-    _tmpToParse = std::move(toParse);
-    this->_tok.reset(_tmpToParse.data(), _tmpToParse.size());
+    tmpToParse_ = std::move(toParse);
+    this->tok_.reset(tmpToParse_.data(), tmpToParse_.size());
   }
 
   // testing interface, only works when parsing from an utf8-string
   // return the current position of the tokenizer in the input string
   // can be used to test if the advancing of the tokenizer works
   // as expected
-  size_t getPosition() const { return this->_tok.begin() - _tmpToParse.data(); }
+  size_t getPosition() const { return this->tok_.begin() - tmpToParse_.data(); }
 
   FRIEND_TEST(TurtleParserTest, prefixedName);
   FRIEND_TEST(TurtleParserTest, prefixID);
@@ -493,10 +494,10 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   // but only the number of triples that were already present
   // before the backup
   struct TurtleParserBackupState {
-    size_t _numBlankNodes = 0;
-    size_t _numTriples;
-    const char* _tokenizerPosition;
-    size_t _tokenizerSize;
+    size_t numBlankNodes_ = 0;
+    size_t numTriples_;
+    const char* tokenizerPosition_;
+    size_t tokenizerSize_;
   };
 
  public:
@@ -516,13 +517,13 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   void initialize(const string& filename);
 
   size_t getParsePosition() const override {
-    return _numBytesBeforeCurrentBatch + (_tok.data().data() - _byteVec.data());
+    return numBytesBeforeCurrentBatch_ + (tok_.data().data() - byteVec_.data());
   }
 
  private:
-  using TurtleParser<Tokenizer_T>::_tok;
-  using TurtleParser<Tokenizer_T>::_triples;
-  using TurtleParser<Tokenizer_T>::_isParserExhausted;
+  using TurtleParser<Tokenizer_T>::tok_;
+  using TurtleParser<Tokenizer_T>::triples_;
+  using TurtleParser<Tokenizer_T>::isParserExhausted_;
   // Backup the current state of the turtle parser to a
   // TurtleparserBackupState object
   // This can be used e.g. when parsing from a compressed input
@@ -538,16 +539,16 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   // stores the current batch of bytes we have to parse.
   // Might end in the middle of a statement or even a multibyte utf8 character,
   // that's why we need the backupState() and resetStateAndRead() methods
-  ParallelBuffer::BufferType _byteVec;
+  ParallelBuffer::BufferType byteVec_;
 
-  std::unique_ptr<ParallelBuffer> _fileBuffer;
+  std::unique_ptr<ParallelBuffer> fileBuffer_;
   // this many characters will be buffered at once,
   // defaults to a global constant
-  size_t _bufferSize = FILE_BUFFER_SIZE();
+  size_t bufferSize_ = FILE_BUFFER_SIZE();
 
   // that many bytes were already parsed before dealing with the current batch
-  // in member _byteVec
-  size_t _numBytesBeforeCurrentBatch = 0;
+  // in member byteVec_
+  size_t numBytesBeforeCurrentBatch_ = 0;
 };
 
 /**
@@ -577,36 +578,36 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   std::optional<std::vector<TurtleTriple>> getBatch() override;
 
   void printAndResetQueueStatistics() override {
-    LOG(TIMING) << parallelParser.getTimeStatistics() << '\n';
-    parallelParser.resetTimers();
-    LOG(TIMING) << tripleCollector.getTimeStatistics() << '\n';
-    tripleCollector.resetTimers();
+    LOG(TIMING) << parallelParser_.getTimeStatistics() << '\n';
+    parallelParser_.resetTimers();
+    LOG(TIMING) << tripleCollector_.getTimeStatistics() << '\n';
+    tripleCollector_.resetTimers();
   }
 
   void initialize(const string& filename);
 
-  virtual size_t getParsePosition() const override {
+  size_t getParsePosition() const override {
     // TODO: can we really define this position here?
     return 0;
   }
 
  private:
-  using TurtleParser<Tokenizer_T>::_tok;
-  using TurtleParser<Tokenizer_T>::_triples;
-  using TurtleParser<Tokenizer_T>::_isParserExhausted;
+  using TurtleParser<Tokenizer_T>::tok_;
+  using TurtleParser<Tokenizer_T>::triples_;
+  using TurtleParser<Tokenizer_T>::isParserExhausted_;
 
   // this many characters will be buffered at once,
   // defaults to a global constant
-  size_t _bufferSize = FILE_BUFFER_SIZE();
+  size_t bufferSize_ = FILE_BUFFER_SIZE();
 
-  ParallelBufferWithEndRegex _fileBuffer{_bufferSize, "\\.[\\t ]*([\\r\\n]+)"};
+  ParallelBufferWithEndRegex fileBuffer_{bufferSize_, "\\.[\\t ]*([\\r\\n]+)"};
 
-  ad_utility::TaskQueue<true> tripleCollector{QUEUE_SIZE_AFTER_PARALLEL_PARSING,
+  ad_utility::TaskQueue<true> tripleCollector_{QUEUE_SIZE_AFTER_PARALLEL_PARSING,
                                               0, "triple collector"};
-  ad_utility::TaskQueue<true> parallelParser{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
+  ad_utility::TaskQueue<true> parallelParser_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
                                              NUM_PARALLEL_PARSER_THREADS,
                                              "parallel parser"};
-  std::future<void> _parseFuture;
+  std::future<void> parseFuture_;
 
-  ParallelBuffer::BufferType _remainingBatchFromInitialization;
+  ParallelBuffer::BufferType remainingBatchFromInitialization_;
 };

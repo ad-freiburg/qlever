@@ -865,12 +865,12 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     TurtleTriple&& triple) const {
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result._triple;
-  resultTriple[0] = std::move(triple._subject);
-  resultTriple[1] = std::move(triple._predicate);
+  resultTriple[0] = std::move(triple.subject_);
+  resultTriple[1] = std::move(triple.predicate_);
 
   // If the object of the triple can be directly folded into an ID, do so. Note
   // that the actual folding is done by the `TripleComponent`.
-  std::optional<Id> idIfNotString = triple._object.toValueIdIfNotString();
+  std::optional<Id> idIfNotString = triple.object_.toValueIdIfNotString();
 
   // TODO<joka921> The following statement could be simplified by a helper
   // function "optionalCast";
@@ -878,7 +878,7 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     resultTriple[2] = idIfNotString.value();
   } else {
     // `toRdfLiteral` handles literals as well as IRIs correctly.
-    resultTriple[2] = std::move(triple._object).toRdfLiteral();
+    resultTriple[2] = std::move(triple.object_).toRdfLiteral();
   }
 
   for (size_t i = 0; i < 3; ++i) {

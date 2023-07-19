@@ -26,12 +26,11 @@
 class ParallelBuffer {
  public:
   using BufferType = ad_utility::UninitializedVector<char>;
-  ParallelBuffer() = default;
   /**
    * @brief Specify the size of the blocks that are to be retrieved
    * @param blocksize  the blocksize (in bytes)
    */
-  ParallelBuffer(size_t blocksize) : _blocksize(blocksize) {}
+  explicit ParallelBuffer(size_t blocksize) : _blocksize(blocksize) {}
   virtual ~ParallelBuffer() = default;
   /**
    * @brief Open a file (in the sense of unix files, can also be a
@@ -48,8 +47,6 @@ class ParallelBuffer {
    */
   virtual std::optional<BufferType> getNextBlock() = 0;
 
-  const size_t& blocksize() const { return _blocksize; }
-
  protected:
   size_t _blocksize = 100 * (2 << 20);
 };
@@ -64,17 +61,16 @@ class ParallelBuffer {
 class ParallelFileBuffer : public ParallelBuffer {
  public:
   using BufferType = ad_utility::UninitializedVector<char>;
-  ParallelFileBuffer() : ParallelBuffer(){};
-  ParallelFileBuffer(size_t blocksize) : ParallelBuffer(blocksize) {}
+  explicit ParallelFileBuffer(size_t blocksize) : ParallelBuffer(blocksize) {}
 
   // _________________________________________________________________________
-  virtual void open(const string& filename) override;
+  void open(const string& filename) override;
 
   // _____________________________________________________
-  virtual std::optional<BufferType> getNextBlock() override;
+  std::optional<BufferType> getNextBlock() override;
 
  private:
-  ad_utility::File _file;
+  ad_utility::File file_;
   bool _eof = true;
   BufferType _buf;
   std::future<size_t> _fut;

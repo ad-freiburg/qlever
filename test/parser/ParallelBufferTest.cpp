@@ -8,6 +8,7 @@
 #include "parser/ParallelBuffer.h"
 #include "../util/GTestHelpers.h"
 
+// ________________________________________________________
 TEST(ParallelBuffer, ParallelFileBuffer) {
   std::string filename = "parallelBufferTest.first.dat";
   auto of = ad_utility::makeOfstream(filename);
@@ -33,8 +34,9 @@ TEST(ParallelBuffer, ParallelFileBuffer) {
   EXPECT_ANY_THROW(buf2.getNextBlock());
 }
 
+// ________________________________________________________
 TEST(ParallelBuffer, ParallelBufferWithEndRegex) {
-  std::string filename = "parallelBufferTest.first.dat";
+  std::string filename = "parallelBufferWithEndRegex.dat";
   auto of = ad_utility::makeOfstream(filename);
   of << "ab1cde23fgh";
   of.close();
@@ -88,3 +90,32 @@ TEST(ParallelBuffer, ParallelBufferWithEndRegex) {
   EXPECT_ANY_THROW(buf2.getNextBlock());
 }
 
+// ________________________________________________________
+TEST(ParallelBuffer, ParallelBufferWithEndRegexLongLookahead) {
+  std::string filename = "parallelBufferWithEndRegexLongLookahead.dat";
+  auto of = ad_utility::makeOfstream(filename);
+  of << "abcdef1";
+  for (size_t i = 0; i < 2000; ++i) {
+  of << 'x';
+  }
+  of.close();
+
+  size_t blocksize = 2000;
+  {
+  // We will always have blocks that end with a number that is followed by a
+  // letter. The numbers must be at most 5 positions apart from each other.
+  // Note: It is crucial that the regex contains exactly one capture group. The end of the capture group determines the end of the block.
+  ParallelBufferWithEndRegex buf(blocksize, "([0-9])[a-z]");
+  buf.open(filename);
+  std::vector<ParallelFileBuffer::BufferType> expected{
+      {'a', 'b', 'c', 'd', 'e', 'f', '1'}};
+  expected.emplace_back(2000, 'x');
+
+  std::vector<ParallelFileBuffer::BufferType> actual;
+  while (auto opt = buf.getNextBlock()) {
+      actual.push_back(opt.value());
+  }
+  EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));
+  }
+  ad_utility::deleteFile(filename);
+}

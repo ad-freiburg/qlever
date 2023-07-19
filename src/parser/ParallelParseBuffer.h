@@ -143,7 +143,7 @@ class ParallelParseBuffer {
   // this future handles the asynchronous parser calls
   std::future<std::pair<bool, std::vector<array<string, 3>>>> _fut;
 
-  // this function extracts _bufferSize many triples from the parser.
+  // this function extracts bufferSize_ many triples from the parser.
   // If the bool argument is false, the parser is exhausted and further calls
   // to parseBatch are useless. In this case we probably still have some triples
   // that were parsed before the parser was done, so we still have to consider

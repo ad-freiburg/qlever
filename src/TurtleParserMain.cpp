@@ -27,8 +27,8 @@ void writeNTImpl(std::ostream& out, const std::string& filename) {
   TurtleTriple triple;
   size_t numTriples = 0;
   while (p.getLine(triple)) {
-    out << triple._subject << " " << triple._predicate << " "
-        << triple._object.toRdfLiteral() << " .\n";
+    out << triple.subject_ << " " << triple.predicate_ << " "
+        << triple.object_.toRdfLiteral() << " .\n";
     numTriples++;
     if (numTriples % 10000000 == 0) {
       LOG(INFO) << "Parsed " << numTriples << " triples" << std::endl;
