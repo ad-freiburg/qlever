@@ -200,10 +200,33 @@ class QueryExecutionTree {
   // trees for two different trees, the sort columns of which are specified as
   // a vector of two-dimensional arrays. This format often appears in
   // `QueryPlanner.cpp`.
-  static std::array<std::shared_ptr<QueryExecutionTree>, 2> createSortedTrees(
+  static std::pair<std::shared_ptr<QueryExecutionTree>,
+                   shared_ptr<QueryExecutionTree>>
+  createSortedTrees(std::shared_ptr<QueryExecutionTree> qetA,
+                    std::shared_ptr<QueryExecutionTree> qetB,
+                    const vector<std::array<ColumnIndex, 2>>& sortColumns);
+
+  // The return type of the `getSortedTreesAndJoinColumns` function below. It is
+  // deliberately stored as a tuple vs. a struct with named members, so that we
+  // can use `std::tie` on it (see for example `MultiColumnJoin.cpp`).
+  using SortedTreesAndJoinColumns =
+      std::tuple<std::shared_ptr<QueryExecutionTree>,
+                 std::shared_ptr<QueryExecutionTree>,
+                 std::vector<std::array<ColumnIndex, 2>>>;
+
+  // First compute the join columns of the two trees, and then sort the trees by
+  // those join columns. Return the sorted trees as well as the join columns.
+  // Throw an exception if the two trees have no join columns in common.
+  static SortedTreesAndJoinColumns getSortedSubtreesAndJoinColumns(
       std::shared_ptr<QueryExecutionTree> qetA,
-      std::shared_ptr<QueryExecutionTree> qetB,
-      const vector<std::array<ColumnIndex, 2>>& sortColumns);
+      std::shared_ptr<QueryExecutionTree> qetB);
+
+  // Return the column pairs where the two `QueryExecutionTree`s have the
+  // same variable. The result is sorted by the column indices, so that it is
+  // deterministic when called repeatedly. This is important to find a
+  // `QueryExecutionTree` in the cache.
+  static std::vector<std::array<ColumnIndex, 2>> getJoinColumns(
+      const QueryExecutionTree& qetA, const QueryExecutionTree& qetB);
 
   // If the result of this `Operation` is sorted (either because this
   // `Operation` enforces this sorting, or because it preserves the sorting of

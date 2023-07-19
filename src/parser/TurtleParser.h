@@ -26,7 +26,7 @@
 #include <locale>
 #include <string_view>
 
-#include "parser/ParseException.h"
+#include "util/ParseException.h"
 
 using std::string;
 

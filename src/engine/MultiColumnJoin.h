@@ -23,35 +23,34 @@ class MultiColumnJoin : public Operation {
  public:
   MultiColumnJoin(QueryExecutionContext* qec,
                   std::shared_ptr<QueryExecutionTree> t1,
-                  std::shared_ptr<QueryExecutionTree> t2,
-                  const std::vector<std::array<ColumnIndex, 2>>& joinCols);
+                  std::shared_ptr<QueryExecutionTree> t2);
 
  protected:
-  virtual string asStringImpl(size_t indent = 0) const override;
+  string asStringImpl(size_t indent = 0) const override;
 
  public:
-  virtual string getDescriptor() const override;
+  string getDescriptor() const override;
 
-  virtual size_t getResultWidth() const override;
+  size_t getResultWidth() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override;
+  vector<ColumnIndex> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t limit) override {
+  void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
     _right->setTextLimit(limit);
   }
 
-  virtual bool knownEmptyResult() override {
+  bool knownEmptyResult() override {
     return _left->knownEmptyResult() || _right->knownEmptyResult();
   }
 
-  virtual float getMultiplicity(size_t col) override;
+  float getMultiplicity(size_t col) override;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
-  virtual size_t getCostEstimate() override;
+  size_t getCostEstimate() override;
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
@@ -69,7 +68,7 @@ class MultiColumnJoin : public Operation {
       IdTable* resultMightBeUnsorted);
 
  private:
-  virtual ResultTable computeResult() override;
+  ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

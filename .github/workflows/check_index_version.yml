@@ -1,0 +1,92 @@
+name: Check index version
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  merge_group:
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  check-index-version:
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc]
+        compiler-version: [11]
+        warnings: [  "-Wall -Wextra -O1 " ]
+        build-type: [Debug]
+
+    runs-on: ubuntu-22.04
+
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: 'recursive'
+        path: 'pr'
+    - uses: actions/checkout@v3
+      with:
+        submodules: 'recursive'
+        path: 'master'
+        ref: 'master'
+
+    - name: Install dependencies
+      run:  |
+        sudo gem install apt-spy2 && sudo apt-spy2 fix --commit --launchpad --country=US
+        sudo apt-get update
+        sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
+    - name: Install boost Ubuntu 22.04
+      run : sudo apt update && sudo apt install -y libboost-all-dev
+    - name: Install gcc 11
+      run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-11 g++-11
+
+    - name: Python dependencies
+      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
+
+    - name: Configure CMake Master
+      working-directory: ${{github.workspace}}/master
+      run:  cmake -B build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true -DENABLE_EXPENSIVE_CHECKS=true
+    - name: Configure CMake PR
+      working-directory: ${{github.workspace}}/pr
+      run:  cmake -B build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true -DENABLE_EXPENSIVE_CHECKS=true
+
+    - name: Build master
+        # Build your program with the given configuration
+      run:  cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} -- -j $(nproc)
+
+    - name: E2E on Master
+      working-directory: ${{github.workspace}}/master
+      run:  e2e/e2e.sh
+    - name: Get index version master
+      working-directory: ${{github.workspace}}/master/build
+      run: |
+        if test -f "./PrintIndexVersionMain"; then
+          echo 'index_version_master<<EOF' >> $GITHUB_ENV
+          ./PrintIndexVersionMain >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+        else
+          echo 'index_version_master={}' >> $GITHUB_ENV
+        fi
+    - name: Clean master
+      run:  cmake --build ${{github.workspace}}/master/build --target clean
+    - name: BuildPr
+      run:    cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} -- -j $(nproc)
+    - name: Get index version PR
+      working-directory: ${{github.workspace}}/pr/build
+      run: |
+          echo 'index_version_pr<<EOF' >> $GITHUB_ENV
+          ./PrintIndexVersionMain >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+    - name: Print index versions
+      run : |
+        echo '${{ fromJson(env.index_version_master)}}'
+        echo '${{ fromJson(env.index_version_pr)}}'
+    - name: E2E on PR using index from Master
+      if: env.index_version_master == env.index_version_pr
+      working-directory: ${{github.workspace}}/master
+      run:  e2e/e2e.sh -i -d ../pr/build

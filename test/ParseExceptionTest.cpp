@@ -5,18 +5,31 @@
 #include <gtest/gtest.h>
 
 #include "SparqlAntlrParserTestHelpers.h"
-#include "parser/ParseException.h"
 #include "parser/SparqlParser.h"
+#include "util/ParseException.h"
 #include "util/SourceLocation.h"
 
+// _____________________________________________________________________________
 TEST(ParseException, coloredError) {
   auto exampleQuery = "SELECT A ?var WHERE";
   EXPECT_EQ((ExceptionMetadata{exampleQuery, 7, 7, 1, 7}).coloredError(),
             "SELECT \x1B[1m\x1B[4m\x1B[31mA\x1B[0m ?var WHERE");
   EXPECT_EQ((ExceptionMetadata{exampleQuery, 9, 12, 1, 9}).coloredError(),
             "SELECT A \x1B[1m\x1B[4m\x1B[31m?var\x1B[0m WHERE");
+  // Start index is greater than stop index.
+  EXPECT_ANY_THROW(
+      (ExceptionMetadata{exampleQuery, 8, 6, 1, 3}).coloredError());
 }
 
+// _____________________________________________________________________________
+TEST(ParseException, illegalConstructorArguments) {
+  auto exampleQuery = "SELECT A ?var WHERE";
+  // Start index is greater than stop index.
+  EXPECT_ANY_THROW((ParseException{
+      "illegal query", ExceptionMetadata{exampleQuery, 8, 6, 1, 3}}));
+}
+
+// _____________________________________________________________________________
 void expectParseExceptionWithMetadata(
     const string& input, const std::optional<ExceptionMetadata>& metadata,
     ad_utility::source_location l = ad_utility::source_location::current()) {
@@ -30,6 +43,7 @@ void expectParseExceptionWithMetadata(
   }
 }
 
+// _____________________________________________________________________________
 TEST(ParseException, MetadataGeneration) {
   // A is not a valid argument for select.
   expectParseExceptionWithMetadata(

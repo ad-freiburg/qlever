@@ -93,7 +93,7 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
         qec, inputA.clone(), varsLeft);
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, inputB.clone(), varsRight);
-    OptionalJoin opt{qec, left, right, jcls};
+    OptionalJoin opt{qec, left, right};
 
     auto result = opt.computeResultOnlyForTesting();
     ASSERT_EQ(result.idTable(), expectedResult);
