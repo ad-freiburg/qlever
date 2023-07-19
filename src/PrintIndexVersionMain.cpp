@@ -6,8 +6,8 @@
 // integration tests to check whether the index version has changed.
 #include <iostream>
 
-#include "index/IndexVersion.h"
+#include "index/IndexFormatVersion.h"
 
 int main() {
-  std::cout << nlohmann::json{qlever::indexVersion}.dump(4) << std::endl;
+  std::cout << nlohmann::json{qlever::indexFormatVersion}.dump(4) << std::endl;
 }
