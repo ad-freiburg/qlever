@@ -63,10 +63,31 @@ jobs:
     - name: E2E on Master
       working-directory: ${{github.workspace}}/master
       run:  e2e/e2e.sh
+    - name: Get index version master
+      working-directory: ${{github.workspace}}/master/build
+      run: |
+        if test -f "./PrintIndexVersionMain"; then
+          echo 'index_version_master<<EOF' >> $GITHUB_ENV
+          ./PrintIndexVersionMain >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+        else
+          echo 'index_version_master={}' >> $GITHUB_ENV
+        fi
     - name: Clean master
       run:  cmake --build ${{github.workspace}}/master/build --target clean
     - name: BuildPr
       run:    cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} -- -j $(nproc)
+    - name: Get index version master
+      working-directory: ${{github.workspace}}/pr/build
+      run: |
+          echo 'index_version_pr<<EOF' >> $GITHUB_ENV
+          ./PrintIndexVersionMain >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+    - name: Print index versions
+      run : |
+        echo '${{ fromJson(env.index_version_master)}}'
+        echo '${{ fromJson(env.index_version_pr)}}'
     - name: E2E on PR using index from Master
+      if: env.index_version_master == env.index_version_pr
       working-directory: ${{github.workspace}}/master
       run:  e2e/e2e.sh -i -d ../pr/build
