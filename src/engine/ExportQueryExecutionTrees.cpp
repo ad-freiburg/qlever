@@ -134,10 +134,11 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
 // ___________________________________________________________________________
 std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
+  using enum Datatype;
   switch (id.getDatatype()) {
-    case Datatype::Undefined:
+    case Undefined:
       return std::nullopt;
-    case Datatype::Double:
+    case Double:
       // We use the immediately invoked lambda here because putting this block
       // in braces confuses the test coverage tool.
       return [id] {
@@ -153,12 +154,12 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
         }
         return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
       }();
-    case Datatype::Bool:
+    case Bool:
       return id.getBool() ? std::pair{"true", XSD_BOOLEAN_TYPE}
                           : std::pair{"false", XSD_BOOLEAN_TYPE};
-    case Datatype::Int:
+    case Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
-    case Datatype::Date:
+    case Date:
       return id.getDate().toStringAndType();
     default:
       AD_FAIL();
@@ -172,21 +173,21 @@ std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
                                              EscapeFunction&& escapeFunction) {
+  using enum Datatype;
   auto datatype = id.getDatatype();
   if constexpr (onlyReturnLiterals) {
-    if (!(datatype == Datatype::VocabIndex ||
-          datatype == Datatype::LocalVocabIndex)) {
+    if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {
       return std::nullopt;
     }
   }
   switch (id.getDatatype()) {
-    case Datatype::Undefined:
-    case Datatype::Double:
-    case Datatype::Bool:
-    case Datatype::Int:
-    case Datatype::Date:
+    case Undefined:
+    case Double:
+    case Bool:
+    case Int:
+    case Date:
       return idToStringAndTypeForEncodedValue(id);
-    case Datatype::VocabIndex: {
+    case VocabIndex: {
       // TODO<joka921> As soon as we get rid of the special encoding of date
       // values, we can use `index.getVocab().indexToOptionalString()` directly.
       std::optional<string> entity =
@@ -203,7 +204,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       }
       return std::pair{escapeFunction(std::move(entity.value())), nullptr};
     }
-    case Datatype::LocalVocabIndex: {
+    case LocalVocabIndex: {
       std::string word = localVocab.getWord(id.getLocalVocabIndex());
       if constexpr (onlyReturnLiterals) {
         if (!word.starts_with('"')) {
@@ -215,7 +216,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       }
       return std::pair{escapeFunction(std::move(word)), nullptr};
     }
-    case Datatype::TextRecordIndex:
+    case TextRecordIndex:
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
           nullptr};
