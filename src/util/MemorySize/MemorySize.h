@@ -169,7 +169,7 @@ constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
     // TODO<c++23> As of `c++23`, `std::ceil` is constexpr and can be used.
     const double doubleResult =
         amountOfUnits * static_cast<double>(numBytesPerUnit);
-    const size_t unroundedResult = static_cast<size_t>(doubleResult);
+    const auto unroundedResult = static_cast<size_t>(doubleResult);
     // We (maybe) have to round up.
     return doubleResult > static_cast<double>(unroundedResult)
                ? unroundedResult + 1
