@@ -220,21 +220,6 @@ std::string Index::getTextExcerpt(TextRecordIndex cid) const {
   return pimpl_->getTextExcerpt(cid);
 }
 
-/*
-// ____________________________________________________________________________
-void Index::dumpAsciiLists(const vector<std::string>& lists,
-                           bool decodeGapsFreq) const {
-  return pimpl_->dumpAsciiLists(lists, decodeGapsFreq);
-}
- */
-
-// ____________________________________________________________________________
-/*
-void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
-  return pimpl_->dumpAsciiLists(tbmd);
-}
- */
-
 // ____________________________________________________________________________
 float Index::getAverageNofEntityContexts() const {
   return pimpl_->getAverageNofEntityContexts();
