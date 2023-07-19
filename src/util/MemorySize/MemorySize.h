@@ -169,9 +169,10 @@ constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
   // Max value for `amountOfUnits`.
   if (static_cast<T>(sizeTDivision(size_t_max, numBytesPerUnit.at(unitName))) <
       amountOfUnits) {
-    throw std::runtime_error(absl::StrCat(
-        amountOfUnits, " ", unitName,
-        " is more memory, than can be represented and worked with in c++."));
+    throw std::runtime_error(
+        absl::StrCat(amountOfUnits, " ", unitName,
+                     " is larger than the maximum amount of memory that can be "
+                     "addressed using 64 bits"));
   }
 
   if constexpr (std::is_floating_point_v<T>) {
