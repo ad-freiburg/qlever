@@ -58,8 +58,7 @@ jobs:
     - name: Build master
         # Build your program with the given configuration
       run:  cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} -- -j $(nproc)
-      #TODO<joka921> As soon as this works, add the check if the version has changed. If true, the following check has to
-      # be disabled.
+
     - name: E2E on Master
       working-directory: ${{github.workspace}}/master
       run:  e2e/e2e.sh
@@ -77,7 +76,7 @@ jobs:
       run:  cmake --build ${{github.workspace}}/master/build --target clean
     - name: BuildPr
       run:    cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} -- -j $(nproc)
-    - name: Get index version master
+    - name: Get index version PR
       working-directory: ${{github.workspace}}/pr/build
       run: |
           echo 'index_version_pr<<EOF' >> $GITHUB_ENV

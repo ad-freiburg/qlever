@@ -17,25 +17,25 @@ struct IndexVersion {
   // The number of the pull request that changed the index format most recently.
   uint64_t prNumber_;
   // The date of the last breaking change of the index format.
-  Date date_{1900, 1, 1};
+  DateOrLargeYear date_{Date{1900, 1, 1}};
 
   // Conversion To JSON.
   friend void to_json(nlohmann::json& j, const IndexVersion& version) {
     j["date"] = version.date_.toStringAndType().first;
-    j["date-bits"] = version.date_.toBits();
     j["pull-request-number"] = version.prNumber_;
   }
 
   // Conversion from JSON.
   friend void from_json(const nlohmann::json& j, IndexVersion& version) {
     version.prNumber_ = static_cast<uint64_t>(j["pull-request-number"]);
-    version.date_ = Date::fromBits(static_cast<uint64_t>(j["date-bits"]));
+    version.date_ = DateOrLargeYear::parseXsdDate(std::string{j["date"]});
   }
   bool operator==(const IndexVersion&) const = default;
 };
 
 // The actual index version. Change it once the binary format of the index
 // changes.
-inline const IndexVersion& indexVersion{1004, Date{2023, 6, 16}};
+inline const IndexVersion& indexVersion{1004,
+                                        DateOrLargeYear{Date{2023, 6, 16}}};
 
 }  // namespace qlever

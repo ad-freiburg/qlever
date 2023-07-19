@@ -788,8 +788,8 @@ void IndexImpl::setPrefixCompression(bool compressed) {
 void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
   auto configuration = configurationJson_;
-  configuration["git_hash"] = std::string(qlever::version::GitHash);
-  configuration["last-change-of-index-version"] = qlever::indexVersion;
+  configuration["git-hash"] = std::string(qlever::version::GitHash);
+  configuration["index-format-version"] = qlever::indexVersion;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
@@ -798,9 +798,9 @@ void IndexImpl::writeConfiguration() const {
 void IndexImpl::readConfiguration() {
   auto f = ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE);
   f >> configurationJson_;
-  if (configurationJson_.find("git_hash") != configurationJson_.end()) {
+  if (configurationJson_.find("git-hash") != configurationJson_.end()) {
     LOG(INFO) << "The git hash used to build this index was "
-              << std::string(configurationJson_["git_hash"]).substr(0, 6)
+              << std::string(configurationJson_["git-hash"]).substr(0, 6)
               << std::endl;
   } else {
     LOG(INFO) << "The index was built before git commit hashes were stored in "
@@ -808,10 +808,10 @@ void IndexImpl::readConfiguration() {
               << std::endl;
   }
 
-  if (configurationJson_.find("last-change-of-index-version") !=
+  if (configurationJson_.find("index-format-version") !=
       configurationJson_.end()) {
     auto indexVersion = static_cast<qlever::IndexVersion>(
-        configurationJson_["last-change-of-index-version"]);
+        configurationJson_["index-format-version"]);
     const auto& currentVersion = qlever::indexVersion;
     if (indexVersion != currentVersion) {
       if (indexVersion.date_.toBits() > currentVersion.date_.toBits()) {
@@ -822,27 +822,28 @@ void IndexImpl::readConfiguration() {
                    << indexVersion.prNumber_
                    << ", Date = " << indexVersion.date_.toStringAndType().first
                    << ")." << std::endl;
-        throw std::runtime_error{
-            "Incompatible index version, see log message for details"};
+      } else {
+        LOG(ERROR) << "The index is too old for this version of QLever. "
+                      "We recommend that you rebuild the index start the "
+                      "server with the "
+                      "current master."
+                      " Alternatively start the engine with a version of "
+                      "QLever that is compatible with this index"
+                      " (PR = "
+                   << indexVersion.prNumber_
+                   << ", Date = " << indexVersion.date_.toStringAndType().first
+                   << ")." << std::endl;
       }
-      LOG(ERROR) << "The index is not compatible with this version of QLever. "
-                    "We recommend to rebuild and then start the index with the "
-                    "current master."
-                    " Alternatively start the engine with a compatible version "
-                    "of QLever (PR = "
-                 << indexVersion.prNumber_
-                 << ", Date = " << indexVersion.date_.toStringAndType().first
-                 << ")." << std::endl;
       throw std::runtime_error{
           "Incompatible index version, see log message for details"};
     }
   } else {
     LOG(ERROR) << "This index was built before versioning was introduced for "
-                  "QLevers indexes. Please rebuild your index using the "
+                  "QLever's index format. Please rebuild your index using the "
                   "current version of QLever."
                << std::endl;
     throw std::runtime_error{
-        "No index version found, see log message for details"};
+        "Incompatible index version, see log message for details"};
   }
 
   if (configurationJson_.find("prefixes") != configurationJson_.end()) {
