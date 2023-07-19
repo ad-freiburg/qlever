@@ -123,14 +123,26 @@ TEST(MemorySize, MemorySizeConstructor) {
   ASSERT_ANY_THROW(ad_utility::MemorySize::terabytes(-1.0));
 
   // Numbers, that lead to overflow, are not allowed.
-  ASSERT_ANY_THROW(ad_utility::MemorySize::kilobytes(ad_utility::size_t_max));
-  ASSERT_ANY_THROW(ad_utility::MemorySize::megabytes(ad_utility::size_t_max));
-  ASSERT_ANY_THROW(ad_utility::MemorySize::gigabytes(ad_utility::size_t_max));
-  ASSERT_ANY_THROW(ad_utility::MemorySize::terabytes(ad_utility::size_t_max));
-  ASSERT_ANY_THROW(ad_utility::MemorySize::kilobytes(DBL_MAX));
-  ASSERT_ANY_THROW(ad_utility::MemorySize::megabytes(DBL_MAX));
-  ASSERT_ANY_THROW(ad_utility::MemorySize::gigabytes(DBL_MAX));
-  ASSERT_ANY_THROW(ad_utility::MemorySize::terabytes(DBL_MAX));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::MemorySize::kilobytes(ad_utility::size_t_max),
+      ::testing::ContainsRegex(absl::StrCat(ad_utility::size_t_max, " kB")));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::MemorySize::megabytes(ad_utility::size_t_max),
+      ::testing::ContainsRegex(absl::StrCat(ad_utility::size_t_max, " MB")));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::MemorySize::gigabytes(ad_utility::size_t_max),
+      ::testing::ContainsRegex(absl::StrCat(ad_utility::size_t_max, " GB")));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::MemorySize::terabytes(ad_utility::size_t_max),
+      ::testing::ContainsRegex(absl::StrCat(ad_utility::size_t_max, " TB")));
+  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::MemorySize::kilobytes(DBL_MAX),
+                               ::testing::ContainsRegex(" is more memory"));
+  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::MemorySize::megabytes(DBL_MAX),
+                               ::testing::ContainsRegex(" is more memory"));
+  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::MemorySize::gigabytes(DBL_MAX),
+                               ::testing::ContainsRegex(" is more memory"));
+  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::MemorySize::terabytes(DBL_MAX),
+                               ::testing::ContainsRegex(" is more memory"));
 }
 
 TEST(MemorySize, AssignmentOperator) {

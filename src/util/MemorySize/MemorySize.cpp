@@ -3,8 +3,6 @@
 // Author: Andre Schlegel (July of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
-#include "util/MemorySize/MemorySize.h"
-
 #include <absl/strings/str_cat.h>
 
 #include <cinttypes>
@@ -16,6 +14,7 @@
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/MemorySize/MemorySizeParser.h"
 #include "util/MemorySize/generated/MemorySizeLanguageLexer.h"
 #include "util/MemorySize/generated/MemorySizeLanguageParser.h"
@@ -41,9 +40,9 @@ std::string MemorySize::asString() const {
   */
   constexpr ad_utility::ConstexprMap<char, size_t, 4> memoryUnitLowerBound(
       {std::pair<char, size_t>{'k', ad_utility::pow(10, 5)},
-       std::pair<char, size_t>{'M', detail::numBytesPerMB},
-       std::pair<char, size_t>{'G', detail::numBytesPerGB},
-       std::pair<char, size_t>{'T', detail::numBytesPerTB}});
+       std::pair<char, size_t>{'M', detail::numBytesPerUnit.at("MB")},
+       std::pair<char, size_t>{'G', detail::numBytesPerUnit.at("GB")},
+       std::pair<char, size_t>{'T', detail::numBytesPerUnit.at("TB")}});
 
   // Go through the units from top to bottom, in terms of size, and choose the
   // first one, that is smaller/equal to `memoryInBytes_`.
