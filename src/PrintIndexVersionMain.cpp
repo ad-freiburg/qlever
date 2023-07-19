@@ -9,5 +9,5 @@
 #include "index/IndexVersion.h"
 
 int main() {
-  std::cout << nlohmann::json{qlever::indexVersion()}.dump(4) << std::endl;
+  std::cout << nlohmann::json{qlever::indexVersion}.dump(4) << std::endl;
 }

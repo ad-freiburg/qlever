@@ -789,7 +789,7 @@ void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
   auto configuration = configurationJson_;
   configuration["git_hash"] = std::string(qlever::version::GitHash);
-  configuration["last-change-of-index-version"] = qlever::indexVersion();
+  configuration["last-change-of-index-version"] = qlever::indexVersion;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
@@ -812,7 +812,7 @@ void IndexImpl::readConfiguration() {
       configurationJson_.end()) {
     auto indexVersion = static_cast<qlever::IndexVersion>(
         configurationJson_["last-change-of-index-version"]);
-    const auto& currentVersion = qlever::indexVersion();
+    const auto& currentVersion = qlever::indexVersion;
     if (indexVersion != currentVersion) {
       if (indexVersion.date_.toBits() > currentVersion.date_.toBits()) {
         LOG(ERROR) << "The version of QLever you are using is too old for this "
@@ -825,8 +825,6 @@ void IndexImpl::readConfiguration() {
         throw std::runtime_error{
             "Incompatible index version, see log message for details"};
       }
-      // TODO<joka921> Handle the case that the binary is older than the index
-      // (determine by the date).
       LOG(ERROR) << "The index is not compatible with this version of QLever. "
                     "We recommend to rebuild and then start the index with the "
                     "current master."
