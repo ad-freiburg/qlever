@@ -49,19 +49,19 @@ class ConfigOptions : public BenchmarkInterface {
   ConfigOptions() {
     ad_utility::ConfigManager& manager = getConfigManager();
 
-    manager.createConfigOption<std::string>("date", "The current date.",
-                                            &dateString_, "22.3.2023");
+    manager.addOption<std::string>("date", "The current date.", &dateString_,
+                                   "22.3.2023");
 
-    manager.createConfigOption<int>("numSigns", "The number of street signs.",
-                                    &numberOfStreetSigns_, 10);
+    manager.addOption<int>("numSigns", "The number of street signs.",
+                           &numberOfStreetSigns_, 10);
 
-    manager.createConfigOption<std::vector<bool>>(
+    manager.addOption<std::vector<bool>>(
         "CoinFlipTry", "The number of succesful coin flips.", &wonOnTryX_,
         std::vector{false, false, false, false, false});
 
-    manager.createConfigOption<float>({"Accounts", "Personal", "Steve"},
-                                      "Steves saving account balance.",
-                                      &balanceOnStevesSavingAccount_, -41.9);
+    manager.addOption<float>({"Accounts", "Personal", "Steve"},
+                             "Steves saving account balance.",
+                             &balanceOnStevesSavingAccount_, -41.9);
   }
 };
 

@@ -67,11 +67,11 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  void createConfigOption(const std::vector<std::string>& pathToOption,
-                          std::string_view optionDescription,
-                          OptionType* variableToPutValueOfTheOptionIn,
-                          std::optional<OptionType> defaultValue =
-                              std::optional<OptionType>(std::nullopt)) {
+  void addOption(const std::vector<std::string>& pathToOption,
+                 std::string_view optionDescription,
+                 OptionType* variableToPutValueOfTheOptionIn,
+                 std::optional<OptionType> defaultValue =
+                     std::optional<OptionType>(std::nullopt)) {
     /*
     We need a non-empty path to construct a ConfigOption object, the `verify...`
     function always throws an exception for this case. No need to duplicate the
@@ -89,20 +89,19 @@ class ConfigManager {
 
   /*
   @brief Creates and adds a new configuration option, just like in the other
-  `createConfigOption`. But instead of a `pathToOption`, there is only an
+  `addOption`. But instead of a `pathToOption`, there is only an
   `optionName`, which describes a path only made out of this single string.
   */
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  void createConfigOption(std::string optionName,
-                          std::string_view optionDescription,
-                          OptionType* variableToPutValueOfTheOptionIn,
-                          std::optional<OptionType> defaultValue =
-                              std::optional<OptionType>(std::nullopt)) {
-    createConfigOption<OptionType>(
-        std::vector<std::string>{std::move(optionName)}, optionDescription,
-        variableToPutValueOfTheOptionIn, std::move(defaultValue));
+  void addOption(std::string optionName, std::string_view optionDescription,
+                 OptionType* variableToPutValueOfTheOptionIn,
+                 std::optional<OptionType> defaultValue =
+                     std::optional<OptionType>(std::nullopt)) {
+    addOption<OptionType>(std::vector<std::string>{std::move(optionName)},
+                          optionDescription, variableToPutValueOfTheOptionIn,
+                          std::move(defaultValue));
   }
 
   /*

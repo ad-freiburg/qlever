@@ -134,7 +134,7 @@ Defining the configuration options and passing values to them.
 
 ### Adding options
 
-Adding configuration options is done by adding configuration option to the private member variable `manager_`, accessible via a getter, by using the function `ConfigManager::createConfigOption`. That is best done in the constructor of your class.
+Adding configuration options is done by adding configuration option to the private member variable `manager_`, accessible via a getter, by using the function `ConfigManager::addOption`. That is best done in the constructor of your class.
 
 In our system a configuration option is described by a handful of characteristics:
 
