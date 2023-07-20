@@ -798,18 +798,74 @@ void IndexImpl::writeConfiguration() const {
 
 // ___________________________________________________________________________
 void IndexImpl::readConfiguration() {
-  auto f = ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE);
-  f >> configurationJson_;
-  if (configurationJson_.find("git_hash") != configurationJson_.end()) {
+  ad_utility::ConfigManager config{};
+
+  // TODO Write a description.
+  std::string gitHash;
+  config.createConfigOption<std::string>("git_hash", "", &gitHash,
+                                         "None given.");
+
+  // TODO Write a description.
+  bool boolPrefixes;
+  config.createConfigOption<bool>("prefixes", "", &boolPrefixes, false);
+
+  // TODO Write a description.
+  bool hasAllPermutations;
+  config.createConfigOption<bool>("has-all-permutations", "",
+                                  &hasAllPermutations, true);
+
+  // TODO Write a description.
+  std::vector<std::string> prefixesExternal;
+  config.createConfigOption<std::vector<std::string>>(
+      "prefixes-external", "", &prefixesExternal, std::vector<std::string>{});
+
+  // TODO Write a description.
+  std::string lang;
+  config.createConfigOption<std::string>(
+      std::vector<std::string>{"locale", "language"}, "", &lang);
+
+  // TODO Write a description.
+  std::string country;
+  config.createConfigOption<std::string>(
+      std::vector<std::string>{"locale", "country"}, "", &country);
+
+  // TODO Write a description.
+  bool ignorePunctuation;
+  config.createConfigOption<bool>(
+      std::vector<std::string>{"locale", "ignore-punctuation"}, "",
+      &ignorePunctuation);
+
+  // TODO Write a description.
+  std::vector<std::string> languagesInternal;
+  config.createConfigOption<std::vector<std::string>>(
+      "languages-internal", "", &languagesInternal, std::vector<std::string>{});
+
+  // TODO Write a description.
+  config.createConfigOption<size_t>("num-predicates-normal", "",
+                                    &numPredicatesNormal_);
+  config.createConfigOption<size_t>("num-subjects-normal", "",
+                                    &numSubjectsNormal_);
+  config.createConfigOption<size_t>("num-objects-normal", "",
+                                    &numObjectsNormal_);
+  config.createConfigOption<size_t>("num-triples-normal", "",
+                                    &numTriplesNormal_);
+
+  config.parseConfig(fileToJson(onDiskBase_ + CONFIGURATION_FILE));
+
+  if (config.getConfigurationOptionByNestedKeys({"git_hash"})
+          .wasSetAtRuntime()) {
+    configurationJson_["git_hash"] = gitHash;
     LOG(INFO) << "The git hash used to build this index was "
-              << std::string(configurationJson_["git_hash"]).substr(0, 6)
-              << std::endl;
+              << gitHash.substr(0, 6) << std::endl;
   } else {
     LOG(INFO) << "The index was built before git commit hashes were stored in "
                  "the index meta data"
               << std::endl;
   }
 
+  // Slight problem here: I have no idea, what kind of value `"prefixes"` points
+  // to. So I had to guess.
+  /*
   if (configurationJson_.find("prefixes") != configurationJson_.end()) {
     if (configurationJson_["prefixes"]) {
       vector<string> prefixes;
@@ -822,60 +878,62 @@ void IndexImpl::readConfiguration() {
       vocab_.buildCodebookForPrefixCompression(std::vector<std::string>());
     }
   }
-
-  if (configurationJson_.find("prefixes-external") !=
-      configurationJson_.end()) {
-    vocab_.initializeExternalizePrefixes(
-        configurationJson_["prefixes-external"]);
+  */
+  if (config.getConfigurationOptionByNestedKeys({"prefixes"})
+          .wasSetAtRuntime()) {
+    configurationJson_["prefixes"] = boolPrefixes;
+    if (boolPrefixes) {
+      vector<string> prefixes;
+      auto prefixFile = ad_utility::makeIfstream(onDiskBase_ + PREFIX_FILE);
+      for (string prefix; std::getline(prefixFile, prefix);) {
+        prefixes.emplace_back(std::move(prefix));
+      }
+      vocab_.buildCodebookForPrefixCompression(prefixes);
+    } else {
+      vocab_.buildCodebookForPrefixCompression(std::vector<std::string>());
+    }
   }
 
-  if (configurationJson_.count("ignore-case")) {
-    LOG(ERROR) << ERROR_IGNORE_CASE_UNSUPPORTED << '\n';
-    throw std::runtime_error("Deprecated key \"ignore-case\" in index build");
+  if (config.getConfigurationOptionByNestedKeys({"prefixes-external"})
+          .wasSetAtRuntime()) {
+    vocab_.initializeExternalizePrefixes(prefixesExternal);
+    configurationJson_["prefixes-external"] = prefixesExternal;
   }
 
-  if (configurationJson_.count("locale")) {
-    std::string lang{configurationJson_["locale"]["language"]};
-    std::string country{configurationJson_["locale"]["country"]};
-    bool ignorePunctuation{configurationJson_["locale"]["ignore-punctuation"]};
-    vocab_.setLocale(lang, country, ignorePunctuation);
-    textVocab_.setLocale(lang, country, ignorePunctuation);
-  } else {
-    LOG(ERROR) << "Key \"locale\" is missing in the metadata. This is probably "
-                  "and old index build that is no longer supported by QLever. "
-                  "Please rebuild your index\n";
-    throw std::runtime_error(
-        "Missing required key \"locale\" in index build's metadata");
+  configurationJson_["locale"]["language"] = lang;
+  configurationJson_["locale"]["country"] = country;
+  configurationJson_["locale"]["ignore-punctuation"] = ignorePunctuation;
+  vocab_.setLocale(lang, country, ignorePunctuation);
+  textVocab_.setLocale(lang, country, ignorePunctuation);
+
+  if (config.getConfigurationOptionByNestedKeys({"languages-internal"})
+          .wasSetAtRuntime()) {
+    vocab_.initializeInternalizedLangs(languagesInternal);
+    configurationJson_["languages-internal"] = languagesInternal;
   }
 
-  if (configurationJson_.find("languages-internal") !=
-      configurationJson_.end()) {
-    vocab_.initializeInternalizedLangs(
-        configurationJson_["languages-internal"]);
-  }
-
+  // Once again, I can only guess, what kind of value should be at
+  // `"has-all-permutations"`.
+  /*
   if (configurationJson_.find("has-all-permutations") !=
           configurationJson_.end() &&
       configurationJson_["has-all-permutations"] == false) {
     // If the permutations simply don't exist, then we can never load them.
     loadAllPermutations_ = false;
   }
+  */
+  if (config.getConfigurationOptionByNestedKeys({"has-all-permutations"})
+          .wasSetAtRuntime() &&
+      !hasAllPermutations) {
+    configurationJson_["has-all-permutations"] = false;
+    // If the permutations simply don't exist, then we can never load them.
+    loadAllPermutations_ = false;
+  }
 
-  auto loadRequestedDataMember = [this](std::string_view key, auto& target) {
-    auto it = configurationJson_.find(key);
-    if (it == configurationJson_.end()) {
-      throw std::runtime_error{absl::StrCat(
-          "The required key \"", key,
-          "\" was not found in the `meta-data.json`. Most likely this index "
-          "was built with an older version of QLever and should be rebuilt")};
-    }
-    target = std::decay_t<decltype(target)>{*it};
-  };
-
-  loadRequestedDataMember("num-predicates-normal", numPredicatesNormal_);
-  loadRequestedDataMember("num-subjects-normal", numSubjectsNormal_);
-  loadRequestedDataMember("num-objects-normal", numObjectsNormal_);
-  loadRequestedDataMember("num-triples-normal", numTriplesNormal_);
+  configurationJson_["num-predicates-normal"] = numPredicatesNormal_;
+  configurationJson_["num-subjects-normal"] = numSubjectsNormal_;
+  configurationJson_["num-objects-normal"] = numObjectsNormal_;
+  configurationJson_["num-triples-normal"] = numTriplesNormal_;
 }
 
 // ___________________________________________________________________________
@@ -932,7 +990,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   // TODO Write a description.
   std::vector<std::string> languagesInternal;
   config.createConfigOption<std::vector<std::string>>(
-      "languages-internal", "", &prefixesExternal, std::vector<std::string>{});
+      "languages-internal", "", &languagesInternal, std::vector<std::string>{});
 
   // TODO Write a description.
   std::string lang;
