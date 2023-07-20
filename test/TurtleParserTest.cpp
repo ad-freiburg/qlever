@@ -555,6 +555,17 @@ TEST(TurtleParserTest, booleanLiteral) {
                  parseRule<CtreParser, &CtreParser::booleanLiteral>);
 }
 
+TEST(TurtleParserTest, booleanLiteralLongForm) {
+  auto runCommonTests = [](const auto& ruleChecker) {
+    ruleChecker("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>", true);
+    ruleChecker("\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>", false);
+    ruleChecker("\"maybe\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+                lit("\"maybe\""));
+  };
+  runCommonTests(checkParseResult<Re2Parser, &Re2Parser::rdfLiteral>);
+  runCommonTests(checkParseResult<CtreParser, &CtreParser::rdfLiteral>);
+}
+
 TEST(TurtleParserTest, collection) {
   auto runCommonTests = [](const auto& checker) {
     using TC = TripleComponent;

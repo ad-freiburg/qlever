@@ -86,7 +86,7 @@ std::string TripleComponent::toRdfLiteral() const {
     return getLiteral().rawContent();
   } else {
     auto [value, type] =
-        ExportQueryExecutionTrees::idToStringAndTypeOnlyEncoded(
+        ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(
             toValueIdIfNotString().value())
             .value();
     return absl::StrCat("\"", value, "\"^^<", type, ">");

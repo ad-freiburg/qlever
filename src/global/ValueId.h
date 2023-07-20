@@ -180,7 +180,7 @@ class ValueId {
     return IntegerType::fromNBit(_bits);
   }
 
-  /// Create a `ValueId` for a boolean value
+  /// Create a `ValueId` for a boolean value.
   static ValueId makeFromBool(bool b) noexcept {
     auto bits = static_cast<T>(b);
     return addDatatypeBits(bits, Datatype::Bool);
@@ -305,6 +305,8 @@ class ValueId {
                            ad_utility::isSimilar<T, int64_t> ||
                            ad_utility::isSimilar<T, bool>) {
         ostr << std::to_string(value);
+      } else if constexpr (ad_utility::isSimilar<T, bool>) {
+        ostr << (value ? "true" : "false");
       } else if constexpr (ad_utility::isSimilar<T, DateOrLargeYear>) {
         ostr << value.toStringAndType().first;
       } else {
