@@ -394,8 +394,21 @@ bool TurtleParser<T>::rdfLiteral() {
           type == XSD_UNSIGNED_LONG_TYPE || type == XSD_UNSIGNED_INT_TYPE ||
           type == XSD_UNSIGNED_SHORT_TYPE ||
           type == XSD_POSITIVE_INTEGER_TYPE) {
-        // type == XSD_BOOLEAN_TYPE) {
         parseIntegerConstant(strippedLiteral);
+      } else if (type == XSD_BOOLEAN_TYPE) {
+        if (strippedLiteral == "true") {
+          _lastParseResult = true;
+        } else if (strippedLiteral == "false") {
+          _lastParseResult = false;
+        } else {
+          LOG(DEBUG)
+              << literalString.get()
+              << " could not be parsed as a boolean object of type " << typeIri
+              << ". It is treated as a plain string literal without datatype "
+                 "instead"
+              << std::endl;
+          _lastParseResult = TripleComponent::Literal{literalString};
+        }
       } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
                  type == XSD_FLOAT_TYPE) {
         parseDoubleConstant(strippedLiteral);
@@ -443,12 +456,11 @@ bool TurtleParser<T>::rdfLiteral() {
 // ______________________________________________________________________
 template <class T>
 bool TurtleParser<T>::booleanLiteral() {
-  if (parseTerminal<TurtleTokenId::True>() ||
-      parseTerminal<TurtleTokenId::False>()) {
-    _lastParseResult =
-        TripleComponent::Literal{RdfEscaping::normalizeRDFLiteral(
-                                     '"' + _lastParseResult.getString() + "\""),
-                                 absl::StrCat("^^<", XSD_BOOLEAN_TYPE, ">")};
+  if (parseTerminal<TurtleTokenId::True>()) {
+    _lastParseResult = true;
+    return true;
+  } else if (parseTerminal<TurtleTokenId::False>()) {
+    _lastParseResult = false;
     return true;
   } else {
     return false;

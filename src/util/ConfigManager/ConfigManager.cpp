@@ -16,6 +16,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
@@ -103,22 +104,8 @@ void ConfigManager::addConfigOption(
 
   // Add the configuration option.
   configurationOptions_.insert(
-      {createJsonPointerString(pathToOption), std::move(option)});
-}
-
-// ____________________________________________________________________________
-const ConfigOption& ConfigManager::getConfigurationOptionByNestedKeys(
-    const std::vector<std::string>& keys) const {
-  // If there is an config option with that described location, then this should
-  // point to the configuration option.
-  const std::string ptr{createJsonPointerString(keys)};
-
-  if (configurationOptions_.contains(ptr)) {
-    return configurationOptions_.at(ptr);
-  } else {
-    throw NoConfigOptionFoundException(vectorOfKeysForJsonToString(keys),
-                                       printConfigurationDoc(true));
-  }
+      {createJsonPointerString(pathToOption),
+       std::make_unique<ConfigOption>(std::move(option))});
 }
 
 // ____________________________________________________________________________
@@ -224,7 +211,7 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
         j.contains(configurationOptionJsonPosition)) {
       // This will throw an exception, if the json object can't be interpreted
       // with the wanted type.
-      option.setValueWithJson(j.at(configurationOptionJsonPosition));
+      option->setValueWithJson(j.at(configurationOptionJsonPosition));
     }
 
     /*
@@ -232,7 +219,7 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
     points to, that means, it doesn't have a default value, and needs to be set
     by the user at runtime, but wasn't.
     */
-    if (!option.wasSet()) {
+    if (!option->wasSet()) {
       throw ConfigOptionWasntSetException(key);
     }
   }
@@ -267,12 +254,12 @@ std::string ConfigManager::printConfigurationDoc(
       // We can only use the value, if we are sure, that the value was
       // initialized.
       configuratioOptionsVisualization[jsonOptionPointer] =
-          option.wasSet() ? option.getValueAsJson()
-                          : "value was never initialized";
+          option->wasSet() ? option->getValueAsJson()
+                           : "value was never initialized";
     } else {
       configuratioOptionsVisualization[jsonOptionPointer] =
-          option.hasDefaultValue() ? option.getDefaultValueAsJson()
-                                   : option.getDummyValueAsJson();
+          option->hasDefaultValue() ? option->getDefaultValueAsJson()
+                                    : option->getDummyValueAsJson();
     }
   }
 
@@ -287,7 +274,7 @@ std::string ConfigManager::printConfigurationDoc(
                               // itself.
                               return absl::StrCat(
                                   "Location : ", pair.first, "\n",
-                                  static_cast<std::string>(pair.second));
+                                  static_cast<std::string>(*pair.second));
                             }),
       "\n\n");
 
@@ -321,7 +308,7 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
     const {
   // For only looking at the configuration options in our map.
   auto onlyConfigurationOptionsView = std::views::transform(
-      configurationOptions_, [](const auto& pair) { return pair.second; });
+      configurationOptions_, [](const auto& pair) { return *pair.second; });
 
   // Returns true, if the `ConfigOption` has a default value and wasn't set at
   // runtime.

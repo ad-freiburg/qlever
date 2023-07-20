@@ -98,7 +98,7 @@ static const char XSD_UNSIGNED_BYTE_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#unsignedByte";
 static const char XSD_POSITIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#positiveInteger";
-static const char XSD_BOOLEAN_TYPE[] =
+constexpr inline char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
 static const char RDF_PREFIX[] = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 static const char VALUE_DATE_TIME_SEPARATOR[] = "T";

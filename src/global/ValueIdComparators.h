@@ -353,6 +353,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
+    case Datatype::Bool:
     case Datatype::Date:
       // For `Date` the trivial comparison via bits is also correct.
       return detail::simplifyRanges(
@@ -379,6 +380,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
   switch (valueIdBegin.getDatatype()) {
     case Datatype::Double:
     case Datatype::Int:
+    case Datatype::Bool:
     case Datatype::Undefined:
     case Datatype::Date:
       AD_FAIL();

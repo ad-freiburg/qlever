@@ -4,21 +4,6 @@
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./IndexImpl.h"
-
-#include <CompilationInfo.h>
-#include <absl/strings/str_cat.h>
-#include <absl/strings/str_join.h>
-#include <index/PrefixHeuristic.h>
-#include <index/TriplesView.h>
-#include <index/VocabularyGenerator.h>
-#include <parser/ParallelParseBuffer.h>
-#include <util/BatchedPipeline.h>
-#include <util/CompressionUsingZstd/ZstdWrapper.h>
-#include <util/HashMap.h>
-#include <util/Serializer/FileSerializer.h>
-#include <util/TupleHelpers.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -29,7 +14,22 @@
 #include <stxxl/map>
 #include <unordered_map>
 
+#include "./IndexImpl.h"
+#include "CompilationInfo.h"
+#include "absl/strings/str_join.h"
+#include "index/IndexFormatVersion.h"
+#include "index/PrefixHeuristic.h"
+#include "index/TriplesView.h"
+#include "index/VocabularyGenerator.h"
+#include "parser/ParallelParseBuffer.h"
+#include "util/BatchedPipeline.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/ConfigManager/ConfigManager.h"
+#include "util/ConfigManager/ConfigOption.h"
+#include "util/Date.h"
+#include "util/HashMap.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/TupleHelpers.h"
 #include "util/json.h"
 
 using std::array;
@@ -792,7 +792,8 @@ void IndexImpl::setPrefixCompression(bool compressed) {
 void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
   auto configuration = configurationJson_;
-  configuration["git_hash"] = std::string(qlever::version::GitHash);
+  configuration["git-hash"] = std::string(qlever::version::GitHash);
+  configuration["index-format-version"] = qlever::indexFormatVersion;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
@@ -803,65 +804,109 @@ void IndexImpl::readConfiguration() {
 
   // TODO Write a description.
   std::string gitHash;
-  config.createConfigOption<std::string>("git_hash", "", &gitHash,
-                                         "None given.");
+  const ad_utility::ConfigOption* gitHashOption = config.addOption<std::string>(
+      "git-hash", "", &gitHash, std::string{"None given."});
 
   // TODO Write a description.
   bool boolPrefixes;
-  config.createConfigOption<bool>("prefixes", "", &boolPrefixes, false);
+  const ad_utility::ConfigOption* prefixesOption =
+      config.addOption<bool>("prefixes", "", &boolPrefixes, false);
 
   // TODO Write a description.
   bool hasAllPermutations;
-  config.createConfigOption<bool>("has-all-permutations", "",
-                                  &hasAllPermutations, true);
+  const ad_utility::ConfigOption* hasAllPermutationsOption =
+      config.addOption<bool>("has-all-permutations", "", &hasAllPermutations,
+                             true);
 
   // TODO Write a description.
   std::vector<std::string> prefixesExternal;
-  config.createConfigOption<std::vector<std::string>>(
-      "prefixes-external", "", &prefixesExternal, std::vector<std::string>{});
+  const ad_utility::ConfigOption* prefixesExternalOption =
+      config.addOption<std::vector<std::string>>("prefixes-external", "",
+                                                 &prefixesExternal,
+                                                 std::vector<std::string>{});
 
   // TODO Write a description.
   std::string lang;
-  config.createConfigOption<std::string>(
-      std::vector<std::string>{"locale", "language"}, "", &lang);
+  config.addOption<std::string>(std::vector<std::string>{"locale", "language"},
+                                "", &lang);
 
   // TODO Write a description.
   std::string country;
-  config.createConfigOption<std::string>(
-      std::vector<std::string>{"locale", "country"}, "", &country);
+  config.addOption<std::string>(std::vector<std::string>{"locale", "country"},
+                                "", &country);
 
   // TODO Write a description.
   bool ignorePunctuation;
-  config.createConfigOption<bool>(
+  config.addOption<bool>(
       std::vector<std::string>{"locale", "ignore-punctuation"}, "",
       &ignorePunctuation);
 
   // TODO Write a description.
   std::vector<std::string> languagesInternal;
-  config.createConfigOption<std::vector<std::string>>(
-      "languages-internal", "", &languagesInternal, std::vector<std::string>{});
+  const ad_utility::ConfigOption* languagesInternalOption =
+      config.addOption<std::vector<std::string>>("languages-internal", "",
+                                                 &languagesInternal,
+                                                 std::vector<std::string>{});
 
   // TODO Write a description.
-  config.createConfigOption<size_t>("num-predicates-normal", "",
-                                    &numPredicatesNormal_);
-  config.createConfigOption<size_t>("num-subjects-normal", "",
-                                    &numSubjectsNormal_);
-  config.createConfigOption<size_t>("num-objects-normal", "",
-                                    &numObjectsNormal_);
-  config.createConfigOption<size_t>("num-triples-normal", "",
-                                    &numTriplesNormal_);
+  config.addOption<size_t>("num-predicates-normal", "", &numPredicatesNormal_);
+  config.addOption<size_t>("num-subjects-normal", "", &numSubjectsNormal_);
+  config.addOption<size_t>("num-objects-normal", "", &numObjectsNormal_);
+  config.addOption<size_t>("num-triples-normal", "", &numTriplesNormal_);
 
+  // TODO Make this cleaner, than just catching all the fields of the object.
+  size_t indexFormatVersionPullRequestNumber;
+  config.addOption(
+      std::vector<std::string>{"index-format-version", "pull-request-number"},
+      "The number of the pull request that changed the index format most "
+      "recently.",
+      &indexFormatVersionPullRequestNumber);
+  std::string indexFormatVersionDate;
+  config.addOption(std::vector<std::string>{"index-format-version", "date"},
+                   "The date of the last breaking change of the index format.",
+                   &indexFormatVersionDate);
+
+  // One of the options can't be done with `ConfigManager`.
+  ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE) >>
+      configurationJson_;
   config.parseConfig(fileToJson(onDiskBase_ + CONFIGURATION_FILE));
 
-  if (config.getConfigurationOptionByNestedKeys({"git_hash"})
-          .wasSetAtRuntime()) {
-    configurationJson_["git_hash"] = gitHash;
+  if (gitHashOption->wasSetAtRuntime()) {
+    configurationJson_["git-hash"] = gitHash;
     LOG(INFO) << "The git hash used to build this index was "
               << gitHash.substr(0, 6) << std::endl;
   } else {
     LOG(INFO) << "The index was built before git commit hashes were stored in "
                  "the index meta data"
               << std::endl;
+  }
+
+  // Is the index format version up to date?
+  auto indexFormatVersion = qlever::IndexFormatVersion{
+      indexFormatVersionPullRequestNumber,
+      DateOrLargeYear::parseXsdDate(indexFormatVersionDate)};
+  const auto& currentVersion = qlever::indexFormatVersion;
+  if (indexFormatVersion != currentVersion) {
+    if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
+      LOG(ERROR) << "The version of QLever you are using is too old for this "
+                    "index. Please use a version of QLever that is "
+                    "compatible with this index"
+                    " (PR = "
+                 << indexFormatVersion.prNumber_ << ", Date = "
+                 << indexFormatVersion.date_.toStringAndType().first << ")."
+                 << std::endl;
+    } else {
+      LOG(ERROR) << "The index is too old for this version of QLever. "
+                    "We recommend that you rebuild the index and start the "
+                    "server with the current master. Alternatively start the "
+                    "engine with a version of QLever that is compatible with "
+                    "this index (PR = "
+                 << indexFormatVersion.prNumber_ << ", Date = "
+                 << indexFormatVersion.date_.toStringAndType().first << ")."
+                 << std::endl;
+    }
+    throw std::runtime_error{
+        "Incompatible index format, see log message for details"};
   }
 
   // Slight problem here: I have no idea, what kind of value `"prefixes"` points
@@ -880,8 +925,7 @@ void IndexImpl::readConfiguration() {
     }
   }
   */
-  if (config.getConfigurationOptionByNestedKeys({"prefixes"})
-          .wasSetAtRuntime()) {
+  if (prefixesOption->wasSetAtRuntime()) {
     configurationJson_["prefixes"] = boolPrefixes;
     if (boolPrefixes) {
       vector<string> prefixes;
@@ -895,8 +939,7 @@ void IndexImpl::readConfiguration() {
     }
   }
 
-  if (config.getConfigurationOptionByNestedKeys({"prefixes-external"})
-          .wasSetAtRuntime()) {
+  if (prefixesExternalOption->wasSetAtRuntime()) {
     vocab_.initializeExternalizePrefixes(prefixesExternal);
     configurationJson_["prefixes-external"] = prefixesExternal;
   }
@@ -907,8 +950,7 @@ void IndexImpl::readConfiguration() {
   vocab_.setLocale(lang, country, ignorePunctuation);
   textVocab_.setLocale(lang, country, ignorePunctuation);
 
-  if (config.getConfigurationOptionByNestedKeys({"languages-internal"})
-          .wasSetAtRuntime()) {
+  if (languagesInternalOption->wasSetAtRuntime()) {
     vocab_.initializeInternalizedLangs(languagesInternal);
     configurationJson_["languages-internal"] = languagesInternal;
   }
@@ -923,9 +965,7 @@ void IndexImpl::readConfiguration() {
     loadAllPermutations_ = false;
   }
   */
-  if (config.getConfigurationOptionByNestedKeys({"has-all-permutations"})
-          .wasSetAtRuntime() &&
-      !hasAllPermutations) {
+  if (hasAllPermutationsOption->wasSetAtRuntime() && !hasAllPermutations) {
     configurationJson_["has-all-permutations"] = false;
     // If the permutations simply don't exist, then we can never load them.
     loadAllPermutations_ = false;
@@ -985,52 +1025,59 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 
   // TODO Write a description.
   std::vector<std::string> prefixesExternal;
-  config.createConfigOption<std::vector<std::string>>(
-      "prefixes-external", "", &prefixesExternal, std::vector<std::string>{});
+  const ad_utility::ConfigOption* prefixesExternalOption =
+      config.addOption<std::vector<std::string>>("prefixes-external", "",
+                                                 &prefixesExternal,
+                                                 std::vector<std::string>{});
 
   // TODO Write a description.
   std::vector<std::string> languagesInternal;
-  config.createConfigOption<std::vector<std::string>>(
-      "languages-internal", "", &languagesInternal, std::vector<std::string>{});
+  const ad_utility::ConfigOption* languagesInternalOption =
+      config.addOption<std::vector<std::string>>("languages-internal", "",
+                                                 &languagesInternal,
+                                                 std::vector<std::string>{});
 
   // TODO Write a description.
   std::string lang;
-  config.createConfigOption<std::string>(
+  const ad_utility::ConfigOption* langOption = config.addOption<std::string>(
       std::vector<std::string>{"locale", "language"}, "", &lang,
       LOCALE_DEFAULT_LANG);
 
   // TODO Write a description.
   std::string country;
-  config.createConfigOption<std::string>(
+  const ad_utility::ConfigOption* countryOption = config.addOption<std::string>(
       std::vector<std::string>{"locale", "country"}, "", &country,
       LOCALE_DEFAULT_COUNTRY);
 
   // TODO Write a description.
   bool ignorePunctuation;
-  config.createConfigOption<bool>(
-      std::vector<std::string>{"locale", "ignore-punctuation"}, "",
-      &ignorePunctuation, LOCALE_DEFAULT_IGNORE_PUNCTUATION);
+  const ad_utility::ConfigOption* ignorePunctuationOption =
+      config.addOption<bool>(
+          std::vector<std::string>{"locale", "ignore-punctuation"}, "",
+          &ignorePunctuation, LOCALE_DEFAULT_IGNORE_PUNCTUATION);
 
   // TODO Write a description.
   bool asciiPrefixesOnly;
-  config.createConfigOption<bool>("ascii-prefixes-only", "", &asciiPrefixesOnly,
-                                  false);
+  const ad_utility::ConfigOption* asciiPrefixesOnlyOption =
+      config.addOption<bool>("ascii-prefixes-only", "", &asciiPrefixesOnly,
+                             false);
 
   // TODO Write a description.
   size_t numTriplesPerBatch;
-  config.createConfigOption<size_t>("num-triples-per-batch", "",
-                                    &numTriplesPerBatch, 0);
+  const ad_utility::ConfigOption* numTriplesPerBatchOption =
+      config.addOption<size_t>("num-triples-per-batch", "", &numTriplesPerBatch,
+                               0uL);
 
   // TODO Write a description.
   size_t parserBatchSize;
-  config.createConfigOption<size_t>("parser-batch-size", "", &parserBatchSize,
-                                    0);
+  const ad_utility::ConfigOption* parserBatchSizeOption =
+      config.addOption<size_t>("parser-batch-size", "", &parserBatchSize, 0uL);
 
   // TODO Write a description.
   std::string parserIntegerOverflowBehavior;
-  config.createConfigOption<std::string>("parser-integer-overflow-behavior", "",
-                                         &parserIntegerOverflowBehavior,
-                                         "overflowing-integers-throw");
+  config.addOption<std::string>("parser-integer-overflow-behavior", "",
+                                &parserIntegerOverflowBehavior,
+                                std::string{"overflowing-integers-throw"});
 
   // Set the options.
   if (!settingsFileName_.empty()) {
@@ -1039,8 +1086,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     config.parseConfig(json(json::value_t::object));
   }
 
-  if (config.getConfigurationOptionByNestedKeys({"prefixes-external"})
-          .wasSetAtRuntime()) {
+  if (prefixesExternalOption->wasSetAtRuntime()) {
     vocab_.initializeExternalizePrefixes(prefixesExternal);
     configurationJson_["prefixes-external"] = prefixesExternal;
   }
@@ -1052,15 +1098,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
    * locale setting.
    */
 
-  if (config.getConfigurationOptionByNestedKeys({"locale", "language"})
-              .wasSetAtRuntime() !=
-          config.getConfigurationOptionByNestedKeys({"locale", "country"})
-              .wasSetAtRuntime() ||
-      config.getConfigurationOptionByNestedKeys({"locale", "country"})
-              .wasSetAtRuntime() != config
-                                        .getConfigurationOptionByNestedKeys(
-                                            {"locale", "ignore-punctuation"})
-                                        .wasSetAtRuntime()) {
+  if (langOption->wasSetAtRuntime() != countryOption->wasSetAtRuntime() ||
+      countryOption->wasSetAtRuntime() !=
+          ignorePunctuationOption->wasSetAtRuntime()) {
     throw std::runtime_error(absl::StrCat(
         "All three options under 'locale' must be set, or none of them.",
         config.printConfigurationDoc(true)));
@@ -1085,14 +1125,12 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   configurationJson_["locale"]["country"] = country;
   configurationJson_["locale"]["ignore-punctuation"] = ignorePunctuation;
 
-  if (config.getConfigurationOptionByNestedKeys({"languages-internal"})
-          .wasSetAtRuntime()) {
+  if (languagesInternalOption->wasSetAtRuntime()) {
     vocab_.initializeInternalizedLangs(languagesInternal);
     configurationJson_["languages-internal"] = languagesInternal;
   }
 
-  if (config.getConfigurationOptionByNestedKeys({"ascii-prefixes-only"})
-          .wasSetAtRuntime()) {
+  if (asciiPrefixesOnlyOption->wasSetAtRuntime()) {
     if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
       if (asciiPrefixesOnly) {
         LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
@@ -1108,8 +1146,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     }
   }
 
-  if (config.getConfigurationOptionByNestedKeys({"num-triples-per-batch"})
-          .wasSetAtRuntime()) {
+  if (numTriplesPerBatchOption->wasSetAtRuntime()) {
     numTriplesPerBatch_ = numTriplesPerBatch;
     LOG(INFO)
         << "You specified \"num-triples-per-batch = " << numTriplesPerBatch_
@@ -1117,8 +1154,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
         << std::endl;
   }
 
-  if (config.getConfigurationOptionByNestedKeys({"parser-batch-size"})
-          .wasSetAtRuntime()) {
+  if (parserBatchSizeOption->wasSetAtRuntime()) {
     parserBatchSize_ = parserBatchSize;
     LOG(INFO) << "Overriding setting parser-batch-size to " << parserBatchSize_
               << " This might influence performance during index build."
