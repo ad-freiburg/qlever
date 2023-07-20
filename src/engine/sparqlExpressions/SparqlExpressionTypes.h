@@ -230,8 +230,6 @@ Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, string>) {
     return Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained(std::forward<T>(result)));
-  } else if constexpr (ad_utility::isSimilar<double, T>) {
-    return Id::makeFromDouble(result);
   } else if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
   } else {
