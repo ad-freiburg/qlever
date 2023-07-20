@@ -3,6 +3,8 @@
 // Authors: Björn Buchhold <buchholb>,
 //          Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
+#include "./Vocabulary.h"
+
 #include <fstream>
 #include <iostream>
 
@@ -15,7 +17,6 @@
 #include "../util/Serializer/FileSerializer.h"
 #include "../util/json.h"
 #include "./ConstantsIndexBuilding.h"
-#include "./Vocabulary.h"
 
 using std::string;
 

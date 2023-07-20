@@ -2,10 +2,11 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
+#include "util/ParseException.h"
+
 #include <Token.h>
 
 #include "util/Exception.h"
-#include "util/ParseException.h"
 #include "util/StringUtils.h"
 
 // ___________________________________________________________________________
