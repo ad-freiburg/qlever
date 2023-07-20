@@ -69,10 +69,10 @@ class Batcher {
    */
   Batch<ValueT> pickupBatch() {
     try {
-      _timer->cont();
+      Timer timer{Timer::InitialStatus::Started};
       auto res = _fut.get();
       orderNextBatch();
-      _timer->stop();
+      _waitingTime->fetch_add(timer.msecs());
       return res;
     } catch (const std::future_error& e) {
       throw std::runtime_error(
@@ -84,7 +84,7 @@ class Batcher {
   // get the accumulated time that calls to pickupBatch had to block until they
   // could return the next batch
   std::vector<Timer::Duration> getWaitingTime() const {
-    return {_timer->value()};
+    return {std::chrono::milliseconds{*_waitingTime}};
   }
 
   // returns the batchSize. The last batch might be smaller
@@ -93,8 +93,8 @@ class Batcher {
  private:
   size_t _batchSize;
   std::unique_ptr<Creator> _creator;
-  std::unique_ptr<ad_utility::Timer> _timer =
-      std::make_unique<ad_utility::Timer>(ad_utility::Timer::Stopped);
+  std::unique_ptr<std::atomic<size_t>> _waitingTime{
+      std::make_unique<std::atomic<size_t>>(0)};
   std::future<detail::Batch<ValueT>> _fut;
 
   // start assembling the next batch in parallel
@@ -192,10 +192,10 @@ class BatchedPipeline {
   // _____________________________________________________________________
   Batch<ResT> pickupBatch() {
     try {
-      _timer->cont();
+      Timer timer{Timer::InitialStatus::Started};
       auto res = _fut.get();
       orderNextBatch();
-      _timer->stop();
+      _waitingTime->fetch_add(timer.msecs());
       return res;
     } catch (std::future_error& e) {
       throw std::runtime_error(
@@ -221,7 +221,7 @@ class BatchedPipeline {
   // time in calls to produce batch
   std::vector<Timer::Duration> getWaitingTime() const {
     auto res = _previousStage->getWaitingTime();
-    res.push_back(_timer->value());
+    res.push_back(std::chrono::milliseconds(*_waitingTime));
     return res;
   }
 
@@ -345,8 +345,8 @@ class BatchedPipeline {
   }
 
  private:
-  std::unique_ptr<ad_utility::Timer> _timer =
-      std::make_unique<ad_utility::Timer>(ad_utility::Timer::Stopped);
+  std::unique_ptr<std::atomic<size_t>> _waitingTime{
+      std::make_unique<std::atomic<size_t>>(0)};
   // the unique_ptrs to our Transformers
   using uniquePtrTuple = toUniquePtrTuple_t<FirstTransformer, Transformers...>;
   // raw non-owning pointers to the transformers
@@ -478,14 +478,14 @@ class BatchExtractor {
     // we return the elements in order
     if (_buffer.size() == _bufferPosition && _isPipelineValid) {
       // we have to wait for the next parallel batch to be completed.
-      _timer->cont();
+      Timer timer{Timer::InitialStatus::Started};
       {
         auto res = _fut.get();
         _isPipelineValid = res.m_isPipelineGood;
         _buffer = std::move(res.m_content);
       }
 
-      _timer->stop();
+      _waitingTime->fetch_add(timer.msecs());
       _bufferPosition = 0;
       if (_isPipelineValid) {
         // if possible, directly submit the next parsing job
@@ -510,7 +510,7 @@ class BatchExtractor {
    */
   [[nodiscard]] std::vector<Timer::Duration> getWaitingTime() const {
     auto res = _pipeline->getWaitingTime();
-    res.push_back(_timer->value());
+    res.push_back(std::chrono::milliseconds(*_waitingTime));
     return res;
   }
 
@@ -518,8 +518,8 @@ class BatchExtractor {
   [[nodiscard]] size_t getBatchSize() const { return _pipeline.getBatchSize(); }
 
  private:
-  std::unique_ptr<ad_utility::Timer> _timer =
-      std::make_unique<ad_utility::Timer>(ad_utility::Timer::Stopped);
+  std::unique_ptr<std::atomic<size_t>> _waitingTime{
+      std::make_unique<std::atomic<size_t>>(0)};
   std::unique_ptr<Pipeline> _pipeline;
   std::future<detail::Batch<ValueT>> _fut;
   std::vector<ValueT> _buffer;

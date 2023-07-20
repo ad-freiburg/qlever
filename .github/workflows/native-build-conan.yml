@@ -69,8 +69,10 @@ jobs:
         source ./conanrun.sh;
         benchmark/BenchmarkExamples -p;
 
+      # explicitly specify the binary directory for the E2E script via the `-d` option to also
+      # test that it works.
     - name: E2E
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
-        ${{github.workspace}}/e2e/e2e.sh
+        ${{github.workspace}}/e2e/e2e.sh -d build
 

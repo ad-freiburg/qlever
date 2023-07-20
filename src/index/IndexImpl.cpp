@@ -6,18 +6,6 @@
 
 #include "./IndexImpl.h"
 
-#include <CompilationInfo.h>
-#include <absl/strings/str_join.h>
-#include <index/PrefixHeuristic.h>
-#include <index/TriplesView.h>
-#include <index/VocabularyGenerator.h>
-#include <parser/ParallelParseBuffer.h>
-#include <util/BatchedPipeline.h>
-#include <util/CompressionUsingZstd/ZstdWrapper.h>
-#include <util/HashMap.h>
-#include <util/Serializer/FileSerializer.h>
-#include <util/TupleHelpers.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -26,6 +14,19 @@
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_map>
+
+#include "CompilationInfo.h"
+#include "absl/strings/str_join.h"
+#include "index/IndexFormatVersion.h"
+#include "index/PrefixHeuristic.h"
+#include "index/TriplesView.h"
+#include "index/VocabularyGenerator.h"
+#include "parser/ParallelParseBuffer.h"
+#include "util/BatchedPipeline.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/HashMap.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/TupleHelpers.h"
 
 using std::array;
 
@@ -787,7 +788,8 @@ void IndexImpl::setPrefixCompression(bool compressed) {
 void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
   auto configuration = configurationJson_;
-  configuration["git_hash"] = std::string(qlever::version::GitHash);
+  configuration["git-hash"] = std::string(qlever::version::GitHash);
+  configuration["index-format-version"] = qlever::indexFormatVersion;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
@@ -796,14 +798,50 @@ void IndexImpl::writeConfiguration() const {
 void IndexImpl::readConfiguration() {
   auto f = ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE);
   f >> configurationJson_;
-  if (configurationJson_.find("git_hash") != configurationJson_.end()) {
+  if (configurationJson_.find("git-hash") != configurationJson_.end()) {
     LOG(INFO) << "The git hash used to build this index was "
-              << std::string(configurationJson_["git_hash"]).substr(0, 6)
+              << std::string(configurationJson_["git-hash"]).substr(0, 6)
               << std::endl;
   } else {
     LOG(INFO) << "The index was built before git commit hashes were stored in "
                  "the index meta data"
               << std::endl;
+  }
+
+  if (configurationJson_.find("index-format-version") !=
+      configurationJson_.end()) {
+    auto indexFormatVersion = static_cast<qlever::IndexFormatVersion>(
+        configurationJson_["index-format-version"]);
+    const auto& currentVersion = qlever::indexFormatVersion;
+    if (indexFormatVersion != currentVersion) {
+      if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
+        LOG(ERROR) << "The version of QLever you are using is too old for this "
+                      "index. Please use a version of QLever that is "
+                      "compatible with this index"
+                      " (PR = "
+                   << indexFormatVersion.prNumber_ << ", Date = "
+                   << indexFormatVersion.date_.toStringAndType().first << ")."
+                   << std::endl;
+      } else {
+        LOG(ERROR) << "The index is too old for this version of QLever. "
+                      "We recommend that you rebuild the index and start the "
+                      "server with the current master. Alternatively start the "
+                      "engine with a version of QLever that is compatible with "
+                      "this index (PR = "
+                   << indexFormatVersion.prNumber_ << ", Date = "
+                   << indexFormatVersion.date_.toStringAndType().first << ")."
+                   << std::endl;
+      }
+      throw std::runtime_error{
+          "Incompatible index format, see log message for details"};
+    }
+  } else {
+    LOG(ERROR) << "This index was built before versioning was introduced for "
+                  "QLever's index format. Please rebuild your index using the "
+                  "current version of QLever."
+               << std::endl;
+    throw std::runtime_error{
+        "Incompatible index format, see log message for details"};
   }
 
   if (configurationJson_.find("prefixes") != configurationJson_.end()) {

@@ -344,3 +344,6 @@ qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT
 
 add_executable(PermutationExporterMain src/index/PermutationExporterMain.cpp)
 qlever_target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
+qlever_target_link_libraries(PrintIndexVersionMain util)

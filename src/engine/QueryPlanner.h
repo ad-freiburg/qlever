@@ -192,17 +192,6 @@ class QueryPlanner {
       ParsedQuery::GraphPattern* rootPattern);
 
   /**
-   * @brief Fills varToTrip with a mapping from all variables in the root graph
-   * pattern (no matter whether they are in the subject, predicate or object) to
-   * the triple they occur in. Fills contextVars with all subject variables for
-   * which the predicate is either 'contains-word' or 'contains-entity'.
-   */
-  void getVarTripleMap(
-      const ParsedQuery& pq,
-      ad_utility::HashMap<string, vector<SparqlTriple>>* varToTrip,
-      ad_utility::HashSet<string>* contextVars) const;
-
-  /**
    * @brief Fills children with all operations that are associated with a single
    * node in the triple graph (e.g. IndexScans).
    */
@@ -390,13 +379,6 @@ class QueryPlanner {
 
   [[nodiscard]] SubtreePlan getTextLeafPlan(
       const TripleGraph::Node& node) const;
-
-  [[nodiscard]] SubtreePlan optionalJoin(const SubtreePlan& a,
-                                         const SubtreePlan& b) const;
-  [[nodiscard]] SubtreePlan minus(const SubtreePlan& a,
-                                  const SubtreePlan& b) const;
-  [[nodiscard]] SubtreePlan multiColumnJoin(const SubtreePlan& a,
-                                            const SubtreePlan& b) const;
 
   /**
    * @brief return the index of the cheapest execution tree in the argument.

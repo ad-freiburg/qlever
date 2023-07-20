@@ -1230,50 +1230,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
 }
 
 // _____________________________________________________________________________
-QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
-    const SubtreePlan& a, const SubtreePlan& b) const {
-  // The second tree must be the OPTIONAL tree, OPTIONAL joins are not
-  // symmetric.
-  AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL &&
-                    b.type == SubtreePlan::OPTIONAL);
-  return makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet,
-                                       getJoinColumns(a, b));
-}
-
-// _____________________________________________________________________________
-QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
-                                              const SubtreePlan& b) const {
-  AD_CONTRACT_CHECK(a.type != SubtreePlan::MINUS &&
-                    b.type == SubtreePlan::MINUS);
-  std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
-
-  // TODO: We could probably also accept permutations of the join columns
-  // as the order of a here and then permute the join columns to match the
-  // sorted columns of a or b (whichever is larger).
-  auto [qetA, qetB] =
-      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
-  return makeSubtreePlan<Minus>(_qec, qetA, qetB, jcs);
-}
-
-// _____________________________________________________________________________
-QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
-    const SubtreePlan& a, const SubtreePlan& b) const {
-  if (Join::isFullScanDummy(a._qet) || Join::isFullScanDummy(b._qet)) {
-    throw std::runtime_error(
-        "Trying a JOIN between two full scan dummys, this"
-        "will be handled by the calling code automatically");
-  }
-
-  // TODO: We could probably also accept permutations of the join columns
-  // as the order of a here and then permute the join columns to match the
-  // sorted columns of a or b (whichever is larger).
-  std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
-  auto [qetA, qetB] =
-      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
-  return makeSubtreePlan<MultiColumnJoin>(_qec, qetA, qetB, jcs);
-}
-
-// _____________________________________________________________________________
 string QueryPlanner::TripleGraph::asString() const {
   std::ostringstream os;
   for (size_t i = 0; i < _adjLists.size(); ++i) {
@@ -1349,17 +1305,8 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
 std::vector<std::array<ColumnIndex, 2>> QueryPlanner::getJoinColumns(
     const QueryPlanner::SubtreePlan& a,
     const QueryPlanner::SubtreePlan& b) const {
-  std::vector<std::array<ColumnIndex, 2>> jcs;
-  const auto& aVarCols = a._qet->getVariableColumns();
-  const auto& bVarCols = b._qet->getVariableColumns();
-  for (const auto& aVarCol : aVarCols) {
-    auto itt = bVarCols.find(aVarCol.first);
-    if (itt != bVarCols.end()) {
-      jcs.push_back(std::array<ColumnIndex, 2>{
-          {aVarCol.second.columnIndex_, itt->second.columnIndex_}});
-    }
-  }
-  return jcs;
+  AD_CORRECTNESS_CHECK(a._qet && b._qet);
+  return QueryExecutionTree::getJoinColumns(*a._qet, *b._qet);
 }
 
 // _____________________________________________________________________________
@@ -1961,21 +1908,21 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     // is made non optional earlier. If a minus occurs after an optional
     // further into the query that optional should be resolved by now.
     AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL);
-    return std::vector{minus(a, b)};
+    return {makeSubtreePlan<Minus>(_qec, a._qet, b._qet)};
   }
 
   // OPTIONAL JOINS are not symmetric!
   AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL);
   if (b.type == SubtreePlan::OPTIONAL) {
     // Join the two optional columns using an optional join
-    return std::vector{optionalJoin(a, b)};
+    return {makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet)};
   }
 
   if (jcs.size() >= 2) {
     // If there are two or more join columns and we are not using the
     // TwoColumnJoin (the if part before this comment), use a multiColumnJoin.
     try {
-      SubtreePlan plan = multiColumnJoin(a, b);
+      SubtreePlan plan = makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet);
       mergeSubtreePlanIds(plan, a, b);
       return {plan};
     } catch (const std::exception& e) {

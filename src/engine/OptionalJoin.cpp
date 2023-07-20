@@ -14,13 +14,12 @@ using std::string;
 // _____________________________________________________________________________
 OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
                            std::shared_ptr<QueryExecutionTree> t1,
-                           std::shared_ptr<QueryExecutionTree> t2,
-                           const std::vector<std::array<ColumnIndex, 2>>& jcs)
+                           std::shared_ptr<QueryExecutionTree> t2)
     : Operation(qec),
       _left{std::move(t1)},
       _right{std::move(t2)},
-      _joinColumns(jcs) {
-  AD_CONTRACT_CHECK(!jcs.empty());
+      _joinColumns(QueryExecutionTree::getJoinColumns(*_left, *_right)) {
+  AD_CORRECTNESS_CHECK(!_joinColumns.empty());
 
   // If `_right` contains no UNDEF in the join columns and at most one column in
   // `_left` contains UNDEF values, and that column is the last join column,
@@ -53,10 +52,8 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
   }
 
   // The inputs must be sorted by the join columns.
-  auto [sortedLeft, sortedRight] = QueryExecutionTree::createSortedTrees(
+  std::tie(_left, _right) = QueryExecutionTree::createSortedTrees(
       std::move(_left), std::move(_right), _joinColumns);
-  _left = std::move(sortedLeft);
-  _right = std::move(sortedRight);
 }
 
 // _____________________________________________________________________________
