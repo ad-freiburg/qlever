@@ -545,16 +545,25 @@ TEST(TurtleParserTest, DateLiterals) {
 
 TEST(TurtleParserTest, booleanLiteral) {
   auto runCommonTests = [](const auto& ruleChecker, const auto& ruleParser) {
-    ruleChecker("true", lit("\"true\"",
-                            "^^<http://www.w3.org/2001/XMLSchema#boolean>"));
-    ruleChecker("false", lit("\"false\"",
-                             "^^<http://www.w3.org/2001/XMLSchema#boolean>"));
+    ruleChecker("true", true);
+    ruleChecker("false", false);
     ASSERT_FALSE(ruleParser("maybe"));
   };
   runCommonTests(checkParseResult<Re2Parser, &Re2Parser::booleanLiteral>,
                  parseRule<Re2Parser, &Re2Parser::booleanLiteral>);
   runCommonTests(checkParseResult<CtreParser, &CtreParser::booleanLiteral>,
                  parseRule<CtreParser, &CtreParser::booleanLiteral>);
+}
+
+TEST(TurtleParserTest, booleanLiteralLongForm) {
+  auto runCommonTests = [](const auto& ruleChecker) {
+    ruleChecker("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>", true);
+    ruleChecker("\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>", false);
+    ruleChecker("\"maybe\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+                lit("\"maybe\""));
+  };
+  runCommonTests(checkParseResult<Re2Parser, &Re2Parser::rdfLiteral>);
+  runCommonTests(checkParseResult<CtreParser, &CtreParser::rdfLiteral>);
 }
 
 TEST(TurtleParserTest, collection) {

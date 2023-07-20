@@ -611,10 +611,8 @@ TEST(SparqlParser, DataBlock) {
   expectDataBlock("?test { 10.0 }", m::Values({Var{"?test"}}, {{10.0}}));
   expectDataBlock("?test { UNDEF }",
                   m::Values({Var{"?test"}}, {{TripleComponent::UNDEF{}}}));
-  // Booleans are not yet parsed as `dataBlockValue`.
-  // (numericLiteral/booleanLiteral)
-  // TODO<joka921/qup42> implement.
-  expectDataBlockFails("?test { true }");
+  expectDataBlock("?test { false true }",
+                  m::Values({Var{"?test"}}, {{false}, {true}}));
   expectDataBlock(
       R"(?foo { "baz" "bar" })",
       m::Values({Var{"?foo"}}, {{lit("\"baz\"")}, {lit("\"bar\"")}}));

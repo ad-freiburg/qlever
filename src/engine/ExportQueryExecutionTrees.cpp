@@ -132,37 +132,62 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
 }
 
 // ___________________________________________________________________________
+std::optional<std::pair<std::string, const char*>>
+ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case Undefined:
+      return std::nullopt;
+    case Double:
+      // We use the immediately invoked lambda here because putting this block
+      // in braces confuses the test coverage tool.
+      return [id] {
+        // Format as integer if fractional part is zero, let C++ decide
+        // otherwise.
+        std::stringstream ss;
+        double d = id.getDouble();
+        double dIntPart;
+        if (std::modf(d, &dIntPart) == 0.0) {
+          ss << std::fixed << std::setprecision(0) << id.getDouble();
+        } else {
+          ss << d;
+        }
+        return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
+      }();
+    case Bool:
+      return id.getBool() ? std::pair{"true", XSD_BOOLEAN_TYPE}
+                          : std::pair{"false", XSD_BOOLEAN_TYPE};
+    case Int:
+      return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
+    case Date:
+      return id.getDate().toStringAndType();
+    default:
+      AD_FAIL();
+  }
+}
+
+// ___________________________________________________________________________
 template <bool removeQuotesAndAngleBrackets, bool onlyReturnLiterals,
           typename EscapeFunction>
 std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
                                              EscapeFunction&& escapeFunction) {
+  using enum Datatype;
   auto datatype = id.getDatatype();
   if constexpr (onlyReturnLiterals) {
-    if (!(datatype == Datatype::VocabIndex ||
-          datatype == Datatype::LocalVocabIndex)) {
+    if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {
       return std::nullopt;
     }
   }
   switch (id.getDatatype()) {
-    case Datatype::Undefined:
-      return std::nullopt;
-    case Datatype::Double: {
-      // Format as integer if fractional part is zero, let C++ decide otherwise.
-      std::stringstream ss;
-      double d = id.getDouble();
-      double dIntPart;
-      if (std::modf(d, &dIntPart) == 0.0) {
-        ss << std::fixed << std::setprecision(0) << id.getDouble();
-      } else {
-        ss << d;
-      }
-      return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
-    }
-    case Datatype::Int:
-      return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
-    case Datatype::VocabIndex: {
+    case Undefined:
+    case Double:
+    case Bool:
+    case Int:
+    case Date:
+      return idToStringAndTypeForEncodedValue(id);
+    case VocabIndex: {
       // TODO<joka921> As soon as we get rid of the special encoding of date
       // values, we can use `index.getVocab().indexToOptionalString()` directly.
       std::optional<string> entity =
@@ -179,7 +204,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       }
       return std::pair{escapeFunction(std::move(entity.value())), nullptr};
     }
-    case Datatype::LocalVocabIndex: {
+    case LocalVocabIndex: {
       std::string word = localVocab.getWord(id.getLocalVocabIndex());
       if constexpr (onlyReturnLiterals) {
         if (!word.starts_with('"')) {
@@ -191,12 +216,10 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       }
       return std::pair{escapeFunction(std::move(word)), nullptr};
     }
-    case Datatype::TextRecordIndex:
+    case TextRecordIndex:
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
           nullptr};
-    case Datatype::Date:
-      return id.getDate().toStringAndType();
   }
   AD_FAIL();
 }
@@ -349,13 +372,11 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
-  // TODO<joka921> Also add a warning to the exported result.
-  if (selectedColumnIndices.empty()) {
-    LOG(WARN) << "Exporting a SPARQL query where none of the selected "
-                 "variables is bound in the query"
-              << std::endl;
-    return {std::vector<std::string>{}};
-  }
+  // This can never happen, because empty SELECT clauses are not supported by
+  // QLever. Should we ever support triples without variables then this might
+  // theoretically happen in combination with `SELECT *`, but then this still
+  // can be changed.
+  AD_CORRECTNESS_CHECK(!selectedColumnIndices.empty());
 
   return ExportQueryExecutionTrees::idTableToQLeverJSONArray(
       qet, limitAndOffset, selectedColumnIndices, std::move(resultTable));

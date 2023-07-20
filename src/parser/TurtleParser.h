@@ -346,6 +346,7 @@ class TurtleParser {
   FRIEND_TEST(TurtleParserTest, blankNodePropertyList);
   FRIEND_TEST(TurtleParserTest, numericLiteral);
   FRIEND_TEST(TurtleParserTest, booleanLiteral);
+  FRIEND_TEST(TurtleParserTest, booleanLiteralLongForm);
   FRIEND_TEST(TurtleParserTest, collection);
 };
 
