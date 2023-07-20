@@ -346,6 +346,8 @@ addLinkAndDiscoverTest(IdTableHelpersTest testUtil)
 
 addLinkAndDiscoverTest(GeneratorTest)
 
+addLinkAndDiscoverTest(MemorySizeTest memorySize)
+
 addLinkAndDiscoverTest(JsonUtilTest)
 
 addLinkAndDiscoverTest(JoinAlgorithmsTest)
