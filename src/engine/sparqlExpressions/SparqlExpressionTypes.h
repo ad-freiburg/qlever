@@ -273,7 +273,8 @@ Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
     return Id::makeFromDouble(result);
   } else if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
-
+  } else if constexpr (ad_utility::isSimilar<T, Bool>) {
+    return Id::makeFromBool(result);
   } else {
     static_assert(ad_utility::isSimilar<int64_t, T> ||
                   ad_utility::isSimilar<Bool, T>);

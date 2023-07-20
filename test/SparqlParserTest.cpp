@@ -747,8 +747,7 @@ TEST(ParserTest, testLiterals) {
   const auto& c = pq.children()[0].getBasic();
   ASSERT_TRUE(selectClause.isAsterisk());
   ASSERT_EQ(2u, c._triples.size());
-  ASSERT_EQ(lit("\"true\"", "^^<http://www.w3.org/2001/XMLSchema#boolean>"),
-            c._triples[0]._s);
+  ASSERT_EQ(true, c._triples[0]._s);
   ASSERT_EQ("<test:myrel>", c._triples[0]._p._iri);
   ASSERT_EQ(10, c._triples[0]._o);
   ASSERT_EQ(10.2, c._triples[1]._s);
