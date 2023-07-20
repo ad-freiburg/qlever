@@ -197,29 +197,29 @@ using AvgExpression =
 // return type.
 
 template <typename comparator, valueIdComparators::Comparison comparison>
-inline auto minMaxLambdaForAllTypes =
-    []<SingleExpressionResult T>(const T& a, const T& b) {
-      if constexpr (std::is_arithmetic_v<T> ||
-                    ad_utility::isSimilar<T, std::string>) {
-        // TODO<joka921> Also implement correct comparisons for `std::string`
-        // using ICU that respect the locale
-        return comparator{}(a, b);
-      } else if constexpr (ad_utility::isSimilar<T, Id>) {
-        if (a.getDatatype() == Datatype::Undefined ||
-            b.getDatatype() == Datatype::Undefined) {
-          // If one of the values is undefined, we just return the other.
-          static_assert(0u == Id::makeUndefined().getBits());
-          return Id::fromBits(a.getBits() | b.getBits());
-        }
-        return valueIdComparators::compareIds<
-                   valueIdComparators::ComparisonForIncompatibleTypes::
-                       CompareByType>(a, b, comparison)
-                   ? a
-                   : b;
-      } else {
-        return ad_utility::alwaysFalse<T>;
-      }
-    };
+inline auto minMaxLambdaForAllTypes = []<SingleExpressionResult T>(const T& a,
+                                                                   const T& b) {
+  if constexpr (std::is_arithmetic_v<T> ||
+                ad_utility::isSimilar<T, std::string>) {
+    // TODO<joka921> Also implement correct comparisons for `std::string`
+    // using ICU that respect the locale
+    return comparator{}(a, b);
+  } else if constexpr (ad_utility::isSimilar<T, Id>) {
+    if (a.getDatatype() == Datatype::Undefined ||
+        b.getDatatype() == Datatype::Undefined) {
+      // If one of the values is undefined, we just return the other.
+      static_assert(0u == Id::makeUndefined().getBits());
+      return Id::fromBits(a.getBits() | b.getBits());
+    }
+    return toBoolNotUndef(valueIdComparators::compareIds<
+                          valueIdComparators::ComparisonForIncompatibleTypes::
+                              CompareByType>(a, b, comparison))
+               ? a
+               : b;
+  } else {
+    return ad_utility::alwaysFalse<T>;
+  }
+};
 
 constexpr inline auto min = [](const auto& a, const auto& b) {
   return std::min(a, b);

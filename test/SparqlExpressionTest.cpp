@@ -340,7 +340,7 @@ TEST(SparqlExpression, unaryNegate) {
       testUnaryExpression<UnaryNegateExpression, std::string, Id>;
   // Zero and NaN are considered to be false, so their negation is true
 
-  // TODO<joka921> Undef is currently considered to be `false` but it is
+  // TODO<joka921> AlwaysUndef is currently considered to be `false` but it is
   // actually `UNDEF`.
   checkNegate({B(true), B(false), I(0), I(3), D(0), D(12), D(naN), U},
               {B(false), B(true), B(true), B(false), B(true), B(false), B(true),
@@ -357,7 +357,7 @@ TEST(SparqlExpression, unaryMinus) {
       testUnaryExpression<UnaryMinusExpression, std::string, Id>;
   // Zero and NaN are considered to be false, so their negation is true
 
-  // TODO<joka921> Undef is currently considered to be `false` but it is
+  // TODO<joka921> AlwaysUndef is currently considered to be `false` but it is
   // actually `UNDEF`.
   // TODO<joka921> Everything converts to double here, fix this.
   checkMinus(

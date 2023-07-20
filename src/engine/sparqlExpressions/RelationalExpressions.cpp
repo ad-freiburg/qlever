@@ -293,20 +293,20 @@ ExpressionResult evaluateRelationalExpression(S1 value1, S2 value2,
                     valueIdComparators::compareIds(*itA, *itB, Comp);
                   }) {
       // Compare two `ValueId`s
-      result.push_back(
+      result.push_back(toValueId(
           valueIdComparators::compareIds<
-              valueIdComparators::ComparisonForIncompatibleTypes::Undef>(
-              *itA, *itB, Comp));
+              valueIdComparators::ComparisonForIncompatibleTypes::AlwaysUndef>(
+              *itA, *itB, Comp)));
     } else if constexpr (requires {
                            valueIdComparators::compareWithEqualIds(
                                *itA, itB->first, itB->second, Comp);
                          }) {
       // Compare `ValueId` with range of equal `ValueId`s (used when `value2` is
       // `string` or `vector<string>`.
-      result.push_back(
+      result.push_back(toValueId(
           valueIdComparators::compareWithEqualIds<
-              valueIdComparators::ComparisonForIncompatibleTypes::Undef>(
-              *itA, itB->first, itB->second, Comp));
+              valueIdComparators::ComparisonForIncompatibleTypes::AlwaysUndef>(
+              *itA, itB->first, itB->second, Comp)));
     } else {
       // Compare two numeric values, or two string values.
       result.push_back(Id::makeFromBool(applyComparison<Comp>(*itA, *itB)));

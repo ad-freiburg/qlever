@@ -28,11 +28,32 @@ enum struct Comparison { LT, LE, EQ, NE, GE, GT };
 // will be smaller than all IDs with a type different from `Undefined`. This
 // behavior is used e.g. in `ORDER BY` expressions where we need a consistent
 // partial ordering on all possible IDs.
-enum struct ComparisonForIncompatibleTypes {
-  AlwaysFalse,
-  CompareByType,
-  Undef
-};
+enum struct ComparisonForIncompatibleTypes { CompareByType, AlwaysUndef };
+
+enum struct ComparisonResult { False, True, Undef };
+
+inline bool toBoolNotUndef(ComparisonResult comparisonResult) {
+  using enum ComparisonResult;
+  AD_EXPENSIVE_CHECK(comparisonResult != Undef);
+  return comparisonResult == True;
+}
+
+inline ComparisonResult fromBool(bool b) {
+  using enum ComparisonResult;
+  return b ? True : False;
+}
+
+inline ValueId toValueId(ComparisonResult comparisonResult) {
+  using enum ComparisonResult;
+  switch (comparisonResult) {
+    case False:
+      return ValueId::makeFromBool(false);
+    case True:
+      return ValueId::makeFromBool(true);
+    case Undef:
+      return ValueId::makeUndefined();
+  }
+}
 
 // Compares two `ValueId`s directly on the underlying representation. Note
 // that because the type bits are the most significant bits, all values of
@@ -397,14 +418,6 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
   AD_FAIL();
 }
 
-// When comparing with the `Undef` mode, then the result is a `ValueId` that is
-// `UNDEF` when there is a type mismatch.
-template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes>
-using ComparisonResult =
-    std::conditional_t<comparisonForIncompatibleTypes ==
-                           ComparisonForIncompatibleTypes::Undef,
-                       ValueId, bool>;
-
 namespace detail {
 
 // Determine whether the two datatypes can be compared. If they cannot be
@@ -422,32 +435,25 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 
 // This function is part of the implementation of `compareIds` (see below).
 template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
-              ComparisonForIncompatibleTypes::AlwaysFalse>
-ComparisonResult<comparisonForIncompatibleTypes> compareIdsImpl(
-    ValueId a, ValueId b, auto comparator) {
+              ComparisonForIncompatibleTypes::AlwaysUndef>
+ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
   Datatype typeA = a.getDatatype();
   Datatype typeB = b.getDatatype();
+  using enum ComparisonResult;
   if (!areTypesCompatible(typeA, typeB)) {
     using enum ComparisonForIncompatibleTypes;
-    if constexpr (comparisonForIncompatibleTypes == AlwaysFalse) {
-      return false;
-    } else if constexpr (comparisonForIncompatibleTypes == CompareByType) {
-      return comparator(a.getDatatype(), b.getDatatype());
+    if constexpr (comparisonForIncompatibleTypes == CompareByType) {
+      return fromBool(comparator(a.getDatatype(), b.getDatatype()));
     } else {
-      static_assert(comparisonForIncompatibleTypes == Undef);
-      return Id::makeUndefined();
+      static_assert(comparisonForIncompatibleTypes == AlwaysUndef);
+      return ComparisonResult::Undef;
     }
   }
 
-  auto visitor = [comparator](const auto& aValue, const auto& bValue)
-      -> ComparisonResult<comparisonForIncompatibleTypes> {
+  auto visitor = [comparator](const auto& aValue,
+                              const auto& bValue) -> ComparisonResult {
     if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
-      if constexpr (comparisonForIncompatibleTypes ==
-                    ComparisonForIncompatibleTypes::Undef) {
-        return ValueId::makeFromBool(std::invoke(comparator, aValue, bValue));
-      } else {
-        return std::invoke(comparator, aValue, bValue);
-      }
+      return fromBool(std::invoke(comparator, aValue, bValue));
     } else {
       AD_FAIL();
     }
@@ -466,9 +472,9 @@ ComparisonResult<comparisonForIncompatibleTypes> compareIdsImpl(
 // For the definition of the template parameter `comparisonForIncompatibleTypes`
 // see the documentation of the enum `ComparisonForIncompatibleTypes` above.
 template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
-              ComparisonForIncompatibleTypes::AlwaysFalse>
-inline ComparisonResult<comparisonForIncompatibleTypes> compareIds(
-    ValueId a, ValueId b, Comparison comparison) {
+              ComparisonForIncompatibleTypes::AlwaysUndef>
+inline ComparisonResult compareIds(ValueId a, ValueId b,
+                                   Comparison comparison) {
   // A helper lambda to factor out common code
   auto compare = [&](auto comparator) {
     // For the `compareByType` mode, which is used by ORDER BY, we also need a
@@ -505,9 +511,10 @@ inline ComparisonResult<comparisonForIncompatibleTypes> compareIds(
 // Similar to `compareIds` above but takes a range [bBegin, bEnd) of Ids that
 // are considered to be equal.
 template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
-              ComparisonForIncompatibleTypes::AlwaysFalse>
-inline ComparisonResult<comparisonForIncompatibleTypes> compareWithEqualIds(
-    ValueId a, ValueId bBegin, ValueId bEnd, Comparison comparison) {
+              ComparisonForIncompatibleTypes::AlwaysUndef>
+inline ComparisonResult compareWithEqualIds(ValueId a, ValueId bBegin,
+                                            ValueId bEnd,
+                                            Comparison comparison) {
   // The case `bBegin == bEnd` happens when IDs from QLever's vocabulary are
   // compared to "pseudo"-IDs that represent words that are not part of the
   // vocabulary. In this case the ID `bBegin` is the ID of the smallest
@@ -520,8 +527,9 @@ inline ComparisonResult<comparisonForIncompatibleTypes> compareWithEqualIds(
   // The comparison for `equal` is also used for the `not equal` case, so we
   // factor it out.
   auto compareEqual = [&]() {
-    return detail::compareIdsImpl(a, bBegin, std::greater_equal<>()) &&
-           detail::compareIdsImpl(a, bEnd, std::less<>());
+    return toBoolNotUndef(detail::compareIdsImpl<mode>(
+               a, bBegin, std::greater_equal<>())) &&
+           toBoolNotUndef(detail::compareIdsImpl<mode>(a, bEnd, std::less<>()));
   };
   using enum Comparison;
   switch (comparison) {
@@ -530,11 +538,11 @@ inline ComparisonResult<comparisonForIncompatibleTypes> compareWithEqualIds(
     case LE:
       return detail::compareIdsImpl<mode>(a, bEnd, std::less<>());
     case EQ: {
-      if constexpr (mode == ComparisonForIncompatibleTypes::Undef) {
+      if constexpr (mode == ComparisonForIncompatibleTypes::AlwaysUndef) {
         bool typesAreCompatible =
             detail::areTypesCompatible(a.getDatatype(), bBegin.getDatatype());
-        return typesAreCompatible ? Id::makeFromBool(compareEqual())
-                                  : Id::makeUndefined();
+        return typesAreCompatible ? fromBool(compareEqual())
+                                  : ComparisonResult::Undef;
       } else {
         return compareEqual();
       }
@@ -545,14 +553,11 @@ inline ComparisonResult<comparisonForIncompatibleTypes> compareWithEqualIds(
       // `expression error`.
       bool typesAreCompatible =
           detail::areTypesCompatible(a.getDatatype(), bBegin.getDatatype());
-      bool equal = compareEqual();
-      if constexpr (mode == ComparisonForIncompatibleTypes::Undef) {
-        return typesAreCompatible ? ValueId::makeFromBool(equal)
-                                  : Id::makeUndefined();
+      if constexpr (mode == ComparisonForIncompatibleTypes::AlwaysUndef) {
+        return typesAreCompatible ? fromBool(!compareEqual())
+                                  : ComparisonResult::Undef;
       } else {
-        // TODO<joka921> Do we still need this `else` case and the `AlwaysFalse`
-        // case with the refactored filters.
-        return !compareEqual() && typesAreCompatible;
+        return !typesAreCompatible || !compareEqual();
       }
     }
     case GE:
@@ -562,26 +567,6 @@ inline ComparisonResult<comparisonForIncompatibleTypes> compareWithEqualIds(
     default:
       AD_FAIL();
   }
-}
-
-// ____________________________________________________________________________
-inline bool compareIds(ValueId a, double b, Comparison comparison) {
-  return compareIds(a, ValueId::makeFromDouble(b), comparison);
-}
-
-// ____________________________________________________________________________
-inline bool compareIds(double a, ValueId b, Comparison comparison) {
-  return compareIds(ValueId::makeFromDouble(a), b, comparison);
-}
-
-// ____________________________________________________________________________
-inline bool compareIds(ValueId a, int64_t b, Comparison comparison) {
-  return compareIds(a, ValueId::makeFromInt(b), comparison);
-}
-
-// ____________________________________________________________________________
-inline bool compareIds(int64_t a, ValueId b, Comparison comparison) {
-  return compareIds(ValueId::makeFromInt(a), b, comparison);
 }
 
 }  // namespace valueIdComparators

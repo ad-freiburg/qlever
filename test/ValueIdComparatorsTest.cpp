@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "./ValueIdTestHelpers.h"
@@ -72,21 +73,25 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
     auto isMatching = [&](ValueId a, ValueId b) {
       return isMatchingDatatype(a) && applyComparator(comparator, a, b);
     };
+    using enum ComparisonResult;
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
         ASSERT_FALSE(isMatching(*it, id)) << *it << ' ' << id;
-        ASSERT_FALSE(compareIds(*it, id, comparison)) << *it << ' ' << id;
+        auto expected = isMatchingDatatype(*it) ? False : Undef;
+        ASSERT_EQ(compareIds(*it, id, comparison), expected)
+            << *it << ' ' << id;
         ++it;
       }
       while (it != rangeEnd) {
         ASSERT_TRUE(isMatching(*it, id)) << *it << ' ' << id;
-        ASSERT_TRUE(compareIds(*it, id, comparison)) << *it << ' ' << id;
+        ASSERT_EQ(compareIds(*it, id, comparison), True) << *it << ' ' << id;
         ++it;
       }
     }
     while (it != end) {
       ASSERT_FALSE(isMatching(*it, id));
-      ASSERT_FALSE(compareIds(*it, id, comparison)) << *it << ' ' << id;
+      auto expected = isMatchingDatatype(*it) ? False : Undef;
+      ASSERT_EQ(compareIds(*it, id, comparison), expected) << *it << ' ' << id;
       ++it;
     }
   };
@@ -167,11 +172,14 @@ auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
         idBegin.getDatatype() == Datatype::VocabIndex) {
       EXPECT_TRUE(true);
     }
+    using enum ComparisonResult;
     auto ranges = getRangesForEqualIds(begin, end, idBegin, idEnd, comparison);
     auto it = begin;
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
-        ASSERT_FALSE(compareWithEqualIds(*it, idBegin, idEnd, comparison))
+        // TODO<joka921> Correctly determine, which of these cases we want.
+        ASSERT_THAT(compareWithEqualIds(*it, idBegin, idEnd, comparison),
+                    ::testing::AnyOf(False, Undef))
             << *it << " " << idBegin << ' ' << idEnd << ' '
             << static_cast<int>(comparison);
         ++it;
@@ -179,12 +187,15 @@ auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
       while (it != rangeEnd) {
         // The "not equal" relation also yields true for different datatypes.
         ASSERT_TRUE(isMatchingDatatype(*it) || comparison == Comparison::NE);
-        ASSERT_TRUE(compareWithEqualIds(*it, idBegin, idEnd, comparison));
+        ASSERT_EQ(compareWithEqualIds(*it, idBegin, idEnd, comparison), True)
+            << *it << ' ' << idBegin << ' ' << idEnd;
         ++it;
       }
     }
     while (it != end) {
-      ASSERT_FALSE(compareWithEqualIds(*it, idBegin, idEnd, comparison));
+      // TODO<joka921> Correctly determine, which of these cases we want.
+      ASSERT_THAT(compareWithEqualIds(*it, idBegin, idEnd, comparison),
+                  ::testing::AnyOf(False, Undef));
       ++it;
     }
   };
@@ -243,12 +254,21 @@ TEST(ValueIdComparators, IndexTypes) {
 // _______________________________________________________________________
 TEST(ValueIdComparators, undefinedWithItself) {
   auto u = ValueId::makeUndefined();
-  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::LT));
-  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::LE));
-  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::EQ));
-  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::NE));
-  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::GT));
-  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::GE));
+  using enum ComparisonResult;
+  using enum ComparisonForIncompatibleTypes;
+  ASSERT_EQ(compareIds(u, u, Comparison::LT), Undef);
+  ASSERT_EQ(compareIds(u, u, Comparison::LE), Undef);
+  ASSERT_EQ(compareIds(u, u, Comparison::EQ), Undef);
+  ASSERT_EQ(compareIds(u, u, Comparison::NE), Undef);
+  ASSERT_EQ(compareIds(u, u, Comparison::GT), Undef);
+  ASSERT_EQ(compareIds(u, u, Comparison::GE), Undef);
+
+  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::LT), False);
+  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::LE), True);
+  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::EQ), True);
+  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::NE), False);
+  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::GT), False);
+  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::GE), True);
 }
 
 // _______________________________________________________________________
