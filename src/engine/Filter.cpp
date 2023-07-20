@@ -81,21 +81,7 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
 
   auto visitor =
       [&]<sparqlExpression::SingleExpressionResult T>(T&& singleResult) {
-        if constexpr (false) {
-          // if constexpr (std::is_same_v<T,
-          // sparqlExpression::VectorWithMemoryLimit<
-          //                                    sparqlExpression::Bool>>) {
-          AD_CONTRACT_CHECK(singleResult.size() == input.size());
-          auto totalSize =
-              std::accumulate(singleResult.begin(), singleResult.end(), 0ul);
-          output.reserve(totalSize);
-          for (size_t i = 0; i < singleResult.size(); ++i) {
-            if (singleResult[i]) {
-              output.push_back(input[i]);
-            }
-          }
-          AD_CONTRACT_CHECK(output.size() == totalSize);
-        } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
+        if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
           auto totalSize = std::accumulate(
               singleResult._intervals.begin(), singleResult._intervals.end(),
               0ul, [](const auto& sum, const auto& interval) {

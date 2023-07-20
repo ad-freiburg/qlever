@@ -51,8 +51,6 @@ struct IsValidValueGetter {
 /// Return a boolean value that is used for AND, OR and NOT expressions.
 /// See section 17.2.2 of the Sparql Standard
 struct EffectiveBooleanValueGetter {
-  // bool operator()(Bool v, EvaluationContext*) const { return v._value; }
-
   // _________________________________________________________________________
   bool operator()(ValueId id, EvaluationContext*) const;
 

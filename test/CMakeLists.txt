@@ -217,9 +217,6 @@ addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(MilestoneIdTest)
 
-# The VocabularyOnDisk uses mmap which fails when the tests are run in
-# parallel. This should be fixed by using distinct filenames for each test case.
-# TODO<qup42, joka921> fix this
 addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(VocabularyTest index)
@@ -290,7 +287,7 @@ addLinkAndDiscoverTest(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
 
-#addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
+addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
 

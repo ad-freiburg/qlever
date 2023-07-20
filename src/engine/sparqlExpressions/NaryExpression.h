@@ -121,9 +121,11 @@ requires std::integral<T> || std::floating_point<T> Id makeNumericId(T t) {
 
 template <typename Function>
 struct NumericIdWrapper {
-  Function function{};
+  // Note: Sonarcloud suggests `[[no_unique_address]]` for the following member,
+  // but adding it causes an internal compiler error in Clang 16.
+  Function function_{};
   Id operator()(auto&&... args) const {
-    return makeNumericId(function(AD_FWD(args)...));
+    return makeNumericId(function_(AD_FWD(args)...));
   }
 };
 
@@ -144,33 +146,29 @@ using SET = SpecializedFunction<F, decltype(areAllSetOfIntervals)>;
 using ad_utility::SetOfIntervals;
 
 // The types for the concrete MultiBinaryExpressions and UnaryExpressions.
-inline auto orLambda = [](bool a, bool b) -> Id {
-  return Id::makeFromBool(a || b);
-};
+inline auto orLambda = [](bool a, bool b) { return Id::makeFromBool(a || b); };
 using OrExpression =
     NARY<2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Union>>;
 
-inline auto andLambda = [](bool a, bool b) -> Id {
-  return Id::makeFromBool(a && b);
-};
+inline auto andLambda = [](bool a, bool b) { return Id::makeFromBool(a && b); };
 using AndExpression =
     NARY<2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Intersection>>;
 
 // Unary Negation
-inline auto unaryNegate = [](bool a) -> Id { return Id::makeFromBool(!a); };
+inline auto unaryNegate = [](bool a) { return Id::makeFromBool(!a); };
 using UnaryNegateExpression =
     NARY<1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Complement>>;
 
 // Unary Minus, currently all results are converted to double
-inline auto unaryMinus = [](auto a) -> Id { return Id::makeFromDouble(-a); };
+inline auto unaryMinus = [](auto a) { return Id::makeFromDouble(-a); };
 using UnaryMinusExpression =
     NARY<1, FV<decltype(unaryMinus), NumericValueGetter>>;
 
 // Multiplication.
-inline auto multiply = [](const auto& a, const auto& b) -> Id {
+inline auto multiply = [](const auto& a, const auto& b) {
   return Id::makeFromDouble(a * b);
 };
 using MultiplyExpression = NARY<2, FV<decltype(multiply), NumericValueGetter>>;
@@ -180,18 +178,18 @@ using MultiplyExpression = NARY<2, FV<decltype(multiply), NumericValueGetter>>;
 // TODO<joka921> If `b == 0` this is technically undefined behavior and
 // should lead to an expression error in SPARQL. Fix this as soon as we
 // introduce the proper semantics for expression errors.
-inline auto divide = [](const auto& a, const auto& b) -> Id {
+inline auto divide = [](const auto& a, const auto& b) {
   return Id::makeFromDouble(static_cast<double>(a) / b);
 };
 using DivideExpression = NARY<2, FV<decltype(divide), NumericValueGetter>>;
 
 // Addition and subtraction, currently all results are converted to double.
-inline auto add = [](const auto& a, const auto& b) -> Id {
+inline auto add = [](const auto& a, const auto& b) {
   return Id::makeFromDouble(a + b);
 };
 using AddExpression = NARY<2, FV<decltype(add), NumericValueGetter>>;
 
-inline auto subtract = [](const auto& a, const auto& b) -> Id {
+inline auto subtract = [](const auto& a, const auto& b) {
   return Id::makeFromDouble(a - b);
 };
 using SubtractExpression = NARY<2, FV<decltype(subtract), NumericValueGetter>>;
