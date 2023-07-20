@@ -397,9 +397,9 @@ bool TurtleParser<T>::rdfLiteral() {
         parseIntegerConstant(strippedLiteral);
       } else if (type == XSD_BOOLEAN_TYPE) {
         if (strippedLiteral == "true") {
-          _lastParseResult = true;
+          lastParseResult_ = true;
         } else if (strippedLiteral == "false") {
-          _lastParseResult = false;
+          lastParseResult_ = false;
         } else {
           LOG(DEBUG)
               << literalString.get()
@@ -407,7 +407,7 @@ bool TurtleParser<T>::rdfLiteral() {
               << ". It is treated as a plain string literal without datatype "
                  "instead"
               << std::endl;
-          _lastParseResult = TripleComponent::Literal{literalString};
+          lastParseResult_ = TripleComponent::Literal{literalString};
         }
       } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
                  type == XSD_FLOAT_TYPE) {
