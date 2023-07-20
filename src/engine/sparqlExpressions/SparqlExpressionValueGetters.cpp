@@ -16,6 +16,10 @@ double NumericValueGetter::operator()(ValueId id, EvaluationContext*) const {
       return id.getDouble();
     case Datatype::Int:
       return static_cast<double>(id.getInt());
+    case Datatype::Bool:
+      // TODO<joka921> Check in the specification what the correct behavior is
+      // here.
+      return static_cast<double>(id.getBool());
     case Datatype::Undefined:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
@@ -36,6 +40,8 @@ bool EffectiveBooleanValueGetter::operator()(ValueId id,
     }
     case Datatype::Int:
       return id.getInt() != 0;
+    case Datatype::Bool:
+      return id.getBool();
     case Datatype::Undefined:
       return false;
     case Datatype::VocabIndex: {
