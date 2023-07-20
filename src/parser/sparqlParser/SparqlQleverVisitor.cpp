@@ -799,9 +799,8 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   } else if (ctx->UNDEF()) {
     return TripleComponent::UNDEF{};
   } else {
-    // TODO implement.
     AD_CORRECTNESS_CHECK(ctx->booleanLiteral());
-    reportNotSupported(ctx, "Boolean literals in a VALUES clause are ");
+    return TripleComponent{visit(ctx->booleanLiteral())};
   }
 }
 

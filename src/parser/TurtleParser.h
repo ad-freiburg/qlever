@@ -26,7 +26,7 @@
 #include <locale>
 #include <string_view>
 
-#include "parser/ParseException.h"
+#include "util/ParseException.h"
 
 using std::string;
 
@@ -371,6 +371,7 @@ class TurtleParser : public TurtleParserBase {
   FRIEND_TEST(TurtleParserTest, blankNodePropertyList);
   FRIEND_TEST(TurtleParserTest, numericLiteral);
   FRIEND_TEST(TurtleParserTest, booleanLiteral);
+  FRIEND_TEST(TurtleParserTest, booleanLiteralLongForm);
   FRIEND_TEST(TurtleParserTest, collection);
 };
 

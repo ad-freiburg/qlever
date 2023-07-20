@@ -2,9 +2,12 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
+#include "util/ParseException.h"
+
 #include <Token.h>
-#include <parser/ParseException.h>
-#include <util/Exception.h>
+
+#include "util/Exception.h"
+#include "util/StringUtils.h"
 
 // ___________________________________________________________________________
 std::string ExceptionMetadata::coloredError() const {
