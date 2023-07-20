@@ -16,12 +16,23 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Conversions.h"
 
+namespace {
+
 using ad_utility::source_location;
 // Some useful shortcuts for the tests below.
 using namespace sparqlExpression;
 using namespace std::literals;
 template <typename T>
 using V = VectorWithMemoryLimit<T>;
+
+auto naN = std::numeric_limits<double>::quiet_NaN();
+auto inf = std::numeric_limits<double>::infinity();
+auto negInf = -inf;
+
+auto D = ad_utility::testing::DoubleId;
+auto B = ad_utility::testing::BoolId;
+auto I = ad_utility::testing::IntId;
+auto U = Id::makeUndefined();
 
 // Test allocator (the inputs to our `SparqlExpression`s are
 // `VectorWithMemoryLimit`s, and these require an `AllocatorWithLimit`).
@@ -122,14 +133,10 @@ auto testMultiply = testBinaryExpressionCommutative<MultiplyExpression>;
 auto testMinus = testNaryExpression<SubtractExpression>;
 auto testDivide = testNaryExpression<DivideExpression>;
 
+}  // namespace
 // Test `AndExpression` and `OrExpression`.
 //
-// TODO: Also test `UnaryNegateExpression`.
 TEST(SparqlExpression, logicalOperators) {
-  auto D = ad_utility::testing::DoubleId;
-  auto B = ad_utility::testing::BoolId;
-  auto I = ad_utility::testing::IntId;
-
   V<Id> b{{B(false), B(true), B(true), B(false)}, alloc};
   V<Id> d{{D(1.0), D(2.0), D(std::numeric_limits<double>::quiet_NaN()), D(0.0)},
           alloc};
@@ -211,32 +218,24 @@ TEST(SparqlExpression, logicalOperators) {
 //
 // TODO: Also test `UnaryMinusExpression`.
 TEST(SparqlExpression, arithmeticOperators) {
-  auto nan = std::numeric_limits<double>::quiet_NaN();
-  auto inf = std::numeric_limits<double>::infinity();
-  auto negInf = -inf;
-
-  auto D = ad_utility::testing::DoubleId;
-  auto B = ad_utility::testing::BoolId;
-  auto I = ad_utility::testing::IntId;
-
   V<Id> b{{B(true), B(false), B(false), B(true)}, alloc};
   V<Id> bAsInt{{I(1), I(0), I(0), I(1)}, alloc};
 
-  V<Id> d{{D(1.0), D(-2.0), D(nan), D(0.0)}, alloc};
+  V<Id> d{{D(1.0), D(-2.0), D(naN), D(0.0)}, alloc};
 
   V<std::string> s{{"true", "", "false", ""}, alloc};
 
-  V<Id> allNan{{D(nan), D(nan), D(nan), D(nan)}, alloc};
+  V<Id> allNan{{D(naN), D(naN), D(naN), D(naN)}, alloc};
 
   V<Id> i{{I(32), I(-42), I(0), I(5)}, alloc};
   V<Id> iAsDouble{{D(32.0), D(-42.0), D(0.0), D(5.0)}, alloc};
 
-  V<Id> bPlusD{{D(2.0), D(-2.0), D(nan), D(1.0)}, alloc};
-  V<Id> bMinusD{{D(0), D(2.0), D(nan), D(1)}, alloc};
-  V<Id> dMinusB{{D(0), D(-2.0), D(nan), D(-1)}, alloc};
-  V<Id> bTimesD{{D(1.0), D(-0.0), D(nan), D(0.0)}, alloc};
-  V<Id> bByD{{D(1.0), D(-0.0), D(nan), D(inf)}, alloc};
-  V<Id> dByB{{D(1.0), D(negInf), D(nan), D(0)}, alloc};
+  V<Id> bPlusD{{D(2.0), D(-2.0), D(naN), D(1.0)}, alloc};
+  V<Id> bMinusD{{D(0), D(2.0), D(naN), D(1)}, alloc};
+  V<Id> dMinusB{{D(0), D(-2.0), D(naN), D(-1)}, alloc};
+  V<Id> bTimesD{{D(1.0), D(-0.0), D(naN), D(0.0)}, alloc};
+  V<Id> bByD{{D(1.0), D(-0.0), D(naN), D(inf)}, alloc};
+  V<Id> dByB{{D(1.0), D(negInf), D(naN), D(0)}, alloc};
 
   testPlus(bPlusD, b, d);
   testMinus(bMinusD, b, d);
@@ -327,12 +326,55 @@ auto checkStr = [](std::vector<OperandType>&& operand,
       std::move(operand), std::move(expected));
 };
 TEST(SparqlExpression, stringOperators) {
-  auto D = ad_utility::testing::DoubleId;
-  auto B = ad_utility::testing::BoolId;
-  auto I = ad_utility::testing::IntId;
   checkStrlen({"one", "two", "three", ""}, {I(3), I(3), I(5), I(0)});
   checkStr<Id>({I(1), I(2), I(3)}, {"1", "2", "3"});
   checkStr<Id>({D(-1.0), D(1.0), D(2.34)}, {"-1", "1", "2.34"});
   checkStr<Id>({B(true), B(false), B(true)}, {"true", "false", "true"});
   checkStr<std::string>({"one", "two", "three"}, {"one", "two", "three"});
+}
+
+// _____________________________________________________________________________________
+TEST(SparqlExpression, unaryNegate) {
+  auto checkNegate = testUnaryExpression<UnaryNegateExpression, Id, Id>;
+  auto checkNegateStr =
+      testUnaryExpression<UnaryNegateExpression, std::string, Id>;
+  // Zero and NaN are considered to be false, so their negation is true
+
+  // TODO<joka921> Undef is currently considered to be `false` but it is
+  // actually `UNDEF`.
+  checkNegate({B(true), B(false), I(0), I(3), D(0), D(12), D(naN), U},
+              {B(false), B(true), B(true), B(false), B(true), B(false), B(true),
+               B(true)});
+  // Empty strings are considered to be true.
+  checkNegateStr({"true", "false", "", "blibb"},
+                 {B(false), B(false), B(true), B(false)});
+}
+
+// _____________________________________________________________________________________
+TEST(SparqlExpression, unaryMinus) {
+  auto checkMinus = testUnaryExpression<UnaryMinusExpression, Id, Id>;
+  auto checkMinusStr =
+      testUnaryExpression<UnaryMinusExpression, std::string, Id>;
+  // Zero and NaN are considered to be false, so their negation is true
+
+  // TODO<joka921> Undef is currently considered to be `false` but it is
+  // actually `UNDEF`.
+  // TODO<joka921> Everything converts to double here, fix this.
+  checkMinus(
+      {B(true), B(false), I(0), I(3), D(0), D(12), D(naN), U},
+      {D(-1), D(-0.0), D(-0.0), D(-3), D(-0.0), D(-12), D(-naN), D(-naN)});
+  // TODO<joka921> These results should be UNDEF, not NaN.
+  checkMinusStr({"true", "false", "", "<blibb>"},
+                {D(-naN), D(-naN), D(-naN), D(-naN)});
+}
+
+// ________________________________________________________________________________________
+TEST(SparqlExpression, geoSparqlExpressions) {
+  auto checkLat = testUnaryExpression<LatitudeExpression, std::string, Id>;
+  auto checkLong = testUnaryExpression<LongitudeExpression, std::string, Id>;
+  auto checkDist = testBinaryExpressionCommutative<DistExpression>;
+
+  checkLat({"POINT(24.3 26.8)"}, {D(26.8)});
+  checkLong({"POINT(24.3 26.8)"}, {D(24.3)});
+  checkDist(D(0.0), "POINT(24.3 26.8)"s, "POINT(24.3 26.8)"s);
 }
