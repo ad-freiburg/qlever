@@ -85,6 +85,7 @@ function(addAndLinkTest basename)
 endfunction()
 
 add_subdirectory(engine)
+add_subdirectory(parser)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 

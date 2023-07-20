@@ -22,13 +22,6 @@ class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
 
-/**
- * Used as a template argument to the `createFromFile` method, when we do not
- * yet know which tokenizer specialization of the `TurtleParser` we are going
- * to use.
- */
-class TurtleParserAuto {};
-
 class Index {
  private:
   // Pimpl to reduce compile times.
@@ -76,8 +69,6 @@ class Index {
   // Create an index from a file. Will write vocabulary and on-disk index data.
   // NOTE: The index can not directly be used after this call, but has to be
   // setup by `createFromOnDiskIndex` after this call.
-  // TODO<joka921> Make the parser options also a plain enum!
-  template <class Parser>
   void createFromFile(const std::string& filename);
 
   void addPatternsToExistingIndex();
