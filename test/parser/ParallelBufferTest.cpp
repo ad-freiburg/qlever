@@ -22,8 +22,8 @@ TEST(ParallelBuffer, ParallelFileBuffer) {
       {'a', 'b', 'c', 'd'}, {'e', 'f', 'g', 'h'}, {'i', 'j'}};
 
   std::vector<ParallelFileBuffer::BufferType> actual;
-  while (auto opt = buf.getNextBlock()) {
-    actual.push_back(opt.value());
+  while (auto block = buf.getNextBlock()) {
+    actual.push_back(block.value());
   }
 
   ad_utility::deleteFile(filename);

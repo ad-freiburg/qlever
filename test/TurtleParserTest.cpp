@@ -602,7 +602,7 @@ TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
       expectedTriples.emplace_back(subject, predicate, object);
     }
   }
-  // The order of triples in not necessarily the same, so we sort them
+  // The order of triples in not necessarily the same, so we sort them.
   auto toRef = [](const TurtleTriple& t) {
     return std::tie(t.subject_, t.predicate_, t.object_.getString());
   };
@@ -615,8 +615,8 @@ TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
 
     std::vector<TurtleTriple> result;
     if (useBatchInterface) {
-      while (auto opt = parser.getBatch()) {
-        result.insert(result.end(), opt.value().begin(), opt.value().end());
+      while (auto batch = parser.getBatch()) {
+        result.insert(result.end(), batch.value().begin(), batch.value().end());
         parser.printAndResetQueueStatistics();
       }
     } else {
