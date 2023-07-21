@@ -29,15 +29,13 @@
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/ConfigManager/generated/ConfigShorthandParser.h"
 #include "util/Exception.h"
-#include "util/Forward.h"
 #include "util/StringUtils.h"
 #include "util/antlr/ANTLRErrorHandling.h"
 #include "util/json.h"
 
 namespace ad_utility {
-static auto getDereferencedConfigurationOptionsViewImpl(
-    auto& configurationOptions) {
-  return std::views::transform(AD_FWD(configurationOptions), [](auto& pair) {
+static auto configurationOptionsImpl(auto& configurationOptions) {
+  return std::views::transform(configurationOptions, [](auto& pair) {
     // Make sure, that there is no null pointer.
     AD_CORRECTNESS_CHECK(pair.second);
 
@@ -47,13 +45,13 @@ static auto getDereferencedConfigurationOptionsViewImpl(
 }
 
 // ____________________________________________________________________________
-auto ConfigManager::getDereferencedConfigurationOptionsView() {
-  return getDereferencedConfigurationOptionsViewImpl(configurationOptions_);
+auto ConfigManager::configurationOptions() {
+  return configurationOptionsImpl(configurationOptions_);
 }
 
 // ____________________________________________________________________________
-auto ConfigManager::getDereferencedConfigurationOptionsView() const {
-  return getDereferencedConfigurationOptionsViewImpl(configurationOptions_);
+auto ConfigManager::configurationOptionsView() const {
+  return configurationOptionsImpl(configurationOptions_);
 }
 
 // ____________________________________________________________________________
@@ -228,7 +226,7 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   an exception, if a configuration option was given a value of the wrong type,
   or if it HAD to be set, but wasn't.
   */
-  for (auto&& [key, option] : getDereferencedConfigurationOptionsView()) {
+  for (auto&& [key, option] : configurationOptions()) {
     // Set the option, if possible, with the pointer to the position of the
     // current configuration in json.
     if (const nlohmann::json::json_pointer configurationOptionJsonPosition{key};
@@ -269,7 +267,7 @@ std::string ConfigManager::printConfigurationDoc(
   - The default value of the configuration option.
   - An example value, of the correct type.
   */
-  for (const auto& [path, option] : getDereferencedConfigurationOptionsView()) {
+  for (const auto& [path, option] : configurationOptionsView()) {
     // Pointer to the position of this option in
     // `configuratioOptionsVisualization`.
     const nlohmann::json::json_pointer jsonOptionPointer{path};
@@ -292,7 +290,7 @@ std::string ConfigManager::printConfigurationDoc(
 
   // List the configuration options themselves.
   const std::string& listOfConfigurationOptions = ad_utility::lazyStrJoin(
-      std::views::transform(getDereferencedConfigurationOptionsView(),
+      std::views::transform(configurationOptionsView(),
                             [](const auto& pair) {
                               // Add the location of the option and the option
                               // itself.
@@ -332,7 +330,7 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
     const {
   // For only looking at the configuration options in our map.
   auto onlyConfigurationOptionsView =
-      std::views::values(getDereferencedConfigurationOptionsView());
+      std::views::values(configurationOptionsView());
 
   // Returns true, if the `ConfigOption` has a default value and wasn't set at
   // runtime.

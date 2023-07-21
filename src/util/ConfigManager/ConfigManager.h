@@ -283,7 +283,7 @@ class ConfigManager {
   @brief Provide a range of tuples, that hold references to the key value pairs
   in `configurationOptions_`, but with the pointer dereferenced.
   */
-  auto getDereferencedConfigurationOptionsView();
-  auto getDereferencedConfigurationOptionsView() const;
+  auto configurationOptions();
+  auto configurationOptionsView() const;
 };
 }  // namespace ad_utility
