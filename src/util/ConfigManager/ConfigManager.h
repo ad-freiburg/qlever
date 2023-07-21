@@ -26,6 +26,7 @@
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/HashMap.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
@@ -45,7 +46,7 @@ class ConfigManager {
   The string key describes their location in the json object literal, by
   representing a json pointer in string form.
   */
-  absl::flat_hash_map<std::string, std::unique_ptr<ConfigOption>>
+  ad_utility::HashMap<std::string, std::unique_ptr<ConfigOption>>
       configurationOptions_;
 
  public:
