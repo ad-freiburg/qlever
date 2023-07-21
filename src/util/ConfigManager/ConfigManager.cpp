@@ -50,7 +50,7 @@ auto ConfigManager::configurationOptions() {
 }
 
 // ____________________________________________________________________________
-auto ConfigManager::configurationOptionsView() const {
+auto ConfigManager::configurationOptions() const {
   return configurationOptionsImpl(configurationOptions_);
 }
 
@@ -267,7 +267,7 @@ std::string ConfigManager::printConfigurationDoc(
   - The default value of the configuration option.
   - An example value, of the correct type.
   */
-  for (const auto& [path, option] : configurationOptionsView()) {
+  for (const auto& [path, option] : configurationOptions()) {
     // Pointer to the position of this option in
     // `configuratioOptionsVisualization`.
     const nlohmann::json::json_pointer jsonOptionPointer{path};
@@ -290,7 +290,7 @@ std::string ConfigManager::printConfigurationDoc(
 
   // List the configuration options themselves.
   const std::string& listOfConfigurationOptions = ad_utility::lazyStrJoin(
-      std::views::transform(configurationOptionsView(),
+      std::views::transform(configurationOptions(),
                             [](const auto& pair) {
                               // Add the location of the option and the option
                               // itself.
@@ -330,7 +330,7 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
     const {
   // For only looking at the configuration options in our map.
   auto onlyConfigurationOptionsView =
-      std::views::values(configurationOptionsView());
+      std::views::values(configurationOptions());
 
   // Returns true, if the `ConfigOption` has a default value and wasn't set at
   // runtime.

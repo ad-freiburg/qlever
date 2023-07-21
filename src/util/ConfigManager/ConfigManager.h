@@ -284,6 +284,6 @@ class ConfigManager {
   in `configurationOptions_`, but with the pointer dereferenced.
   */
   auto configurationOptions();
-  auto configurationOptionsView() const;
+  auto configurationOptions() const;
 };
 }  // namespace ad_utility
