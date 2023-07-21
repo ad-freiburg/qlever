@@ -17,6 +17,7 @@
 #include "./IndexImpl.h"
 #include "CompilationInfo.h"
 #include "absl/strings/str_join.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "index/IndexFormatVersion.h"
 #include "index/PrefixHeuristic.h"
 #include "index/TriplesView.h"
@@ -804,8 +805,7 @@ void IndexImpl::readConfiguration() {
 
   // TODO Write a description.
   std::string gitHash;
-  const ad_utility::ConfigOption* gitHashOption = config.addOption<std::string>(
-      "git-hash", "", &gitHash, std::string{"None given."});
+  config.addOption<std::string>("git-hash", "", &gitHash, std::string{});
 
   // TODO Write a description.
   bool boolPrefixes;
@@ -814,16 +814,12 @@ void IndexImpl::readConfiguration() {
 
   // TODO Write a description.
   bool hasAllPermutations;
-  const ad_utility::ConfigOption* hasAllPermutationsOption =
-      config.addOption<bool>("has-all-permutations", "", &hasAllPermutations,
-                             true);
+  config.addOption<bool>("has-all-permutations", "", &hasAllPermutations, true);
 
   // TODO Write a description.
   std::vector<std::string> prefixesExternal;
-  const ad_utility::ConfigOption* prefixesExternalOption =
-      config.addOption<std::vector<std::string>>("prefixes-external", "",
-                                                 &prefixesExternal,
-                                                 std::vector<std::string>{});
+  config.addOption<std::vector<std::string>>(
+      "prefixes-external", "", &prefixesExternal, std::vector<std::string>{});
 
   // TODO Write a description.
   std::string lang;
@@ -843,10 +839,8 @@ void IndexImpl::readConfiguration() {
 
   // TODO Write a description.
   std::vector<std::string> languagesInternal;
-  const ad_utility::ConfigOption* languagesInternalOption =
-      config.addOption<std::vector<std::string>>("languages-internal", "",
-                                                 &languagesInternal,
-                                                 std::vector<std::string>{});
+  config.addOption<std::vector<std::string>>("languages-internal", "",
+                                             &languagesInternal, {"en"});
 
   // TODO Write a description.
   config.addOption<size_t>("num-predicates-normal", "", &numPredicatesNormal_);
@@ -871,7 +865,7 @@ void IndexImpl::readConfiguration() {
       configurationJson_;
   config.parseConfig(fileToJson(onDiskBase_ + CONFIGURATION_FILE));
 
-  if (gitHashOption->wasSetAtRuntime()) {
+  if (!gitHash.empty()) {
     configurationJson_["git-hash"] = gitHash;
     LOG(INFO) << "The git hash used to build this index was "
               << gitHash.substr(0, 6) << std::endl;
@@ -939,10 +933,8 @@ void IndexImpl::readConfiguration() {
     }
   }
 
-  if (prefixesExternalOption->wasSetAtRuntime()) {
-    vocab_.initializeExternalizePrefixes(prefixesExternal);
-    configurationJson_["prefixes-external"] = prefixesExternal;
-  }
+  vocab_.initializeExternalizePrefixes(prefixesExternal);
+  configurationJson_["prefixes-external"] = prefixesExternal;
 
   configurationJson_["locale"]["language"] = lang;
   configurationJson_["locale"]["country"] = country;
@@ -950,10 +942,8 @@ void IndexImpl::readConfiguration() {
   vocab_.setLocale(lang, country, ignorePunctuation);
   textVocab_.setLocale(lang, country, ignorePunctuation);
 
-  if (languagesInternalOption->wasSetAtRuntime()) {
-    vocab_.initializeInternalizedLangs(languagesInternal);
-    configurationJson_["languages-internal"] = languagesInternal;
-  }
+  vocab_.initializeInternalizedLangs(languagesInternal);
+  configurationJson_["languages-internal"] = languagesInternal;
 
   // Once again, I can only guess, what kind of value should be at
   // `"has-all-permutations"`.
@@ -965,7 +955,7 @@ void IndexImpl::readConfiguration() {
     loadAllPermutations_ = false;
   }
   */
-  if (hasAllPermutationsOption->wasSetAtRuntime() && !hasAllPermutations) {
+  if (!hasAllPermutations) {
     configurationJson_["has-all-permutations"] = false;
     // If the permutations simply don't exist, then we can never load them.
     loadAllPermutations_ = false;
@@ -1025,17 +1015,13 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 
   // TODO Write a description.
   std::vector<std::string> prefixesExternal;
-  const ad_utility::ConfigOption* prefixesExternalOption =
-      config.addOption<std::vector<std::string>>("prefixes-external", "",
-                                                 &prefixesExternal,
-                                                 std::vector<std::string>{});
+  config.addOption<std::vector<std::string>>(
+      "prefixes-external", "", &prefixesExternal, std::vector<std::string>{});
 
   // TODO Write a description.
   std::vector<std::string> languagesInternal;
-  const ad_utility::ConfigOption* languagesInternalOption =
-      config.addOption<std::vector<std::string>>("languages-internal", "",
-                                                 &languagesInternal,
-                                                 std::vector<std::string>{});
+  config.addOption<std::vector<std::string>>("languages-internal", "",
+                                             &languagesInternal, {"en"});
 
   // TODO Write a description.
   std::string lang;
@@ -1058,20 +1044,17 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 
   // TODO Write a description.
   bool asciiPrefixesOnly;
-  const ad_utility::ConfigOption* asciiPrefixesOnlyOption =
-      config.addOption<bool>("ascii-prefixes-only", "", &asciiPrefixesOnly,
-                             false);
+  config.addOption<bool>("ascii-prefixes-only", "", &asciiPrefixesOnly, false);
 
   // TODO Write a description.
   size_t numTriplesPerBatch;
-  const ad_utility::ConfigOption* numTriplesPerBatchOption =
-      config.addOption<size_t>("num-triples-per-batch", "", &numTriplesPerBatch,
-                               0uL);
+  config.addOption<size_t>("num-triples-per-batch", "", &numTriplesPerBatch,
+                           static_cast<size_t>(NUM_TRIPLES_PER_PARTIAL_VOCAB));
 
   // TODO Write a description.
   size_t parserBatchSize;
-  const ad_utility::ConfigOption* parserBatchSizeOption =
-      config.addOption<size_t>("parser-batch-size", "", &parserBatchSize, 0uL);
+  config.addOption<size_t>("parser-batch-size", "", &parserBatchSize,
+                           PARSER_BATCH_SIZE);
 
   // TODO Write a description.
   std::string parserIntegerOverflowBehavior;
@@ -1086,10 +1069,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     config.parseConfig(json(json::value_t::object));
   }
 
-  if (prefixesExternalOption->wasSetAtRuntime()) {
-    vocab_.initializeExternalizePrefixes(prefixesExternal);
-    configurationJson_["prefixes-external"] = prefixesExternal;
-  }
+  vocab_.initializeExternalizePrefixes(prefixesExternal);
+  configurationJson_["prefixes-external"] = prefixesExternal;
 
   /**
    * ICU uses two separate arguments for each Locale, the language ("en" or
@@ -1125,41 +1106,26 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   configurationJson_["locale"]["country"] = country;
   configurationJson_["locale"]["ignore-punctuation"] = ignorePunctuation;
 
-  if (languagesInternalOption->wasSetAtRuntime()) {
-    vocab_.initializeInternalizedLangs(languagesInternal);
-    configurationJson_["languages-internal"] = languagesInternal;
-  }
+  vocab_.initializeInternalizedLangs(languagesInternal);
+  configurationJson_["languages-internal"] = languagesInternal;
 
-  if (asciiPrefixesOnlyOption->wasSetAtRuntime()) {
-    if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
-      if (asciiPrefixesOnly) {
-        LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
-        onlyAsciiTurtlePrefixes_ = true;
-      } else {
-        onlyAsciiTurtlePrefixes_ = false;
-      }
+  if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
+    if (asciiPrefixesOnly) {
+      LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
+      onlyAsciiTurtlePrefixes_ = true;
     } else {
-      LOG(WARN) << "You specified the ascii-prefixes-only but a parser that is "
-                   "not the Turtle stream parser. This means that this setting "
-                   "is ignored."
-                << std::endl;
+      onlyAsciiTurtlePrefixes_ = false;
     }
-  }
-
-  if (numTriplesPerBatchOption->wasSetAtRuntime()) {
-    numTriplesPerBatch_ = numTriplesPerBatch;
-    LOG(INFO)
-        << "You specified \"num-triples-per-batch = " << numTriplesPerBatch_
-        << "\", choose a lower value if the index builder runs out of memory"
-        << std::endl;
-  }
-
-  if (parserBatchSizeOption->wasSetAtRuntime()) {
-    parserBatchSize_ = parserBatchSize;
-    LOG(INFO) << "Overriding setting parser-batch-size to " << parserBatchSize_
-              << " This might influence performance during index build."
+  } else {
+    LOG(WARN) << "You specified the ascii-prefixes-only but a parser that is "
+                 "not the Turtle stream parser. This means that this setting "
+                 "is ignored."
               << std::endl;
   }
+
+  numTriplesPerBatch_ = numTriplesPerBatch;
+
+  parserBatchSize_ = parserBatchSize;
 
   std::string overflowingIntegersThrow = "overflowing-integers-throw";
   std::string overflowingIntegersBecomeDoubles =
