@@ -4,8 +4,6 @@
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./IndexImpl.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -13,6 +11,7 @@
 #include <optional>
 #include <unordered_map>
 
+#include "./IndexImpl.h"
 #include "CompilationInfo.h"
 #include "absl/strings/str_join.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -797,7 +796,7 @@ void IndexImpl::readConfiguration() {
 
   // TODO Write a description.
   bool boolPrefixes;
-  const ad_utility::ConfigOption* prefixesOption =
+  const ad_utility::ConfigOption& prefixesOption =
       config.addOption("prefixes", "", &boolPrefixes, false);
 
   // TODO Write a description.
@@ -901,7 +900,7 @@ void IndexImpl::readConfiguration() {
     }
   }
   */
-  if (prefixesOption->wasSetAtRuntime()) {
+  if (prefixesOption.wasSetAtRuntime()) {
     configurationJson_["prefixes"] = boolPrefixes;
     if (boolPrefixes) {
       vector<string> prefixes;
@@ -1004,17 +1003,17 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 
   // TODO Write a description.
   std::string lang;
-  const ad_utility::ConfigOption* langOption = config.addOption(
+  const ad_utility::ConfigOption& langOption = config.addOption(
       {"locale"s, "language"s}, "", &lang, LOCALE_DEFAULT_LANG);
 
   // TODO Write a description.
   std::string country;
-  const ad_utility::ConfigOption* countryOption = config.addOption(
+  const ad_utility::ConfigOption& countryOption = config.addOption(
       {"locale"s, "country"s}, "", &country, LOCALE_DEFAULT_COUNTRY);
 
   // TODO Write a description.
   bool ignorePunctuation;
-  const ad_utility::ConfigOption* ignorePunctuationOption =
+  const ad_utility::ConfigOption& ignorePunctuationOption =
       config.addOption({"locale"s, "ignore-punctuation"s}, "",
                        &ignorePunctuation, LOCALE_DEFAULT_IGNORE_PUNCTUATION);
 
@@ -1059,9 +1058,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
    * locale setting.
    */
 
-  if (langOption->wasSetAtRuntime() != countryOption->wasSetAtRuntime() ||
-      countryOption->wasSetAtRuntime() !=
-          ignorePunctuationOption->wasSetAtRuntime()) {
+  if (langOption.wasSetAtRuntime() != countryOption.wasSetAtRuntime() ||
+      countryOption.wasSetAtRuntime() !=
+          ignorePunctuationOption.wasSetAtRuntime()) {
     throw std::runtime_error(absl::StrCat(
         "All three options under 'locale' must be set, or none of them.",
         config.printConfigurationDoc(true)));
