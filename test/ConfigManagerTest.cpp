@@ -50,13 +50,14 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
 
   // Configuration options for testing.
   int notUsed;
-  config.addOption({"Shared_part", "Unique_part_1", "Sense_of_existence"}, "",
-                   &notUsed, 42);
+  config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s},
+                   "", &notUsed, 42);
 
   // Trying to add a configuration option with the same name at the same
   // place, should cause an error.
   ASSERT_THROW(config.addOption(
-      {"Shared_part", "Unique_part_1", "Sense_of_existence"}, "", &notUsed, 42);
+      {"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}, "", &notUsed,
+      42);
                , ad_utility::ConfigManagerOptionPathAlreadyinUseException);
 
   /*
@@ -87,22 +88,22 @@ TEST(ConfigManagerTest, ParseConfig) {
   int secondInt;
   int thirdInt;
 
-  const ConfigOption* optionZero =
+  const ConfigOption& optionZero =
       config.addOption({"depth_0"s, "Option_0"s},
                        "Must be set. Has no default value.", &firstInt);
-  const ConfigOption* optionOne =
-      config.addOption({"depth_0", "depth_1", "Option_1"},
+  const ConfigOption& optionOne =
+      config.addOption({"depth_0"s, "depth_1"s, "Option_1"s},
                        "Must be set. Has no default value.", &secondInt);
-  const ConfigOption* optionTwo =
+  const ConfigOption& optionTwo =
       config.addOption("Option_2", "Has a default value.", &thirdInt, 2);
 
   // Does the option with the default already have a value?
-  checkOption<int>(*optionTwo, thirdInt, true, 2);
+  checkOption<int>(optionTwo, thirdInt, true, 2);
 
   // The other two should never have set the variable, that the internal pointer
   // points to.
-  checkOption<int>(*optionZero, firstInt, false, 2);
-  checkOption<int>(*optionOne, secondInt, false, 2);
+  checkOption<int>(optionZero, firstInt, false, 2);
+  checkOption<int>(optionOne, secondInt, false, 2);
 
   // The json for testing `parseConfig`. Sets all of the configuration
   // options.
@@ -119,9 +120,9 @@ TEST(ConfigManagerTest, ParseConfig) {
   // Set and check.
   config.parseConfig(testJson);
 
-  checkOption<int>(*optionZero, firstInt, true, 10);
-  checkOption<int>(*optionOne, secondInt, true, 11);
-  checkOption<int>(*optionTwo, thirdInt, true, 12);
+  checkOption<int>(optionZero, firstInt, true, 10);
+  checkOption<int>(optionOne, secondInt, true, 11);
+  checkOption<int>(optionTwo, thirdInt, true, 12);
 }
 
 TEST(ConfigManagerTest, ParseConfigExceptionTest) {
@@ -189,109 +190,109 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
 
   // Add integer options.
   int somePositiveNumberInt;
-  const ConfigOption* somePositiveNumber = config.addOption(
+  const ConfigOption& somePositiveNumber = config.addOption(
       "somePositiveNumber", "Must be set. Has no default value.",
       &somePositiveNumberInt);
   int someNegativNumberInt;
-  const ConfigOption* someNegativNumber = config.addOption(
+  const ConfigOption& someNegativNumber = config.addOption(
       "someNegativNumber", "Must be set. Has no default value.",
       &someNegativNumberInt);
 
   // Add integer list.
   std::vector<int> someIntegerlistIntVector;
-  const ConfigOption* someIntegerlist =
+  const ConfigOption& someIntegerlist =
       config.addOption("someIntegerlist", "Must be set. Has no default value.",
                        &someIntegerlistIntVector);
 
   // Add floating point options.
   float somePositiveFloatingPointFloat;
-  const ConfigOption* somePositiveFloatingPoint = config.addOption(
+  const ConfigOption& somePositiveFloatingPoint = config.addOption(
       "somePositiveFloatingPoint", "Must be set. Has no default value.",
       &somePositiveFloatingPointFloat);
   float someNegativFloatingPointFloat;
-  const ConfigOption* someNegativFloatingPoint = config.addOption(
+  const ConfigOption& someNegativFloatingPoint = config.addOption(
       "someNegativFloatingPoint", "Must be set. Has no default value.",
       &someNegativFloatingPointFloat);
 
   // Add floating point list.
   std::vector<float> someFloatingPointListFloatVector;
-  const ConfigOption* someFloatingPointList = config.addOption(
+  const ConfigOption& someFloatingPointList = config.addOption(
       "someFloatingPointList", "Must be set. Has no default value.",
       &someFloatingPointListFloatVector);
 
   // Add boolean options.
   bool boolTrueBool;
-  const ConfigOption* boolTrue = config.addOption(
+  const ConfigOption& boolTrue = config.addOption(
       "boolTrue", "Must be set. Has no default value.", &boolTrueBool);
   bool boolFalseBool;
-  const ConfigOption* boolFalse = config.addOption(
+  const ConfigOption& boolFalse = config.addOption(
       "boolFalse", "Must be set. Has no default value.", &boolFalseBool);
 
   // Add boolean list.
   std::vector<bool> someBooleanListBoolVector;
-  const ConfigOption* someBooleanList =
+  const ConfigOption& someBooleanList =
       config.addOption("someBooleanList", "Must be set. Has no default value.",
                        &someBooleanListBoolVector);
 
   // Add string option.
   std::string myNameString;
-  const ConfigOption* myName = config.addOption(
+  const ConfigOption& myName = config.addOption(
       "myName", "Must be set. Has no default value.", &myNameString);
 
   // Add string list.
   std::vector<std::string> someStringListStringVector;
-  const ConfigOption* someStringList =
+  const ConfigOption& someStringList =
       config.addOption("someStringList", "Must be set. Has no default value.",
                        &someStringListStringVector);
 
   // Add option with deeper level.
   std::vector<int> deeperIntVector;
-  const ConfigOption* deeperIntVectorOption =
-      config.addOption({"depth", "here", "list"},
+  const ConfigOption& deeperIntVectorOption =
+      config.addOption({"depth"s, "here"s, "list"s},
                        "Must be set. Has no default value.", &deeperIntVector);
 
   // This one will not be changed, in order to test, that options, that are
   // not set at run time, are not changed.
   int noChangeInt;
-  const ConfigOption* noChange =
+  const ConfigOption& noChange =
       config.addOption("No_change", "", &noChangeInt, 10);
 
   // Set those.
   config.parseConfig(ad_utility::ConfigManager::parseShortHand(
       R"--(somePositiveNumber : 42, someNegativNumber : -42, someIntegerlist : [40, 41], somePositiveFloatingPoint : 4.2, someNegativFloatingPoint : -4.2, someFloatingPointList : [4.1, 4.2], boolTrue : true, boolFalse : false, someBooleanList : [true, false, true], myName : "Bernd", someStringList : ["t1", "t2"], depth : { here : {list : [7,8]}})--"));
 
-  checkOption<int>(*somePositiveNumber, somePositiveNumberInt, true, 42);
-  checkOption<int>(*someNegativNumber, someNegativNumberInt, true, -42);
+  checkOption<int>(somePositiveNumber, somePositiveNumberInt, true, 42);
+  checkOption<int>(someNegativNumber, someNegativNumberInt, true, -42);
 
-  checkOption<std::vector<int>>(*someIntegerlist, someIntegerlistIntVector,
-                                true, std::vector{40, 41});
+  checkOption<std::vector<int>>(someIntegerlist, someIntegerlistIntVector, true,
+                                std::vector{40, 41});
 
-  checkOption<float>(*somePositiveFloatingPoint, somePositiveFloatingPointFloat,
+  checkOption<float>(somePositiveFloatingPoint, somePositiveFloatingPointFloat,
                      true, 4.2f);
-  checkOption<float>(*someNegativFloatingPoint, someNegativFloatingPointFloat,
+  checkOption<float>(someNegativFloatingPoint, someNegativFloatingPointFloat,
                      true, -4.2f);
 
-  checkOption<std::vector<float>>(*someFloatingPointList,
+  checkOption<std::vector<float>>(someFloatingPointList,
                                   someFloatingPointListFloatVector, true,
                                   {4.1f, 4.2f});
 
-  checkOption<bool>(*boolTrue, boolTrueBool, true, true);
-  checkOption<bool>(*boolFalse, boolFalseBool, true, false);
+  checkOption<bool>(boolTrue, boolTrueBool, true, true);
+  checkOption<bool>(boolFalse, boolFalseBool, true, false);
 
-  checkOption<std::vector<bool>>(*someBooleanList, someBooleanListBoolVector,
+  checkOption<std::vector<bool>>(someBooleanList, someBooleanListBoolVector,
                                  true, std::vector{true, false, true});
 
-  checkOption<std::string>(*myName, myNameString, true, std::string{"Bernd"});
+  checkOption<std::string>(myName, myNameString, true, std::string{"Bernd"});
 
-  checkOption<std::vector<std::string>>(*someStringList,
+  checkOption<std::vector<std::string>>(someStringList,
                                         someStringListStringVector, true,
                                         std::vector<std::string>{"t1", "t2"});
 
-  checkOption<std::vector<int>>(*deeperIntVectorOption, deeperIntVector, true,
+  checkOption<std::vector<int>>(deeperIntVectorOption, deeperIntVector, true,
                                 std::vector{7, 8});
 
   // Is the "No Change" unchanged?
-  checkOption<int>(*noChange, noChangeInt, true, 10);
+  checkOption<int>(noChange, noChangeInt, true, 10);
 
   // Multiple key value pairs with the same key are not allowed.
   AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::ConfigManager::parseShortHand(

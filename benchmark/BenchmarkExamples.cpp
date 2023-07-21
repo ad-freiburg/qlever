@@ -59,7 +59,7 @@ class ConfigOptions : public BenchmarkInterface {
     manager.addOption("CoinFlipTry", "The number of succesful coin flips.",
                       &wonOnTryX_, {false, false, false, false, false});
 
-    manager.addOption({"Accounts", "Personal", "Steve"},
+    manager.addOption({"Accounts"s, "Personal"s, "Steve"s},
                       "Steves saving account balance.",
                       &balanceOnStevesSavingAccount_, -41.9f);
   }
