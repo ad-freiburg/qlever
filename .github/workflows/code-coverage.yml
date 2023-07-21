@@ -70,7 +70,7 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=DEBUG -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}} ${{env.asan-flags}} ${{env.ubsan-flags}} ${{env.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{env.coverage-flags}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DSINGLE_TEST_BINARY=ON -DENABLE_EXPENSIVE_CHECKS=true
+      run: cmake -B ${{github.workspace}}/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=TIMING -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}} ${{env.asan-flags}} ${{env.ubsan-flags}} ${{env.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{env.coverage-flags}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DSINGLE_TEST_BINARY=ON -DENABLE_EXPENSIVE_CHECKS=true
 
     - name: Build
         # Build your program with the given configuration

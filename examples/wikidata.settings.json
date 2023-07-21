@@ -11,5 +11,6 @@
 	  "ignore-punctuation": true
   },
   "ascii-prefixes-only": true,
-  "num-triples-per-batch" : 10000000
+  "num-triples-per-batch" : 10000000,
+  "parallel-parsing" : true
 }

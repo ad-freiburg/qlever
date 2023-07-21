@@ -109,6 +109,7 @@ class IndexImpl {
   string onDiskBase_;
   string settingsFileName_;
   bool onlyAsciiTurtlePrefixes_ = false;
+  bool useParallelParser_ = true;
   TurtleParserIntegerOverflowBehavior turtleParserIntegerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
@@ -204,7 +205,6 @@ class IndexImpl {
   // Will write vocabulary and on-disk index data.
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
-  template <class Parser>
   void createFromFile(const string& filename);
 
   void addPatternsToExistingIndex();
@@ -426,13 +426,12 @@ class IndexImpl {
   // permutations. Member vocab_ will be empty after this because it is not
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
-  template <class Parser>
-  IndexBuilderDataAsPsoSorter createIdTriplesAndVocab(const string& ntFile);
+  IndexBuilderDataAsPsoSorter createIdTriplesAndVocab(
+      std::shared_ptr<TurtleParserBase> parser);
 
   // ___________________________________________________________________
-  template <class Parser>
-  IndexBuilderDataAsStxxlVector passFileForVocabulary(const string& ntFile,
-                                                      size_t linesPerPartial);
+  IndexBuilderDataAsStxxlVector passFileForVocabulary(
+      std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial);
 
   /**
    * @brief Everything that has to be done when we have seen all the triples
@@ -617,7 +616,6 @@ class IndexImpl {
   void readConfiguration();
 
   // initialize the index-build-time settings for the vocabulary
-  template <class Parser>
   void readIndexBuilderSettingsFromFile();
 
   /**

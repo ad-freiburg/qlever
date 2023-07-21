@@ -11,9 +11,6 @@
 #include <cstdio>
 #include <future>
 #include <optional>
-#include <stdexcept>
-#include <stxxl/algorithm>
-#include <stxxl/map>
 #include <unordered_map>
 
 #include "CompilationInfo.h"
@@ -41,11 +38,10 @@ IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
     : allocator_{std::move(allocator)} {};
 
 // _____________________________________________________________________________
-template <class Parser>
 IndexBuilderDataAsPsoSorter IndexImpl::createIdTriplesAndVocab(
-    const string& ntFile) {
+    std::shared_ptr<TurtleParserBase> parser) {
   auto indexBuilderData =
-      passFileForVocabulary<Parser>(ntFile, numTriplesPerBatch_);
+      passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
   totalVocabularySize_ = indexBuilderData.vocabularyMetaData_.numWordsTotal_;
@@ -85,29 +81,33 @@ void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
 }
 
 // _____________________________________________________________________________
-template <class Parser>
 void IndexImpl::createFromFile(const string& filename) {
+  LOG(INFO) << "Processing input triples from " << filename << " ..."
+            << std::endl;
   string indexFilename = onDiskBase_ + ".index";
 
-  readIndexBuilderSettingsFromFile<Parser>();
+  readIndexBuilderSettingsFromFile();
 
-  IndexBuilderDataAsPsoSorter indexBuilderData;
-  if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
+  auto setTokenizer = [this,
+                       &filename]<template <typename> typename ParserTemplate>()
+      -> std::unique_ptr<TurtleParserBase> {
     if (onlyAsciiTurtlePrefixes_) {
-      LOG(DEBUG) << "Using the CTRE library for tokenization" << std::endl;
-      indexBuilderData =
-          createIdTriplesAndVocab<TurtleParallelParser<TokenizerCtre>>(
-              filename);
+      return std::make_unique<ParserTemplate<TokenizerCtre>>(filename);
     } else {
-      LOG(DEBUG) << "Using the Google RE2 library for tokenization"
-                 << std::endl;
-      indexBuilderData =
-          createIdTriplesAndVocab<TurtleParallelParser<Tokenizer>>(filename);
+      return std::make_unique<ParserTemplate<Tokenizer>>(filename);
     }
+  };
 
-  } else {
-    indexBuilderData = createIdTriplesAndVocab<Parser>(filename);
-  }
+  std::unique_ptr<TurtleParserBase> parser = [&setTokenizer, this]() {
+    if (useParallelParser_) {
+      return setTokenizer.template operator()<TurtleParallelParser>();
+    } else {
+      return setTokenizer.template operator()<TurtleStreamParser>();
+    }
+  }();
+
+  IndexBuilderDataAsPsoSorter indexBuilderData =
+      createIdTriplesAndVocab(std::move(parser));
 
   // If we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
@@ -125,7 +125,7 @@ void IndexImpl::createFromFile(const string& filename) {
   LOG(INFO) << "Writing compressed vocabulary to disk ..." << std::endl;
 
   vocab_.buildCodebookForPrefixCompression(prefixes);
-  auto wordReader = vocab_.makeUncompressedDiskIterator(vocabFile);
+  auto wordReader = RdfsVocabulary::makeUncompressedDiskIterator(vocabFile);
   auto wordWriter = vocab_.makeCompressedWordWriter(vocabFileTmp);
   for (const auto& word : wordReader) {
     wordWriter.push(word);
@@ -235,21 +235,9 @@ void IndexImpl::createFromFile(const string& filename) {
   LOG(INFO) << "Index build completed" << std::endl;
 }
 
-// Explicit instantiations.
-template void IndexImpl::createFromFile<TurtleStreamParser<Tokenizer>>(
-    const string& filename);
-template void IndexImpl::createFromFile<TurtleMmapParser<Tokenizer>>(
-    const string& filename);
-template void IndexImpl::createFromFile<TurtleParserAuto>(
-    const string& filename);
-
 // _____________________________________________________________________________
-template <class Parser>
 IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
-    const string& filename, size_t linesPerPartial) {
-  LOG(INFO) << "Processing input triples from " << filename << " ..."
-            << std::endl;
-  auto parser = std::make_shared<Parser>(filename);
+    std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial) {
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   std::unique_ptr<TripleVec> idTriples(new TripleVec());
@@ -314,9 +302,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                     << std::endl;
       }
 
-      if constexpr (requires(Parser p) { p.printAndResetQueueStatistics(); }) {
-        parser->printAndResetQueueStatistics();
-      }
+      parser->printAndResetQueueStatistics();
     }
 
     // localWriter.finish();
@@ -973,12 +959,12 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     TurtleTriple&& triple) const {
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result._triple;
-  resultTriple[0] = std::move(triple._subject);
-  resultTriple[1] = std::move(triple._predicate);
+  resultTriple[0] = std::move(triple.subject_);
+  resultTriple[1] = std::move(triple.predicate_);
 
   // If the object of the triple can be directly folded into an ID, do so. Note
   // that the actual folding is done by the `TripleComponent`.
-  std::optional<Id> idIfNotString = triple._object.toValueIdIfNotString();
+  std::optional<Id> idIfNotString = triple.object_.toValueIdIfNotString();
 
   // TODO<joka921> The following statement could be simplified by a helper
   // function "optionalCast";
@@ -986,7 +972,7 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     resultTriple[2] = idIfNotString.value();
   } else {
     // `toRdfLiteral` handles literals as well as IRIs correctly.
-    resultTriple[2] = std::move(triple._object).toRdfLiteral();
+    resultTriple[2] = std::move(triple.object_).toRdfLiteral();
   }
 
   for (size_t i = 0; i < 3; ++i) {
@@ -1010,7 +996,6 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
 }
 
 // ___________________________________________________________________________
-template <class Parser>
 void IndexImpl::readIndexBuilderSettingsFromFile() {
   ad_utility::ConfigManager config{};
 
@@ -1044,8 +1029,12 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
           &ignorePunctuation, LOCALE_DEFAULT_IGNORE_PUNCTUATION);
 
   // TODO Write a description.
-  bool asciiPrefixesOnly;
-  config.addOption<bool>("ascii-prefixes-only", "", &asciiPrefixesOnly, false);
+  config.addOption<bool>("ascii-prefixes-only", "", &onlyAsciiTurtlePrefixes_,
+                         onlyAsciiTurtlePrefixes_);
+
+  // TODO Write a description.
+  config.addOption<bool>("parallel-parsing", "", &useParallelParser_,
+                         useParallelParser_);
 
   // TODO Write a description.
   size_t numTriplesPerBatch;
@@ -1110,18 +1099,12 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   vocab_.initializeInternalizedLangs(languagesInternal);
   configurationJson_["languages-internal"] = languagesInternal;
 
-  if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
-    if (asciiPrefixesOnly) {
-      LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
-      onlyAsciiTurtlePrefixes_ = true;
-    } else {
-      onlyAsciiTurtlePrefixes_ = false;
-    }
-  } else {
-    LOG(WARN) << "You specified the ascii-prefixes-only but a parser that is "
-                 "not the Turtle stream parser. This means that this setting "
-                 "is ignored."
-              << std::endl;
+  if (onlyAsciiTurtlePrefixes_) {
+    LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
+  }
+
+  if (useParallelParser_) {
+    LOG(INFO) << WARNING_PARALLEL_PARSING << std::endl;
   }
 
   numTriplesPerBatch_ = numTriplesPerBatch;
