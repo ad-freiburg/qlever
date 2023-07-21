@@ -17,6 +17,8 @@
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/json.h"
 
+using namespace std::string_literals;
+
 namespace ad_utility {
 
 /*
@@ -72,9 +74,8 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
   configuration grammar. Ergo, you can't set values, with such paths per short
   hand, which we don't want.
   */
-  ASSERT_THROW(config.addOption(
-      std::vector<std::string>{"Shared part", "Sense_of_existence"}, "",
-      &notUsed, 42);
+  ASSERT_THROW(config.addOption({"Shared part"s, "Sense_of_existence"s}, "",
+                                &notUsed, 42);
                , ad_utility::NotValidShortHandNameException);
 }
 
@@ -87,7 +88,7 @@ TEST(ConfigManagerTest, ParseConfig) {
   int thirdInt;
 
   const ConfigOption* optionZero =
-      config.addOption(std::vector<std::string>{"depth_0", "Option_0"},
+      config.addOption({"depth_0"s, "Option_0"s},
                        "Must be set. Has no default value.", &firstInt);
   const ConfigOption* optionOne =
       config.addOption({"depth_0", "depth_1", "Option_1"},
@@ -129,9 +130,9 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
   // Add one option with default and one without.
   int notUsedInt;
   std::vector<int> notUsedVector;
-  config.addOption(std::vector<std::string>{"depth_0", "Without_default"},
+  config.addOption({"depth_0"s, "Without_default"s},
                    "Must be set. Has no default value.", &notUsedInt);
-  config.addOption(std::vector<std::string>{"depth_0", "With_default"},
+  config.addOption({"depth_0"s, "With_default"s},
                    "Must not be set. Has default value.", &notUsedVector,
                    {40, 41});
 
