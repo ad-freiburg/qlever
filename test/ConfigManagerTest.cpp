@@ -50,13 +50,14 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
 
   // Configuration options for testing.
   int notUsed;
-  config.addOption({"Shared_part", "Unique_part_1", "Sense_of_existence"}, "",
-                   &notUsed, 42);
+  config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s},
+                   "", &notUsed, 42);
 
   // Trying to add a configuration option with the same name at the same
   // place, should cause an error.
   ASSERT_THROW(config.addOption(
-      {"Shared_part", "Unique_part_1", "Sense_of_existence"}, "", &notUsed, 42);
+      {"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}, "", &notUsed,
+      42);
                , ad_utility::ConfigManagerOptionPathAlreadyinUseException);
 
   /*
@@ -91,7 +92,7 @@ TEST(ConfigManagerTest, ParseConfig) {
       config.addOption({"depth_0"s, "Option_0"s},
                        "Must be set. Has no default value.", &firstInt);
   const ConfigOption& optionOne =
-      config.addOption({"depth_0", "depth_1", "Option_1"},
+      config.addOption({"depth_0"s, "depth_1"s, "Option_1"s},
                        "Must be set. Has no default value.", &secondInt);
   const ConfigOption& optionTwo =
       config.addOption("Option_2", "Has a default value.", &thirdInt, 2);
@@ -247,7 +248,7 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   // Add option with deeper level.
   std::vector<int> deeperIntVector;
   const ConfigOption& deeperIntVectorOption =
-      config.addOption({"depth", "here", "list"},
+      config.addOption({"depth"s, "here"s, "list"s},
                        "Must be set. Has no default value.", &deeperIntVector);
 
   // This one will not be changed, in order to test, that options, that are
