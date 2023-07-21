@@ -9,29 +9,9 @@
 #include "util/Conversions.h"
 
 using namespace sparqlExpression::detail;
-// _____________________________________________________________________________
-double NumericValueGetter::operator()(ValueId id, EvaluationContext*) const {
-  switch (id.getDatatype()) {
-    case Datatype::Double:
-      return id.getDouble();
-    case Datatype::Int:
-      return static_cast<double>(id.getInt());
-    case Datatype::Bool:
-      // TODO<joka921> Check in the specification what the correct behavior is
-      // here.
-      return static_cast<double>(id.getBool());
-    case Datatype::Undefined:
-    case Datatype::VocabIndex:
-    case Datatype::LocalVocabIndex:
-    case Datatype::TextRecordIndex:
-    case Datatype::Date:
-      return std::numeric_limits<double>::quiet_NaN();
-  }
-  AD_FAIL();
-}
 
 // _____________________________________________________________________________
-NumericValue CorrectNumericValueGetter::operator()(
+NumericValue NumericValueGetter::operator()(
     ValueId id, sparqlExpression::EvaluationContext*) const {
   switch (id.getDatatype()) {
     case Datatype::Double:
@@ -87,7 +67,6 @@ auto EffectiveBooleanValueGetter::operator()(ValueId id,
                  : True;
     }
     case Datatype::TextRecordIndex:
-      return True;
     case Datatype::Date:
       return True;
   }

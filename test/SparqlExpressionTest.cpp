@@ -237,6 +237,18 @@ TEST(SparqlExpression, logicalOperators) {
   testOr(b, b, std::string(""));
   testAnd(allFalse, b, std::string(""));
   testAnd(b, b, std::string("yellow"));
+
+  // Test the behavior in the presence of UNDEF values.
+  Id t = B(true);
+  Id f = B(false);
+  {
+    V<Id> allValues1{{t, t, t, f, f, f, U, U, U}, alloc};
+    V<Id> allValues2{{t, f, U, t, f, U, t, f, U}, alloc};
+    V<Id> resultOr{{t, t, t, t, f, U, t, U, U}, alloc};
+    V<Id> resultAnd{{t, f, U, f, f, f, U, f, U}, alloc};
+    testOr(resultOr, allValues1, allValues2);
+    testAnd(resultAnd, allValues1, allValues2);
+  }
 }
 
 // Test `AddExpression`, `SubtractExpression`, `MultiplyExpression`, and
@@ -406,6 +418,10 @@ TEST(SparqlExpression, unaryNegate) {
   // Empty strings are considered to be true.
   checkNegateStr({"true", "false", "", "blibb"},
                  {B(false), B(false), B(true), B(false)});
+
+  // Complete the test coverage for normally unreachable code.
+  ASSERT_ANY_THROW(sparqlExpression::detail::unaryNegate(
+      static_cast<sparqlExpression::detail::TernaryBool>(42)));
 }
 
 // _____________________________________________________________________________________

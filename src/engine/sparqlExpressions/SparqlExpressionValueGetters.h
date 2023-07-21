@@ -16,27 +16,37 @@ namespace sparqlExpression::detail {
 
 /// Returns a numeric value.
 
-struct NumericValueGetter {
-  // This is the current error-signalling mechanism
-  double operator()(const string&, EvaluationContext*) const {
-    return std::numeric_limits<double>::quiet_NaN();
-  }
-
-  // Convert an id from a result table to a double value.
-  // TODO<joka921> Also convert to integer types.
-  double operator()(ValueId id, EvaluationContext*) const;
-};
-
 struct NotNumeric {};
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
-struct CorrectNumericValueGetter {
+
+// TODO<joka921> Move these helpers elsewhere
+template <bool NanToUndef = false, typename T>
+requires std::integral<T> || std::floating_point<T> || std::same_as<Id, T> ||
+         std::same_as<NotNumeric, T> || std::same_as<NumericValue, T>
+Id makeNumericId(T t) {
+  if constexpr (std::integral<T>) {
+    return Id::makeFromInt(t);
+  } else if constexpr (std::floating_point<T>) {
+    if constexpr (NanToUndef) {
+      return std::isnan(t) ? Id::makeUndefined() : Id::makeFromDouble(t);
+    } else {
+      return Id::makeFromDouble(t);
+    }
+  } else if constexpr (std::same_as<NotNumeric, T>) {
+    return Id::makeUndefined();
+  } else if constexpr (std::same_as<NumericValue, T>) {
+    return std::visit([](const auto& x) { return makeNumericId(x); }, t);
+  } else {
+    static_assert(std::same_as<Id, T>);
+    return t;
+  }
+}
+struct NumericValueGetter {
   // This is the current error-signalling mechanism
   NumericValue operator()(const string&, EvaluationContext*) const {
     return NotNumeric{};
   }
 
-  // Convert an id from a result table to a double value.
-  // TODO<joka921> Also convert to integer types.
   NumericValue operator()(ValueId id, EvaluationContext*) const;
 };
 

@@ -98,7 +98,9 @@ class AggregateExpression : public SparqlExpression {
             aggregateOperation._function(std::move(result), std::move(*it));
       }
       result = finalOperation(std::move(result), inputSize);
-      if constexpr (std::is_same_v<ResultType, double>) {
+      if constexpr (requires { makeNumericId(result); }) {
+        return makeNumericId(result);
+      } else if constexpr (std::is_same_v<ResultType, double>) {
         return Id::makeFromDouble(result);
       } else if constexpr (std::integral<ResultType>) {
         return Id::makeFromInt(result);
@@ -132,7 +134,9 @@ class AggregateExpression : public SparqlExpression {
         }
       }
       result = finalOperation(std::move(result), uniqueHashSet.size());
-      if constexpr (std::is_same_v<ResultType, double>) {
+      if constexpr (requires { makeNumericId(result); }) {
+        return makeNumericId(result);
+      } else if constexpr (std::is_same_v<ResultType, double>) {
         return Id::makeFromDouble(result);
       } else if constexpr (std::integral<ResultType>) {
         return Id::makeFromInt(result);
@@ -178,15 +182,34 @@ class CountExpression : public CountExpressionBase {
   }
 };
 
+// TODO<joka921> Comment. And what to do about NaNs.
+template <typename Op>
+inline auto makeNumericExpressionForAggregate() {
+  return [](const std::same_as<NumericValue> auto&... args) -> NumericValue {
+    auto visitor = []<typename... Ts>(const Ts&... t) -> NumericValue {
+      if constexpr ((... || std::is_same_v<NotNumeric, Ts>)) {
+        return NotNumeric{};
+      } else {
+        return (Op{}(t...));
+      }
+    };
+    return std::visit(visitor, args...);
+  };
+}
+
 // SUM
-inline auto addForSum = [](const auto& a, const auto& b) { return a + b; };
+inline auto addForSum = makeNumericExpressionForAggregate<std::plus<>>();
 using SumExpression = AGG_EXP<decltype(addForSum), NumericValueGetter>;
 
 // AVG
-inline auto averageFinalOp = [](const auto& aggregation, size_t numElements) {
-  return numElements ? (static_cast<double>(aggregation) /
-                        static_cast<double>(numElements))
-                     : std::numeric_limits<double>::quiet_NaN();
+// inline auto addForAvgSum = [](const auto& a, const auto& b) { return a + b;
+// };
+inline auto averageFinalOp = [](const NumericValue& aggregation,
+                                size_t numElements) -> NumericValue {
+  return numElements ? (makeNumericExpressionForAggregate<std::divides<>>()(
+                           aggregation,
+                           NumericValue{static_cast<int64_t>(numElements)}))
+                     : NumericValue{std::numeric_limits<double>::quiet_NaN()};
 };
 using AvgExpression =
     detail::AggregateExpression<AGG_OP<decltype(addForSum), NumericValueGetter>,

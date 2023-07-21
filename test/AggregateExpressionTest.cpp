@@ -70,13 +70,12 @@ TEST(AggregateExpression, sum) {
   testSumId({I(3), D(23.3), I(0), I(4), (I(-1))}, D(29.3));
   testSumId({D(2), D(2), I(2)}, D(4), true);
 
-  // TODO<joka921> The result should be `UNDEF` not `NaN`
-  testSumId({I(3), U}, NaN);
+  testSumId({I(3), U}, U);
   testSumId({I(3), NaN}, NaN);
 
   auto testSumString = testAggregate<SumExpression, std::string, Id>;
   // TODO<joka921> The result should be `UNDEF` not `NaN`
-  testSumString({"alpha", "äpfel", "Beta", "unfug"}, NaN);
+  testSumString({"alpha", "äpfel", "Beta", "unfug"}, U);
 }
 
 TEST(AggregateExpression, count) {

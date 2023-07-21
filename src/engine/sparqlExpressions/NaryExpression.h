@@ -108,24 +108,6 @@ class NaryExpression : public SparqlExpression {
   Children _children;
 };
 
-// TODO<joka921> Move these helpers elsewhere
-template <bool NanToUndef = false, typename T>
-requires std::integral<T> || std::floating_point<T> || std::same_as<Id, T>
-Id makeNumericId(T t) {
-  if constexpr (std::integral<T>) {
-    return Id::makeFromInt(t);
-  } else if constexpr (std::floating_point<T>) {
-    if constexpr (NanToUndef) {
-      return std::isnan(t) ? Id::makeUndefined() : Id::makeFromDouble(t);
-    } else {
-      return Id::makeFromDouble(t);
-    }
-  } else {
-    static_assert(std::same_as<Id, T>);
-    return t;
-  }
-}
-
 template <typename Function, bool nanToUndef = false>
 struct NumericIdWrapper {
   // Note: Sonarcloud suggests `[[no_unique_address]]` for the following member,
@@ -218,12 +200,11 @@ inline auto makeNumericExpression() {
 inline auto unaryMinus = makeNumericExpression<std::negate<>>();
 // inline auto unaryMinus = [](auto a) { return Id::makeFromDouble(-a); };
 using UnaryMinusExpression =
-    NARY<1, FV<decltype(unaryMinus), CorrectNumericValueGetter>>;
+    NARY<1, FV<decltype(unaryMinus), NumericValueGetter>>;
 
 // Multiplication.
 inline auto multiply = makeNumericExpression<std::multiplies<>>();
-using MultiplyExpression =
-    NARY<2, FV<decltype(multiply), CorrectNumericValueGetter>>;
+using MultiplyExpression = NARY<2, FV<decltype(multiply), NumericValueGetter>>;
 
 // Division.
 //
@@ -235,16 +216,14 @@ using MultiplyExpression =
 // currently implement the latter behavior. Note: The result of a division in
 // SPARQL is always a decimal number, so there is no integer division.
 inline auto divide = makeNumericExpression<std::divides<double>>();
-using DivideExpression =
-    NARY<2, FV<decltype(divide), CorrectNumericValueGetter>>;
+using DivideExpression = NARY<2, FV<decltype(divide), NumericValueGetter>>;
 
 // Addition and subtraction, currently all results are converted to double.
 inline auto add = makeNumericExpression<std::plus<>>();
-using AddExpression = NARY<2, FV<decltype(add), CorrectNumericValueGetter>>;
+using AddExpression = NARY<2, FV<decltype(add), NumericValueGetter>>;
 
 inline auto subtract = makeNumericExpression<std::minus<>>();
-using SubtractExpression =
-    NARY<2, FV<decltype(subtract), CorrectNumericValueGetter>>;
+using SubtractExpression = NARY<2, FV<decltype(subtract), NumericValueGetter>>;
 
 // Basic GeoSPARQL functions (code in util/GeoSparqlHelpers.h).
 using LongitudeExpression =
