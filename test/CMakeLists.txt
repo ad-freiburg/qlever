@@ -85,6 +85,7 @@ function(addAndLinkTest basename)
 endfunction()
 
 add_subdirectory(engine)
+add_subdirectory(parser)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
@@ -345,6 +346,8 @@ addLinkAndDiscoverTest(ThreadSafeQueueTest)
 addLinkAndDiscoverTest(IdTableHelpersTest testUtil)
 
 addLinkAndDiscoverTest(GeneratorTest)
+
+addLinkAndDiscoverTest(MemorySizeTest memorySize)
 
 addLinkAndDiscoverTest(JsonUtilTest)
 

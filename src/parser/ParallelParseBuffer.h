@@ -28,9 +28,11 @@ class ParserBatcher {
  public:
   /// construct from a Parser, the maximum Number of triples to parse, and the
   /// callback.
-  ParserBatcher(const std::shared_ptr<Parser>& p, size_t maxNumTriples,
+  ParserBatcher(std::shared_ptr<Parser> p, size_t maxNumTriples,
                 ExhaustedCallback c)
-      : m_parser(p), m_maxNumTriples(maxNumTriples), m_exhaustedCallback(c) {}
+      : m_parser(std::move(p)),
+        m_maxNumTriples(maxNumTriples),
+        m_exhaustedCallback(c) {}
   using Triple = std::array<std::string, 3>;
 
   /**
@@ -59,7 +61,7 @@ class ParserBatcher {
   // getBatch() member function. The first requires enables this function only
   // if the second "requires" evaluates to true
   std::optional<std::vector<TurtleTriple>> getBatch()
-      requires requires(Parser p) { p.getBatch(); } {
+      requires requires(Parser& p) { p.getBatch(); } {
     if (m_numTriplesAlreadyParsed >= m_maxNumTriples) {
       return std::nullopt;
     }
@@ -141,7 +143,7 @@ class ParallelParseBuffer {
   // this future handles the asynchronous parser calls
   std::future<std::pair<bool, std::vector<array<string, 3>>>> _fut;
 
-  // this function extracts _bufferSize many triples from the parser.
+  // this function extracts bufferSize_ many triples from the parser.
   // If the bool argument is false, the parser is exhausted and further calls
   // to parseBatch are useless. In this case we probably still have some triples
   // that were parsed before the parser was done, so we still have to consider
