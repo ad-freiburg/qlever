@@ -2,13 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
 #include <antlr4-runtime.h>
 
+#include <algorithm>
+#include <functional>
 #include <iostream>
 #include <iterator>
 #include <ranges>
@@ -17,20 +17,43 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <utility>
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/ConfigManager/generated/ConfigShorthandParser.h"
 #include "util/Exception.h"
+#include "util/Forward.h"
 #include "util/StringUtils.h"
 #include "util/antlr/ANTLRErrorHandling.h"
 #include "util/json.h"
 
 namespace ad_utility {
+static auto getDereferencedConfigurationOptionsViewImpl(
+    auto& configurationOptions) {
+  return std::views::transform(AD_FWD(configurationOptions), [](auto& pair) {
+    // Make sure, that there is no null pointer.
+    AD_CORRECTNESS_CHECK(pair.second);
+
+    // Return a dereferenced reference.
+    return std::tie(pair.first, *pair.second);
+  });
+}
+
+// ____________________________________________________________________________
+auto ConfigManager::getDereferencedConfigurationOptionsView() {
+  return getDereferencedConfigurationOptionsViewImpl(configurationOptions_);
+}
+
+// ____________________________________________________________________________
+auto ConfigManager::getDereferencedConfigurationOptionsView() const {
+  return getDereferencedConfigurationOptionsViewImpl(configurationOptions_);
+}
 
 // ____________________________________________________________________________
 std::string ConfigManager::createJsonPointerString(
@@ -204,22 +227,22 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   an exception, if a configuration option was given a value of the wrong type,
   or if it HAD to be set, but wasn't.
   */
-  for (auto& [key, option] : configurationOptions_) {
+  for (auto&& [key, option] : getDereferencedConfigurationOptionsView()) {
     // Set the option, if possible, with the pointer to the position of the
     // current configuration in json.
     if (const nlohmann::json::json_pointer configurationOptionJsonPosition{key};
         j.contains(configurationOptionJsonPosition)) {
       // This will throw an exception, if the json object can't be interpreted
       // with the wanted type.
-      option->setValueWithJson(j.at(configurationOptionJsonPosition));
+      option.setValueWithJson(j.at(configurationOptionJsonPosition));
     }
 
     /*
     If the option hasn't set the variable, that it's internal variable pointer
-    points to, that means, it doesn't have a default value, and needs to be set
-    by the user at runtime, but wasn't.
+    points to, that means, it doesn't have a default value, and needs to be
+    set by the user at runtime, but wasn't.
     */
-    if (!option->wasSet()) {
+    if (!option.wasSet()) {
       throw ConfigOptionWasntSetException(key);
     }
   }
@@ -245,7 +268,7 @@ std::string ConfigManager::printConfigurationDoc(
   - The default value of the configuration option.
   - An example value, of the correct type.
   */
-  for (const auto& [path, option] : configurationOptions_) {
+  for (const auto& [path, option] : getDereferencedConfigurationOptionsView()) {
     // Pointer to the position of this option in
     // `configuratioOptionsVisualization`.
     const nlohmann::json::json_pointer jsonOptionPointer{path};
@@ -254,12 +277,12 @@ std::string ConfigManager::printConfigurationDoc(
       // We can only use the value, if we are sure, that the value was
       // initialized.
       configuratioOptionsVisualization[jsonOptionPointer] =
-          option->wasSet() ? option->getValueAsJson()
-                           : "value was never initialized";
+          option.wasSet() ? option.getValueAsJson()
+                          : "value was never initialized";
     } else {
       configuratioOptionsVisualization[jsonOptionPointer] =
-          option->hasDefaultValue() ? option->getDefaultValueAsJson()
-                                    : option->getDummyValueAsJson();
+          option.hasDefaultValue() ? option.getDefaultValueAsJson()
+                                   : option.getDummyValueAsJson();
     }
   }
 
@@ -268,13 +291,13 @@ std::string ConfigManager::printConfigurationDoc(
 
   // List the configuration options themselves.
   const std::string& listOfConfigurationOptions = ad_utility::lazyStrJoin(
-      std::views::transform(configurationOptions_,
+      std::views::transform(getDereferencedConfigurationOptionsView(),
                             [](const auto& pair) {
                               // Add the location of the option and the option
                               // itself.
                               return absl::StrCat(
-                                  "Location : ", pair.first, "\n",
-                                  static_cast<std::string>(*pair.second));
+                                  "Location : ", std::get<0>(pair), "\n",
+                                  static_cast<std::string>(std::get<1>(pair)));
                             }),
       "\n\n");
 
@@ -307,8 +330,8 @@ std::string
 ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
     const {
   // For only looking at the configuration options in our map.
-  auto onlyConfigurationOptionsView = std::views::transform(
-      configurationOptions_, [](const auto& pair) { return *pair.second; });
+  auto onlyConfigurationOptionsView =
+      std::views::values(getDereferencedConfigurationOptionsView());
 
   // Returns true, if the `ConfigOption` has a default value and wasn't set at
   // runtime.

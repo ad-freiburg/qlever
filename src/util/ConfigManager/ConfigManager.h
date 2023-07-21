@@ -277,5 +277,12 @@ class ConfigManager {
     return *configurationOptions_.at(createJsonPointerString(pathToOption))
                 .get();
   }
+
+  /*
+  @brief Provide a range of tuples, that hold references to the key value pairs
+  in `configurationOptions_`, but with the pointer dereferenced.
+  */
+  auto getDereferencedConfigurationOptionsView();
+  auto getDereferencedConfigurationOptionsView() const;
 };
 }  // namespace ad_utility
