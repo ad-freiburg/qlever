@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "util/ConfigManager/ConfigManager.h"
+
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -21,21 +23,19 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
-#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/ConfigManager/generated/ConfigShorthandParser.h"
 #include "util/Exception.h"
-#include "util/Forward.h"
 #include "util/StringUtils.h"
 #include "util/antlr/ANTLRErrorHandling.h"
 #include "util/json.h"
 
 namespace ad_utility {
 static auto configurationOptionsImpl(auto& configurationOptions) {
-  return std::views::transform(AD_FWD(configurationOptions), [](auto& pair) {
+  return std::views::transform(configurationOptions, [](auto& pair) {
     // Make sure, that there is no null pointer.
     AD_CORRECTNESS_CHECK(pair.second);
 
