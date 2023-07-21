@@ -63,12 +63,13 @@ class ConfigManager {
   option will be copied into this variable, whenever the value in the
   configuration option changes.
 
-  @return A pointer to the newly created configuration option.
+  @return A reference to the newly created configuration option. This reference
+  will stay valid, even after adding more options.
   */
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption* addOption(const std::vector<std::string>& pathToOption,
+  const ConfigOption& addOption(const std::vector<std::string>& pathToOption,
                                 std::string_view optionDescription,
                                 OptionType* variableToPutValueOfTheOptionIn) {
     return addOptionImpl(pathToOption, optionDescription,
@@ -91,13 +92,14 @@ class ConfigManager {
   configuration option changes.
   @param defaultValue A default value for the configuration option.
 
-  @return A pointer to the newly created configuration option.
+  @return A reference to the newly created configuration option. This reference
+  will stay valid, even after adding more options.
   */
   template <typename OptionType,
             std::same_as<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption* addOption(const std::vector<std::string>& pathToOption,
+  const ConfigOption& addOption(const std::vector<std::string>& pathToOption,
                                 std::string_view optionDescription,
                                 OptionType* variableToPutValueOfTheOptionIn,
                                 DefaultValueType defaultValue) {
@@ -111,12 +113,13 @@ class ConfigManager {
   `addOption`. But instead of a `pathToOption`, there is only an
   `optionName`, which describes a path only made out of this single string.
 
-  @return A pointer to the newly created configuration option.
+  @return A reference to the newly created configuration option. This reference
+  will stay valid, even after adding more options.
   */
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption* addOption(std::string optionName,
+  const ConfigOption& addOption(std::string optionName,
                                 std::string_view optionDescription,
                                 OptionType* variableToPutValueOfTheOptionIn) {
     return addOption<OptionType>(
@@ -129,13 +132,14 @@ class ConfigManager {
   `addOption`. But instead of a `pathToOption`, there is only an
   `optionName`, which describes a path only made out of this single string.
 
-  @return A pointer to the newly created configuration option.
+  @return A reference to the newly created configuration option. This reference
+  will stay valid, even after adding more options.
   */
   template <typename OptionType,
             std::same_as<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption* addOption(std::string optionName,
+  const ConfigOption& addOption(std::string optionName,
                                 std::string_view optionDescription,
                                 OptionType* variableToPutValueOfTheOptionIn,
                                 DefaultValueType defaultValue) {
@@ -239,12 +243,13 @@ class ConfigManager {
   given, signified by an empty optional, then a value for the configuration
   option MUST be given at runtime.
 
-  @return A pointer to the newly created configuration option.
+  @return A reference to the newly created configuration option. Will stay
+  valid, even after more options.
   */
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption* addOptionImpl(
+  const ConfigOption& addOptionImpl(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn,
@@ -269,8 +274,8 @@ class ConfigManager {
     move constructor. Which is why, we can't just return the `ConfigOption`
     we created here.
     */
-    return configurationOptions_.at(createJsonPointerString(pathToOption))
-        .get();
+    return *configurationOptions_.at(createJsonPointerString(pathToOption))
+                .get();
   }
 };
 }  // namespace ad_utility
