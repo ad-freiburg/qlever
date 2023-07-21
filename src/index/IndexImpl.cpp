@@ -32,6 +32,7 @@
 #include "util/json.h"
 
 using std::array;
+using namespace std::string_literals;
 
 // _____________________________________________________________________________
 IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
@@ -792,58 +793,52 @@ void IndexImpl::readConfiguration() {
 
   // TODO Write a description.
   std::string gitHash;
-  config.addOption<std::string>("git-hash", "", &gitHash, std::string{});
+  config.addOption("git-hash", "", &gitHash, {});
 
   // TODO Write a description.
   bool boolPrefixes;
   const ad_utility::ConfigOption* prefixesOption =
-      config.addOption<bool>("prefixes", "", &boolPrefixes, false);
+      config.addOption("prefixes", "", &boolPrefixes, false);
 
   // TODO Write a description.
   bool hasAllPermutations;
-  config.addOption<bool>("has-all-permutations", "", &hasAllPermutations, true);
+  config.addOption("has-all-permutations", "", &hasAllPermutations, true);
 
   // TODO Write a description.
   std::vector<std::string> prefixesExternal;
-  config.addOption<std::vector<std::string>>(
-      "prefixes-external", "", &prefixesExternal, std::vector<std::string>{});
+  config.addOption("prefixes-external", "", &prefixesExternal, {});
 
   // TODO Write a description.
   std::string lang;
-  config.addOption<std::string>(std::vector<std::string>{"locale", "language"},
-                                "", &lang);
+  config.addOption({"locale"s, "language"s}, "", &lang);
 
   // TODO Write a description.
   std::string country;
-  config.addOption<std::string>(std::vector<std::string>{"locale", "country"},
-                                "", &country);
+  config.addOption({"locale"s, "country"s}, "", &country);
 
   // TODO Write a description.
   bool ignorePunctuation;
-  config.addOption<bool>(
-      std::vector<std::string>{"locale", "ignore-punctuation"}, "",
-      &ignorePunctuation);
+  config.addOption({"locale"s, "ignore-punctuation"s}, "", &ignorePunctuation);
 
   // TODO Write a description.
   std::vector<std::string> languagesInternal;
-  config.addOption<std::vector<std::string>>("languages-internal", "",
-                                             &languagesInternal, {"en"});
+  config.addOption("languages-internal", "", &languagesInternal, {"en"});
 
   // TODO Write a description.
-  config.addOption<size_t>("num-predicates-normal", "", &numPredicatesNormal_);
-  config.addOption<size_t>("num-subjects-normal", "", &numSubjectsNormal_);
-  config.addOption<size_t>("num-objects-normal", "", &numObjectsNormal_);
-  config.addOption<size_t>("num-triples-normal", "", &numTriplesNormal_);
+  config.addOption("num-predicates-normal", "", &numPredicatesNormal_);
+  config.addOption("num-subjects-normal", "", &numSubjectsNormal_);
+  config.addOption("num-objects-normal", "", &numObjectsNormal_);
+  config.addOption("num-triples-normal", "", &numTriplesNormal_);
 
   // TODO Make this cleaner, than just catching all the fields of the object.
   size_t indexFormatVersionPullRequestNumber;
   config.addOption(
-      std::vector<std::string>{"index-format-version", "pull-request-number"},
+      {"index-format-version"s, "pull-request-number"s},
       "The number of the pull request that changed the index format most "
       "recently.",
       &indexFormatVersionPullRequestNumber);
   std::string indexFormatVersionDate;
-  config.addOption(std::vector<std::string>{"index-format-version", "date"},
+  config.addOption({"index-format-version"s, "date"s},
                    "The date of the last breaking change of the index format.",
                    &indexFormatVersionDate);
 
@@ -1001,56 +996,51 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 
   // TODO Write a description.
   std::vector<std::string> prefixesExternal;
-  config.addOption<std::vector<std::string>>(
-      "prefixes-external", "", &prefixesExternal, std::vector<std::string>{});
+  config.addOption("prefixes-external", "", &prefixesExternal, {});
 
   // TODO Write a description.
   std::vector<std::string> languagesInternal;
-  config.addOption<std::vector<std::string>>("languages-internal", "",
-                                             &languagesInternal, {"en"});
+  config.addOption("languages-internal", "", &languagesInternal, {"en"});
 
   // TODO Write a description.
   std::string lang;
-  const ad_utility::ConfigOption* langOption = config.addOption<std::string>(
-      std::vector<std::string>{"locale", "language"}, "", &lang,
-      LOCALE_DEFAULT_LANG);
+  const ad_utility::ConfigOption* langOption = config.addOption(
+      {"locale"s, "language"s}, "", &lang, LOCALE_DEFAULT_LANG);
 
   // TODO Write a description.
   std::string country;
-  const ad_utility::ConfigOption* countryOption = config.addOption<std::string>(
-      std::vector<std::string>{"locale", "country"}, "", &country,
-      LOCALE_DEFAULT_COUNTRY);
+  const ad_utility::ConfigOption* countryOption = config.addOption(
+      {"locale"s, "country"s}, "", &country, LOCALE_DEFAULT_COUNTRY);
 
   // TODO Write a description.
   bool ignorePunctuation;
   const ad_utility::ConfigOption* ignorePunctuationOption =
-      config.addOption<bool>(
-          std::vector<std::string>{"locale", "ignore-punctuation"}, "",
-          &ignorePunctuation, LOCALE_DEFAULT_IGNORE_PUNCTUATION);
+      config.addOption({"locale"s, "ignore-punctuation"s}, "",
+                       &ignorePunctuation, LOCALE_DEFAULT_IGNORE_PUNCTUATION);
 
   // TODO Write a description.
-  config.addOption<bool>("ascii-prefixes-only", "", &onlyAsciiTurtlePrefixes_,
-                         onlyAsciiTurtlePrefixes_);
+  config.addOption("ascii-prefixes-only", "", &onlyAsciiTurtlePrefixes_,
+                   onlyAsciiTurtlePrefixes_);
 
   // TODO Write a description.
-  config.addOption<bool>("parallel-parsing", "", &useParallelParser_,
-                         useParallelParser_);
+  config.addOption("parallel-parsing", "", &useParallelParser_,
+                   useParallelParser_);
 
   // TODO Write a description.
   size_t numTriplesPerBatch;
-  config.addOption<size_t>("num-triples-per-batch", "", &numTriplesPerBatch,
-                           static_cast<size_t>(NUM_TRIPLES_PER_PARTIAL_VOCAB));
+  config.addOption("num-triples-per-batch", "", &numTriplesPerBatch,
+                   static_cast<size_t>(NUM_TRIPLES_PER_PARTIAL_VOCAB));
 
   // TODO Write a description.
   size_t parserBatchSize;
-  config.addOption<size_t>("parser-batch-size", "", &parserBatchSize,
-                           PARSER_BATCH_SIZE);
+  config.addOption("parser-batch-size", "", &parserBatchSize,
+                   PARSER_BATCH_SIZE);
 
   // TODO Write a description.
   std::string parserIntegerOverflowBehavior;
-  config.addOption<std::string>("parser-integer-overflow-behavior", "",
-                                &parserIntegerOverflowBehavior,
-                                std::string{"overflowing-integers-throw"});
+  config.addOption("parser-integer-overflow-behavior", "",
+                   &parserIntegerOverflowBehavior,
+                   "overflowing-integers-throw"s);
 
   // Set the options.
   if (!settingsFileName_.empty()) {
