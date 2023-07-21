@@ -62,23 +62,24 @@ INSTANTIATE_NARY(2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
 INSTANTIATE_NARY(1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
                  SET<SetOfIntervals::Complement>);
 
-INSTANTIATE_NARY(1, FV<decltype(unaryMinus), NumericValueGetter>);
+INSTANTIATE_NARY(1, FV<decltype(unaryMinus), CorrectNumericValueGetter>);
 
-INSTANTIATE_NARY(2, FV<decltype(multiply), NumericValueGetter>);
+INSTANTIATE_NARY(2, FV<decltype(multiply), CorrectNumericValueGetter>);
 
-INSTANTIATE_NARY(2, FV<decltype(divide), NumericValueGetter>);
+INSTANTIATE_NARY(2, FV<decltype(divide), CorrectNumericValueGetter>);
 
-INSTANTIATE_NARY(2, FV<decltype(add), NumericValueGetter>);
+INSTANTIATE_NARY(2, FV<decltype(add), CorrectNumericValueGetter>);
 
-INSTANTIATE_NARY(2, FV<decltype(subtract), NumericValueGetter>);
+INSTANTIATE_NARY(2, FV<decltype(subtract), CorrectNumericValueGetter>);
 
-INSTANTIATE_NARY(1, FV<NumericIdWrapper<decltype(ad_utility::wktLongitude)>,
+INSTANTIATE_NARY(1,
+                 FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
+                    StringValueGetter>);
+INSTANTIATE_NARY(1,
+                 FV<NumericIdWrapper<decltype(ad_utility::wktLatitude), true>,
+                    StringValueGetter>);
+INSTANTIATE_NARY(2, FV<NumericIdWrapper<decltype(ad_utility::wktDist), true>,
                        StringValueGetter>);
-INSTANTIATE_NARY(
-    1,
-    FV<NumericIdWrapper<decltype(ad_utility::wktLatitude)>, StringValueGetter>);
-INSTANTIATE_NARY(
-    2, FV<NumericIdWrapper<decltype(ad_utility::wktDist)>, StringValueGetter>);
 
 INSTANTIATE_NARY(1, FV<decltype(extractYear), DateValueGetter>);
 INSTANTIATE_NARY(1, FV<decltype(extractMonth), DateValueGetter>);

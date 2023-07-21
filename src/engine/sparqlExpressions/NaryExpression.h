@@ -109,23 +109,30 @@ class NaryExpression : public SparqlExpression {
 };
 
 // TODO<joka921> Move these helpers elsewhere
-template <typename T>
-requires std::integral<T> || std::floating_point<T> Id makeNumericId(T t) {
+template <bool NanToUndef = false, typename T>
+requires std::integral<T> || std::floating_point<T> || std::same_as<Id, T>
+Id makeNumericId(T t) {
   if constexpr (std::integral<T>) {
     return Id::makeFromInt(t);
+  } else if constexpr (std::floating_point<T>) {
+    if constexpr (NanToUndef) {
+      return std::isnan(t) ? Id::makeUndefined() : Id::makeFromDouble(t);
+    } else {
+      return Id::makeFromDouble(t);
+    }
   } else {
-    static_assert(std::floating_point<T>);
-    return Id::makeFromDouble(t);
+    static_assert(std::same_as<Id, T>);
+    return t;
   }
 }
 
-template <typename Function>
+template <typename Function, bool nanToUndef = false>
 struct NumericIdWrapper {
   // Note: Sonarcloud suggests `[[no_unique_address]]` for the following member,
   // but adding it causes an internal compiler error in Clang 16.
   Function function_{};
   Id operator()(auto&&... args) const {
-    return makeNumericId(function_(AD_FWD(args)...));
+    return makeNumericId<nanToUndef>(function_(AD_FWD(args)...));
   }
 };
 
@@ -146,63 +153,109 @@ using SET = SpecializedFunction<F, decltype(areAllSetOfIntervals)>;
 using ad_utility::SetOfIntervals;
 
 // The types for the concrete MultiBinaryExpressions and UnaryExpressions.
-inline auto orLambda = [](bool a, bool b) { return Id::makeFromBool(a || b); };
+using TernaryBool = EffectiveBooleanValueGetter::Result;
+inline auto orLambda = [](TernaryBool a, TernaryBool b) {
+  using enum TernaryBool;
+  if (a == True || b == True) {
+    return Id::makeFromBool(true);
+  }
+  if (a == False && b == False) {
+    return Id::makeFromBool(false);
+  }
+  return Id::makeUndefined();
+};
 using OrExpression =
     NARY<2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Union>>;
 
-inline auto andLambda = [](bool a, bool b) { return Id::makeFromBool(a && b); };
+inline auto andLambda = [](TernaryBool a, TernaryBool b) {
+  using enum TernaryBool;
+  if (a == True && b == True) {
+    return Id::makeFromBool(true);
+  }
+  if (a == False || b == False) {
+    return Id::makeFromBool(false);
+  }
+  return Id::makeUndefined();
+};
 using AndExpression =
     NARY<2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Intersection>>;
 
 // Unary Negation
-inline auto unaryNegate = [](bool a) { return Id::makeFromBool(!a); };
+inline auto unaryNegate = [](TernaryBool a) {
+  using enum TernaryBool;
+  switch (a) {
+    case True:
+      return Id::makeFromBool(false);
+    case False:
+      return Id::makeFromBool(true);
+    case Undef:
+      return Id::makeUndefined();
+  }
+  AD_FAIL();
+};
 using UnaryNegateExpression =
     NARY<1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Complement>>;
 
+// TODO<joka921> Comment. And what to do about NaNs.
+template <typename Op>
+inline auto makeNumericExpression() {
+  return [](const std::same_as<NumericValue> auto&... args) {
+    auto visitor = []<typename... Ts>(const Ts&... t) {
+      if constexpr ((... || std::is_same_v<NotNumeric, Ts>)) {
+        return Id::makeUndefined();
+      } else {
+        return makeNumericId(Op{}(t...));
+      }
+    };
+    return std::visit(visitor, args...);
+  };
+}
+
 // Unary Minus, currently all results are converted to double
-inline auto unaryMinus = [](auto a) { return Id::makeFromDouble(-a); };
+inline auto unaryMinus = makeNumericExpression<std::negate<>>();
+// inline auto unaryMinus = [](auto a) { return Id::makeFromDouble(-a); };
 using UnaryMinusExpression =
-    NARY<1, FV<decltype(unaryMinus), NumericValueGetter>>;
+    NARY<1, FV<decltype(unaryMinus), CorrectNumericValueGetter>>;
 
 // Multiplication.
-inline auto multiply = [](const auto& a, const auto& b) {
-  return Id::makeFromDouble(a * b);
-};
-using MultiplyExpression = NARY<2, FV<decltype(multiply), NumericValueGetter>>;
+inline auto multiply = makeNumericExpression<std::multiplies<>>();
+using MultiplyExpression =
+    NARY<2, FV<decltype(multiply), CorrectNumericValueGetter>>;
 
 // Division.
 //
 // TODO<joka921> If `b == 0` this is technically undefined behavior and
 // should lead to an expression error in SPARQL. Fix this as soon as we
 // introduce the proper semantics for expression errors.
-inline auto divide = [](const auto& a, const auto& b) {
-  return Id::makeFromDouble(static_cast<double>(a) / b);
-};
-using DivideExpression = NARY<2, FV<decltype(divide), NumericValueGetter>>;
+// Update: I checked it, and the standard differentiates between `xsd:decimal`
+// (error) and `xsd:float/xsd:double` where we have `NaN` and `inf` results. We
+// currently implement the latter behavior. Note: The result of a division in
+// SPARQL is always a decimal number, so there is no integer division.
+inline auto divide = makeNumericExpression<std::divides<double>>();
+using DivideExpression =
+    NARY<2, FV<decltype(divide), CorrectNumericValueGetter>>;
 
 // Addition and subtraction, currently all results are converted to double.
-inline auto add = [](const auto& a, const auto& b) {
-  return Id::makeFromDouble(a + b);
-};
-using AddExpression = NARY<2, FV<decltype(add), NumericValueGetter>>;
+inline auto add = makeNumericExpression<std::plus<>>();
+using AddExpression = NARY<2, FV<decltype(add), CorrectNumericValueGetter>>;
 
-inline auto subtract = [](const auto& a, const auto& b) {
-  return Id::makeFromDouble(a - b);
-};
-using SubtractExpression = NARY<2, FV<decltype(subtract), NumericValueGetter>>;
+inline auto subtract = makeNumericExpression<std::minus<>>();
+using SubtractExpression =
+    NARY<2, FV<decltype(subtract), CorrectNumericValueGetter>>;
 
 // Basic GeoSPARQL functions (code in util/GeoSparqlHelpers.h).
 using LongitudeExpression =
-    NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLongitude)>,
+    NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
                StringValueGetter>>;
 using LatitudeExpression =
-    NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLatitude)>,
+    NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLatitude), true>,
                StringValueGetter>>;
-using DistExpression = NARY<
-    2, FV<NumericIdWrapper<decltype(ad_utility::wktDist)>, StringValueGetter>>;
+using DistExpression =
+    NARY<2, FV<NumericIdWrapper<decltype(ad_utility::wktDist), true>,
+               StringValueGetter>>;
 
 // Date functions.
 //

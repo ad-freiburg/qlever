@@ -53,6 +53,7 @@ inline ValueId toValueId(ComparisonResult comparisonResult) {
     case Undef:
       return ValueId::makeUndefined();
   }
+  AD_FAIL();
 }
 
 // Compares two `ValueId`s directly on the underlying representation. Note

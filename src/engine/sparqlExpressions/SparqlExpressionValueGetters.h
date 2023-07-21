@@ -1,9 +1,6 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
-
-//
-// Created by johannes on 23.09.21.
-//
+//  Copyright 2021, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H
 #define QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H
@@ -18,6 +15,7 @@
 namespace sparqlExpression::detail {
 
 /// Returns a numeric value.
+
 struct NumericValueGetter {
   // This is the current error-signalling mechanism
   double operator()(const string&, EvaluationContext*) const {
@@ -27,6 +25,19 @@ struct NumericValueGetter {
   // Convert an id from a result table to a double value.
   // TODO<joka921> Also convert to integer types.
   double operator()(ValueId id, EvaluationContext*) const;
+};
+
+struct NotNumeric {};
+using NumericValue = std::variant<NotNumeric, double, int64_t>;
+struct CorrectNumericValueGetter {
+  // This is the current error-signalling mechanism
+  NumericValue operator()(const string&, EvaluationContext*) const {
+    return NotNumeric{};
+  }
+
+  // Convert an id from a result table to a double value.
+  // TODO<joka921> Also convert to integer types.
+  NumericValue operator()(ValueId id, EvaluationContext*) const;
 };
 
 /// Return the type exactly as it was passed in.
@@ -51,11 +62,14 @@ struct IsValidValueGetter {
 /// Return a boolean value that is used for AND, OR and NOT expressions.
 /// See section 17.2.2 of the Sparql Standard
 struct EffectiveBooleanValueGetter {
+  enum struct Result { False, True, Undef };
   // _________________________________________________________________________
-  bool operator()(ValueId id, EvaluationContext*) const;
+  Result operator()(ValueId id, EvaluationContext*) const;
 
   // Nonempty strings are true.
-  bool operator()(const string& s, EvaluationContext*) { return !s.empty(); }
+  Result operator()(const string& s, EvaluationContext*) {
+    return s.empty() ? Result::False : Result::True;
+  }
 };
 
 /// This class can be used as the `ValueGetter` argument of Expression

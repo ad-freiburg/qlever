@@ -31,36 +31,65 @@ double NumericValueGetter::operator()(ValueId id, EvaluationContext*) const {
 }
 
 // _____________________________________________________________________________
-bool EffectiveBooleanValueGetter::operator()(ValueId id,
-                                             EvaluationContext* context) const {
+NumericValue CorrectNumericValueGetter::operator()(
+    ValueId id, sparqlExpression::EvaluationContext*) const {
+  switch (id.getDatatype()) {
+    case Datatype::Double:
+      return id.getDouble();
+    case Datatype::Int:
+      return id.getInt();
+    case Datatype::Bool:
+      // TODO<joka921> Check in the specification what the correct behavior is
+      // here. They probably should be UNDEF as soon as we have conversion
+      // functions.
+      return static_cast<int64_t>(id.getBool());
+    case Datatype::Undefined:
+    case Datatype::VocabIndex:
+    case Datatype::LocalVocabIndex:
+    case Datatype::TextRecordIndex:
+    case Datatype::Date:
+      return NotNumeric{};
+  }
+  AD_FAIL();
+}
+
+// _____________________________________________________________________________
+auto EffectiveBooleanValueGetter::operator()(ValueId id,
+                                             EvaluationContext* context) const
+    -> Result {
+  using enum Result;
   switch (id.getDatatype()) {
     case Datatype::Double: {
       auto d = id.getDouble();
-      return d != 0.0 && !std::isnan(d);
+      return (d != 0.0 && !std::isnan(d)) ? True : False;
     }
     case Datatype::Int:
-      return id.getInt() != 0;
+      return (id.getInt() != 0) ? True : False;
     case Datatype::Bool:
-      return id.getBool();
+      return id.getBool() ? True : False;
     case Datatype::Undefined:
-      return false;
+      return Undef;
     case Datatype::VocabIndex: {
       auto index = id.getVocabIndex();
       // TODO<joka921> We could precompute whether the empty literal or empty
       // iri are contained in the KB.
-      return !context->_qec.getIndex()
-                  .getVocab()
-                  .indexToOptionalString(index)
-                  .value_or("")
-                  .empty();
+      return context->_qec.getIndex()
+                     .getVocab()
+                     .indexToOptionalString(index)
+                     .value_or("")
+                     .empty()
+                 ? False
+                 : True;
     }
     case Datatype::LocalVocabIndex: {
-      return !(context->_localVocab.getWord(id.getLocalVocabIndex()).empty());
+      return (context->_localVocab.getWord(id.getLocalVocabIndex()).empty())
+                 ? False
+                 : True;
     }
     case Datatype::TextRecordIndex:
-      return true;
+      return True;
     case Datatype::Date:
-      return true;
+      return True;
   }
   AD_FAIL();
 }

@@ -32,6 +32,7 @@ auto negInf = -inf;
 auto D = ad_utility::testing::DoubleId;
 auto B = ad_utility::testing::BoolId;
 auto I = ad_utility::testing::IntId;
+auto Voc = ad_utility::testing::VocabId;
 auto U = Id::makeUndefined();
 
 // Test allocator (the inputs to our `SparqlExpression`s are
@@ -42,25 +43,41 @@ auto U = Id::makeUndefined();
 using ad_utility::AllocatorWithLimit;
 AllocatorWithLimit<Id> alloc = ad_utility::testing::makeAllocator();
 
+::testing::Matcher<const ValueId&> matchId(Id id) {
+  if (id.getDatatype() != Datatype::Double) {
+    return ::testing::Eq(id);
+  } else {
+    testing::Matcher<float> doubleMatcher =
+        ::testing::NanSensitiveFloatEq(static_cast<float>(id.getDouble()));
+    auto doubleMatcherCast =
+        ::testing::MatcherCast<const double&>(doubleMatcher);
+
+    return ::testing::AllOf(
+        AD_PROPERTY(Id, getDatatype, ::testing::Eq(Datatype::Double)),
+        AD_PROPERTY(Id, getDouble, doubleMatcherCast));
+  }
+}
 // Assert that the vectors `a` and `b` are equal. The case `V<double>` is
 // treated separately because we want to consider two elements that are both
 // `NaN` as equal for the test, but they are not equal wrt `==` (by definition,
 // a `NaN` is not equal to anything).
-auto checkResultsEqual = [](const auto& a, const auto& b,
-                            source_location l = source_location::current()) {
+auto checkResultsEqual = []<SingleExpressionResult A, SingleExpressionResult B>(
+                             const A& expected, const B& actual,
+                             source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  if constexpr (ad_utility::isSimilar<decltype(a), V<double>> &&
-                ad_utility::isSimilar<decltype(b), V<double>>) {
-    ASSERT_EQ(a.size(), b.size());
-    for (size_t i = 0; i < a.size(); ++i) {
-      if (std::isnan(a[i])) {
-        ASSERT_TRUE(std::isnan(b[i]));
+  if constexpr (ad_utility::isSimilar<A, B>) {
+    if constexpr (isVectorResult<A>) {
+      if constexpr (std::is_same_v<typename A::value_type, Id>) {
+        auto matcherVec = ad_utility::transform(
+            expected, [](const Id id) { return matchId(id); });
+        ASSERT_THAT(actual, ::testing::ElementsAreArray(matcherVec));
       } else {
-        ASSERT_FLOAT_EQ(a[i], b[i]);
+        ASSERT_EQ(actual, expected);
       }
+
+    } else {
+      ASSERT_EQ(actual, expected);
     }
-  } else if constexpr (ad_utility::isSimilar<decltype(a), decltype(b)>) {
-    ASSERT_EQ(a, b);
   } else {
     FAIL() << "Result type does not match";
   }
@@ -126,12 +143,21 @@ auto testBinaryExpressionCommutative =
       testNaryExpression<NaryExpression>(expected, op2, op1);
     };
 
+template <typename NaryExpression>
+auto testBinaryExpression = [](const SingleExpressionResult auto& expected,
+                               const SingleExpressionResult auto& op1,
+                               const SingleExpressionResult auto& op2,
+                               source_location l = source_location::current()) {
+  auto t = generateLocationTrace(l);
+  testNaryExpression<NaryExpression>(expected, op1, op2);
+};
+
 auto testOr = testBinaryExpressionCommutative<OrExpression>;
 auto testAnd = testBinaryExpressionCommutative<AndExpression>;
 auto testPlus = testBinaryExpressionCommutative<AddExpression>;
 auto testMultiply = testBinaryExpressionCommutative<MultiplyExpression>;
-auto testMinus = testNaryExpression<SubtractExpression>;
-auto testDivide = testNaryExpression<DivideExpression>;
+auto testMinus = testBinaryExpression<SubtractExpression>;
+auto testDivide = testBinaryExpression<DivideExpression>;
 
 }  // namespace
 // Test `AndExpression` and `OrExpression`.
@@ -243,6 +269,38 @@ TEST(SparqlExpression, arithmeticOperators) {
   testMultiply(bTimesD, b, d);
   testDivide(bByD, b, d);
   testDivide(dByB, d, b);
+
+  V<Id> mixed{{B(true), B(false), I(-4), I(0), I(13), D(-13.2), D(0.0), D(16.3),
+               Voc(4)},
+              alloc};
+  V<Id> plus1{{I(2), I(1), I(-3), I(1), I(14), D(-12.2), D(1.0), D(17.3), U},
+              alloc};
+  V<Id> minus22{{D(-1.2), D(-2.2), D(-6.2), D(-2.2), D(10.8), D(-15.4), D(-2.2),
+                 D(14.1), U},
+                alloc};
+  V<Id> times2{{I(2), I(0), I(-8), I(0), I(26), D(-26.4), D(0.0), D(32.6), U},
+               alloc};
+  V<Id> times13{
+      {D(1.3), D(0), D(-5.2), D(0), D(16.9), D(-17.16), D(0.0), D(21.19), U},
+      alloc};
+  V<Id> by2{{D(0.5), D(0), D(-2.0), D(0), D(6.5), D(-6.6), D(0.0), D(8.15), U},
+            alloc};
+
+  testPlus(plus1, I(1), mixed);
+  testMinus(plus1, mixed, I(-1));
+
+  testMinus(minus22, mixed, D(2.2));
+  testPlus(minus22, mixed, D(-2.2));
+
+  testMultiply(times2, mixed, I(2));
+  testMultiply(times13, mixed, D(1.3));
+
+  // For division, all results are doubles, so there is no difference between
+  // int and double inputs.
+  testDivide(by2, mixed, I(2));
+  testDivide(by2, mixed, D(2));
+  testMultiply(by2, mixed, D(0.5));
+  testDivide(times13, mixed, D(1.0 / 1.3));
 }
 
 // Helper lambda to enable testing a unary expression in one line (see below).
@@ -251,14 +309,16 @@ TEST(SparqlExpression, arithmeticOperators) {
 // in this vein.
 template <typename UnaryExpression, SingleExpressionResult OperandType,
           SingleExpressionResult OutputType>
-auto testUnaryExpression =
-    [](std::vector<OperandType>&& operand, std::vector<OutputType>&& expected) {
-      V<OperandType> operandV{std::make_move_iterator(operand.begin()),
-                              std::make_move_iterator(operand.end()), alloc};
-      V<OutputType> expectedV{std::make_move_iterator(expected.begin()),
-                              std::make_move_iterator(expected.end()), alloc};
-      testNaryExpression<UnaryExpression>(expectedV, operandV);
-    };
+auto testUnaryExpression = [](std::vector<OperandType>&& operand,
+                              std::vector<OutputType>&& expected,
+                              source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(l);
+  V<OperandType> operandV{std::make_move_iterator(operand.begin()),
+                          std::make_move_iterator(operand.end()), alloc};
+  V<OutputType> expectedV{std::make_move_iterator(expected.begin()),
+                          std::make_move_iterator(expected.end()), alloc};
+  testNaryExpression<UnaryExpression>(expectedV, operandV);
+};
 
 // Test `YearExpression`, `MonthExpression`, and `DayExpression`.
 TEST(SparqlExpression, dateOperators) {
@@ -340,11 +400,9 @@ TEST(SparqlExpression, unaryNegate) {
       testUnaryExpression<UnaryNegateExpression, std::string, Id>;
   // Zero and NaN are considered to be false, so their negation is true
 
-  // TODO<joka921> AlwaysUndef is currently considered to be `false` but it is
-  // actually `UNDEF`.
-  checkNegate({B(true), B(false), I(0), I(3), D(0), D(12), D(naN), U},
-              {B(false), B(true), B(true), B(false), B(true), B(false), B(true),
-               B(true)});
+  checkNegate(
+      {B(true), B(false), I(0), I(3), D(0), D(12), D(naN), U},
+      {B(false), B(true), B(true), B(false), B(true), B(false), B(true), U});
   // Empty strings are considered to be true.
   checkNegateStr({"true", "false", "", "blibb"},
                  {B(false), B(false), B(true), B(false)});
@@ -355,17 +413,9 @@ TEST(SparqlExpression, unaryMinus) {
   auto checkMinus = testUnaryExpression<UnaryMinusExpression, Id, Id>;
   auto checkMinusStr =
       testUnaryExpression<UnaryMinusExpression, std::string, Id>;
-  // Zero and NaN are considered to be false, so their negation is true
-
-  // TODO<joka921> AlwaysUndef is currently considered to be `false` but it is
-  // actually `UNDEF`.
-  // TODO<joka921> Everything converts to double here, fix this.
-  checkMinus(
-      {B(true), B(false), I(0), I(3), D(0), D(12), D(naN), U},
-      {D(-1), D(-0.0), D(-0.0), D(-3), D(-0.0), D(-12), D(-naN), D(-naN)});
-  // TODO<joka921> These results should be UNDEF, not NaN.
-  checkMinusStr({"true", "false", "", "<blibb>"},
-                {D(-naN), D(-naN), D(-naN), D(-naN)});
+  checkMinus({B(true), B(false), I(0), I(3), D(0), D(12.8), D(naN), U, Voc(6)},
+             {I(-1), I(0), I(0), I(-3), D(-0.0), D(-12.8), D(-naN), U, U});
+  checkMinusStr({"true", "false", "", "<blibb>"}, {U, U, U, U});
 }
 
 // ________________________________________________________________________________________
@@ -374,7 +424,9 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLong = testUnaryExpression<LongitudeExpression, std::string, Id>;
   auto checkDist = testBinaryExpressionCommutative<DistExpression>;
 
-  checkLat({"POINT(24.3 26.8)"}, {D(26.8)});
-  checkLong({"POINT(24.3 26.8)"}, {D(24.3)});
+  checkLat({"POINT(24.3 26.8)", "NotAPoint"}, {D(26.8), U});
+  checkLong({"POINT(24.3 26.8)", "NotAPoint"}, {D(24.3), U});
   checkDist(D(0.0), "POINT(24.3 26.8)"s, "POINT(24.3 26.8)"s);
+  checkDist(U, "POINT(24.3 26.8)"s, "NotAPoint"s);
+  checkDist(U, "NotAPoint"s, "POINT(24.3 26.8)"s);
 }
