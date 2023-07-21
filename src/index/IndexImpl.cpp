@@ -884,22 +884,6 @@ void IndexImpl::readConfiguration() {
         "Incompatible index format, see log message for details"};
   }
 
-  // Slight problem here: I have no idea, what kind of value `"prefixes"` points
-  // to. So I had to guess.
-  /*
-  if (configurationJson_.find("prefixes") != configurationJson_.end()) {
-    if (configurationJson_["prefixes"]) {
-      vector<string> prefixes;
-      auto prefixFile = ad_utility::makeIfstream(onDiskBase_ + PREFIX_FILE);
-      for (string prefix; std::getline(prefixFile, prefix);) {
-        prefixes.emplace_back(std::move(prefix));
-      }
-      vocab_.buildCodebookForPrefixCompression(prefixes);
-    } else {
-      vocab_.buildCodebookForPrefixCompression(std::vector<std::string>());
-    }
-  }
-  */
   if (prefixesOption.wasSetAtRuntime()) {
     configurationJson_["prefixes"] = boolPrefixes;
     if (boolPrefixes) {
@@ -926,16 +910,6 @@ void IndexImpl::readConfiguration() {
   vocab_.initializeInternalizedLangs(languagesInternal);
   configurationJson_["languages-internal"] = languagesInternal;
 
-  // Once again, I can only guess, what kind of value should be at
-  // `"has-all-permutations"`.
-  /*
-  if (configurationJson_.find("has-all-permutations") !=
-          configurationJson_.end() &&
-      configurationJson_["has-all-permutations"] == false) {
-    // If the permutations simply don't exist, then we can never load them.
-    loadAllPermutations_ = false;
-  }
-  */
   if (!hasAllPermutations) {
     configurationJson_["has-all-permutations"] = false;
     // If the permutations simply don't exist, then we can never load them.
