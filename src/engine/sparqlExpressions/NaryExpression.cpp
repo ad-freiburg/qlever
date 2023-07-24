@@ -72,9 +72,14 @@ INSTANTIATE_NARY(2, FV<decltype(add), NumericValueGetter>);
 
 INSTANTIATE_NARY(2, FV<decltype(subtract), NumericValueGetter>);
 
-INSTANTIATE_NARY(1, FV<decltype(ad_utility::wktLongitude), StringValueGetter>);
-INSTANTIATE_NARY(1, FV<decltype(ad_utility::wktLatitude), StringValueGetter>);
-INSTANTIATE_NARY(2, FV<decltype(ad_utility::wktDist), StringValueGetter>);
+INSTANTIATE_NARY(1,
+                 FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
+                    StringValueGetter>);
+INSTANTIATE_NARY(1,
+                 FV<NumericIdWrapper<decltype(ad_utility::wktLatitude), true>,
+                    StringValueGetter>);
+INSTANTIATE_NARY(2, FV<NumericIdWrapper<decltype(ad_utility::wktDist), true>,
+                       StringValueGetter>);
 
 INSTANTIATE_NARY(1, FV<decltype(extractYear), DateValueGetter>);
 INSTANTIATE_NARY(1, FV<decltype(extractMonth), DateValueGetter>);

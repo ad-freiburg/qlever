@@ -205,8 +205,9 @@ TEST(SparqlExpressionParser, First) {
   sparqlExpression::EvaluationContext input{*ad_utility::testing::getQec(), map,
                                             table, alloc, localVocab};
   auto result = resultAsExpression->evaluate(&input);
-  AD_CONTRACT_CHECK(std::holds_alternative<double>(result));
-  ASSERT_FLOAT_EQ(25.0, std::get<double>(result));
+  AD_CONTRACT_CHECK(std::holds_alternative<Id>(result));
+  ASSERT_EQ(std::get<Id>(result).getDatatype(), Datatype::Int);
+  ASSERT_EQ(25, std::get<Id>(result).getInt());
 }
 
 TEST(SparqlParser, ComplexConstructTemplate) {

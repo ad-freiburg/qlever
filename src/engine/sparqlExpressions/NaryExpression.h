@@ -108,6 +108,38 @@ class NaryExpression : public SparqlExpression {
   Children _children;
 };
 
+// Takes a `Function` that returns a numeric value (integral or floating point)
+// and converts it to a function, that takes the same arguments and returns the
+// same result, but the return type is the `NumericValue` variant.
+template <typename Function, bool nanToUndef = false>
+struct NumericIdWrapper {
+  // Note: Sonarcloud suggests `[[no_unique_address]]` for the following member,
+  // but adding it causes an internal compiler error in Clang 16.
+  Function function_{};
+  Id operator()(auto&&... args) const {
+    return makeNumericId<nanToUndef>(function_(AD_FWD(args)...));
+  }
+};
+
+// Takes a `Function` that takes and returns numeric values (integral or
+// floating point) and converts it to a function, that takes the same arguments
+// and returns the same result, but the arguments and the return type are the
+// `NumericValue` variant.
+template <typename Function>
+inline auto makeNumericExpression() {
+  return [](const std::same_as<NumericValue> auto&... args) {
+    auto visitor = []<typename... Ts>(const Ts&... t) {
+      if constexpr ((... || std::is_same_v<NotNumeric, Ts>)) {
+        return Id::makeUndefined();
+      } else {
+        using C = std::common_type_t<Ts...>;
+        return makeNumericId(Function{}(static_cast<C>(t)...));
+      }
+    };
+    return std::visit(visitor, args...);
+  };
+}
+
 // Two short aliases to make the instantiations more readable.
 template <typename... T>
 using FV = FunctionAndValueGetters<T...>;
@@ -125,31 +157,62 @@ using SET = SpecializedFunction<F, decltype(areAllSetOfIntervals)>;
 using ad_utility::SetOfIntervals;
 
 // The types for the concrete MultiBinaryExpressions and UnaryExpressions.
-inline auto orLambda = [](bool a, bool b) -> Bool { return a || b; };
+using TernaryBool = EffectiveBooleanValueGetter::Result;
+
+// Or
+inline auto orLambda = [](TernaryBool a, TernaryBool b) {
+  using enum TernaryBool;
+  if (a == True || b == True) {
+    return Id::makeFromBool(true);
+  }
+  if (a == False && b == False) {
+    return Id::makeFromBool(false);
+  }
+  return Id::makeUndefined();
+};
 using OrExpression =
     NARY<2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Union>>;
 
-inline auto andLambda = [](bool a, bool b) -> Bool { return a && b; };
+// And
+inline auto andLambda = [](TernaryBool a, TernaryBool b) {
+  using enum TernaryBool;
+  if (a == True && b == True) {
+    return Id::makeFromBool(true);
+  }
+  if (a == False || b == False) {
+    return Id::makeFromBool(false);
+  }
+  return Id::makeUndefined();
+};
 using AndExpression =
     NARY<2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Intersection>>;
 
 // Unary Negation
-inline auto unaryNegate = [](bool a) -> Bool { return !a; };
+inline auto unaryNegate = [](TernaryBool a) {
+  using enum TernaryBool;
+  switch (a) {
+    case True:
+      return Id::makeFromBool(false);
+    case False:
+      return Id::makeFromBool(true);
+    case Undef:
+      return Id::makeUndefined();
+  }
+  AD_FAIL();
+};
 using UnaryNegateExpression =
     NARY<1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Complement>>;
 
-// Unary Minus, currently all results are converted to double
-inline auto unaryMinus = [](auto a) -> double { return -a; };
+// Unary Minus.
+inline auto unaryMinus = makeNumericExpression<std::negate<>>();
 using UnaryMinusExpression =
     NARY<1, FV<decltype(unaryMinus), NumericValueGetter>>;
 
 // Multiplication.
-inline auto multiply = [](const auto& a, const auto& b) -> double {
-  return a * b;
-};
+inline auto multiply = makeNumericExpression<std::multiplies<>>();
 using MultiplyExpression = NARY<2, FV<decltype(multiply), NumericValueGetter>>;
 
 // Division.
@@ -157,27 +220,30 @@ using MultiplyExpression = NARY<2, FV<decltype(multiply), NumericValueGetter>>;
 // TODO<joka921> If `b == 0` this is technically undefined behavior and
 // should lead to an expression error in SPARQL. Fix this as soon as we
 // introduce the proper semantics for expression errors.
-inline auto divide = [](const auto& a, const auto& b) -> double {
-  return static_cast<double>(a) / b;
-};
+// Update: I checked it, and the standard differentiates between `xsd:decimal`
+// (error) and `xsd:float/xsd:double` where we have `NaN` and `inf` results. We
+// currently implement the latter behavior. Note: The result of a division in
+// SPARQL is always a decimal number, so there is no integer division.
+inline auto divide = makeNumericExpression<std::divides<double>>();
 using DivideExpression = NARY<2, FV<decltype(divide), NumericValueGetter>>;
 
 // Addition and subtraction, currently all results are converted to double.
-inline auto add = [](const auto& a, const auto& b) -> double { return a + b; };
+inline auto add = makeNumericExpression<std::plus<>>();
 using AddExpression = NARY<2, FV<decltype(add), NumericValueGetter>>;
 
-inline auto subtract = [](const auto& a, const auto& b) -> double {
-  return a - b;
-};
+inline auto subtract = makeNumericExpression<std::minus<>>();
 using SubtractExpression = NARY<2, FV<decltype(subtract), NumericValueGetter>>;
 
 // Basic GeoSPARQL functions (code in util/GeoSparqlHelpers.h).
 using LongitudeExpression =
-    NARY<1, FV<decltype(ad_utility::wktLongitude), StringValueGetter>>;
+    NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
+               StringValueGetter>>;
 using LatitudeExpression =
-    NARY<1, FV<decltype(ad_utility::wktLatitude), StringValueGetter>>;
+    NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLatitude), true>,
+               StringValueGetter>>;
 using DistExpression =
-    NARY<2, FV<decltype(ad_utility::wktDist), StringValueGetter>>;
+    NARY<2, FV<NumericIdWrapper<decltype(ad_utility::wktDist), true>,
+               StringValueGetter>>;
 
 // Date functions.
 //
@@ -221,7 +287,9 @@ using DayExpression = NARY<1, FV<decltype(extractDay), DateValueGetter>>;
 using StrExpression = NARY<1, FV<std::identity, StringValueGetter>>;
 
 // Compute string length.
-inline auto strlen = [](const auto& s) -> int64_t { return s.size(); };
+inline auto strlen = [](const auto& s) -> Id {
+  return Id::makeFromInt(s.size());
+};
 using StrlenExpression = NARY<1, FV<decltype(strlen), StringValueGetter>>;
 
 }  // namespace detail

@@ -18,7 +18,7 @@ ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
       [context]<typename T>(const T& childResult) -> ExpressionResult {
     if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
       // If there exists an element that is true, return true.
-      return Bool{!childResult._intervals.empty()};
+      return Id::makeFromBool(!childResult._intervals.empty());
     } else if constexpr (isVectorResult<T>) {
       AD_CONTRACT_CHECK(!childResult.empty());
       return childResult[0];
