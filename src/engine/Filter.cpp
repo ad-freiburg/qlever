@@ -73,8 +73,11 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
   // constructor.
   evaluationContext._columnsByWhichResultIsSorted = inputResultTable.sortedBy();
 
+  ad_utility::Timer expressionTimer{ad_utility::Timer::Started};
   sparqlExpression::ExpressionResult expressionResult =
       _expression.getPimpl()->evaluate(&evaluationContext);
+  getRuntimeInfo().addDetail("time-expression-evaluation",
+                             expressionTimer.msecs());
 
   const auto input = inputResultTable.idTable().asStaticView<WIDTH>();
   auto output = std::move(*outputIdTable).toStatic<WIDTH>();

@@ -121,14 +121,17 @@ template <size_t IN_WIDTH, size_t OUT_WIDTH>
 void Bind::computeExpressionBind(
     IdTable* outputIdTable, LocalVocab* outputLocalVocab,
     const ResultTable& inputResultTable,
-    sparqlExpression::SparqlExpression* expression) const {
+    sparqlExpression::SparqlExpression* expression) {
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputResultTable.idTable(), getExecutionContext()->getAllocator(),
       inputResultTable.localVocab());
 
+  ad_utility::Timer expressionTimer{ad_utility::Timer::Started};
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
+  getRuntimeInfo().addDetail("time-expression-evaluation",
+                             expressionTimer.msecs());
 
   const auto input = inputResultTable.idTable().asStaticView<IN_WIDTH>();
   auto output = std::move(*outputIdTable).toStatic<OUT_WIDTH>();

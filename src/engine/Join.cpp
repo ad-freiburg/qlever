@@ -440,7 +440,7 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
 // ______________________________________________________________________________
 
 void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
-                ColumnIndex jc2, IdTable* result) const {
+                ColumnIndex jc2, IdTable* result) {
   LOG(DEBUG) << "Performing join between two tables.\n";
   LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size()
              << "\n";
@@ -524,6 +524,9 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
     }();
     AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
   }
+
+  rowAdder.flush();
+  getRuntimeInfo().addDetail("writing-time", rowAdder.writingTime());
   *result = std::move(rowAdder).resultTable();
   // The column order in the result is now
   // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
@@ -730,6 +733,8 @@ IdTable Join::computeResultForTwoIndexScans() {
   AD_CORRECTNESS_CHECK(rightBlocks.details().numBlocksRead_ <=
                        leftBlocks.details().numElementsRead_);
 
+  rowAdder.flush();
+  getRuntimeInfo().addDetail("writing-time", rowAdder.writingTime());
   return std::move(rowAdder).resultTable();
 }
 
@@ -776,6 +781,8 @@ IdTable Join::computeResultForIndexScanAndIdTable(const IdTable& idTable,
   } else {
     doJoin(blockForIdTable, rightBlocks);
   }
+  rowAdder.flush();
+  getRuntimeInfo().addDetail("writing-time", rowAdder.writingTime());
   auto result = std::move(rowAdder).resultTable();
   result.setColumnSubset(joinColMap.permutationResult());
 

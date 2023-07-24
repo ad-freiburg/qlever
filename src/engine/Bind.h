@@ -50,10 +50,10 @@ class Bind : public Operation {
 
   // Implementation for the binding of arbitrary expressions.
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  void computeExpressionBind(
-      IdTable* outputIdTable, LocalVocab* outputLocalVocab,
-      const ResultTable& inputResultTable,
-      sparqlExpression::SparqlExpression* expression) const;
+  void computeExpressionBind(IdTable* outputIdTable,
+                             LocalVocab* outputLocalVocab,
+                             const ResultTable& inputResultTable,
+                             sparqlExpression::SparqlExpression* expression);
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };

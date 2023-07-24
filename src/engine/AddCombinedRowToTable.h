@@ -11,6 +11,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Exception.h"
+#include "util/Timer.h"
 
 namespace ad_utility {
 // This class handles the efficient writing of the results of a JOIN operation
@@ -24,6 +25,7 @@ class AddCombinedRowToIdTable {
   size_t numJoinColumns_;
   std::optional<std::array<IdTableView<0>, 2>> inputs_;
   IdTable resultTable_;
+  ad_utility::Timer writeTimer_{ad_utility::Timer::Started};
 
   // This struct stores the information, which row indices from the input are
   // combined into a given row index in the output, i.e. "To obtain the
@@ -155,6 +157,8 @@ class AddCombinedRowToIdTable {
   // have to call it manually after adding the last row, else the destructor
   // will throw an exception.
   void flush() {
+    writeTimer_.cont();
+    absl::Cleanup stopTimer{[this] { writeTimer_.stop(); }};
     auto& result = resultTable_;
     size_t oldSize = result.size();
     AD_CORRECTNESS_CHECK(nextIndex_ ==
@@ -272,6 +276,11 @@ class AddCombinedRowToIdTable {
     optionalIndexBuffer_.clear();
     nextIndex_ = 0;
   }
+
+  // Get the time that was spent writing the results.
+  size_t writingTime() { return writeTimer_.msecs(); }
+
+ private:
   const IdTableView<0>& inputLeft() const { return inputs_.value()[0]; }
 
   const IdTableView<0>& inputRight() const { return inputs_.value()[1]; }
