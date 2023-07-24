@@ -100,10 +100,6 @@ class AggregateExpression : public SparqlExpression {
       result = finalOperation(std::move(result), inputSize);
       if constexpr (requires { makeNumericId(result); }) {
         return makeNumericId(result);
-      } else if constexpr (std::is_same_v<ResultType, double>) {
-        return Id::makeFromDouble(result);
-      } else if constexpr (std::integral<ResultType>) {
-        return Id::makeFromInt(result);
       } else {
         return result;
       }
@@ -136,10 +132,6 @@ class AggregateExpression : public SparqlExpression {
       result = finalOperation(std::move(result), uniqueHashSet.size());
       if constexpr (requires { makeNumericId(result); }) {
         return makeNumericId(result);
-      } else if constexpr (std::is_same_v<ResultType, double>) {
-        return Id::makeFromDouble(result);
-      } else if constexpr (std::integral<ResultType>) {
-        return Id::makeFromInt(result);
       } else {
         return result;
       }
@@ -182,15 +174,17 @@ class CountExpression : public CountExpressionBase {
   }
 };
 
-// TODO<joka921> Comment. And what to do about NaNs.
-template <typename Op>
+// Take an `NumericOperation` that takes numeric arguments (integral or floating
+// points) and returns an numeric result. Return a function that performs the
+// same operation, but takes and returns the `NumericValue` variant.
+template <typename NumericOperation>
 inline auto makeNumericExpressionForAggregate() {
   return [](const std::same_as<NumericValue> auto&... args) -> NumericValue {
     auto visitor = []<typename... Ts>(const Ts&... t) -> NumericValue {
       if constexpr ((... || std::is_same_v<NotNumeric, Ts>)) {
         return NotNumeric{};
       } else {
-        return (Op{}(t...));
+        return (NumericOperation{}(t...));
       }
     };
     return std::visit(visitor, args...);
@@ -202,26 +196,19 @@ inline auto addForSum = makeNumericExpressionForAggregate<std::plus<>>();
 using SumExpression = AGG_EXP<decltype(addForSum), NumericValueGetter>;
 
 // AVG
-// inline auto addForAvgSum = [](const auto& a, const auto& b) { return a + b;
-// };
 inline auto averageFinalOp = [](const NumericValue& aggregation,
-                                size_t numElements) -> NumericValue {
-  return numElements ? (makeNumericExpressionForAggregate<std::divides<>>()(
-                           aggregation,
-                           NumericValue{static_cast<int64_t>(numElements)}))
-                     : NumericValue{std::numeric_limits<double>::quiet_NaN()};
+                                size_t numElements) {
+  return makeNumericExpressionForAggregate<std::divides<>>()(
+      aggregation, NumericValue{static_cast<double>(numElements)});
 };
 using AvgExpression =
     detail::AggregateExpression<AGG_OP<decltype(addForSum), NumericValueGetter>,
                                 decltype(averageFinalOp)>;
 
-// Note: the std::common_type_t is required in case we compare different numeric
-// types like an int and a bool. Then we need to manually specify the
-// return type.
-
+// Min and Max.
 template <typename comparator, valueIdComparators::Comparison comparison>
-inline auto minMaxLambdaForAllTypes = []<SingleExpressionResult T>(const T& a,
-                                                                   const T& b) {
+inline const auto minMaxLambdaForAllTypes = []<SingleExpressionResult T>(
+                                                const T& a, const T& b) {
   if constexpr (std::is_arithmetic_v<T> ||
                 ad_utility::isSimilar<T, std::string>) {
     // TODO<joka921> Also implement correct comparisons for `std::string`

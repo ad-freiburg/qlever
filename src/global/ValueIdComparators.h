@@ -19,7 +19,7 @@ enum struct Comparison { LT, LE, EQ, NE, GE, GT };
 // This enum can be used to configure the behavior of the `compareIds` method
 // below in the case when two `Id`s have incompatible datatypes (e.g.
 // `VocabIndex` and a numeric type, or `Undefined` and any other type).
-// For `AlwaysFalse`, the comparison will always be false, so for example `"x"`
+// For `AlwaysUndef`, the comparison will always be UNDEF, so for example `"x"`
 // is neither smaller than nor greater than nor equal to `42`. This behavior is
 // similar to the behavior of floating point `NaN` values. It is used for
 // example for filter expressions like `FILTER (?x < 42)` which will filter out
@@ -30,19 +30,26 @@ enum struct Comparison { LT, LE, EQ, NE, GE, GT };
 // partial ordering on all possible IDs.
 enum struct ComparisonForIncompatibleTypes { CompareByType, AlwaysUndef };
 
+// The result of the comparisons is actually ternary because we sometimes
+// distinguish between "false" and "type mismatch" (see the comment directly
+// above for details).
 enum struct ComparisonResult { False, True, Undef };
 
+// Convert the comparison result to a boolean value, assuming that it is not
+// `Undef`.
 inline bool toBoolNotUndef(ComparisonResult comparisonResult) {
   using enum ComparisonResult;
   AD_EXPENSIVE_CHECK(comparisonResult != Undef);
   return comparisonResult == True;
 }
 
+// Convert a bool to a ternary `ComparisonResult`.
 inline ComparisonResult fromBool(bool b) {
   using enum ComparisonResult;
   return b ? True : False;
 }
 
+// Convert a `ComparisonResult` to a `ValueId`.
 inline ValueId toValueId(ComparisonResult comparisonResult) {
   using enum ComparisonResult;
   switch (comparisonResult) {

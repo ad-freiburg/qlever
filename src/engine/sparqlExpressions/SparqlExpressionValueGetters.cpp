@@ -12,7 +12,7 @@ using namespace sparqlExpression::detail;
 
 // _____________________________________________________________________________
 NumericValue NumericValueGetter::operator()(
-    ValueId id, sparqlExpression::EvaluationContext*) const {
+    ValueId id, const sparqlExpression::EvaluationContext*) const {
   switch (id.getDatatype()) {
     case Datatype::Double:
       return id.getDouble();
@@ -34,9 +34,8 @@ NumericValue NumericValueGetter::operator()(
 }
 
 // _____________________________________________________________________________
-auto EffectiveBooleanValueGetter::operator()(ValueId id,
-                                             EvaluationContext* context) const
-    -> Result {
+auto EffectiveBooleanValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const -> Result {
   using enum Result;
   switch (id.getDatatype()) {
     case Datatype::Double: {
@@ -74,7 +73,8 @@ auto EffectiveBooleanValueGetter::operator()(ValueId id,
 }
 
 // ____________________________________________________________________________
-string StringValueGetter::operator()(Id id, EvaluationContext* context) const {
+string StringValueGetter::operator()(Id id,
+                                     const EvaluationContext* context) const {
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true>(
           context->_qec.getIndex(), id, context->_localVocab);
@@ -100,7 +100,7 @@ std::optional<string> LiteralFromIdGetter::operator()(
 
 // ____________________________________________________________________________
 bool IsValidValueGetter::operator()(
-    ValueId id, [[maybe_unused]] EvaluationContext* context) const {
+    ValueId id, [[maybe_unused]] const EvaluationContext* context) const {
   // Every knowledge base value that is bound converts to "True"
   // TODO<joka921> check for the correct semantics of the error handling and
   // implement it in a further version.

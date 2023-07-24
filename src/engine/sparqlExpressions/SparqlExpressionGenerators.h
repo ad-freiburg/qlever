@@ -86,7 +86,8 @@ inline cppcoro::generator<Id> resultGenerator(ad_utility::SetOfIntervals set,
 /// Return a generator that yields `numItems` many items for the various
 /// `SingleExpressionResult`
 template <SingleExpressionResult Input>
-auto makeGenerator(Input&& input, size_t numItems, EvaluationContext* context) {
+auto makeGenerator(Input&& input, size_t numItems,
+                   const EvaluationContext* context) {
   if constexpr (ad_utility::isSimilar<::Variable, Input>) {
     std::span<const ValueId> inputWithVariableResolved{
         getIdsFromVariable(std::forward<Input>(input), context)};

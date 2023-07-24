@@ -108,6 +108,9 @@ class NaryExpression : public SparqlExpression {
   Children _children;
 };
 
+// Takes a `Function` that returns a numeric value (integral or floating point)
+// and converts it to a function, that takes the same arguments and returns the
+// same result, but the return type is the `NumericValue` variant.
 template <typename Function, bool nanToUndef = false>
 struct NumericIdWrapper {
   // Note: Sonarcloud suggests `[[no_unique_address]]` for the following member,
@@ -117,6 +120,25 @@ struct NumericIdWrapper {
     return makeNumericId<nanToUndef>(function_(AD_FWD(args)...));
   }
 };
+
+// Takes a `Function` that takes and returns numeric values (integral or
+// floating point) and converts it to a function, that takes the same arguments
+// and returns the same result, but the arguments and the return type are the
+// `NumericValue` variant.
+template <typename Function>
+inline auto makeNumericExpression() {
+  return [](const std::same_as<NumericValue> auto&... args) {
+    auto visitor = []<typename... Ts>(const Ts&... t) {
+      if constexpr ((... || std::is_same_v<NotNumeric, Ts>)) {
+        return Id::makeUndefined();
+      } else {
+        using C = std::common_type_t<Ts...>;
+        return makeNumericId(Function{}(static_cast<C>(t)...));
+      }
+    };
+    return std::visit(visitor, args...);
+  };
+}
 
 // Two short aliases to make the instantiations more readable.
 template <typename... T>
@@ -136,6 +158,8 @@ using ad_utility::SetOfIntervals;
 
 // The types for the concrete MultiBinaryExpressions and UnaryExpressions.
 using TernaryBool = EffectiveBooleanValueGetter::Result;
+
+// Or
 inline auto orLambda = [](TernaryBool a, TernaryBool b) {
   using enum TernaryBool;
   if (a == True || b == True) {
@@ -150,6 +174,7 @@ using OrExpression =
     NARY<2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Union>>;
 
+// And
 inline auto andLambda = [](TernaryBool a, TernaryBool b) {
   using enum TernaryBool;
   if (a == True && b == True) {
@@ -181,24 +206,8 @@ using UnaryNegateExpression =
     NARY<1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Complement>>;
 
-// TODO<joka921> Comment. And what to do about NaNs.
-template <typename Op>
-inline auto makeNumericExpression() {
-  return [](const std::same_as<NumericValue> auto&... args) {
-    auto visitor = []<typename... Ts>(const Ts&... t) {
-      if constexpr ((... || std::is_same_v<NotNumeric, Ts>)) {
-        return Id::makeUndefined();
-      } else {
-        return makeNumericId(Op{}(t...));
-      }
-    };
-    return std::visit(visitor, args...);
-  };
-}
-
-// Unary Minus, currently all results are converted to double
+// Unary Minus.
 inline auto unaryMinus = makeNumericExpression<std::negate<>>();
-// inline auto unaryMinus = [](auto a) { return Id::makeFromDouble(-a); };
 using UnaryMinusExpression =
     NARY<1, FV<decltype(unaryMinus), NumericValueGetter>>;
 

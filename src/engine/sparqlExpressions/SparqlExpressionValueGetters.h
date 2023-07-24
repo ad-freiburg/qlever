@@ -14,24 +14,25 @@
 
 namespace sparqlExpression::detail {
 
-/// Returns a numeric value.
-
+// An empty struct to represent a non-numeric value in a context where only
+// numeric values make sense.
 struct NotNumeric {};
+// The input to an expression that expects a numeric value.
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
 
-// TODO<joka921> Move these helpers elsewhere
+// Convert a numeric value (either a plain number, or the `NumericValue` variant
+// from above) into an `ID`. When `NanToUndef` is `true` then floating point NaN
+// values will become `Id::makeUndefined()`.
 template <bool NanToUndef = false, typename T>
-requires std::integral<T> || std::floating_point<T> || std::same_as<Id, T> ||
-         std::same_as<NotNumeric, T> || std::same_as<NumericValue, T>
+requires std::integral<T> || std::floating_point<T> ||
+         ad_utility::isTypeAnyOf<T, Id, NotNumeric, NumericValue>
 Id makeNumericId(T t) {
   if constexpr (std::integral<T>) {
     return Id::makeFromInt(t);
-  } else if constexpr (std::floating_point<T>) {
-    if constexpr (NanToUndef) {
-      return std::isnan(t) ? Id::makeUndefined() : Id::makeFromDouble(t);
-    } else {
-      return Id::makeFromDouble(t);
-    }
+  } else if constexpr (std::floating_point<T> && NanToUndef) {
+    return std::isnan(t) ? Id::makeUndefined() : Id::makeFromDouble(t);
+  } else if constexpr (std::floating_point<T> && !NanToUndef) {
+    return Id::makeFromDouble(t);
   } else if constexpr (std::same_as<NotNumeric, T>) {
     return Id::makeUndefined();
   } else if constexpr (std::same_as<NumericValue, T>) {
@@ -41,13 +42,14 @@ Id makeNumericId(T t) {
     return t;
   }
 }
+
+// Return `NumericValue` which is then used as the input to numeric expressions.
 struct NumericValueGetter {
-  // This is the current error-signalling mechanism
-  NumericValue operator()(const string&, EvaluationContext*) const {
+  NumericValue operator()(const string&, const EvaluationContext*) const {
     return NotNumeric{};
   }
 
-  NumericValue operator()(ValueId id, EvaluationContext*) const;
+  NumericValue operator()(ValueId id, const EvaluationContext*) const;
 };
 
 /// Return the type exactly as it was passed in.
@@ -55,7 +57,7 @@ struct NumericValueGetter {
 struct ActualValueGetter {
   // Simply preserve the input from numeric values
   template <typename T>
-  T operator()(T v, EvaluationContext*) const {
+  T operator()(T v, const EvaluationContext*) const {
     return v;
   }
 };
@@ -64,9 +66,11 @@ struct ActualValueGetter {
 /// not a nan (signalling an error in a previous calculation).
 struct IsValidValueGetter {
   // check for NULL/UNDEF values.
-  bool operator()(ValueId id, EvaluationContext*) const;
+  bool operator()(ValueId id, const EvaluationContext*) const;
 
-  bool operator()(const string&, EvaluationContext*) const { return true; }
+  bool operator()(const string&, const EvaluationContext*) const {
+    return true;
+  }
 };
 
 /// Return a boolean value that is used for AND, OR and NOT expressions.
@@ -74,10 +78,10 @@ struct IsValidValueGetter {
 struct EffectiveBooleanValueGetter {
   enum struct Result { False, True, Undef };
   // _________________________________________________________________________
-  Result operator()(ValueId id, EvaluationContext*) const;
+  Result operator()(ValueId id, const EvaluationContext*) const;
 
   // Nonempty strings are true.
-  Result operator()(const string& s, EvaluationContext*) {
+  Result operator()(std::string_view s, const EvaluationContext*) const {
     return s.empty() ? Result::False : Result::True;
   }
 };
@@ -85,9 +89,9 @@ struct EffectiveBooleanValueGetter {
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a string value.
 struct StringValueGetter {
-  string operator()(ValueId, EvaluationContext*) const;
+  string operator()(ValueId, const EvaluationContext*) const;
 
-  string operator()(string s, EvaluationContext*) const { return s; }
+  string operator()(string s, const EvaluationContext*) const { return s; }
 };
 
 /// This class can be used as the `ValueGetter` argument of Expression
