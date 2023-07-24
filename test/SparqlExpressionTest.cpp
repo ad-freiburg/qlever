@@ -51,8 +51,8 @@ AllocatorWithLimit<Id> alloc = ad_utility::testing::makeAllocator();
     return ::testing::Eq(id);
   } else {
     // NaN and NaN are considered equal, and we also use `FloatEq` and not
-    // `DoubleEq` because the precision in `ValueIds` is less than 64 bits
-    // because of the type bits.
+    // `DoubleEq` because the precision of a `ValueId` is less than 64 bits
+    // because of the datatype bits.
     testing::Matcher<float> doubleMatcher =
         ::testing::NanSensitiveFloatEq(static_cast<float>(id.getDouble()));
     auto doubleMatcherCast =
