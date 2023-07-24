@@ -174,8 +174,8 @@ class CountExpression : public CountExpressionBase {
   }
 };
 
-// Take an `NumericOperation` that takes numeric arguments (integral or floating
-// points) and returns an numeric result. Return a function that performs the
+// Take a `NumericOperation` that takes numeric arguments (integral or floating
+// points) and returns a numeric result. Return a function that performs the
 // same operation, but takes and returns the `NumericValue` variant.
 template <typename NumericOperation>
 inline auto makeNumericExpressionForAggregate() {
