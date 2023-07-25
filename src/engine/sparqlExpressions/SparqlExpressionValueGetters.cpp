@@ -51,11 +51,13 @@ auto EffectiveBooleanValueGetter::operator()(
       return Undef;
     case Datatype::WordVocabIndex: {
       auto index = id.getWordVocabIndex();
-      return !context->_qec.getIndex()
-                  .getTextVocab()
-                  .indexToOptionalString(index)
-                  .value_or("")
-                  .empty();
+      return context->_qec.getIndex()
+                     .getTextVocab()
+                     .indexToOptionalString(index)
+                     .value_or("")
+                     .empty()
+                 ? False
+                 : True;
     }
     case Datatype::VocabIndex: {
       auto index = id.getVocabIndex();
