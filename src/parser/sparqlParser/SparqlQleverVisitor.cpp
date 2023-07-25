@@ -1505,10 +1505,10 @@ Visitor::OperatorAndExpression Visitor::visit(
 ExpressionPtr Visitor::visit(Parser::UnaryExpressionContext* ctx) {
   auto child = visit(ctx->primaryExpression());
   if (ctx->children[0]->getText() == "-") {
-    return createExpression<sparqlExpression::UnaryMinusExpression>(
+    return sparqlExpression::makeUnaryMinusExpression(
         std::move(child));
   } else if (ctx->children[0]->getText() == "!") {
-    return createExpression<sparqlExpression::UnaryNegateExpression>(
+    return sparqlExpression::makeUnaryNegateExpression(
         std::move(child));
   } else {
     // no sign or an explicit '+'
@@ -1580,7 +1580,7 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     AD_CONTRACT_CHECK(argList.size() == 1);
     return createExpression<Expression>(std::move(argList[0]));
   };
-  auto createUnary = [this, &argList](auto&& function) {
+  auto createUnary = [&argList](auto&& function) {
     AD_CONTRACT_CHECK(argList.size() == 1);
     return function(std::move(argList[0]));
   };
