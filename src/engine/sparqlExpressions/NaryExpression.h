@@ -234,6 +234,53 @@ using AddExpression = NARY<2, FV<decltype(add), NumericValueGetter>>;
 inline auto subtract = makeNumericExpression<std::minus<>>();
 using SubtractExpression = NARY<2, FV<decltype(subtract), NumericValueGetter>>;
 
+// Additional numeric expressions
+
+// Abs
+inline const auto absImpl = []<typename T>(T num) { return std::abs(num); };
+inline const auto abs = makeNumericExpression<decltype(absImpl)>();
+using AbsExpression = NARY<1, FV<decltype(abs), NumericValueGetter>>;
+
+// Abs
+// Round
+inline const auto roundImpl = []<typename T>(T num) {
+  if constexpr (std::is_floating_point_v<T>) {
+    auto res = std::round(num);
+    // In SPARQL negative numbers are rounded towards zero if they lie exactly
+    // between two integers.
+    if (num < 0 && std::abs(res - num) == 0.5) {
+      res += 1;
+    }
+    return res;
+  } else {
+    return num;
+  }
+};
+inline const auto round = makeNumericExpression<decltype(roundImpl)>();
+using RoundExpression = NARY<1, FV<decltype(round), NumericValueGetter>>;
+
+// Ceil
+inline const auto ceilImpl = []<typename T>(T num) {
+  if constexpr (std::is_floating_point_v<T>) {
+    return std::ceil(num);
+  } else {
+    return num;
+  }
+};
+inline const auto ceil = makeNumericExpression<decltype(ceilImpl)>();
+using CeilExpression = NARY<1, FV<decltype(ceil), NumericValueGetter>>;
+
+// Floor
+inline const auto floorImpl = []<typename T>(T num) {
+  if constexpr (std::is_floating_point_v<T>) {
+    return std::floor(num);
+  } else {
+    return num;
+  }
+};
+inline const auto floor = makeNumericExpression<decltype(floorImpl)>();
+using FloorExpression = NARY<1, FV<decltype(floor), NumericValueGetter>>;
+
 // Basic GeoSPARQL functions (code in util/GeoSparqlHelpers.h).
 using LongitudeExpression =
     NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
@@ -294,6 +341,38 @@ using StrlenExpression = NARY<1, FV<decltype(strlen), StringValueGetter>>;
 
 }  // namespace detail
 
+SparqlExpression::Ptr makeAddExpression(SparqlExpression::Ptr child1,
+                                        SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeAndExpression(SparqlExpression::Ptr child1,
+                                        SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeDivideExpression(SparqlExpression::Ptr child1,
+                                           SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeMultiplyExpression(SparqlExpression::Ptr child1,
+                                             SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeOrExpression(SparqlExpression::Ptr child1,
+                                       SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeSubtractExpression(SparqlExpression::Ptr child1,
+                                             SparqlExpression::Ptr child2);
+
+SparqlExpression::Ptr makeUnaryMinusExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeUnaryNegateExpression(SparqlExpression::Ptr child);
+
+SparqlExpression::Ptr makeRoundExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeAbsExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeCeilExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeFloorExpression(SparqlExpression::Ptr child);
+
+SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
+
+SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
+
+SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child);
+
 using detail::AddExpression;
 using detail::AndExpression;
 using detail::DivideExpression;
@@ -302,6 +381,11 @@ using detail::OrExpression;
 using detail::SubtractExpression;
 using detail::UnaryMinusExpression;
 using detail::UnaryNegateExpression;
+
+using detail::AbsExpression;
+using detail::CeilExpression;
+using detail::FloorExpression;
+using detail::RoundExpression;
 
 using detail::DistExpression;
 using detail::LatitudeExpression;

@@ -1580,6 +1580,10 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     AD_CONTRACT_CHECK(argList.size() == 1);
     return createExpression<Expression>(std::move(argList[0]));
   };
+  auto createUnary = [this, &argList](auto&& function) {
+    AD_CONTRACT_CHECK(argList.size() == 1);
+    return function(std::move(argList[0]));
+  };
   if (functionName == "str") {
     return createUnaryExpression.template operator()<StrExpression>();
   } else if (functionName == "strlen") {
@@ -1593,6 +1597,14 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "rand") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<RandomExpression>();
+  } else if (functionName == "ceil") {
+    return createUnary(&makeCeilExpression);
+  } else if (functionName == "abs") {
+    return createUnary(&makeAbsExpression);
+  } else if (functionName == "round") {
+    return createUnary(&makeRoundExpression);
+  } else if (functionName == "floor") {
+    return createUnary(&makeFloorExpression);
   } else {
     reportError(
         ctx,

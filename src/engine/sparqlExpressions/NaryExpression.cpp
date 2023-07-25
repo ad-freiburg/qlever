@@ -50,6 +50,12 @@ requires(isOperation<Op>) [[nodiscard]] string NaryExpression<Op>::getCacheKey(
   return key;
 }
 
+#define NARY_EXPRESSION(Name, N, X, ...)                                     \
+  class Name : public NaryExpression<detail::Operation<N, X, __VA_ARGS__>> { \
+    using Base = NaryExpression<Operation<N, X, __VA_ARGS__>>;               \
+    using Base::Base;                                                        \
+  };
+
 #define INSTANTIATE_NARY(N, X, ...) \
   template class NaryExpression<Operation<N, X, __VA_ARGS__>>
 
@@ -72,6 +78,11 @@ INSTANTIATE_NARY(2, FV<decltype(add), NumericValueGetter>);
 
 INSTANTIATE_NARY(2, FV<decltype(subtract), NumericValueGetter>);
 
+INSTANTIATE_NARY(1, FV<decltype(abs), NumericValueGetter>);
+INSTANTIATE_NARY(1, FV<decltype(round), NumericValueGetter>);
+INSTANTIATE_NARY(1, FV<decltype(ceil), NumericValueGetter>);
+INSTANTIATE_NARY(1, FV<decltype(floor), NumericValueGetter>);
+
 INSTANTIATE_NARY(1,
                  FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
                     StringValueGetter>);
@@ -86,5 +97,58 @@ INSTANTIATE_NARY(1, FV<decltype(extractMonth), DateValueGetter>);
 INSTANTIATE_NARY(1, FV<decltype(extractDay), DateValueGetter>);
 INSTANTIATE_NARY(1, FV<std::identity, StringValueGetter>);
 INSTANTIATE_NARY(1, FV<decltype(strlen), StringValueGetter>);
+
+NARY_EXPRESSION(AbsExpressionInternal, 1,
+                FV<decltype(abs), NumericValueGetter>);
 }  // namespace detail
+
+SparqlExpression::Ptr makeAddExpression(SparqlExpression::Ptr child1,
+                                        SparqlExpression::Ptr child2) {
+  return std::make_unique<AddExpression>(std::move(child1), std::move(child2));
+}
+SparqlExpression::Ptr makeAndExpression(SparqlExpression::Ptr child1,
+                                        SparqlExpression::Ptr child2) {
+  return std::make_unique<AndExpression>(std::move(child1), std::move(child2));
+}
+
+SparqlExpression::Ptr makeDivideExpression(SparqlExpression::Ptr child1,
+                                           SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeMultiplyExpression(SparqlExpression::Ptr child1,
+                                             SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeOrExpression(SparqlExpression::Ptr child1,
+                                       SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeSubtractExpression(SparqlExpression::Ptr child1,
+                                             SparqlExpression::Ptr child2);
+
+SparqlExpression::Ptr makeUnaryMinusExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeUnaryNegateExpression(SparqlExpression::Ptr child);
+
+SparqlExpression::Ptr makeRoundExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeAbsExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeCeilExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeFloorExpression(SparqlExpression::Ptr child);
+
+SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
+
+SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
+
+SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child);
+
+SparqlExpression::Ptr makeRoundExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<RoundExpression>(std::move(child));
+}
+SparqlExpression::Ptr makeAbsExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<detail::AbsExpressionInternal>(std::move(child));
+}
+SparqlExpression::Ptr makeCeilExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<CeilExpression>(std::move(child));
+}
+SparqlExpression::Ptr makeFloorExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<FloorExpression>(std::move(child));
+}
 }  // namespace sparqlExpression
