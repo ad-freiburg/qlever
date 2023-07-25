@@ -9,12 +9,6 @@
 namespace sparqlExpression {
 namespace detail {
 
-INSTANTIATE_NARY(2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
-                 SET<SetOfIntervals::Union>);
-
-INSTANTIATE_NARY(2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
-                 SET<SetOfIntervals::Intersection>);
-
 INSTANTIATE_NARY(1,
                  FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
                     StringValueGetter>);
@@ -24,16 +18,10 @@ INSTANTIATE_NARY(1,
 INSTANTIATE_NARY(2, FV<NumericIdWrapper<decltype(ad_utility::wktDist), true>,
                        StringValueGetter>);
 
-INSTANTIATE_NARY(1, FV<decltype(extractYear), DateValueGetter>);
-INSTANTIATE_NARY(1, FV<decltype(extractMonth), DateValueGetter>);
-INSTANTIATE_NARY(1, FV<decltype(extractDay), DateValueGetter>);
 INSTANTIATE_NARY(1, FV<std::identity, StringValueGetter>);
 INSTANTIATE_NARY(1, FV<decltype(strlen), StringValueGetter>);
 
 }  // namespace detail
-
-SparqlExpression::Ptr makeOrExpression(SparqlExpression::Ptr child1,
-                                       SparqlExpression::Ptr child2);
 
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);

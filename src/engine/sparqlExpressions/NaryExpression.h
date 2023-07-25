@@ -159,36 +159,6 @@ using ad_utility::SetOfIntervals;
 // The types for the concrete MultiBinaryExpressions and UnaryExpressions.
 using TernaryBool = EffectiveBooleanValueGetter::Result;
 
-// Or
-inline auto orLambda = [](TernaryBool a, TernaryBool b) {
-  using enum TernaryBool;
-  if (a == True || b == True) {
-    return Id::makeFromBool(true);
-  }
-  if (a == False && b == False) {
-    return Id::makeFromBool(false);
-  }
-  return Id::makeUndefined();
-};
-using OrExpression =
-    NARY<2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
-         SET<SetOfIntervals::Union>>;
-
-// And
-inline auto andLambda = [](TernaryBool a, TernaryBool b) {
-  using enum TernaryBool;
-  if (a == True && b == True) {
-    return Id::makeFromBool(true);
-  }
-  if (a == False || b == False) {
-    return Id::makeFromBool(false);
-  }
-  return Id::makeUndefined();
-};
-using AndExpression =
-    NARY<2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
-         SET<SetOfIntervals::Intersection>>;
-
 // Basic GeoSPARQL functions (code in util/GeoSparqlHelpers.h).
 using LongitudeExpression =
     NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
@@ -199,44 +169,6 @@ using LatitudeExpression =
 using DistExpression =
     NARY<2, FV<NumericIdWrapper<decltype(ad_utility::wktDist), true>,
                StringValueGetter>>;
-
-// Date functions.
-//
-inline auto extractYear = [](std::optional<DateOrLargeYear> d) {
-  if (!d.has_value()) {
-    return Id::makeUndefined();
-  } else {
-    return Id::makeFromInt(d->getYear());
-  }
-};
-
-inline auto extractMonth = [](std::optional<DateOrLargeYear> d) {
-  // TODO<C++23> Use the monadic operations for std::optional
-  if (!d.has_value()) {
-    return Id::makeUndefined();
-  }
-  auto optionalMonth = d.value().getMonth();
-  if (!optionalMonth.has_value()) {
-    return Id::makeUndefined();
-  }
-  return Id::makeFromInt(optionalMonth.value());
-};
-
-inline auto extractDay = [](std::optional<DateOrLargeYear> d) {
-  // TODO<C++23> Use the monadic operations for `std::optional`.
-  if (!d.has_value()) {
-    return Id::makeUndefined();
-  }
-  auto optionalDay = d.value().getDay();
-  if (!optionalDay.has_value()) {
-    return Id::makeUndefined();
-  }
-  return Id::makeFromInt(optionalDay.value());
-};
-
-using YearExpression = NARY<1, FV<decltype(extractYear), DateValueGetter>>;
-using MonthExpression = NARY<1, FV<decltype(extractMonth), DateValueGetter>>;
-using DayExpression = NARY<1, FV<decltype(extractDay), DateValueGetter>>;
 
 // String functions.
 using StrExpression = NARY<1, FV<std::identity, StringValueGetter>>;
@@ -281,16 +213,9 @@ SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child);
 
-using detail::AndExpression;
-using detail::OrExpression;
-
 using detail::DistExpression;
 using detail::LatitudeExpression;
 using detail::LongitudeExpression;
-
-using detail::DayExpression;
-using detail::MonthExpression;
-using detail::YearExpression;
 
 using detail::StrExpression;
 using detail::StrlenExpression;

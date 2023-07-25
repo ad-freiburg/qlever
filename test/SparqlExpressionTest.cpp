@@ -35,6 +35,9 @@ auto I = ad_utility::testing::IntId;
 auto Voc = ad_utility::testing::VocabId;
 auto U = Id::makeUndefined();
 
+using Ids = std::vector<Id>;
+using Strings = std::vector<std::string>;
+
 // Test allocator (the inputs to our `SparqlExpression`s are
 // `VectorWithMemoryLimit`s, and these require an `AllocatorWithLimit`).
 //
@@ -168,13 +171,15 @@ auto testBinaryExpression = [](auto makeExpression,
   testNaryExpressionImpl(makeExpression, expected, op1, op2);
 };
 
+/*
+// TODO<joka921> Make them commutative again
 auto testOr = testBinaryExpressionCommutative<OrExpression>;
 auto testAnd = testBinaryExpressionCommutative<AndExpression>;
-// TODO<joka921> Make them commutative again
-/*
 auto testPlus = testBinaryExpressionCommutative<AddExpression>;
 auto testMultiply = testBinaryExpressionCommutative<MultiplyExpression>;
  */
+auto testOr = std::bind_front(testBinaryExpression, &makeOrExpression);
+auto testAnd = std::bind_front(testBinaryExpression, &makeAndExpression);
 auto testPlus = std::bind_front(testBinaryExpression, &makeAddExpression);
 auto testMultiply =
     std::bind_front(testBinaryExpression, &makeMultiplyExpression);
@@ -371,9 +376,11 @@ auto testUnaryExpression = [](std::vector<OperandType> operand,
 TEST(SparqlExpression, dateOperators) {
   // Helper function that asserts that the date operators give the expected
   // result on the given date.
-  auto checkYear = testUnaryExpression<YearExpression, Id, Id>;
-  auto checkMonth = testUnaryExpression<MonthExpression, Id, Id>;
-  auto checkDay = testUnaryExpression<DayExpression, Id, Id>;
+  auto checkYear =
+      std::bind_front(testUnaryExpressionImpl, &makeYearExpression);
+  auto checkMonth =
+      std::bind_front(testUnaryExpressionImpl, &makeMonthExpression);
+  auto checkDay = std::bind_front(testUnaryExpressionImpl, &makeDayExpression);
   auto check = [&checkYear, &checkMonth, &checkDay](
                    const DateOrLargeYear& date, std::optional<int> expectedYear,
                    std::optional<int> expectedMonth,
@@ -387,9 +394,9 @@ TEST(SparqlExpression, dateOperators) {
         return Id::makeUndefined();
       }
     };
-    checkYear({Id::makeFromDate(date)}, {optToId(expectedYear)});
-    checkMonth({Id::makeFromDate(date)}, {optToId(expectedMonth)});
-    checkDay({Id::makeFromDate(date)}, {optToId(expectedDay)});
+    checkYear(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedYear)});
+    checkMonth(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedMonth)});
+    checkDay(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedDay)});
   };
 
   using D = DateOrLargeYear;
@@ -413,15 +420,13 @@ TEST(SparqlExpression, dateOperators) {
   check(D::parseXsdDate("-12345-03-04"), -12345, 1, 1);
 
   // Invalid inputs for date expressions.
-  checkYear({Id::makeFromInt(42)}, {Id::makeUndefined()});
-  checkMonth({Id::makeFromInt(42)}, {Id::makeUndefined()});
-  checkDay({Id::makeFromInt(42)}, {Id::makeUndefined()});
-  testUnaryExpression<YearExpression, Id, Id>({Id::makeFromDouble(42.0)},
-                                              {Id::makeUndefined()});
-  testUnaryExpression<YearExpression, Id, Id>({Id::makeFromBool(false)},
-                                              {Id::makeUndefined()});
-  testUnaryExpression<YearExpression, std::string, Id>({"noDate"},
-                                                       {Id::makeUndefined()});
+  checkYear(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
+  checkMonth(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
+  checkDay(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
+  auto testYear = std::bind_front(testUnaryExpressionImpl, &makeYearExpression);
+  testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
+  testYear(Ids{Id::makeFromBool(false)}, Ids{U});
+  testYear(Strings{"noDate"}, Ids{U});
 }
 
 // Test `StrlenExpression` and `StrExpression`.
@@ -445,8 +450,6 @@ TEST(SparqlExpression, unaryNegate) {
   auto checkNegate =
       std::bind_front(testUnaryExpressionImpl, &makeUnaryNegateExpression);
   // Zero and NaN are considered to be false, so their negation is true
-  using Ids = std::vector<Id>;
-  using Strings = std::vector<std::string>;
 
   checkNegate(
       Ids{B(true), B(false), I(0), I(3), D(0), D(12), D(naN), U},
@@ -461,8 +464,6 @@ TEST(SparqlExpression, unaryMinus) {
   auto checkMinus =
       std::bind_front(testUnaryExpressionImpl, &makeUnaryMinusExpression);
   // Zero and NaN are considered to be false, so their negation is true
-  using Ids = std::vector<Id>;
-  using Strings = std::vector<std::string>;
   checkMinus(
       Ids{B(true), B(false), I(0), I(3), D(0), D(12.8), D(naN), U, Voc(6)},
       Ids{I(-1), I(0), I(0), I(-3), D(-0.0), D(-12.8), D(-naN), U, U});

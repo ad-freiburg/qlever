@@ -1303,11 +1303,10 @@ ExpressionPtr Visitor::visit(Parser::ConditionalOrExpressionContext* ctx) {
   auto children = visitVector(ctx->conditionalAndExpression());
   AD_CONTRACT_CHECK(!children.empty());
   auto result = std::move(children.front());
-  using C = sparqlExpression::OrExpression::Children;
   std::for_each(children.begin() + 1, children.end(),
                 [&result](ExpressionPtr& ptr) {
-                  result = std::make_unique<sparqlExpression::OrExpression>(
-                      C{std::move(result), std::move(ptr)});
+                  result = sparqlExpression::makeOrExpression(std::move(result),
+                                                              std::move(ptr));
                 });
   result->descriptor() = ctx->getText();
   return result;
@@ -1318,11 +1317,10 @@ ExpressionPtr Visitor::visit(Parser::ConditionalAndExpressionContext* ctx) {
   auto children = visitVector(ctx->valueLogical());
   AD_CONTRACT_CHECK(!children.empty());
   auto result = std::move(children.front());
-  using C = sparqlExpression::AndExpression::Children;
   std::for_each(children.begin() + 1, children.end(),
                 [&result](ExpressionPtr& ptr) {
-                  result = std::make_unique<sparqlExpression::AndExpression>(
-                      C{std::move(result), std::move(ptr)});
+                  result = sparqlExpression::makeAndExpression(
+                      std::move(result), std::move(ptr));
                 });
   result->descriptor() = ctx->getText();
   return result;
@@ -1587,11 +1585,11 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "strlen") {
     return createUnaryExpression.template operator()<StrlenExpression>();
   } else if (functionName == "year") {
-    return createUnaryExpression.template operator()<YearExpression>();
+    return createUnary(&makeYearExpression);
   } else if (functionName == "month") {
-    return createUnaryExpression.template operator()<MonthExpression>();
+    return createUnary(&makeMonthExpression);
   } else if (functionName == "day") {
-    return createUnaryExpression.template operator()<DayExpression>();
+    return createUnary(&makeDayExpression);
   } else if (functionName == "rand") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<RandomExpression>();

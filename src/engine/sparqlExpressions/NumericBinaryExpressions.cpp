@@ -30,6 +30,37 @@ inline auto subtract = makeNumericExpression<std::minus<>>();
 NARY_EXPRESSION(SubtractExpression, 2,
                 FV<decltype(subtract), NumericValueGetter>);
 
+// Or
+inline auto orLambda = [](TernaryBool a, TernaryBool b) {
+  using enum TernaryBool;
+  if (a == True || b == True) {
+    return Id::makeFromBool(true);
+  }
+  if (a == False && b == False) {
+    return Id::makeFromBool(false);
+  }
+  return Id::makeUndefined();
+};
+
+NARY_EXPRESSION(OrExpression, 2,
+                FV<decltype(orLambda), EffectiveBooleanValueGetter>,
+                SET<SetOfIntervals::Union>);
+
+// And
+inline auto andLambda = [](TernaryBool a, TernaryBool b) {
+  using enum TernaryBool;
+  if (a == True && b == True) {
+    return Id::makeFromBool(true);
+  }
+  if (a == False || b == False) {
+    return Id::makeFromBool(false);
+  }
+  return Id::makeUndefined();
+};
+NARY_EXPRESSION(AndExpression, 2,
+                FV<decltype(andLambda), EffectiveBooleanValueGetter>,
+                SET<SetOfIntervals::Intersection>);
+
 }  // namespace detail
 
 using namespace detail;
@@ -52,5 +83,14 @@ SparqlExpression::Ptr makeSubtractExpression(SparqlExpression::Ptr child1,
                                              SparqlExpression::Ptr child2) {
   return std::make_unique<SubtractExpression>(std::move(child1),
                                               std::move(child2));
+}
+
+SparqlExpression::Ptr makeAndExpression(SparqlExpression::Ptr child1,
+                                        SparqlExpression::Ptr child2) {
+  return std::make_unique<AndExpression>(std::move(child1), std::move(child2));
+}
+SparqlExpression::Ptr makeOrExpression(SparqlExpression::Ptr child1,
+                                       SparqlExpression::Ptr child2) {
+  return std::make_unique<OrExpression>(std::move(child1), std::move(child2));
 }
 }  // namespace sparqlExpression
