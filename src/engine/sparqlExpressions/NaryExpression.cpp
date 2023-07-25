@@ -14,11 +14,6 @@ INSTANTIATE_NARY(2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
 INSTANTIATE_NARY(2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
                  SET<SetOfIntervals::Intersection>);
 
-INSTANTIATE_NARY(1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
-                 SET<SetOfIntervals::Complement>);
-
-INSTANTIATE_NARY(1, FV<decltype(unaryMinus), NumericValueGetter>);
-
 INSTANTIATE_NARY(2, FV<decltype(multiply), NumericValueGetter>);
 
 INSTANTIATE_NARY(2, FV<decltype(divide), NumericValueGetter>);
@@ -62,13 +57,6 @@ SparqlExpression::Ptr makeOrExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeSubtractExpression(SparqlExpression::Ptr child1,
                                              SparqlExpression::Ptr child2);
 
-SparqlExpression::Ptr makeUnaryMinusExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<UnaryMinusExpression>(std::move(child));
-}
-
-SparqlExpression::Ptr makeUnaryNegateExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<UnaryNegateExpression>(std::move(child));
-}
 
 SparqlExpression::Ptr makeRoundExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeAbsExpression(SparqlExpression::Ptr child);

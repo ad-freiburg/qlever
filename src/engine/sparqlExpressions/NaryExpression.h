@@ -189,27 +189,6 @@ using AndExpression =
     NARY<2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Intersection>>;
 
-// Unary Negation
-inline auto unaryNegate = [](TernaryBool a) {
-  using enum TernaryBool;
-  switch (a) {
-    case True:
-      return Id::makeFromBool(false);
-    case False:
-      return Id::makeFromBool(true);
-    case Undef:
-      return Id::makeUndefined();
-  }
-  AD_FAIL();
-};
-using UnaryNegateExpression =
-    NARY<1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
-         SET<SetOfIntervals::Complement>>;
-
-// Unary Minus.
-inline auto unaryMinus = makeNumericExpression<std::negate<>>();
-using UnaryMinusExpression =
-    NARY<1, FV<decltype(unaryMinus), NumericValueGetter>>;
 
 // Multiplication.
 inline auto multiply = makeNumericExpression<std::multiplies<>>();
@@ -333,8 +312,6 @@ using detail::DivideExpression;
 using detail::MultiplyExpression;
 using detail::OrExpression;
 using detail::SubtractExpression;
-using detail::UnaryMinusExpression;
-using detail::UnaryNegateExpression;
 
 using detail::DistExpression;
 using detail::LatitudeExpression;

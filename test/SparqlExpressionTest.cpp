@@ -436,31 +436,28 @@ TEST(SparqlExpression, stringOperators) {
 
 // _____________________________________________________________________________________
 TEST(SparqlExpression, unaryNegate) {
-  auto checkNegate = testUnaryExpression<UnaryNegateExpression, Id, Id>;
-  auto checkNegateStr =
-      testUnaryExpression<UnaryNegateExpression, std::string, Id>;
+  auto checkNegate = std::bind_front(testUnaryExpressionImpl, &makeUnaryNegateExpression);
   // Zero and NaN are considered to be false, so their negation is true
+  using Ids = std::vector<Id>;
+  using Strings = std::vector<std::string>;
 
   checkNegate(
-      {B(true), B(false), I(0), I(3), D(0), D(12), D(naN), U},
-      {B(false), B(true), B(true), B(false), B(true), B(false), B(true), U});
+      Ids{B(true), B(false), I(0), I(3), D(0), D(12), D(naN), U},
+      Ids{B(false), B(true), B(true), B(false), B(true), B(false), B(true), U});
   // Empty strings are considered to be true.
-  checkNegateStr({"true", "false", "", "blibb"},
-                 {B(false), B(false), B(true), B(false)});
-
-  // Complete the test coverage for normally unreachable code.
-  ASSERT_ANY_THROW(sparqlExpression::detail::unaryNegate(
-      static_cast<sparqlExpression::detail::TernaryBool>(42)));
+  checkNegate(Strings{"true", "false", "", "blibb"},
+                 Ids{B(false), B(false), B(true), B(false)});
 }
 
 // _____________________________________________________________________________________
 TEST(SparqlExpression, unaryMinus) {
-  auto checkMinus = testUnaryExpression<UnaryMinusExpression, Id, Id>;
-  auto checkMinusStr =
-      testUnaryExpression<UnaryMinusExpression, std::string, Id>;
-  checkMinus({B(true), B(false), I(0), I(3), D(0), D(12.8), D(naN), U, Voc(6)},
-             {I(-1), I(0), I(0), I(-3), D(-0.0), D(-12.8), D(-naN), U, U});
-  checkMinusStr({"true", "false", "", "<blibb>"}, {U, U, U, U});
+  auto checkMinus = std::bind_front(testUnaryExpressionImpl, &makeUnaryMinusExpression);
+  // Zero and NaN are considered to be false, so their negation is true
+  using Ids = std::vector<Id>;
+  using Strings = std::vector<std::string>;
+  checkMinus(Ids{B(true), B(false), I(0), I(3), D(0), D(12.8), D(naN), U, Voc(6)},
+             Ids{I(-1), I(0), I(0), I(-3), D(-0.0), D(-12.8), D(-naN), U, U});
+  checkMinus(Strings{"true", "false", "", "<blibb>"}, Ids{U, U, U, U});
 }
 
 TEST(SparqlExpression, ceilFloorAbsRound) {

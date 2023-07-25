@@ -6,6 +6,27 @@
 
 namespace sparqlExpression {
 namespace detail {
+
+// Unary Negation
+inline auto unaryNegate = [](TernaryBool a) {
+  using enum TernaryBool;
+  switch (a) {
+    case True:
+      return Id::makeFromBool(false);
+    case False:
+      return Id::makeFromBool(true);
+    case Undef:
+      return Id::makeUndefined();
+  }
+  AD_FAIL();
+};
+NARY_EXPRESSION(UnaryNegateExpression, 1,
+                FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
+                SET<SetOfIntervals::Complement>);
+
+// Unary Minus.
+inline auto unaryMinus = makeNumericExpression<std::negate<>>();
+NARY_EXPRESSION(UnaryMinusExpression, 1, FV<decltype(unaryMinus), NumericValueGetter>);
 // Abs
 inline const auto absImpl = []<typename T>(T num) { return std::abs(num); };
 inline const auto abs = makeNumericExpression<decltype(absImpl)>();
@@ -67,4 +88,13 @@ SparqlExpression::Ptr makeCeilExpression(SparqlExpression::Ptr child) {
 SparqlExpression::Ptr makeFloorExpression(SparqlExpression::Ptr child) {
   return std::make_unique<FloorExpression>(std::move(child));
 }
+
+SparqlExpression::Ptr makeUnaryMinusExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<UnaryMinusExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeUnaryNegateExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<UnaryNegateExpression>(std::move(child));
+}
+
 }
