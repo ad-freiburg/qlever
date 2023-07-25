@@ -26,12 +26,11 @@
 class ParallelBuffer {
  public:
   using BufferType = ad_utility::UninitializedVector<char>;
-  ParallelBuffer() = default;
   /**
    * @brief Specify the size of the blocks that are to be retrieved
    * @param blocksize  the blocksize (in bytes)
    */
-  ParallelBuffer(size_t blocksize) : _blocksize(blocksize) {}
+  explicit ParallelBuffer(size_t blocksize) : blocksize_(blocksize) {}
   virtual ~ParallelBuffer() = default;
   /**
    * @brief Open a file (in the sense of unix files, can also be a
@@ -40,7 +39,7 @@ class ParallelBuffer {
    */
   virtual void open(const string& filename) = 0;
   /**
-   * @brief Get (approximately) the next _blocksize bytes from the inut stream.
+   * @brief Get (approximately) the next blocksize_ bytes from the inut stream.
    *
    * Only valid after a call to open().
    *
@@ -48,10 +47,8 @@ class ParallelBuffer {
    */
   virtual std::optional<BufferType> getNextBlock() = 0;
 
-  const size_t& blocksize() const { return _blocksize; }
-
  protected:
-  size_t _blocksize = 100 * (2 << 20);
+  size_t blocksize_ = 100 * (2 << 20);
 };
 
 /**
@@ -64,20 +61,19 @@ class ParallelBuffer {
 class ParallelFileBuffer : public ParallelBuffer {
  public:
   using BufferType = ad_utility::UninitializedVector<char>;
-  ParallelFileBuffer() : ParallelBuffer(){};
-  ParallelFileBuffer(size_t blocksize) : ParallelBuffer(blocksize) {}
+  explicit ParallelFileBuffer(size_t blocksize) : ParallelBuffer(blocksize) {}
 
   // _________________________________________________________________________
-  virtual void open(const string& filename) override;
+  void open(const string& filename) override;
 
   // _____________________________________________________
-  virtual std::optional<BufferType> getNextBlock() override;
+  std::optional<BufferType> getNextBlock() override;
 
  private:
-  ad_utility::File _file;
-  bool _eof = true;
-  BufferType _buf;
-  std::future<size_t> _fut;
+  ad_utility::File file_;
+  bool eof_ = true;
+  BufferType buf_;
+  std::future<size_t> fut_;
 };
 
 /// A parallel buffer, where each of the blocks except for the last one has to
@@ -86,13 +82,15 @@ class ParallelFileBuffer : public ParallelBuffer {
 class ParallelBufferWithEndRegex : public ParallelBuffer {
  public:
   ParallelBufferWithEndRegex(size_t blocksize, std::string endRegex)
-      : ParallelBuffer{blocksize}, _endRegex{endRegex} {}
+      : ParallelBuffer{blocksize},
+        endRegex_{endRegex},
+        endRegexAsString_{std::move(endRegex)} {}
 
   // __________________________________________________________________________
   std::optional<BufferType> getNextBlock() override;
 
   // Open the file from which the blocks are read.
-  void open(const string& filename) override { _rawBuffer.open(filename); }
+  void open(const string& filename) override { rawBuffer_.open(filename); }
 
  private:
   // Find `regex` near the end of `vec` by searching in blocks of 1000, 2000,
@@ -101,8 +99,9 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
   // of the regex match, or std::nullopt if the regex was not found at all.
   static std::optional<size_t> findRegexNearEnd(const BufferType& vec,
                                                 const re2::RE2& regex);
-  ParallelFileBuffer _rawBuffer{_blocksize};
-  BufferType _remainder;
-  re2::RE2 _endRegex;
-  bool _exhausted = false;
+  ParallelFileBuffer rawBuffer_{blocksize_};
+  BufferType remainder_;
+  re2::RE2 endRegex_;
+  std::string endRegexAsString_;
+  bool exhausted_ = false;
 };

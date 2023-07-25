@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <parser/ParseException.h>
-
 #include <string>
 
 #include "BaseErrorListener.h"
@@ -15,6 +13,7 @@
 #include "Recognizer.h"
 #include "Token.h"
 #include "absl/strings/str_cat.h"
+#include "util/ParseException.h"
 
 ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
                                    antlr4::Token* offendingToken, size_t line,

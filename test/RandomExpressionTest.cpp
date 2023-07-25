@@ -15,14 +15,15 @@ TEST(RandomExpression, evaluate) {
   evaluationContext._endIndex = 1044;
   auto resultAsVariant = RandomExpression{}.evaluate(&evaluationContext);
 
-  using V = VectorWithMemoryLimit<int64_t>;
+  using V = VectorWithMemoryLimit<Id>;
   ASSERT_TRUE(std::holds_alternative<V>(resultAsVariant));
   const auto& resultVector = std::get<V>(resultAsVariant);
   ASSERT_EQ(resultVector.size(), 1001);
 
   std::vector<int64_t> histogram(10);
   for (auto rand : resultVector) {
-    histogram[std::abs(rand) % 10]++;
+    ASSERT_EQ(rand.getDatatype(), Datatype::Int);
+    histogram[std::abs(rand.getInt()) % 10]++;
   }
 
   // A simple check whether the numbers are sufficiently random. It has a

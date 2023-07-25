@@ -681,42 +681,30 @@ TEST(QueryPlannerTest, threeVarTriples) {
 }
 
 TEST(QueryPlannerTest, threeVarTriplesTCJ) {
-  {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?x ?p ?o WHERE {"
-        "<s> ?p ?x . ?x ?p ?o }");
-    QueryPlanner qp(nullptr);
-    ASSERT_THROW(qp.createExecutionTree(pq), ad_utility::Exception);
-  }
+  h::expect(
+      "SELECT ?x ?p ?o WHERE {"
+      "<s> ?p ?x . ?x ?p ?o }",
+      h::MultiColumnJoin(h::IndexScan("<s>", Var{"?p"}, Var{"?x"}),
+                         h::IndexScan(Var{"?x"}, Var{"?p"}, Var{"?o"})));
 
-  {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?s ?p ?o WHERE {"
-        "?s ?p ?o . ?s ?p <x> }");
-    QueryPlanner qp(nullptr);
-    ASSERT_THROW(QueryExecutionTree qet = qp.createExecutionTree(pq),
-                 ad_utility::Exception);
-  }
+  h::expect(
+      "SELECT ?s ?p ?o WHERE {"
+      "?s ?p ?o . ?s ?p <x> }",
+      h::MultiColumnJoin(h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}),
+                         h::IndexScan(Var{"?s"}, Var{"?p"}, "<x>")));
 }
 
 TEST(QueryPlannerTest, threeVarXthreeVarException) {
-  try {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?s ?s2 WHERE {"
-        "?s ?p ?o . ?s2 ?p ?o }");
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    FAIL() << "Was expecting exception, but got" << qet.asString() << std::endl;
-  } catch (const ad_utility::Exception& e) {
-    ASSERT_THAT(
-        e.what(),
-        ::testing::StartsWith(
-            "Could not find a suitable execution tree. "
-            "Likely cause: Queries that require joins of the full index with "
-            "itself are not supported at the moment."));
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
-  }
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "SELECT ?s ?s2 WHERE {"
+      "?s ?p ?o . ?s2 ?p ?o }");
+  QueryPlanner qp(nullptr);
+  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  h::expect(
+      "SELECT ?s ?s2 WHERE {"
+      "?s ?p ?o . ?s2 ?p ?o }",
+      h::MultiColumnJoin(h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}),
+                         h::IndexScan(Var{"?s2"}, Var{"?p"}, Var{"?o"})));
 }
 
 TEST(QueryExecutionTreeTest, testBooksbyNewman) {
@@ -1021,11 +1009,11 @@ TEST(QueryPlannerTest, SimpleTripleOneVariable) {
   // exactly the same result. The query planner consistently chosses one of
   // them.
   h::expect("SELECT * WHERE { ?s <p> <o> }",
-            h::IndexScan(Var{"?s"}, "<p>", "<o>", 1, {POS}));
+            h::IndexScan(Var{"?s"}, "<p>", "<o>", {POS}));
   h::expect("SELECT * WHERE { <s> ?p <o> }",
-            h::IndexScan("<s>", Var{"?p"}, "<o>", 1, {SOP}));
+            h::IndexScan("<s>", Var{"?p"}, "<o>", {SOP}));
   h::expect("SELECT * WHERE { <s> <p> ?o }",
-            h::IndexScan("<s>", "<p>", Var{"?o"}, 1, {PSO}));
+            h::IndexScan("<s>", "<p>", Var{"?o"}, {PSO}));
 }
 
 TEST(QueryPlannerTest, SimpleTripleTwoVariables) {
@@ -1035,28 +1023,28 @@ TEST(QueryPlannerTest, SimpleTripleTwoVariables) {
 
   // Without `Order By`, two orderings are possible, both are fine.
   h::expect("SELECT * WHERE { ?s <p> ?o }",
-            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, 2, {POS, PSO}));
+            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {POS, PSO}));
   // Must always be a single index scan, never index scan + sorting.
   h::expect("SELECT * WHERE { ?s <p> ?o } INTERNAL SORT BY ?o",
-            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, 2, {POS}));
+            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {POS}));
   h::expect("SELECT * WHERE { ?s <p> ?o } INTERNAL SORT BY ?s",
-            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, 2, {PSO}));
+            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {PSO}));
 
   // Fixed subject.
   h::expect("SELECT * WHERE { <s> ?p ?o }",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, 2, {SOP, SPO}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP, SPO}));
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, 2, {SOP}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP}));
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, 2, {SPO}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SPO}));
 
   // Fixed object.
   h::expect("SELECT * WHERE { <s> ?p ?o }",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, 2, {SOP, SPO}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP, SPO}));
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, 2, {SOP}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP}));
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, 2, {SPO}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SPO}));
 }
 
 TEST(QueryPlannerTest, SimpleTripleThreeVariables) {
@@ -1065,28 +1053,28 @@ TEST(QueryPlannerTest, SimpleTripleThreeVariables) {
   // Fixed predicate.
   // Don't care about the sorting.
   h::expect("SELECT * WHERE { ?s ?p ?o }",
-            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, 3,
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"},
                          {SPO, SOP, PSO, POS, OSP, OPS}));
 
   // Sorted by one variable, two possible permutations remain.
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s",
-            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, 3, {SPO, SOP}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {SPO, SOP}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p",
-            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, 3, {POS, PSO}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {POS, PSO}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o",
-            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, 3, {OSP, OPS}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {OSP, OPS}));
 
   // Sorted by two variables, this makes the permutation unique.
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?o",
-            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, 3, {SOP}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {SOP}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?p",
-            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, 3, {SPO}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {SPO}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o ?s",
-            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, 3, {OSP}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {OSP}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o ?p",
-            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, 3, {OPS}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {OPS}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?s",
-            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, 3, {PSO}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {PSO}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?o",
-            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, 3, {POS}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {POS}));
 }

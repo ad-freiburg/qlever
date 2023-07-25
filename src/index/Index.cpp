@@ -19,17 +19,9 @@ Index::Index(Index&&) noexcept = default;
 Index::~Index() = default;
 
 // ____________________________________________________________________________
-template <class Parser>
 void Index::createFromFile(const std::string& filename) {
-  pimpl_->template createFromFile<Parser>(filename);
+  pimpl_->createFromFile(filename);
 }
-
-// Explicit instantiations.
-template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
-    const string& filename);
-template void Index::createFromFile<TurtleMmapParser<Tokenizer>>(
-    const string& filename);
-template void Index::createFromFile<TurtleParserAuto>(const string& filename);
 
 // ____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
@@ -224,21 +216,6 @@ Index::WordEntityPostings Index::getEntityPostingsForTerm(
 std::string Index::getTextExcerpt(TextRecordIndex cid) const {
   return pimpl_->getTextExcerpt(cid);
 }
-
-/*
-// ____________________________________________________________________________
-void Index::dumpAsciiLists(const vector<std::string>& lists,
-                           bool decodeGapsFreq) const {
-  return pimpl_->dumpAsciiLists(lists, decodeGapsFreq);
-}
- */
-
-// ____________________________________________________________________________
-/*
-void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
-  return pimpl_->dumpAsciiLists(tbmd);
-}
- */
 
 // ____________________________________________________________________________
 float Index::getAverageNofEntityContexts() const {

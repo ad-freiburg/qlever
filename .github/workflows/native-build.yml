@@ -39,6 +39,10 @@ jobs:
           - compiler: clang
             compiler-version: 16
             ubsan-flags: " -fsanitize=undefined"
+          - compiler: clang
+            compiler-version: 16
+            build-type: Debug
+            ubsan-flags: " -fsanitize=thread -O1 -g"
 
     runs-on: ubuntu-22.04
 

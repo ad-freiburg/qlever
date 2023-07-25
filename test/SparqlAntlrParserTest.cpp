@@ -205,8 +205,9 @@ TEST(SparqlExpressionParser, First) {
   sparqlExpression::EvaluationContext input{*ad_utility::testing::getQec(), map,
                                             table, alloc, localVocab};
   auto result = resultAsExpression->evaluate(&input);
-  AD_CONTRACT_CHECK(std::holds_alternative<double>(result));
-  ASSERT_FLOAT_EQ(25.0, std::get<double>(result));
+  AD_CONTRACT_CHECK(std::holds_alternative<Id>(result));
+  ASSERT_EQ(std::get<Id>(result).getDatatype(), Datatype::Int);
+  ASSERT_EQ(25, std::get<Id>(result).getInt());
 }
 
 TEST(SparqlParser, ComplexConstructTemplate) {
@@ -611,10 +612,8 @@ TEST(SparqlParser, DataBlock) {
   expectDataBlock("?test { 10.0 }", m::Values({Var{"?test"}}, {{10.0}}));
   expectDataBlock("?test { UNDEF }",
                   m::Values({Var{"?test"}}, {{TripleComponent::UNDEF{}}}));
-  // Booleans are not yet parsed as `dataBlockValue`.
-  // (numericLiteral/booleanLiteral)
-  // TODO<joka921/qup42> implement.
-  expectDataBlockFails("?test { true }");
+  expectDataBlock("?test { false true }",
+                  m::Values({Var{"?test"}}, {{false}, {true}}));
   expectDataBlock(
       R"(?foo { "baz" "bar" })",
       m::Values({Var{"?foo"}}, {{lit("\"baz\"")}, {lit("\"bar\"")}}));

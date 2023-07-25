@@ -1,7 +1,11 @@
 include(GoogleTest)
 
-# Link binary ${basename} against `gmock_main`, the threading library,
-# and all libraries that are specified as additional arguments.
+# Needed for creating the `testUil`-library.
+add_subdirectory(util)
+
+# Link binary ${basename} against `gmock_main`, the threading library, the
+# general test utilities and all libraries that are specified as additional
+# arguments.
 function (linkTest basename)
     qlever_target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
@@ -36,7 +40,7 @@ endfunction()
 if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
     add_executable(QLeverAllUnitTestsMain)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(QLeverAllUnitTestsMain gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
     gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
             TRUE)
 else()
@@ -81,6 +85,7 @@ function(addAndLinkTest basename)
 endfunction()
 
 add_subdirectory(engine)
+add_subdirectory(parser)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
@@ -110,7 +115,7 @@ addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
 addLinkAndDiscoverTest(EngineTest engine)
 
-addLinkAndDiscoverTest(JoinTest engine)
+addLinkAndDiscoverTest(JoinTest engine testUtil)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
@@ -213,9 +218,6 @@ addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(MilestoneIdTest)
 
-# The VocabularyOnDisk uses mmap which fails when the tests are run in
-# parallel. This should be fixed by using distinct filenames for each test case.
-# TODO<qup42, joka921> fix this
 addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(VocabularyTest index)
@@ -338,7 +340,11 @@ addLinkAndDiscoverTest(ComparisonWithNanTest)
 
 addLinkAndDiscoverTest(ThreadSafeQueueTest)
 
+addLinkAndDiscoverTest(IdTableHelpersTest testUtil)
+
 addLinkAndDiscoverTest(GeneratorTest)
+
+addLinkAndDiscoverTest(MemorySizeTest memorySize)
 
 addLinkAndDiscoverTest(JsonUtilTest)
 

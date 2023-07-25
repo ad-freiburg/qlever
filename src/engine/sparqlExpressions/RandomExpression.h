@@ -18,12 +18,12 @@ class RandomExpression : public SparqlExpression {
  public:
   // Evaluate a Sparql expression.
   ExpressionResult evaluate(EvaluationContext* context) const override {
-    VectorWithMemoryLimit<int64_t> result{context->_allocator};
+    VectorWithMemoryLimit<Id> result{context->_allocator};
     const size_t numElements = context->_endIndex - context->_beginIndex;
     result.reserve(numElements);
     FastRandomIntGenerator<int64_t> randInt;
     for (size_t i = 0; i < numElements; ++i) {
-      result.push_back(randInt());
+      result.push_back(Id::makeFromInt(randInt() >> Id::numDatatypeBits));
     }
     return result;
   }

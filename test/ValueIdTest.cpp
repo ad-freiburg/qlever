@@ -6,12 +6,12 @@
 
 #include <bitset>
 
-#include "../src/global/ValueId.h"
-#include "../src/util/HashSet.h"
-#include "../src/util/Random.h"
-#include "../src/util/Serializer/ByteBufferSerializer.h"
-#include "../src/util/Serializer/Serializer.h"
 #include "./ValueIdTestHelpers.h"
+#include "./util/GTestHelpers.h"
+#include "global/ValueId.h"
+#include "util/Random.h"
+#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/Serializer.h"
 
 TEST(ValueId, makeFromDouble) {
   auto testRepresentableDouble = [](double d) {
@@ -111,6 +111,8 @@ TEST(ValueId, Indices) {
     for (size_t idx = 0; idx < 10'000; ++idx) {
       auto value = invalidIndexGenerator();
       ASSERT_THROW(makeId(value), ValueId::IndexTooLargeException);
+      AD_EXPECT_THROW_WITH_MESSAGE(makeId(value),
+                                   ::testing::ContainsRegex("is bigger than"));
     }
   };
 
@@ -281,12 +283,16 @@ TEST(ValueId, toDebugString) {
   test(ValueId::makeUndefined(), "Undefined:Undefined");
   test(ValueId::makeFromInt(-42), "Int:-42");
   test(ValueId::makeFromDouble(42.0), "Double:42.000000");
+  test(ValueId::makeFromBool(false), "Bool:false");
+  test(ValueId::makeFromBool(true), "Bool:true");
   test(makeVocabId(15), "VocabIndex:15");
   test(makeLocalVocabId(25), "LocalVocabIndex:25");
   test(makeTextRecordId(37), "TextRecordIndex:37");
   test(ValueId::makeFromDate(
            DateOrLargeYear{123456, DateOrLargeYear::Type::Year}),
        "Date:123456");
+  // make an ID with an invalid datatype
+  ASSERT_ANY_THROW(test(ValueId::max(), "blim"));
 }
 
 TEST(ValueId, InvalidDatatypeEnumValue) {

@@ -23,6 +23,7 @@
 /// The different Datatypes that a `ValueId` (see below) can encode.
 enum struct Datatype {
   Undefined = 0,
+  Bool,
   Int,
   Double,
   VocabIndex,
@@ -31,7 +32,6 @@ enum struct Datatype {
   WordVocabIndex,
   Date,
   MaxValue = Date
-  // TODO<joka921> At least "date" is missing and not yet folded.
   // Note: Unfortunately we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
   // alias must always be equal to the last member,
@@ -43,6 +43,8 @@ constexpr std::string_view toString(Datatype type) {
   switch (type) {
     case Datatype::Undefined:
       return "Undefined";
+    case Datatype::Bool:
+      return "Bool";
     case Datatype::Double:
       return "Double";
     case Datatype::Int:
@@ -181,6 +183,17 @@ class ValueId {
     return IntegerType::fromNBit(_bits);
   }
 
+  /// Create a `ValueId` for a boolean value.
+  static ValueId makeFromBool(bool b) noexcept {
+    auto bits = static_cast<T>(b);
+    return addDatatypeBits(bits, Datatype::Bool);
+  }
+
+  // Obtain the boolean value.
+  [[nodiscard]] bool getBool() const noexcept {
+    return static_cast<bool>(removeDatatypeBits(_bits));
+  }
+
   /// Create a `ValueId` for an unsigned index of type
   /// `VocabIndex|TextRecordIndex|LocalVocabIndex`. These types can
   /// represent values in the range [0, 2^60]. When `index` is outside of this
@@ -259,6 +272,8 @@ class ValueId {
     switch (getDatatype()) {
       case Datatype::Undefined:
         return std::invoke(visitor, getUndefined());
+      case Datatype::Bool:
+        return std::invoke(visitor, getBool());
       case Datatype::Double:
         return std::invoke(visitor, getDouble());
       case Datatype::Int:
@@ -300,6 +315,8 @@ class ValueId {
       } else if constexpr (ad_utility::isSimilar<T, double> ||
                            ad_utility::isSimilar<T, int64_t>) {
         ostr << std::to_string(value);
+      } else if constexpr (ad_utility::isSimilar<T, bool>) {
+        ostr << (value ? "true" : "false");
       } else if constexpr (ad_utility::isSimilar<T, DateOrLargeYear>) {
         ostr << value.toStringAndType().first;
       } else {

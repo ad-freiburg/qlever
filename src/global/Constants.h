@@ -100,7 +100,7 @@ static const char XSD_UNSIGNED_BYTE_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#unsignedByte";
 static const char XSD_POSITIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#positiveInteger";
-static const char XSD_BOOLEAN_TYPE[] =
+constexpr inline char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
 static const char RDF_PREFIX[] = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 static const char VALUE_DATE_TIME_SEPARATOR[] = "T";
@@ -127,6 +127,12 @@ static const std::string WARNING_ASCII_ONLY_PREFIXES =
 // "literals, and the regex \". *\\n\" only matches at the end of a triple. "
 // "Most Turtle files fulfill these properties (e.g. that from Wikidata), "
 // "but not all";
+
+static const std::string WARNING_PARALLEL_PARSING =
+    "You specified \"parallel-parsing = true\", which enables faster parsing "
+    "for TTL files that don't include multiline literals with unescaped "
+    "newline characters and that have newline characters after the end of "
+    "triples.";
 static const std::string LOCALE_DEFAULT_LANG = "en";
 static const std::string LOCALE_DEFAULT_COUNTRY = "US";
 static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;

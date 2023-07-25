@@ -799,9 +799,8 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   } else if (ctx->UNDEF()) {
     return TripleComponent::UNDEF{};
   } else {
-    // TODO implement.
     AD_CORRECTNESS_CHECK(ctx->booleanLiteral());
-    reportNotSupported(ctx, "Boolean literals in a VALUES clause are ");
+    return TripleComponent{visit(ctx->booleanLiteral())};
   }
 }
 
@@ -1441,12 +1440,12 @@ Visitor::OperatorAndExpression Visitor::visit(
 
   // Create the initial expression from a double literal
   auto createFromDouble = [&](double d) -> ExpressionPtr {
-    return std::make_unique<sparqlExpression::DoubleExpression>(
-        invertIfNecessary(d));
+    return std::make_unique<sparqlExpression::IdExpression>(
+        Id::makeFromDouble(invertIfNecessary(d)));
   };
   auto createFromInt = [&](int64_t i) -> ExpressionPtr {
-    return std::make_unique<sparqlExpression::IntExpression>(
-        invertIfNecessary(i));
+    return std::make_unique<sparqlExpression::IdExpression>(
+        Id::makeFromInt(invertIfNecessary(i)));
   };
 
   auto literalAsVariant = visitAlternative<IntOrDouble>(
@@ -1548,16 +1547,17 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
     }
   } else if (ctx->numericLiteral()) {
     auto integralWrapper = [](int64_t x) {
-      return ExpressionPtr{make_unique<IntExpression>(x)};
+      return ExpressionPtr{make_unique<IdExpression>(Id::makeFromInt(x))};
     };
     auto doubleWrapper = [](double x) {
-      return ExpressionPtr{make_unique<DoubleExpression>(x)};
+      return ExpressionPtr{make_unique<IdExpression>(Id::makeFromDouble(x))};
     };
     return std::visit(
         ad_utility::OverloadCallOperator{integralWrapper, doubleWrapper},
         visit(ctx->numericLiteral()));
   } else if (ctx->booleanLiteral()) {
-    return make_unique<BoolExpression>(visit(ctx->booleanLiteral()));
+    return make_unique<IdExpression>(
+        Id::makeFromBool(visit(ctx->booleanLiteral())));
   } else if (ctx->var()) {
     return make_unique<VariableExpression>(visit(ctx->var()));
   } else {
