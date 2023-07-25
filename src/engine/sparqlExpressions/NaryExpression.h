@@ -189,31 +189,6 @@ using AndExpression =
     NARY<2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Intersection>>;
 
-
-// Multiplication.
-inline auto multiply = makeNumericExpression<std::multiplies<>>();
-using MultiplyExpression = NARY<2, FV<decltype(multiply), NumericValueGetter>>;
-
-// Division.
-//
-// TODO<joka921> If `b == 0` this is technically undefined behavior and
-// should lead to an expression error in SPARQL. Fix this as soon as we
-// introduce the proper semantics for expression errors.
-// Update: I checked it, and the standard differentiates between `xsd:decimal`
-// (error) and `xsd:float/xsd:double` where we have `NaN` and `inf` results. We
-// currently implement the latter behavior. Note: The result of a division in
-// SPARQL is always a decimal number, so there is no integer division.
-inline auto divide = makeNumericExpression<std::divides<double>>();
-using DivideExpression = NARY<2, FV<decltype(divide), NumericValueGetter>>;
-
-// Addition and subtraction, currently all results are converted to double.
-inline auto add = makeNumericExpression<std::plus<>>();
-using AddExpression = NARY<2, FV<decltype(add), NumericValueGetter>>;
-
-inline auto subtract = makeNumericExpression<std::minus<>>();
-using SubtractExpression = NARY<2, FV<decltype(subtract), NumericValueGetter>>;
-
-
 // Basic GeoSPARQL functions (code in util/GeoSparqlHelpers.h).
 using LongitudeExpression =
     NARY<1, FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
@@ -306,12 +281,8 @@ SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child);
 
-using detail::AddExpression;
 using detail::AndExpression;
-using detail::DivideExpression;
-using detail::MultiplyExpression;
 using detail::OrExpression;
-using detail::SubtractExpression;
 
 using detail::DistExpression;
 using detail::LatitudeExpression;

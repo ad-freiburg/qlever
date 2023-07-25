@@ -59,4 +59,4 @@ requires(isOperation<Op>) [[nodiscard]] string NaryExpression<Op>::getCacheKey(
 
 #define INSTANTIATE_NARY(N, X, ...) \
   template class NaryExpression<Operation<N, X, __VA_ARGS__>>
-}
+}  // namespace sparqlExpression::detail

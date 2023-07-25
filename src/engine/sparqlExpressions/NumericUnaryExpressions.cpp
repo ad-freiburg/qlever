@@ -26,12 +26,12 @@ NARY_EXPRESSION(UnaryNegateExpression, 1,
 
 // Unary Minus.
 inline auto unaryMinus = makeNumericExpression<std::negate<>>();
-NARY_EXPRESSION(UnaryMinusExpression, 1, FV<decltype(unaryMinus), NumericValueGetter>);
+NARY_EXPRESSION(UnaryMinusExpression, 1,
+                FV<decltype(unaryMinus), NumericValueGetter>);
 // Abs
 inline const auto absImpl = []<typename T>(T num) { return std::abs(num); };
 inline const auto abs = makeNumericExpression<decltype(absImpl)>();
-NARY_EXPRESSION(AbsExpression, 1,
-                FV<decltype(abs), NumericValueGetter>);
+NARY_EXPRESSION(AbsExpression, 1, FV<decltype(abs), NumericValueGetter>);
 
 // Additional numeric expressions
 // Round
@@ -73,7 +73,7 @@ inline const auto floorImpl = []<typename T>(T num) {
 };
 inline const auto floor = makeNumericExpression<decltype(floorImpl)>();
 using FloorExpression = NARY<1, FV<decltype(floor), NumericValueGetter>>;
-}
+}  // namespace detail
 
 using namespace detail;
 SparqlExpression::Ptr makeRoundExpression(SparqlExpression::Ptr child) {
@@ -97,4 +97,4 @@ SparqlExpression::Ptr makeUnaryNegateExpression(SparqlExpression::Ptr child) {
   return std::make_unique<UnaryNegateExpression>(std::move(child));
 }
 
-}
+}  // namespace sparqlExpression

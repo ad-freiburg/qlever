@@ -1379,11 +1379,11 @@ ExpressionPtr Visitor::visit(Parser::AdditiveExpressionContext* ctx) {
        visitVector(ctx->multiplicativeExpressionWithSign())) {
     switch (signAndExpression.operator_) {
       case Operator::Plus:
-        result = createExpression<sparqlExpression::AddExpression>(
+        result = sparqlExpression::makeAddExpression(
             std::move(result), std::move(signAndExpression.expression_));
         break;
       case Operator::Minus:
-        result = createExpression<sparqlExpression::SubtractExpression>(
+        result = sparqlExpression::makeSubtractExpression(
             std::move(result), std::move(signAndExpression.expression_));
         break;
       default:
@@ -1446,11 +1446,11 @@ Visitor::OperatorAndExpression Visitor::visit(
        visitVector(ctx->multiplyOrDivideExpression())) {
     switch (opAndExp.operator_) {
       case Operator::Multiply:
-        expression = createExpression<sparqlExpression::MultiplyExpression>(
+        expression = sparqlExpression::makeMultiplyExpression(
             std::move(expression), std::move(opAndExp.expression_));
         break;
       case Operator::Divide:
-        expression = createExpression<sparqlExpression::DivideExpression>(
+        expression = sparqlExpression::makeDivideExpression(
             std::move(expression), std::move(opAndExp.expression_));
         break;
       default:
@@ -1468,11 +1468,11 @@ ExpressionPtr Visitor::visit(Parser::MultiplicativeExpressionContext* ctx) {
        visitVector(ctx->multiplyOrDivideExpression())) {
     switch (opAndExp.operator_) {
       case Operator::Multiply:
-        result = createExpression<sparqlExpression::MultiplyExpression>(
+        result = sparqlExpression::makeMultiplyExpression(
             std::move(result), std::move(opAndExp.expression_));
         break;
       case Operator::Divide:
-        result = createExpression<sparqlExpression::DivideExpression>(
+        result = sparqlExpression::makeDivideExpression(
             std::move(result), std::move(opAndExp.expression_));
         break;
       default:
@@ -1505,11 +1505,9 @@ Visitor::OperatorAndExpression Visitor::visit(
 ExpressionPtr Visitor::visit(Parser::UnaryExpressionContext* ctx) {
   auto child = visit(ctx->primaryExpression());
   if (ctx->children[0]->getText() == "-") {
-    return sparqlExpression::makeUnaryMinusExpression(
-        std::move(child));
+    return sparqlExpression::makeUnaryMinusExpression(std::move(child));
   } else if (ctx->children[0]->getText() == "!") {
-    return sparqlExpression::makeUnaryNegateExpression(
-        std::move(child));
+    return sparqlExpression::makeUnaryNegateExpression(std::move(child));
   } else {
     // no sign or an explicit '+'
     return child;

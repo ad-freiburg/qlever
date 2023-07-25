@@ -11,6 +11,6 @@ add_library(sparqlExpressions
         SparqlExpressionPimpl.h SparqlExpressionPimpl.cpp
         SampleExpression.h SampleExpression.cpp
         RelationalExpressions.cpp AggregateExpression.cpp RegexExpression.cpp
-        LangExpression.cpp NumericUnaryExpressions.cpp)
+        LangExpression.cpp NumericUnaryExpressions.cpp NumericBinaryExpressions.cpp)
 
 qlever_target_link_libraries(sparqlExpressions index)

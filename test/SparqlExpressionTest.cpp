@@ -159,21 +159,27 @@ auto testBinaryExpressionCommutative =
       testNaryExpression<NaryExpression>(expected, op2, op1);
     };
 
-template <typename NaryExpression>
-auto testBinaryExpression = [](const SingleExpressionResult auto& expected,
+auto testBinaryExpression = [](auto makeExpression,
+                               const SingleExpressionResult auto& expected,
                                const SingleExpressionResult auto& op1,
                                const SingleExpressionResult auto& op2,
                                source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  testNaryExpression<NaryExpression>(expected, op1, op2);
+  testNaryExpressionImpl(makeExpression, expected, op1, op2);
 };
 
 auto testOr = testBinaryExpressionCommutative<OrExpression>;
 auto testAnd = testBinaryExpressionCommutative<AndExpression>;
+// TODO<joka921> Make them commutative again
+/*
 auto testPlus = testBinaryExpressionCommutative<AddExpression>;
 auto testMultiply = testBinaryExpressionCommutative<MultiplyExpression>;
-auto testMinus = testBinaryExpression<SubtractExpression>;
-auto testDivide = testBinaryExpression<DivideExpression>;
+ */
+auto testPlus = std::bind_front(testBinaryExpression, &makeAddExpression);
+auto testMultiply =
+    std::bind_front(testBinaryExpression, &makeMultiplyExpression);
+auto testMinus = std::bind_front(testBinaryExpression, &makeSubtractExpression);
+auto testDivide = std::bind_front(testBinaryExpression, &makeDivideExpression);
 
 }  // namespace
 // Test `AndExpression` and `OrExpression`.
@@ -436,7 +442,8 @@ TEST(SparqlExpression, stringOperators) {
 
 // _____________________________________________________________________________________
 TEST(SparqlExpression, unaryNegate) {
-  auto checkNegate = std::bind_front(testUnaryExpressionImpl, &makeUnaryNegateExpression);
+  auto checkNegate =
+      std::bind_front(testUnaryExpressionImpl, &makeUnaryNegateExpression);
   // Zero and NaN are considered to be false, so their negation is true
   using Ids = std::vector<Id>;
   using Strings = std::vector<std::string>;
@@ -446,17 +453,19 @@ TEST(SparqlExpression, unaryNegate) {
       Ids{B(false), B(true), B(true), B(false), B(true), B(false), B(true), U});
   // Empty strings are considered to be true.
   checkNegate(Strings{"true", "false", "", "blibb"},
-                 Ids{B(false), B(false), B(true), B(false)});
+              Ids{B(false), B(false), B(true), B(false)});
 }
 
 // _____________________________________________________________________________________
 TEST(SparqlExpression, unaryMinus) {
-  auto checkMinus = std::bind_front(testUnaryExpressionImpl, &makeUnaryMinusExpression);
+  auto checkMinus =
+      std::bind_front(testUnaryExpressionImpl, &makeUnaryMinusExpression);
   // Zero and NaN are considered to be false, so their negation is true
   using Ids = std::vector<Id>;
   using Strings = std::vector<std::string>;
-  checkMinus(Ids{B(true), B(false), I(0), I(3), D(0), D(12.8), D(naN), U, Voc(6)},
-             Ids{I(-1), I(0), I(0), I(-3), D(-0.0), D(-12.8), D(-naN), U, U});
+  checkMinus(
+      Ids{B(true), B(false), I(0), I(3), D(0), D(12.8), D(naN), U, Voc(6)},
+      Ids{I(-1), I(0), I(0), I(-3), D(-0.0), D(-12.8), D(-naN), U, U});
   checkMinus(Strings{"true", "false", "", "<blibb>"}, Ids{U, U, U, U});
 }
 
