@@ -7,7 +7,7 @@
 namespace sparqlExpression {
 namespace detail {
 // Date functions.
-//
+// The input is `std::nullopt` if the argument to the expression is not a date.
 inline auto extractYear = [](std::optional<DateOrLargeYear> d) {
   if (!d.has_value()) {
     return Id::makeUndefined();

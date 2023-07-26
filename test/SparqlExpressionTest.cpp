@@ -93,9 +93,9 @@ auto checkResultsEqual = []<SingleExpressionResult A, SingleExpressionResult B>(
 
 // Assert that the given `NaryExpression` with the given `operands` has the
 // `expected` result.
-auto testNaryExpressionImpl = [](auto&& makeExpression,
-                                 SingleExpressionResult auto&& expected,
-                                 SingleExpressionResult auto&&... operands) {
+auto testNaryExpression = [](auto&& makeExpression,
+                             SingleExpressionResult auto&& expected,
+                             SingleExpressionResult auto&&... operands) {
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   VariableToColumnMap map;
@@ -139,27 +139,16 @@ auto testNaryExpressionImpl = [](auto&& makeExpression,
   // ASSERT_EQ(result, ExpressionResult{clone(expected)});
 };
 
-template <typename NaryExpression>
-auto testNaryExpression = [](SingleExpressionResult auto& expected,
-                             SingleExpressionResult auto&&... operands) {
-  testNaryExpressionImpl(
-      [](auto&&... ops) {
-        return std::make_unique<NaryExpression>(AD_FWD(ops)...);
-      },
-      expected, AD_FWD(operands)...);
-};
-
 // Assert that the given commutative binary expression has the `expected` result
 // in both orders of the operands `op1` and `op2`.
-template <typename NaryExpression>
 auto testBinaryExpressionCommutative =
-    [](const SingleExpressionResult auto& expected,
+    [](auto makeFunction, const SingleExpressionResult auto& expected,
        const SingleExpressionResult auto& op1,
        const SingleExpressionResult auto& op2,
        source_location l = source_location::current()) {
       auto t = generateLocationTrace(l);
-      testNaryExpression<NaryExpression>(expected, op1, op2);
-      testNaryExpression<NaryExpression>(expected, op2, op1);
+      testNaryExpression(makeFunction, expected, op1, op2);
+      testNaryExpression(makeFunction, expected, op2, op1);
     };
 
 auto testBinaryExpression = [](auto makeExpression,
@@ -168,21 +157,17 @@ auto testBinaryExpression = [](auto makeExpression,
                                const SingleExpressionResult auto& op2,
                                source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  testNaryExpressionImpl(makeExpression, expected, op1, op2);
+  testNaryExpression(makeExpression, expected, op1, op2);
 };
 
-/*
-// TODO<joka921> Make them commutative again
-auto testOr = testBinaryExpressionCommutative<OrExpression>;
-auto testAnd = testBinaryExpressionCommutative<AndExpression>;
-auto testPlus = testBinaryExpressionCommutative<AddExpression>;
-auto testMultiply = testBinaryExpressionCommutative<MultiplyExpression>;
- */
-auto testOr = std::bind_front(testBinaryExpression, &makeOrExpression);
-auto testAnd = std::bind_front(testBinaryExpression, &makeAndExpression);
-auto testPlus = std::bind_front(testBinaryExpression, &makeAddExpression);
+auto testOr =
+    std::bind_front(testBinaryExpressionCommutative, &makeOrExpression);
+auto testAnd =
+    std::bind_front(testBinaryExpressionCommutative, &makeAndExpression);
+auto testPlus =
+    std::bind_front(testBinaryExpressionCommutative, &makeAddExpression);
 auto testMultiply =
-    std::bind_front(testBinaryExpression, &makeMultiplyExpression);
+    std::bind_front(testBinaryExpressionCommutative, &makeMultiplyExpression);
 auto testMinus = std::bind_front(testBinaryExpression, &makeSubtractExpression);
 auto testDivide = std::bind_front(testBinaryExpression, &makeDivideExpression);
 
@@ -346,7 +331,7 @@ TEST(SparqlExpression, arithmeticOperators) {
 //
 // TODO: The tests above could also be simplified (and made much more readable)
 // in this vein.
-auto testUnaryExpressionImpl =
+auto testUnaryExpression =
     []<SingleExpressionResult OperandType, SingleExpressionResult OutputType>(
         auto makeFunction, std::vector<OperandType> operand,
         std::vector<OutputType> expected,
@@ -356,31 +341,16 @@ auto testUnaryExpressionImpl =
                               std::make_move_iterator(operand.end()), alloc};
       V<OutputType> expectedV{std::make_move_iterator(expected.begin()),
                               std::make_move_iterator(expected.end()), alloc};
-      testNaryExpressionImpl(makeFunction, expectedV, operandV);
+      testNaryExpression(makeFunction, expectedV, operandV);
     };
-
-template <typename UnaryExpression, SingleExpressionResult OperandType,
-          SingleExpressionResult OutputType>
-auto testUnaryExpression = [](std::vector<OperandType> operand,
-                              std::vector<OutputType> expected,
-                              source_location l = source_location::current()) {
-  auto tr = generateLocationTrace(l);
-  testUnaryExpressionImpl(
-      [](auto&&... ops) {
-        return std::make_unique<UnaryExpression>(AD_FWD(ops)...);
-      },
-      std::move(operand), std::move(expected));
-};
 
 // Test `YearExpression`, `MonthExpression`, and `DayExpression`.
 TEST(SparqlExpression, dateOperators) {
   // Helper function that asserts that the date operators give the expected
   // result on the given date.
-  auto checkYear =
-      std::bind_front(testUnaryExpressionImpl, &makeYearExpression);
-  auto checkMonth =
-      std::bind_front(testUnaryExpressionImpl, &makeMonthExpression);
-  auto checkDay = std::bind_front(testUnaryExpressionImpl, &makeDayExpression);
+  auto checkYear = std::bind_front(testUnaryExpression, &makeYearExpression);
+  auto checkMonth = std::bind_front(testUnaryExpression, &makeMonthExpression);
+  auto checkDay = std::bind_front(testUnaryExpression, &makeDayExpression);
   auto check = [&checkYear, &checkMonth, &checkDay](
                    const DateOrLargeYear& date, std::optional<int> expectedYear,
                    std::optional<int> expectedMonth,
@@ -423,16 +393,15 @@ TEST(SparqlExpression, dateOperators) {
   checkYear(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
   checkMonth(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
   checkDay(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
-  auto testYear = std::bind_front(testUnaryExpressionImpl, &makeYearExpression);
+  auto testYear = std::bind_front(testUnaryExpression, &makeYearExpression);
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
   testYear(Strings{"noDate"}, Ids{U});
 }
 
 // Test `StrlenExpression` and `StrExpression`.
-auto checkStrlen =
-    std::bind_front(testUnaryExpressionImpl, &makeStrlenExpression);
-auto checkStr = std::bind_front(testUnaryExpressionImpl, &makeStrExpression);
+auto checkStrlen = std::bind_front(testUnaryExpression, &makeStrlenExpression);
+auto checkStr = std::bind_front(testUnaryExpression, &makeStrExpression);
 TEST(SparqlExpression, stringOperators) {
   checkStrlen(Strings{"one", "two", "three", ""}, Ids{I(3), I(3), I(5), I(0)});
   checkStr(Ids{I(1), I(2), I(3)}, Strings{"1", "2", "3"});
@@ -444,7 +413,7 @@ TEST(SparqlExpression, stringOperators) {
 // _____________________________________________________________________________________
 TEST(SparqlExpression, unaryNegate) {
   auto checkNegate =
-      std::bind_front(testUnaryExpressionImpl, &makeUnaryNegateExpression);
+      std::bind_front(testUnaryExpression, &makeUnaryNegateExpression);
   // Zero and NaN are considered to be false, so their negation is true
 
   checkNegate(
@@ -458,7 +427,7 @@ TEST(SparqlExpression, unaryNegate) {
 // _____________________________________________________________________________________
 TEST(SparqlExpression, unaryMinus) {
   auto checkMinus =
-      std::bind_front(testUnaryExpressionImpl, &makeUnaryMinusExpression);
+      std::bind_front(testUnaryExpression, &makeUnaryMinusExpression);
   // Zero and NaN are considered to be false, so their negation is true
   checkMinus(
       Ids{B(true), B(false), I(0), I(3), D(0), D(12.8), D(naN), U, Voc(6)},
@@ -468,7 +437,7 @@ TEST(SparqlExpression, unaryMinus) {
 
 TEST(SparqlExpression, ceilFloorAbsRound) {
   auto bindUnary = [](auto f) {
-    return std::bind_front(testUnaryExpressionImpl, f);
+    return std::bind_front(testUnaryExpression, f);
   };
   auto checkFloor = bindUnary(&makeFloorExpression);
   auto checkAbs = bindUnary(&makeAbsExpression);
@@ -497,11 +466,10 @@ TEST(SparqlExpression, ceilFloorAbsRound) {
 
 // ________________________________________________________________________________________
 TEST(SparqlExpression, geoSparqlExpressions) {
-  auto checkLat =
-      std::bind_front(testUnaryExpressionImpl, &makeLatitudeExpression);
+  auto checkLat = std::bind_front(testUnaryExpression, &makeLatitudeExpression);
   auto checkLong =
-      std::bind_front(testUnaryExpressionImpl, &makeLongitudeExpression);
-  auto checkDist = std::bind_front(testNaryExpressionImpl, &makeDistExpression);
+      std::bind_front(testUnaryExpression, &makeLongitudeExpression);
+  auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
 
   checkLat(Strings{"POINT(24.3 26.8)", "NotAPoint"}, Ids{D(26.8), U});
   checkLong(Strings{"POINT(24.3 26.8)", "NotAPoint"}, Ids{D(24.3), U});

@@ -1225,11 +1225,11 @@ auto matchNary(auto makeFunction, std::same_as<Variable> auto&&... vars)
   auto typeIdLambda = [](const auto& ptr) {
     return std::type_index{typeid(*ptr)};
   };
-  auto dummyElement =
-      makeFunction(std::make_unique<VariableExpression>(vars)...);
+
+  auto expectedTypeIndex =
+      typeIdLambda(makeFunction(std::make_unique<VariableExpression>(vars)...));
   ::testing::Matcher<const SparqlExpression::Ptr> typeIdMatcher =
-      ::testing::ResultOf(typeIdLambda,
-                          ::testing::Eq(typeIdLambda(dummyElement)));
+      ::testing::ResultOf(typeIdLambda, ::testing::Eq(expectedTypeIndex));
   auto variableChildren = std::array{matchPtr<VariableExpression>(
       AD_PROPERTY(VariableExpression, value, testing::Eq(vars)))...};
   return ::testing::AllOf(typeIdMatcher,
@@ -1237,7 +1237,7 @@ auto matchNary(auto makeFunction, std::same_as<Variable> auto&&... vars)
                               SparqlExpression, childrenForTesting,
                               ::testing::ElementsAreArray(variableChildren))));
 }
-auto matchUnaryX(auto makeFunction)
+auto matchUnary(auto makeFunction)
     -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
   return matchNary(makeFunction, Variable{"?x"});
 }
@@ -1249,14 +1249,14 @@ TEST(SparqlParser, builtInCall) {
   using namespace builtInCallTestHelpers;
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
   auto expectFails = ExpectParseFails<&Parser::builtInCall>{};
-  expectBuiltInCall("StrLEN(?x)", matchUnaryX(&makeStrlenExpression));
-  expectBuiltInCall("year(?x)", matchUnaryX(&makeYearExpression));
-  expectBuiltInCall("month(?x)", matchUnaryX(&makeMonthExpression));
-  expectBuiltInCall("day(?x)", matchUnaryX(&makeDayExpression));
-  expectBuiltInCall("abs(?x)", matchUnaryX(&makeAbsExpression));
-  expectBuiltInCall("ceil(?x)", matchUnaryX(&makeCeilExpression));
-  expectBuiltInCall("floor(?x)", matchUnaryX(&makeFloorExpression));
-  expectBuiltInCall("round(?x)", matchUnaryX(&makeRoundExpression));
+  expectBuiltInCall("StrLEN(?x)", matchUnary(&makeStrlenExpression));
+  expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
+  expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
+  expectBuiltInCall("day(?x)", matchUnary(&makeDayExpression));
+  expectBuiltInCall("abs(?x)", matchUnary(&makeAbsExpression));
+  expectBuiltInCall("ceil(?x)", matchUnary(&makeCeilExpression));
+  expectBuiltInCall("floor(?x)", matchUnary(&makeFloorExpression));
+  expectBuiltInCall("round(?x)", matchUnary(&makeRoundExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
 
   // The following three cases delegate to a separate parsing function, so we
@@ -1276,10 +1276,10 @@ TEST(SparqlParser, FunctionCall) {
   // Correct function calls. Check that the parser picks the correct expression.
   expectFunctionCall(
       "<http://www.opengis.net/def/function/geosparql/latitude>(?x)",
-      matchUnaryX(&makeLatitudeExpression));
+      matchUnary(&makeLatitudeExpression));
   expectFunctionCall(
       "<http://www.opengis.net/def/function/geosparql/longitude>(?x)",
-      matchUnaryX(&makeLongitudeExpression));
+      matchUnary(&makeLongitudeExpression));
   expectFunctionCall(
       "<http://www.opengis.net/def/function/geosparql/distance>(?a, ?b)",
       matchNary(&makeDistExpression, Variable{"?a"}, Variable{"?b"}));

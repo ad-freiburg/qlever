@@ -11,8 +11,10 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
+// Factory functions for all kinds of expressions that only have other
+// expressions as arguments. The actual types and implementations of the
+// expressions are hidden in the respective `.cpp` file to reduce compile times.
 namespace sparqlExpression {
-namespace detail {}  // namespace detail
 
 SparqlExpression::Ptr makeAddExpression(SparqlExpression::Ptr child1,
                                         SparqlExpression::Ptr child2);

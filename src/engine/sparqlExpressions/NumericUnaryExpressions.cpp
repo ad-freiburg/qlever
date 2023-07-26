@@ -7,7 +7,7 @@
 namespace sparqlExpression {
 namespace detail {
 
-// Unary Negation
+// Unary negation.
 inline auto unaryNegate = [](TernaryBool a) {
   using enum TernaryBool;
   switch (a) {
@@ -33,17 +33,13 @@ inline const auto absImpl = []<typename T>(T num) { return std::abs(num); };
 inline const auto abs = makeNumericExpression<decltype(absImpl)>();
 NARY_EXPRESSION(AbsExpression, 1, FV<decltype(abs), NumericValueGetter>);
 
-// Additional numeric expressions
-// Round
+// Rounding.
 inline const auto roundImpl = []<typename T>(T num) {
   if constexpr (std::is_floating_point_v<T>) {
     auto res = std::round(num);
-    // In SPARQL negative numbers are rounded towards zero if they lie exactly
+    // In SPARQL, negative numbers are rounded towards zero if they lie exactly
     // between two integers.
-    if (num < 0 && std::abs(res - num) == 0.5) {
-      res += 1;
-    }
-    return res;
+    return (num < 0 && std::abs(res - num) == 0.5) ? res += 1 : res;
   } else {
     return num;
   }
@@ -52,7 +48,7 @@ inline const auto roundImpl = []<typename T>(T num) {
 inline const auto round = makeNumericExpression<decltype(roundImpl)>();
 NARY_EXPRESSION(RoundExpression, 1, FV<decltype(round), NumericValueGetter>);
 
-// Ceil
+// Ceiling.
 inline const auto ceilImpl = []<typename T>(T num) {
   if constexpr (std::is_floating_point_v<T>) {
     return std::ceil(num);
@@ -63,7 +59,7 @@ inline const auto ceilImpl = []<typename T>(T num) {
 inline const auto ceil = makeNumericExpression<decltype(ceilImpl)>();
 NARY_EXPRESSION(CeilExpression, 1, FV<decltype(ceil), NumericValueGetter>);
 
-// Floor
+// Flooring.
 inline const auto floorImpl = []<typename T>(T num) {
   if constexpr (std::is_floating_point_v<T>) {
     return std::floor(num);

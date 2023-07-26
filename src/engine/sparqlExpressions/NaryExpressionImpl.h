@@ -176,12 +176,14 @@ requires(isOperation<Op>) [[nodiscard]] string NaryExpression<Op>::getCacheKey(
   return key;
 }
 
+// Define a class `Name` that is a strong typedef (via inheritance) from
+// `NaryExpresssion<N, X, ...>`. The strong typedef (vs. a simple `using`
+// declaration) is used to improve compiler messages as the resulting class has
+// a short and descriptive name.
 #define NARY_EXPRESSION(Name, N, X, ...)                                     \
   class Name : public NaryExpression<detail::Operation<N, X, __VA_ARGS__>> { \
     using Base = NaryExpression<Operation<N, X, __VA_ARGS__>>;               \
     using Base::Base;                                                        \
   };
 
-#define INSTANTIATE_NARY(N, X, ...) \
-  template class NaryExpression<Operation<N, X, __VA_ARGS__>>
 }  // namespace sparqlExpression::detail
