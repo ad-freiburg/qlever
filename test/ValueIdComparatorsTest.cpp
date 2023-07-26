@@ -210,7 +210,8 @@ auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
 }
 
 // Test that `getRangesFromId` works correctly for `ValueId`s of the unsigned
-// index types (`VocabIndex`, `TextRecordIndex`, `LocalVocabIndex`,  `WordVocabIndex`).
+// index types (`VocabIndex`, `TextRecordIndex`, `LocalVocabIndex`,
+// `WordVocabIndex`).
 TEST(ValueIdComparators, IndexTypes) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);

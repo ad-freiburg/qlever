@@ -121,8 +121,7 @@ TEST(ValueId, Indices) {
   testRandomIds(&makeVocabId, &getVocabIndex, Datatype::VocabIndex);
   testRandomIds(&makeLocalVocabId, &getLocalVocabIndex,
                 Datatype::LocalVocabIndex);
-  testRandomIds(&makeWordVocabId, &getWordVocabIndex,
-                Datatype::WordVocabIndex);
+  testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex);
 }
 
 TEST(ValueId, Undefined) {
