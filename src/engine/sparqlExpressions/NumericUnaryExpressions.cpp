@@ -39,7 +39,7 @@ inline const auto roundImpl = []<typename T>(T num) {
     auto res = std::round(num);
     // In SPARQL, negative numbers are rounded towards zero if they lie exactly
     // between two integers.
-    return (num < 0 && std::abs(res - num) == 0.5) ? res += 1 : res;
+    return (num < 0 && std::abs(res - num) == 0.5) ? res + 1 : res;
   } else {
     return num;
   }
