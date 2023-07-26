@@ -5,33 +5,33 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "util/GeoSparqlHelpers.h"
 
 namespace sparqlExpression {
 namespace detail {
-
-INSTANTIATE_NARY(1,
-                 FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
-                    StringValueGetter>);
-INSTANTIATE_NARY(1,
-                 FV<NumericIdWrapper<decltype(ad_utility::wktLatitude), true>,
-                    StringValueGetter>);
-INSTANTIATE_NARY(2, FV<NumericIdWrapper<decltype(ad_utility::wktDist), true>,
-                       StringValueGetter>);
-
-INSTANTIATE_NARY(1, FV<std::identity, StringValueGetter>);
-INSTANTIATE_NARY(1, FV<decltype(strlen), StringValueGetter>);
+NARY_EXPRESSION(LongitudeExpression, 1,
+                FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
+                   StringValueGetter>);
+NARY_EXPRESSION(LatitudeExpression, 1,
+                FV<NumericIdWrapper<decltype(ad_utility::wktLatitude), true>,
+                   StringValueGetter>);
+NARY_EXPRESSION(DistExpression, 2,
+                FV<NumericIdWrapper<decltype(ad_utility::wktDist), true>,
+                   StringValueGetter>);
 
 }  // namespace detail
 
-SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child);
-SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
-SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
+using namespace detail;
+SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
+                                         SparqlExpression::Ptr child2) {
+  return std::make_unique<DistExpression>(std::move(child1), std::move(child2));
+}
 
-SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child);
-SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child);
-SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
-
-SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child);
-SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<LatitudeExpression>(std::move(child));
+}
+SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<LongitudeExpression>(std::move(child));
+}
 
 }  // namespace sparqlExpression

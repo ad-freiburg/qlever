@@ -94,7 +94,7 @@ auto checkResultsEqual = []<SingleExpressionResult A, SingleExpressionResult B>(
 // Assert that the given `NaryExpression` with the given `operands` has the
 // `expected` result.
 auto testNaryExpressionImpl = [](auto&& makeExpression,
-                                 SingleExpressionResult auto& expected,
+                                 SingleExpressionResult auto&& expected,
                                  SingleExpressionResult auto&&... operands) {
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
@@ -430,19 +430,15 @@ TEST(SparqlExpression, dateOperators) {
 }
 
 // Test `StrlenExpression` and `StrExpression`.
-auto checkStrlen = testUnaryExpression<StrlenExpression, std::string, Id>;
-template <SingleExpressionResult OperandType>
-auto checkStr = [](std::vector<OperandType>&& operand,
-                   std::vector<std::string>&& expected) {
-  testUnaryExpression<StrExpression, OperandType, std::string>(
-      std::move(operand), std::move(expected));
-};
+auto checkStrlen =
+    std::bind_front(testUnaryExpressionImpl, &makeStrlenExpression);
+auto checkStr = std::bind_front(testUnaryExpressionImpl, &makeStrExpression);
 TEST(SparqlExpression, stringOperators) {
-  checkStrlen({"one", "two", "three", ""}, {I(3), I(3), I(5), I(0)});
-  checkStr<Id>({I(1), I(2), I(3)}, {"1", "2", "3"});
-  checkStr<Id>({D(-1.0), D(1.0), D(2.34)}, {"-1", "1", "2.34"});
-  checkStr<Id>({B(true), B(false), B(true)}, {"true", "false", "true"});
-  checkStr<std::string>({"one", "two", "three"}, {"one", "two", "three"});
+  checkStrlen(Strings{"one", "two", "three", ""}, Ids{I(3), I(3), I(5), I(0)});
+  checkStr(Ids{I(1), I(2), I(3)}, Strings{"1", "2", "3"});
+  checkStr(Ids{D(-1.0), D(1.0), D(2.34)}, Strings{"-1", "1", "2.34"});
+  checkStr(Ids{B(true), B(false), B(true)}, Strings{"true", "false", "true"});
+  checkStr(Strings{"one", "two", "three"}, Strings{"one", "two", "three"});
 }
 
 // _____________________________________________________________________________________
@@ -501,12 +497,14 @@ TEST(SparqlExpression, ceilFloorAbsRound) {
 
 // ________________________________________________________________________________________
 TEST(SparqlExpression, geoSparqlExpressions) {
-  auto checkLat = testUnaryExpression<LatitudeExpression, std::string, Id>;
-  auto checkLong = testUnaryExpression<LongitudeExpression, std::string, Id>;
-  auto checkDist = testBinaryExpressionCommutative<DistExpression>;
+  auto checkLat =
+      std::bind_front(testUnaryExpressionImpl, &makeLatitudeExpression);
+  auto checkLong =
+      std::bind_front(testUnaryExpressionImpl, &makeLongitudeExpression);
+  auto checkDist = std::bind_front(testNaryExpressionImpl, &makeDistExpression);
 
-  checkLat({"POINT(24.3 26.8)", "NotAPoint"}, {D(26.8), U});
-  checkLong({"POINT(24.3 26.8)", "NotAPoint"}, {D(24.3), U});
+  checkLat(Strings{"POINT(24.3 26.8)", "NotAPoint"}, Ids{D(26.8), U});
+  checkLong(Strings{"POINT(24.3 26.8)", "NotAPoint"}, Ids{D(24.3), U});
   checkDist(D(0.0), "POINT(24.3 26.8)"s, "POINT(24.3 26.8)"s);
   checkDist(U, "POINT(24.3 26.8)"s, "NotAPoint"s);
   checkDist(U, "NotAPoint"s, "POINT(24.3 26.8)"s);

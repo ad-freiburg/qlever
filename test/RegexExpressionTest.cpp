@@ -32,8 +32,7 @@ RegexExpression makeRegexExpression(
   SparqlExpression::Ptr variableExpression =
       std::make_unique<VariableExpression>(Variable{std::move(variable)});
   if (childAsStr) {
-    variableExpression =
-        std::make_unique<StrExpression>(std::move(variableExpression));
+    variableExpression = makeStrExpression(std::move(variableExpression));
   }
   auto regexExpression = std::make_unique<StringLiteralExpression>(lit(regex));
   std::optional<SparqlExpression::Ptr> flagsExpression = std::nullopt;

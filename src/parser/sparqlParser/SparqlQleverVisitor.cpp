@@ -78,16 +78,14 @@ ExpressionPtr Visitor::processIriFunctionCall(
     iriView.remove_suffix(1);
     if (iriView == "distance") {
       checkNumArgs("geof:", iriView, 2);
-      return createExpression<sparqlExpression::DistExpression>(
-          std::move(argList[0]), std::move(argList[1]));
+      return sparqlExpression::makeDistExpression(std::move(argList[0]),
+                                                  std::move(argList[1]));
     } else if (iriView == "longitude") {
       checkNumArgs("geof:", iriView, 1);
-      return createExpression<sparqlExpression::LongitudeExpression>(
-          std::move(argList[0]));
+      return sparqlExpression::makeLongitudeExpression(std::move(argList[0]));
     } else if (iriView == "latitude") {
       checkNumArgs("geof:", iriView, 1);
-      return createExpression<sparqlExpression::LatitudeExpression>(
-          std::move(argList[0]));
+      return sparqlExpression::makeLatitudeExpression(std::move(argList[0]));
     }
   }
   reportNotSupported(ctx, "Function \"" + iri + "\" is");
@@ -1571,19 +1569,17 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   auto functionName = ad_utility::getLowercase(ctx->children[0]->getText());
   auto argList = visitVector(ctx->expression());
   using namespace sparqlExpression;
-  // Create the expression using the matching lambda from `NaryExpression.h`.
-  auto createUnaryExpression = [this, &argList]<typename Expression>() {
-    AD_CONTRACT_CHECK(argList.size() == 1);
-    return createExpression<Expression>(std::move(argList[0]));
-  };
-  auto createUnary = [&argList](auto&& function) {
+  // Create the expression using the matching factory function from
+  // `NaryExpression.h`.
+  auto createUnary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
     AD_CONTRACT_CHECK(argList.size() == 1);
     return function(std::move(argList[0]));
   };
   if (functionName == "str") {
-    return createUnaryExpression.template operator()<StrExpression>();
+    return createUnary(&makeStrExpression);
   } else if (functionName == "strlen") {
-    return createUnaryExpression.template operator()<StrlenExpression>();
+    return createUnary(&makeStrlenExpression);
   } else if (functionName == "year") {
     return createUnary(&makeYearExpression);
   } else if (functionName == "month") {

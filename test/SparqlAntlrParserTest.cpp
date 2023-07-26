@@ -8,6 +8,7 @@
 
 #include <iostream>
 #include <type_traits>
+#include <typeindex>
 #include <utility>
 
 #include "./SparqlExpressionTestHelpers.h"
@@ -537,32 +538,6 @@ TEST(SparqlParser, GroupCondition) {
       "<http://www.opengis.net/def/function/geosparql/latitude>(?test)",
       m::ExpressionGroupKey(
           "<http://www.opengis.net/def/function/geosparql/latitude>(?test)"));
-}
-
-TEST(SparqlParser, FunctionCall) {
-  auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
-  auto expectFunctionCallFails = ExpectParseFails<&Parser::functionCall>{};
-
-  // Correct function calls. Check that the parser picks the correct expression.
-  expectFunctionCall(
-      "<http://www.opengis.net/def/function/geosparql/latitude>(?a)",
-      m::ExpressionWithType<sparqlExpression::LatitudeExpression>());
-  expectFunctionCall(
-      "<http://www.opengis.net/def/function/geosparql/longitude>(?a)",
-      m::ExpressionWithType<sparqlExpression::LongitudeExpression>());
-  expectFunctionCall(
-      "<http://www.opengis.net/def/function/geosparql/distance>(?a, ?b)",
-      m::ExpressionWithType<sparqlExpression::DistExpression>());
-
-  // Wrong number of arguments.
-  expectFunctionCallFails(
-      "<http://www.opengis.net/def/function/geosparql/distance>(?a)");
-  // Unknown function with the `geof:` prefix.
-  expectFunctionCallFails(
-      "<http://www.opengis.net/def/function/geosparql/notExisting>()");
-  // Prefix for which no function is known.
-  expectFunctionCallFails(
-      "<http://www.no-existing-prefixes.com/notExisting>()");
 }
 
 TEST(SparqlParser, GroupClause) {
@@ -1244,14 +1219,27 @@ auto matchPtr(Matcher matcher = Matcher{})
 // (via `dynamic_cast`) to an object of type `UnaryExpression` that has a single
 // child expression that is the variable `x`. (e.g.  "COUNT(?x)" or
 // "STRLEN(?x)".
-template <typename UnaryExpression>
-auto matchUnaryX()
+auto matchNary(auto makeFunction, std::same_as<Variable> auto&&... vars)
     -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
   using namespace sparqlExpression;
-  auto varX = matchPtr<VariableExpression>(
-      AD_PROPERTY(VariableExpression, value, testing::Eq(Variable("?x"))));
-  return matchPtr<UnaryExpression>(AD_PROPERTY(
-      SparqlExpression, childrenForTesting, ::testing::ElementsAre(varX)));
+  auto typeIdLambda = [](const auto& ptr) {
+    return std::type_index{typeid(*ptr)};
+  };
+  auto dummyElement =
+      makeFunction(std::make_unique<VariableExpression>(vars)...);
+  ::testing::Matcher<const SparqlExpression::Ptr> typeIdMatcher =
+      ::testing::ResultOf(typeIdLambda,
+                          ::testing::Eq(typeIdLambda(dummyElement)));
+  auto variableChildren = std::array{matchPtr<VariableExpression>(
+      AD_PROPERTY(VariableExpression, value, testing::Eq(vars)))...};
+  return ::testing::AllOf(typeIdMatcher,
+                          ::testing::Pointee(AD_PROPERTY(
+                              SparqlExpression, childrenForTesting,
+                              ::testing::ElementsAreArray(variableChildren))));
+}
+auto matchUnaryX(auto makeFunction)
+    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  return matchNary(makeFunction, Variable{"?x"});
 }
 }  // namespace builtInCallTestHelpers
 
@@ -1261,10 +1249,14 @@ TEST(SparqlParser, builtInCall) {
   using namespace builtInCallTestHelpers;
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
   auto expectFails = ExpectParseFails<&Parser::builtInCall>{};
-  expectBuiltInCall("StrLEN(?x)", matchUnaryX<StrlenExpression>());
-  expectBuiltInCall("year(?x)", matchUnaryX<YearExpression>());
-  expectBuiltInCall("month(?x)", matchUnaryX<MonthExpression>());
-  expectBuiltInCall("day(?x)", matchUnaryX<DayExpression>());
+  expectBuiltInCall("StrLEN(?x)", matchUnaryX(&makeStrlenExpression));
+  expectBuiltInCall("year(?x)", matchUnaryX(&makeYearExpression));
+  expectBuiltInCall("month(?x)", matchUnaryX(&makeMonthExpression));
+  expectBuiltInCall("day(?x)", matchUnaryX(&makeDayExpression));
+  expectBuiltInCall("abs(?x)", matchUnaryX(&makeAbsExpression));
+  expectBuiltInCall("ceil(?x)", matchUnaryX(&makeCeilExpression));
+  expectBuiltInCall("floor(?x)", matchUnaryX(&makeFloorExpression));
+  expectBuiltInCall("round(?x)", matchUnaryX(&makeRoundExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
 
   // The following three cases delegate to a separate parsing function, so we
@@ -1273,4 +1265,32 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("regex(?x, \"ab\")", matchPtr<RegexExpression>());
   expectBuiltInCall("LANG(?x)", matchPtr<LangExpression>());
   expectFails("SHA512(?x)");
+}
+
+TEST(SparqlParser, FunctionCall) {
+  using namespace sparqlExpression;
+  using namespace builtInCallTestHelpers;
+  auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
+  auto expectFunctionCallFails = ExpectParseFails<&Parser::functionCall>{};
+
+  // Correct function calls. Check that the parser picks the correct expression.
+  expectFunctionCall(
+      "<http://www.opengis.net/def/function/geosparql/latitude>(?x)",
+      matchUnaryX(&makeLatitudeExpression));
+  expectFunctionCall(
+      "<http://www.opengis.net/def/function/geosparql/longitude>(?x)",
+      matchUnaryX(&makeLongitudeExpression));
+  expectFunctionCall(
+      "<http://www.opengis.net/def/function/geosparql/distance>(?a, ?b)",
+      matchNary(&makeDistExpression, Variable{"?a"}, Variable{"?b"}));
+
+  // Wrong number of arguments.
+  expectFunctionCallFails(
+      "<http://www.opengis.net/def/function/geosparql/distance>(?a)");
+  // Unknown function with the `geof:` prefix.
+  expectFunctionCallFails(
+      "<http://www.opengis.net/def/function/geosparql/notExisting>()");
+  // Prefix for which no function is known.
+  expectFunctionCallFails(
+      "<http://www.no-existing-prefixes.com/notExisting>()");
 }
