@@ -708,14 +708,14 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   using namespace sparqlExpression;
 
   // Create `Alias` object for `(AVG(?a + ?b) AS ?x)`.
-  auto sum = make<AddExpression>(make<VariableExpression>(varA),
-                                 make<VariableExpression>(varB));
+  auto sum = makeAddExpression(make<VariableExpression>(varA),
+                               make<VariableExpression>(varB));
   auto avg = make<AvgExpression>(false, std::move(sum));
   auto alias1 = Alias{SparqlExpressionPimpl{std::move(avg), "avg(?a + ?b"},
                       Variable{"?x"}};
 
   // Create `Alias` object for `(?a + COUNT(?b) AS ?y)`.
-  auto expr2 = make<AddExpression>(
+  auto expr2 = makeAddExpression(
       make<VariableExpression>(varA),
       make<CountExpression>(false, make<VariableExpression>(varB)));
   auto alias2 = Alias{SparqlExpressionPimpl{std::move(expr2), "?a + COUNT(?b)"},
@@ -770,14 +770,14 @@ TEST(GroupBy, AliasResultReused) {
   using namespace sparqlExpression;
 
   // Create `Alias` object for `(AVG(?a + ?b) AS ?x)`.
-  auto sum = make<AddExpression>(make<VariableExpression>(varA),
-                                 make<VariableExpression>(varB));
+  auto sum = makeAddExpression(make<VariableExpression>(varA),
+                               make<VariableExpression>(varB));
   auto avg = make<AvgExpression>(false, std::move(sum));
   auto alias1 = Alias{SparqlExpressionPimpl{std::move(avg), "avg(?a + ?b"},
                       Variable{"?x"}};
 
   // Create `Alias` object for `(?a + COUNT(?b) AS ?y)`.
-  auto expr2 = make<AddExpression>(
+  auto expr2 = makeAddExpression(
       make<VariableExpression>(Variable{"?x"}),
       make<CountExpression>(false, make<VariableExpression>(varB)));
   auto alias2 = Alias{SparqlExpressionPimpl{std::move(expr2), "?x + COUNT(?b)"},

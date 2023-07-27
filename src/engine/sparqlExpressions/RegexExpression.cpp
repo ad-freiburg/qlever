@@ -82,7 +82,7 @@ RegexExpression::RegexExpression(
     SparqlExpression::Ptr child, SparqlExpression::Ptr regex,
     std::optional<SparqlExpression::Ptr> optionalFlags)
     : child_{std::move(child)} {
-  if (dynamic_cast<const StrExpression*>(child_.get())) {
+  if (child_->isStrExpression()) {
     child_ = std::move(std::move(*child_).moveChildrenOut().at(0));
     childIsStrExpression_ = true;
   }

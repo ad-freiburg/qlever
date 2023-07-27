@@ -78,16 +78,14 @@ ExpressionPtr Visitor::processIriFunctionCall(
     iriView.remove_suffix(1);
     if (iriView == "distance") {
       checkNumArgs("geof:", iriView, 2);
-      return createExpression<sparqlExpression::DistExpression>(
-          std::move(argList[0]), std::move(argList[1]));
+      return sparqlExpression::makeDistExpression(std::move(argList[0]),
+                                                  std::move(argList[1]));
     } else if (iriView == "longitude") {
       checkNumArgs("geof:", iriView, 1);
-      return createExpression<sparqlExpression::LongitudeExpression>(
-          std::move(argList[0]));
+      return sparqlExpression::makeLongitudeExpression(std::move(argList[0]));
     } else if (iriView == "latitude") {
       checkNumArgs("geof:", iriView, 1);
-      return createExpression<sparqlExpression::LatitudeExpression>(
-          std::move(argList[0]));
+      return sparqlExpression::makeLatitudeExpression(std::move(argList[0]));
     }
   }
   reportNotSupported(ctx, "Function \"" + iri + "\" is");
@@ -1303,11 +1301,10 @@ ExpressionPtr Visitor::visit(Parser::ConditionalOrExpressionContext* ctx) {
   auto children = visitVector(ctx->conditionalAndExpression());
   AD_CONTRACT_CHECK(!children.empty());
   auto result = std::move(children.front());
-  using C = sparqlExpression::OrExpression::Children;
   std::for_each(children.begin() + 1, children.end(),
                 [&result](ExpressionPtr& ptr) {
-                  result = std::make_unique<sparqlExpression::OrExpression>(
-                      C{std::move(result), std::move(ptr)});
+                  result = sparqlExpression::makeOrExpression(std::move(result),
+                                                              std::move(ptr));
                 });
   result->descriptor() = ctx->getText();
   return result;
@@ -1318,11 +1315,10 @@ ExpressionPtr Visitor::visit(Parser::ConditionalAndExpressionContext* ctx) {
   auto children = visitVector(ctx->valueLogical());
   AD_CONTRACT_CHECK(!children.empty());
   auto result = std::move(children.front());
-  using C = sparqlExpression::AndExpression::Children;
   std::for_each(children.begin() + 1, children.end(),
                 [&result](ExpressionPtr& ptr) {
-                  result = std::make_unique<sparqlExpression::AndExpression>(
-                      C{std::move(result), std::move(ptr)});
+                  result = sparqlExpression::makeAndExpression(
+                      std::move(result), std::move(ptr));
                 });
   result->descriptor() = ctx->getText();
   return result;
@@ -1379,11 +1375,11 @@ ExpressionPtr Visitor::visit(Parser::AdditiveExpressionContext* ctx) {
        visitVector(ctx->multiplicativeExpressionWithSign())) {
     switch (signAndExpression.operator_) {
       case Operator::Plus:
-        result = createExpression<sparqlExpression::AddExpression>(
+        result = sparqlExpression::makeAddExpression(
             std::move(result), std::move(signAndExpression.expression_));
         break;
       case Operator::Minus:
-        result = createExpression<sparqlExpression::SubtractExpression>(
+        result = sparqlExpression::makeSubtractExpression(
             std::move(result), std::move(signAndExpression.expression_));
         break;
       default:
@@ -1446,11 +1442,11 @@ Visitor::OperatorAndExpression Visitor::visit(
        visitVector(ctx->multiplyOrDivideExpression())) {
     switch (opAndExp.operator_) {
       case Operator::Multiply:
-        expression = createExpression<sparqlExpression::MultiplyExpression>(
+        expression = sparqlExpression::makeMultiplyExpression(
             std::move(expression), std::move(opAndExp.expression_));
         break;
       case Operator::Divide:
-        expression = createExpression<sparqlExpression::DivideExpression>(
+        expression = sparqlExpression::makeDivideExpression(
             std::move(expression), std::move(opAndExp.expression_));
         break;
       default:
@@ -1468,11 +1464,11 @@ ExpressionPtr Visitor::visit(Parser::MultiplicativeExpressionContext* ctx) {
        visitVector(ctx->multiplyOrDivideExpression())) {
     switch (opAndExp.operator_) {
       case Operator::Multiply:
-        result = createExpression<sparqlExpression::MultiplyExpression>(
+        result = sparqlExpression::makeMultiplyExpression(
             std::move(result), std::move(opAndExp.expression_));
         break;
       case Operator::Divide:
-        result = createExpression<sparqlExpression::DivideExpression>(
+        result = sparqlExpression::makeDivideExpression(
             std::move(result), std::move(opAndExp.expression_));
         break;
       default:
@@ -1505,11 +1501,9 @@ Visitor::OperatorAndExpression Visitor::visit(
 ExpressionPtr Visitor::visit(Parser::UnaryExpressionContext* ctx) {
   auto child = visit(ctx->primaryExpression());
   if (ctx->children[0]->getText() == "-") {
-    return createExpression<sparqlExpression::UnaryMinusExpression>(
-        std::move(child));
+    return sparqlExpression::makeUnaryMinusExpression(std::move(child));
   } else if (ctx->children[0]->getText() == "!") {
-    return createExpression<sparqlExpression::UnaryNegateExpression>(
-        std::move(child));
+    return sparqlExpression::makeUnaryNegateExpression(std::move(child));
   } else {
     // no sign or an explicit '+'
     return child;
@@ -1575,24 +1569,34 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   auto functionName = ad_utility::getLowercase(ctx->children[0]->getText());
   auto argList = visitVector(ctx->expression());
   using namespace sparqlExpression;
-  // Create the expression using the matching lambda from `NaryExpression.h`.
-  auto createUnaryExpression = [this, &argList]<typename Expression>() {
+  // Create the expression using the matching factory function from
+  // `NaryExpression.h`.
+  auto createUnary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
     AD_CONTRACT_CHECK(argList.size() == 1);
-    return createExpression<Expression>(std::move(argList[0]));
+    return function(std::move(argList[0]));
   };
   if (functionName == "str") {
-    return createUnaryExpression.template operator()<StrExpression>();
+    return createUnary(&makeStrExpression);
   } else if (functionName == "strlen") {
-    return createUnaryExpression.template operator()<StrlenExpression>();
+    return createUnary(&makeStrlenExpression);
   } else if (functionName == "year") {
-    return createUnaryExpression.template operator()<YearExpression>();
+    return createUnary(&makeYearExpression);
   } else if (functionName == "month") {
-    return createUnaryExpression.template operator()<MonthExpression>();
+    return createUnary(&makeMonthExpression);
   } else if (functionName == "day") {
-    return createUnaryExpression.template operator()<DayExpression>();
+    return createUnary(&makeDayExpression);
   } else if (functionName == "rand") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<RandomExpression>();
+  } else if (functionName == "ceil") {
+    return createUnary(&makeCeilExpression);
+  } else if (functionName == "abs") {
+    return createUnary(&makeAbsExpression);
+  } else if (functionName == "round") {
+    return createUnary(&makeRoundExpression);
+  } else if (functionName == "floor") {
+    return createUnary(&makeFloorExpression);
   } else {
     reportError(
         ctx,
