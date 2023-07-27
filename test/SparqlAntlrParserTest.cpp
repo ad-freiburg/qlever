@@ -1285,6 +1285,15 @@ TEST(SparqlParser, builtInCall) {
   expectFails("SHA512(?x)");
 }
 
+TEST(SparqlParser, unaryExpression) {
+  using namespace sparqlExpression;
+  using namespace builtInCallTestHelpers;
+  auto expectUnary = ExpectCompleteParse<&Parser::unaryExpression>{};
+
+  expectUnary("-?x", matchUnary(&makeUnaryMinusExpression));
+  expectUnary("!?x", matchUnary(&makeUnaryNegateExpression));
+}
+
 TEST(SparqlParser, multiplicativeExpression) {
   using namespace sparqlExpression;
   using namespace builtInCallTestHelpers;
