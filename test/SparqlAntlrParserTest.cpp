@@ -1315,7 +1315,7 @@ TEST(SparqlParser, multiplicativeExpression) {
                                     matchUnary(&makeAbsExpression)));
 }
 
-// Return a matcher that matcher for an `OperatorAndExpression`.
+// Return a matcher for an `OperatorAndExpression`.
 ::testing::Matcher<const SparqlQleverVisitor::OperatorAndExpression&>
 matchOperatorAndExpression(
     SparqlQleverVisitor::Operator op,
