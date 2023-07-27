@@ -1202,8 +1202,6 @@ TEST(SparqlParser, Query) {
 }
 
 // Some helper matchers for the `builtInCall` test below.
-// TODO<joka921> The first of these matchers can probably also be used to
-// test the parsing of other expressions more cleanly.
 namespace builtInCallTestHelpers {
 // Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
 // (via `dynamic_cast`) points to an object of type `Expression`, and that this
@@ -1216,26 +1214,45 @@ auto matchPtr(Matcher matcher = Matcher{})
 }
 
 // Return a matcher  that checks whether a given `SparqlExpression::Ptr` points
-// (via `dynamic_cast`) to an object of type `UnaryExpression` that has a single
-// child expression that is the variable `x`. (e.g.  "COUNT(?x)" or
-// "STRLEN(?x)".
-auto matchNary(auto makeFunction, std::same_as<Variable> auto&&... vars)
+// (via `dynamic_cast`) to an object of the same type that a call to the
+// `makeFunction` yields. The matcher also checks that the expression's children
+// match the `childrenMatchers`.
+auto matchNaryWithChildrenMatchers(auto makeFunction,
+                                   auto&&... childrenMatchers)
     -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
   using namespace sparqlExpression;
   auto typeIdLambda = [](const auto& ptr) {
     return std::type_index{typeid(*ptr)};
   };
 
+  std::array<SparqlExpression::Ptr, sizeof...(childrenMatchers)> dummyChildren;
+  std::ranges::generate(dummyChildren, []() {
+    return std::make_unique<VariableExpression>(Variable{"?x"});
+  });
   auto expectedTypeIndex =
-      typeIdLambda(makeFunction(std::make_unique<VariableExpression>(vars)...));
-  ::testing::Matcher<const SparqlExpression::Ptr> typeIdMatcher =
+      typeIdLambda(std::apply(makeFunction, std::move(dummyChildren)));
+  ::testing::Matcher<const SparqlExpression::Ptr&> typeIdMatcher =
       ::testing::ResultOf(typeIdLambda, ::testing::Eq(expectedTypeIndex));
-  auto variableChildren = std::array{matchPtr<VariableExpression>(
-      AD_PROPERTY(VariableExpression, value, testing::Eq(vars)))...};
   return ::testing::AllOf(typeIdMatcher,
                           ::testing::Pointee(AD_PROPERTY(
                               SparqlExpression, childrenForTesting,
-                              ::testing::ElementsAreArray(variableChildren))));
+                              ::testing::ElementsAre(childrenMatchers...))));
+}
+
+// Return a matcher  that checks whether a given `SparqlExpression::Ptr` points
+// (via `dynamic_cast`) to an object of the same type that a call to the
+// `makeFunction` yields. The matcher also checks that the expression's children
+// are the `variables`.
+auto matchNary(auto makeFunction,
+               ad_utility::SimilarTo<Variable> auto&&... variables)
+    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  using namespace sparqlExpression;
+  auto variableMatcher = [](const Variable& var) {
+    return matchPtr<VariableExpression>(
+        AD_PROPERTY(VariableExpression, value, testing::Eq(var)));
+  };
+  return matchNaryWithChildrenMatchers(makeFunction,
+                                       variableMatcher(variables)...);
 }
 auto matchUnary(auto makeFunction)
     -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
@@ -1250,6 +1267,7 @@ TEST(SparqlParser, builtInCall) {
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
   auto expectFails = ExpectParseFails<&Parser::builtInCall>{};
   expectBuiltInCall("StrLEN(?x)", matchUnary(&makeStrlenExpression));
+  expectBuiltInCall("StR(?x)", matchUnary(&makeStrExpression));
   expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
   expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
   expectBuiltInCall("day(?x)", matchUnary(&makeDayExpression));
@@ -1265,6 +1283,95 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("regex(?x, \"ab\")", matchPtr<RegexExpression>());
   expectBuiltInCall("LANG(?x)", matchPtr<LangExpression>());
   expectFails("SHA512(?x)");
+}
+
+TEST(SparqlParser, multiplicativeExpression) {
+  using namespace sparqlExpression;
+  using namespace builtInCallTestHelpers;
+  Variable x{"?x"};
+  Variable y{"?y"};
+  Variable z{"?z"};
+  auto expectMultiplicative =
+      ExpectCompleteParse<&Parser::multiplicativeExpression>{};
+  expectMultiplicative("?x * ?y", matchNary(&makeMultiplyExpression, x, y));
+  expectMultiplicative("?y / ?x", matchNary(&makeDivideExpression, y, x));
+  expectMultiplicative(
+      "?z * ?y / abs(?x)",
+      matchNaryWithChildrenMatchers(&makeDivideExpression,
+                                    matchNary(&makeMultiplyExpression, z, y),
+                                    matchUnary(&makeAbsExpression)));
+  expectMultiplicative(
+      "?y / ?z * abs(?x)",
+      matchNaryWithChildrenMatchers(&makeMultiplyExpression,
+                                    matchNary(&makeDivideExpression, y, z),
+                                    matchUnary(&makeAbsExpression)));
+}
+
+// TODO<joka921> Comment
+::testing::Matcher<const SparqlQleverVisitor::OperatorAndExpression&>
+matchOperatorAndExpression(
+    SparqlQleverVisitor::Operator op,
+    const ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&>&
+        expressionMatcher) {
+  using OpAndExp = SparqlQleverVisitor::OperatorAndExpression;
+  return ::testing::AllOf(AD_FIELD(OpAndExp, operator_, ::testing::Eq(op)),
+                          AD_FIELD(OpAndExp, expression_, expressionMatcher));
+}
+
+TEST(SparqlParser, multiplicativeExpressionLeadingSignButNoSpaceContext) {
+  using namespace sparqlExpression;
+  using namespace builtInCallTestHelpers;
+  Variable x{"?x"};
+  Variable y{"?y"};
+  Variable z{"?z"};
+  using Op = SparqlQleverVisitor::Operator;
+  auto expectMultiplicative = ExpectCompleteParse<
+      &Parser::multiplicativeExpressionWithLeadingSignButNoSpace>{};
+  auto matchVariableExpression = [](Variable var) {
+    return matchPtr<VariableExpression>(
+        AD_PROPERTY(VariableExpression, value, ::testing::Eq(var)));
+  };
+  auto matchIdExpression = [](Id id) {
+    return matchPtr<IdExpression>(
+        AD_PROPERTY(IdExpression, value, ::testing::Eq(id)));
+  };
+
+  expectMultiplicative("-3 * ?y",
+                       matchOperatorAndExpression(
+                           Op::Minus, matchNaryWithChildrenMatchers(
+                                          &makeMultiplyExpression,
+                                          matchIdExpression(Id::makeFromInt(3)),
+                                          matchVariableExpression(y))));
+  expectMultiplicative(
+      "-3.7 / ?y",
+      matchOperatorAndExpression(
+          Op::Minus,
+          matchNaryWithChildrenMatchers(
+              &makeDivideExpression, matchIdExpression(Id::makeFromDouble(3.7)),
+              matchPtr<VariableExpression>())));
+
+  expectMultiplicative("+5 * ?y",
+                       matchOperatorAndExpression(
+                           Op::Plus, matchNaryWithChildrenMatchers(
+                                         &makeMultiplyExpression,
+                                         matchIdExpression(Id::makeFromInt(5)),
+                                         matchVariableExpression(y))));
+  expectMultiplicative(
+      "+3.9 / ?y", matchOperatorAndExpression(
+                       Op::Plus, matchNaryWithChildrenMatchers(
+                                     &makeDivideExpression,
+                                     matchIdExpression(Id::makeFromDouble(3.9)),
+                                     matchPtr<VariableExpression>())));
+  expectMultiplicative(
+      "-3.2 / abs(?x) * ?y",
+      matchOperatorAndExpression(
+          Op::Minus, matchNaryWithChildrenMatchers(
+                         &makeMultiplyExpression,
+                         matchNaryWithChildrenMatchers(
+                             &makeDivideExpression,
+                             matchIdExpression(Id::makeFromDouble(3.2)),
+                             matchUnary(&makeAbsExpression)),
+                         matchPtr<VariableExpression>())));
 }
 
 TEST(SparqlParser, FunctionCall) {

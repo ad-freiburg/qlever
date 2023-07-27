@@ -217,6 +217,9 @@ TEST(SparqlExpression, logicalOperators) {
   testOr(dOrS, d, s);
   testOr(sOrI, i, s);
 
+  using S = ad_utility::SetOfIntervals;
+  testOr(S{{{0, 6}}}, S{{{0, 4}}}, S{{{3, 6}}});
+
   testAnd(b, b, allTrue);
   testAnd(dAsBool, d, allTrue);
   testAnd(allFalse, b, allFalse);
@@ -226,6 +229,7 @@ TEST(SparqlExpression, logicalOperators) {
   testAnd(dAndI, d, i);
   testAnd(dAndS, d, s);
   testAnd(sAndI, s, i);
+  testAnd(S{{{3, 4}}}, S{{{0, 4}}}, S{{{3, 6}}});
 
   testOr(allTrue, b, B(true));
   testOr(b, b, B(false));

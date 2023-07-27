@@ -19,7 +19,10 @@ NARY_EXPRESSION(MultiplyExpression, 2,
 // (error) and `xsd:float/xsd:double` where we have `NaN` and `inf` results. We
 // currently implement the latter behavior. Note: The result of a division in
 // SPARQL is always a decimal number, so there is no integer division.
-inline auto divide = makeNumericExpression<std::divides<double>>();
+[[maybe_unused]] inline auto divideImpl = [](auto x, auto y) {
+  return static_cast<double>(x) / static_cast<double>(y);
+};
+inline auto divide = makeNumericExpression<decltype(divideImpl)>();
 NARY_EXPRESSION(DivideExpression, 2, FV<decltype(divide), NumericValueGetter>);
 
 // Addition and subtraction, currently all results are converted to double.

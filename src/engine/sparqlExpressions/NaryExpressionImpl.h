@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <ranges>
+
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 
@@ -15,6 +17,10 @@ class NaryExpression : public SparqlExpression {
   static constexpr size_t N = NaryOperation::N;
   using Children = std::array<SparqlExpression::Ptr, N>;
 
+ private:
+  Children children_;
+
+ public:
   // Construct from an array of `N` child expressions.
   explicit NaryExpression(Children&& children);
 
@@ -25,7 +31,6 @@ class NaryExpression : public SparqlExpression {
       requires(sizeof...(children) == N)
       : NaryExpression{Children{std::move(children)...}} {}
 
- public:
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
@@ -38,10 +43,10 @@ class NaryExpression : public SparqlExpression {
 
  private:
   // Evaluate the `naryOperation` on the `operands` using the `context`.
-  static inline auto evaluateOnChildrenOperands =
-      []<SingleExpressionResult... Operands>(
-          NaryOperation naryOperation, EvaluationContext* context,
-          Operands&&... operands) -> ExpressionResult {
+  template <SingleExpressionResult... Operands>
+  static ExpressionResult evaluateOnChildrenOperands(
+      NaryOperation naryOperation, EvaluationContext* context,
+      Operands&&... operands) {
     // Perform a more efficient calculation if a specialized function exists
     // that matches all operands.
     if (isAnySpecializedFunctionPossible(naryOperation._specializedFunctions,
@@ -49,7 +54,7 @@ class NaryExpression : public SparqlExpression {
       auto optionalResult = evaluateOnSpecializedFunctionsIfPossible(
           naryOperation._specializedFunctions,
           std::forward<Operands>(operands)...);
-      AD_CONTRACT_CHECK(optionalResult);
+      AD_CORRECTNESS_CHECK(optionalResult);
       return std::move(optionalResult.value());
     }
 
@@ -68,18 +73,15 @@ class NaryExpression : public SparqlExpression {
     using ResultType = typename decltype(resultGenerator)::value_type;
     VectorWithMemoryLimit<ResultType> result{context->_allocator};
     result.reserve(targetSize);
-    for (auto&& singleResult : resultGenerator) {
-      result.push_back(std::forward<decltype(singleResult)>(singleResult));
-    }
+    std::ranges::move(resultGenerator, std::back_inserter(result));
 
     if constexpr (resultIsConstant) {
-      AD_CONTRACT_CHECK(result.size() == 1);
+      AD_CORRECTNESS_CHECK(result.size() == 1);
       return std::move(result[0]);
     } else {
       return result;
     }
-  };
-  Children _children;
+  }
 };
 
 // Takes a `Function` that returns a numeric value (integral or floating point)
@@ -106,8 +108,7 @@ inline auto makeNumericExpression() {
       if constexpr ((... || std::is_same_v<NotNumeric, Ts>)) {
         return Id::makeUndefined();
       } else {
-        using C = std::common_type_t<Ts...>;
-        return makeNumericId(Function{}(static_cast<C>(t)...));
+        return makeNumericId(Function{}(t...));
       }
     };
     return std::visit(visitor, args...);
@@ -137,7 +138,7 @@ using TernaryBool = EffectiveBooleanValueGetter::Result;
 template <typename Op>
 requires(isOperation<Op>)
 NaryExpression<Op>::NaryExpression(Children&& children)
-    : _children{std::move(children)} {}
+    : children_{std::move(children)} {}
 
 // _____________________________________________________________________________
 
@@ -147,13 +148,18 @@ ExpressionResult NaryExpression<NaryOperation>::evaluate(
     EvaluationContext* context) const {
   auto resultsOfChildren = ad_utility::applyFunctionToEachElementOfTuple(
       [context](const auto& child) { return child->evaluate(context); },
-      _children);
+      children_);
+
+  // Bind the `evaluateOnChildrenOperands` to a lambda.
+  auto evaluateOnChildOperandsAsLambda = [](auto&&... args) {
+    return evaluateOnChildrenOperands(AD_FWD(args)...);
+  };
 
   // A function that only takes several `ExpressionResult`s,
   // and evaluates the expression.
-  auto evaluateOnChildrenResults =
-      std::bind_front(ad_utility::visitWithVariantsAndParameters,
-                      evaluateOnChildrenOperands, NaryOperation{}, context);
+  auto evaluateOnChildrenResults = std::bind_front(
+      ad_utility::visitWithVariantsAndParameters,
+      evaluateOnChildOperandsAsLambda, NaryOperation{}, context);
 
   return std::apply(evaluateOnChildrenResults, std::move(resultsOfChildren));
 }
@@ -162,7 +168,7 @@ ExpressionResult NaryExpression<NaryOperation>::evaluate(
 template <typename Op>
 requires(isOperation<Op>)
 std::span<SparqlExpression::Ptr> NaryExpression<Op>::children() {
-  return {_children.data(), _children.size()};
+  return {children_.data(), children_.size()};
 }
 
 // __________________________________________________________________________
@@ -170,9 +176,11 @@ template <typename Op>
 requires(isOperation<Op>) [[nodiscard]] string NaryExpression<Op>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   string key = typeid(*this).name();
-  for (const auto& child : _children) {
-    key += child->getCacheKey(varColMap);
-  }
+  key += ad_utility::lazyStrJoin(
+      children_ | std::views::transform([&](const auto& child) {
+        return child->getCacheKey(varColMap);
+      }),
+      "");
   return key;
 }
 
