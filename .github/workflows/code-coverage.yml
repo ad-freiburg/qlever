@@ -44,7 +44,7 @@ jobs:
     - name: Install dependencies
       run:  |
         sudo gem install apt-spy2 && sudo apt-spy2 fix --commit --launchpad --country=US
-        sudo apt-get update
+        sudo apt-get update && sudo apt-get upgrade
     - name: Install clang 16
       # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
       # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted
