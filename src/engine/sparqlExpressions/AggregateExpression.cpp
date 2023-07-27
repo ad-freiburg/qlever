@@ -69,6 +69,7 @@ AggregateExpression<AggregateOperation, FinalOperation>::getVariableForCount()
 #define INSTANTIATE_AGG_EXP(...)      \
   template class AggregateExpression< \
       Operation<2, FunctionAndValueGetters<__VA_ARGS__>>>;
+/*
 INSTANTIATE_AGG_EXP(decltype(addForSum), NumericValueGetter);
 
 INSTANTIATE_AGG_EXP(decltype(count), IsValidValueGetter);
@@ -80,5 +81,6 @@ template class AggregateExpression<
 
 // Needed for the GroupConcatExpression
 INSTANTIATE_AGG_EXP(PerformConcat, StringValueGetter);
+ */
 }  // namespace detail
 }  // namespace sparqlExpression

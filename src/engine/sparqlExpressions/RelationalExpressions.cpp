@@ -135,15 +135,18 @@ std::pair<ValueId, ValueId> getRangeFromVocab(
 // Convert an int, double, or string value into a `ValueId`. For int and double
 // this is a single `ValueId`, for strings it is a `pair<ValueId, ValueId>` that
 // denotes a range (see `getRangeFromVocab` above).
-template <SingleExpressionResult S>
-requires isConstantResult<S>
-auto makeValueId(const S& value, const EvaluationContext* context) {
+//template <SingleExpressionResult S>
+//requires isConstantResult<S>
+template<typename S> requires (!SingleExpressionResult<S> || isConstantResult<S>)
+auto makeValueId(const S& value, const EvaluationContext* context) ->Id {
   if constexpr (std::is_integral_v<S>) {
     return ValueId::makeFromInt(value);
   } else if constexpr (std::is_floating_point_v<S>) {
     return ValueId::makeFromDouble(value);
   } else if constexpr (ad_utility::isSimilar<S, ValueId>) {
     return value;
+  } else if constexpr (ad_utility::isSimilar<S, IdOrString>) {
+    return value.visit([&](const auto& s){return makeValueId(s, context);});
   } else {
     static_assert(ad_utility::isSimilar<S, std::string>);
     return getRangeFromVocab(value, context);

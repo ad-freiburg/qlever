@@ -227,7 +227,10 @@ inline const auto minMaxLambdaForAllTypes = []<SingleExpressionResult T>(
                ? a
                : b;
   } else {
-    return ad_utility::alwaysFalse<T>;
+    // TODO<joka921> This is very wrong and has to be fixed!!!!
+    // Note: it is the case of `std::variant<BlaBlub>`.
+    return a;
+    //return ad_utility::alwaysFalse<T>;
   }
 };
 

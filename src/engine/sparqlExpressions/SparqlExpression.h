@@ -158,7 +158,7 @@ class SparqlExpression {
             std::make_move_iterator(span.end())};
   }
 
- private:
+ public:
   // Get the direct child expressions.
   virtual std::span<SparqlExpression::Ptr> children() = 0;
   virtual std::span<const SparqlExpression::Ptr> children() const final {
@@ -166,6 +166,7 @@ class SparqlExpression {
     return {children.data(), children.size()};
   }
 
+ private:
   // Helper function for strings(). Get all variables, iris, and string literals
   // that are included in this expression directly, ignoring possible child
   // expressions.
@@ -175,6 +176,7 @@ class SparqlExpression {
   }
 
  protected:
+
   // After calling this function, `isInsideAlias()` (see below) returns true for
   // this expression as well as for all its descendants. This function must be
   // called by all child classes that are aggregate expressions.

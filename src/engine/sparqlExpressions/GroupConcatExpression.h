@@ -15,12 +15,14 @@ namespace detail {
 
 struct PerformConcat {
   std::string separator_;
-  std::string operator()(string&& a, const string& b) const {
+  std::string operator()(string&& a, const std::optional<std::string>& b) const {
     if (a.empty()) [[unlikely]] {
-      return b;
+      return b.value_or("");
     } else [[likely]] {
-      a.append(separator_);
-      a.append(b);
+      if (b.has_value()) {
+        a.append(separator_);
+        a.append(b.value());
+      }
       return std::move(a);
     }
   }
@@ -31,18 +33,22 @@ class GroupConcatExpression : public SparqlExpression {
  public:
   GroupConcatExpression(bool distinct, Ptr&& child, std::string separator)
       : _separator{std::move(separator)} {
+    /*
     using OP = detail::AGG_OP<detail::PerformConcat, detail::StringValueGetter>;
     auto groupConcatOp = OP{detail::PerformConcat{_separator}};
     using AGG_EXP = detail::AggregateExpression<OP>;
     _actualExpression = std::make_unique<AGG_EXP>(distinct, std::move(child),
                                                   std::move(groupConcatOp));
+                                                  */
     setIsInsideAggregate();
   }
 
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override {
     // The child is already set up to perform all the work.
+    /*
     return _actualExpression->evaluate(context);
+     */
   }
 
   // _________________________________________________________________________

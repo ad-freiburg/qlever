@@ -239,8 +239,12 @@ ExpressionResult RegexExpression::evaluateNonPrefixRegex(
   result.reserve(resultSize);
   if (childIsStrExpression_) {
     for (auto id : detail::makeGenerator(variable, resultSize, context)) {
+      auto str = detail::StringValueGetter{}(id, context);
+      if (! str.has_value()) {
+        result.push_back(Id::makeUndefined());
+      }
       result.push_back(Id::makeFromBool(RE2::PartialMatch(
-          detail::StringValueGetter{}(id, context), std::get<RE2>(regex_))));
+          str.value(), std::get<RE2>(regex_))));
     }
   } else {
     for (auto id : detail::makeGenerator(variable, resultSize, context)) {

@@ -6,6 +6,8 @@
 #define QLEVER_GEOSPARQLHELPERS_H
 
 #include <string>
+#include <optional>
+#include <limits>
 
 namespace ad_utility {
 
@@ -22,25 +24,35 @@ double wktLatitudeImpl(const std::string_view point);
 double wktDistImpl(const std::string_view point1,
                    const std::string_view point2);
 
+auto NaN = std::numeric_limits<double>::quiet_NaN();
 }  // namespace detail
 
 // Parse the longitude coordinate from a WKT point (it's the first coordinate).
-inline auto wktLongitude = [](const std::string& point) -> double {
-  return detail::wktLongitudeImpl(point);
+inline auto wktLongitude = [](const std::optional<std::string>& point) -> double {
+  if (!point.has_value()) {
+    return detail::NaN;
+  }
+  return detail::wktLongitudeImpl(point.value());
 };
 
 // Parse the latitute coordinate from a WKT point (it's the second coordinate).
-inline auto wktLatitude = [](const std::string& point) -> double {
-  return detail::wktLatitudeImpl(point);
+inline auto wktLatitude = [](const std::optional<std::string>& point) -> double {
+  if (!point.has_value()) {
+    return detail::NaN;
+  }
+  return detail::wktLatitudeImpl(point.value());
 };
 
 // Compute the distance in km between two WKT points according to the formula in
 // https://en.wikipedia.org/wiki/Geographical_distance ("ellipsoidal earth
 // projected to a plane"). A more precise way is the Haversine formula, which we
 // save for when we compute this at indexing time.
-inline auto wktDist = [](const std::string& point1,
-                         const std::string& point2) -> double {
-  return detail::wktDistImpl(point1, point2);
+inline auto wktDist = [](const std::optional<std::string>& point1,
+                         const std::optional<std::string>& point2) -> double {
+  if (!point1.has_value() || !point2.has_value()) {
+    return detail::NaN;
+  }
+  return detail::wktDistImpl(point1.value(), point2.value());
 };
 
 }  // namespace ad_utility

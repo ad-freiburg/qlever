@@ -5,18 +5,55 @@
 namespace sparqlExpression {
 namespace detail {
 // String functions.
-NARY_EXPRESSION(StrExpressionImpl, 1, FV<std::identity, StringValueGetter>);
+auto strImpl = [](std::optional<std::string> s) {
+  return IdOrString{std::move(s)};
+};
+NARY_EXPRESSION(StrExpressionImpl, 1, FV<decltype(strImpl), StringValueGetter>);
 
 class StrExpression : public StrExpressionImpl {
   using StrExpressionImpl::StrExpressionImpl;
   bool isStrExpression() const override { return true; }
 };
 
-// Compute string length.
-inline auto strlen = [](std::string_view s) {
-  return Id::makeFromInt(s.size());
+template <size_t N, typename Function>
+class StringExpressionImpl : public SparqlExpression {
+ private:
+  using WithStrImpl = NARY<N, FV<Function, StringValueGetter>>;
+  using WithoutStrImpl = NARY<N, FV<Function, LiteralFromIdGetter>>;
+
+  SparqlExpression::Ptr impl_;
+ public:
+  StringExpressionImpl(SparqlExpression::Ptr child) {
+    AD_CORRECTNESS_CHECK(child != nullptr);
+    if (child->isStrExpression()) {
+      impl_ = std::make_unique<WithStrImpl>(std::move(std::move(*child).moveChildrenOut().at(0)));
+    } else {
+      impl_ = std::make_unique<WithoutStrImpl>(std::move(child));
+    }
+  }
+
+  ExpressionResult evaluate(EvaluationContext* context) const override{
+    return impl_->evaluate(context);
+  }
+  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
+    return impl_->getCacheKey(varColMap);
+  }
+
+ private:
+  std::span<SparqlExpression::Ptr> children() override {
+    return impl_->children();
+  }
 };
-NARY_EXPRESSION(StrlenExpression, 1, FV<decltype(strlen), StringValueGetter>);
+
+// Compute string length.
+inline auto strlen = [](std::optional<std::string> s) {
+  if (!s.has_value()) {
+    return Id::makeUndefined();
+  }
+  return Id::makeFromInt(s.value().size());
+};
+using StrlenExpression = StringExpressionImpl<1, decltype(strlen)>;
+//NARY_EXPRESSION(StrlenExpression, 1, FV<decltype(strlen), StringValueGetter>);
 
 }  // namespace detail
 using namespace detail;

@@ -15,6 +15,7 @@
 #include "util/ConstexprSmallString.h"
 #include "util/Generator.h"
 #include "util/HashMap.h"
+#include "util/VisitMixin.h"
 #include "util/TypeTraits.h"
 
 namespace sparqlExpression {
@@ -49,8 +50,21 @@ class VectorWithMemoryLimit
   }
 };
 
-/// A list of StrongIds that all have the same datatype.
-using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
+using IdOrStringBase = std::variant<ValueId, std::string>;
+
+class IdOrString : public IdOrStringBase, public VisitMixin<IdOrString, IdOrStringBase>{
+ public:
+  using IdOrStringBase::IdOrStringBase;
+  IdOrString(std::optional<std::string> s) {
+    if (s.has_value()) {
+      emplace<std::string>(std::move(s.value()));
+    } else {
+      emplace<Id>(Id::makeUndefined());
+    }
+  }
+};
+
+
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
@@ -59,7 +73,7 @@ using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
 namespace detail {
 // For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
 // possible expression result types.
-using ConstantTypes = std::tuple<string, ValueId>;
+using ConstantTypes = std::tuple<IdOrString, ValueId, std::string>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
@@ -224,14 +238,19 @@ struct EvaluationContext {
 
 namespace detail {
 /// Get Id of constant result of type T.
-template <SingleExpressionResult T, typename LocalVocabT>
+template <typename T, typename LocalVocabT>
 Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
-  static_assert(isConstantResult<T>);
+  // TODO<joka921> Reinstate the asserts.
+  //static_assert(isConstantResult<T>);
   if constexpr (ad_utility::isSimilar<T, string>) {
     return Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained(std::forward<T>(result)));
   } else if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
+  } else if constexpr (ad_utility::isSimilar<T, IdOrString>) {
+      return std::visit([&localVocab](auto&& result) {
+        return constantExpressionResultToId(AD_FWD(result), localVocab);
+      }, AD_FWD(result));
   } else {
     static_assert(ad_utility::alwaysFalse<T>);
   }
