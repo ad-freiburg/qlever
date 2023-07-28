@@ -2,8 +2,6 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "MediaTypes.h"
-
 #include <absl/strings/str_join.h>
 
 #include "../Exception.h"
@@ -12,6 +10,7 @@
 #include "../antlr/ANTLRErrorHandling.h"
 #include "./HttpParser/AcceptHeaderQleverVisitor.h"
 #include "./HttpParser/generated/AcceptHeaderLexer.h"
+#include "MediaTypes.h"
 
 using std::string;
 namespace ad_utility {
@@ -131,6 +130,17 @@ std::optional<MediaType> toMediaType(std::string_view s) {
   }
 }
 
+// For use with `ThrowingErrorListener` in `parseAcceptHeader`.
+
+class InvalidMediaTypeParseException : public ParseException {
+ public:
+  explicit InvalidMediaTypeParseException(
+      std::string_view cause,
+      std::optional<ExceptionMetadata> metadata = std::nullopt)
+      : ParseException{cause, std::move(metadata),
+                       "Invalid media type parse:"} {}
+};
+
 // ___________________________________________________________________________
 std::vector<MediaTypeWithQuality> parseAcceptHeader(
     std::string_view acceptHeader, std::vector<MediaType> supportedMediaTypes) {
@@ -140,7 +150,7 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
     antlr4::ANTLRInputStream stream{input};
     AcceptHeaderLexer lexer{&stream};
     antlr4::CommonTokenStream tokens{&lexer};
-    ThrowingErrorListener<InvalidSparqlQueryException> errorListener_{};
+    ThrowingErrorListener<InvalidMediaTypeParseException> errorListener_{};
 
    public:
     AcceptHeaderParser parser{&tokens};
