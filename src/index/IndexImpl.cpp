@@ -796,8 +796,7 @@ void IndexImpl::readConfiguration() {
 
   // TODO Write a description.
   bool boolPrefixes;
-  const ad_utility::ConfigOption& prefixesOption =
-      config.addOption("prefixes", "", &boolPrefixes, false);
+  config.addOption("prefixes", "", &boolPrefixes, false);
 
   // TODO Write a description.
   bool hasAllPermutations;
@@ -841,7 +840,6 @@ void IndexImpl::readConfiguration() {
                    "The date of the last breaking change of the index format.",
                    &indexFormatVersionDate);
 
-  // One of the options can't be done with `ConfigManager`.
   configurationJson_ = fileToJson(onDiskBase_ + CONFIGURATION_FILE);
   config.parseConfig(configurationJson_);
 
@@ -882,17 +880,15 @@ void IndexImpl::readConfiguration() {
         "Incompatible index format, see log message for details"};
   }
 
-  if (prefixesOption.wasSetAtRuntime()) {
-    if (boolPrefixes) {
-      vector<string> prefixes;
-      auto prefixFile = ad_utility::makeIfstream(onDiskBase_ + PREFIX_FILE);
-      for (string prefix; std::getline(prefixFile, prefix);) {
-        prefixes.emplace_back(std::move(prefix));
-      }
-      vocab_.buildCodebookForPrefixCompression(prefixes);
-    } else {
-      vocab_.buildCodebookForPrefixCompression(std::vector<std::string>());
+  if (boolPrefixes) {
+    vector<string> prefixes;
+    auto prefixFile = ad_utility::makeIfstream(onDiskBase_ + PREFIX_FILE);
+    for (string prefix; std::getline(prefixFile, prefix);) {
+      prefixes.emplace_back(std::move(prefix));
     }
+    vocab_.buildCodebookForPrefixCompression(prefixes);
+  } else {
+    vocab_.buildCodebookForPrefixCompression(std::vector<std::string>());
   }
 
   vocab_.initializeExternalizePrefixes(prefixesExternal);
