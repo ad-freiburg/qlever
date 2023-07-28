@@ -92,79 +92,63 @@ class AggregateExpression : public SparqlExpression {
         return aggregateOperation._function(AD_FWD(x), AD_FWD(y), context);
       }
     };
+    // The operands *without* applying the `valueGetter`.
+    auto operands =
+        makeGenerator(std::forward<Operand>(operand), inputSize, context);
 
-    if (!distinct) {
-      auto values = detail::valueGetterGenerator(
-          inputSize, context, std::forward<Operand>(operand), valueGetter);
-      auto it = values.begin();
-      // Unevaluated operation to get the proper `ResultType`. With `auto`, we
-      // would get the operand type, which is not necessarily the `ResultType`.
-      // For example, in the COUNT aggregate we calculate a sum of boolean
-      // values, but the result is not boolean.
-      using ResultType =
-          std::decay_t<decltype(callFunction(std::move(*it), *it))>;
-      ResultType result = *it;
-      for (++it; it != values.end(); ++it) {
-        result = callFunction(std::move(result), std::move(*it));
+    // For distinct we must put the operands into the hash set before
+    // applying the `valueGetter`. For example, COUNT(?x), where ?x matches
+    // three different strings, the value getter always returns `1`, but
+    // we still have three distinct inputs.
+    // Unevaluated operation to get the proper `ResultType`. With `auto`, we
+    // would get the operand type, which is not necessarily the `ResultType`.
+    // For example, in the COUNT aggregate we calculate a sum of boolean
+    // values, but the result is not boolean.
+    auto getUniqueElements = [context, inputSize](auto&& ops)
+        -> cppcoro::generator<typename decltype(operands)::value_type> {
+      ad_utility::HashSetWithMemoryLimit<
+          typename decltype(operands)::value_type>
+          uniqueHashSet(inputSize, context->_allocator);
+      for (auto&& el : ops) {
+        if (uniqueHashSet.insert(el).second) {
+          auto elForYielding = std::move(el);
+          co_yield elForYielding;
+        }
       }
-      result = finalOperation(std::move(result), inputSize);
-      if constexpr (requires { makeNumericId(result); }) {
-        return makeNumericId(result);
+    };
+
+    auto impl = [&valueGetter, context, &finalOperation,
+                 &callFunction](auto&& inputs) {
+      auto it = inputs.begin();
+      AD_CORRECTNESS_CHECK(it != inputs.end());
+
+      using ResultType = std::decay_t<decltype(callFunction(
+          std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
+      ResultType result = valueGetter(*it, context);
+      size_t numValues = 1;
+
+      for (++it; it != inputs.end(); ++it) {
+        result = callFunction(std::move(result),
+                              valueGetter(std::move(*it), context));
+        ++numValues;
+      }
+      result = finalOperation(std::move(result), numValues);
+      return result;
+    };
+    auto result = [&]() {
+      if (distinct) {
+        auto uniqueValues = getUniqueElements(std::move(operands));
+        return impl(std::move(uniqueValues));
       } else {
-        return result;
+        return impl(std::move(operands));
       }
+    }();
+    if constexpr (requires { makeNumericId(result); }) {
+      return makeNumericId(result);
     } else {
-      // The operands *without* applying the `valueGetter`.
-      auto operands =
-          makeGenerator(std::forward<Operand>(operand), inputSize, context);
-
-      // For distinct we must put the operands into the hash set before
-      // applying the `valueGetter`. For example, COUNT(?x), where ?x matches
-      // three different strings, the value getter always returns `1`, but
-      // we still have three distinct inputs.
-      // Unevaluated operation to get the proper `ResultType`. With `auto`, we
-      // would get the operand type, which is not necessarily the `ResultType`.
-      // For example, in the COUNT aggregate we calculate a sum of boolean
-      // values, but the result is not boolean.
-      auto getUniqueElements = [context, inputSize](auto&& ops)
-          -> cppcoro::generator<typename decltype(operands)::value_type> {
-        ad_utility::HashSetWithMemoryLimit<
-            typename decltype(operands)::value_type>
-            uniqueHashSet(inputSize, context->_allocator);
-        for (auto&& el : ops) {
-          if (uniqueHashSet.insert(el).second) {
-            auto elForYielding = std::move(el);
-            co_yield elForYielding;
-          }
-        }
-      };
-      auto uniqueValues = getUniqueElements(std::move(operands));
-
-      auto impl = [&valueGetter, context, &finalOperation, &callFunction](auto&& inputs) {
-        auto it = inputs.begin();
-        AD_CORRECTNESS_CHECK(it != inputs.end());
-
-        using ResultType = std::decay_t<decltype(callFunction(
-            std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
-        ResultType result = valueGetter(*it, context);
-        size_t numValues = 1;
-
-        for (++it; it != inputs.end(); ++it) {
-          result = callFunction(std::move(result),
-                                valueGetter(std::move(*it), context));
-          ++numValues;
-        }
-        result = finalOperation(std::move(result), numValues);
-        return result;
-      };
-      auto result = impl(std::move(uniqueValues));
-        if constexpr (requires { makeNumericId(result); }) {
-            return makeNumericId(result);
-        } else {
-            return result;
-        }
+      return result;
     }
-      };
+  };
 
  protected:
   bool _distinct;
