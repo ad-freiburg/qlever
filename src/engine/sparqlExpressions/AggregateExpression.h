@@ -122,31 +122,49 @@ class AggregateExpression : public SparqlExpression {
       // applying the `valueGetter`. For example, COUNT(?x), where ?x matches
       // three different strings, the value getter always returns `1`, but
       // we still have three distinct inputs.
-      auto it = operands.begin();
       // Unevaluated operation to get the proper `ResultType`. With `auto`, we
       // would get the operand type, which is not necessarily the `ResultType`.
       // For example, in the COUNT aggregate we calculate a sum of boolean
       // values, but the result is not boolean.
-      using ResultType = std::decay_t<decltype(callFunction(
-          std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
-      ResultType result = valueGetter(*it, context);
-      ad_utility::HashSetWithMemoryLimit<
-          typename decltype(operands)::value_type>
-          uniqueHashSet({*it}, inputSize, context->_allocator);
-      for (++it; it != operands.end(); ++it) {
-        if (uniqueHashSet.insert(*it).second) {
+      auto getUniqueElements = [context, inputSize](auto&& ops)
+          -> cppcoro::generator<typename decltype(operands)::value_type> {
+        ad_utility::HashSetWithMemoryLimit<
+            typename decltype(operands)::value_type>
+            uniqueHashSet(inputSize, context->_allocator);
+        for (auto&& el : ops) {
+          if (uniqueHashSet.insert(el).second) {
+            auto elForYielding = std::move(el);
+            co_yield elForYielding;
+          }
+        }
+      };
+      auto uniqueValues = getUniqueElements(std::move(operands));
+
+      auto impl = [&valueGetter, context, &finalOperation, &callFunction](auto&& inputs) {
+        auto it = inputs.begin();
+        AD_CORRECTNESS_CHECK(it != inputs.end());
+
+        using ResultType = std::decay_t<decltype(callFunction(
+            std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
+        ResultType result = valueGetter(*it, context);
+        size_t numValues = 1;
+
+        for (++it; it != inputs.end(); ++it) {
           result = callFunction(std::move(result),
                                 valueGetter(std::move(*it), context));
+          ++numValues;
         }
-      }
-      result = finalOperation(std::move(result), uniqueHashSet.size());
-      if constexpr (requires { makeNumericId(result); }) {
-        return makeNumericId(result);
-      } else {
+        result = finalOperation(std::move(result), numValues);
         return result;
-      }
+      };
+      auto result = impl(std::move(uniqueValues));
+        if constexpr (requires { makeNumericId(result); }) {
+            return makeNumericId(result);
+        } else {
+            return result;
+        }
     }
-  };
+      };
 
  protected:
   bool _distinct;
