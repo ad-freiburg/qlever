@@ -240,11 +240,11 @@ ExpressionResult RegexExpression::evaluateNonPrefixRegex(
   if (childIsStrExpression_) {
     for (auto id : detail::makeGenerator(variable, resultSize, context)) {
       auto str = detail::StringValueGetter{}(id, context);
-      if (! str.has_value()) {
+      if (!str.has_value()) {
         result.push_back(Id::makeUndefined());
       }
-      result.push_back(Id::makeFromBool(RE2::PartialMatch(
-          str.value(), std::get<RE2>(regex_))));
+      result.push_back(Id::makeFromBool(
+          RE2::PartialMatch(str.value(), std::get<RE2>(regex_))));
     }
   } else {
     for (auto id : detail::makeGenerator(variable, resultSize, context)) {

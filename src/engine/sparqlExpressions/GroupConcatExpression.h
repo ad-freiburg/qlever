@@ -15,7 +15,8 @@ namespace detail {
 
 struct PerformConcat {
   std::string separator_;
-  std::string operator()(string&& a, const std::optional<std::string>& b) const {
+  std::string operator()(string&& a,
+                         const std::optional<std::string>& b) const {
     if (a.empty()) [[unlikely]] {
       return b.value_or("");
     } else [[likely]] {
@@ -30,31 +31,49 @@ struct PerformConcat {
 
 }  // namespace detail
 class GroupConcatExpression : public SparqlExpression {
+ private:
+  Ptr child_;
+  std::string separator_;
+  bool distinct_;
+
  public:
   GroupConcatExpression(bool distinct, Ptr&& child, std::string separator)
-      : _separator{std::move(separator)} {
-    /*
-    using OP = detail::AGG_OP<detail::PerformConcat, detail::StringValueGetter>;
-    auto groupConcatOp = OP{detail::PerformConcat{_separator}};
-    using AGG_EXP = detail::AggregateExpression<OP>;
-    _actualExpression = std::make_unique<AGG_EXP>(distinct, std::move(child),
-                                                  std::move(groupConcatOp));
-                                                  */
+      : child_{std::move(child)},
+        separator_{std::move(separator)},
+        distinct_{distinct} {
+    if (distinct) {
+      throw std::runtime_error{
+          "DISTINCT in combination with GROUP_CONCAT is currently not "
+          "supported by QLever"};
+    }
     setIsInsideAggregate();
   }
 
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override {
-    // The child is already set up to perform all the work.
-    /*
-    return _actualExpression->evaluate(context);
-     */
+    auto impl = [context,
+                 this](SingleExpressionResult auto&& el) -> ExpressionResult {
+      auto generator =
+          detail::makeGenerator(AD_FWD(el), context->size(), context);
+      auto getString = [context](const SingleExpressionResult auto& s) {
+        return detail::StringValueGetter{}(s, context);
+      };
+
+      // TODO<joka921> The strings should conform to the memory limit.
+      auto filtered =
+          generator | std::views::transform(getString) |
+          std::views::filter(&std::optional<std::string>::has_value);
+      auto toString = std::views::transform(
+          filtered, [](auto&& opt) { return AD_FWD(opt).value(); });
+      return IdOrString(ad_utility::lazyStrJoin(toString, separator_));
+    };
+
+    auto childRes = child_->evaluate(context);
+    return std::visit(impl, std::move(childRes));
   }
 
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override {
-    return {&_actualExpression, 1};
-  }
+  std::span<SparqlExpression::Ptr> children() override { return {&child_, 1}; }
 
   // A `GroupConcatExpression` is an aggregate, so it never leaves any
   // unaggregated variables.
@@ -65,13 +84,9 @@ class GroupConcatExpression : public SparqlExpression {
 
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override {
-    return absl::StrCat("[", _separator, "]",
-                        _actualExpression->getCacheKey(varColMap));
+    return absl::StrCat("[ GROUP_CONCAT", distinct_ ? " DISTINCT " : "",
+                        separator_, "]", child_->getCacheKey(varColMap));
   }
-
- private:
-  Ptr _actualExpression;
-  std::string _separator;
 };
 }  // namespace sparqlExpression
 

@@ -36,7 +36,7 @@ auto Voc = ad_utility::testing::VocabId;
 auto U = Id::makeUndefined();
 
 using Ids = std::vector<Id>;
-using Strings = std::vector<std::string>;
+using IdOrStrings = std::vector<IdOrString>;
 
 // Test allocator (the inputs to our `SparqlExpression`s are
 // `VectorWithMemoryLimit`s, and these require an `AllocatorWithLimit`).
@@ -180,7 +180,7 @@ TEST(SparqlExpression, logicalOperators) {
           alloc};
   V<Id> dAsBool{{B(true), B(true), B(false), B(false)}, alloc};
 
-  V<std::string> s{{"true", "", "false", ""}, alloc};
+  V<IdOrString> s{{"true", "", "false", ""}, alloc};
   V<Id> sAsBool{{B(true), B(false), B(true), B(false)}, alloc};
 
   V<Id> i{{I(32), I(-42), I(0), I(5)}, alloc};
@@ -249,10 +249,10 @@ TEST(SparqlExpression, logicalOperators) {
   testAnd(allFalse, b, D(nan));
   testAnd(b, b, D(2839.123));
 
-  testOr(allTrue, b, std::string("halo"));
-  testOr(b, b, std::string(""));
-  testAnd(allFalse, b, std::string(""));
-  testAnd(b, b, std::string("yellow"));
+  testOr(allTrue, b, IdOrString{"halo"});
+  testOr(b, b, IdOrString(""));
+  testAnd(allFalse, b, IdOrString(""));
+  testAnd(b, b, IdOrString("yellow"));
 
   // Test the behavior in the presence of UNDEF values.
   Id t = B(true);
@@ -400,18 +400,21 @@ TEST(SparqlExpression, dateOperators) {
   auto testYear = std::bind_front(testUnaryExpression, &makeYearExpression);
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
-  testYear(Strings{"noDate"}, Ids{U});
+  testYear(IdOrStrings{"noDate"}, Ids{U});
 }
 
 // Test `StrlenExpression` and `StrExpression`.
 auto checkStrlen = std::bind_front(testUnaryExpression, &makeStrlenExpression);
 auto checkStr = std::bind_front(testUnaryExpression, &makeStrExpression);
 TEST(SparqlExpression, stringOperators) {
-  checkStrlen(Strings{"one", "two", "three", ""}, Ids{I(3), I(3), I(5), I(0)});
-  checkStr(Ids{I(1), I(2), I(3)}, Strings{"1", "2", "3"});
-  checkStr(Ids{D(-1.0), D(1.0), D(2.34)}, Strings{"-1", "1", "2.34"});
-  checkStr(Ids{B(true), B(false), B(true)}, Strings{"true", "false", "true"});
-  checkStr(Strings{"one", "two", "three"}, Strings{"one", "two", "three"});
+  checkStrlen(IdOrStrings{"one", "two", "three", ""},
+              Ids{I(3), I(3), I(5), I(0)});
+  checkStr(Ids{I(1), I(2), I(3)}, IdOrStrings{"1", "2", "3"});
+  checkStr(Ids{D(-1.0), D(1.0), D(2.34)}, IdOrStrings{"-1", "1", "2.34"});
+  checkStr(Ids{B(true), B(false), B(true)},
+           IdOrStrings{"true", "false", "true"});
+  checkStr(IdOrStrings{"one", "two", "three"},
+           IdOrStrings{"one", "two", "three"});
 }
 
 // _____________________________________________________________________________________
@@ -424,7 +427,7 @@ TEST(SparqlExpression, unaryNegate) {
       Ids{B(true), B(false), I(0), I(3), D(0), D(12), D(naN), U},
       Ids{B(false), B(true), B(true), B(false), B(true), B(false), B(true), U});
   // Empty strings are considered to be true.
-  checkNegate(Strings{"true", "false", "", "blibb"},
+  checkNegate(IdOrStrings{"true", "false", "", "blibb"},
               Ids{B(false), B(false), B(true), B(false)});
 }
 
@@ -436,7 +439,7 @@ TEST(SparqlExpression, unaryMinus) {
   checkMinus(
       Ids{B(true), B(false), I(0), I(3), D(0), D(12.8), D(naN), U, Voc(6)},
       Ids{I(-1), I(0), I(0), I(-3), D(-0.0), D(-12.8), D(-naN), U, U});
-  checkMinus(Strings{"true", "false", "", "<blibb>"}, Ids{U, U, U, U});
+  checkMinus(IdOrStrings{"true", "false", "", "<blibb>"}, Ids{U, U, U, U});
 }
 
 TEST(SparqlExpression, ceilFloorAbsRound) {
@@ -475,9 +478,10 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       std::bind_front(testUnaryExpression, &makeLongitudeExpression);
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
 
-  checkLat(Strings{"POINT(24.3 26.8)", "NotAPoint"}, Ids{D(26.8), U});
-  checkLong(Strings{"POINT(24.3 26.8)", "NotAPoint"}, Ids{D(24.3), U});
-  checkDist(D(0.0), "POINT(24.3 26.8)"s, "POINT(24.3 26.8)"s);
-  checkDist(U, "POINT(24.3 26.8)"s, "NotAPoint"s);
-  checkDist(U, "NotAPoint"s, "POINT(24.3 26.8)"s);
+  checkLat(IdOrStrings{"POINT(24.3 26.8)", "NotAPoint"}, Ids{D(26.8), U});
+  checkLong(IdOrStrings{"POINT(24.3 26.8)", "NotAPoint"}, Ids{D(24.3), U});
+  checkDist(D(0.0), IdOrString{"POINT(24.3 26.8)"},
+            IdOrString{"POINT(24.3 26.8)"});
+  checkDist(U, IdOrString{"POINT(24.3 26.8)"s}, IdOrString{"NotAPoint"});
+  checkDist(U, IdOrString{"NotAPoint"}, IdOrString{"POINT(24.3 26.8)"});
 }

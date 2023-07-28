@@ -22,17 +22,19 @@ class StringExpressionImpl : public SparqlExpression {
   using WithoutStrImpl = NARY<N, FV<Function, LiteralFromIdGetter>>;
 
   SparqlExpression::Ptr impl_;
+
  public:
   StringExpressionImpl(SparqlExpression::Ptr child) {
     AD_CORRECTNESS_CHECK(child != nullptr);
     if (child->isStrExpression()) {
-      impl_ = std::make_unique<WithStrImpl>(std::move(std::move(*child).moveChildrenOut().at(0)));
+      impl_ = std::make_unique<WithStrImpl>(
+          std::move(std::move(*child).moveChildrenOut().at(0)));
     } else {
       impl_ = std::make_unique<WithoutStrImpl>(std::move(child));
     }
   }
 
-  ExpressionResult evaluate(EvaluationContext* context) const override{
+  ExpressionResult evaluate(EvaluationContext* context) const override {
     return impl_->evaluate(context);
   }
   std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
@@ -53,7 +55,8 @@ inline auto strlen = [](std::optional<std::string> s) {
   return Id::makeFromInt(s.value().size());
 };
 using StrlenExpression = StringExpressionImpl<1, decltype(strlen)>;
-//NARY_EXPRESSION(StrlenExpression, 1, FV<decltype(strlen), StringValueGetter>);
+// NARY_EXPRESSION(StrlenExpression, 1, FV<decltype(strlen),
+// StringValueGetter>);
 
 }  // namespace detail
 using namespace detail;

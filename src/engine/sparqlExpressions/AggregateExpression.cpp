@@ -69,15 +69,15 @@ AggregateExpression<AggregateOperation, FinalOperation>::getVariableForCount()
 #define INSTANTIATE_AGG_EXP(...)      \
   template class AggregateExpression< \
       Operation<2, FunctionAndValueGetters<__VA_ARGS__>>>;
-/*
 INSTANTIATE_AGG_EXP(decltype(addForSum), NumericValueGetter);
+
+template class AggregateExpression<
+    AGG_OP<decltype(addForSum), NumericValueGetter>, decltype(averageFinalOp)>;
 
 INSTANTIATE_AGG_EXP(decltype(count), IsValidValueGetter);
 INSTANTIATE_AGG_EXP(decltype(minLambdaForAllTypes), ActualValueGetter);
 INSTANTIATE_AGG_EXP(decltype(maxLambdaForAllTypes), ActualValueGetter);
-
-template class AggregateExpression<
-    AGG_OP<decltype(addForSum), NumericValueGetter>, decltype(averageFinalOp)>;
+/*
 
 // Needed for the GroupConcatExpression
 INSTANTIATE_AGG_EXP(PerformConcat, StringValueGetter);

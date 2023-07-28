@@ -15,8 +15,8 @@
 #include "util/ConstexprSmallString.h"
 #include "util/Generator.h"
 #include "util/HashMap.h"
-#include "util/VisitMixin.h"
 #include "util/TypeTraits.h"
+#include "util/VisitMixin.h"
 
 namespace sparqlExpression {
 
@@ -52,7 +52,8 @@ class VectorWithMemoryLimit
 
 using IdOrStringBase = std::variant<ValueId, std::string>;
 
-class IdOrString : public IdOrStringBase, public VisitMixin<IdOrString, IdOrStringBase>{
+class IdOrString : public IdOrStringBase,
+                   public VisitMixin<IdOrString, IdOrStringBase> {
  public:
   using IdOrStringBase::IdOrStringBase;
   IdOrString(std::optional<std::string> s) {
@@ -64,8 +65,6 @@ class IdOrString : public IdOrStringBase, public VisitMixin<IdOrString, IdOrStri
   }
 };
 
-
-
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
 /// the row indices in which a boolean expression evaluates to "true". Constant
@@ -73,7 +72,7 @@ class IdOrString : public IdOrStringBase, public VisitMixin<IdOrString, IdOrStri
 namespace detail {
 // For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
 // possible expression result types.
-using ConstantTypes = std::tuple<IdOrString, ValueId, std::string>;
+using ConstantTypes = std::tuple<IdOrString, ValueId>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
@@ -241,16 +240,18 @@ namespace detail {
 template <typename T, typename LocalVocabT>
 Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   // TODO<joka921> Reinstate the asserts.
-  //static_assert(isConstantResult<T>);
+  // static_assert(isConstantResult<T>);
   if constexpr (ad_utility::isSimilar<T, string>) {
     return Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained(std::forward<T>(result)));
   } else if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
   } else if constexpr (ad_utility::isSimilar<T, IdOrString>) {
-      return std::visit([&localVocab](auto&& result) {
-        return constantExpressionResultToId(AD_FWD(result), localVocab);
-      }, AD_FWD(result));
+    return std::visit(
+        [&localVocab](auto&& result) {
+          return constantExpressionResultToId(AD_FWD(result), localVocab);
+        },
+        AD_FWD(result));
   } else {
     static_assert(ad_utility::alwaysFalse<T>);
   }

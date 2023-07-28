@@ -105,9 +105,12 @@ struct EffectiveBooleanValueGetter {
 struct StringValueGetter {
   std::optional<string> operator()(ValueId, const EvaluationContext*) const;
 
-  std::optional<string> operator()(string s, const EvaluationContext*) const { return s; }
+  std::optional<string> operator()(string s, const EvaluationContext*) const {
+    return s;
+  }
 
-  std::optional<string> operator()(IdOrString s, const EvaluationContext* ctx) const {
+  std::optional<string> operator()(IdOrString s,
+                                   const EvaluationContext* ctx) const {
     return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
                       std::move(s));
   }
@@ -144,13 +147,15 @@ struct LiteralFromIdGetter {
                                    const EvaluationContext* context) const;
   std::optional<string> operator()(std::string s,
                                    const EvaluationContext*) const {
-      // TODO<joka921> `string` should be a type that is aware of Literals vs strings.
-      return std::move(s);
+    // TODO<joka921> `string` should be a type that is aware of Literals vs
+    // strings.
+    return std::move(s);
   }
 
-  std::optional<string> operator()(IdOrString s, const EvaluationContext* ctx) const {
-      return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
-                        std::move(s));
+  std::optional<string> operator()(IdOrString s,
+                                   const EvaluationContext* ctx) const {
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
   }
 };
 

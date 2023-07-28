@@ -176,7 +176,6 @@ class SparqlExpression {
   }
 
  protected:
-
   // After calling this function, `isInsideAlias()` (see below) returns true for
   // this expression as well as for all its descendants. This function must be
   // called by all child classes that are aggregate expressions.

@@ -73,8 +73,8 @@ auto EffectiveBooleanValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
-std::optional<std::string> StringValueGetter::operator()(Id id,
-                                     const EvaluationContext* context) const {
+std::optional<std::string> StringValueGetter::operator()(
+    Id id, const EvaluationContext* context) const {
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true>(
           context->_qec.getIndex(), id, context->_localVocab);

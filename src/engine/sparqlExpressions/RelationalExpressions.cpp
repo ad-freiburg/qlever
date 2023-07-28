@@ -135,10 +135,11 @@ std::pair<ValueId, ValueId> getRangeFromVocab(
 // Convert an int, double, or string value into a `ValueId`. For int and double
 // this is a single `ValueId`, for strings it is a `pair<ValueId, ValueId>` that
 // denotes a range (see `getRangeFromVocab` above).
-//template <SingleExpressionResult S>
-//requires isConstantResult<S>
-template<typename S> requires (!SingleExpressionResult<S> || isConstantResult<S>)
-auto makeValueId(const S& value, const EvaluationContext* context) ->Id {
+// template <SingleExpressionResult S>
+// requires isConstantResult<S>
+template <typename S>
+requires((!SingleExpressionResult<S> || isConstantResult<S>))
+auto makeValueId(const S& value, const EvaluationContext* context) {
   if constexpr (std::is_integral_v<S>) {
     return ValueId::makeFromInt(value);
   } else if constexpr (std::is_floating_point_v<S>) {
@@ -146,7 +147,16 @@ auto makeValueId(const S& value, const EvaluationContext* context) ->Id {
   } else if constexpr (ad_utility::isSimilar<S, ValueId>) {
     return value;
   } else if constexpr (ad_utility::isSimilar<S, IdOrString>) {
-    return value.visit([&](const auto& s){return makeValueId(s, context);});
+    auto visitor = [context](const auto& x) {
+      auto res = makeValueId(x, context);
+      if constexpr (ad_utility::isSimilar<decltype(res), Id>) {
+        return std::pair{res, res};
+      } else {
+        return res;
+      }
+    };
+    return value.visit(visitor);
+
   } else {
     static_assert(ad_utility::isSimilar<S, std::string>);
     return getRangeFromVocab(value, context);
@@ -269,19 +279,33 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
   VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(resultSize);
 
-  constexpr static bool value2IsString = ad_utility::isSimilar<S2, std::string>;
   if constexpr (ad_utility::isSimilar<S1, Variable> && isConstantResult<S2>) {
-    auto columnIndex = context->getColumnIndexForVariable(value1);
-    auto valueId = makeValueId(value2, context);
-    const auto& cols = context->_columnsByWhichResultIsSorted;
-    if (!cols.empty() && cols[0] == columnIndex) {
-      if constexpr (value2IsString) {
-        return evaluateWithBinarySearch<Comp>(value1, valueId.first,
-                                              valueId.second, context);
-      } else {
-        return evaluateWithBinarySearch<Comp>(value1, valueId, std::nullopt,
-                                              context);
+    auto impl = [&](const auto& value2) -> std::optional<ExpressionResult> {
+      auto columnIndex = context->getColumnIndexForVariable(value1);
+      auto valueId = makeValueId(value2, context);
+      const auto& cols = context->_columnsByWhichResultIsSorted;
+      if (!cols.empty() && cols[0] == columnIndex) {
+        constexpr static bool value2IsString =
+            !ad_utility::isSimilar<decltype(valueId), Id>;
+        if constexpr (value2IsString) {
+          return evaluateWithBinarySearch<Comp>(value1, valueId.first,
+                                                valueId.second, context);
+        } else {
+          return evaluateWithBinarySearch<Comp>(value1, valueId, std::nullopt,
+                                                context);
+        }
       }
+      return std::nullopt;
+    };
+    std::optional<ExpressionResult> resultFromBinarySearch;
+    if constexpr (ad_utility::isSimilar<S2, IdOrString>) {
+      resultFromBinarySearch =
+          value2.visit([&impl](const auto& x) { return impl(x); });
+    } else {
+      resultFromBinarySearch = impl(value2);
+    }
+    if (resultFromBinarySearch.has_value()) {
+      return std::move(resultFromBinarySearch.value());
     }
   }
 
@@ -291,28 +315,62 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
   auto itB = generatorB.begin();
 
   for (size_t i = 0; i < resultSize; ++i) {
-    if constexpr (requires {
-                    valueIdComparators::compareIds(*itA, *itB, Comp);
-                  }) {
-      // Compare two `ValueId`s
-      result.push_back(toValueId(
-          valueIdComparators::compareIds<
-              valueIdComparators::ComparisonForIncompatibleTypes::AlwaysUndef>(
-              *itA, *itB, Comp)));
-    } else if constexpr (requires {
-                           valueIdComparators::compareWithEqualIds(
-                               *itA, itB->first, itB->second, Comp);
-                         }) {
-      // Compare `ValueId` with range of equal `ValueId`s (used when `value2` is
-      // `string` or `vector<string>`.
-      result.push_back(toValueId(
-          valueIdComparators::compareWithEqualIds<
-              valueIdComparators::ComparisonForIncompatibleTypes::AlwaysUndef>(
-              *itA, itB->first, itB->second, Comp)));
+    auto impl = [&]<typename X, typename Y>(const X& x, const Y& y,
+                                            auto&& self) {
+      if constexpr (AreIncomparable<X, Y>) {
+        result.push_back(Id::makeUndefined());
+      } else if constexpr (requires {
+                             valueIdComparators::compareIds(x, y, Comp);
+                           }) {
+        // Compare two `ValueId`s
+        result.push_back(
+            toValueId(valueIdComparators::compareIds<
+                      valueIdComparators::ComparisonForIncompatibleTypes::
+                          AlwaysUndef>(x, y, Comp)));
+      } else if constexpr (requires {
+                             valueIdComparators::compareWithEqualIds(
+                                 x, y.first, y.second, Comp);
+                           }) {
+        // Compare `ValueId` with range of equal `ValueId`s (used when `value2`
+        // is `string` or `vector<string>`.
+        result.push_back(
+            toValueId(valueIdComparators::compareWithEqualIds<
+                      valueIdComparators::ComparisonForIncompatibleTypes::
+                          AlwaysUndef>(x, y.first, y.second, Comp)));
+      } else if constexpr (requires {
+                             valueIdComparators::compareWithEqualIds(
+                                 y, x.first, x.second, Comp);
+                           }) {
+        // Compare `ValueId` with range of equal `ValueId`s (used when `value2`
+        // is `string` or `vector<string>`.
+        result.push_back(
+            toValueId(valueIdComparators::compareWithEqualIds<
+                      valueIdComparators::ComparisonForIncompatibleTypes::
+                          AlwaysUndef>(
+                y, x.first, x.second, getComparisonForSwappedArguments(Comp))));
+      } else if constexpr (!(StoresValueId<X> || StoresValueId<Y>)) {
+        // Compare two numeric values, or two string values.
+        result.push_back(Id::makeFromBool(applyComparison<Comp>(x, y)));
+      } else {
+        return self(makeValueId(x, context), makeValueId(y, context), self);
+      }
+    };
+    auto base = [](const IdOrString& i) -> const IdOrStringBase& { return i; };
+    auto actualImpl = [&impl](const auto& x, const auto& y) {
+      return impl(x, y, impl);
+    };
+    if constexpr (ad_utility::isSimilar<decltype(*itA), IdOrString> &&
+                  ad_utility::isSimilar<decltype(*itB), IdOrString>) {
+      std::visit(actualImpl, base(*itA), base(*itB));
+    } else if constexpr (ad_utility::isSimilar<decltype(*itA), IdOrString>) {
+      std::visit([&actualImpl, &itB](auto& x) { return actualImpl(x, *itB); },
+                 base(*itA));
+    } else if constexpr (ad_utility::isSimilar<decltype(*itB), IdOrString>) {
+      std::visit([&actualImpl, &itA](auto& x) { return actualImpl(*itA, x); },
+                 base(*itB));
     } else {
-      // Compare two numeric values, or two string values.
-      result.push_back(Id::makeFromBool(applyComparison<Comp>(*itA, *itB)));
-    }
+      actualImpl(*itA, *itB);
+    };
     ++itA;
     ++itB;
   }
