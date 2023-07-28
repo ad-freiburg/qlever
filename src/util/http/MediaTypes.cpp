@@ -2,6 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include "MediaTypes.h"
+
 #include <absl/strings/str_join.h>
 
 #include "../Exception.h"
@@ -10,7 +12,6 @@
 #include "../antlr/ANTLRErrorHandling.h"
 #include "./HttpParser/AcceptHeaderQleverVisitor.h"
 #include "./HttpParser/generated/AcceptHeaderLexer.h"
-#include "MediaTypes.h"
 
 using std::string;
 namespace ad_utility {

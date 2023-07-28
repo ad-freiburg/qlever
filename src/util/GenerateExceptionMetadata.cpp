@@ -5,11 +5,12 @@
 //   2023 Andre Schlegel (schlegea@informatik.uni-freiburg.de)
 
 // These are ANTLR headers.
+#include "util/GenerateExceptionMetadata.h"
+
 #include <Lexer.h>
 #include <Parser.h>
 
 #include "util/Exception.h"
-#include "util/GenerateExceptionMetadata.h"
 
 // _____________________________________________________________________________
 ExceptionMetadata generateMetadata(antlr4::Parser* parser,
