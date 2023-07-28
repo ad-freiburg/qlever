@@ -828,6 +828,18 @@ void IndexImpl::readConfiguration() {
   config.addOption("num-objects-normal", "", &numObjectsNormal_);
   config.addOption("num-triples-normal", "", &numTriplesNormal_);
 
+  // TODO Make this cleaner, than just catching all the fields of the object.
+  size_t indexFormatVersionPullRequestNumber;
+  config.addOption(
+      {"index-format-version"s, "pull-request-number"s},
+      "The number of the pull request that changed the index format most "
+      "recently.",
+      &indexFormatVersionPullRequestNumber);
+  std::string indexFormatVersionDate;
+  config.addOption({"index-format-version"s, "date"s},
+                   "The date of the last breaking change of the index format.",
+                   &indexFormatVersionDate);
+
   configurationJson_ = fileToJson(onDiskBase_ + CONFIGURATION_FILE);
 
   /*
