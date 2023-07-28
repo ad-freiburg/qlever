@@ -11,12 +11,12 @@
 using namespace sparqlExpression;
 
 TEST(SparqlExpressionTypes, expressionResultCopyIfNotVector) {
-  ExpressionResult a = 42.3;
-  ExpressionResult b = 1.0;
+  ExpressionResult a = Id::makeFromDouble(42.3);
+  ExpressionResult b = Id::makeFromDouble(1.0);
   ASSERT_NO_THROW(b = copyExpressionResultIfNotVector(a));
   ASSERT_EQ(a, b);
 
-  a = VectorWithMemoryLimit<double>(ad_utility::testing::makeAllocator());
+  a = VectorWithMemoryLimit<Id>(ad_utility::testing::makeAllocator());
   ASSERT_ANY_THROW(b = copyExpressionResultIfNotVector(a));
   AD_EXPECT_THROW_WITH_MESSAGE(
       b = copyExpressionResultIfNotVector(a),
