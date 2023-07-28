@@ -114,23 +114,27 @@ constexpr static bool isSimilar =
 template <typename T, typename U>
 concept SimilarTo = isSimilar<T, U>;
 
+/// True iff `T` is similar (see above) to any of the `Ts...`.
+template <typename T, typename... Ts>
+constexpr static bool isTypeAnyOf = (... || isSimilar<T, Ts>);
+
 /// isTypeContainedIn<T, U> It is true iff type U is a pair, tuple or variant
 /// and T `isSimilar` (see above) to one of the types contained in the tuple,
 /// pair or variant.
-template <typename... Ts>
+template <typename T, typename... Ts>
 constexpr static bool isTypeContainedIn = false;
 
 template <typename T, typename... Ts>
 constexpr static bool isTypeContainedIn<T, std::tuple<Ts...>> =
-    (... || isSimilar<T, Ts>);
+    isTypeAnyOf<T, Ts...>;
 
 template <typename T, typename... Ts>
 constexpr static bool isTypeContainedIn<T, std::variant<Ts...>> =
-    (... || isSimilar<T, Ts>);
+    isTypeAnyOf<T, Ts...>;
 
 template <typename T, typename... Ts>
 constexpr static bool isTypeContainedIn<T, std::pair<Ts...>> =
-    (... || isSimilar<T, Ts>);
+    isTypeAnyOf<T, Ts...>;
 
 /// A templated bool that is always false,
 /// independent of the template parameter.

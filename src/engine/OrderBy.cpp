@@ -117,9 +117,11 @@ ResultTable OrderBy::computeResult() {
       if (row1[column] == row2[column]) {
         continue;
       }
-      bool isLessThan = valueIdComparators::compareIds<
-          valueIdComparators::ComparisonForIncompatibleTypes::CompareByType>(
-          row1[column], row2[column], valueIdComparators::Comparison::LT);
+      bool isLessThan =
+          toBoolNotUndef(valueIdComparators::compareIds<
+                         valueIdComparators::ComparisonForIncompatibleTypes::
+                             CompareByType>(
+              row1[column], row2[column], valueIdComparators::Comparison::LT));
       return isLessThan != isDescending;
     }
     return false;

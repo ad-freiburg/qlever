@@ -81,19 +81,7 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
 
   auto visitor =
       [&]<sparqlExpression::SingleExpressionResult T>(T&& singleResult) {
-        if constexpr (std::is_same_v<T, sparqlExpression::VectorWithMemoryLimit<
-                                            sparqlExpression::Bool>>) {
-          AD_CONTRACT_CHECK(singleResult.size() == input.size());
-          auto totalSize =
-              std::accumulate(singleResult.begin(), singleResult.end(), 0ul);
-          output.reserve(totalSize);
-          for (size_t i = 0; i < singleResult.size(); ++i) {
-            if (singleResult[i]) {
-              output.push_back(input[i]);
-            }
-          }
-          AD_CONTRACT_CHECK(output.size() == totalSize);
-        } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
+        if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
           auto totalSize = std::accumulate(
               singleResult._intervals.begin(), singleResult._intervals.end(),
               0ul, [](const auto& sum, const auto& interval) {
@@ -106,11 +94,9 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
           }
           AD_CONTRACT_CHECK(output.size() == totalSize);
         } else {
-          // Default case for all other types. We currently implicitly convert
-          // all kinds of results (strings, doubles, ints) to bools inside a
-          // FILTER.
-          // TODO<joka921> Read up in the standard what is correct here, and
-          // then rewrite the expression module with the correct semantics.
+          // All other results are converted to boolean values via the
+          // `EffectiveBooleanValueGetter`. This means for example, that zero,
+          // UNDEF, and empty strings are filtered out.
           // TODO<joka921> Check whether it's feasible to precompute and reserve
           // the total size. This depends on the expensiveness of the
           // `EffectiveBooleanValueGetter`.
@@ -118,9 +104,9 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
               std::forward<T>(singleResult), input.size(), &evaluationContext);
           size_t i = 0;
 
+          using EBV = sparqlExpression::detail::EffectiveBooleanValueGetter;
           for (auto&& resultValue : resultGenerator) {
-            if (sparqlExpression::detail::EffectiveBooleanValueGetter{}(
-                    resultValue, &evaluationContext)) {
+            if (EBV{}(resultValue, &evaluationContext) == EBV::Result::True) {
               output.push_back(input[i]);
             }
             ++i;

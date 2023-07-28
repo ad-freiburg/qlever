@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <type_traits>
 #include <vector>
@@ -80,7 +81,39 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
                , ad_utility::NotValidShortHandNameException);
 }
 
-TEST(ConfigManagerTest, ParseConfig) {
+/*
+The exceptions for adding sub managers.
+*/
+TEST(ConfigManagerTest, addSubManagerExceptionTest) {
+  ad_utility::ConfigManager config{};
+
+  // Sub manager for testing. Empty sub manager are not allowed.
+  int notUsed;
+  config
+      .addSubManager({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s})
+      .addOption("ignore", "", &notUsed);
+
+  // Trying to add a sub manager with the same name at the same place, should
+  // cause an error.
+  ASSERT_THROW(config.addSubManager(
+                   {"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}),
+               ad_utility::ConfigManagerOptionPathAlreadyinUseException);
+
+  // An empty vector that should cause an exception.
+  ASSERT_ANY_THROW(config.addSubManager(std::vector<std::string>{}););
+
+  /*
+  Trying to add a sub manager with a path containing strings with
+  spaces should cause an error.
+  Reason: A string with spaces in it, can't be read by the short hand
+  configuration grammar. Ergo, you can't set values, with such paths per
+  short hand, which we don't want.
+  */
+  ASSERT_THROW(config.addSubManager({"Shared part"s, "Sense_of_existence"s});
+               , ad_utility::NotValidShortHandNameException);
+}
+
+TEST(ConfigManagerTest, ParseConfigNoSubManager) {
   ad_utility::ConfigManager config{};
 
   // Adding the options.
@@ -108,14 +141,14 @@ TEST(ConfigManagerTest, ParseConfig) {
   // The json for testing `parseConfig`. Sets all of the configuration
   // options.
   const nlohmann::json testJson(nlohmann::json::parse(R"--({
-"depth_0": {
-  "Option_0": 10,
-  "depth_1": {
-    "Option_1": 11
-  }
-},
-"Option_2": 12
-})--"));
+ "depth_0": {
+   "Option_0": 10,
+   "depth_1": {
+     "Option_1": 11
+   }
+ },
+ "Option_2": 12
+ })--"));
 
   // Set and check.
   config.parseConfig(testJson);
@@ -125,7 +158,239 @@ TEST(ConfigManagerTest, ParseConfig) {
   checkOption<int>(optionTwo, thirdInt, true, 12);
 }
 
-TEST(ConfigManagerTest, ParseConfigExceptionTest) {
+TEST(ConfigManagerTest, ParseConfigWithSubManager) {
+  // Parse the given configManager with the given json and check, that all the
+  // configOption were set correctly.
+  auto parseAndCheck =
+      [](const nlohmann::json& j, ConfigManager& m,
+         const std::vector<std::pair<int*, int>>& wantedValues) {
+        m.parseConfig(j);
+
+        std::ranges::for_each(
+            wantedValues, [](const std::pair<int*, int>& wantedValue) -> void {
+              ASSERT_EQ(*wantedValue.first, wantedValue.second);
+            });
+      };
+
+  // Simple manager, with only one sub manager and no recursion.
+  ad_utility::ConfigManager managerWithOneSubNoRecursion{};
+  ad_utility::ConfigManager& managerSteve =
+      managerWithOneSubNoRecursion.addSubManager({"personal"s, "Steve"s});
+  int steveId;
+  managerSteve.addOption("Id", "", &steveId, 4);
+  int steveInfractions;
+  managerSteve.addOption("Infractions", "", &steveInfractions, 6);
+
+  parseAndCheck(nlohmann::json::parse(R"--({
+ "personal": {
+   "Steve": {
+     "Id": 40, "Infractions" : 60
+   }
+ }
+ })--"),
+                managerWithOneSubNoRecursion,
+                {{&steveId, 40}, {&steveInfractions, 60}});
+
+  // Adding configuration options to the top level manager.
+  int amountOfPersonal;
+  managerWithOneSubNoRecursion.addOption("AmountOfPersonal", "",
+                                         &amountOfPersonal, 0);
+
+  parseAndCheck(
+      nlohmann::json::parse(R"--({
+ "AmountOfPersonal" : 1,
+ "personal": {
+   "Steve": {
+     "Id": 30, "Infractions" : 70
+   }
+ }
+ })--"),
+      managerWithOneSubNoRecursion,
+      {{&amountOfPersonal, 1}, {&steveId, 30}, {&steveInfractions, 70}});
+
+  // Simple manager, with multiple sub manager and no recursion.
+  ad_utility::ConfigManager managerWithMultipleSubNoRecursion{};
+  ad_utility::ConfigManager& managerDave =
+      managerWithMultipleSubNoRecursion.addSubManager({"personal"s, "Dave"s});
+  ad_utility::ConfigManager& managerJanice =
+      managerWithMultipleSubNoRecursion.addSubManager({"personal"s, "Janice"s});
+  int daveId;
+  managerDave.addOption("Id", "", &daveId, 7);
+  int janiceId;
+  managerJanice.addOption("Id", "", &janiceId, 11);
+  int daveInfractions;
+  managerDave.addOption("Infractions", "", &daveInfractions, 1);
+  int janiceInfractions;
+  managerJanice.addOption("Infractions", "", &janiceInfractions, 143);
+
+  parseAndCheck(nlohmann::json::parse(R"--({
+ "personal": {
+   "Dave": {
+     "Id": 4, "Infractions" : 0
+   },
+   "Janice": {
+     "Id": 0, "Infractions" : 6
+   }
+ }
+ })--"),
+                managerWithMultipleSubNoRecursion,
+                {{&daveId, 4},
+                 {&daveInfractions, 0},
+                 {&janiceId, 0},
+                 {&janiceInfractions, 6}});
+
+  // Adding configuration options to the top level manager.
+  managerWithMultipleSubNoRecursion.addOption("AmountOfPersonal", "",
+                                              &amountOfPersonal, 0);
+
+  parseAndCheck(nlohmann::json::parse(R"--({
+ "AmountOfPersonal" : 1,
+ "personal": {
+   "Dave": {
+     "Id": 6, "Infractions" : 2
+   },
+   "Janice": {
+     "Id": 2, "Infractions" : 8
+   }
+ }
+ })--"),
+                managerWithMultipleSubNoRecursion,
+                {{&amountOfPersonal, 1},
+                 {&daveId, 6},
+                 {&daveInfractions, 2},
+                 {&janiceId, 2},
+                 {&janiceInfractions, 8}});
+
+  // Complex manager with recursion.
+  ad_utility::ConfigManager managerWithRecursion{};
+  ad_utility::ConfigManager& managerDepth1 =
+      managerWithRecursion.addSubManager({"depth1"s});
+  ad_utility::ConfigManager& managerDepth2 =
+      managerDepth1.addSubManager({"depth2"s});
+
+  ad_utility::ConfigManager& managerAlex =
+      managerDepth2.addSubManager({"personal"s, "Alex"s});
+  int alexId;
+  managerAlex.addOption("Id", "", &alexId, 8);
+  int alexInfractions;
+  managerAlex.addOption("Infractions", "", &alexInfractions, 4);
+
+  ad_utility::ConfigManager& managerPeter =
+      managerDepth2.addSubManager({"personal"s, "Peter"s});
+  int peterId;
+  managerPeter.addOption("Id", "", &peterId, 8);
+  int peterInfractions;
+  managerPeter.addOption("Infractions", "", &peterInfractions, 4);
+
+  parseAndCheck(nlohmann::json::parse(R"--({
+ "depth1": {
+     "depth2": {
+         "personal": {
+           "Alex": {
+             "Id": 4, "Infractions" : 0
+           },
+           "Peter": {
+             "Id": 0, "Infractions" : 6
+           }
+         }
+     }
+ }
+ })--"),
+                managerWithRecursion,
+                {{&alexId, 4},
+                 {&alexInfractions, 0},
+                 {&peterId, 0},
+                 {&peterInfractions, 6}});
+
+  // Add an option to `managerDepth2`.
+  int someOptionAtDepth2;
+  managerDepth2.addOption("someOption", "", &someOptionAtDepth2, 7);
+
+  parseAndCheck(nlohmann::json::parse(R"--({
+ "depth1": {
+     "depth2": {
+         "someOption" : 9,
+         "personal": {
+           "Alex": {
+             "Id": 6, "Infractions" : 2
+           },
+           "Peter": {
+             "Id": 2, "Infractions" : 8
+           }
+         }
+     }
+ }
+ })--"),
+                managerWithRecursion,
+                {{&someOptionAtDepth2, 9},
+                 {&alexId, 6},
+                 {&alexInfractions, 2},
+                 {&peterId, 2},
+                 {&peterInfractions, 8}});
+
+  // Add an option to `managerDepth1`.
+  int someOptionAtDepth1;
+  managerDepth1.addOption("someOption", "", &someOptionAtDepth1, 10);
+
+  parseAndCheck(nlohmann::json::parse(R"--({
+ "depth1": {
+     "someOption" : 3,
+     "depth2": {
+         "someOption" : 7,
+         "personal": {
+           "Alex": {
+             "Id": 4, "Infractions" : 0
+           },
+           "Peter": {
+             "Id": 0, "Infractions" : 6
+           }
+         }
+     }
+ }
+ })--"),
+                managerWithRecursion,
+                {{&someOptionAtDepth1, 3},
+                 {&someOptionAtDepth2, 7},
+                 {&alexId, 4},
+                 {&alexInfractions, 0},
+                 {&peterId, 0},
+                 {&peterInfractions, 6}});
+
+  // Add a second sub manager to `managerDepth1`.
+  int someOptionInSecondSubManagerAtDepth1;
+  managerDepth1.addSubManager({"random"s})
+      .addOption("someOption", "", &someOptionInSecondSubManagerAtDepth1, 1);
+
+  parseAndCheck(nlohmann::json::parse(R"--({
+ "depth1": {
+     "random": {
+       "someOption" : 8
+     },
+     "someOption" : 1,
+     "depth2": {
+         "someOption" : 5,
+         "personal": {
+           "Alex": {
+             "Id": 2, "Infractions" : -2
+           },
+           "Peter": {
+             "Id": -2, "Infractions" : 4
+           }
+         }
+     }
+ }
+ })--"),
+                managerWithRecursion,
+                {{&someOptionInSecondSubManagerAtDepth1, 8},
+                 {&someOptionAtDepth1, 1},
+                 {&someOptionAtDepth2, 5},
+                 {&alexId, 2},
+                 {&alexInfractions, -2},
+                 {&peterId, -2},
+                 {&peterInfractions, 4}});
+}
+
+TEST(ConfigManagerTest, ParseConfigExceptionWithoutSubManagerTest) {
   ad_utility::ConfigManager config{};
 
   // Add one option with default and one without.
@@ -144,11 +409,13 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
   // Should throw an exception, if we try set an option, that isn't there.
   AD_EXPECT_THROW_WITH_MESSAGE(
       config.parseConfig(nlohmann::json::parse(
-          R"--({"depth_0":{"Without_default":42, "with_default" : [39]}})--")),
+          R"--({"depth_0":{"Without_default":42, "with_default" :
+           [39]}})--")),
       ::testing::ContainsRegex(R"('/depth_0/with_default')"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       config.parseConfig(nlohmann::json::parse(
-          R"--({"depth_0":{"Without_default":42, "test_string" : "test"}})--")),
+          R"--({"depth_0":{"Without_default":42, "test_string" :
+           "test"}})--")),
       ::testing::ContainsRegex(R"('/depth_0/test_string')"));
 
   /*
@@ -158,7 +425,8 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
   */
   AD_EXPECT_THROW_WITH_MESSAGE(
       config.parseConfig(nlohmann::json::parse(
-          R"--({"depth_0":{"Without_default":42, "With_default" : {"value" : 4}}})--")),
+          R"--({"depth_0":{"Without_default":42, "With_default" : {"value" :
+           4}}})--")),
       ::testing::ContainsRegex(R"('/depth_0/With_default/value')"));
 
   // Parsing with a non json object literal is not allowed.
@@ -183,6 +451,119 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
   ASSERT_THROW(
       config.parseConfig(nlohmann::json(nlohmann::json::value_t::string)),
       ConfigManagerParseConfigNotJsonObjectLiteralException);
+}
+
+TEST(ConfigManagerTest, ParseConfigExceptionWithSubManagerTest) {
+  ad_utility::ConfigManager config{};
+
+  // Empty sub managers are not allowed.
+  ad_utility::ConfigManager& m1 = config.addSubManager({"some"s, "manager"s});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.parseConfig(nlohmann::json::parse(R"--({})--")),
+      ::testing::ContainsRegex(R"('/some/manager')"));
+  int notUsedInt;
+  config.addOption("Ignore", "Must not be set. Has default value.", &notUsedInt,
+                   41);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.parseConfig(nlohmann::json::parse(R"--({})--")),
+      ::testing::ContainsRegex(R"('/some/manager')"));
+
+  // Add one option with default and one without.
+  std::vector<int> notUsedVector;
+  m1.addOption({"depth_0"s, "Without_default"s},
+               "Must be set. Has no default value.", &notUsedInt);
+  m1.addOption({"depth_0"s, "With_default"s},
+               "Must not be set. Has default value.", &notUsedVector, {40, 41});
+
+  // Should throw an exception, if we don't set all options, that must be set.
+  ASSERT_THROW(config.parseConfig(nlohmann::json::parse(R"--({})--")),
+               ad_utility::ConfigOptionWasntSetException);
+
+  // Should throw an exception, if we try set an option, that isn't there.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.parseConfig(nlohmann::json::parse(
+          R"--({"some":{ "manager": {"depth_0":{"Without_default":42,
+           "with_default" : [39]}}}})--")),
+      ::testing::ContainsRegex(R"('/some/manager/depth_0/with_default')"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.parseConfig(nlohmann::json::parse(
+          R"--({"some":{ "manager": {"depth_0":{"Without_default":42,
+           "test_string" : "test"}}}})--")),
+      ::testing::ContainsRegex(R"('/some/manager/depth_0/test_string')"));
+
+  /*
+  Should throw an exception, if we try set an option with a value, that we
+  already know, can't be valid, regardless of the actual internal type of the
+  configuration option. That is, it's neither an array, nor a primitive.
+  */
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.parseConfig(nlohmann::json::parse(
+          R"--({"some":{ "manager": {"depth_0":{"Without_default":42,
+           "With_default" : {"value" : 4}}}}})--")),
+      ::testing::ContainsRegex(
+          R"('/some/manager/depth_0/With_default/value')"));
+
+  // Repeat all those tests, but with a second sub manager added to the first
+  // one.
+  ad_utility::ConfigManager config2{};
+
+  // Empty sub managers are not allowed.
+  ad_utility::ConfigManager& config2m1 =
+      config2.addSubManager({"some"s, "manager"s});
+  ad_utility::ConfigManager& config2m2 =
+      config2m1.addSubManager({"some"s, "manager"s});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config2.parseConfig(nlohmann::json::parse(R"--({})--")),
+      ::testing::ContainsRegex(R"('/some/manager/some/manager')"));
+  config2.addOption("Ignore", "Must not be set. Has default value.",
+                    &notUsedInt, 41);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config2.parseConfig(nlohmann::json::parse(R"--({})--")),
+      ::testing::ContainsRegex(R"('/some/manager/some/manager')"));
+  config2m1.addOption("Ignore", "Must not be set. Has default value.",
+                      &notUsedInt, 41);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config2.parseConfig(nlohmann::json::parse(R"--({})--")),
+      ::testing::ContainsRegex(R"('/some/manager/some/manager')"));
+
+  // Add one option with default and one without.
+  config2m2.addOption({"depth_0"s, "Without_default"s},
+                      "Must be set. Has no default value.", &notUsedInt);
+  config2m2.addOption({"depth_0"s, "With_default"s},
+                      "Must not be set. Has default value.", &notUsedVector,
+                      {40, 41});
+
+  // Should throw an exception, if we don't set all options, that must be set.
+  ASSERT_THROW(config2.parseConfig(nlohmann::json::parse(R"--({})--")),
+               ad_utility::ConfigOptionWasntSetException);
+
+  // Should throw an exception, if we try set an option, that isn't there.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config2.parseConfig(nlohmann::json::parse(
+          R"--({"some":{ "manager": {"some":{ "manager":
+           {"depth_0":{"Without_default":42, "with_default" : [39]}}}}}})--")),
+      ::testing::ContainsRegex(
+          R"('/some/manager/some/manager/depth_0/with_default')"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config2.parseConfig(nlohmann::json::parse(
+          R"--({"some":{ "manager": {"some":{ "manager":
+           {"depth_0":{"Without_default":42, "test_string" :
+           "test"}}}}}})--")),
+      ::testing::ContainsRegex(
+          R"('/some/manager/some/manager/depth_0/test_string')"));
+
+  /*
+  Should throw an exception, if we try set an option with a value, that we
+  already know, can't be valid, regardless of the actual internal type of the
+  configuration option. That is, it's neither an array, nor a primitive.
+  */
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config2.parseConfig(nlohmann::json::parse(
+          R"--({"some":{ "manager": {"some":{ "manager":
+           {"depth_0":{"Without_default":42, "With_default" : {"value" :
+           4}}}}}}})--")),
+      ::testing::ContainsRegex(
+          R"('/some/manager/some/manager/depth_0/With_default/value')"));
 }
 
 TEST(ConfigManagerTest, ParseShortHandTest) {
@@ -319,5 +700,24 @@ TEST(ConfigManagerTest, PrintConfigurationDocExistence) {
   config.addOption("WithoutDefault", "", &notUsed);
   ASSERT_NO_THROW(config.printConfigurationDoc(false));
   ASSERT_NO_THROW(config.printConfigurationDoc(true));
+
+  ad_utility::ConfigManager& subMan =
+      config.addSubManager({"Just"s, "some"s, "sub-manager"});
+  subMan.addOption("WithDefault", "", &notUsed, 42);
+  subMan.addOption("WithoutDefault", "", &notUsed);
+  ASSERT_NO_THROW(config.printConfigurationDoc(false));
+  ASSERT_NO_THROW(config.printConfigurationDoc(true));
+
+  // Printing with an empty sub manager should never be possible.
+  subMan.addSubManager({"Just"s, "some"s, "other"s, "sub-manager"});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.printConfigurationDoc(false),
+      ::testing::ContainsRegex(
+          R"('/Just/some/sub-manager/Just/some/other/sub-manager')"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.printConfigurationDoc(true),
+      ::testing::ContainsRegex(
+          R"('/Just/some/sub-manager/Just/some/other/sub-manager')"));
 }
+
 }  // namespace ad_utility

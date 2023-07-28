@@ -49,9 +49,7 @@ concept StoresStrings = ad_utility::SimilarTo<ValueType<T>, std::string>;
 
 // Concept that requires that `T` logically stores boolean values.
 template <typename T>
-concept StoresBoolean =
-    std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
-    std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
+concept StoresBoolean = std::is_same_v<T, ad_utility::SetOfIntervals>;
 
 // Concept that requires that `T` logically stores `ValueId`s.
 template <typename T>
@@ -123,8 +121,8 @@ constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
 // the byte level can still logically be equal, depending on the chosen Unicode
 // collation level.
 // TODO<joka921> Make the collation level configurable.
-std::pair<ValueId, ValueId> getRangeFromVocab(const std::string& s,
-                                              EvaluationContext* context) {
+std::pair<ValueId, ValueId> getRangeFromVocab(
+    const std::string& s, const EvaluationContext* context) {
   auto level = TripleComponentComparator::Level::QUARTERNARY;
   // TODO<joka921> This should be `Vocab::equal_range`
   const ValueId lower = Id::makeFromVocabIndex(
@@ -139,7 +137,7 @@ std::pair<ValueId, ValueId> getRangeFromVocab(const std::string& s,
 // denotes a range (see `getRangeFromVocab` above).
 template <SingleExpressionResult S>
 requires isConstantResult<S>
-auto makeValueId(const S& value, EvaluationContext* context) {
+auto makeValueId(const S& value, const EvaluationContext* context) {
   if constexpr (std::is_integral_v<S>) {
     return ValueId::makeFromInt(value);
   } else if constexpr (std::is_floating_point_v<S>) {
@@ -162,7 +160,7 @@ auto makeValueId(const S& value, EvaluationContext* context) {
 // same ID `targetSize` many times.
 template <SingleExpressionResult S>
 requires isConstantResult<S>
-auto idGenerator(S value, size_t targetSize, EvaluationContext* context)
+auto idGenerator(S value, size_t targetSize, const EvaluationContext* context)
     -> cppcoro::generator<const decltype(makeValueId(value, context))> {
   auto id = makeValueId(value, context);
   for (size_t i = 0; i < targetSize; ++i) {
@@ -175,7 +173,7 @@ auto idGenerator(S value, size_t targetSize, EvaluationContext* context)
 // elements in the vector.
 template <SingleExpressionResult S>
 requires isVectorResult<S>
-auto idGenerator(S values, size_t targetSize, EvaluationContext* context)
+auto idGenerator(S values, size_t targetSize, const EvaluationContext* context)
     -> cppcoro::generator<decltype(makeValueId(values[0], context))> {
   AD_CONTRACT_CHECK(targetSize == values.size());
   for (const auto& el : values) {
@@ -187,7 +185,7 @@ auto idGenerator(S values, size_t targetSize, EvaluationContext* context)
 // For the `Variable` class, the generator from the `sparqlExpressions` module
 // already yields the `ValueIds`.
 auto idGenerator(Variable variable, size_t targetSize,
-                 EvaluationContext* context) {
+                 const EvaluationContext* context) {
   return sparqlExpression::detail::makeGenerator(std::move(variable),
                                                  targetSize, context);
 }
@@ -200,7 +198,7 @@ auto idGenerator(Variable variable, size_t targetSize,
 // returned. These simply yield the values unchanged.
 template <SingleExpressionResult S1, SingleExpressionResult S2>
 auto getGenerators(S1 value1, S2 value2, size_t targetSize,
-                   EvaluationContext* context) {
+                   const EvaluationContext* context) {
   if constexpr (StoresValueId<S1> || StoresValueId<S2>) {
     return std::pair{idGenerator(std::move(value1), targetSize, context),
                      idGenerator(std::move(value2), targetSize, context)};
@@ -220,7 +218,7 @@ auto getGenerators(S1 value1, S2 value2, size_t targetSize,
 template <Comparison Comp>
 ad_utility::SetOfIntervals evaluateWithBinarySearch(
     const Variable& variable, ValueId valueId,
-    std::optional<ValueId> valueIdUpper, EvaluationContext* context) {
+    std::optional<ValueId> valueIdUpper, const EvaluationContext* context) {
   // Set up iterators into the `IdTable` that only access the column where the
   // `variable` is stored.
   auto columnIndex = context->getColumnIndexForVariable(variable);
@@ -259,14 +257,13 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
 // `AreComparable` (see above), which means that the comparison between them is
 // supported and not always false.
 template <Comparison Comp, SingleExpressionResult S1, SingleExpressionResult S2>
-requires AreComparable<S1, S2>
-ExpressionResult evaluateRelationalExpression(S1 value1, S2 value2,
-                                              EvaluationContext* context) {
+requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
+    S1 value1, S2 value2, const EvaluationContext* context) {
   auto resultSize =
       sparqlExpression::detail::getResultSize(*context, value1, value2);
   constexpr static bool resultIsConstant =
       (isConstantResult<S1> && isConstantResult<S2>);
-  VectorWithMemoryLimit<Bool> result{context->_allocator};
+  VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(resultSize);
 
   constexpr static bool value2IsString = ad_utility::isSimilar<S2, std::string>;
@@ -295,18 +292,23 @@ ExpressionResult evaluateRelationalExpression(S1 value1, S2 value2,
                     valueIdComparators::compareIds(*itA, *itB, Comp);
                   }) {
       // Compare two `ValueId`s
-      result.push_back(valueIdComparators::compareIds(*itA, *itB, Comp));
+      result.push_back(toValueId(
+          valueIdComparators::compareIds<
+              valueIdComparators::ComparisonForIncompatibleTypes::AlwaysUndef>(
+              *itA, *itB, Comp)));
     } else if constexpr (requires {
                            valueIdComparators::compareWithEqualIds(
                                *itA, itB->first, itB->second, Comp);
                          }) {
       // Compare `ValueId` with range of equal `ValueId`s (used when `value2` is
       // `string` or `vector<string>`.
-      result.push_back(valueIdComparators::compareWithEqualIds(
-          *itA, itB->first, itB->second, Comp));
+      result.push_back(toValueId(
+          valueIdComparators::compareWithEqualIds<
+              valueIdComparators::ComparisonForIncompatibleTypes::AlwaysUndef>(
+              *itA, itB->first, itB->second, Comp)));
     } else {
       // Compare two numeric values, or two string values.
-      result.push_back(applyComparison<Comp>(*itA, *itB));
+      result.push_back(Id::makeFromBool(applyComparison<Comp>(*itA, *itB)));
     }
     ++itA;
     ++itB;
@@ -323,7 +325,7 @@ ExpressionResult evaluateRelationalExpression(S1 value1, S2 value2,
 // The relational comparisons like `less than` are not useful for booleans and
 // thus currently throw an exception.
 template <Comparison, typename A, typename B>
-Bool evaluateRelationalExpression(const A&, const B&, EvaluationContext*)
+Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*)
     requires StoresBoolean<A> || StoresBoolean<B> {
   throw std::runtime_error(
       "Relational expressions like <, >, == are currently not supported for "
@@ -332,11 +334,12 @@ Bool evaluateRelationalExpression(const A&, const B&, EvaluationContext*)
 
 template <Comparison Comp, typename A, typename B>
 requires AreIncomparable<A, B>
-Bool evaluateRelationalExpression(const A&, const B&, EvaluationContext*) {
+Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
+  // TODO<joka921> We should probably return `undefined` here.
   if constexpr (Comp == Comparison::NE) {
-    return true;
+    return Id::makeFromBool(true);
   } else {
-    return false;
+    return Id::makeFromBool(false);
   }
 }
 
@@ -344,8 +347,8 @@ Bool evaluateRelationalExpression(const A&, const B&, EvaluationContext*) {
 // must come first.
 template <Comparison Comp, SingleExpressionResult A, SingleExpressionResult B>
 requires(!AreComparable<A, B> && AreComparable<B, A>)
-ExpressionResult evaluateRelationalExpression(A a, B b,
-                                              EvaluationContext* context) {
+ExpressionResult evaluateRelationalExpression(
+    A a, B b, const EvaluationContext* context) {
   return evaluateRelationalExpression<getComparisonForSwappedArguments(Comp)>(
       std::move(b), std::move(a), context);
 }

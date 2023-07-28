@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <absl/container/flat_hash_map.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 #include <gtest/gtest.h>
@@ -17,6 +16,7 @@
 #include <string_view>
 #include <type_traits>
 #include <typeinfo>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -37,7 +37,8 @@ Manages a bunch of `ConfigOption`s.
 */
 class ConfigManager {
   /*
-  The added configuration options.
+  The added configuration options. Configuration managers are used by the user
+  to describe a json object literal more explicitly.
 
   A configuration option tends to be placed like a key value pair in a json
   object. For example: `{"object 1" : [{"object 2" : { "The configuration option
@@ -46,8 +47,9 @@ class ConfigManager {
   The string key describes their location in the json object literal, by
   representing a json pointer in string form.
   */
-  ad_utility::HashMap<std::string, std::unique_ptr<ConfigOption>>
-      configurationOptions_;
+  using HashMapEntry =
+      std::unique_ptr<std::variant<ConfigOption, ConfigManager>>;
+  ad_utility::HashMap<std::string, HashMapEntry> configurationOptions_;
 
  public:
   /*
@@ -150,12 +152,24 @@ class ConfigManager {
   }
 
   /*
+  @brief Creates and adds a new configuration manager with a prefix path for
+  it's internally held configuration options and managers.
+
+  @param pathToOption Describes a path in json, which will be a prefix to all
+  the other paths held in the newly created ConfigManager.
+
+  @return A reference to the newly created configuration manager. This reference
+  will stay valid, even after adding more options.
+  */
+  ConfigManager& addSubManager(const std::vector<std::string>& path);
+
+  /*
   @brief Sets the configuration options based on the given json.
 
   @param j There will be an exception thrown, if:
   - `j` doesn't contain values for all configuration options, that must be set
   at runtime.
-  - Same, if there are values for configuration options, that do not exist.
+  - If there are values for configuration options, that do not exist.
   - `j` is anything but a json object literal.
   */
   void parseConfig(const nlohmann::json& j);
@@ -187,6 +201,7 @@ class ConfigManager {
   FRIEND_TEST(ConfigManagerTest, ParseConfig);
   FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
   FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
+  FRIEND_TEST(ConfigManagerTest, CheckForBrokenPaths);
 
   /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
@@ -196,15 +211,12 @@ class ConfigManager {
       const std::vector<std::string>& keys);
 
   /*
-  @brief Verifies, that the given path is a valid path for an option, with this
-  name. If not, throws exceptions.
+  @brief Verifies, that the given path is a valid path for an option/manager. If
+  not, throws exceptions.
 
-  @param pathToOption Describes a path in json, that points to the value held by
-  the configuration option.
-  @param optionName The identifier of the `ConfigOption`.
+  @param pathToOption Describes a path in json.
   */
-  void verifyPathToConfigOption(const std::vector<std::string>& pathToOption,
-                                std::string_view optionName) const;
+  void verifyPath(const std::vector<std::string>& path) const;
 
   /*
   @brief Adds a configuration option, that can be accessed with the given path.
@@ -256,15 +268,7 @@ class ConfigManager {
       OptionType* variableToPutValueOfTheOptionIn,
       std::optional<OptionType> defaultValue =
           std::optional<OptionType>(std::nullopt)) {
-    /*
-    We need a non-empty path to construct a ConfigOption object, the `verify...`
-    function always throws an exception for this case. No need to duplicate the
-    error code.
-    */
-    if (pathToOption.empty()) {
-      verifyPathToConfigOption(pathToOption, "");
-    }
-
+    verifyPath(pathToOption);
     addConfigOption(
         pathToOption,
         ConfigOption(pathToOption.back(), optionDescription,
@@ -275,15 +279,30 @@ class ConfigManager {
     move constructor. Which is why, we can't just return the `ConfigOption`
     we created here.
     */
-    return *configurationOptions_.at(createJsonPointerString(pathToOption))
-                .get();
+    return std::get<ConfigOption>(
+        *configurationOptions_.at(createJsonPointerString(pathToOption)));
   }
 
   /*
-  @brief Provide a range of tuples, that hold references to the key value pairs
-  in `configurationOptions_`, but with the pointer dereferenced.
+  @brief A vector to all the configuratio options, held by this manager,
+  represented with their json paths and reference to them. Options held by a sub
+  manager, are also included with the path to the sub manager as prefix.
+
+  @param pathPrefix This prefix will be added to all configuration option json
+  paths, that will be returned.
   */
-  auto configurationOptions();
-  auto configurationOptionsView() const;
+  std::vector<std::pair<std::string, ConfigOption*>> configurationOptions(
+      std::string_view pathPrefix = "");
+  const std::vector<std::pair<std::string, ConfigOption*>> configurationOptions(
+      std::string_view pathPrefix = "") const;
+
+  /*
+  @brief The implementation for `configurationOptions`.
+
+  @param pathPrefix This prefix will be added to all configuration option json
+  paths, that will be returned.
+  */
+  static auto configurationOptionsImpl(auto& configurationOptions,
+                                       std::string_view pathPrefix = "");
 };
 }  // namespace ad_utility
