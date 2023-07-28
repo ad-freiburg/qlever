@@ -842,8 +842,7 @@ void IndexImpl::readConfiguration() {
                    &indexFormatVersionDate);
 
   // One of the options can't be done with `ConfigManager`.
-  ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE) >>
-      configurationJson_;
+  configurationJson_ = fileToJson(onDiskBase_ + CONFIGURATION_FILE);
   config.parseConfig(configurationJson_);
 
   if (!gitHash.empty()) {
