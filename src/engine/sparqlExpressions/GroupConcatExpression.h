@@ -62,7 +62,7 @@ class GroupConcatExpression : public SparqlExpression {
        */
 
       std::string result;
-      result.reserve(200);
+      result.reserve(20000);
       for (auto&& inp : generator) {
         auto&& s = detail::StringValueGetter{}(std::move(inp), context);
         if (s.has_value()) {
@@ -70,6 +70,7 @@ class GroupConcatExpression : public SparqlExpression {
           result.append(s.value());
         }
       }
+      result.shrink_to_fit();
       return IdOrString(std::move(result));
 
       /*
