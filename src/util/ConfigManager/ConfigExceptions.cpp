@@ -2,12 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (June of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigExceptions.h"
-
 #include <absl/strings/str_cat.h>
 
 #include <exception>
 #include <string>
+
+#include "util/ConfigManager/ConfigExceptions.h"
 
 namespace ad_utility {
 //_____________________________________________________________________________
@@ -63,7 +63,8 @@ ConfigManagerOptionPathAlreadyinUseException::
         std::string_view pathToOption,
         std::string_view allPathsCurrentlyInUse) {
   getMessage() = absl::StrCat(
-      "Key error: There is already a configuration option with the path '",
+      "Key error: There is already a configuration option/manager with the "
+      "path '",
       pathToOption, "'\n", allPathsCurrentlyInUse, "\n");
 }
 
