@@ -55,17 +55,32 @@ class GroupConcatExpression : public SparqlExpression {
                  this](SingleExpressionResult auto&& el) -> ExpressionResult {
       auto generator =
           detail::makeGenerator(AD_FWD(el), context->size(), context);
+      /*
       auto getString = [context](const SingleExpressionResult auto& s) {
         return detail::StringValueGetter{}(s, context);
       };
+       */
 
+      std::string result;
+      result.reserve(200);
+      for (auto&& inp : generator) {
+        auto&& s = detail::StringValueGetter{}(std::move(inp), context);
+        if (s.has_value()) {
+          result.append(separator_);
+          result.append(s.value());
+        }
+      }
+      return IdOrString(std::move(result));
+
+      /*
       // TODO<joka921> The strings should conform to the memory limit.
       auto filtered =
           generator | std::views::transform(getString) |
           std::views::filter(&std::optional<std::string>::has_value);
       auto toString = std::views::transform(
-          filtered, [](auto&& opt) { return AD_FWD(opt).value(); });
+          filtered, [](std::optional<std::string>&& opt) { return AD_FWD(opt).value(); });
       return IdOrString(ad_utility::lazyStrJoin(toString, separator_));
+       */
     };
 
     auto childRes = child_->evaluate(context);

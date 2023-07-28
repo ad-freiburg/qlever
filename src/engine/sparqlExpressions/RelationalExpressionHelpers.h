@@ -121,20 +121,15 @@ inline std::pair<ValueId, ValueId> getRangeFromVocab(
       context->_qec.getIndex().getVocab().upper_bound(s, level));
   return {lower, upper};
 }
-
-// Convert an int, double, or string value into a `ValueId`. For int and double
-// this is a single `ValueId`, for strings it is a `pair<ValueId, ValueId>` that
-// denotes a range (see `getRangeFromVocab` above).
-// template <SingleExpressionResult S>
-// requires isConstantResult<S>
 template <typename S>
-requires((!SingleExpressionResult<S> || isConstantResult<S>))
+concept StoresStringOrId = ad_utility::isTypeAnyOf<S, ValueId, std::string, IdOrString, std::pair<Id, Id>>;
+// Convert a string or `IdOrString` value into the (possibly empty) range of
+// corresponding `ValueIds`. (see `getRangeFromVocab` above). This function also
+// takes `ValueId`s and `pair<ValuedId, ValueId>` which are simply returned
+// unchanged. This makes the usage of this function easier.
+template <StoresStringOrId S>
 auto makeValueId(const S& value, const EvaluationContext* context) {
-  if constexpr (std::is_integral_v<S>) {
-    return ValueId::makeFromInt(value);
-  } else if constexpr (std::is_floating_point_v<S>) {
-    return ValueId::makeFromDouble(value);
-  } else if constexpr (ad_utility::isSimilar<S, ValueId>) {
+  if constexpr (ad_utility::isSimilar<S, ValueId>) {
     return value;
   } else if constexpr (ad_utility::isSimilar<S, std::pair<Id, Id>>) {
     return value;
@@ -155,14 +150,15 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
   }
 };
 
-// TODO<joka921> Comment
-// TODO<joka921> There is a duplication between this function and the
-// RelationalExpression. Get rid of it.
+// Compare two elements that are either strings or IDs in some way (see the
+// `StoresStringOrId` concept) according to the sepcified comparison (see
+// `ValueIdComparators.h` for details). The `EvaluationContext` is required to
+// compare strings to Ids.
 template <valueIdComparators::Comparison Comp,
           valueIdComparators::ComparisonForIncompatibleTypes
               comparisonForIncompatibleTypes>
 inline const auto compareIdsOrStrings =
-    []<typename T, typename U>(
+    []<StoresStringOrId T, StoresStringOrId U>(
         const T& a, const U& b,
         const EvaluationContext* ctx) -> valueIdComparators::ComparisonResult {
   if constexpr (ad_utility::isSimilar<std::string, T> &&

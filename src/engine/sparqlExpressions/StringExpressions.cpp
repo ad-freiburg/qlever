@@ -55,8 +55,6 @@ inline auto strlen = [](std::optional<std::string> s) {
   return Id::makeFromInt(s.value().size());
 };
 using StrlenExpression = StringExpressionImpl<1, decltype(strlen)>;
-// NARY_EXPRESSION(StrlenExpression, 1, FV<decltype(strlen),
-// StringValueGetter>);
 
 }  // namespace detail
 using namespace detail;
