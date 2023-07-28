@@ -982,13 +982,11 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                    useParallelParser_);
 
   // TODO Write a description.
-  size_t numTriplesPerBatch;
-  config.addOption("num-triples-per-batch", "", &numTriplesPerBatch,
+  config.addOption("num-triples-per-batch", "", &numTriplesPerBatch_,
                    static_cast<size_t>(NUM_TRIPLES_PER_PARTIAL_VOCAB));
 
   // TODO Write a description.
-  size_t parserBatchSize;
-  config.addOption("parser-batch-size", "", &parserBatchSize,
+  config.addOption("parser-batch-size", "", &parserBatchSize_,
                    PARSER_BATCH_SIZE);
 
   // TODO Write a description.
@@ -1051,10 +1049,6 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   if (useParallelParser_) {
     LOG(INFO) << WARNING_PARALLEL_PARSING << std::endl;
   }
-
-  numTriplesPerBatch_ = numTriplesPerBatch;
-
-  parserBatchSize_ = parserBatchSize;
 
   std::string overflowingIntegersThrow = "overflowing-integers-throw";
   std::string overflowingIntegersBecomeDoubles =
