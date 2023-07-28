@@ -136,6 +136,8 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
     return ValueId::makeFromDouble(value);
   } else if constexpr (ad_utility::isSimilar<S, ValueId>) {
     return value;
+  } else if constexpr (ad_utility::isSimilar<S, std::pair<Id, Id>>) {
+    return value;
   } else if constexpr (ad_utility::isSimilar<S, IdOrString>) {
     auto visitor = [context](const auto& x) {
       auto res = makeValueId(x, context);
@@ -151,5 +153,51 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
     static_assert(ad_utility::isSimilar<S, std::string>);
     return getRangeFromVocab(value, context);
   }
-}  // namespace detail
+};
+
+// TODO<joka921> Comment
+// TODO<joka921> There is a duplication between this function and the
+// RelationalExpression. Get rid of it.
+template <valueIdComparators::Comparison Comp,
+          valueIdComparators::ComparisonForIncompatibleTypes
+              comparisonForIncompatibleTypes>
+inline const auto compareIdsOrStrings =
+    []<typename T, typename U>(
+        const T& a, const U& b,
+        const EvaluationContext* ctx) -> valueIdComparators::ComparisonResult {
+  if constexpr (ad_utility::isSimilar<std::string, T> &&
+                ad_utility::isSimilar<std::string, U>) {
+    // TODO<joka921> integrate comparison via ICU and proper handling for
+    // IRIs/ Literals/etc.
+    return valueIdComparators::fromBool(applyComparison<Comp>(a, b));
+  } else {
+    auto x = makeValueId(a, ctx);
+    auto y = makeValueId(b, ctx);
+    if constexpr (requires { valueIdComparators::compareIds(x, y, Comp); }) {
+      // Compare two `ValueId`s
+      return valueIdComparators::compareIds<comparisonForIncompatibleTypes>(
+          x, y, Comp);
+    } else if constexpr (requires {
+                           valueIdComparators::compareWithEqualIds(
+                               x, y.first, y.second, Comp);
+                         }) {
+      // Compare `ValueId` with range of equal `ValueId`s (used when `value2`
+      // is `string` or `vector<string>`.
+      return valueIdComparators::compareWithEqualIds<
+          comparisonForIncompatibleTypes>(x, y.first, y.second, Comp);
+    } else if constexpr (requires {
+                           valueIdComparators::compareWithEqualIds(
+                               y, x.first, x.second, Comp);
+                         }) {
+      // Compare `ValueId` with range of equal `ValueId`s (used when `value2`
+      // is `string` or `vector<string>`.
+      return valueIdComparators::compareWithEqualIds<
+          comparisonForIncompatibleTypes>(
+          y, x.first, x.second, getComparisonForSwappedArguments(Comp));
+    } else {
+      // static_assert(ad_utility::alwaysFalse<decltype(x)>);
+      static_assert(ad_utility::alwaysFalse<decltype(y)>);
+    }
+  }
+};
 }  // namespace sparqlExpression

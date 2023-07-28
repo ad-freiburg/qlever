@@ -181,10 +181,10 @@ inline auto visitWithVariantsAndParameters =
     []<typename Function, typename... ParametersOrVariants>(
         Function&& f, ParametersOrVariants&&... parametersOrVariants) {
       auto liftToVariant = []<typename T>(T&& t) {
-        if constexpr (isVariant<T>) {
-          return std::forward<T>(t);
+        if constexpr (isVariant<std::decay_t<T>>) {
+          return AD_FWD(t);
         } else {
-          return std::variant<std::decay_t<T>>{std::forward<T>(t)};
+          return std::variant<std::decay_t<T>>{AD_FWD(t)};
         }
       };
       return std::visit(f, liftToVariant(std::forward<ParametersOrVariants>(

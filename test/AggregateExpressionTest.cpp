@@ -56,9 +56,10 @@ TEST(AggregateExpression, max) {
 
 TEST(AggregateExpression, min) {
   auto testMinId = testAggregate<MinExpression, Id>;
-  testMinId({I(3), U, I(0), I(4), U, (I(-1))}, I(-1));
-  testMinId({V(7), U, V(2), V(4)}, V(2));
-  testMinId({I(3), U, V(0), L(3), U, (I(-1))}, I(-1));
+  testMinId({I(3), I(0), I(4), (I(-1))}, I(-1));
+  testMinId({V(7), V(2), V(4)}, V(2));
+  testMinId({V(7), U, V(2), V(4)}, U);
+  testMinId({I(3), V(0), L(3), (I(-1))}, I(-1));
 
   auto testMinString = testAggregate<MinExpression, IdOrString>;
   // TODO<joka921> Implement correct comparison on strings

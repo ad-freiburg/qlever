@@ -26,9 +26,12 @@ AggregateExpression<AggregateOperation, FinalOperation>::evaluate(
     EvaluationContext* context) const {
   auto childResult = _child->evaluate(context);
 
-  return ad_utility::visitWithVariantsAndParameters(
-      evaluateOnChildOperand, _aggregateOp, FinalOperation{}, context,
-      _distinct, std::move(childResult));
+  return std::visit(
+      [this, context](auto&& arg) {
+        return evaluateOnChildOperand(_aggregateOp, FinalOperation{}, context,
+                                      _distinct, AD_FWD(arg));
+      },
+      std::move(childResult));
 }
 
 // _________________________________________________________________________
