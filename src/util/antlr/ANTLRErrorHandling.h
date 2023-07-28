@@ -10,17 +10,16 @@
 #include <string>
 
 #include "BaseErrorListener.h"
-#include "ParserRuleContext.h"
 #include "Recognizer.h"
 #include "Token.h"
 #include "absl/strings/str_cat.h"
+#include "util/GenerateExceptionMetadata.h"
 #include "util/ParseException.h"
 
-ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
-                                   antlr4::Token* offendingToken, size_t line,
-                                   size_t charPositionInLine);
-
-ExceptionMetadata generateMetadata(antlr4::ParserRuleContext* ctx);
+namespace detail {
+std::string generateExceptionMessage(antlr4::Token* offendingSymbol,
+                                     const std::string& msg);
+}  // namespace detail
 
 /*
 antlr::ANTLRErrorListener that raises encountered syntaxErrors as
@@ -39,23 +38,9 @@ struct ThrowingErrorListener : public antlr4::BaseErrorListener {
                    antlr4::Token* offendingSymbol, size_t line,
                    size_t charPositionInLine, const std::string& msg,
                    [[maybe_unused]] std::exception_ptr e) override {
-    throw GrammarParseException{generateExceptionMessage(offendingSymbol, msg),
-                                generateMetadata(recognizer, offendingSymbol,
-                                                 line, charPositionInLine)};
-  }
-
- private:
-  std::string generateExceptionMessage(antlr4::Token* offendingSymbol,
-                                       const std::string& msg) {
-    if (!offendingSymbol) {
-      return msg;
-    } else if (offendingSymbol->getStartIndex() ==
-               offendingSymbol->getStopIndex() + 1) {
-      // This can only happen at the end of the query when a token is expected,
-      // but none is found. The offending token is then empty.
-      return absl::StrCat("Unexpected end of Query: ", msg);
-    } else {
-      return absl::StrCat("Token \"", offendingSymbol->getText(), "\": ", msg);
-    }
+    throw GrammarParseException{
+        detail::generateExceptionMessage(offendingSymbol, msg),
+        generateMetadata(recognizer, offendingSymbol, line,
+                         charPositionInLine)};
   }
 };

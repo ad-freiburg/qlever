@@ -27,7 +27,6 @@
 #include "util/HashMap.h"
 #include "util/OverloadCallOperator.h"
 #include "util/StringUtils.h"
-#include "util/antlr/ANTLRErrorHandling.h"
 
 template <typename T>
 class Reversed {
