@@ -4,8 +4,6 @@
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./IndexImpl.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -13,6 +11,7 @@
 #include <optional>
 #include <unordered_map>
 
+#include "./IndexImpl.h"
 #include "CompilationInfo.h"
 #include "absl/strings/str_join.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -845,10 +844,9 @@ void IndexImpl::readConfiguration() {
   // One of the options can't be done with `ConfigManager`.
   ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE) >>
       configurationJson_;
-  config.parseConfig(fileToJson(onDiskBase_ + CONFIGURATION_FILE));
+  config.parseConfig(configurationJson_);
 
   if (!gitHash.empty()) {
-    configurationJson_["git-hash"] = gitHash;
     LOG(INFO) << "The git hash used to build this index was "
               << gitHash.substr(0, 6) << std::endl;
   } else {
@@ -886,7 +884,6 @@ void IndexImpl::readConfiguration() {
   }
 
   if (prefixesOption.wasSetAtRuntime()) {
-    configurationJson_["prefixes"] = boolPrefixes;
     if (boolPrefixes) {
       vector<string> prefixes;
       auto prefixFile = ad_utility::makeIfstream(onDiskBase_ + PREFIX_FILE);
@@ -900,27 +897,16 @@ void IndexImpl::readConfiguration() {
   }
 
   vocab_.initializeExternalizePrefixes(prefixesExternal);
-  configurationJson_["prefixes-external"] = prefixesExternal;
 
-  configurationJson_["locale"]["language"] = lang;
-  configurationJson_["locale"]["country"] = country;
-  configurationJson_["locale"]["ignore-punctuation"] = ignorePunctuation;
   vocab_.setLocale(lang, country, ignorePunctuation);
   textVocab_.setLocale(lang, country, ignorePunctuation);
 
   vocab_.initializeInternalizedLangs(languagesInternal);
-  configurationJson_["languages-internal"] = languagesInternal;
 
   if (!hasAllPermutations) {
-    configurationJson_["has-all-permutations"] = false;
     // If the permutations simply don't exist, then we can never load them.
     loadAllPermutations_ = false;
   }
-
-  configurationJson_["num-predicates-normal"] = numPredicatesNormal_;
-  configurationJson_["num-subjects-normal"] = numSubjectsNormal_;
-  configurationJson_["num-objects-normal"] = numObjectsNormal_;
-  configurationJson_["num-triples-normal"] = numTriplesNormal_;
 }
 
 // ___________________________________________________________________________
