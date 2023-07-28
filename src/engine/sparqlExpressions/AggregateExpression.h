@@ -5,10 +5,10 @@
 #ifndef QLEVER_AGGREGATEEXPRESSION_H
 #define QLEVER_AGGREGATEEXPRESSION_H
 
+#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/ValueIdComparators.h"
-#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 
 namespace sparqlExpression {
 
@@ -82,6 +82,16 @@ class AggregateExpression : public SparqlExpression {
     }
 
     const auto& valueGetter = std::get<0>(aggregateOperation._valueGetters);
+    auto callFunction = [&aggregateOperation, context](
+                            auto&& x, auto&& y) -> decltype(auto) {
+      if constexpr (requires {
+                      aggregateOperation._function(AD_FWD(x), AD_FWD(y));
+                    }) {
+        return aggregateOperation._function(AD_FWD(x), AD_FWD(y));
+      } else {
+        return aggregateOperation._function(AD_FWD(x), AD_FWD(y), context);
+      }
+    };
 
     if (!distinct) {
       auto values = detail::valueGetterGenerator(
@@ -91,12 +101,11 @@ class AggregateExpression : public SparqlExpression {
       // would get the operand type, which is not necessarily the `ResultType`.
       // For example, in the COUNT aggregate we calculate a sum of boolean
       // values, but the result is not boolean.
-      using ResultType = std::decay_t<decltype(aggregateOperation._function(
-          std::move(*it), *it))>;
+      using ResultType =
+          std::decay_t<decltype(callFunction(std::move(*it), *it))>;
       ResultType result = *it;
       for (++it; it != values.end(); ++it) {
-        result =
-            aggregateOperation._function(std::move(result), std::move(*it));
+        result = callFunction(std::move(result), std::move(*it));
       }
       result = finalOperation(std::move(result), inputSize);
       if constexpr (requires { makeNumericId(result); }) {
@@ -118,7 +127,7 @@ class AggregateExpression : public SparqlExpression {
       // would get the operand type, which is not necessarily the `ResultType`.
       // For example, in the COUNT aggregate we calculate a sum of boolean
       // values, but the result is not boolean.
-      using ResultType = std::decay_t<decltype(aggregateOperation._function(
+      using ResultType = std::decay_t<decltype(callFunction(
           std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
       ResultType result = valueGetter(*it, context);
       ad_utility::HashSetWithMemoryLimit<
@@ -126,8 +135,8 @@ class AggregateExpression : public SparqlExpression {
           uniqueHashSet({*it}, inputSize, context->_allocator);
       for (++it; it != operands.end(); ++it) {
         if (uniqueHashSet.insert(*it).second) {
-          result = aggregateOperation._function(
-              std::move(result), valueGetter(std::move(*it), context));
+          result = callFunction(std::move(result),
+                                valueGetter(std::move(*it), context));
         }
       }
       result = finalOperation(std::move(result), uniqueHashSet.size());
@@ -207,12 +216,12 @@ using AvgExpression =
                                 decltype(averageFinalOp)>;
 
 // TODO<joka921> Comment
-// TODO<joka921> There is a duplication between this function and the RelationalExpression.
-// Get rid of it.
+// TODO<joka921> There is a duplication between this function and the
+// RelationalExpression. Get rid of it.
 template <typename comparator, valueIdComparators::Comparison Comp>
 inline const auto compareIdsOrStrings =
-    []<typename T, typename U>(const T& a, const T& b,
-                               const EvaluationContext* ctx) -> bool {
+    []<typename T, typename U>(const T& a, const U& b,
+                               const EvaluationContext* ctx) -> IdOrString {
   if constexpr (ad_utility::isSimilar<std::string, T> &&
                 ad_utility::isSimilar<std::string, U>) {
     // TODO<joka921> integrate comparison via ICU and proper handling for IRIs/
@@ -225,27 +234,43 @@ inline const auto compareIdsOrStrings =
       // Compare two `ValueId`s
       return toBoolNotUndef(valueIdComparators::compareIds<
                             valueIdComparators::ComparisonForIncompatibleTypes::
-                                CompareByType>(x, y, Comp));
+                                CompareByType>(x, y, Comp))
+                 ? a
+                 : b;
     } else if constexpr (requires {
                            valueIdComparators::compareWithEqualIds(
                                x, y.first, y.second, Comp);
                          }) {
       // Compare `ValueId` with range of equal `ValueId`s (used when `value2` is
       // `string` or `vector<string>`.
-      return toBoolNotUndef(
-          valueIdComparators::compareWithEqualIds<
-              valueIdComparators::ComparisonForIncompatibleTypes::AlwaysUndef>(
-              x, y.first, y.second, Comp));
-    }
-    else {
-      static_assert(ad_utility::alwaysFalse<T>);
+      return toBoolNotUndef(valueIdComparators::compareWithEqualIds<
+                            valueIdComparators::ComparisonForIncompatibleTypes::
+                                CompareByType>(x, y.first, y.second, Comp))
+                 ? IdOrString{a}
+                 : IdOrString{b};
+    } else if constexpr (requires {
+                           valueIdComparators::compareWithEqualIds(
+                               y, x.first, x.second, Comp);
+                         }) {
+      // Compare `ValueId` with range of equal `ValueId`s (used when `value2`
+      // is `string` or `vector<string>`.
+      return toBoolNotUndef(valueIdComparators::compareWithEqualIds<
+                            valueIdComparators::ComparisonForIncompatibleTypes::
+                                CompareByType>(
+                 y, x.first, x.second, getComparisonForSwappedArguments(Comp)))
+                 ? IdOrString{a}
+                 : IdOrString{b};
+    } else {
+      // static_assert(ad_utility::alwaysFalse<decltype(x)>);
+      static_assert(ad_utility::alwaysFalse<decltype(y)>);
     }
   }
 };
 // Min and Max.
 template <typename comparator, valueIdComparators::Comparison comparison>
 inline const auto minMaxLambdaForAllTypes = []<SingleExpressionResult T>(
-                                                const T& a, const T& b) {
+                                                const T& a, const T& b,
+                                                EvaluationContext* ctx) {
   if constexpr (std::is_arithmetic_v<T> ||
                 ad_utility::isSimilar<T, std::string>) {
     // TODO<joka921> Also implement correct comparisons for `std::string`
@@ -264,8 +289,12 @@ inline const auto minMaxLambdaForAllTypes = []<SingleExpressionResult T>(
                ? a
                : b;
   } else {
-    // TODO<joka921> This is very wrong and has to be fixed!!!!
-    // Note: it is the case of `std::variant<BlaBlub>`.
+    auto base = [](const IdOrString& i) -> const IdOrStringBase& { return i; };
+    auto actualImpl = [ctx](const auto& x, const auto& y) {
+      return compareIdsOrStrings<comparator, comparison>(x, y, ctx);
+    };
+    // TODO<joka921> We should definitely move strings here.
+    return std::visit(actualImpl, base(a), base(b));
     return a;
     // return ad_utility::alwaysFalse<T>;
   }

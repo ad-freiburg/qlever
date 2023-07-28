@@ -6,9 +6,9 @@
 
 #include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "util/LambdaHelpers.h"
-#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "util/TypeTraits.h"
 
 using namespace sparqlExpression;
@@ -19,7 +19,6 @@ using valueIdComparators::Comparison;
 
 // Several concepts used to choose the proper evaluation methods for different
 // input types.
-
 
 // For the various `SingleExpressionResult`s the `idGenerator` function returns
 // a generator that yields `targetSize` many `ValueId`s. One exception is the

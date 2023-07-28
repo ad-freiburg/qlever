@@ -5,7 +5,7 @@
 namespace sparqlExpression {
 namespace detail {
 // String functions.
-auto strImpl = [](std::optional<std::string> s) {
+[[maybe_unused]] auto strImpl = [](std::optional<std::string> s) {
   return IdOrString{std::move(s)};
 };
 NARY_EXPRESSION(StrExpressionImpl, 1, FV<decltype(strImpl), StringValueGetter>);

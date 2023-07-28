@@ -2,11 +2,13 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-
 #pragma once
 
+#include "engine/sparqlExpressions/SparqlExpression.h"
+#include "global/ValueIdComparators.h"
+
 namespace sparqlExpression {
-    using valueIdComparators::Comparison;
+using valueIdComparators::Comparison;
 // For `T == VectorWithMemoryLimit<U>`, `ValueType<T>` is `U`. For any other
 // type `T`, `ValueType<T>` is `T`.
 namespace detail {
@@ -109,7 +111,7 @@ constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
 // the byte level can still logically be equal, depending on the chosen Unicode
 // collation level.
 // TODO<joka921> Make the collation level configurable.
-std::pair<ValueId, ValueId> getRangeFromVocab(
+inline std::pair<ValueId, ValueId> getRangeFromVocab(
     const std::string& s, const EvaluationContext* context) {
   auto level = TripleComponentComparator::Level::QUARTERNARY;
   // TODO<joka921> This should be `Vocab::equal_range`
@@ -149,5 +151,5 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
     static_assert(ad_utility::isSimilar<S, std::string>);
     return getRangeFromVocab(value, context);
   }
-} // namespace detail
-} // namespace sparqlExpression
+}  // namespace detail
+}  // namespace sparqlExpression
