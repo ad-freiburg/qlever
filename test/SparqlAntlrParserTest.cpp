@@ -1225,12 +1225,11 @@ auto matchNaryWithChildrenMatchers(auto makeFunction,
     return std::type_index{typeid(*ptr)};
   };
 
-  std::array<SparqlExpression::Ptr, sizeof...(childrenMatchers)> dummyChildren;
-  std::ranges::generate(dummyChildren, []() {
+  auto makeDummyChild = [](auto&&) -> SparqlExpression::Ptr {
     return std::make_unique<VariableExpression>(Variable{"?x"});
-  });
+  };
   auto expectedTypeIndex =
-      typeIdLambda(std::apply(makeFunction, std::move(dummyChildren)));
+      typeIdLambda(makeFunction(makeDummyChild(childrenMatchers)...));
   ::testing::Matcher<const SparqlExpression::Ptr&> typeIdMatcher =
       ::testing::ResultOf(typeIdLambda, ::testing::Eq(expectedTypeIndex));
   return ::testing::AllOf(typeIdMatcher,
@@ -1316,7 +1315,7 @@ TEST(SparqlParser, multiplicativeExpression) {
                                     matchUnary(&makeAbsExpression)));
 }
 
-// TODO<joka921> Comment
+// Return a matcher for an `OperatorAndExpression`.
 ::testing::Matcher<const SparqlQleverVisitor::OperatorAndExpression&>
 matchOperatorAndExpression(
     SparqlQleverVisitor::Operator op,
@@ -1357,7 +1356,7 @@ TEST(SparqlParser, multiplicativeExpressionLeadingSignButNoSpaceContext) {
           Op::Minus,
           matchNaryWithChildrenMatchers(
               &makeDivideExpression, matchIdExpression(Id::makeFromDouble(3.7)),
-              matchPtr<VariableExpression>())));
+              matchVariableExpression(y))));
 
   expectMultiplicative("+5 * ?y",
                        matchOperatorAndExpression(
@@ -1370,7 +1369,7 @@ TEST(SparqlParser, multiplicativeExpressionLeadingSignButNoSpaceContext) {
                        Op::Plus, matchNaryWithChildrenMatchers(
                                      &makeDivideExpression,
                                      matchIdExpression(Id::makeFromDouble(3.9)),
-                                     matchPtr<VariableExpression>())));
+                                     matchVariableExpression(y))));
   expectMultiplicative(
       "-3.2 / abs(?x) * ?y",
       matchOperatorAndExpression(
@@ -1380,7 +1379,7 @@ TEST(SparqlParser, multiplicativeExpressionLeadingSignButNoSpaceContext) {
                              &makeDivideExpression,
                              matchIdExpression(Id::makeFromDouble(3.2)),
                              matchUnary(&makeAbsExpression)),
-                         matchPtr<VariableExpression>())));
+                         matchVariableExpression(y))));
 }
 
 TEST(SparqlParser, FunctionCall) {
