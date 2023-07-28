@@ -8,6 +8,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/ValueIdComparators.h"
+#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 
 namespace sparqlExpression {
 
@@ -205,6 +206,42 @@ using AvgExpression =
     detail::AggregateExpression<AGG_OP<decltype(addForSum), NumericValueGetter>,
                                 decltype(averageFinalOp)>;
 
+// TODO<joka921> Comment
+// TODO<joka921> There is a duplication between this function and the RelationalExpression.
+// Get rid of it.
+template <typename comparator, valueIdComparators::Comparison Comp>
+inline const auto compareIdsOrStrings =
+    []<typename T, typename U>(const T& a, const T& b,
+                               const EvaluationContext* ctx) -> bool {
+  if constexpr (ad_utility::isSimilar<std::string, T> &&
+                ad_utility::isSimilar<std::string, U>) {
+    // TODO<joka921> integrate comparison via ICU and proper handling for IRIs/
+    // Literals/etc.
+    return comparator{}(a, b);
+  } else {
+    auto x = makeValueId(a, ctx);
+    auto y = makeValueId(b, ctx);
+    if constexpr (requires { valueIdComparators::compareIds(x, y, Comp); }) {
+      // Compare two `ValueId`s
+      return toBoolNotUndef(valueIdComparators::compareIds<
+                            valueIdComparators::ComparisonForIncompatibleTypes::
+                                CompareByType>(x, y, Comp));
+    } else if constexpr (requires {
+                           valueIdComparators::compareWithEqualIds(
+                               x, y.first, y.second, Comp);
+                         }) {
+      // Compare `ValueId` with range of equal `ValueId`s (used when `value2` is
+      // `string` or `vector<string>`.
+      return toBoolNotUndef(
+          valueIdComparators::compareWithEqualIds<
+              valueIdComparators::ComparisonForIncompatibleTypes::AlwaysUndef>(
+              x, y.first, y.second, Comp));
+    }
+    else {
+      static_assert(ad_utility::alwaysFalse<T>);
+    }
+  }
+};
 // Min and Max.
 template <typename comparator, valueIdComparators::Comparison comparison>
 inline const auto minMaxLambdaForAllTypes = []<SingleExpressionResult T>(
