@@ -828,19 +828,52 @@ void IndexImpl::readConfiguration() {
   config.addOption("num-objects-normal", "", &numObjectsNormal_);
   config.addOption("num-triples-normal", "", &numTriplesNormal_);
 
-  // TODO Make this cleaner, than just catching all the fields of the object.
-  size_t indexFormatVersionPullRequestNumber;
-  config.addOption(
-      {"index-format-version"s, "pull-request-number"s},
-      "The number of the pull request that changed the index format most "
-      "recently.",
-      &indexFormatVersionPullRequestNumber);
-  std::string indexFormatVersionDate;
-  config.addOption({"index-format-version"s, "date"s},
-                   "The date of the last breaking change of the index format.",
-                   &indexFormatVersionDate);
-
   configurationJson_ = fileToJson(onDiskBase_ + CONFIGURATION_FILE);
+
+  /*
+  Because an out of date index format version can cause the parsing for
+  configuration options to fail, we have to manually check it before parsing.
+
+  For example: Old configuration option could have been deleted. Trying to set
+  those, would cause an error, before we could actually parse the index format
+  version.
+  */
+  if (configurationJson_.find("index-format-version") !=
+      configurationJson_.end()) {
+    auto indexFormatVersion = static_cast<qlever::IndexFormatVersion>(
+        configurationJson_["index-format-version"]);
+    const auto& currentVersion = qlever::indexFormatVersion;
+    if (indexFormatVersion != currentVersion) {
+      if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
+        LOG(ERROR) << "The version of QLever you are using is too old for this "
+                      "index. Please use a version of QLever that is "
+                      "compatible with this index"
+                      " (PR = "
+                   << indexFormatVersion.prNumber_ << ", Date = "
+                   << indexFormatVersion.date_.toStringAndType().first << ")."
+                   << std::endl;
+      } else {
+        LOG(ERROR) << "The index is too old for this version of QLever. "
+                      "We recommend that you rebuild the index and start the "
+                      "server with the current master. Alternatively start the "
+                      "engine with a version of QLever that is compatible with "
+                      "this index (PR = "
+                   << indexFormatVersion.prNumber_ << ", Date = "
+                   << indexFormatVersion.date_.toStringAndType().first << ")."
+                   << std::endl;
+      }
+      throw std::runtime_error{
+          "Incompatible index format, see log message for details"};
+    }
+  } else {
+    LOG(ERROR) << "This index was built before versioning was introduced for "
+                  "QLever's index format. Please rebuild your index using the "
+                  "current version of QLever."
+               << std::endl;
+    throw std::runtime_error{
+        "Incompatible index format, see log message for details"};
+  }
+
   config.parseConfig(configurationJson_);
 
   if (!gitHash.empty()) {
@@ -850,34 +883,6 @@ void IndexImpl::readConfiguration() {
     LOG(INFO) << "The index was built before git commit hashes were stored in "
                  "the index meta data"
               << std::endl;
-  }
-
-  // Is the index format version up to date?
-  auto indexFormatVersion = qlever::IndexFormatVersion{
-      indexFormatVersionPullRequestNumber,
-      DateOrLargeYear::parseXsdDate(indexFormatVersionDate)};
-  const auto& currentVersion = qlever::indexFormatVersion;
-  if (indexFormatVersion != currentVersion) {
-    if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
-      LOG(ERROR) << "The version of QLever you are using is too old for this "
-                    "index. Please use a version of QLever that is "
-                    "compatible with this index"
-                    " (PR = "
-                 << indexFormatVersion.prNumber_ << ", Date = "
-                 << indexFormatVersion.date_.toStringAndType().first << ")."
-                 << std::endl;
-    } else {
-      LOG(ERROR) << "The index is too old for this version of QLever. "
-                    "We recommend that you rebuild the index and start the "
-                    "server with the current master. Alternatively start the "
-                    "engine with a version of QLever that is compatible with "
-                    "this index (PR = "
-                 << indexFormatVersion.prNumber_ << ", Date = "
-                 << indexFormatVersion.date_.toStringAndType().first << ")."
-                 << std::endl;
-    }
-    throw std::runtime_error{
-        "Incompatible index format, see log message for details"};
   }
 
   if (boolPrefixes) {
