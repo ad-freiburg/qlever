@@ -54,28 +54,3 @@ ExceptionMetadata generateMetadata(antlr4::ParserRuleContext* ctx) {
           ctx->getStop()->getStopIndex(), start->getLine(),
           start->getCharPositionInLine()};
 }
-
-std::string generateExceptionMessage(antlr4::Token* offendingSymbol,
-                                     const std::string& msg) {
-  if (!offendingSymbol) {
-    return msg;
-  } else if (offendingSymbol->getStartIndex() ==
-             offendingSymbol->getStopIndex() + 1) {
-    // This can only happen at the end of the query when a token is expected,
-    // but none is found. The offending token is then empty.
-    return absl::StrCat("Unexpected end of Query: ", msg);
-  } else {
-    return absl::StrCat("Token \"", offendingSymbol->getText(), "\": ", msg);
-  }
-}
-
-// _____________________________________________________________________________
-void ThrowingErrorListener::syntaxError(antlr4::Recognizer* recognizer,
-                                        antlr4::Token* offendingSymbol,
-                                        size_t line, size_t charPositionInLine,
-                                        const std::string& msg,
-                                        [[maybe_unused]] std::exception_ptr e) {
-  throw InvalidQueryException{
-      generateExceptionMessage(offendingSymbol, msg),
-      generateMetadata(recognizer, offendingSymbol, line, charPositionInLine)};
-}

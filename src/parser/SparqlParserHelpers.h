@@ -32,7 +32,7 @@ struct ParserAndVisitor {
   antlr4::ANTLRInputStream stream_{input_};
   SparqlAutomaticLexer lexer_{&stream_};
   antlr4::CommonTokenStream tokens_{&lexer_};
-  ThrowingErrorListener errorListener_{};
+  ThrowingErrorListener<InvalidSparqlQueryException> errorListener_{};
 
  public:
   SparqlAutomaticParser parser_{&tokens_};

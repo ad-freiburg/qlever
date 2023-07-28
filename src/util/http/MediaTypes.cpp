@@ -140,7 +140,7 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
     antlr4::ANTLRInputStream stream{input};
     AcceptHeaderLexer lexer{&stream};
     antlr4::CommonTokenStream tokens{&lexer};
-    ThrowingErrorListener errorListener_{};
+    ThrowingErrorListener<InvalidSparqlQueryException> errorListener_{};
 
    public:
     AcceptHeaderParser parser{&tokens};

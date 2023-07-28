@@ -1865,7 +1865,7 @@ void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
 // _____________________________________________________________________________
 void Visitor::reportError(antlr4::ParserRuleContext* ctx,
                           const std::string& msg) {
-  throw InvalidQueryException{msg, generateMetadata(ctx)};
+  throw InvalidSparqlQueryException{msg, generateMetadata(ctx)};
 }
 
 // _____________________________________________________________________________
