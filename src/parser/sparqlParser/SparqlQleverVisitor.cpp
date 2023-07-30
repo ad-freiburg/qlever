@@ -1864,13 +1864,13 @@ void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
 }
 
 // _____________________________________________________________________________
-void Visitor::reportError(antlr4::ParserRuleContext* ctx,
+void Visitor::reportError(const antlr4::ParserRuleContext* ctx,
                           const std::string& msg) {
   throw InvalidSparqlQueryException{msg, generateMetadata(ctx)};
 }
 
 // _____________________________________________________________________________
-void Visitor::reportNotSupported(antlr4::ParserRuleContext* ctx,
+void Visitor::reportNotSupported(const antlr4::ParserRuleContext* ctx,
                                  const std::string& feature) {
   throw NotSupportedException{feature + " currently not supported by QLever.",
                               generateMetadata(ctx)};
@@ -1878,7 +1878,7 @@ void Visitor::reportNotSupported(antlr4::ParserRuleContext* ctx,
 
 // _____________________________________________________________________________
 void Visitor::checkUnsupportedLangOperation(
-    antlr4::ParserRuleContext* ctx,
+    const antlr4::ParserRuleContext* ctx,
     const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
   if (expression.containsLangExpression()) {
     throw NotSupportedException{
@@ -1890,7 +1890,7 @@ void Visitor::checkUnsupportedLangOperation(
 
 // _____________________________________________________________________________
 void Visitor::checkUnsupportedLangOperationAllowFilters(
-    antlr4::ParserRuleContext* ctx,
+    const antlr4::ParserRuleContext* ctx,
     const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
   if (expression.containsLangExpression() &&
       !expression.getLanguageFilterExpression()) {

@@ -511,24 +511,25 @@ class SparqlQleverVisitor {
   void visitIf(Ctx* ctx) requires voidWhenVisited<SparqlQleverVisitor, Ctx>;
 
  public:
-  [[noreturn]] static void reportError(antlr4::ParserRuleContext* ctx,
+  [[noreturn]] static void reportError(const antlr4::ParserRuleContext* ctx,
                                        const std::string& msg);
 
-  [[noreturn]] static void reportNotSupported(antlr4::ParserRuleContext* ctx,
-                                              const std::string& feature);
+  [[noreturn]] static void reportNotSupported(
+      const antlr4::ParserRuleContext* ctx, const std::string& feature);
 
  private:
   // Throw an exception if the `expression` contains the `LANG()` function. The
   // `context` will be used to create the exception metadata.
   static void checkUnsupportedLangOperation(
-      antlr4::ParserRuleContext* context,
+      const antlr4::ParserRuleContext* context,
       const SparqlExpressionPimpl& expression);
 
   // Similar to `checkUnsupportedLangOperation` but doesn't throw for the
   // expression `LANG(?someVariable) = "someLangtag"` which is supported by
   // QLever inside a FILTER clause.
   static void checkUnsupportedLangOperationAllowFilters(
-      antlr4::ParserRuleContext* ctx, const SparqlExpressionPimpl& expression);
+      const antlr4::ParserRuleContext* ctx,
+      const SparqlExpressionPimpl& expression);
 
   // Parse both `ConstructTriplesContext` and `TriplesTemplateContext` because
   // they have the same structure.
