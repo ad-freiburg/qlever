@@ -13,9 +13,9 @@
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
-ExceptionMetadata generateMetadata(antlr4::Parser* parser,
-                                   antlr4::Token* offendingToken, size_t line,
-                                   size_t charPositionInLine) {
+ExceptionMetadata generateMetadataWithParser(
+    antlr4::Parser* parser, const antlr4::Token* offendingToken, size_t line,
+    size_t charPositionInLine) {
   return {
       parser->getTokenStream()->getTokenSource()->getInputStream()->toString(),
       offendingToken->getStartIndex(), offendingToken->getStopIndex(), line,
@@ -23,7 +23,7 @@ ExceptionMetadata generateMetadata(antlr4::Parser* parser,
 }
 
 // _____________________________________________________________________________
-ExceptionMetadata generateMetadata(antlr4::ParserRuleContext* ctx) {
+ExceptionMetadata generateMetadata(const antlr4::ParserRuleContext* ctx) {
   auto start = ctx->getStart();
   return {start->getInputStream()->toString(), ctx->getStart()->getStartIndex(),
           ctx->getStop()->getStopIndex(), start->getLine(),
@@ -47,7 +47,8 @@ ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
   // only subclasses of `antlr4::Recognizer`.
   if (auto* parser = dynamic_cast<antlr4::Parser*>(recognizer)) {
     AD_CONTRACT_CHECK(offendingToken != nullptr);
-    return generateMetadata(parser, offendingToken, line, charPositionInLine);
+    return generateMetadataWithParser(parser, offendingToken, line,
+                                      charPositionInLine);
   } else if (auto* lexer = dynamic_cast<antlr4::Lexer*>(recognizer)) {
     // If the recognizer is a Lexer this means that the error was a Lexer error.
     // In that case `offendingToken` is `nullptr`.

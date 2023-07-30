@@ -10,7 +10,7 @@
 #include "util/GenerateExceptionMetadata.h"
 #include "util/ParseException.h"
 
-ExceptionMetadata generateMetadata(antlr4::ParserRuleContext* ctx);
+ExceptionMetadata generateMetadata(const antlr4::ParserRuleContext* ctx);
 
 ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
                                    antlr4::Token* offendingToken, size_t line,
