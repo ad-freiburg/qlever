@@ -293,16 +293,21 @@ class ConfigManager {
   */
   std::vector<std::pair<std::string, ConfigOption*>> configurationOptions(
       std::string_view pathPrefix = "");
-  const std::vector<std::pair<std::string, ConfigOption*>> configurationOptions(
+  std::vector<std::pair<std::string, const ConfigOption*>> configurationOptions(
       std::string_view pathPrefix = "") const;
 
   /*
   @brief The implementation for `configurationOptions`.
 
+  @tparam ReturnPointe Should be either `ConfigOption*`, or `const
+  ConfigOption*`.
+
   @param pathPrefix This prefix will be added to all configuration option json
   paths, that will be returned.
   */
-  static auto configurationOptionsImpl(auto& configurationOptions,
-                                       std::string_view pathPrefix = "");
+  template <typename ReturnPointer>
+  static std::vector<std::pair<std::string, ReturnPointer>>
+  configurationOptionsImpl(auto& configurationOptions,
+                           std::string_view pathPrefix = "");
 };
 }  // namespace ad_utility

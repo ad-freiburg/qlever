@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -24,6 +22,7 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -37,9 +36,11 @@
 
 namespace ad_utility {
 // ____________________________________________________________________________
-auto ConfigManager::configurationOptionsImpl(auto& configurationOptions,
-                                             std::string_view pathPrefix) {
-  std::vector<std::pair<std::string, ConfigOption*>> collectedOptions;
+template <typename ReturnPointer>
+std::vector<std::pair<std::string, ReturnPointer>>
+ConfigManager::configurationOptionsImpl(auto& configurationOptions,
+                                        std::string_view pathPrefix) {
+  std::vector<std::pair<std::string, ReturnPointer>> collectedOptions;
 
   std::ranges::for_each(
       configurationOptions,
@@ -59,7 +60,8 @@ auto ConfigManager::configurationOptionsImpl(auto& configurationOptions,
                     (std::is_same_v<std::decay_t<T>, ConfigManager>));
                 ad_utility::appendVector(
                     collectedOptions,
-                    var.configurationOptions(pathToCurrentEntry));
+                    configurationOptionsImpl<ReturnPointer>(
+                        var.configurationOptions_, pathToCurrentEntry));
               }
             },
             std::get<1>(pair));
@@ -88,13 +90,15 @@ auto ConfigManager::configurationOptionsImpl(auto& configurationOptions,
 // ____________________________________________________________________________
 std::vector<std::pair<std::string, ConfigOption*>>
 ConfigManager::configurationOptions(std::string_view pathPrefix) {
-  return configurationOptionsImpl(configurationOptions_, pathPrefix);
+  return configurationOptionsImpl<ConfigOption*>(configurationOptions_,
+                                                 pathPrefix);
 }
 
 // ____________________________________________________________________________
-const std::vector<std::pair<std::string, ConfigOption*>>
+std::vector<std::pair<std::string, const ConfigOption*>>
 ConfigManager::configurationOptions(std::string_view pathPrefix) const {
-  return configurationOptionsImpl(configurationOptions_, pathPrefix);
+  return configurationOptionsImpl<const ConfigOption*>(configurationOptions_,
+                                                       pathPrefix);
 }
 
 // ____________________________________________________________________________
@@ -309,8 +313,8 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
 std::string ConfigManager::printConfigurationDoc(
     bool printCurrentJsonConfiguration) const {
   // All the configuration options together with their paths.
-  const std::vector<std::pair<std::string, ConfigOption*>> allConfigOption =
-      configurationOptions("");
+  const std::vector<std::pair<std::string, const ConfigOption*>>
+      allConfigOption = configurationOptions("");
   auto allConfigOptionDereferencedView = std::views::transform(
       allConfigOption,
       [](auto& pair) { return std::tie(pair.first, *pair.second); });
@@ -389,8 +393,8 @@ std::string
 ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
     const {
   // All the configuration options together with their paths.
-  const std::vector<std::pair<std::string, ConfigOption*>> allConfigOption =
-      configurationOptions("");
+  const std::vector<std::pair<std::string, const ConfigOption*>>
+      allConfigOption = configurationOptions("");
   auto allConfigOptionDereferencedView = std::views::transform(
       allConfigOption,
       [](auto& pair) { return std::tie(pair.first, *pair.second); });
