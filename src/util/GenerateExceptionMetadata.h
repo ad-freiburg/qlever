@@ -13,5 +13,5 @@
 ExceptionMetadata generateMetadata(const antlr4::ParserRuleContext* ctx);
 
 ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
-                                   antlr4::Token* offendingToken, size_t line,
-                                   size_t charPositionInLine);
+                                   const antlr4::Token* offendingToken,
+                                   size_t line, size_t charPositionInLine);

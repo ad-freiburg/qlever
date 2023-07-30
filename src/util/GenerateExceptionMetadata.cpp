@@ -39,8 +39,8 @@ ExceptionMetadata generateMetadata(antlr4::Lexer* lexer, size_t line,
 
 // _____________________________________________________________________________
 ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
-                                   antlr4::Token* offendingToken, size_t line,
-                                   size_t charPositionInLine) {
+                                   const antlr4::Token* offendingToken,
+                                   size_t line, size_t charPositionInLine) {
   // The abstract `antlr4::Recognizer` interface does not provide enough
   // information to generate the Metadata. For this reason we manually cast to
   // the subclasses. As of ANTLRv4 `antlr4::Parser` and `antlr4::Lexer` are the
