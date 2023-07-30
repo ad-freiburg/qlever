@@ -109,7 +109,7 @@ class SparqlQleverVisitor {
   void visit(Parser::PrologueContext* ctx);
 
   // ___________________________________________________________________________
-  [[noreturn]] static void visit(Parser::BaseDeclContext* ctx);
+  [[noreturn]] static void visit(const Parser::BaseDeclContext* ctx);
 
   // ___________________________________________________________________________
   void visit(Parser::PrefixDeclContext* ctx);
@@ -134,11 +134,12 @@ class SparqlQleverVisitor {
   // will always throw an exception because the corresponding feature is not
   // (yet) supported by QLever. If they have return types other than void this
   // is to make the usage of abstractions like `visitAlternative` easier.
-  [[noreturn]] static ParsedQuery visit(Parser::DescribeQueryContext* ctx);
+  [[noreturn]] static ParsedQuery visit(
+      const Parser::DescribeQueryContext* ctx);
 
-  [[noreturn]] static ParsedQuery visit(Parser::AskQueryContext* ctx);
+  [[noreturn]] static ParsedQuery visit(const Parser::AskQueryContext* ctx);
 
-  [[noreturn]] static void visit(Parser::DatasetClauseContext* ctx);
+  [[noreturn]] static void visit(const Parser::DatasetClauseContext* ctx);
 
   [[noreturn]] static void visit(Parser::DefaultGraphClauseContext* ctx);
 
@@ -197,7 +198,7 @@ class SparqlQleverVisitor {
       Parser::OptionalGraphPatternContext* ctx);
 
   [[noreturn]] static parsedQuery::GraphPatternOperation visit(
-      Parser::GraphGraphPatternContext* ctx);
+      const Parser::GraphGraphPatternContext* ctx);
 
   [[nodiscard]] parsedQuery::Service visit(
       Parser::ServiceGraphPatternContext* ctx);
@@ -292,7 +293,7 @@ class SparqlQleverVisitor {
   [[nodiscard]] PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
   [[noreturn]] static PropertyPath visit(
-      Parser::PathNegatedPropertySetContext*);
+      const Parser::PathNegatedPropertySetContext*);
 
   [[noreturn]] static PropertyPath visit(
       Parser::PathOneInPropertySetContext* ctx);
@@ -385,13 +386,14 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] ExpressionPtr visit(Parser::LangExpressionContext* ctx);
 
-  [[noreturn]] static void visit(Parser::SubstringExpressionContext* ctx);
+  [[noreturn]] static void visit(const Parser::SubstringExpressionContext* ctx);
 
-  [[noreturn]] static void visit(Parser::StrReplaceExpressionContext* ctx);
+  [[noreturn]] static void visit(
+      const Parser::StrReplaceExpressionContext* ctx);
 
-  [[noreturn]] static void visit(Parser::ExistsFuncContext* ctx);
+  [[noreturn]] static void visit(const Parser::ExistsFuncContext* ctx);
 
-  [[noreturn]] static void visit(Parser::NotExistsFuncContext* ctx);
+  [[noreturn]] static void visit(const Parser::NotExistsFuncContext* ctx);
 
   [[nodiscard]] ExpressionPtr visit(Parser::AggregateContext* ctx);
 
@@ -453,7 +455,7 @@ class SparqlQleverVisitor {
   // `visitIriOrFunction`.
   [[nodiscard]] static ExpressionPtr processIriFunctionCall(
       const std::string& iri, std::vector<ExpressionPtr> argList,
-      antlr4::ParserRuleContext*);
+      const antlr4::ParserRuleContext*);
 
   void addVisibleVariable(Variable var);
 

@@ -54,7 +54,7 @@ std::string Visitor::getOriginalInputForContext(
 // ___________________________________________________________________________
 ExpressionPtr Visitor::processIriFunctionCall(
     const std::string& iri, std::vector<ExpressionPtr> argList,
-    antlr4::ParserRuleContext* ctx) {
+    const antlr4::ParserRuleContext* ctx) {
   // Lambda that checks the number of arguments and throws an error if it's
   // not right.
   auto checkNumArgs = [&argList, &ctx](const std::string_view prefix,
@@ -185,17 +185,17 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
+ParsedQuery Visitor::visit(const Parser::DescribeQueryContext* ctx) {
   reportNotSupported(ctx, "DESCRIBE queries are");
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
+ParsedQuery Visitor::visit(const Parser::AskQueryContext* ctx) {
   reportNotSupported(ctx, "ASK queries are");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::DatasetClauseContext* ctx) {
+void Visitor::visit(const Parser::DatasetClauseContext* ctx) {
   reportNotSupported(ctx, "FROM clauses are");
 }
 
@@ -489,7 +489,7 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
 
 // ____________________________________________________________________________
 parsedQuery::GraphPatternOperation Visitor::visit(
-    Parser::GraphGraphPatternContext* ctx) {
+    const Parser::GraphGraphPatternContext* ctx) {
   reportNotSupported(ctx, "Named Graphs (FROM, GRAPH) are");
 }
 
@@ -646,7 +646,7 @@ void Visitor::visit(Parser::PrologueContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::BaseDeclContext* ctx) {
+void Visitor::visit(const Parser::BaseDeclContext* ctx) {
   reportNotSupported(ctx, "BASE declarations are");
 }
 
@@ -1156,7 +1156,7 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
+PropertyPath Visitor::visit(const Parser::PathNegatedPropertySetContext* ctx) {
   reportNotSupported(ctx, "\"!\" inside a property path is ");
 }
 
@@ -1636,22 +1636,22 @@ ExpressionPtr Visitor::visit(Parser::LangExpressionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::SubstringExpressionContext* ctx) {
+void Visitor::visit(const Parser::SubstringExpressionContext* ctx) {
   reportNotSupported(ctx, "The SUBSTR function is");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
+void Visitor::visit(const Parser::StrReplaceExpressionContext* ctx) {
   reportNotSupported(ctx, "The REPLACE function is");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::ExistsFuncContext* ctx) {
+void Visitor::visit(const Parser::ExistsFuncContext* ctx) {
   reportNotSupported(ctx, "The EXISTS function is");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::NotExistsFuncContext* ctx) {
+void Visitor::visit(const Parser::NotExistsFuncContext* ctx) {
   reportNotSupported(ctx, "The NOT EXISTS function is");
 }
 
