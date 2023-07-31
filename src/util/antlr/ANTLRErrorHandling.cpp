@@ -4,6 +4,8 @@
 
 #include "util/antlr/ANTLRErrorHandling.h"
 
+namespace ad_utility {
+namespace antlr_utility {
 namespace detail {
 
 std::string generateExceptionMessage(antlr4::Token* offendingSymbol,
@@ -20,3 +22,5 @@ std::string generateExceptionMessage(antlr4::Token* offendingSymbol,
   }
 }
 }  // namespace detail
+}  // namespace antlr_utility
+}  // namespace ad_utility

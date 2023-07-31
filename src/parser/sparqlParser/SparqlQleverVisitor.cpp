@@ -19,9 +19,9 @@
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
 #include "parser/data/Variable.h"
-#include "util/GenerateExceptionMetadata.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/StringUtils.h"
+#include "util/antlr/GenerateAntlrExceptionMetadata.h"
 
 using namespace ad_utility::sparql_types;
 using namespace sparqlExpression;
@@ -1866,14 +1866,16 @@ void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
 // _____________________________________________________________________________
 void Visitor::reportError(const antlr4::ParserRuleContext* ctx,
                           const std::string& msg) {
-  throw InvalidSparqlQueryException{msg, generateMetadata(ctx)};
+  throw InvalidSparqlQueryException{
+      msg, ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
 }
 
 // _____________________________________________________________________________
 void Visitor::reportNotSupported(const antlr4::ParserRuleContext* ctx,
                                  const std::string& feature) {
-  throw NotSupportedException{feature + " currently not supported by QLever.",
-                              generateMetadata(ctx)};
+  throw NotSupportedException{
+      feature + " currently not supported by QLever.",
+      ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
 }
 
 // _____________________________________________________________________________
@@ -1884,7 +1886,7 @@ void Visitor::checkUnsupportedLangOperation(
     throw NotSupportedException{
         "The LANG function is currently only supported in the construct "
         "FILTER(LANG(?variable) = \"langtag\" by QLever",
-        generateMetadata(ctx)};
+        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
   }
 }
 
@@ -1897,6 +1899,6 @@ void Visitor::checkUnsupportedLangOperationAllowFilters(
     throw NotSupportedException(
         "The LANG() function is only supported by QLever in the construct "
         "FILTER(LANG(?variable) = \"langtag\"",
-        generateMetadata(ctx));
+        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx));
   }
 }

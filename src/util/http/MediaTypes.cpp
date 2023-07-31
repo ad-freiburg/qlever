@@ -151,7 +151,8 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
     antlr4::ANTLRInputStream stream{input};
     AcceptHeaderLexer lexer{&stream};
     antlr4::CommonTokenStream tokens{&lexer};
-    ThrowingErrorListener<InvalidMediaTypeParseException> errorListener_{};
+    antlr_utility::ThrowingErrorListener<InvalidMediaTypeParseException>
+        errorListener_{};
 
    public:
     AcceptHeaderParser parser{&tokens};

@@ -7,11 +7,15 @@
 #pragma once
 
 #include "ParserRuleContext.h"
-#include "util/GenerateExceptionMetadata.h"
 #include "util/ParseException.h"
 
-ExceptionMetadata generateMetadata(const antlr4::ParserRuleContext* ctx);
+namespace ad_utility {
+namespace antlr_utility {
+ExceptionMetadata generateAntlrExceptionMetadata(
+    const antlr4::ParserRuleContext* ctx);
 
-ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
-                                   const antlr4::Token* offendingToken,
-                                   size_t line, size_t charPositionInLine);
+ExceptionMetadata generateAntlrExceptionMetadata(
+    antlr4::Recognizer* recognizer, const antlr4::Token* offendingToken,
+    size_t line, size_t charPositionInLine);
+}  // namespace antlr_utility
+}  // namespace ad_utility

@@ -13,9 +13,11 @@
 #include "Recognizer.h"
 #include "Token.h"
 #include "absl/strings/str_cat.h"
-#include "util/GenerateExceptionMetadata.h"
 #include "util/ParseException.h"
+#include "util/antlr/GenerateAntlrExceptionMetadata.h"
 
+namespace ad_utility {
+namespace antlr_utility {
 namespace detail {
 std::string generateExceptionMessage(antlr4::Token* offendingSymbol,
                                      const std::string& msg);
@@ -40,7 +42,9 @@ struct ThrowingErrorListener : public antlr4::BaseErrorListener {
                    [[maybe_unused]] std::exception_ptr e) override {
     throw GrammarParseException{
         detail::generateExceptionMessage(offendingSymbol, msg),
-        generateMetadata(recognizer, offendingSymbol, line,
-                         charPositionInLine)};
+        generateAntlrExceptionMetadata(recognizer, offendingSymbol, line,
+                                       charPositionInLine)};
   }
 };
+}  // namespace antlr_utility
+}  // namespace ad_utility
