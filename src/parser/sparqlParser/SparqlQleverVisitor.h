@@ -453,7 +453,7 @@ class SparqlQleverVisitor {
 
   // Process an IRI function call. This is used in both `visitFunctionCall` and
   // `visitIriOrFunction`.
-  [[nodiscard]] ExpressionPtr processIriFunctionCall(
+  [[nodiscard]] static ExpressionPtr processIriFunctionCall(
       const std::string& iri, std::vector<ExpressionPtr> argList,
       antlr4::ParserRuleContext*);
 

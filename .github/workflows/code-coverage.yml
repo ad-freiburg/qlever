@@ -41,6 +41,10 @@ jobs:
       with:
         submodules: "recursive"
 
+    - name: Install dependencies
+      run:  |
+        sudo gem install apt-spy2 && sudo apt-spy2 fix --commit --launchpad --country=US
+        sudo apt-get update
     - name: Install clang 16
       # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
       # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted
@@ -49,8 +53,6 @@ jobs:
         wget https://apt.llvm.org/llvm.sh
         sudo chmod +x llvm.sh
         sed   's/apt-key del/echo/' llvm.sh -iy
-        sudo ./llvm.sh 15 
-        sudo apt install clang-15 llvm-15
         sudo ./llvm.sh 16 all
     - name: Install dependencies
       run:  |
@@ -89,8 +91,8 @@ jobs:
     - name: Process coverage info
       working-directory: ${{github.workspace}}/build/test
       run:  >
-        llvm-profdata-15 merge -sparse *.profraw -o default.profdata;
-        xargs -a tests.txt llvm-cov-15 export --dump --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" --ignore-filename-regex="/benchmark/" > ./coverage.lcov
+        llvm-profdata-16 merge -sparse *.profraw -o default.profdata;
+        xargs -a tests.txt llvm-cov-16 export --dump --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" --ignore-filename-regex="/benchmark/" > ./coverage.lcov
 
 # Only upload the coverage directly if this is not a pull request. In this
 # case we are on the master branch and have access to the Codecov token.

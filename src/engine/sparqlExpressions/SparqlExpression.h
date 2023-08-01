@@ -138,6 +138,10 @@ class SparqlExpression {
   // implementation returns `false`.
   virtual bool isConstantExpression() const { return false; }
 
+  // Returns true iff this expression is a STR(...) expression.  Default
+  // implementation returns `false`.
+  virtual bool isStrExpression() const { return false; }
+
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;
 
