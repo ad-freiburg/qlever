@@ -9,10 +9,12 @@
 #include <any>
 #include <concepts>
 #include <optional>
+#include <stdexcept>
 #include <string_view>
 #include <type_traits>
 #include <typeinfo>
 #include <variant>
+#include <vector>
 
 #include "global/ValueId.h"
 #include "util/ConfigManager/ConfigExceptions.h"
@@ -69,6 +71,13 @@ class ConfigOption {
   // true, if they are used.
   bool configurationOptionWasSet_ = false;
 
+  /*
+  List of the added validators. Whenever the value of this option is set,
+  they are called with `verifyWithValidators` to make sure, that the new value
+  is valid, before setting it.
+  */
+  std::vector<std::function<bool(void)>> validators_;
+
  public:
   // No default constructor.
   ConfigOption() = delete;
@@ -100,6 +109,7 @@ class ConfigOption {
     if (auto* data = std::get_if<Data<T>>(&data_); data != nullptr) {
       *(data->variablePointer_) = value;
       configurationOptionWasSet_ = true;
+      verifyWithValidators();
     } else {
       throw ConfigOptionSetWrongTypeException(identifier_,
                                               getActualValueTypeAsString(),
@@ -240,6 +250,51 @@ class ConfigOption {
     }
   }
 
+  /*
+  @brief Add a function to the configuration option for verifying, that the
+  value of the configuration option is valid. Will always be called after
+  setting the value of the configuration option.
+
+  @tparam The type of value, this configuration options points to.
+
+  @param validatorFunction Checks, if the value of the configuration option is
+  valid. Should return true, if it is valid.
+  @param errorMessage A `std::runtime_error` with this as an error message will
+  get thrown, if the `validatorFunction` returns false.
+   */
+  template <typename T>
+  requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes>
+  void addValidator(std::function<bool(const T&)> validatorFunction,
+                    const std::string& errorMessage) {
+    // Does the function take the right type?
+    auto* data = std::get_if<Data<T>>(&data_);
+    if (data == nullptr) {
+      throw std::runtime_error(absl::StrCat(
+          "Adding of validator to configuration option '", identifier_,
+          "' failed. Configuration option holds value of type '",
+          getActualValueTypeAsString(),
+          "', yet validator function only takes value of type '",
+          availableTypesToString<T>(), "' as parameter."));
+    }
+
+    /*
+    Add a function wrapper to our list of validators, that calls the
+    `validatorFunction` with the value and throws an exception, if the
+    `validatorFunction` returns false.
+    */
+    validators_.emplace_back([validatorFunction,
+                              valuePointer = data->variablePointer_,
+                              errorMessage]() {
+      AD_CORRECTNESS_CHECK(valuePointer != nullptr);
+
+      if (!validatorFunction(*valuePointer)) {
+        throw std::runtime_error(errorMessage);
+      } else {
+        return true;
+      }
+    });
+  }
+
  private:
   /*
   @brief Return the string representation/name of the type, of the currently
@@ -262,6 +317,11 @@ class ConfigOption {
   */
   static std::string contentOfAvailableTypesToString(
       const std::optional<AvailableTypes>& v);
+
+  /*
+  @brief Call all the validators to check, if the current value is valid.
+  */
+  void verifyWithValidators() const;
 };
 
 }  // namespace ad_utility
