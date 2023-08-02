@@ -36,6 +36,8 @@ SparqlExpression::Ptr makeRoundExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeAbsExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeCeilExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeFloorExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeLogExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeExpExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2);

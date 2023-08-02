@@ -69,6 +69,29 @@ inline const auto floorImpl = []<typename T>(T num) {
 };
 inline const auto floor = makeNumericExpression<decltype(floorImpl)>();
 using FloorExpression = NARY<1, FV<decltype(floor), NumericValueGetter>>;
+
+// Natural Logarithm.
+inline const auto logImpl = []<typename T>(T num) {
+  if constexpr (std::is_floating_point_v<T> || std::is_integral_v<T>) {
+    return num > 0 ? std::log(num) : std::numeric_limits<double>::quiet_NaN();
+  } else {
+    return Id::makeUndefined();
+  }
+};
+inline const auto log = makeNumericExpression<decltype(logImpl)>();
+using LogExpression = NARY<1, FV<decltype(log), NumericValueGetter>>;
+
+// Exponentiation.
+inline const auto expImpl = []<typename T>(T num) {
+  if constexpr (std::is_floating_point_v<T> || std::is_integral_v<T>) {
+    return std::exp(num);
+  } else {
+    return Id::makeUndefined();
+  }
+};
+inline const auto exp = makeNumericExpression<decltype(expImpl)>();
+using ExpExpression = NARY<1, FV<decltype(exp), NumericValueGetter>>;
+
 }  // namespace detail
 
 using namespace detail;
@@ -83,6 +106,12 @@ SparqlExpression::Ptr makeCeilExpression(SparqlExpression::Ptr child) {
 }
 SparqlExpression::Ptr makeFloorExpression(SparqlExpression::Ptr child) {
   return std::make_unique<FloorExpression>(std::move(child));
+}
+SparqlExpression::Ptr makeLogExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<LogExpression>(std::move(child));
+}
+SparqlExpression::Ptr makeExpExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<ExpExpression>(std::move(child));
 }
 
 SparqlExpression::Ptr makeUnaryMinusExpression(SparqlExpression::Ptr child) {

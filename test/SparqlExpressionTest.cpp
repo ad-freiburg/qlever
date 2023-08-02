@@ -439,7 +439,8 @@ TEST(SparqlExpression, unaryMinus) {
   checkMinus(Strings{"true", "false", "", "<blibb>"}, Ids{U, U, U, U});
 }
 
-TEST(SparqlExpression, ceilFloorAbsRound) {
+// Test the built-in numeric functions (floor, abs, round, ceil).
+TEST(SparqlExpression, builtInNumericFunctions) {
   auto bindUnary = [](auto f) {
     return std::bind_front(testUnaryExpression, f);
   };
@@ -466,6 +467,17 @@ TEST(SparqlExpression, ceilFloorAbsRound) {
   checkFloor(input, floor);
   checkCeil(input, ceil);
   checkRound(input, round);
+}
+
+// Test the custom numeric functions implemented so far (log, exp).
+TEST(SparqlExpression, customNumericFunctions) {
+  auto nan = std::numeric_limits<double>::quiet_NaN();
+  testUnaryExpression(makeLogExpression,
+                      std::vector<Id>{B(false), B(true), I(1), D(exp(1)), U},
+                      std::vector<Id>{D(nan), D(0), D(0), D(1), U});
+  testUnaryExpression(makeExpExpression,
+                      std::vector<Id>{B(false), B(true), I(0), D(1), U},
+                      std::vector<Id>{D(1), D(exp(1)), D(1), D(exp(1)), U});
 }
 
 // ________________________________________________________________________________________

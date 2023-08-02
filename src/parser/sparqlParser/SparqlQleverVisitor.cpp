@@ -72,7 +72,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
 
   constexpr static std::string_view geofPrefix =
       "<http://www.opengis.net/def/function/geosparql/";
-  if (std::string_view iriView = iri; iriView.starts_with(geofPrefix)) {
+  constexpr static std::string_view qfnPrefix =
+      "<http://qlever.cs.uni-freiburg.de/function#";
+  std::string_view iriView = iri;
+  if (iriView.starts_with(geofPrefix)) {
     iriView.remove_prefix(geofPrefix.size());
     AD_CONTRACT_CHECK(iriView.ends_with('>'));
     iriView.remove_suffix(1);
@@ -86,6 +89,17 @@ ExpressionPtr Visitor::processIriFunctionCall(
     } else if (iriView == "latitude") {
       checkNumArgs("geof:", iriView, 1);
       return sparqlExpression::makeLatitudeExpression(std::move(argList[0]));
+    }
+  } else if (iriView.starts_with(qfnPrefix)) {
+    iriView.remove_prefix(qfnPrefix.size());
+    AD_CONTRACT_CHECK(iriView.ends_with('>'));
+    iriView.remove_suffix(1);
+    if (iriView == "log") {
+      checkNumArgs("qfn:", iriView, 1);
+      return sparqlExpression::makeLogExpression(std::move(argList[0]));
+    } else if (iriView == "exp") {
+      checkNumArgs("qfn:", iriView, 1);
+      return sparqlExpression::makeExpExpression(std::move(argList[0]));
     }
   }
   reportNotSupported(ctx, "Function \"" + iri + "\" is");
