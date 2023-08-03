@@ -92,6 +92,17 @@ inline const auto expImpl = []<typename T>(T num) {
 inline const auto exp = makeNumericExpression<decltype(expImpl)>();
 using ExpExpression = NARY<1, FV<decltype(exp), NumericValueGetter>>;
 
+// Square root.
+inline const auto sqrtImpl = []<typename T>(T num) {
+  if constexpr (std::is_floating_point_v<T> || std::is_integral_v<T>) {
+    return num >= 0 ? std::sqrt(num) : std::numeric_limits<double>::quiet_NaN();
+  } else {
+    return Id::makeUndefined();
+  }
+};
+inline const auto sqrt = makeNumericExpression<decltype(sqrtImpl)>();
+using SqrtExpression = NARY<1, FV<decltype(sqrt), NumericValueGetter>>;
+
 }  // namespace detail
 
 using namespace detail;
@@ -112,6 +123,9 @@ SparqlExpression::Ptr makeLogExpression(SparqlExpression::Ptr child) {
 }
 SparqlExpression::Ptr makeExpExpression(SparqlExpression::Ptr child) {
   return std::make_unique<ExpExpression>(std::move(child));
+}
+SparqlExpression::Ptr makeSqrtExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<SqrtExpression>(std::move(child));
 }
 
 SparqlExpression::Ptr makeUnaryMinusExpression(SparqlExpression::Ptr child) {

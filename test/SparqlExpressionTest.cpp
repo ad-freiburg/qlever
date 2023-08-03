@@ -478,6 +478,9 @@ TEST(SparqlExpression, customNumericFunctions) {
   testUnaryExpression(makeExpExpression,
                       std::vector<Id>{B(false), B(true), I(0), D(1), U},
                       std::vector<Id>{D(1), D(exp(1)), D(1), D(exp(1)), U});
+  testUnaryExpression(makeSqrtExpression,
+                      std::vector<Id>{B(false), B(true), I(0), D(2), I(-1), U},
+                      std::vector<Id>{D(0), D(1), D(0), D(sqrt(2)), D(nan), U});
 }
 
 // ________________________________________________________________________________________

@@ -1387,17 +1387,23 @@ TEST(SparqlParser, FunctionCall) {
   using namespace builtInCallTestHelpers;
   auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
   auto expectFunctionCallFails = ExpectParseFails<&Parser::functionCall>{};
+  auto geof = "http://www.opengis.net/def/function/geosparql/";
+  auto qfn = "http://qlever.cs.uni-freiburg.de/function#";
 
   // Correct function calls. Check that the parser picks the correct expression.
+  expectFunctionCall(absl::StrCat("<", geof, "latitude>(?x)"),
+                     matchUnary(&makeLatitudeExpression));
+  expectFunctionCall(absl::StrCat("<", geof, "longitude>(?x)"),
+                     matchUnary(&makeLongitudeExpression));
   expectFunctionCall(
-      "<http://www.opengis.net/def/function/geosparql/latitude>(?x)",
-      matchUnary(&makeLatitudeExpression));
-  expectFunctionCall(
-      "<http://www.opengis.net/def/function/geosparql/longitude>(?x)",
-      matchUnary(&makeLongitudeExpression));
-  expectFunctionCall(
-      "<http://www.opengis.net/def/function/geosparql/distance>(?a, ?b)",
+      absl::StrCat("<", geof, "distance>(?a, ?b)"),
       matchNary(&makeDistExpression, Variable{"?a"}, Variable{"?b"}));
+  expectFunctionCall(absl::StrCat("<", qfn, "log>(?x)"),
+                     matchUnary(&makeLogExpression));
+  expectFunctionCall(absl::StrCat("<", qfn, "exp>(?x)"),
+                     matchUnary(&makeExpExpression));
+  expectFunctionCall(absl::StrCat("<", qfn, "sqrt>(?x)"),
+                     matchUnary(&makeSqrtExpression));
 
   // Wrong number of arguments.
   expectFunctionCallFails(

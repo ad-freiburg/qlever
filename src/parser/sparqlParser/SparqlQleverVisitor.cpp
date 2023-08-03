@@ -100,6 +100,9 @@ ExpressionPtr Visitor::processIriFunctionCall(
     } else if (iriView == "exp") {
       checkNumArgs("qfn:", iriView, 1);
       return sparqlExpression::makeExpExpression(std::move(argList[0]));
+    } else if (iriView == "sqrt") {
+      checkNumArgs("qfn:", iriView, 1);
+      return sparqlExpression::makeSqrtExpression(std::move(argList[0]));
     }
   }
   reportNotSupported(ctx, "Function \"" + iri + "\" is");
