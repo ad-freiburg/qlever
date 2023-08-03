@@ -183,23 +183,6 @@ class Index {
   WordEntityPostings getContextEntityScoreListsForWords(
       const std::string& words) const;
 
-  template <size_t I>
-  void getECListForWordsAndSingleSub(const std::string& words,
-                                     const vector<std::array<Id, I>>& subres,
-                                     size_t subResMainCol, size_t limit,
-                                     vector<std::array<Id, 3 + I>>& res) const;
-
-  void getECListForWordsAndTwoW1Subs(const std::string& words,
-                                     const vector<std::array<Id, 1>> subres1,
-                                     const vector<std::array<Id, 1>> subres2,
-                                     size_t limit,
-                                     vector<std::array<Id, 5>>& res) const;
-
-  void getECListForWordsAndSubtrees(
-      const std::string& words,
-      const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
-      size_t limit, vector<vector<Id>>& res) const;
-
   WordEntityPostings getWordPostingsForTerm(const std::string& term) const;
 
   WordEntityPostings getEntityPostingsForTerm(const std::string& term) const;

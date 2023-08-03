@@ -174,33 +174,6 @@ Index::WordEntityPostings Index::getContextEntityScoreListsForWords(
 }
 
 // ____________________________________________________________________________
-template <size_t I>
-void Index::getECListForWordsAndSingleSub(
-    const std::string& words, const vector<std::array<Id, I>>& subres,
-    size_t subResMainCol, size_t limit,
-    vector<std::array<Id, 3 + I>>& res) const {
-  return pimpl_->getECListForWordsAndSingleSub(words, subres, subResMainCol,
-                                               limit, res);
-}
-
-// ____________________________________________________________________________
-void Index::getECListForWordsAndTwoW1Subs(
-    const std::string& words, const vector<std::array<Id, 1>> subres1,
-    const vector<std::array<Id, 1>> subres2, size_t limit,
-    vector<std::array<Id, 5>>& res) const {
-  return pimpl_->getECListForWordsAndTwoW1Subs(words, subres1, subres2, limit,
-                                               res);
-}
-
-// ____________________________________________________________________________
-void Index::getECListForWordsAndSubtrees(
-    const std::string& words,
-    const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
-    size_t limit, vector<vector<Id>>& res) const {
-  return pimpl_->getECListForWordsAndSubtrees(words, subResVecs, limit, res);
-}
-
-// ____________________________________________________________________________
 Index::WordEntityPostings Index::getWordPostingsForTerm(
     const std::string& term) const {
   return pimpl_->getWordPostingsForTerm(term);
