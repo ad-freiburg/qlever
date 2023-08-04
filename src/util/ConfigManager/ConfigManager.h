@@ -72,9 +72,9 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption& addOption(const std::vector<std::string>& pathToOption,
-                                std::string_view optionDescription,
-                                OptionType* variableToPutValueOfTheOptionIn) {
+  ConfigOption& addOption(const std::vector<std::string>& pathToOption,
+                          std::string_view optionDescription,
+                          OptionType* variableToPutValueOfTheOptionIn) {
     return addOptionImpl(pathToOption, optionDescription,
                          variableToPutValueOfTheOptionIn,
                          std::optional<OptionType>(std::nullopt));
@@ -102,10 +102,10 @@ class ConfigManager {
             std::same_as<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption& addOption(const std::vector<std::string>& pathToOption,
-                                std::string_view optionDescription,
-                                OptionType* variableToPutValueOfTheOptionIn,
-                                DefaultValueType defaultValue) {
+  ConfigOption& addOption(const std::vector<std::string>& pathToOption,
+                          std::string_view optionDescription,
+                          OptionType* variableToPutValueOfTheOptionIn,
+                          DefaultValueType defaultValue) {
     return addOptionImpl(pathToOption, optionDescription,
                          variableToPutValueOfTheOptionIn,
                          std::optional<OptionType>(std::move(defaultValue)));
@@ -122,9 +122,9 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption& addOption(std::string optionName,
-                                std::string_view optionDescription,
-                                OptionType* variableToPutValueOfTheOptionIn) {
+  ConfigOption& addOption(std::string optionName,
+                          std::string_view optionDescription,
+                          OptionType* variableToPutValueOfTheOptionIn) {
     return addOption<OptionType>(
         std::vector<std::string>{std::move(optionName)}, optionDescription,
         variableToPutValueOfTheOptionIn);
@@ -142,10 +142,10 @@ class ConfigManager {
             std::same_as<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption& addOption(std::string optionName,
-                                std::string_view optionDescription,
-                                OptionType* variableToPutValueOfTheOptionIn,
-                                DefaultValueType defaultValue) {
+  ConfigOption& addOption(std::string optionName,
+                          std::string_view optionDescription,
+                          OptionType* variableToPutValueOfTheOptionIn,
+                          DefaultValueType defaultValue) {
     return addOption<OptionType>(
         std::vector<std::string>{std::move(optionName)}, optionDescription,
         variableToPutValueOfTheOptionIn, std::move(defaultValue));
@@ -262,12 +262,11 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption& addOptionImpl(
-      const std::vector<std::string>& pathToOption,
-      std::string_view optionDescription,
-      OptionType* variableToPutValueOfTheOptionIn,
-      std::optional<OptionType> defaultValue =
-          std::optional<OptionType>(std::nullopt)) {
+  ConfigOption& addOptionImpl(const std::vector<std::string>& pathToOption,
+                              std::string_view optionDescription,
+                              OptionType* variableToPutValueOfTheOptionIn,
+                              std::optional<OptionType> defaultValue =
+                                  std::optional<OptionType>(std::nullopt)) {
     verifyPath(pathToOption);
     addConfigOption(
         pathToOption,

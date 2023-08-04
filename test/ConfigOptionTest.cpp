@@ -21,9 +21,7 @@
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
-// Easier usage.
-using ConfigOption = ad_utility::ConfigOption;
-
+namespace ad_utility {
 /*
 Not all identifiers are allowed for configuration options.
 */
@@ -364,6 +362,254 @@ TEST(ConfigOptionTest, DummyValueExistence) {
   });
 }
 
+/*
+@brief Call the given template function with the cartesian product of the parameter type list with
+itself, as template parameters.
+For example: If given `<int, const int>`, then the function will be called as `Func<int,
+int>`, `Func<int, const int>`, `Func<const int, int>` and `Func<const int, const int>`.
+*/
+template <typename Func, typename... Parameter>
+constexpr void passCartesianPorductToLambda(Func func) {
+  (
+      [&func]<typename T>() {
+        (func.template operator()<T, Parameter>(), ...);
+      }.template operator()<Parameter>(),
+      ...);
+}
+
+TEST(ConfigOptionTest, ValidatorConcept) {
+  // Lambda function types for easier test creation.
+  using SingleIntValidatorFunction = decltype([](const int&) { return true; });
+  using DoubleIntValidatorFunction = decltype([](const int&, const int&) { return true; });
+
+  // Valid function.
+  static_assert(ad_utility::Validator<SingleIntValidatorFunction, const int&>);
+  static_assert(ad_utility::Validator<DoubleIntValidatorFunction, const int&, const int&>);
+
+  // The number of parameter types is wrong.
+  static_assert(!ad_utility::Validator<SingleIntValidatorFunction>);
+  static_assert(!ad_utility::Validator<SingleIntValidatorFunction, const int&, const int&>);
+  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction>);
+  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, const int&, const int&,
+                                       const int&, const int&>);
+
+  // Function is valid, but the parameter types are of the wrong object type.
+  static_assert(!ad_utility::Validator<SingleIntValidatorFunction, const std::vector<bool>&>);
+  static_assert(!ad_utility::Validator<SingleIntValidatorFunction, const std::string&>);
+  static_assert(
+      !ad_utility::Validator<DoubleIntValidatorFunction, const std::vector<bool>&, const int&>);
+  static_assert(
+      !ad_utility::Validator<DoubleIntValidatorFunction, const int&, const std::vector<bool>&>);
+  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, const std::vector<bool>&,
+                                       const std::vector<bool>&>);
+  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, const std::string&, const int&>);
+  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, const int&, const std::string&>);
+  static_assert(
+      !ad_utility::Validator<DoubleIntValidatorFunction, const std::string&, const std::string&>);
+
+  // Function is valid, but the parameter types are not const, nor l-value references.
+  static_assert(!ad_utility::Validator<SingleIntValidatorFunction, int>);
+  static_assert(!ad_utility::Validator<SingleIntValidatorFunction, const int>);
+  static_assert(!ad_utility::Validator<SingleIntValidatorFunction, int&>);
+  static_assert(!ad_utility::Validator<SingleIntValidatorFunction, int&&>);
+  static_assert(!ad_utility::Validator<SingleIntValidatorFunction, const int&&>);
+
+  auto validFunctionButParameterNotConstNotLValueReferencesTestHelper =
+      []<typename FirstParameter, typename SecondParameter>() {
+        static_assert(
+            !ad_utility::Validator<DoubleIntValidatorFunction, FirstParameter, SecondParameter>);
+      };
+  passCartesianPorductToLambda<
+      decltype(validFunctionButParameterNotConstNotLValueReferencesTestHelper), int, const int,
+      int&, int&&, const int&&>(validFunctionButParameterNotConstNotLValueReferencesTestHelper);
+
+  // Template parameter types are valid (const l-value), but the given function is not valid.
+
+  // The parameter types of the function are wrong, but the return type is correct.
+  static_assert(!ad_utility::Validator<decltype([](int&) { return true; }), const int&>);
+  static_assert(!ad_utility::Validator<decltype([](int&&) { return true; }), const int&>);
+  static_assert(!ad_utility::Validator<decltype([](const int&&) { return true; }), const int&>);
+
+  auto validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper =
+      []<typename FirstParameter, typename SecondParameter>() {
+        static_assert(
+            !ad_utility::Validator<decltype([](FirstParameter, SecondParameter) { return true; }),
+                                   const int&, const int&>);
+      };
+  passCartesianPorductToLambda<
+      decltype(validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper), int&, int&&,
+      const int&&>(validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper);
+
+  // Parameter types are correct, but return type is wrong.
+  static_assert(!ad_utility::Validator<decltype([](int n) { return n; }), const int&>);
+  static_assert(!ad_utility::Validator<decltype([](const int n) { return n; }), const int&>);
+  static_assert(!ad_utility::Validator<decltype([](const int& n) { return n; }), const int&>);
+
+  auto validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper =
+      []<typename FirstParameter, typename SecondParameter>() {
+        static_assert(
+            !ad_utility::Validator<decltype([](FirstParameter n, SecondParameter) { return n; }),
+                                   const int&, const int&>);
+      };
+  passCartesianPorductToLambda<
+      decltype(validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper), int, const int,
+      const int&>(validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper);
+
+  // Both the parameter types and the return type is wrong.
+  static_assert(!ad_utility::Validator<decltype([](int& n) { return n; }), const int&>);
+  static_assert(!ad_utility::Validator<decltype([](int&& n) { return n; }), const int&>);
+  static_assert(!ad_utility::Validator<decltype([](const int&& n) { return n; }), const int&>);
+
+  auto validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper =
+      []<typename FirstParameter, typename SecondParameter>() {
+        static_assert(
+            !ad_utility::Validator<decltype([](FirstParameter n, SecondParameter) { return n; }),
+                                   const int&, const int&>);
+      };
+  passCartesianPorductToLambda<
+      decltype(validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper), int&, int&&,
+      const int&&>(validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper);
+}
+
+/*
+@brief Does the tests for `ValidatorWithSingleParameterTypeOutOfListConcept` with the given lambda
+function.
+
+@tparam ConceptFunction A constexpr lambda function, with the signature `template<typename T,
+typename... Ts>`, no arguments and a return type of bool.
+*/
+template <typename ConceptFunction>
+void doValidatorWithSingleParameterTypeOutOfListConceptTest(ConceptFunction conceptFunction) {
+  // Lambda function types for easier test creation.
+  using SingleIntValidatorFunction = decltype([](const int&) { return true; });
+
+  // Valid function with list, which contains its parameter.
+  static_assert(conceptFunction.template operator()<SingleIntValidatorFunction, const int&>());
+  static_assert(conceptFunction.template
+                operator()<SingleIntValidatorFunction, const int&, const int&, const int&>());
+  static_assert(conceptFunction.template operator()<SingleIntValidatorFunction, const std::string&,
+                                                    const std::vector<bool>&, const int&>());
+  static_assert(conceptFunction.template operator()<SingleIntValidatorFunction, const std::string&,
+                                                    const int&, const std::vector<bool>&>());
+
+  // Does it work, regardless of the list conctent being const, or references?
+  static_assert(conceptFunction.template operator()<SingleIntValidatorFunction, const int>());
+  static_assert(conceptFunction.template operator()<SingleIntValidatorFunction, int&>());
+  static_assert(conceptFunction.template operator()<SingleIntValidatorFunction, int>());
+  static_assert(conceptFunction.template operator()<SingleIntValidatorFunction, int&&>());
+  static_assert(conceptFunction.template operator()<SingleIntValidatorFunction, const int&&>());
+  auto workingValidatorWrapper =
+      [&conceptFunction]<typename FirstParameter, typename SecondParameter>() {
+        if constexpr (!std::is_same_v<FirstParameter, std::vector<bool>> ||
+                      !std::is_same_v<SecondParameter, std::vector<bool>>) {
+          static_assert(conceptFunction.template
+                        operator()<SingleIntValidatorFunction, FirstParameter, SecondParameter>());
+        }
+      };
+  passCartesianPorductToLambda<decltype(workingValidatorWrapper), std::vector<bool>, int&&,
+                               const int&&, int, const int, int&>(workingValidatorWrapper);
+
+  // Empty list shouldn't work.
+  static_assert(!conceptFunction.template operator()<SingleIntValidatorFunction>());
+
+  // Correct function, but no valid parameter type.
+  static_assert(!conceptFunction.template operator()<SingleIntValidatorFunction, std::string>());
+  static_assert(
+      !conceptFunction.template operator()<SingleIntValidatorFunction, std::string, ConfigOption,
+                                           std::vector<bool>, int*, const int*>());
+
+  // Valid types in the list, but the given function is not valid `Validator`.
+
+  // The parameter types of the function are wrong, but the return type is correct.
+  auto wrongParameterButRightReturnTest =
+      [&conceptFunction]<typename FirstParameter, typename SecondParameter>() {
+        static_assert(!conceptFunction.template
+                       operator()<decltype([](int&) { return true; }), FirstParameter>());
+        static_assert(!conceptFunction.template
+                       operator()<decltype([](int&&) { return true; }), FirstParameter>());
+        static_assert(!conceptFunction.template
+                       operator()<decltype([](const int&&) { return true; }), FirstParameter>());
+
+        static_assert(!conceptFunction.template operator()<decltype([](int&) { return true; }),
+                                                           FirstParameter, SecondParameter>());
+        static_assert(!conceptFunction.template operator()<decltype([](int&&) { return true; }),
+                                                           FirstParameter, SecondParameter>());
+        static_assert(
+            !conceptFunction.template operator()<decltype([](const int&&) { return true; }),
+                                                 FirstParameter, SecondParameter>());
+      };
+  passCartesianPorductToLambda<decltype(wrongParameterButRightReturnTest), int, std::string>(
+      wrongParameterButRightReturnTest);
+
+  // Parameter types are correct, but return type is wrong.
+  auto rightParameterButWrongReturnTest =
+      [&conceptFunction]<typename FirstParameter, typename SecondParameter>() {
+        static_assert(!conceptFunction.template
+                       operator()<decltype([](int n) { return n; }), FirstParameter>());
+        static_assert(!conceptFunction.template
+                       operator()<decltype([](const int n) { return n; }), FirstParameter>());
+        static_assert(!conceptFunction.template
+                       operator()<decltype([](const int& n) { return n; }), FirstParameter>());
+
+        static_assert(!conceptFunction.template operator()<decltype([](int n) { return n; }),
+                                                           FirstParameter, SecondParameter>());
+        static_assert(!conceptFunction.template operator()<decltype([](const int n) { return n; }),
+                                                           FirstParameter, SecondParameter>());
+        static_assert(!conceptFunction.template operator()<decltype([](const int& n) { return n; }),
+                                                           FirstParameter, SecondParameter>());
+      };
+  passCartesianPorductToLambda<decltype(rightParameterButWrongReturnTest), int, std::string>(
+      rightParameterButWrongReturnTest);
+
+  // Both the parameter types and the return type is wrong.
+  auto wrongParameterAndWrongReturnTest = [&conceptFunction]<typename FirstParameter,
+                                                             typename SecondParameter>() {
+    static_assert(
+        !conceptFunction.template operator()<decltype([](int& n) { return n; }), FirstParameter>());
+    static_assert(!conceptFunction
+                       .template operator()<decltype([](int&& n) { return n; }), FirstParameter>());
+    static_assert(!conceptFunction.template
+                   operator()<decltype([](const int&& n) { return n; }), FirstParameter>());
+
+    static_assert(!conceptFunction.template operator()<decltype([](int& n) { return n; }),
+                                                       FirstParameter, SecondParameter>());
+    static_assert(!conceptFunction.template operator()<decltype([](int&& n) { return n; }),
+                                                       FirstParameter, SecondParameter>());
+    static_assert(!conceptFunction.template operator()<decltype([](const int&& n) { return n; }),
+                                                       FirstParameter, SecondParameter>());
+  };
+  passCartesianPorductToLambda<decltype(wrongParameterAndWrongReturnTest), int, std::string>(
+      wrongParameterAndWrongReturnTest);
+}
+
+TEST(ConfigOptionTest, ValidatorWithSingleParameterTypeOutOfListConcept) {
+  // We moved the test into it's own function to reduce code duplication.
+  doValidatorWithSingleParameterTypeOutOfListConceptTest([]<typename Func, typename... Ts>() {
+    return ad_utility::ValidatorWithSingleParameterTypeOutOfList<Func, Ts...>;
+  });
+}
+
+TEST(ConfigOptionTest, isValidatorWithSingleParameterTypeOutOfVariant) {
+  // Do all the tests for `ValidatorWithSingleParameterTypeOutOfList`.
+  doValidatorWithSingleParameterTypeOutOfListConceptTest([]<typename Func, typename... Ts>() {
+    return ad_utility::isValidatorWithSingleParameterTypeOutOfVariant<Func, std::variant<Ts...>>;
+  });
+
+  // Lambda function types for easier test creation.
+  using SingleIntValidatorFunction = decltype([](const int&) { return true; });
+
+  // The function is valid, but the passed `VariantType` isn't a `std::variant`.
+  static_assert(
+      !ad_utility::isValidatorWithSingleParameterTypeOutOfVariant<SingleIntValidatorFunction,
+                                                                  std::vector<const int&>>);
+  static_assert(
+      !ad_utility::isValidatorWithSingleParameterTypeOutOfVariant<SingleIntValidatorFunction,
+                                                                  std::tuple<const int&>>);
+  static_assert(
+      !ad_utility::isValidatorWithSingleParameterTypeOutOfVariant<
+          SingleIntValidatorFunction, std::tuple<const int&, const int&, const int&, const int&>>);
+}
+
 TEST(ConfigOptionTest, AddValidator) {
   /*
   Generates a value of the given type. `variant` slightly changes the returned value, to make it
@@ -388,30 +634,29 @@ TEST(ConfigOptionTest, AddValidator) {
       // Must be a vector and we can go recursive.
       AD_CORRECTNESS_CHECK(ad_utility::isVector<Type>);
       Type vec;
-      vec.reserve(variant);
+      vec.reserve(variant + 1);
       for (size_t i = 0; i <= variant; i++) {
-        vec.push_back(createDummyValue<Type::value_type>(i));
+        vec.push_back(
+            createDummyValue.template operator()<typename Type::value_type>(i, createDummyValue));
       }
       return vec;
     }
   };
 
   /*
-  @brief For easily creating validator functions, that compare given values to values created using
-  the generator function.
-  The following invariant should always be true, except for `bool`: A validator function with
-  `variant` number $x$ returns true, for all `createDummyValue(y)` with $y >= x$. For all
-  other values, it returns false.
+  @brief For easily creating validator functions, that compare given values to values created
+  using the generator function. The following invariant should always be true, except for `bool`:
+  A validator function with `variant` number $x$ returns true, for all `createDummyValue(y)` with
+  $y >= x$. For all other values, it returns false.
 
   @tparam ParameterType The parameter type for the parameter of the function.
 
   @param variant Changes the generated function slightly. Allows the easier creation of multiple
-  different validator functions. For more information, what the exact difference is, see the code.
+  different validator functions. For more information, what the exact difference is, see the
+  code.
   */
-  auto generateValidatorFunction =
-      [&createDummyValue]<typename ParameterType>(
-          size_t variant,
-          auto&& generateValidatorFunction) -> std::function<bool(const ParameterType&)> {
+  auto generateValidatorFunction = [&createDummyValue]<typename ParameterType>(
+                                       size_t variant, auto&& generateValidatorFunction) {
     if constexpr (std::is_same_v<ParameterType, bool>) {
       // Simple comparison.
       return [compareTo = createDummyValue.template operator()<ParameterType>(
@@ -435,13 +680,13 @@ TEST(ConfigOptionTest, AddValidator) {
       // the vector.
       return [&generateValidatorFunction, variant](const ParameterType& v) {
         // If there are not enough elements, it can't pass all checks.
-        if (v.size() < variant) {
+        if (v.size() < variant + 1) {
           return false;
         }
 
-        for (size_t i = 0; i <= variant; i++) {
-          if (!generateValidatorFunction<ParameterType::value_type>(
-                  variant, generateValidatorFunction)(v.at(i))) {
+        for (size_t i = 0; i < variant + 1; i++) {
+          if (!generateValidatorFunction.template operator()<typename ParameterType::value_type>(
+                  i, generateValidatorFunction)(v.at(i))) {
             return false;
           }
         }
@@ -463,8 +708,8 @@ TEST(ConfigOptionTest, AddValidator) {
                                  ::testing::ContainsRegex(expectedErrorMessage));
 
     // Convert the values to json representation.
-    nlohmann::json validValueAsJson{validValue};
-    nlohmann::json notValidValueAsJson{notValidValue};
+    nlohmann::json validValueAsJson(validValue);
+    nlohmann::json notValidValueAsJson(notValidValue);
 
     ASSERT_NO_THROW(option.setValueWithJson(validValueAsJson));
     AD_EXPECT_THROW_WITH_MESSAGE(option.setValueWithJson(notValidValueAsJson),
@@ -479,38 +724,42 @@ TEST(ConfigOptionTest, AddValidator) {
     // Single validator.
     option.addValidator(
         generateValidatorFunction.template operator()<Type>(1, generateValidatorFunction),
-        "Validator 1");
+        absl::StrCat(ConfigOption::availableTypesToString<Type>(), " validator 1"));
     // Using the invariant of our function generator, to create valid and none valid values for the
     // test.
     checkSet(option, createDummyValue.template operator()<Type>(1, createDummyValue),
-             createDummyValue.template operator()<Type>(0, createDummyValue), "Validator 1");
+             createDummyValue.template operator()<Type>(0, createDummyValue),
+             absl::StrCat(ConfigOption::availableTypesToString<Type>(), " validator 1"));
 
     // Multiple validators.
-    constexpr size_t NUMBER_OF_VALIDATORS{500};
+    constexpr size_t NUMBER_OF_VALIDATORS{50};
     for (size_t i = 2; i < NUMBER_OF_VALIDATORS + 2; i++) {
       /*
-      Special handeling for `bool`, because it only has two values and that doesn't really work with
-      our test for multiple validators, which uses the invariant property of our lambda generation
-      function.
+      Special handeling for `bool`, because it only has two values and that doesn't really work
+      with our test for multiple validators, which uses the invariant property of our lambda
+      generation function.
       */
       if constexpr (std::is_same_v<Type, bool>) {
-        option.addValidator(generateValidatorFunction.template operator()<Type>(
-                                i * 2 + 1, generateValidatorFunction),
-                            absl::StrCat("Validator ", i * 2 + 1));
+        option.addValidator(
+            generateValidatorFunction.template operator()<Type>(i * 2 + 1,
+                                                                generateValidatorFunction),
+            absl::StrCat(ConfigOption::availableTypesToString<Type>(), " validator ", i * 2 + 1));
         checkSet(option, createDummyValue.template operator()<Type>(1, createDummyValue),
-                 createDummyValue.template operator()<Type>(0, createDummyValue), "Validator 1");
+                 createDummyValue.template operator()<Type>(0, createDummyValue),
+                 absl::StrCat(ConfigOption::availableTypesToString<Type>(), " validator 1"));
       } else {
         option.addValidator(
             generateValidatorFunction.template operator()<Type>(i, generateValidatorFunction),
-            absl::StrCat("Validator ", i));
+            absl::StrCat(ConfigOption::availableTypesToString<Type>(), " validator ", i));
 
         // Using the invariant of our function generator, to create valid and none valid values for
         // all added validators.
         for (size_t validatorNumber = 1; validatorNumber <= i; validatorNumber++) {
           checkSet(
-              option, createDummyValue.template operator()<Type>(validatorNumber, createDummyValue),
+              option, createDummyValue.template operator()<Type>(i, createDummyValue),
               createDummyValue.template operator()<Type>(validatorNumber - 1, createDummyValue),
-              absl::StrCat("Validator ", validatorNumber));
+              absl::StrCat(ConfigOption::availableTypesToString<Type>(), " validator ",
+                           validatorNumber));
         }
       }
     }
@@ -519,3 +768,34 @@ TEST(ConfigOptionTest, AddValidator) {
   // Test everything.
   doForTypeInValueType(doTest);
 }
+
+// Most errors, when adding a validator function, are found at compile time, but a few are not.
+TEST(ConfigOptionTest, AddValidatorExceptions) {
+  // Creates a configuration option of the given type and checks, if adding a valid validator, which
+  // takes the wrong type of argument, doens't work.
+  auto doTest = []<typename Type>() {
+    Type var{};
+    ConfigOption option("Test", "", &var);
+
+    // Try adding a validator for every type, that configuration options support.
+    doForTypeInValueType([&option]<typename T>() {
+      const std::string validatorName =
+          absl::StrCat(ConfigOption::availableTypesToString<T>(), " validator");
+      auto validatorFunction = [](const T&) { return true; };
+
+      if constexpr (std::regular_invocable<decltype(validatorFunction), const Type&>) {
+        // Right type shouldn't throw any erros. Note: Implicit conversion makes this a bit more
+        // complicated.
+        ASSERT_NO_THROW(option.addValidator(validatorFunction, validatorName));
+      } else {
+        // Wrong type should throw an erro.
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            option.addValidator(validatorFunction, validatorName),
+            ::testing::ContainsRegex("Adding of validator to configuration option 'Test' failed."));
+      }
+    });
+  };
+
+  doForTypeInValueType(doTest);
+}
+}  // namespace ad_utility

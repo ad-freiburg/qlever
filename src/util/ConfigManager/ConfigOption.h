@@ -8,6 +8,7 @@
 
 #include <any>
 #include <concepts>
+#include <functional>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
@@ -17,6 +18,7 @@
 #include <vector>
 
 #include "global/ValueId.h"
+#include "gtest/gtest_prod.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigUtil.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
@@ -27,6 +29,40 @@
 #include "util/json.h"
 
 namespace ad_utility {
+// A validator function is any invocable object, who takes the given const
+// references and returns a bool.
+template <typename Func, typename... ParameterTypes>
+concept Validator =
+    std::regular_invocable<Func, ParameterTypes...> &&
+    std::same_as<std::invoke_result_t<Func, ParameterTypes...>, bool> &&
+    ((std::is_lvalue_reference_v<ParameterTypes> &&
+      std::is_const_v<std::remove_reference_t<ParameterTypes>>)&&...);
+
+/*
+The validator has only a single parameter and this parameter is contained in
+a given list. Note that all parameters in the list will be decayed and then cast
+as `const&` for easier usage.
+*/
+template <typename Func, typename... Ts>
+concept ValidatorWithSingleParameterTypeOutOfList =
+    ((Validator<Func, const std::decay_t<Ts>&>) || ...);
+
+template <typename Func, typename T>
+struct isValidatorWithSingleParameterTypeOutOfVariantImpl : std::false_type {};
+
+template <typename Func, typename... Ts>
+requires ValidatorWithSingleParameterTypeOutOfList<Func, Ts...>
+struct isValidatorWithSingleParameterTypeOutOfVariantImpl<Func,
+                                                          std::variant<Ts...>>
+    : std::true_type {};
+
+// The validator has only a single parameter and this parameter is contained in
+// a given variant.
+template <typename Func, typename VariantType>
+concept isValidatorWithSingleParameterTypeOutOfVariant =
+    isValidatorWithSingleParameterTypeOutOfVariantImpl<Func,
+                                                       VariantType>::value;
+
 /*
 Describes a configuration option. A configuration option can only hold/parse/set
 values of a specific type, decided when creating the object.
@@ -255,47 +291,66 @@ class ConfigOption {
   value of the configuration option is valid. Will always be called after
   setting the value of the configuration option.
 
-  @tparam The type of value, this configuration options points to.
+  @tparam ValidatorFunction A function, that takes a single argument of type
+  `const T&`, with `T` being the type of value, this config options holds, and
+  returns a bool.
 
   @param validatorFunction Checks, if the value of the configuration option is
   valid. Should return true, if it is valid.
   @param errorMessage A `std::runtime_error` with this as an error message will
   get thrown, if the `validatorFunction` returns false.
    */
-  template <typename T>
-  requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes>
-  void addValidator(std::function<bool(const T&)> validatorFunction,
+  template <isValidatorWithSingleParameterTypeOutOfVariant<AvailableTypes>
+                ValidatorFunction>
+  void addValidator(ValidatorFunction validatorFunction,
                     const std::string& errorMessage) {
-    // Does the function take the right type?
-    auto* data = std::get_if<Data<T>>(&data_);
-    if (data == nullptr) {
-      throw std::runtime_error(absl::StrCat(
-          "Adding of validator to configuration option '", identifier_,
-          "' failed. Configuration option holds value of type '",
-          getActualValueTypeAsString(),
-          "', yet validator function only takes value of type '",
-          availableTypesToString<T>(), "' as parameter."));
-    }
-
     /*
-    Add a function wrapper to our list of validators, that calls the
-    `validatorFunction` with the value and throws an exception, if the
-    `validatorFunction` returns false.
+    Deducing the exact parameter of a given callable object is a major hassle
+    and neigh impossible. Instead we just use the internal type.
     */
-    validators_.emplace_back([validatorFunction,
-                              valuePointer = data->variablePointer_,
-                              errorMessage]() {
-      AD_CORRECTNESS_CHECK(valuePointer != nullptr);
+    std::visit(
+        [this, &validatorFunction,
+         &errorMessage]<typename T>(const Data<T>& data) {
+          /*
+          Can `validatorFunction` be called with the type of this
+          configuration option?
+          Note: This also allows implicit conversion. For example, a function
+          that takes an int, would work for a configuration option that holds a
+          bool.
+          */
+          if constexpr (Validator<ValidatorFunction, const T&>) {
+            /*
+            Add a function wrapper to our list of validators, that calls the
+            `validatorFunction` with the value and throws an exception, if the
+            `validatorFunction` returns false.
+            */
+            validators_.emplace_back([validatorFunction,
+                                      valuePointer = data.variablePointer_,
+                                      errorMessage]() mutable {
+              AD_CORRECTNESS_CHECK(valuePointer != nullptr);
 
-      if (!validatorFunction(*valuePointer)) {
-        throw std::runtime_error(errorMessage);
-      } else {
-        return true;
-      }
-    });
+              if (!std::invoke(validatorFunction, *valuePointer)) {
+                throw std::runtime_error(errorMessage);
+              } else {
+                return true;
+              }
+            });
+          } else {
+            throw std::runtime_error(absl::StrCat(
+                "Adding of validator to configuration option '", identifier_,
+                "' failed. Configuration option holds value of type '",
+                getActualValueTypeAsString(),
+                "', yet validator function is not invocable with a parameter "
+                "of this type."));
+          }
+        },
+        data_);
   }
 
  private:
+  FRIEND_TEST(ConfigOptionTest, AddValidator);
+  FRIEND_TEST(ConfigOptionTest, AddValidatorExceptions);
+
   /*
   @brief Return the string representation/name of the type, of the currently
   held alternative in the given `value`.
