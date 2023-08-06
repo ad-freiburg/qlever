@@ -720,4 +720,92 @@ TEST(ConfigManagerTest, PrintConfigurationDocExistence) {
           R"('/Just/some/sub-manager/Just/some/other/sub-manager')"));
 }
 
+TEST(ConfigManagerTest, ConfigOptionWithValidator) {
+  // Quick check, if `parseConfig` works with the validators of `configOption`.
+  auto checkSet = [](ConfigManager& manager,
+                     const nlohmann::json& jsonWithValidValues,
+                     const nlohmann::json& jsonWithNonValidValues,
+                     std::string_view containedInExpectedErrorMessage) {
+    ASSERT_NO_THROW(manager.parseConfig(jsonWithValidValues));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        manager.parseConfig(jsonWithNonValidValues),
+        ::testing::ContainsRegex(containedInExpectedErrorMessage));
+  };
+
+  // First test with no sub manager.
+  ConfigManager managerWithoutSubManager{};
+  int notUsedInt;
+  managerWithoutSubManager.addOption("h", "", &notUsedInt)
+      .addValidator([](const int& n) { return 0 <= n && n <= 24; },
+                    "Validator of h");
+  checkSet(managerWithoutSubManager, nlohmann::json::parse(R"--({"h" : 10})--"),
+           nlohmann::json::parse(R"--({"h" : 100})--"), "Validator of h");
+
+  // Manager with a simple sub manager.
+  ConfigManager managerWithSubManager{};
+  ConfigManager& firstSubManager =
+      managerWithSubManager.addSubManager({"first"s, "manager"s});
+  ConfigManager& secondSubManager =
+      firstSubManager.addSubManager({"second"s, "manager"s});
+  secondSubManager.addOption("h", "", &notUsedInt)
+      .addValidator([](const int& n) { return 0 <= n && n <= 24; },
+                    "Validator of h");
+  checkSet(
+      managerWithSubManager,
+      nlohmann::json::parse(
+          R"--({"first" : { "manager" : {"second" : { "manager" : {"h" : 10}}}}})--"),
+      nlohmann::json::parse(
+          R"--({"first" : { "manager" : {"second" : { "manager" : {"h" : 100}}}}})--"),
+      "Validator of h");
+
+  std::string sString;
+  firstSubManager.addOption("s", "", &sString)
+      .addValidator(
+          [](const std::string& n) { return n.starts_with("String s"); },
+          "Validator of s");
+  checkSet(
+      managerWithSubManager,
+      nlohmann::json::parse(
+          R"--({"first" : { "manager" : {"s" : "String s", "second" : { "manager" : {"h" : 10}}}}})--"),
+      nlohmann::json::parse(
+          R"--({"first" : { "manager" : {"s" : "String s", "second" : { "manager" : {"h" : 101}}}}})--"),
+      "Validator of h");
+  checkSet(
+      managerWithSubManager,
+      nlohmann::json::parse(
+          R"--({"first" : { "manager" : {"s" : "String s", "second" : { "manager" : {"h" : 10}}}}})--"),
+      nlohmann::json::parse(
+          R"--({"first" : { "manager" : {"s" : "String", "second" : { "manager" : {"h" : 10}}}}})--"),
+      "Validator of s");
+
+  std::vector<bool> boolVector;
+  managerWithSubManager.addOption("b", "", &boolVector)
+      .addValidator(
+          [](const std::vector<bool>& b) {
+            return std::ranges::any_of(b, std::identity{});
+          },
+          "Validator of b");
+  checkSet(
+      managerWithSubManager,
+      nlohmann::json::parse(
+          R"--({"b" : [true], "first" : { "manager" : {"s" : "String s", "second" : { "manager" : {"h" : 10}}}}})--"),
+      nlohmann::json::parse(
+          R"--({"b" : [true], "first" : { "manager" : {"s" : "String s", "second" : { "manager" : {"h" : 101}}}}})--"),
+      "Validator of h");
+  checkSet(
+      managerWithSubManager,
+      nlohmann::json::parse(
+          R"--({"b" : [true], "first" : { "manager" : {"s" : "String s", "second" : { "manager" : {"h" : 10}}}}})--"),
+      nlohmann::json::parse(
+          R"--({"b" : [true], "first" : { "manager" : {"s" : "String", "second" : { "manager" : {"h" : 10}}}}})--"),
+      "Validator of s");
+  checkSet(
+      managerWithSubManager,
+      nlohmann::json::parse(
+          R"--({"b" : [false ,false, true], "first" : { "manager" : {"s" : "String s", "second" : { "manager" : {"h" : 10}}}}})--"),
+      nlohmann::json::parse(
+          R"--({"b" : [false, false, false, false], "first" : { "manager" : {"s" : "String s", "second" : { "manager" : {"h" : 10}}}}})--"),
+      "Validator of b");
+}
+
 }  // namespace ad_utility
