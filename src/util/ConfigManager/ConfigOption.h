@@ -21,6 +21,7 @@
 #include "gtest/gtest_prod.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigUtil.h"
+#include "util/ConfigManager/ValidatorConcept.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
@@ -29,39 +30,6 @@
 #include "util/json.h"
 
 namespace ad_utility {
-// A validator function is any invocable object, who takes the given parameter
-// types, in the same order and transformed to `const type&`, and returns a
-// bool.
-template <typename Func, typename... ParameterTypes>
-concept Validator =
-    std::regular_invocable<Func, const std::decay_t<ParameterTypes>&...> &&
-    std::same_as<
-        std::invoke_result_t<Func, const std::decay_t<ParameterTypes>&...>,
-        bool>;
-
-/*
-The validator has only a single parameter and this parameter is contained in
-a given list.
-*/
-template <typename Func, typename... Ts>
-concept ValidatorWithSingleParameterTypeOutOfList =
-    ((Validator<Func, Ts>) || ...);
-
-template <typename Func, typename T>
-struct isValidatorWithSingleParameterTypeOutOfVariantImpl : std::false_type {};
-
-template <typename Func, typename... Ts>
-requires ValidatorWithSingleParameterTypeOutOfList<Func, Ts...>
-struct isValidatorWithSingleParameterTypeOutOfVariantImpl<Func,
-                                                          std::variant<Ts...>>
-    : std::true_type {};
-
-// The validator has only a single parameter and this parameter is contained in
-// a given variant.
-template <typename Func, typename VariantType>
-concept isValidatorWithSingleParameterTypeOutOfVariant =
-    isValidatorWithSingleParameterTypeOutOfVariantImpl<Func,
-                                                       VariantType>::value;
 
 /*
 Describes a configuration option. A configuration option can only hold/parse/set

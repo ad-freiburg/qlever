@@ -328,6 +328,8 @@ addLinkAndDiscoverTest(ConfigOptionTest configManager)
 
 addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
+addLinkAndDiscoverTest(ValidatorConceptTest)
+
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 
 addLinkAndDiscoverTest(FindUndefRangesTest)
