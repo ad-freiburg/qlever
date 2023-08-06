@@ -29,23 +29,23 @@
 #include "util/json.h"
 
 namespace ad_utility {
-// A validator function is any invocable object, who takes the given const
-// references and returns a bool.
+// A validator function is any invocable object, who takes the given parameter
+// types, in the same order and transformed to `const type&`, and returns a
+// bool.
 template <typename Func, typename... ParameterTypes>
 concept Validator =
-    std::regular_invocable<Func, ParameterTypes...> &&
-    std::same_as<std::invoke_result_t<Func, ParameterTypes...>, bool> &&
-    ((std::is_lvalue_reference_v<ParameterTypes> &&
-      std::is_const_v<std::remove_reference_t<ParameterTypes>>)&&...);
+    std::regular_invocable<Func, const std::decay_t<ParameterTypes>&...> &&
+    std::same_as<
+        std::invoke_result_t<Func, const std::decay_t<ParameterTypes>&...>,
+        bool>;
 
 /*
 The validator has only a single parameter and this parameter is contained in
-a given list. Note that all parameters in the list will be decayed and then cast
-as `const&` for easier usage.
+a given list.
 */
 template <typename Func, typename... Ts>
 concept ValidatorWithSingleParameterTypeOutOfList =
-    ((Validator<Func, const std::decay_t<Ts>&>) || ...);
+    ((Validator<Func, Ts>) || ...);
 
 template <typename Func, typename T>
 struct isValidatorWithSingleParameterTypeOutOfVariantImpl : std::false_type {};
