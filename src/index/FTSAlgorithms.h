@@ -21,7 +21,6 @@ using ad_utility::HashSet;
 
 class FTSAlgorithms {
  public:
-
   static Index::WordEntityPostings filterByRange(
       const IdRange<WordVocabIndex>& idRange,
       const Index::WordEntityPostings& wepPreFilter);

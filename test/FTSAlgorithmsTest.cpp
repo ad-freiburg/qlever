@@ -230,10 +230,12 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
   wep.cids_ = {T(0), T(1), T(2), T(4)};
   wep.eids_ = {V(0), V(0), V(0), V(1)};
   wep.scores_ = {0, 1, 2, 1};
-  wep.wids_ = {{1, 1, 2, 4}};
+  wep.wids_ = {{1, 1, 2, 4}, {5, 7, 8, 9}};
 
   result.clear();
-  FTSAlgorithms::aggScoresAndTakeTopKContexts<4>(wep, 2, &result);
+  result.setNumColumns(5);
+
+  FTSAlgorithms::aggScoresAndTakeTopKContexts<5>(wep, 2, &result);
   ASSERT_EQ(3u, result.size());
   std::sort(result.begin(), result.end(),
             [](const auto& a, const auto& b) { return a[0] < b[0]; });
@@ -241,9 +243,10 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
   ASSERT_EQ(IntId(1u), result(2, 1));
   ASSERT_EQ(V(1u), result(2, 2));
   ASSERT_EQ(WordVocabId(4u), result(2, 3));
+  ASSERT_EQ(WordVocabId(9u), result(2, 4));
 
   result.clear();
-  FTSAlgorithms::aggScoresAndTakeTopKContexts<4>(wep, 1, &result);
+  FTSAlgorithms::aggScoresAndTakeTopKContexts<5>(wep, 1, &result);
   ASSERT_EQ(2u, result.size());
   std::sort(result.begin(), result.end(),
             [](const auto& a, const auto& b) { return a[0] < b[0]; });
@@ -251,11 +254,12 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
   ASSERT_EQ(IntId(3u), result(0, 1));
   ASSERT_EQ(V(0u), result(0, 2));
   ASSERT_EQ(WordVocabId(2u), result(0, 3));
+  ASSERT_EQ(WordVocabId(8u), result(0, 4));
 };
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   IdTable result{makeAllocator()};
-  result.setNumColumns(4);
+  result.setNumColumns(5);
   Index::WordEntityPostings wep;
   int width = result.numColumns();
 
@@ -274,7 +278,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   wep.cids_ = {T(0), T(1), T(2), T(2)};
   wep.eids_ = {V(0), V(0), V(0), V(0)};
   wep.scores_ = {0, 1, 2, 2};
-  wep.wids_ = {{1, 1, 2, 3}};
+  wep.wids_ = {{1, 1, 2, 3}, {5, 7, 8, 9}};
 
   callFixed(width, wep, &result);
   ASSERT_EQ(2u, result.size());
@@ -282,9 +286,14 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   ASSERT_EQ(IntId(3u), result(0, 1));
   ASSERT_EQ(V(0u), result(0, 2));
   ASSERT_EQ(WordVocabId(2u), result(0, 3));
+  ASSERT_EQ(WordVocabId(8u), result(0, 4));
   ASSERT_EQ(WordVocabId(3u), result(1, 3));
+  ASSERT_EQ(WordVocabId(9u), result(1, 4));
 
   result.clear();
+
+  result.setNumColumns(4);
+  width = result.numColumns();
 
   wep.cids_ = {T(0), T(1), T(2), T(3)};
   wep.eids_ = {V(0), V(0), V(0), V(1)};
@@ -353,12 +362,15 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   wep.cids_ = {T(0), T(1), T(1), T(2), T(2), T(2)};
   wep.eids_ = {V(0), V(0), V(1), V(0), V(2), V(2)};
   wep.scores_ = {1, 10, 3, 1, 1, 1};
-  wep.wids_ = {{1, 1, 2, 1, 3, 5}};
+  wep.wids_ = {{1, 1, 2, 1, 3, 5}, {6, 9, 8, 8, 7, 9}};
+
+  IdTable resW6{6, makeAllocator()};
+  width = resW6.numColumns();
 
   nofVars = 2;
   k = 1;
-  width = resW5.numColumns();
-  callFixed(width, wep, nofVars, k, &resW5);
+  width = resW6.numColumns();
+  callFixed(width, wep, nofVars, k, &resW6);
 
   // Result (Note that in the IdTable the rows and columns are swapped):
   // cid:    1 1 1 1 1 1 2 2 2 2 2 2 2 2
@@ -366,10 +378,11 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   // eid1:   0 0 0 1 1 1 0 0 0 2 2 2 2 2
   // eid2:   0 1 1 0 0 1 2 2 2 0 0 0 2 2
   // wids:   1 1 2 1 2 2 1 3 5 1 3 5 3 5
+  // wids2:  9 9 8 9 8 8 8 7 9 8 7 9 7 9
 
-  ASSERT_EQ(14u, resW5.size());
+  ASSERT_EQ(14u, resW6.size());
   // sort it in the same way as shown above
-  std::sort(std::begin(resW5), std::end(resW5),
+  std::sort(std::begin(resW6), std::end(resW6),
             [](const auto& a, const auto& b) {
               return a[0] < b[0] ||
                      (a[0] == b[0] &&
@@ -377,32 +390,36 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
                        (a[2] == b[2] &&
                         (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
             });
-  ASSERT_EQ(TextRecordId(1u), resW5(0, 0));
-  ASSERT_EQ(TextRecordId(1u), resW5(4, 0));
-  ASSERT_EQ(TextRecordId(2u), resW5(9, 0));
-  ASSERT_EQ(TextRecordId(2u), resW5(13, 0));
-  ASSERT_EQ(IntId(3u), resW5(0, 1));
-  ASSERT_EQ(IntId(1u), resW5(4, 1));
-  ASSERT_EQ(IntId(1u), resW5(9, 1));
-  ASSERT_EQ(IntId(1u), resW5(13, 1));
-  ASSERT_EQ(V(0u), resW5(0, 2));
-  ASSERT_EQ(V(1u), resW5(4, 2));
-  ASSERT_EQ(V(2u), resW5(9, 2));
-  ASSERT_EQ(V(2u), resW5(13, 2));
-  ASSERT_EQ(V(0u), resW5(0, 3));
-  ASSERT_EQ(V(0u), resW5(4, 3));
-  ASSERT_EQ(V(0u), resW5(9, 3));
-  ASSERT_EQ(V(2u), resW5(13, 3));
-  ASSERT_EQ(WordVocabId(1u), resW5(0, 4));
-  ASSERT_EQ(WordVocabId(2u), resW5(4, 4));
-  ASSERT_EQ(WordVocabId(1u), resW5(9, 4));
-  ASSERT_EQ(WordVocabId(5u), resW5(13, 4));
+  ASSERT_EQ(TextRecordId(1u), resW6(0, 0));
+  ASSERT_EQ(TextRecordId(1u), resW6(4, 0));
+  ASSERT_EQ(TextRecordId(2u), resW6(9, 0));
+  ASSERT_EQ(TextRecordId(2u), resW6(13, 0));
+  ASSERT_EQ(IntId(3u), resW6(0, 1));
+  ASSERT_EQ(IntId(1u), resW6(4, 1));
+  ASSERT_EQ(IntId(1u), resW6(9, 1));
+  ASSERT_EQ(IntId(1u), resW6(13, 1));
+  ASSERT_EQ(V(0u), resW6(0, 2));
+  ASSERT_EQ(V(1u), resW6(4, 2));
+  ASSERT_EQ(V(2u), resW6(9, 2));
+  ASSERT_EQ(V(2u), resW6(13, 2));
+  ASSERT_EQ(V(0u), resW6(0, 3));
+  ASSERT_EQ(V(0u), resW6(4, 3));
+  ASSERT_EQ(V(0u), resW6(9, 3));
+  ASSERT_EQ(V(2u), resW6(13, 3));
+  ASSERT_EQ(WordVocabId(1u), resW6(0, 4));
+  ASSERT_EQ(WordVocabId(2u), resW6(4, 4));
+  ASSERT_EQ(WordVocabId(1u), resW6(9, 4));
+  ASSERT_EQ(WordVocabId(5u), resW6(13, 4));
+  ASSERT_EQ(WordVocabId(9u), resW6(0, 5));
+  ASSERT_EQ(WordVocabId(8u), resW6(4, 5));
+  ASSERT_EQ(WordVocabId(8u), resW6(9, 5));
+  ASSERT_EQ(WordVocabId(9u), resW6(13, 5));
 
   k = 2;
-  resW5.clear();
-  callFixed(width, wep, nofVars, k, &resW5);
-  ASSERT_EQ(15u, resW5.size());
-  std::sort(std::begin(resW5), std::end(resW5),
+  resW6.clear();
+  callFixed(width, wep, nofVars, k, &resW6);
+  ASSERT_EQ(15u, resW6.size());
+  std::sort(std::begin(resW6), std::end(resW6),
             [](const auto& a, const auto& b) {
               return a[0] < b[0] ||
                      (a[0] == b[0] &&
@@ -410,43 +427,48 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
                        (a[2] == b[2] &&
                         (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
             });
-  ASSERT_EQ(TextRecordId(0u), resW5(0, 0));
-  ASSERT_EQ(TextRecordId(1u), resW5(1, 0));
-  ASSERT_EQ(TextRecordId(1u), resW5(5, 0));
-  ASSERT_EQ(TextRecordId(2u), resW5(10, 0));
-  ASSERT_EQ(TextRecordId(2u), resW5(14, 0));
-  ASSERT_EQ(IntId(3u), resW5(0, 1));
-  ASSERT_EQ(IntId(3u), resW5(1, 1));
-  ASSERT_EQ(IntId(1u), resW5(5, 1));
-  ASSERT_EQ(IntId(1u), resW5(10, 1));
-  ASSERT_EQ(IntId(1u), resW5(14, 1));
-  ASSERT_EQ(V(0u), resW5(0, 2));
-  ASSERT_EQ(V(0u), resW5(1, 2));
-  ASSERT_EQ(V(1u), resW5(5, 2));
-  ASSERT_EQ(V(2u), resW5(10, 2));
-  ASSERT_EQ(V(2u), resW5(14, 2));
-  ASSERT_EQ(V(0u), resW5(0, 3));
-  ASSERT_EQ(V(0u), resW5(1, 3));
-  ASSERT_EQ(V(0u), resW5(5, 3));
-  ASSERT_EQ(V(0u), resW5(10, 3));
-  ASSERT_EQ(V(2u), resW5(14, 3));
-  ASSERT_EQ(WordVocabId(1u), resW5(0, 4));
-  ASSERT_EQ(WordVocabId(1u), resW5(1, 4));
-  ASSERT_EQ(WordVocabId(2u), resW5(5, 4));
-  ASSERT_EQ(WordVocabId(1u), resW5(10, 4));
-  ASSERT_EQ(WordVocabId(5u), resW5(14, 4));
+  ASSERT_EQ(TextRecordId(0u), resW6(0, 0));
+  ASSERT_EQ(TextRecordId(1u), resW6(1, 0));
+  ASSERT_EQ(TextRecordId(1u), resW6(5, 0));
+  ASSERT_EQ(TextRecordId(2u), resW6(10, 0));
+  ASSERT_EQ(TextRecordId(2u), resW6(14, 0));
+  ASSERT_EQ(IntId(3u), resW6(0, 1));
+  ASSERT_EQ(IntId(3u), resW6(1, 1));
+  ASSERT_EQ(IntId(1u), resW6(5, 1));
+  ASSERT_EQ(IntId(1u), resW6(10, 1));
+  ASSERT_EQ(IntId(1u), resW6(14, 1));
+  ASSERT_EQ(V(0u), resW6(0, 2));
+  ASSERT_EQ(V(0u), resW6(1, 2));
+  ASSERT_EQ(V(1u), resW6(5, 2));
+  ASSERT_EQ(V(2u), resW6(10, 2));
+  ASSERT_EQ(V(2u), resW6(14, 2));
+  ASSERT_EQ(V(0u), resW6(0, 3));
+  ASSERT_EQ(V(0u), resW6(1, 3));
+  ASSERT_EQ(V(0u), resW6(5, 3));
+  ASSERT_EQ(V(0u), resW6(10, 3));
+  ASSERT_EQ(V(2u), resW6(14, 3));
+  ASSERT_EQ(WordVocabId(1u), resW6(0, 4));
+  ASSERT_EQ(WordVocabId(1u), resW6(1, 4));
+  ASSERT_EQ(WordVocabId(2u), resW6(5, 4));
+  ASSERT_EQ(WordVocabId(1u), resW6(10, 4));
+  ASSERT_EQ(WordVocabId(5u), resW6(14, 4));
+  ASSERT_EQ(WordVocabId(6u), resW6(0, 5));
+  ASSERT_EQ(WordVocabId(9u), resW6(1, 5));
+  ASSERT_EQ(WordVocabId(8u), resW6(5, 5));
+  ASSERT_EQ(WordVocabId(8u), resW6(10, 5));
+  ASSERT_EQ(WordVocabId(9u), resW6(14, 5));
 
   wep.cids_ = {T(0), T(0), T(0)};
   wep.eids_ = {V(0), V(1), V(2)};
   wep.scores_ = {1, 10, 3};
   wep.wids_ = {{1, 1, 1}};
 
+  resW5.clear();
+
   nofVars = 3;
   k = 1;
-  IdTable resW6{6, makeAllocator()};
-  width = resW6.numColumns();
-  callFixed(width, wep, nofVars, k, &resW6);
-  ASSERT_EQ(27u, resW6.size());  // Res size 3^3
+  callFixed(width, wep, nofVars, k, &resW5);
+  ASSERT_EQ(27u, resW5.size());  // Res size 3^3
 
   nofVars = 10;
   width = resWV.numColumns();
@@ -459,8 +481,10 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   size_t k = 1;
   IdTable resW3{3, makeAllocator()};
   ad_utility::HashMap<Id, IdTable> fMap1;
+  HashSet<Id> fSet1;
 
   int width = resW3.numColumns();
+
   ad_utility::callFixedSize(
       width,
       []<int I>(auto&&... args) {
@@ -468,6 +492,15 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
             AD_FWD(args)...);
       },
       wep, fMap1, k, &resW3);
+  ASSERT_EQ(0u, resW3.size());
+
+  ad_utility::callFixedSize(
+      width,
+      []<int I>(auto&&... args) {
+        FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<I>(
+            AD_FWD(args)...);
+      },
+      wep, fSet1, k, &resW3);
   ASSERT_EQ(0u, resW3.size());
 
   wep.cids_ = {T(0), T(1), T(1), T(2), T(2), T(2)};
@@ -484,12 +517,23 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
       wep, fMap1, k, &resW3);
   ASSERT_EQ(0u, resW3.size());
 
+  ad_utility::callFixedSize(
+      width,
+      []<int I>(auto&&... args) {
+        FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<I>(
+            AD_FWD(args)...);
+      },
+      wep, fSet1, k, &resW3);
+  ASSERT_EQ(0u, resW3.size());
+
   IdTable resW5{5, makeAllocator()};
   width = resW5.numColumns();
 
   auto [it, success] = fMap1.emplace(V(1), IdTable{1, makeAllocator()});
   ASSERT_TRUE(success);
   it->second.push_back({V(1)});
+
+  fSet1.insert(V(1));
 
   ad_utility::callFixedSize(
       width,
@@ -498,6 +542,21 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
             AD_FWD(args)...);
       },
       wep, fMap1, k, &resW5);
+  ASSERT_EQ(1u, resW5.size());
+  ASSERT_EQ(TextRecordId(2u), resW5(0, 0));
+  ASSERT_EQ(IntId(2u), resW5(0, 1));
+  ASSERT_EQ(V(1u), resW5(0, 2));
+  ASSERT_EQ(WordVocabId(3u), resW5(0, 3));
+  ASSERT_EQ(WordVocabId(15u), resW5(0, 4));
+  resW5.clear();
+
+  ad_utility::callFixedSize(
+      width,
+      []<int I>(auto&&... args) {
+        FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<I>(
+            AD_FWD(args)...);
+      },
+      wep, fSet1, k, &resW5);
   ASSERT_EQ(1u, resW5.size());
   ASSERT_EQ(TextRecordId(2u), resW5(0, 0));
   ASSERT_EQ(IntId(2u), resW5(0, 1));
@@ -518,6 +577,26 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
             AD_FWD(args)...);
       },
       wep, fMap1, k, &resW5);
+  ASSERT_EQ(2u, resW5.size());
+  ASSERT_EQ(TextRecordId(2u), resW5(0, 0));
+  ASSERT_EQ(TextRecordId(2u), resW5(1, 0));
+  ASSERT_EQ(IntId(2u), resW5(0, 1));
+  ASSERT_EQ(IntId(2u), resW5(1, 1));
+  ASSERT_EQ(V(1u), resW5(0, 2));
+  ASSERT_EQ(V(1u), resW5(1, 2));
+  ASSERT_EQ(WordVocabId(3u), resW5(0, 3));
+  ASSERT_EQ(WordVocabId(5u), resW5(1, 3));
+  ASSERT_EQ(WordVocabId(15u), resW5(0, 4));
+  ASSERT_EQ(WordVocabId(10u), resW5(1, 4));
+  resW5.clear();
+
+  ad_utility::callFixedSize(
+      width,
+      []<int I>(auto&&... args) {
+        FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<I>(
+            AD_FWD(args)...);
+      },
+      wep, fSet1, k, &resW5);
   ASSERT_EQ(2u, resW5.size());
   ASSERT_EQ(TextRecordId(2u), resW5(0, 0));
   ASSERT_EQ(TextRecordId(2u), resW5(1, 0));
@@ -602,15 +681,18 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
   Index::WordEntityPostings wep;
 
   wep.cids_ = {T(0), T(1), T(1), T(2), T(2), T(2)};
-  wep.eids_ = {V(0), V(0), V(1), V(0), V(1), V(2)};
-  wep.scores_ = {10, 3, 3, 1, 1, 1};
+  wep.eids_ = {V(0), V(0), V(1), V(0), V(2), V(2)};
+  wep.scores_ = {1, 10, 3, 1, 1, 1};
+  wep.wids_ = {{1, 1, 2, 1, 3, 5}, {6, 9, 8, 8, 7, 9}};
 
   size_t k = 1;
-  IdTable resW5{5, makeAllocator()};
+  IdTable resW6{6, makeAllocator()};
+
   ad_utility::HashMap<Id, IdTable> fMap1;
+  HashSet<Id> fSet1;
 
   size_t nofVars = 2;
-  int width = resW5.numColumns();
+  int width = resW6.numColumns();
 
   // The `multVarsFilterAggScoresAndTakeTopKContexts` function is overloaded,
   // so it doesn't work with the `CALL_FIXED_SIZE` macro. We thus need
@@ -622,78 +704,162 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
           AD_FWD(args)...);
     });
   };
-  test(width, wep, fMap1, nofVars, k, &resW5);
-  ASSERT_EQ(0u, resW5.size());
+  test(width, wep, fMap1, nofVars, k, &resW6);
+  ASSERT_EQ(0u, resW6.size());
 
-  auto [it, suc] = fMap1.emplace(V(1), IdTable{1, makeAllocator()});
-  it->second.push_back({V(1)});
+  test(width, wep, fSet1, nofVars, k, &resW6);
+  ASSERT_EQ(0u, resW6.size());
 
-  test(width,
+  auto [it, suc] = fMap1.emplace(V(0), IdTable{1, makeAllocator()});
+  it->second.push_back({V(0)});
 
-       wep, fMap1, nofVars, k, &resW5);
+  fSet1.insert(V(0));
 
-  ASSERT_EQ(3u, resW5.size());  // 1-1 1-0 1-2
+  // Result (Note that in the IdTable the rows and columns are swapped):
+  // cid:    1 1 1 2 2 2
+  // scores: 3 1 1 1 1 1
+  // eid1:   0 1 1 2 2 2
+  // eid2:   0 0 0 0 0 0
+  // wids:   1 1 2 1 3 5
+  // wids2:  9 9 8 8 7 9
 
-  std::sort(resW5.begin(), resW5.end(), [](const auto& a, const auto& b) {
-    if (a[1] == b[1]) {
-      if (a[2] == b[2]) {
-        return a[0] < b[0];
-      }
-      return a[2] < b[2];
-    }
-    return a[1] > b[1];
-  });
+  test(width, wep, fMap1, nofVars, k, &resW6);
+  ASSERT_EQ(6u, resW6.size());
 
-  ASSERT_EQ(TextRecordId(1), resW5(0, 0));
-  ASSERT_EQ(IntId(2), resW5(0, 1));
-  ASSERT_EQ(V(0), resW5(0, 2));
-  ASSERT_EQ(V(1), resW5(0, 3));
-  ASSERT_EQ(TextRecordId(1), resW5(1, 0));
-  ASSERT_EQ(IntId(2), resW5(1, 1));
-  ASSERT_EQ(V(1), resW5(1, 2));
-  ASSERT_EQ(V(1), resW5(1, 3));
-  ASSERT_EQ(TextRecordId(2), resW5(2, 0));
-  ASSERT_EQ(IntId(1), resW5(2, 1));
-  ASSERT_EQ(V(2), resW5(2, 2));
-  ASSERT_EQ(V(1), resW5(2, 3));
-
-  resW5.clear();
-  test(width,
-
-       wep, fMap1, nofVars, 2, &resW5);
-  ASSERT_EQ(5u, resW5.size());  // 2x 1-1  2x 1-0   1x 1-2
-
-  std::sort(std::begin(resW5), std::end(resW5),
+  std::sort(std::begin(resW6), std::end(resW6),
             [](const auto& a, const auto& b) {
-              if (a[1] == b[1]) {
-                if (a[2] == b[2]) {
-                  return a[0] < b[0];
-                }
-                return a[2] < b[2];
-              }
-              return a[1] > b[1];
+              return a[0] < b[0] ||
+                     (a[0] == b[0] &&
+                      (a[2] < b[2] ||
+                       (a[2] == b[2] &&
+                        (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
             });
 
-  ASSERT_EQ(TextRecordId(1u), resW5(0, 0));
-  ASSERT_EQ(IntId(2u), resW5(0, 1));
-  ASSERT_EQ(V(0u), resW5(0, 2));
-  ASSERT_EQ(V(1u), resW5(0, 3));
-  ASSERT_EQ(TextRecordId(2u), resW5(1, 0));
-  ASSERT_EQ(IntId(2u), resW5(1, 1));
-  ASSERT_EQ(V(0u), resW5(1, 2));
-  ASSERT_EQ(V(1u), resW5(1, 3));
+  ASSERT_EQ(TextRecordId(1u), resW6(0, 0));
+  ASSERT_EQ(IntId(3u), resW6(0, 1));
+  ASSERT_EQ(V(0u), resW6(0, 2));
+  ASSERT_EQ(V(0u), resW6(0, 3));
+  ASSERT_EQ(WordVocabId(1u), resW6(0, 4));
+  ASSERT_EQ(WordVocabId(9u), resW6(0, 5));
+  ASSERT_EQ(TextRecordId(1u), resW6(1, 0));
+  ASSERT_EQ(IntId(1u), resW6(1, 1));
+  ASSERT_EQ(V(1u), resW6(1, 2));
+  ASSERT_EQ(V(0u), resW6(1, 3));
+  ASSERT_EQ(WordVocabId(1u), resW6(1, 4));
+  ASSERT_EQ(WordVocabId(9u), resW6(1, 5));
+  ASSERT_EQ(TextRecordId(2u), resW6(5, 0));
+  ASSERT_EQ(IntId(1u), resW6(5, 1));
+  ASSERT_EQ(V(2u), resW6(5, 2));
+  ASSERT_EQ(V(0u), resW6(5, 3));
+  ASSERT_EQ(WordVocabId(5u), resW6(5, 4));
+  ASSERT_EQ(WordVocabId(9u), resW6(5, 5));
 
-  ASSERT_EQ(TextRecordId(1u), resW5(2, 0));
-  ASSERT_EQ(IntId(2u), resW5(2, 1));
-  ASSERT_EQ(V(1u), resW5(2, 2));
-  ASSERT_EQ(V(1u), resW5(2, 3));
-  ASSERT_EQ(TextRecordId(2u), resW5(3, 0));
-  ASSERT_EQ(IntId(2u), resW5(3, 1));
-  ASSERT_EQ(V(1u), resW5(3, 2));
-  ASSERT_EQ(V(1u), resW5(3, 3));
+  resW6.clear();
 
-  ASSERT_EQ(TextRecordId(2u), resW5(4, 0));
-  ASSERT_EQ(IntId(1u), resW5(4, 1));
-  ASSERT_EQ(V(2u), resW5(4, 2));
-  ASSERT_EQ(V(1u), resW5(4, 3));
+  test(width, wep, fSet1, nofVars, k, &resW6);
+  ASSERT_EQ(6u, resW6.size());
+
+  std::sort(std::begin(resW6), std::end(resW6),
+            [](const auto& a, const auto& b) {
+              return a[0] < b[0] ||
+                     (a[0] == b[0] &&
+                      (a[2] < b[2] ||
+                       (a[2] == b[2] &&
+                        (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
+            });
+
+  ASSERT_EQ(TextRecordId(1u), resW6(0, 0));
+  ASSERT_EQ(IntId(3u), resW6(0, 1));
+  ASSERT_EQ(V(0u), resW6(0, 2));
+  ASSERT_EQ(V(0u), resW6(0, 3));
+  ASSERT_EQ(WordVocabId(1u), resW6(0, 4));
+  ASSERT_EQ(WordVocabId(9u), resW6(0, 5));
+  ASSERT_EQ(TextRecordId(1u), resW6(1, 0));
+  ASSERT_EQ(IntId(1u), resW6(1, 1));
+  ASSERT_EQ(V(1u), resW6(1, 2));
+  ASSERT_EQ(V(0u), resW6(1, 3));
+  ASSERT_EQ(WordVocabId(1u), resW6(1, 4));
+  ASSERT_EQ(WordVocabId(9u), resW6(1, 5));
+  ASSERT_EQ(TextRecordId(2u), resW6(5, 0));
+  ASSERT_EQ(IntId(1u), resW6(5, 1));
+  ASSERT_EQ(V(2u), resW6(5, 2));
+  ASSERT_EQ(V(0u), resW6(5, 3));
+  ASSERT_EQ(WordVocabId(5u), resW6(5, 4));
+  ASSERT_EQ(WordVocabId(9u), resW6(5, 5));
+
+  resW6.clear();
+
+  k = 3;
+
+  test(width, wep, fMap1, nofVars, k, &resW6);
+  ASSERT_EQ(8u, resW6.size());
+  std::sort(std::begin(resW6), std::end(resW6),
+            [](const auto& a, const auto& b) {
+              return a[0] < b[0] ||
+                     (a[0] == b[0] &&
+                      (a[2] < b[2] ||
+                       (a[2] == b[2] &&
+                        (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
+            });
+  ASSERT_EQ(TextRecordId(0u), resW6(0, 0));
+  ASSERT_EQ(IntId(3u), resW6(0, 1));
+  ASSERT_EQ(V(0u), resW6(0, 2));
+  ASSERT_EQ(V(0u), resW6(0, 3));
+  ASSERT_EQ(WordVocabId(1u), resW6(0, 4));
+  ASSERT_EQ(WordVocabId(6u), resW6(0, 5));
+  ASSERT_EQ(TextRecordId(1u), resW6(1, 0));
+  ASSERT_EQ(IntId(3u), resW6(1, 1));
+  ASSERT_EQ(V(0u), resW6(1, 2));
+  ASSERT_EQ(V(0u), resW6(1, 3));
+  ASSERT_EQ(WordVocabId(1u), resW6(1, 4));
+  ASSERT_EQ(WordVocabId(9u), resW6(1, 5));
+  ASSERT_EQ(TextRecordId(2u), resW6(4, 0));
+  ASSERT_EQ(IntId(3u), resW6(4, 1));
+  ASSERT_EQ(V(0u), resW6(4, 2));
+  ASSERT_EQ(V(0u), resW6(4, 3));
+  ASSERT_EQ(WordVocabId(1u), resW6(4, 4));
+  ASSERT_EQ(WordVocabId(8u), resW6(4, 5));
+  ASSERT_EQ(TextRecordId(2u), resW6(7, 0));
+  ASSERT_EQ(IntId(1u), resW6(7, 1));
+  ASSERT_EQ(V(2u), resW6(7, 2));
+  ASSERT_EQ(V(0u), resW6(7, 3));
+  ASSERT_EQ(WordVocabId(5u), resW6(7, 4));
+  ASSERT_EQ(WordVocabId(9u), resW6(7, 5));
+
+  resW6.clear();
+
+  test(width, wep, fSet1, nofVars, k, &resW6);
+  ASSERT_EQ(8u, resW6.size());
+  std::sort(std::begin(resW6), std::end(resW6),
+            [](const auto& a, const auto& b) {
+              return a[0] < b[0] ||
+                     (a[0] == b[0] &&
+                      (a[2] < b[2] ||
+                       (a[2] == b[2] &&
+                        (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
+            });
+  ASSERT_EQ(TextRecordId(0u), resW6(0, 0));
+  ASSERT_EQ(IntId(3u), resW6(0, 1));
+  ASSERT_EQ(V(0u), resW6(0, 2));
+  ASSERT_EQ(V(0u), resW6(0, 3));
+  ASSERT_EQ(WordVocabId(1u), resW6(0, 4));
+  ASSERT_EQ(WordVocabId(6u), resW6(0, 5));
+  ASSERT_EQ(TextRecordId(1u), resW6(1, 0));
+  ASSERT_EQ(IntId(3u), resW6(1, 1));
+  ASSERT_EQ(V(0u), resW6(1, 2));
+  ASSERT_EQ(V(0u), resW6(1, 3));
+  ASSERT_EQ(WordVocabId(1u), resW6(1, 4));
+  ASSERT_EQ(WordVocabId(9u), resW6(1, 5));
+  ASSERT_EQ(TextRecordId(2u), resW6(4, 0));
+  ASSERT_EQ(IntId(3u), resW6(4, 1));
+  ASSERT_EQ(V(0u), resW6(4, 2));
+  ASSERT_EQ(V(0u), resW6(4, 3));
+  ASSERT_EQ(WordVocabId(1u), resW6(4, 4));
+  ASSERT_EQ(WordVocabId(8u), resW6(4, 5));
+  ASSERT_EQ(TextRecordId(2u), resW6(7, 0));
+  ASSERT_EQ(IntId(1u), resW6(7, 1));
+  ASSERT_EQ(V(2u), resW6(7, 2));
+  ASSERT_EQ(V(0u), resW6(7, 3));
+  ASSERT_EQ(WordVocabId(5u), resW6(7, 4));
+  ASSERT_EQ(WordVocabId(9u), resW6(7, 5));
 }
