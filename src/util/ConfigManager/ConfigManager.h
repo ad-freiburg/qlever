@@ -11,9 +11,11 @@
 #include <any>
 #include <concepts>
 #include <optional>
+#include <ranges>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <typeinfo>
 #include <utility>
@@ -23,10 +25,12 @@
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigUtil.h"
+#include "util/ConfigManager/ValidatorConcept.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
+#include "util/StringUtils.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
@@ -50,6 +54,13 @@ class ConfigManager {
   using HashMapEntry =
       std::unique_ptr<std::variant<ConfigOption, ConfigManager>>;
   ad_utility::HashMap<std::string, HashMapEntry> configurationOptions_;
+
+  /*
+  List of the added validators. Whenever the values of the options are set,
+  they are called afterwards with `verifyWithValidators` to make sure, that the
+  new values are valid.
+  */
+  std::vector<std::function<bool(void)>> validators_;
 
  public:
   /*
@@ -171,6 +182,7 @@ class ConfigManager {
   at runtime.
   - If there are values for configuration options, that do not exist.
   - `j` is anything but a json object literal.
+  - Any of the validators returns false.
   */
   void parseConfig(const nlohmann::json& j);
 
@@ -196,6 +208,46 @@ class ConfigManager {
   value, a dummy value.
   */
   std::string printConfigurationDoc(bool printCurrentJsonConfiguration) const;
+
+  /*
+  @brief Add a function to the configuration manager for verifying, that the
+  values of the given configuration options are valid. Will always be called
+  after parsing.
+
+  @tparam ValidatorParameterTypes The types of the values in the
+  `validatorParameter`. Needed to interpreting them.
+
+  @param validatorFunction Checks, if the values of the given configuration
+  options are valid. Should return true, if they are valid.
+  @param errorMessage A `std::runtime_error` with this as an error message will
+  get thrown, if the `validatorFunction` returns false.
+  @param validatorParameter The configuration option, whos values will be passed
+  to the validator function as function arguments. Will keep the same order.
+  */
+  template <typename... ValidatorParameterTypes>
+  void addValidator(
+      Validator<ValidatorParameterTypes...> auto validatorFunction,
+      const std::string& errorMessage,
+      const std::same_as<ConfigOption> auto&... validatorParameter)
+      requires(sizeof...(validatorParameter) > 0 &&
+               sizeof...(ValidatorParameterTypes) ==
+                   sizeof...(validatorParameter)) {
+    /*
+    Add a function wrapper to our list of validators, that calls the
+    `validatorFunction` with the needed values and throws an exception, if the
+    `validatorFunction` returns false.
+    */
+    validators_.emplace_back(
+        [validatorFunction, errorMessage, &validatorParameter...]() {
+          if (!std::invoke(validatorFunction,
+                           validatorParameter.template getValue<
+                               std::decay_t<ValidatorParameterTypes>>()...)) {
+            throw std::runtime_error(errorMessage);
+          } else {
+            return true;
+          }
+        });
+  }
 
  private:
   FRIEND_TEST(ConfigManagerTest, ParseConfig);
@@ -308,5 +360,10 @@ class ConfigManager {
   static std::vector<std::pair<std::string, ReturnPointer>>
   configurationOptionsImpl(auto& configurationOptions,
                            std::string_view pathPrefix = "");
+
+  /*
+  @brief Call all the validators to check, if the current value is valid.
+  */
+  void verifyWithValidators() const;
 };
 }  // namespace ad_utility

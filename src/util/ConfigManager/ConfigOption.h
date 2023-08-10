@@ -77,8 +77,8 @@ class ConfigOption {
 
   /*
   List of the added validators. Whenever the value of this option is set,
-  they are called with `verifyWithValidators` to make sure, that the new value
-  is valid, before setting it.
+  they are called afterwards with `verifyWithValidators` to make sure, that the
+  new value is valid.
   */
   std::vector<std::function<bool(void)>> validators_;
 
@@ -318,6 +318,7 @@ class ConfigOption {
  private:
   FRIEND_TEST(ConfigOptionTest, AddValidator);
   FRIEND_TEST(ConfigOptionTest, AddValidatorExceptions);
+  FRIEND_TEST(ConfigManagerTest, AddValidator);
 
   /*
   @brief Return the string representation/name of the type, of the currently

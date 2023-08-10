@@ -308,6 +308,9 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
       throw ConfigOptionWasntSetException(key);
     }
   }
+
+  // Check with the validators, if all the new values are valid.
+  verifyWithValidators();
 }
 
 // ____________________________________________________________________________
@@ -428,4 +431,31 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
   return ad_utility::lazyStrJoin(unchangedFromDefaultConfigOptions, "\n");
 }
 
+// ____________________________________________________________________________
+void ConfigManager::verifyWithValidators() const {
+  // Check all the validators in sub managers.
+  std::ranges::for_each(
+      configurationOptions_,
+      [](auto pair) {
+        std::visit(
+            []<typename T>(T& var) {
+              // Nothing to do, if we are not looking at a config manager.
+              if constexpr (std::is_same_v<std::decay_t<T>, ConfigManager>) {
+                var.verifyWithValidators();
+              }
+            },
+            std::get<1>(pair));
+      },
+      [](auto& pair) {
+        // Make sure, that there is no null pointer.
+        AD_CORRECTNESS_CHECK(pair.second != nullptr);
+
+        // Return a dereferenced reference.
+        return std::tie(pair.first, *pair.second);
+      });
+
+  // Check all validators, that were directly registered.
+  std::ranges::for_each(validators_,
+                        [](auto& validator) { std::invoke(validator); });
+};
 }  // namespace ad_utility
