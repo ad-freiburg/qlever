@@ -53,8 +53,8 @@ given values to values created using the `createDummyValueForValidator`
 function.
 
 The following invariant should always be true, except for `bool`: A validator
-function with `variant` number $x$ returns true, for all `createDummyValue(y)`
-with $y >= x$. For all other values, it returns false.
+function with `variant` number $x$ returns false, when given
+`createDummyValue(x)`. Otherwise, it always returns true.
 
 @tparam ParameterType The parameter type for the parameter of the
 function.
@@ -65,21 +65,13 @@ what the exact difference is, see the code.
 */
 template <typename ParameterType>
 auto generateSingleParameterValidatorFunction(size_t variant) {
-  if constexpr (std::is_same_v<ParameterType, bool>) {
-    // Simple comparison.
+  if constexpr (std::is_same_v<ParameterType, bool> ||
+                std::is_same_v<ParameterType, std::string> ||
+                std::is_same_v<ParameterType, int> ||
+                std::is_same_v<ParameterType, size_t> ||
+                std::is_same_v<ParameterType, float>) {
     return [compareTo = createDummyValueForValidator<ParameterType>(variant)](
-               const bool& b) { return compareTo == b; };
-  } else if constexpr (std::is_same_v<ParameterType, std::string>) {
-    // Is the generated string a prefix of the given string?
-    return [compareTo = createDummyValueForValidator<ParameterType>(variant)](
-               const std::string& s) { return s.starts_with(compareTo); };
-  } else if constexpr (std::is_same_v<ParameterType, int> ||
-                       std::is_same_v<ParameterType, size_t> ||
-                       std::is_same_v<ParameterType, float>) {
-    // Is the generated generated number smaller/equal than the given
-    // one?
-    return [compareTo = createDummyValueForValidator<ParameterType>(variant)](
-               const ParameterType& n) { return n >= compareTo; };
+               const ParameterType& n) { return n != compareTo; };
   } else {
     // Must be a vector and we can go recursive.
     AD_CORRECTNESS_CHECK(ad_utility::isVector<ParameterType>);
@@ -87,19 +79,18 @@ auto generateSingleParameterValidatorFunction(size_t variant) {
     // Just call the validator function for the non-vector version of
     // the types on the elements of the vector.
     return [variant](const ParameterType& v) {
-      // If there are not enough elements, it can't pass all checks.
-      if (v.size() < variant + 1) {
-        return false;
+      if (v.size() != variant + 1) {
+        return true;
       }
 
       for (size_t i = 0; i < variant + 1; i++) {
-        if (!generateSingleParameterValidatorFunction<
+        if (generateSingleParameterValidatorFunction<
                 typename ParameterType::value_type>(i)(v.at(i))) {
-          return false;
+          return true;
         }
       }
 
-      return true;
+      return false;
     };
   }
 };

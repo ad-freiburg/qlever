@@ -408,8 +408,8 @@ TEST(ConfigOptionTest, AddValidator) {
                      " validator 1"));
     // Using the invariant of our function generator, to create valid and none
     // valid values for the test.
-    checkSet(option, createDummyValueForValidator<Type>(1),
-             createDummyValueForValidator<Type>(0),
+    checkSet(option, createDummyValueForValidator<Type>(0),
+             createDummyValueForValidator<Type>(1),
              absl::StrCat(ConfigOption::availableTypesToString<Type>(),
                           " validator 1"));
 
@@ -426,8 +426,8 @@ TEST(ConfigOptionTest, AddValidator) {
             generateSingleParameterValidatorFunction<Type>(i * 2 + 1),
             absl::StrCat(ConfigOption::availableTypesToString<Type>(),
                          " validator ", i * 2 + 1));
-        checkSet(option, createDummyValueForValidator<Type>(1),
-                 createDummyValueForValidator<Type>(0),
+        checkSet(option, createDummyValueForValidator<Type>(0),
+                 createDummyValueForValidator<Type>(1),
                  absl::StrCat(ConfigOption::availableTypesToString<Type>(),
                               " validator 1"));
       } else {
@@ -440,8 +440,8 @@ TEST(ConfigOptionTest, AddValidator) {
         // none valid values for all added validators.
         for (size_t validatorNumber = 1; validatorNumber <= i;
              validatorNumber++) {
-          checkSet(option, createDummyValueForValidator<Type>(i),
-                   createDummyValueForValidator<Type>(validatorNumber - 1),
+          checkSet(option, createDummyValueForValidator<Type>(i + 1),
+                   createDummyValueForValidator<Type>(validatorNumber),
                    absl::StrCat(ConfigOption::availableTypesToString<Type>(),
                                 " validator ", validatorNumber));
         }
