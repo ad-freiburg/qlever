@@ -1095,76 +1095,6 @@ TEST(ConfigManagerTest, AddValidator) {
   callGivenLambdaWithAllCombinationsOfTypes.template operator()<2>(
       doDoubleParameterTests, callGivenLambdaWithAllCombinationsOfTypes);
 
-  // Does all tests for validators with three parameter types, for the given
-  // type combination.
-  auto doTripleParameterTests = [&doTestNoValidatorInSubManager,
-                                 &doTestAlwaysValidatorInSubManager]<typename Type1, typename Type2,
-                                                                     typename Type3>() {
-    // Variables needed for configuration options.
-    Type1 firstVar;
-    Type2 secondVar;
-    Type3 thirdVar;
-
-    // No sub manager.
-    ConfigManager mNoSub;
-    ConfigOption& mNoSubOption1 = mNoSub.addOption("someValue1", "", &firstVar);
-    ConfigOption& mNoSubOption2 = mNoSub.addOption("someValue2", "", &secondVar);
-    ConfigOption& mNoSubOption3 = mNoSub.addOption("someValue3", "", &thirdVar);
-    doTestNoValidatorInSubManager.template operator()<Type1, Type2, Type3>(
-        mNoSub, nlohmann::json(nlohmann::json::value_t::object),
-        std::make_pair(nlohmann::json::json_pointer("/someValue1"), &mNoSubOption1),
-        std::make_pair(nlohmann::json::json_pointer("/someValue2"), &mNoSubOption2),
-        std::make_pair(nlohmann::json::json_pointer("/someValue3"), &mNoSubOption3));
-
-    // With sub manager. Sub manager has no validators of its own.
-    ConfigManager mSubNoValidator;
-    ConfigManager& mSubNoValidatorSub = mSubNoValidator.addSubManager({"some"s, "manager"s});
-    ConfigOption& mSubNoValidatorOption1 =
-        mSubNoValidatorSub.addOption("someValue1", "", &firstVar);
-    ConfigOption& mSubNoValidatorOption2 =
-        mSubNoValidatorSub.addOption("someValue2", "", &secondVar);
-    ConfigOption& mSubNoValidatorOption3 =
-        mSubNoValidatorSub.addOption("someValue3", "", &thirdVar);
-    doTestNoValidatorInSubManager.template operator()<Type1, Type2, Type3>(
-        mSubNoValidator, nlohmann::json(nlohmann::json::value_t::object),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue1"),
-                       &mSubNoValidatorOption1),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue2"),
-                       &mSubNoValidatorOption2),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue3"),
-                       &mSubNoValidatorOption3));
-
-    /*
-    With sub manager.
-    Covers the following cases:
-    - Sub manager has validators of its own, however the manager does not.
-    - Sub manager has validators of its own, as does the manager.
-    */
-    ConfigManager mSubWithValidator;
-    ConfigManager& mSubWithValidatorSub = mSubWithValidator.addSubManager({"some"s, "manager"s});
-    ConfigOption& mSubWithValidatorOption1 =
-        mSubWithValidatorSub.addOption("someValue1", "", &firstVar);
-    ConfigOption& mSubWithValidatorOption2 =
-        mSubWithValidatorSub.addOption("someValue2", "", &secondVar);
-    ConfigOption& mSubWithValidatorOption3 =
-        mSubWithValidatorSub.addOption("someValue3", "", &thirdVar);
-    doTestAlwaysValidatorInSubManager.template operator()<Type1, Type2, Type3>(
-        mSubWithValidator, mSubWithValidatorSub, nlohmann::json(nlohmann::json::value_t::object),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue1"),
-                       &mSubWithValidatorOption1),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue2"),
-                       &mSubWithValidatorOption2),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue3"),
-                       &mSubWithValidatorOption3));
-  };
-
-  // TODO This increases compilation time by a huge margin (around 8 minutes).
-  // Take a look, if the performance can be improved.
-  /*
-  callGivenLambdaWithAllCombinationsOfTypes.template operator()<3>(
-      doTripleParameterTests, callGivenLambdaWithAllCombinationsOfTypes);
-  */
-
   // Testing, if validators with different parameter types work, when added to
   // the same config manager.
   auto doDifferentParameterTests = [&addValidatorToConfigManager,
@@ -1278,17 +1208,6 @@ TEST(ConfigManagerTest, AddValidator) {
         mValidatorSubValidator,
         std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue1"), 1),
         std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue2"), 1));
-
-    /*
-    TODO If possible, find a way to also test the following cases:
-    - All combinations of all possible double parameter type validator function
-    with all possible single parameter type validator functions.
-    - All combinations of all possible double parameter type validator function
-    with all possible double parameter type validator functions.
-
-    Currently, those are WAY to expensive in terms of needed compilation and
-    test runtime.
-    */
   };
 
   callGivenLambdaWithAllCombinationsOfTypes.template operator()<2>(
