@@ -24,6 +24,7 @@
 
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigOption.h"
+#include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConfigManager/ConfigUtil.h"
 #include "util/ConfigManager/ValidatorConcept.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"

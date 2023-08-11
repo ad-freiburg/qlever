@@ -100,6 +100,13 @@ class ConfigOption {
   */
   bool wasSet() const;
 
+  // Returns, if this configuration option holds values of the given type.
+  template <typename Type>
+  requires ad_utility::isTypeContainedIn<Type, ConfigOption::AvailableTypes>
+  constexpr bool holdsType() const {
+    return std::holds_alternative<Data<Type>>(data_);
+  }
+
   /*
   @brief Sets the variable, that the internal pointer points to. Throws an
   exception, should the given value have a different type, than what the
@@ -136,7 +143,7 @@ class ConfigOption {
   template <typename T>
   requires ad_utility::isTypeContainedIn<T, AvailableTypes>
   std::decay_t<T> getDefaultValue() const {
-    if (hasDefaultValue() && std::holds_alternative<Data<T>>(data_)) {
+    if (hasDefaultValue() && holdsType<T>()) {
       return std::get<Data<T>>(data_).defaultValue_.value();
     } else if (!hasDefaultValue()) {
       throw ConfigOptionValueNotSetException(identifier_, "default value");
@@ -165,7 +172,7 @@ class ConfigOption {
   */
   template <typename T>
   requires ad_utility::isTypeContainedIn<T, AvailableTypes> T getValue() const {
-    if (wasSet() && std::holds_alternative<Data<T>>(data_)) {
+    if (wasSet() && holdsType<T>()) {
       return *(std::get<Data<T>>(data_).variablePointer_);
     } else if (!wasSet()) {
       throw ConfigOptionValueNotSetException(identifier_, "value");

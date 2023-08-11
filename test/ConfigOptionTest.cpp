@@ -486,4 +486,23 @@ TEST(ConfigOptionTest, AddValidatorExceptions) {
 
   doForTypeInConfigOptionValueType(doTest);
 }
+
+TEST(ConfigOptionTest, HoldsType) {
+  // Test for `configOption` with the given type.
+  auto doTest = []<typename CorrectType>() {
+    // Correct type.
+    CorrectType var;
+    const ConfigOption opt("testOption", "", &var);
+    ASSERT_TRUE(opt.holdsType<CorrectType>());
+
+    // Wrong type.
+    doForTypeInConfigOptionValueType([&opt]<typename WrongType>() {
+      if constexpr (!std::is_same_v<CorrectType, WrongType>) {
+        ASSERT_FALSE(opt.holdsType<WrongType>());
+      }
+    });
+  };
+
+  doForTypeInConfigOptionValueType(doTest);
+}
 }  // namespace ad_utility
