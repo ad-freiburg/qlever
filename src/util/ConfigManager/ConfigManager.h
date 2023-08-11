@@ -84,9 +84,10 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConfigOption& addOption(const std::vector<std::string>& pathToOption,
-                          std::string_view optionDescription,
-                          OptionType* variableToPutValueOfTheOptionIn) {
+  ConfigOptionProxy<OptionType> addOption(
+      const std::vector<std::string>& pathToOption,
+      std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn) {
     return addOptionImpl(pathToOption, optionDescription,
                          variableToPutValueOfTheOptionIn,
                          std::optional<OptionType>(std::nullopt));
@@ -114,10 +115,11 @@ class ConfigManager {
             std::same_as<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConfigOption& addOption(const std::vector<std::string>& pathToOption,
-                          std::string_view optionDescription,
-                          OptionType* variableToPutValueOfTheOptionIn,
-                          DefaultValueType defaultValue) {
+  ConfigOptionProxy<OptionType> addOption(
+      const std::vector<std::string>& pathToOption,
+      std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn,
+      DefaultValueType defaultValue) {
     return addOptionImpl(pathToOption, optionDescription,
                          variableToPutValueOfTheOptionIn,
                          std::optional<OptionType>(std::move(defaultValue)));
@@ -134,9 +136,9 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConfigOption& addOption(std::string optionName,
-                          std::string_view optionDescription,
-                          OptionType* variableToPutValueOfTheOptionIn) {
+  ConfigOptionProxy<OptionType> addOption(
+      std::string optionName, std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn) {
     return addOption<OptionType>(
         std::vector<std::string>{std::move(optionName)}, optionDescription,
         variableToPutValueOfTheOptionIn);
@@ -154,10 +156,10 @@ class ConfigManager {
             std::same_as<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConfigOption& addOption(std::string optionName,
-                          std::string_view optionDescription,
-                          OptionType* variableToPutValueOfTheOptionIn,
-                          DefaultValueType defaultValue) {
+  ConfigOptionProxy<OptionType> addOption(
+      std::string optionName, std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn,
+      DefaultValueType defaultValue) {
     return addOption<OptionType>(
         std::vector<std::string>{std::move(optionName)}, optionDescription,
         variableToPutValueOfTheOptionIn, std::move(defaultValue));
@@ -216,20 +218,21 @@ class ConfigManager {
   after parsing.
 
   @tparam ValidatorParameterTypes The types of the values in the
-  `validatorParameter`. Needed to interpreting them.
+  `validatorParameter`. Can be left up to type deduction.
 
   @param validatorFunction Checks, if the values of the given configuration
   options are valid. Should return true, if they are valid.
   @param errorMessage A `std::runtime_error` with this as an error message will
   get thrown, if the `validatorFunction` returns false.
-  @param validatorParameter The configuration option, whos values will be passed
-  to the validator function as function arguments. Will keep the same order.
+  @param validatorParameter Proxies for the configuration options, whos values
+  will be passed to the validator function as function arguments. Will keep the
+  same order.
   */
   template <typename... ValidatorParameterTypes>
   void addValidator(
       Validator<ValidatorParameterTypes...> auto validatorFunction,
       const std::string& errorMessage,
-      const std::same_as<ConfigOption> auto&... validatorParameter)
+      const ConfigOptionProxy<ValidatorParameterTypes>... validatorParameter)
       requires(sizeof...(validatorParameter) > 0 &&
                sizeof...(ValidatorParameterTypes) ==
                    sizeof...(validatorParameter)) {
@@ -238,16 +241,17 @@ class ConfigManager {
     `validatorFunction` with the needed values and throws an exception, if the
     `validatorFunction` returns false.
     */
-    validators_.emplace_back(
-        [validatorFunction, errorMessage, &validatorParameter...]() {
-          if (!std::invoke(validatorFunction,
-                           validatorParameter.template getValue<
+    validators_.emplace_back([validatorFunction, errorMessage,
+                              validatorParameter...]() {
+      if (!std::invoke(validatorFunction,
+                       validatorParameter.getConfigOption()
+                           .template getValue<
                                std::decay_t<ValidatorParameterTypes>>()...)) {
-            throw std::runtime_error(errorMessage);
-          } else {
-            return true;
-          }
-        });
+        throw std::runtime_error(errorMessage);
+      } else {
+        return true;
+      }
+    });
   }
 
  private:
@@ -310,16 +314,17 @@ class ConfigManager {
   option MUST be given at runtime.
 
   @return A reference to the newly created configuration option. Will stay
-  valid, even after more options.
+  valid, even after more options were added.
   */
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConfigOption& addOptionImpl(const std::vector<std::string>& pathToOption,
-                              std::string_view optionDescription,
-                              OptionType* variableToPutValueOfTheOptionIn,
-                              std::optional<OptionType> defaultValue =
-                                  std::optional<OptionType>(std::nullopt)) {
+  ConfigOptionProxy<OptionType> addOptionImpl(
+      const std::vector<std::string>& pathToOption,
+      std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn,
+      std::optional<OptionType> defaultValue =
+          std::optional<OptionType>(std::nullopt)) {
     verifyPath(pathToOption);
     addConfigOption(
         pathToOption,
@@ -331,8 +336,8 @@ class ConfigManager {
     move constructor. Which is why, we can't just return the `ConfigOption`
     we created here.
     */
-    return std::get<ConfigOption>(
-        *configurationOptions_.at(createJsonPointerString(pathToOption)));
+    return ConfigOptionProxy<OptionType>{std::get<ConfigOption>(
+        *configurationOptions_.at(createJsonPointerString(pathToOption)))};
   }
 
   /*

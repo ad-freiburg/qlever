@@ -18,13 +18,13 @@ namespace ad_utility {
 template <typename T>
 requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes>
 class ConfigOptionProxy {
-  ConfigOption* option_;
+  ConfigOption* option_ = nullptr;
 
  public:
   using Type = T;
 
   // Custom constructor.
-  ConfigOptionProxy(ConfigOption& opt) : option_(&opt) {
+  explicit ConfigOptionProxy(ConfigOption& opt) : option_(&opt) {
     // Make sure, that the given `ConfigOption` holds values of the right type.
     if (!opt.holdsType<T>()) {
       throw std::runtime_error(absl::StrCat(
@@ -36,7 +36,11 @@ class ConfigOptionProxy {
   }
 
   // Get access to the configuration option, this is a proxy for.
-  ConfigOption& getConfigOption() const {
+  const ConfigOption& getConfigOption() const {
+    AD_CORRECTNESS_CHECK(option_ != nullptr);
+    return *option_;
+  }
+  ConfigOption& getConfigOption() {
     AD_CORRECTNESS_CHECK(option_ != nullptr);
     return *option_;
   }
