@@ -121,12 +121,18 @@ inline std::pair<ValueId, ValueId> getRangeFromVocab(
       context->_qec.getIndex().getVocab().upper_bound(s, level));
   return {lower, upper};
 }
+
+// A concept for various types that either represent a string, an ID or a
+// consecutive range of IDs. For its usage see below.
 template <typename S>
-concept StoresStringOrId = ad_utility::isTypeAnyOf<S, ValueId, std::string, IdOrString, std::pair<Id, Id>>;
+concept StoresStringOrId =
+    ad_utility::isTypeAnyOf<S, ValueId, std::string, IdOrString,
+                            std::pair<Id, Id>>;
 // Convert a string or `IdOrString` value into the (possibly empty) range of
-// corresponding `ValueIds`. (see `getRangeFromVocab` above). This function also
-// takes `ValueId`s and `pair<ValuedId, ValueId>` which are simply returned
-// unchanged. This makes the usage of this function easier.
+// corresponding `ValueIds` (denoted by a `std::pair<Id, Id>`, see
+// `getRangeFromVocab` above for details). This function also takes `ValueId`s
+// and `pair<ValuedId, ValueId>` which are simply returned unchanged. This makes
+// the usage of this function easier.
 template <StoresStringOrId S>
 auto makeValueId(const S& value, const EvaluationContext* context) {
   if constexpr (ad_utility::isSimilar<S, ValueId>) {
@@ -137,6 +143,8 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
     auto visitor = [context](const auto& x) {
       auto res = makeValueId(x, context);
       if constexpr (ad_utility::isSimilar<decltype(res), Id>) {
+        // We need the same return type on all cases when visiting a variant, so
+        // we need to
         return std::pair{res, res};
       } else {
         return res;
@@ -191,8 +199,10 @@ inline const auto compareIdsOrStrings =
           comparisonForIncompatibleTypes>(
           y, x.first, x.second, getComparisonForSwappedArguments(Comp));
     } else {
-      // static_assert(ad_utility::alwaysFalse<decltype(x)>);
-      static_assert(ad_utility::alwaysFalse<decltype(y)>);
+      // The `variant` is so that both types are shown in the compiler error
+      // message once the `static_assert` fails.
+      static_assert(
+          ad_utility::alwaysFalse<std::variant<decltype(x), decltype(y)>>);
     }
   }
 };

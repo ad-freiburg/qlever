@@ -15,22 +15,30 @@ class StrExpression : public StrExpressionImpl {
   bool isStrExpression() const override { return true; }
 };
 
+// Template for an expression that works on string literals. The arguments are
+// the same as those to `NaryExpression` with the difference that the value
+// getter is deduced automatically. If the child of the expression is the
+// `STR()` expression, then the `StringValueGetter` will be used (which also
+// returns string values for IRIs, numeric literals, etc.), otherwise the
+// `LiteralFromIdGetter` is used (which returns `std::nullopt` for these cases.
 template <size_t N, typename Function>
 class StringExpressionImpl : public SparqlExpression {
  private:
-  using WithStrImpl = NARY<N, FV<Function, StringValueGetter>>;
-  using WithoutStrImpl = NARY<N, FV<Function, LiteralFromIdGetter>>;
+  using ExpressionWithStr = NARY<N, FV<Function, StringValueGetter>>;
+  using ExpressionWithoutStr = NARY<N, FV<Function, LiteralFromIdGetter>>;
 
   SparqlExpression::Ptr impl_;
 
  public:
-  StringExpressionImpl(SparqlExpression::Ptr child) {
+  explicit StringExpressionImpl(SparqlExpression::Ptr child) {
     AD_CORRECTNESS_CHECK(child != nullptr);
     if (child->isStrExpression()) {
-      impl_ = std::make_unique<WithStrImpl>(
-          std::move(std::move(*child).moveChildrenOut().at(0)));
+      auto childrenOfStr = std::move(*child).moveChildrenOut();
+      AD_CORRECTNESS_CHECK(childrenOfStr.size() == 1);
+      impl_ =
+          std::make_unique<ExpressionWithStr>(std::move(childrenOfStr.at(0)));
     } else {
-      impl_ = std::make_unique<WithoutStrImpl>(std::move(child));
+      impl_ = std::make_unique<ExpressionWithoutStr>(std::move(child));
     }
   }
 
@@ -42,7 +50,7 @@ class StringExpressionImpl : public SparqlExpression {
   }
 
  private:
-  std::span<SparqlExpression::Ptr> children() override {
+  std::span<SparqlExpression::Ptr> childrenImpl() override {
     return impl_->children();
   }
 };
@@ -52,7 +60,7 @@ inline auto strlen = [](std::optional<std::string> s) {
   if (!s.has_value()) {
     return Id::makeUndefined();
   }
-  return Id::makeFromInt(s.value().size());
+  return Id::makeFromInt(static_cast<int64_t>(s.value().size()));
 };
 using StrlenExpression = StringExpressionImpl<1, decltype(strlen)>;
 

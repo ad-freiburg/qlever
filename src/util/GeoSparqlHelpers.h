@@ -27,8 +27,7 @@ double wktDistImpl(const std::string_view point1,
 }  // namespace detail
 
 // Parse the longitude coordinate from a WKT point (it's the first coordinate).
-inline auto wktLongitude =
-    [](const std::optional<std::string>& point) -> double {
+inline auto wktLongitude = [](const std::optional<std::string>& point) {
   if (!point.has_value()) {
     return std::numeric_limits<double>::quiet_NaN();
   }
@@ -36,8 +35,7 @@ inline auto wktLongitude =
 };
 
 // Parse the latitute coordinate from a WKT point (it's the second coordinate).
-inline auto wktLatitude =
-    [](const std::optional<std::string>& point) -> double {
+inline auto wktLatitude = [](const std::optional<std::string>& point) {
   if (!point.has_value()) {
     return std::numeric_limits<double>::quiet_NaN();
   }
@@ -49,7 +47,7 @@ inline auto wktLatitude =
 // projected to a plane"). A more precise way is the Haversine formula, which we
 // save for when we compute this at indexing time.
 inline auto wktDist = [](const std::optional<std::string>& point1,
-                         const std::optional<std::string>& point2) -> double {
+                         const std::optional<std::string>& point2) {
   if (!point1.has_value() || !point2.has_value()) {
     return std::numeric_limits<double>::quiet_NaN();
   }

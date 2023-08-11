@@ -162,7 +162,7 @@ string RegexExpression::getCacheKey(
 }
 
 // ___________________________________________________________________________
-std::span<SparqlExpression::Ptr> RegexExpression::children() {
+std::span<SparqlExpression::Ptr> RegexExpression::childrenImpl() {
   return {&child_, 1};
 }
 

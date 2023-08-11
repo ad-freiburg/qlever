@@ -136,12 +136,15 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
   VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(resultSize);
 
+  // TODO<joka921> Make this simpler by factoring out the whole binary search
+  // stuff.
   if constexpr (ad_utility::isSimilar<S1, Variable> && isConstantResult<S2>) {
     auto impl = [&](const auto& value2) -> std::optional<ExpressionResult> {
       auto columnIndex = context->getColumnIndexForVariable(value1);
       auto valueId = makeValueId(value2, context);
-      const auto& cols = context->_columnsByWhichResultIsSorted;
-      if (!cols.empty() && cols[0] == columnIndex) {
+      // TODO<C++23> Use `std::ranges::starts_with`.
+      if (const auto& cols = context->_columnsByWhichResultIsSorted;
+          !cols.empty() && cols[0] == columnIndex) {
         constexpr static bool value2IsString =
             !ad_utility::isSimilar<decltype(valueId), Id>;
         if constexpr (value2IsString) {
@@ -182,11 +185,11 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
                                 AlwaysUndef>(x, y, context)));
       }
     };
-    auto base = []<typename I>(const I& i) -> decltype(auto) {
+    auto base = []<typename I>(const I& arg) -> decltype(auto) {
       if constexpr (ad_utility::isSimilar<IdOrString, I>) {
-        return static_cast<const IdOrStringBase&>(i);
+        return static_cast<const IdOrStringBase&>(arg);
       } else {
-        return i;
+        return arg;
       }
     };
     ad_utility::visitWithVariantsAndParameters(impl, base(*itA), base(*itB));
@@ -266,7 +269,7 @@ string RelationalExpression<Comp>::getCacheKey(
 
 // _____________________________________________________________________________
 template <Comparison Comp>
-std::span<SparqlExpression::Ptr> RelationalExpression<Comp>::children() {
+std::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
   return {children_.data(), children_.size()};
 }
 

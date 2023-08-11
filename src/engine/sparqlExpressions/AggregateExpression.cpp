@@ -37,7 +37,7 @@ AggregateExpression<AggregateOperation, FinalOperation>::evaluate(
 // _________________________________________________________________________
 template <typename AggregateOperation, typename FinalOperation>
 std::span<SparqlExpression::Ptr>
-AggregateExpression<AggregateOperation, FinalOperation>::children() {
+AggregateExpression<AggregateOperation, FinalOperation>::childrenImpl() {
   return {&_child, 1};
 }
 
@@ -80,10 +80,5 @@ template class AggregateExpression<
 INSTANTIATE_AGG_EXP(decltype(count), IsValidValueGetter);
 INSTANTIATE_AGG_EXP(decltype(minLambdaForAllTypes), ActualValueGetter);
 INSTANTIATE_AGG_EXP(decltype(maxLambdaForAllTypes), ActualValueGetter);
-/*
-
-// Needed for the GroupConcatExpression
-INSTANTIATE_AGG_EXP(PerformConcat, StringValueGetter);
- */
 }  // namespace detail
 }  // namespace sparqlExpression

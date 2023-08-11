@@ -90,13 +90,13 @@ struct EffectiveBooleanValueGetter {
   Result operator()(ValueId id, const EvaluationContext*) const;
 
   // Nonempty strings are true.
-  Result operator()(std::string s, const EvaluationContext*) const {
+  Result operator()(const std::string& s, const EvaluationContext*) const {
     return s.empty() ? Result::False : Result::True;
   }
 
-  Result operator()(IdOrString s, const EvaluationContext* ctx) const {
-    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
-                      std::move(s));
+  Result operator()(const IdOrString& s, const EvaluationContext* ctx) const {
+    return std::visit(
+        [this, ctx](const auto& el) { return operator()(el, ctx); }, s);
   }
 };
 
@@ -149,7 +149,7 @@ struct LiteralFromIdGetter {
                                    const EvaluationContext*) const {
     // TODO<joka921> `string` should be a type that is aware of Literals vs
     // strings.
-    return std::move(s);
+    return s;
   }
 
   std::optional<string> operator()(IdOrString s,

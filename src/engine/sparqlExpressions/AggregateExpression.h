@@ -33,9 +33,6 @@ class AggregateExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override;
-
-  // _________________________________________________________________________
   vector<Variable> getUnaggregatedVariables() override;
 
   // An `AggregateExpression` (obviously) contains an aggregate.
@@ -109,7 +106,7 @@ class AggregateExpression : public SparqlExpression {
       ad_utility::HashSetWithMemoryLimit<
           typename decltype(operands)::value_type>
           uniqueHashSet(inputSize, context->_allocator);
-      for (auto&& el : ops) {
+      for (auto& el : ops) {
         if (uniqueHashSet.insert(el).second) {
           auto elForYielding = std::move(el);
           co_yield elForYielding;
@@ -143,12 +140,21 @@ class AggregateExpression : public SparqlExpression {
         return impl(std::move(operands));
       }
     }();
+
+    // Currently the intermediate results can be ras `double` or `int` values
+    // which then have to be converted to an ID again.
+    // TODO<joka921> Check if this is really necessary, or if we can also use
+    // IDs in the intermediate steps without loss of efficiency.
     if constexpr (requires { makeNumericId(result); }) {
       return makeNumericId(result);
     } else {
       return result;
     }
   };
+
+ private:
+  // _________________________________________________________________________
+  std::span<SparqlExpression::Ptr> childrenImpl() override;
 
  protected:
   bool _distinct;

@@ -50,13 +50,16 @@ class VectorWithMemoryLimit
   }
 };
 
+// A class to store the results of expressions that can yield strings or IDs as
+// their result. It is also used for expressions that can only yield strings. It
+// is currently implemented as a thin wrapper around a `variant`, but a more
+// sophisticated implementation could be done in the future.
 using IdOrStringBase = std::variant<ValueId, std::string>;
-
 class IdOrString : public IdOrStringBase,
                    public VisitMixin<IdOrString, IdOrStringBase> {
  public:
   using IdOrStringBase::IdOrStringBase;
-  IdOrString(std::optional<std::string> s) {
+  explicit IdOrString(std::optional<std::string> s) {
     if (s.has_value()) {
       emplace<std::string>(std::move(s.value()));
     } else {
@@ -237,19 +240,23 @@ struct EvaluationContext {
 
 namespace detail {
 /// Get Id of constant result of type T.
-template <typename T, typename LocalVocabT>
+template <SingleExpressionResult T, typename LocalVocabT>
+requires isConstantResult<T>
 Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
-  // TODO<joka921> Reinstate the asserts.
-  // static_assert(isConstantResult<T>);
-  if constexpr (ad_utility::isSimilar<T, string>) {
-    return Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(std::forward<T>(result)));
-  } else if constexpr (ad_utility::isSimilar<T, Id>) {
+  if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
   } else if constexpr (ad_utility::isSimilar<T, IdOrString>) {
     return std::visit(
-        [&localVocab](auto&& result) {
-          return constantExpressionResultToId(AD_FWD(result), localVocab);
+        [&localVocab]<typename R>(R&& el) mutable {
+          // TODO<joka921> Should we also look in the vocabulary for the new
+          // strings?
+          if constexpr (ad_utility::isSimilar<R, string>) {
+            return Id::makeFromLocalVocabIndex(
+                localVocab.getIndexAndAddIfNotContained(std::forward<R>(el)));
+          } else {
+            static_assert(ad_utility::isSimilar<R, Id>);
+            return el;
+          }
         },
         AD_FWD(result));
   } else {
