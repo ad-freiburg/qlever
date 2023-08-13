@@ -800,24 +800,6 @@ TEST(ConfigManagerTest, AddValidator) {
   };
 
   /*
-  @brief Build a validator with more than one parameter, out of results from
-  `generateSingleParameterValidatorFunction` in such a way, that it keeps the
-  invariant of `generateSingleParameterValidatorFunction`.
-
-  @tparam Ts The parameter types for the function arguments of the validator.
-  The generated function will have the arguments `const Ts&...`.
-
-  @param variant See `generateSingleParameterValidatorFunction`.
-  */
-  auto generateValidator = [&adjustVariantArgument]<typename... Ts>(size_t variant) {
-    return [variant, &adjustVariantArgument](const Ts&... args) {
-      return (generateSingleParameterValidatorFunction<Ts>(
-                  adjustVariantArgument.template operator()<Ts>(variant))(args) ||
-              ...);
-    };
-  };
-
-  /*
   @brief Generate an informative validator name in the form of `Config manager
   validator<x> y`. With `x` being the list of function argument types and `y` an
   unqiue number id.
@@ -834,8 +816,9 @@ TEST(ConfigManagerTest, AddValidator) {
   };
 
   /*
-  @brief Add a validator, created via `generateValidator` and named via
-  `generateValidatorName`, to the given config manager.
+  @brief Generate and add a validator, which follows the invariant of
+  `generateSingleParameterValidatorFunction` and was named via `generateValidatorName`, to the given
+  config manager.
 
   @tparam Ts The parameter types for the validator functions.
 
@@ -845,13 +828,18 @@ TEST(ConfigManagerTest, AddValidator) {
   passed as arguments to the validator function, in the same order as given
   here.
   */
-  auto addValidatorToConfigManager = [&generateValidator, &generateValidatorName ]<typename... Ts>(
-      size_t variant, ConfigManager & m, const ConfigOptionProxy<Ts>... validatorArguments)
-      requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+  auto addValidatorToConfigManager =
+      [&generateValidatorName, &adjustVariantArgument ]<typename... Ts>(
+          size_t variant, ConfigManager & m, const ConfigOptionProxy<Ts>... validatorArguments)
+          requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
     // Add the new validator
-    m.addValidator(generateValidator.template operator()<Ts...>(variant),
-                   generateValidatorName.template operator()<Ts...>(variant),
-                   validatorArguments...);
+    m.addValidator(
+        [variant, &adjustVariantArgument](const Ts&... args) {
+          return (generateSingleParameterValidatorFunction<Ts>(
+                      adjustVariantArgument.template operator()<Ts>(variant))(args) ||
+                  ...);
+        },
+        generateValidatorName.template operator()<Ts...>(variant), validatorArguments...);
   };
 
   /*
