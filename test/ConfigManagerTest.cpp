@@ -1211,4 +1211,69 @@ TEST(ConfigManagerTest, AddValidator) {
       doDifferentParameterTests, callGivenLambdaWithAllCombinationsOfTypes);
 }
 
+TEST(ConfigManagerTest, AddValidatorException) {
+  /*
+  Test, if there is an exception, when we give `addValidator` configuration options, that are not
+  contained in the corresponding configuration manager.
+  */
+  auto doValidatorParameterNotInConfigManagerTest = []<typename T>() {
+    // Variable for the configuration options.
+    T var{};
+
+    // Dummy validator function.
+    auto validatorDummyFunction = [](const T&) { return true; };
+
+    /*
+    @brief Check, if a call to the `addValidator` function behaves as wanted.
+    */
+    auto checkAddValidatorBehavior = [&validatorDummyFunction](
+                                         ConfigManager& m, const ConfigOptionProxy<T> validOption,
+                                         const ConfigOptionProxy<T> notValidOption) {
+      ASSERT_NO_THROW(m.addValidator(validatorDummyFunction, "", validOption));
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          m.addValidator(validatorDummyFunction, notValidOption.getConfigOption().getIdentifier(),
+                         notValidOption),
+          ::testing::ContainsRegex(notValidOption.getConfigOption().getIdentifier()));
+    };
+
+    // An outside configuration option.
+    ConfigOption outsideOption("outside", "", &var);
+    ConfigOptionProxy<T> outsideOptionProxy(outsideOption);
+
+    // No sub manager.
+    ConfigManager mNoSub;
+    decltype(auto) mNoSubOption = mNoSub.addOption("someOption", "", &var);
+    checkAddValidatorBehavior(mNoSub, mNoSubOption, outsideOptionProxy);
+
+    // With sub manager.
+    ConfigManager mWithSub;
+    decltype(auto) mWithSubOption = mWithSub.addOption("someTopOption", "", &var);
+    ConfigManager& mWithSubSub = mWithSub.addSubManager({"Some"s, "manager"s});
+    decltype(auto) mWithSubSubOption = mWithSubSub.addOption("someSubOption", "", &var);
+    checkAddValidatorBehavior(mWithSub, mWithSubOption, outsideOptionProxy);
+    checkAddValidatorBehavior(mWithSub, mWithSubSubOption, outsideOptionProxy);
+    checkAddValidatorBehavior(mWithSubSub, mWithSubSubOption, outsideOptionProxy);
+    checkAddValidatorBehavior(mWithSubSub, mWithSubSubOption, mWithSubOption);
+
+    // With 2 sub manager.
+    ConfigManager mWith2Sub;
+    decltype(auto) mWith2SubOption = mWith2Sub.addOption("someTopOption", "", &var);
+    ConfigManager& mWith2SubSub1 = mWith2Sub.addSubManager({"Some"s, "manager"s});
+    decltype(auto) mWith2SubSub1Option = mWith2SubSub1.addOption("someSubOption1", "", &var);
+    ConfigManager& mWith2SubSub2 = mWith2Sub.addSubManager({"Some"s, "other"s, "manager"s});
+    decltype(auto) mWith2SubSub2Option = mWith2SubSub2.addOption("someSubOption2", "", &var);
+    checkAddValidatorBehavior(mWith2Sub, mWith2SubOption, outsideOptionProxy);
+    checkAddValidatorBehavior(mWith2Sub, mWith2SubSub1Option, outsideOptionProxy);
+    checkAddValidatorBehavior(mWith2Sub, mWith2SubSub2Option, outsideOptionProxy);
+    checkAddValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option, outsideOptionProxy);
+    checkAddValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option, mWith2SubOption);
+    checkAddValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option, mWith2SubSub2Option);
+    checkAddValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, outsideOptionProxy);
+    checkAddValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, mWith2SubOption);
+    checkAddValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, mWith2SubSub1Option);
+  };
+
+  doForTypeInConfigOptionValueType(doValidatorParameterNotInConfigManagerTest);
+}
+
 }  // namespace ad_utility

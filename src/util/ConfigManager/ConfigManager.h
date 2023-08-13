@@ -13,6 +13,7 @@
 #include <optional>
 #include <ranges>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -231,17 +232,34 @@ class ConfigManager {
   template <typename... ValidatorParameterTypes>
   void addValidator(
       Validator<ValidatorParameterTypes...> auto validatorFunction,
-      const std::string& errorMessage,
+      std::string_view errorMessage,
       const ConfigOptionProxy<ValidatorParameterTypes>... validatorParameter)
       requires(sizeof...(validatorParameter) > 0 &&
                sizeof...(ValidatorParameterTypes) ==
                    sizeof...(validatorParameter)) {
+    // Check, if we contain all the configuration options, that were given us.
+    const auto allOptions = configurationOptions();
+    auto checkIfContainOption = [allOptionsValues = std::views::values(
+                                     allOptions)]<typename T>(
+                                    const ConfigOptionProxy<T> opt) {
+      if (std::ranges::find(allOptionsValues, &opt.getConfigOption()) ==
+          allOptionsValues.end()) {
+        throw std::runtime_error(absl::StrCat(
+            "Error while adding validator: The given configuration option '",
+            opt.getConfigOption().getIdentifier(),
+            "' is not contained in the configuration manager, or its sub "
+            "managers."));
+      }
+    };
+    (checkIfContainOption(validatorParameter), ...);
+
     /*
     Add a function wrapper to our list of validators, that calls the
     `validatorFunction` with the needed values and throws an exception, if the
     `validatorFunction` returns false.
     */
-    validators_.emplace_back([validatorFunction, errorMessage,
+    validators_.emplace_back([validatorFunction,
+                              errorMessage = std::string(errorMessage),
                               validatorParameter...]() {
       if (!std::invoke(validatorFunction,
                        validatorParameter.getConfigOption()
