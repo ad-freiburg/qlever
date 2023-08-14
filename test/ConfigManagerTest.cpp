@@ -1417,4 +1417,60 @@ TEST(ConfigManagerTest, AddOptionValidatorException) {
   checkAddOptionValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, mWith2SubSub1Option);
 }
 
+TEST(ConfigManagerTest, ContainsOption) {
+  // Variable for the configuration options.
+  int var;
+
+  // Outside configuration option.
+  const ConfigOption outsideOption("OutsideOption", "", &var);
+
+  // Without sub manager.
+  ConfigManager m;
+  ASSERT_FALSE(m.containsOption(outsideOption));
+  decltype(auto) topManagerOption = m.addOption("TopLevel", "", &var);
+  ASSERT_TRUE(m.containsOption(topManagerOption.getConfigOption()));
+
+  // Single sub manager.
+  ConfigManager& subManagerDepth1Num1 = m.addSubManager({"subManager1"s});
+  ASSERT_FALSE(subManagerDepth1Num1.containsOption(topManagerOption.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth1Num1.containsOption(outsideOption));
+  decltype(auto) subManagerDepth1Num1Option =
+      subManagerDepth1Num1.addOption("SubManager1", "", &var);
+  ASSERT_FALSE(subManagerDepth1Num1.containsOption(topManagerOption.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth1Num1.containsOption(outsideOption));
+  ASSERT_TRUE(subManagerDepth1Num1.containsOption(subManagerDepth1Num1Option.getConfigOption()));
+  ASSERT_TRUE(m.containsOption(subManagerDepth1Num1Option.getConfigOption()));
+
+  // Second sub manager.
+  ConfigManager& subManagerDepth1Num2 = m.addSubManager({"subManager2"s});
+  ASSERT_FALSE(subManagerDepth1Num2.containsOption(topManagerOption.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth1Num2.containsOption(outsideOption));
+  ASSERT_FALSE(subManagerDepth1Num2.containsOption(subManagerDepth1Num1Option.getConfigOption()));
+  decltype(auto) subManagerDepth1Num2Option =
+      subManagerDepth1Num2.addOption("SubManager2", "", &var);
+  ASSERT_FALSE(subManagerDepth1Num2.containsOption(topManagerOption.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth1Num2.containsOption(outsideOption));
+  ASSERT_FALSE(subManagerDepth1Num2.containsOption(subManagerDepth1Num1Option.getConfigOption()));
+  ASSERT_TRUE(subManagerDepth1Num2.containsOption(subManagerDepth1Num2Option.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth1Num1.containsOption(subManagerDepth1Num2Option.getConfigOption()));
+  ASSERT_TRUE(m.containsOption(subManagerDepth1Num2Option.getConfigOption()));
+
+  // Sub manager in the second sub manager.
+  ConfigManager& subManagerDepth2Num = subManagerDepth1Num2.addSubManager({"subManagerDepth2"s});
+  ASSERT_FALSE(subManagerDepth2Num.containsOption(topManagerOption.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth2Num.containsOption(outsideOption));
+  ASSERT_FALSE(subManagerDepth2Num.containsOption(subManagerDepth1Num1Option.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth2Num.containsOption(subManagerDepth1Num2Option.getConfigOption()));
+  decltype(auto) subManagerDepth2NumOption =
+      subManagerDepth2Num.addOption("SubManagerDepth2", "", &var);
+  ASSERT_FALSE(subManagerDepth2Num.containsOption(topManagerOption.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth2Num.containsOption(outsideOption));
+  ASSERT_FALSE(subManagerDepth2Num.containsOption(subManagerDepth1Num1Option.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth2Num.containsOption(subManagerDepth1Num2Option.getConfigOption()));
+  ASSERT_TRUE(subManagerDepth2Num.containsOption(subManagerDepth2NumOption.getConfigOption()));
+  ASSERT_TRUE(subManagerDepth1Num2.containsOption(subManagerDepth2NumOption.getConfigOption()));
+  ASSERT_TRUE(m.containsOption(subManagerDepth2NumOption.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth1Num1.containsOption(subManagerDepth2NumOption.getConfigOption()));
+}
+
 }  // namespace ad_utility
