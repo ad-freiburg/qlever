@@ -31,7 +31,7 @@ namespace detail {
 // would get the operand type, which is not necessarily the `ResultType`.
 // For example, in the COUNT aggregate we calculate a sum of boolean
 // values, but the result is not boolean.
-auto getUniqueElements =
+inline auto getUniqueElements =
     []<typename Ops>(const EvaluationContext* context, size_t inputSize,
                      Ops ops) -> cppcoro::generator<typename Ops::value_type> {
   ad_utility::HashSetWithMemoryLimit<typename Ops::value_type> uniqueHashSet(
