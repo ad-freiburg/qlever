@@ -26,7 +26,7 @@ TEST(ConfigOptionProxy, Constructor) {
       if constexpr (!std::is_same_v<T, WrongT>) {
         AD_EXPECT_THROW_WITH_MESSAGE(
             ConfigOptionProxy<WrongT> someProxy(opt),
-            ::testing::ContainsRegex(R"--(testOption.*?Mismatch)--"));
+            ::testing::ContainsRegex(R"--(testOption': Mismatch)--"));
       }
     });
   };
