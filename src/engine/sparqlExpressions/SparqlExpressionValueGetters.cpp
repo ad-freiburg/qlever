@@ -49,16 +49,6 @@ auto EffectiveBooleanValueGetter::operator()(
       return id.getBool() ? True : False;
     case Datatype::Undefined:
       return Undef;
-    case Datatype::WordVocabIndex: {
-      auto index = id.getWordVocabIndex();
-      return context->_qec.getIndex()
-                     .getTextVocab()
-                     .indexToOptionalString(index)
-                     .value_or("")
-                     .empty()
-                 ? False
-                 : True;
-    }
     case Datatype::VocabIndex: {
       auto index = id.getVocabIndex();
       // TODO<joka921> We could precompute whether the empty literal or empty
@@ -76,6 +66,7 @@ auto EffectiveBooleanValueGetter::operator()(
                  ? False
                  : True;
     }
+    case Datatype::WordVocabIndex:
     case Datatype::TextRecordIndex:
     case Datatype::Date:
       return True;

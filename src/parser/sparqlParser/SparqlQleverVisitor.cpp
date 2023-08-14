@@ -1007,7 +1007,7 @@ vector<TripleWithPropertyPath> Visitor::visit(
               string name = object.toSparql();
               for (std::string s : std::vector<std::string>(
                        absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
-                if (s.back() != '*') {
+                if (!s.ends_with('*')) {
                   continue;
                 }
                 s.pop_back();

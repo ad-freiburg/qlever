@@ -408,7 +408,7 @@ class IdTable {
   }
 
   void push_back(std::span<const T> newRow) requires(!isView) {
-    AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
+    AD_CONTRACT_CHECK(newRow.size() == numColumns());
     ++numRows_;
     for (size_t i = 0; i < numColumns(); ++i) {
       data()[i].push_back(*(newRow.begin() + i));

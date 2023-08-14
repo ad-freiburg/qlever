@@ -43,15 +43,17 @@ class Index {
   // one place.
   // Every vector is either empty or has the same size as the others.
   struct WordEntityPostings {
-    vector<TextRecordIndex>
-        cids_;  // Stores the index of the TextRecord of each result.
-    vector<vector<WordIndex>> wids_ = {{}};
+    // Stores the index of the TextRecord of each result.
+    vector<TextRecordIndex> cids_;
     // For every instance should wids_.size() never be < 1.
     // For prefix-queries stores for each term and result the index of
     // the Word the prefixed-word was completed to.
-    vector<Id> eids_;       // Stores the index of the entity of each result.
-    vector<Score> scores_;  // Stores for each result how often an entity
-                            // appears in its associated TextRecord.
+    vector<vector<WordIndex>> wids_ = {{}};
+    // Stores the index of the entity of each result.
+    vector<Id> eids_;
+    // Stores for each result how often an entity
+    // appears in its associated TextRecord.
+    vector<Score> scores_;
   };
 
   /// Forbid copy and assignment.

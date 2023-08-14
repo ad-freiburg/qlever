@@ -17,6 +17,19 @@ size_t TextOperationWithoutFilter::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
+size_t TextOperationWithoutFilter::getNofPrefixedTerms() const {
+  // Returns the number of words in _words that end with '*'
+  // TODO<C++23>: This is a one-liner using `std::ranges::fold`.
+  size_t nPrefixedTerms = 0;
+  for (std::string_view s : absl::StrSplit(_words, ' ')) {
+    if (s.ends_with('*')) {
+      nPrefixedTerms++;
+    }
+  }
+  return nPrefixedTerms;
+}
+
+// _____________________________________________________________________________
 TextOperationWithoutFilter::TextOperationWithoutFilter(
     QueryExecutionContext* qec, const std::vector<std::string>& words,
     SetOfVariables variables, Variable cvar, size_t textLimit)
@@ -49,7 +62,7 @@ VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
     }
   }
   for (std::string s : std::vector<std::string>(absl::StrSplit(_words, ' '))) {
-    if (s.back() != '*') {
+    if (!s.ends_with('*')) {
       continue;
     }
     s.pop_back();
