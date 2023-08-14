@@ -22,6 +22,27 @@ inline auto noop = []<typename T>(T&& result, size_t) {
 // then executes the `FinalOperation` (possibly the `noop` lambda from above) on
 // the result.
 namespace detail {
+
+// For distinct we must put the operands into the hash set before
+// applying the `valueGetter`. For example, COUNT(?x), where ?x matches
+// three different strings, the value getter always returns `1`, but
+// we still have three distinct inputs.
+// Unevaluated operation to get the proper `ResultType`. With `auto`, we
+// would get the operand type, which is not necessarily the `ResultType`.
+// For example, in the COUNT aggregate we calculate a sum of boolean
+// values, but the result is not boolean.
+auto getUniqueElements =
+    []<typename Ops>(const EvaluationContext* context, size_t inputSize,
+                     Ops ops) -> cppcoro::generator<typename Ops::value_type> {
+  ad_utility::HashSetWithMemoryLimit<typename Ops::value_type> uniqueHashSet(
+      inputSize, context->_allocator);
+  for (auto& el : ops) {
+    if (uniqueHashSet.insert(el).second) {
+      auto elForYielding = std::move(el);
+      co_yield elForYielding;
+    }
+  }
+};
 template <typename AggregateOperation, typename FinalOperation = decltype(noop)>
 class AggregateExpression : public SparqlExpression {
  public:
@@ -101,6 +122,7 @@ class AggregateExpression : public SparqlExpression {
     // would get the operand type, which is not necessarily the `ResultType`.
     // For example, in the COUNT aggregate we calculate a sum of boolean
     // values, but the result is not boolean.
+    /*
     auto getUniqueElements = [context, inputSize](auto&& ops)
         -> cppcoro::generator<typename decltype(operands)::value_type> {
       ad_utility::HashSetWithMemoryLimit<
@@ -113,6 +135,7 @@ class AggregateExpression : public SparqlExpression {
         }
       }
     };
+     */
 
     auto impl = [&valueGetter, context, &finalOperation,
                  &callFunction](auto&& inputs) {
@@ -134,7 +157,8 @@ class AggregateExpression : public SparqlExpression {
     };
     auto result = [&]() {
       if (distinct) {
-        auto uniqueValues = getUniqueElements(std::move(operands));
+        auto uniqueValues =
+            getUniqueElements(context, inputSize, std::move(operands));
         return impl(std::move(uniqueValues));
       } else {
         return impl(std::move(operands));

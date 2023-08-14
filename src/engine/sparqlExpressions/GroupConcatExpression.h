@@ -5,8 +5,8 @@
 #ifndef QLEVER_GROUPCONCATEXPRESSION_H
 #define QLEVER_GROUPCONCATEXPRESSION_H
 
-#include "AggregateExpression.h"
 #include "absl/strings/str_cat.h"
+#include "engine/sparqlExpressions/AggregateExpression.h"
 
 namespace sparqlExpression {
 /// The GROUP_CONCAT Expression
@@ -21,11 +21,6 @@ class GroupConcatExpression : public SparqlExpression {
       : child_{std::move(child)},
         separator_{std::move(separator)},
         distinct_{distinct} {
-    if (distinct) {
-      throw std::runtime_error{
-          "DISTINCT in combination with GROUP_CONCAT is currently not "
-          "supported by QLever"};
-    }
     setIsInsideAggregate();
   }
 
@@ -33,19 +28,27 @@ class GroupConcatExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext* context) const override {
     auto impl = [context,
                  this](SingleExpressionResult auto&& el) -> ExpressionResult {
+      std::string result;
+      auto implForDistinctOrNot = [&result, this, context](auto generator) {
+        // TODO<joka921> Make this a configurable constant.
+        result.reserve(20000);
+        for (auto& inp : generator) {
+          auto&& s = detail::StringValueGetter{}(std::move(inp), context);
+          if (s.has_value()) {
+            if (!result.empty()) {
+              result.append(separator_);
+            }
+            result.append(s.value());
+          }
+        }
+      };
       auto generator =
           detail::makeGenerator(AD_FWD(el), context->size(), context);
-      std::string result;
-      // TODO<joka921> Make this a configurable constant.
-      result.reserve(20000);
-      for (auto& inp : generator) {
-        auto&& s = detail::StringValueGetter{}(std::move(inp), context);
-        if (s.has_value()) {
-          if (!result.empty()) {
-            result.append(separator_);
-          }
-          result.append(s.value());
-        }
+      if (distinct_) {
+        implForDistinctOrNot(detail::getUniqueElements(context, context->size(),
+                                                       std::move(generator)));
+      } else {
+        implForDistinctOrNot(std::move(generator));
       }
       result.shrink_to_fit();
       return IdOrString(std::move(result));
