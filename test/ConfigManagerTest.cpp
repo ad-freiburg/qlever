@@ -41,8 +41,8 @@ to.
 to.
 */
 template <typename T>
-void checkOption(ConfigOptionProxy<T> option, const T& externalVariable, const bool wasSet,
-                 const T& wantedValue) {
+void checkOption(ConfigOptionProxy<T> option, const T& externalVariable,
+                 const bool wasSet, const T& wantedValue) {
   ASSERT_EQ(wasSet, option.getConfigOption().wasSet());
 
   if (wasSet) {
@@ -59,20 +59,23 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
 
   // Configuration options for testing.
   int notUsed;
-  config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}, "", &notUsed, 42);
+  config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s},
+                   "", &notUsed, 42);
 
   // Trying to add a configuration option with the same name at the same
   // place, should cause an error.
-  ASSERT_THROW(
-      config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}, "", &notUsed, 42);
-      , ad_utility::ConfigManagerOptionPathAlreadyinUseException);
+  ASSERT_THROW(config.addOption(
+      {"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}, "", &notUsed,
+      42);
+               , ad_utility::ConfigManagerOptionPathAlreadyinUseException);
 
   /*
   An empty vector that should cause an exception.
   Reason: The last key is used as the name for the to be created `ConfigOption`.
   An empty vector doesn't work with that.
   */
-  ASSERT_ANY_THROW(config.addOption(std::vector<std::string>{}, "", &notUsed, 42););
+  ASSERT_ANY_THROW(
+      config.addOption(std::vector<std::string>{}, "", &notUsed, 42););
 
   /*
   Trying to add a configuration option with a path containing strings with
@@ -81,7 +84,8 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
   configuration grammar. Ergo, you can't set values, with such paths per short
   hand, which we don't want.
   */
-  ASSERT_THROW(config.addOption({"Shared part"s, "Sense_of_existence"s}, "", &notUsed, 42);
+  ASSERT_THROW(config.addOption({"Shared part"s, "Sense_of_existence"s}, "",
+                                &notUsed, 42);
                , ad_utility::NotValidShortHandNameException);
 }
 
@@ -93,12 +97,14 @@ TEST(ConfigManagerTest, addSubManagerExceptionTest) {
 
   // Sub manager for testing. Empty sub manager are not allowed.
   int notUsed;
-  config.addSubManager({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s})
+  config
+      .addSubManager({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s})
       .addOption("ignore", "", &notUsed);
 
   // Trying to add a sub manager with the same name at the same place, should
   // cause an error.
-  ASSERT_THROW(config.addSubManager({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}),
+  ASSERT_THROW(config.addSubManager(
+                   {"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}),
                ad_utility::ConfigManagerOptionPathAlreadyinUseException);
 
   // An empty vector that should cause an exception.
@@ -124,10 +130,13 @@ TEST(ConfigManagerTest, ParseConfigNoSubManager) {
   int thirdInt;
 
   decltype(auto) optionZero =
-      config.addOption({"depth_0"s, "Option_0"s}, "Must be set. Has no default value.", &firstInt);
-  decltype(auto) optionOne = config.addOption({"depth_0"s, "depth_1"s, "Option_1"s},
-                                              "Must be set. Has no default value.", &secondInt);
-  decltype(auto) optionTwo = config.addOption("Option_2", "Has a default value.", &thirdInt, 2);
+      config.addOption({"depth_0"s, "Option_0"s},
+                       "Must be set. Has no default value.", &firstInt);
+  decltype(auto) optionOne =
+      config.addOption({"depth_0"s, "depth_1"s, "Option_1"s},
+                       "Must be set. Has no default value.", &secondInt);
+  decltype(auto) optionTwo =
+      config.addOption("Option_2", "Has a default value.", &thirdInt, 2);
 
   // Does the option with the default already have a value?
   checkOption(optionTwo, thirdInt, true, 2);
@@ -160,14 +169,16 @@ TEST(ConfigManagerTest, ParseConfigNoSubManager) {
 TEST(ConfigManagerTest, ParseConfigWithSubManager) {
   // Parse the given configManager with the given json and check, that all the
   // configOption were set correctly.
-  auto parseAndCheck = [](const nlohmann::json& j, ConfigManager& m,
-                          const std::vector<std::pair<int*, int>>& wantedValues) {
-    m.parseConfig(j);
+  auto parseAndCheck =
+      [](const nlohmann::json& j, ConfigManager& m,
+         const std::vector<std::pair<int*, int>>& wantedValues) {
+        m.parseConfig(j);
 
-    std::ranges::for_each(wantedValues, [](const std::pair<int*, int>& wantedValue) -> void {
-      ASSERT_EQ(*wantedValue.first, wantedValue.second);
-    });
-  };
+        std::ranges::for_each(
+            wantedValues, [](const std::pair<int*, int>& wantedValue) -> void {
+              ASSERT_EQ(*wantedValue.first, wantedValue.second);
+            });
+      };
 
   // Simple manager, with only one sub manager and no recursion.
   ad_utility::ConfigManager managerWithOneSubNoRecursion{};
@@ -185,13 +196,16 @@ TEST(ConfigManagerTest, ParseConfigWithSubManager) {
    }
  }
  })--"),
-                managerWithOneSubNoRecursion, {{&steveId, 40}, {&steveInfractions, 60}});
+                managerWithOneSubNoRecursion,
+                {{&steveId, 40}, {&steveInfractions, 60}});
 
   // Adding configuration options to the top level manager.
   int amountOfPersonal;
-  managerWithOneSubNoRecursion.addOption("AmountOfPersonal", "", &amountOfPersonal, 0);
+  managerWithOneSubNoRecursion.addOption("AmountOfPersonal", "",
+                                         &amountOfPersonal, 0);
 
-  parseAndCheck(nlohmann::json::parse(R"--({
+  parseAndCheck(
+      nlohmann::json::parse(R"--({
  "AmountOfPersonal" : 1,
  "personal": {
    "Steve": {
@@ -199,8 +213,8 @@ TEST(ConfigManagerTest, ParseConfigWithSubManager) {
    }
  }
  })--"),
-                managerWithOneSubNoRecursion,
-                {{&amountOfPersonal, 1}, {&steveId, 30}, {&steveInfractions, 70}});
+      managerWithOneSubNoRecursion,
+      {{&amountOfPersonal, 1}, {&steveId, 30}, {&steveInfractions, 70}});
 
   // Simple manager, with multiple sub manager and no recursion.
   ad_utility::ConfigManager managerWithMultipleSubNoRecursion{};
@@ -228,10 +242,14 @@ TEST(ConfigManagerTest, ParseConfigWithSubManager) {
  }
  })--"),
                 managerWithMultipleSubNoRecursion,
-                {{&daveId, 4}, {&daveInfractions, 0}, {&janiceId, 0}, {&janiceInfractions, 6}});
+                {{&daveId, 4},
+                 {&daveInfractions, 0},
+                 {&janiceId, 0},
+                 {&janiceInfractions, 6}});
 
   // Adding configuration options to the top level manager.
-  managerWithMultipleSubNoRecursion.addOption("AmountOfPersonal", "", &amountOfPersonal, 0);
+  managerWithMultipleSubNoRecursion.addOption("AmountOfPersonal", "",
+                                              &amountOfPersonal, 0);
 
   parseAndCheck(nlohmann::json::parse(R"--({
  "AmountOfPersonal" : 1,
@@ -253,16 +271,20 @@ TEST(ConfigManagerTest, ParseConfigWithSubManager) {
 
   // Complex manager with recursion.
   ad_utility::ConfigManager managerWithRecursion{};
-  ad_utility::ConfigManager& managerDepth1 = managerWithRecursion.addSubManager({"depth1"s});
-  ad_utility::ConfigManager& managerDepth2 = managerDepth1.addSubManager({"depth2"s});
+  ad_utility::ConfigManager& managerDepth1 =
+      managerWithRecursion.addSubManager({"depth1"s});
+  ad_utility::ConfigManager& managerDepth2 =
+      managerDepth1.addSubManager({"depth2"s});
 
-  ad_utility::ConfigManager& managerAlex = managerDepth2.addSubManager({"personal"s, "Alex"s});
+  ad_utility::ConfigManager& managerAlex =
+      managerDepth2.addSubManager({"personal"s, "Alex"s});
   int alexId;
   managerAlex.addOption("Id", "", &alexId, 8);
   int alexInfractions;
   managerAlex.addOption("Infractions", "", &alexInfractions, 4);
 
-  ad_utility::ConfigManager& managerPeter = managerDepth2.addSubManager({"personal"s, "Peter"s});
+  ad_utility::ConfigManager& managerPeter =
+      managerDepth2.addSubManager({"personal"s, "Peter"s});
   int peterId;
   managerPeter.addOption("Id", "", &peterId, 8);
   int peterInfractions;
@@ -283,7 +305,10 @@ TEST(ConfigManagerTest, ParseConfigWithSubManager) {
  }
  })--"),
                 managerWithRecursion,
-                {{&alexId, 4}, {&alexInfractions, 0}, {&peterId, 0}, {&peterInfractions, 6}});
+                {{&alexId, 4},
+                 {&alexInfractions, 0},
+                 {&peterId, 0},
+                 {&peterInfractions, 6}});
 
   // Add an option to `managerDepth2`.
   int someOptionAtDepth2;
@@ -379,24 +404,27 @@ TEST(ConfigManagerTest, ParseConfigExceptionWithoutSubManagerTest) {
   // Add one option with default and one without.
   int notUsedInt;
   std::vector<int> notUsedVector;
-  config.addOption({"depth_0"s, "Without_default"s}, "Must be set. Has no default value.",
-                   &notUsedInt);
-  config.addOption({"depth_0"s, "With_default"s}, "Must not be set. Has default value.",
-                   &notUsedVector, {40, 41});
+  config.addOption({"depth_0"s, "Without_default"s},
+                   "Must be set. Has no default value.", &notUsedInt);
+  config.addOption({"depth_0"s, "With_default"s},
+                   "Must not be set. Has default value.", &notUsedVector,
+                   {40, 41});
 
   // Should throw an exception, if we don't set all options, that must be set.
   ASSERT_THROW(config.parseConfig(nlohmann::json::parse(R"--({})--")),
                ad_utility::ConfigOptionWasntSetException);
 
   // Should throw an exception, if we try set an option, that isn't there.
-  AD_EXPECT_THROW_WITH_MESSAGE(config.parseConfig(nlohmann::json::parse(
-                                   R"--({"depth_0":{"Without_default":42, "with_default" :
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.parseConfig(nlohmann::json::parse(
+          R"--({"depth_0":{"Without_default":42, "with_default" :
            [39]}})--")),
-                               ::testing::ContainsRegex(R"('/depth_0/with_default')"));
-  AD_EXPECT_THROW_WITH_MESSAGE(config.parseConfig(nlohmann::json::parse(
-                                   R"--({"depth_0":{"Without_default":42, "test_string" :
+      ::testing::ContainsRegex(R"('/depth_0/with_default')"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.parseConfig(nlohmann::json::parse(
+          R"--({"depth_0":{"Without_default":42, "test_string" :
            "test"}})--")),
-                               ::testing::ContainsRegex(R"('/depth_0/test_string')"));
+      ::testing::ContainsRegex(R"('/depth_0/test_string')"));
 
   /*
   Should throw an exception, if we try set an option with a value, that we
@@ -410,20 +438,27 @@ TEST(ConfigManagerTest, ParseConfigExceptionWithoutSubManagerTest) {
       ::testing::ContainsRegex(R"('/depth_0/With_default/value')"));
 
   // Parsing with a non json object literal is not allowed.
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::array)),
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::array)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::boolean)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::null)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::number_float)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(config.parseConfig(
+                   nlohmann::json(nlohmann::json::value_t::number_integer)),
                ConfigManagerParseConfigNotJsonObjectLiteralException);
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::boolean)),
+  ASSERT_THROW(config.parseConfig(
+                   nlohmann::json(nlohmann::json::value_t::number_unsigned)),
                ConfigManagerParseConfigNotJsonObjectLiteralException);
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::null)),
-               ConfigManagerParseConfigNotJsonObjectLiteralException);
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::number_float)),
-               ConfigManagerParseConfigNotJsonObjectLiteralException);
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::number_integer)),
-               ConfigManagerParseConfigNotJsonObjectLiteralException);
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::number_unsigned)),
-               ConfigManagerParseConfigNotJsonObjectLiteralException);
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::string)),
-               ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::string)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
 }
 
 TEST(ConfigManagerTest, ParseConfigExceptionWithSubManagerTest) {
@@ -431,32 +466,38 @@ TEST(ConfigManagerTest, ParseConfigExceptionWithSubManagerTest) {
 
   // Empty sub managers are not allowed.
   ad_utility::ConfigManager& m1 = config.addSubManager({"some"s, "manager"s});
-  AD_EXPECT_THROW_WITH_MESSAGE(config.parseConfig(nlohmann::json::parse(R"--({})--")),
-                               ::testing::ContainsRegex(R"('/some/manager')"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.parseConfig(nlohmann::json::parse(R"--({})--")),
+      ::testing::ContainsRegex(R"('/some/manager')"));
   int notUsedInt;
-  config.addOption("Ignore", "Must not be set. Has default value.", &notUsedInt, 41);
-  AD_EXPECT_THROW_WITH_MESSAGE(config.parseConfig(nlohmann::json::parse(R"--({})--")),
-                               ::testing::ContainsRegex(R"('/some/manager')"));
+  config.addOption("Ignore", "Must not be set. Has default value.", &notUsedInt,
+                   41);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.parseConfig(nlohmann::json::parse(R"--({})--")),
+      ::testing::ContainsRegex(R"('/some/manager')"));
 
   // Add one option with default and one without.
   std::vector<int> notUsedVector;
-  m1.addOption({"depth_0"s, "Without_default"s}, "Must be set. Has no default value.", &notUsedInt);
-  m1.addOption({"depth_0"s, "With_default"s}, "Must not be set. Has default value.", &notUsedVector,
-               {40, 41});
+  m1.addOption({"depth_0"s, "Without_default"s},
+               "Must be set. Has no default value.", &notUsedInt);
+  m1.addOption({"depth_0"s, "With_default"s},
+               "Must not be set. Has default value.", &notUsedVector, {40, 41});
 
   // Should throw an exception, if we don't set all options, that must be set.
   ASSERT_THROW(config.parseConfig(nlohmann::json::parse(R"--({})--")),
                ad_utility::ConfigOptionWasntSetException);
 
   // Should throw an exception, if we try set an option, that isn't there.
-  AD_EXPECT_THROW_WITH_MESSAGE(config.parseConfig(nlohmann::json::parse(
-                                   R"--({"some":{ "manager": {"depth_0":{"Without_default":42,
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.parseConfig(nlohmann::json::parse(
+          R"--({"some":{ "manager": {"depth_0":{"Without_default":42,
            "with_default" : [39]}}}})--")),
-                               ::testing::ContainsRegex(R"('/some/manager/depth_0/with_default')"));
-  AD_EXPECT_THROW_WITH_MESSAGE(config.parseConfig(nlohmann::json::parse(
-                                   R"--({"some":{ "manager": {"depth_0":{"Without_default":42,
+      ::testing::ContainsRegex(R"('/some/manager/depth_0/with_default')"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.parseConfig(nlohmann::json::parse(
+          R"--({"some":{ "manager": {"depth_0":{"Without_default":42,
            "test_string" : "test"}}}})--")),
-                               ::testing::ContainsRegex(R"('/some/manager/depth_0/test_string')"));
+      ::testing::ContainsRegex(R"('/some/manager/depth_0/test_string')"));
 
   /*
   Should throw an exception, if we try set an option with a value, that we
@@ -467,29 +508,38 @@ TEST(ConfigManagerTest, ParseConfigExceptionWithSubManagerTest) {
       config.parseConfig(nlohmann::json::parse(
           R"--({"some":{ "manager": {"depth_0":{"Without_default":42,
            "With_default" : {"value" : 4}}}}})--")),
-      ::testing::ContainsRegex(R"('/some/manager/depth_0/With_default/value')"));
+      ::testing::ContainsRegex(
+          R"('/some/manager/depth_0/With_default/value')"));
 
   // Repeat all those tests, but with a second sub manager added to the first
   // one.
   ad_utility::ConfigManager config2{};
 
   // Empty sub managers are not allowed.
-  ad_utility::ConfigManager& config2m1 = config2.addSubManager({"some"s, "manager"s});
-  ad_utility::ConfigManager& config2m2 = config2m1.addSubManager({"some"s, "manager"s});
-  AD_EXPECT_THROW_WITH_MESSAGE(config2.parseConfig(nlohmann::json::parse(R"--({})--")),
-                               ::testing::ContainsRegex(R"('/some/manager/some/manager')"));
-  config2.addOption("Ignore", "Must not be set. Has default value.", &notUsedInt, 41);
-  AD_EXPECT_THROW_WITH_MESSAGE(config2.parseConfig(nlohmann::json::parse(R"--({})--")),
-                               ::testing::ContainsRegex(R"('/some/manager/some/manager')"));
-  config2m1.addOption("Ignore", "Must not be set. Has default value.", &notUsedInt, 41);
-  AD_EXPECT_THROW_WITH_MESSAGE(config2.parseConfig(nlohmann::json::parse(R"--({})--")),
-                               ::testing::ContainsRegex(R"('/some/manager/some/manager')"));
+  ad_utility::ConfigManager& config2m1 =
+      config2.addSubManager({"some"s, "manager"s});
+  ad_utility::ConfigManager& config2m2 =
+      config2m1.addSubManager({"some"s, "manager"s});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config2.parseConfig(nlohmann::json::parse(R"--({})--")),
+      ::testing::ContainsRegex(R"('/some/manager/some/manager')"));
+  config2.addOption("Ignore", "Must not be set. Has default value.",
+                    &notUsedInt, 41);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config2.parseConfig(nlohmann::json::parse(R"--({})--")),
+      ::testing::ContainsRegex(R"('/some/manager/some/manager')"));
+  config2m1.addOption("Ignore", "Must not be set. Has default value.",
+                      &notUsedInt, 41);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config2.parseConfig(nlohmann::json::parse(R"--({})--")),
+      ::testing::ContainsRegex(R"('/some/manager/some/manager')"));
 
   // Add one option with default and one without.
-  config2m2.addOption({"depth_0"s, "Without_default"s}, "Must be set. Has no default value.",
-                      &notUsedInt);
-  config2m2.addOption({"depth_0"s, "With_default"s}, "Must not be set. Has default value.",
-                      &notUsedVector, {40, 41});
+  config2m2.addOption({"depth_0"s, "Without_default"s},
+                      "Must be set. Has no default value.", &notUsedInt);
+  config2m2.addOption({"depth_0"s, "With_default"s},
+                      "Must not be set. Has default value.", &notUsedVector,
+                      {40, 41});
 
   // Should throw an exception, if we don't set all options, that must be set.
   ASSERT_THROW(config2.parseConfig(nlohmann::json::parse(R"--({})--")),
@@ -500,13 +550,15 @@ TEST(ConfigManagerTest, ParseConfigExceptionWithSubManagerTest) {
       config2.parseConfig(nlohmann::json::parse(
           R"--({"some":{ "manager": {"some":{ "manager":
            {"depth_0":{"Without_default":42, "with_default" : [39]}}}}}})--")),
-      ::testing::ContainsRegex(R"('/some/manager/some/manager/depth_0/with_default')"));
+      ::testing::ContainsRegex(
+          R"('/some/manager/some/manager/depth_0/with_default')"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       config2.parseConfig(nlohmann::json::parse(
           R"--({"some":{ "manager": {"some":{ "manager":
            {"depth_0":{"Without_default":42, "test_string" :
            "test"}}}}}})--")),
-      ::testing::ContainsRegex(R"('/some/manager/some/manager/depth_0/test_string')"));
+      ::testing::ContainsRegex(
+          R"('/some/manager/some/manager/depth_0/test_string')"));
 
   /*
   Should throw an exception, if we try set an option with a value, that we
@@ -518,7 +570,8 @@ TEST(ConfigManagerTest, ParseConfigExceptionWithSubManagerTest) {
           R"--({"some":{ "manager": {"some":{ "manager":
            {"depth_0":{"Without_default":42, "With_default" : {"value" :
            4}}}}}}})--")),
-      ::testing::ContainsRegex(R"('/some/manager/some/manager/depth_0/With_default/value')"));
+      ::testing::ContainsRegex(
+          R"('/some/manager/some/manager/depth_0/With_default/value')"));
 }
 
 TEST(ConfigManagerTest, ParseShortHandTest) {
@@ -527,59 +580,65 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   // Add integer options.
   int somePositiveNumberInt;
   decltype(auto) somePositiveNumber = config.addOption(
-      "somePositiveNumber", "Must be set. Has no default value.", &somePositiveNumberInt);
+      "somePositiveNumber", "Must be set. Has no default value.",
+      &somePositiveNumberInt);
   int someNegativNumberInt;
   decltype(auto) someNegativNumber = config.addOption(
-      "someNegativNumber", "Must be set. Has no default value.", &someNegativNumberInt);
+      "someNegativNumber", "Must be set. Has no default value.",
+      &someNegativNumberInt);
 
   // Add integer list.
   std::vector<int> someIntegerlistIntVector;
-  decltype(auto) someIntegerlist = config.addOption(
-      "someIntegerlist", "Must be set. Has no default value.", &someIntegerlistIntVector);
+  decltype(auto) someIntegerlist =
+      config.addOption("someIntegerlist", "Must be set. Has no default value.",
+                       &someIntegerlistIntVector);
 
   // Add floating point options.
   float somePositiveFloatingPointFloat;
-  decltype(auto) somePositiveFloatingPoint =
-      config.addOption("somePositiveFloatingPoint", "Must be set. Has no default value.",
-                       &somePositiveFloatingPointFloat);
+  decltype(auto) somePositiveFloatingPoint = config.addOption(
+      "somePositiveFloatingPoint", "Must be set. Has no default value.",
+      &somePositiveFloatingPointFloat);
   float someNegativFloatingPointFloat;
-  decltype(auto) someNegativFloatingPoint =
-      config.addOption("someNegativFloatingPoint", "Must be set. Has no default value.",
-                       &someNegativFloatingPointFloat);
+  decltype(auto) someNegativFloatingPoint = config.addOption(
+      "someNegativFloatingPoint", "Must be set. Has no default value.",
+      &someNegativFloatingPointFloat);
 
   // Add floating point list.
   std::vector<float> someFloatingPointListFloatVector;
-  decltype(auto) someFloatingPointList =
-      config.addOption("someFloatingPointList", "Must be set. Has no default value.",
-                       &someFloatingPointListFloatVector);
+  decltype(auto) someFloatingPointList = config.addOption(
+      "someFloatingPointList", "Must be set. Has no default value.",
+      &someFloatingPointListFloatVector);
 
   // Add boolean options.
   bool boolTrueBool;
-  decltype(auto) boolTrue =
-      config.addOption("boolTrue", "Must be set. Has no default value.", &boolTrueBool);
+  decltype(auto) boolTrue = config.addOption(
+      "boolTrue", "Must be set. Has no default value.", &boolTrueBool);
   bool boolFalseBool;
-  decltype(auto) boolFalse =
-      config.addOption("boolFalse", "Must be set. Has no default value.", &boolFalseBool);
+  decltype(auto) boolFalse = config.addOption(
+      "boolFalse", "Must be set. Has no default value.", &boolFalseBool);
 
   // Add boolean list.
   std::vector<bool> someBooleanListBoolVector;
-  decltype(auto) someBooleanList = config.addOption(
-      "someBooleanList", "Must be set. Has no default value.", &someBooleanListBoolVector);
+  decltype(auto) someBooleanList =
+      config.addOption("someBooleanList", "Must be set. Has no default value.",
+                       &someBooleanListBoolVector);
 
   // Add string option.
   std::string myNameString;
-  decltype(auto) myName =
-      config.addOption("myName", "Must be set. Has no default value.", &myNameString);
+  decltype(auto) myName = config.addOption(
+      "myName", "Must be set. Has no default value.", &myNameString);
 
   // Add string list.
   std::vector<std::string> someStringListStringVector;
-  decltype(auto) someStringList = config.addOption(
-      "someStringList", "Must be set. Has no default value.", &someStringListStringVector);
+  decltype(auto) someStringList =
+      config.addOption("someStringList", "Must be set. Has no default value.",
+                       &someStringListStringVector);
 
   // Add option with deeper level.
   std::vector<int> deeperIntVector;
-  decltype(auto) deeperIntVectorOption = config.addOption(
-      {"depth"s, "here"s, "list"s}, "Must be set. Has no default value.", &deeperIntVector);
+  decltype(auto) deeperIntVectorOption =
+      config.addOption({"depth"s, "here"s, "list"s},
+                       "Must be set. Has no default value.", &deeperIntVector);
 
   // This one will not be changed, in order to test, that options, that are
   // not set at run time, are not changed.
@@ -593,17 +652,22 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   checkOption(somePositiveNumber, somePositiveNumberInt, true, 42);
   checkOption(someNegativNumber, someNegativNumberInt, true, -42);
 
-  checkOption(someIntegerlist, someIntegerlistIntVector, true, std::vector{40, 41});
+  checkOption(someIntegerlist, someIntegerlistIntVector, true,
+              std::vector{40, 41});
 
-  checkOption(somePositiveFloatingPoint, somePositiveFloatingPointFloat, true, 4.2f);
-  checkOption(someNegativFloatingPoint, someNegativFloatingPointFloat, true, -4.2f);
+  checkOption(somePositiveFloatingPoint, somePositiveFloatingPointFloat, true,
+              4.2f);
+  checkOption(someNegativFloatingPoint, someNegativFloatingPointFloat, true,
+              -4.2f);
 
-  checkOption(someFloatingPointList, someFloatingPointListFloatVector, true, {4.1f, 4.2f});
+  checkOption(someFloatingPointList, someFloatingPointListFloatVector, true,
+              {4.1f, 4.2f});
 
   checkOption(boolTrue, boolTrueBool, true, true);
   checkOption(boolFalse, boolFalseBool, true, false);
 
-  checkOption(someBooleanList, someBooleanListBoolVector, true, std::vector{true, false, true});
+  checkOption(someBooleanList, someBooleanListBoolVector, true,
+              std::vector{true, false, true});
 
   checkOption(myName, myNameString, true, std::string{"Bernd"});
 
@@ -616,13 +680,15 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   checkOption(noChange, noChangeInt, true, 10);
 
   // Multiple key value pairs with the same key are not allowed.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      ad_utility::ConfigManager::parseShortHand(R"(complicatedKey:42, complicatedKey:43)");
-      , ::testing::ContainsRegex("'complicatedKey'"));
+  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::ConfigManager::parseShortHand(
+                                   R"(complicatedKey:42, complicatedKey:43)");
+                               , ::testing::ContainsRegex("'complicatedKey'"));
 
   // Final test: Is there an exception, if we try to parse the wrong syntax?
-  ASSERT_ANY_THROW(ad_utility::ConfigManager::parseShortHand(R"--({"myName" : "Bernd")})--"));
-  ASSERT_ANY_THROW(ad_utility::ConfigManager::parseShortHand(R"--("myName" = "Bernd";)--"));
+  ASSERT_ANY_THROW(ad_utility::ConfigManager::parseShortHand(
+      R"--({"myName" : "Bernd")})--"));
+  ASSERT_ANY_THROW(
+      ad_utility::ConfigManager::parseShortHand(R"--("myName" = "Bernd";)--"));
 }
 
 TEST(ConfigManagerTest, PrintConfigurationDocExistence) {
@@ -639,7 +705,8 @@ TEST(ConfigManagerTest, PrintConfigurationDocExistence) {
   ASSERT_NO_THROW(config.printConfigurationDoc(false));
   ASSERT_NO_THROW(config.printConfigurationDoc(true));
 
-  ad_utility::ConfigManager& subMan = config.addSubManager({"Just"s, "some"s, "sub-manager"});
+  ad_utility::ConfigManager& subMan =
+      config.addSubManager({"Just"s, "some"s, "sub-manager"});
   subMan.addOption("WithDefault", "", &notUsed, 42);
   subMan.addOption("WithoutDefault", "", &notUsed);
   ASSERT_NO_THROW(config.printConfigurationDoc(false));
@@ -649,10 +716,12 @@ TEST(ConfigManagerTest, PrintConfigurationDocExistence) {
   subMan.addSubManager({"Just"s, "some"s, "other"s, "sub-manager"});
   AD_EXPECT_THROW_WITH_MESSAGE(
       config.printConfigurationDoc(false),
-      ::testing::ContainsRegex(R"('/Just/some/sub-manager/Just/some/other/sub-manager')"));
+      ::testing::ContainsRegex(
+          R"('/Just/some/sub-manager/Just/some/other/sub-manager')"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       config.printConfigurationDoc(true),
-      ::testing::ContainsRegex(R"('/Just/some/sub-manager/Just/some/other/sub-manager')"));
+      ::testing::ContainsRegex(
+          R"('/Just/some/sub-manager/Just/some/other/sub-manager')"));
 }
 
 /*
@@ -664,12 +733,14 @@ TEST(ConfigManagerTest, PrintConfigurationDocExistence) {
 the exception thrown for `jsonWithNonValidValues`. Validators have custom
 exception messages, so they should be identifiable.
 */
-void checkValidator(ConfigManager& manager, const nlohmann::json& jsonWithValidValues,
+void checkValidator(ConfigManager& manager,
+                    const nlohmann::json& jsonWithValidValues,
                     const nlohmann::json& jsonWithNonValidValues,
                     std::string_view containedInExpectedErrorMessage) {
   ASSERT_NO_THROW(manager.parseConfig(jsonWithValidValues));
-  AD_EXPECT_THROW_WITH_MESSAGE(manager.parseConfig(jsonWithNonValidValues),
-                               ::testing::ContainsRegex(containedInExpectedErrorMessage));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.parseConfig(jsonWithNonValidValues),
+      ::testing::ContainsRegex(containedInExpectedErrorMessage));
 }
 
 TEST(ConfigManagerTest, ConfigOptionWithValidator) {
@@ -678,29 +749,36 @@ TEST(ConfigManagerTest, ConfigOptionWithValidator) {
   int notUsedInt;
   managerWithoutSubManager.addOption("h", "", &notUsedInt)
       .getConfigOption()
-      .addValidator([](const int& n) { return 0 <= n && n <= 24; }, "Validator of h");
-  checkValidator(managerWithoutSubManager, nlohmann::json::parse(R"--({"h" : 10})--"),
+      .addValidator([](const int& n) { return 0 <= n && n <= 24; },
+                    "Validator of h");
+  checkValidator(managerWithoutSubManager,
+                 nlohmann::json::parse(R"--({"h" : 10})--"),
                  nlohmann::json::parse(R"--({"h" : 100})--"), "Validator of h");
 
   // Manager with a simple sub manager.
   ConfigManager managerWithSubManager{};
-  ConfigManager& firstSubManager = managerWithSubManager.addSubManager({"first"s, "manager"s});
-  ConfigManager& secondSubManager = firstSubManager.addSubManager({"second"s, "manager"s});
+  ConfigManager& firstSubManager =
+      managerWithSubManager.addSubManager({"first"s, "manager"s});
+  ConfigManager& secondSubManager =
+      firstSubManager.addSubManager({"second"s, "manager"s});
   secondSubManager.addOption("h", "", &notUsedInt)
       .getConfigOption()
-      .addValidator([](const int& n) { return 0 <= n && n <= 24; }, "Validator of h");
-  checkValidator(managerWithSubManager,
-                 nlohmann::json::parse(
-                     R"--({"first" : { "manager" : {"second" : { "manager" : {"h" : 10}}}}})--"),
-                 nlohmann::json::parse(
-                     R"--({"first" : { "manager" : {"second" : { "manager" : {"h" : 100}}}}})--"),
-                 "Validator of h");
+      .addValidator([](const int& n) { return 0 <= n && n <= 24; },
+                    "Validator of h");
+  checkValidator(
+      managerWithSubManager,
+      nlohmann::json::parse(
+          R"--({"first" : { "manager" : {"second" : { "manager" : {"h" : 10}}}}})--"),
+      nlohmann::json::parse(
+          R"--({"first" : { "manager" : {"second" : { "manager" : {"h" : 100}}}}})--"),
+      "Validator of h");
 
   std::string sString;
   firstSubManager.addOption("s", "", &sString)
       .getConfigOption()
-      .addValidator([](const std::string& n) { return n.starts_with("String s"); },
-                    "Validator of s");
+      .addValidator(
+          [](const std::string& n) { return n.starts_with("String s"); },
+          "Validator of s");
   checkValidator(
       managerWithSubManager,
       nlohmann::json::parse(
@@ -720,7 +798,9 @@ TEST(ConfigManagerTest, ConfigOptionWithValidator) {
   managerWithSubManager.addOption("b", "", &boolVector)
       .getConfigOption()
       .addValidator(
-          [](const std::vector<bool>& b) { return std::ranges::any_of(b, std::identity{}); },
+          [](const std::vector<bool>& b) {
+            return std::ranges::any_of(b, std::identity{});
+          },
           "Validator of b");
   checkValidator(
       managerWithSubManager,
@@ -767,10 +847,12 @@ TEST(ConfigManagerTest, AddValidator) {
           func.template operator()<Ts...>();
         } else {
           doForTypeInConfigOptionValueType(
-              [&callGivenLambdaWithAllCombinationsOfTypes, &func]<typename T>() {
+              [&callGivenLambdaWithAllCombinationsOfTypes,
+               &func]<typename T>() {
                 callGivenLambdaWithAllCombinationsOfTypes
                     .template operator()<NumTemplateParameter - 1, T, Ts...>(
-                        AD_FWD(func), AD_FWD(callGivenLambdaWithAllCombinationsOfTypes));
+                        AD_FWD(func),
+                        AD_FWD(callGivenLambdaWithAllCombinationsOfTypes));
               });
         }
       };
@@ -786,7 +868,8 @@ TEST(ConfigManagerTest, AddValidator) {
   @tparam T Same `T` as for `createDummyValueForValidator` and
   `generateSingleParameterValidatorFunction`.
   */
-  auto adjustVariantArgument = []<typename T>(size_t variantThatNeedsPossibleAdjustment) -> size_t {
+  auto adjustVariantArgument =
+      []<typename T>(size_t variantThatNeedsPossibleAdjustment) -> size_t {
     if constexpr (std::is_same_v<T, bool>) {
       /*
       Even numbers for `variant` always result in true, regardless if
@@ -812,13 +895,15 @@ TEST(ConfigManagerTest, AddValidator) {
   auto generateValidatorName = []<typename... Ts>(size_t id) {
     return absl::StrCat(
         "Config manager validator<",
-        lazyStrJoin(std::array{ConfigOption::availableTypesToString<Ts>()...}, ", "), "> ", id);
+        lazyStrJoin(std::array{ConfigOption::availableTypesToString<Ts>()...},
+                    ", "),
+        "> ", id);
   };
 
   /*
   @brief Generate and add a validator, which follows the invariant of
-  `generateSingleParameterValidatorFunction` and was named via `generateValidatorName`, to the given
-  config manager.
+  `generateSingleParameterValidatorFunction` and was named via
+  `generateValidatorName`, to the given config manager.
 
   @tparam Ts The parameter types for the validator functions.
 
@@ -830,16 +915,19 @@ TEST(ConfigManagerTest, AddValidator) {
   */
   auto addValidatorToConfigManager =
       [&generateValidatorName, &adjustVariantArgument ]<typename... Ts>(
-          size_t variant, ConfigManager & m, const ConfigOptionProxy<Ts>... validatorArguments)
+          size_t variant, ConfigManager & m,
+          const ConfigOptionProxy<Ts>... validatorArguments)
           requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
     // Add the new validator
     m.addValidator(
         [variant, &adjustVariantArgument](const Ts&... args) {
           return (generateSingleParameterValidatorFunction<Ts>(
-                      adjustVariantArgument.template operator()<Ts>(variant))(args) ||
+                      adjustVariantArgument.template operator()<Ts>(variant))(
+                      args) ||
                   ...);
         },
-        generateValidatorName.template operator()<Ts...>(variant), validatorArguments...);
+        generateValidatorName.template operator()<Ts...>(variant),
+        validatorArguments...);
   };
 
   /*
@@ -864,11 +952,13 @@ TEST(ConfigManagerTest, AddValidator) {
       [&generateValidatorName, &adjustVariantArgument ]<typename... Ts>(
           size_t variantStart, size_t variantEnd, ConfigManager & m,
           const nlohmann::json& defaultValues,
-          const std::same_as<nlohmann::json::json_pointer> auto&... configOptionPaths)
+          const std::same_as<
+              nlohmann::json::json_pointer> auto&... configOptionPaths)
           requires(sizeof...(Ts) == sizeof...(configOptionPaths)) {
     // Using the invariant of our function generator, to create valid
     // and none valid values for all added validators.
-    for (size_t validatorNumber = variantStart; validatorNumber < variantEnd; validatorNumber++) {
+    for (size_t validatorNumber = variantStart; validatorNumber < variantEnd;
+         validatorNumber++) {
       nlohmann::json validJson(defaultValues);
       ((validJson[configOptionPaths] = createDummyValueForValidator<Ts>(
             adjustVariantArgument.template operator()<Ts>(variantEnd) + 1)),
@@ -890,8 +980,9 @@ TEST(ConfigManagerTest, AddValidator) {
         checkValidator(m, validJson, invalidJson,
                        generateValidatorName.template operator()<Ts...>(0));
       } else {
-        checkValidator(m, validJson, invalidJson,
-                       generateValidatorName.template operator()<Ts...>(validatorNumber));
+        checkValidator(
+            m, validJson, invalidJson,
+            generateValidatorName.template operator()<Ts...>(validatorNumber));
       }
     }
   };
@@ -909,12 +1000,14 @@ TEST(ConfigManagerTest, AddValidator) {
   @param defaultValues The values for all the configuration options, that will
   not be checked via the validator.
   @param validatorArguments As list of pairs, that contain a json pointer to the
-  position of the configuration option in the configuration manager and a proxy to the
-  `ConfigOption` object itself. The described configuration options will be passed as arguments to
-  the validator function, in the same order as given here.
+  position of the configuration option in the configuration manager and a proxy
+  to the `ConfigOption` object itself. The described configuration options will
+  be passed as arguments to the validator function, in the same order as given
+  here.
   */
   auto doTestNoValidatorInSubManager =
-      [&addValidatorToConfigManager, &testGeneratedValidatorsOfConfigManager ]<typename... Ts>(
+      [&addValidatorToConfigManager, &
+       testGeneratedValidatorsOfConfigManager ]<typename... Ts>(
           ConfigManager & m, const nlohmann::json& defaultValues,
           const std::pair<nlohmann::json::json_pointer,
                           ConfigOptionProxy<Ts>>&... validatorArguments)
@@ -924,7 +1017,8 @@ TEST(ConfigManagerTest, AddValidator) {
 
     for (size_t i = 0; i < NUMBER_OF_VALIDATORS; i++) {
       // Add a new validator
-      addValidatorToConfigManager.template operator()<Ts...>(i, m, validatorArguments.second...);
+      addValidatorToConfigManager.template operator()<Ts...>(
+          i, m, validatorArguments.second...);
 
       // Test all the added validators.
       testGeneratedValidatorsOfConfigManager.template operator()<Ts...>(
@@ -949,13 +1043,16 @@ TEST(ConfigManagerTest, AddValidator) {
   @param defaultValues The values for all the configuration options, that will
   not be checked via the validator.
   @param validatorArguments As list of pairs, that contain a json pointer to the
-  position of the configuration option in the configuration manager and a proxy to the
-  `ConfigOption` object itself. The described configuration options will be passed as arguments to
-  the validator function, in the same order as given here.
+  position of the configuration option in the configuration manager and a proxy
+  to the `ConfigOption` object itself. The described configuration options will
+  be passed as arguments to the validator function, in the same order as given
+  here.
   */
   auto doTestAlwaysValidatorInSubManager =
-      [&addValidatorToConfigManager, &testGeneratedValidatorsOfConfigManager ]<typename... Ts>(
-          ConfigManager & m, ConfigManager & subM, const nlohmann::json& defaultValues,
+      [&addValidatorToConfigManager, &
+       testGeneratedValidatorsOfConfigManager ]<typename... Ts>(
+          ConfigManager & m, ConfigManager & subM,
+          const nlohmann::json& defaultValues,
           const std::pair<nlohmann::json::json_pointer,
                           ConfigOptionProxy<Ts>>&... validatorArguments)
           requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
@@ -966,7 +1063,8 @@ TEST(ConfigManagerTest, AddValidator) {
     // manager goes correctly.
     for (size_t i = 0; i < NUMBER_OF_VALIDATORS; i++) {
       // Add a new validator
-      addValidatorToConfigManager.template operator()<Ts...>(i, subM, validatorArguments.second...);
+      addValidatorToConfigManager.template operator()<Ts...>(
+          i, subM, validatorArguments.second...);
 
       // Test all the added validators.
       testGeneratedValidatorsOfConfigManager.template operator()<Ts...>(
@@ -976,7 +1074,8 @@ TEST(ConfigManagerTest, AddValidator) {
     // Now, we add additional validators to the top manager.
     for (size_t i = NUMBER_OF_VALIDATORS; i < NUMBER_OF_VALIDATORS * 2; i++) {
       // Add a new validator
-      addValidatorToConfigManager.template operator()<Ts...>(i, m, validatorArguments.second...);
+      addValidatorToConfigManager.template operator()<Ts...>(
+          i, m, validatorArguments.second...);
 
       // Test all the added validators.
       testGeneratedValidatorsOfConfigManager.template operator()<Ts...>(
@@ -985,97 +1084,116 @@ TEST(ConfigManagerTest, AddValidator) {
   };
 
   // Does all tests for single parameter validators for a given type.
-  auto doSingleParameterTests = [&doTestNoValidatorInSubManager,
-                                 &doTestAlwaysValidatorInSubManager]<typename Type>() {
-    // Variables needed for configuration options.
-    Type firstVar;
+  auto doSingleParameterTests =
+      [&doTestNoValidatorInSubManager,
+       &doTestAlwaysValidatorInSubManager]<typename Type>() {
+        // Variables needed for configuration options.
+        Type firstVar;
 
-    // No sub manager.
-    ConfigManager mNoSub;
-    decltype(auto) mNoSubOption = mNoSub.addOption("someValue", "", &firstVar);
-    doTestNoValidatorInSubManager.template operator()<Type>(
-        mNoSub, nlohmann::json(nlohmann::json::value_t::object),
-        std::make_pair(nlohmann::json::json_pointer("/someValue"), mNoSubOption));
+        // No sub manager.
+        ConfigManager mNoSub;
+        decltype(auto) mNoSubOption =
+            mNoSub.addOption("someValue", "", &firstVar);
+        doTestNoValidatorInSubManager.template operator()<Type>(
+            mNoSub, nlohmann::json(nlohmann::json::value_t::object),
+            std::make_pair(nlohmann::json::json_pointer("/someValue"),
+                           mNoSubOption));
 
-    // With sub manager. Sub manager has no validators of its own.
-    ConfigManager mSubNoValidator;
-    decltype(auto) mSubNoValidatorOption =
-        mSubNoValidator.addSubManager({"some"s, "manager"s}).addOption("someValue", "", &firstVar);
-    doTestNoValidatorInSubManager.template operator()<Type>(
-        mSubNoValidator, nlohmann::json(nlohmann::json::value_t::object),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue"),
-                       mSubNoValidatorOption));
+        // With sub manager. Sub manager has no validators of its own.
+        ConfigManager mSubNoValidator;
+        decltype(auto) mSubNoValidatorOption =
+            mSubNoValidator.addSubManager({"some"s, "manager"s})
+                .addOption("someValue", "", &firstVar);
+        doTestNoValidatorInSubManager.template operator()<Type>(
+            mSubNoValidator, nlohmann::json(nlohmann::json::value_t::object),
+            std::make_pair(
+                nlohmann::json::json_pointer("/some/manager/someValue"),
+                mSubNoValidatorOption));
 
-    /*
-    With sub manager.
-    Covers the following cases:
-    - Sub manager has validators of its own, however the manager does not.
-    - Sub manager has validators of its own, as does the manager.
-    */
-    ConfigManager mSubWithValidator;
-    ConfigManager& mSubWithValidatorSub = mSubWithValidator.addSubManager({"some"s, "manager"s});
-    decltype(auto) mSubWithValidatorOption =
-        mSubWithValidatorSub.addOption("someValue", "", &firstVar);
-    doTestAlwaysValidatorInSubManager.template operator()<Type>(
-        mSubWithValidator, mSubWithValidatorSub, nlohmann::json(nlohmann::json::value_t::object),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue"),
-                       mSubWithValidatorOption));
-  };
+        /*
+        With sub manager.
+        Covers the following cases:
+        - Sub manager has validators of its own, however the manager does not.
+        - Sub manager has validators of its own, as does the manager.
+        */
+        ConfigManager mSubWithValidator;
+        ConfigManager& mSubWithValidatorSub =
+            mSubWithValidator.addSubManager({"some"s, "manager"s});
+        decltype(auto) mSubWithValidatorOption =
+            mSubWithValidatorSub.addOption("someValue", "", &firstVar);
+        doTestAlwaysValidatorInSubManager.template operator()<Type>(
+            mSubWithValidator, mSubWithValidatorSub,
+            nlohmann::json(nlohmann::json::value_t::object),
+            std::make_pair(
+                nlohmann::json::json_pointer("/some/manager/someValue"),
+                mSubWithValidatorOption));
+      };
 
   callGivenLambdaWithAllCombinationsOfTypes.template operator()<1>(
       doSingleParameterTests, callGivenLambdaWithAllCombinationsOfTypes);
 
   // Does all tests for validators with two parameter types for the given type
   // combination.
-  auto doDoubleParameterTests = [&doTestNoValidatorInSubManager,
-                                 &doTestAlwaysValidatorInSubManager]<typename Type1,
-                                                                     typename Type2>() {
-    // Variables needed for configuration options.
-    Type1 firstVar;
-    Type2 secondVar;
+  auto doDoubleParameterTests =
+      [&doTestNoValidatorInSubManager,
+       &doTestAlwaysValidatorInSubManager]<typename Type1, typename Type2>() {
+        // Variables needed for configuration options.
+        Type1 firstVar;
+        Type2 secondVar;
 
-    // No sub manager.
-    ConfigManager mNoSub;
-    decltype(auto) mNoSubOption1 = mNoSub.addOption("someValue1", "", &firstVar);
-    decltype(auto) mNoSubOption2 = mNoSub.addOption("someValue2", "", &secondVar);
-    doTestNoValidatorInSubManager.template operator()<Type1, Type2>(
-        mNoSub, nlohmann::json(nlohmann::json::value_t::object),
-        std::make_pair(nlohmann::json::json_pointer("/someValue1"), mNoSubOption1),
-        std::make_pair(nlohmann::json::json_pointer("/someValue2"), mNoSubOption2));
+        // No sub manager.
+        ConfigManager mNoSub;
+        decltype(auto) mNoSubOption1 =
+            mNoSub.addOption("someValue1", "", &firstVar);
+        decltype(auto) mNoSubOption2 =
+            mNoSub.addOption("someValue2", "", &secondVar);
+        doTestNoValidatorInSubManager.template operator()<Type1, Type2>(
+            mNoSub, nlohmann::json(nlohmann::json::value_t::object),
+            std::make_pair(nlohmann::json::json_pointer("/someValue1"),
+                           mNoSubOption1),
+            std::make_pair(nlohmann::json::json_pointer("/someValue2"),
+                           mNoSubOption2));
 
-    // With sub manager. Sub manager has no validators of its own.
-    ConfigManager mSubNoValidator;
-    ConfigManager& mSubNoValidatorSub = mSubNoValidator.addSubManager({"some"s, "manager"s});
-    decltype(auto) mSubNoValidatorOption1 =
-        mSubNoValidatorSub.addOption("someValue1", "", &firstVar);
-    decltype(auto) mSubNoValidatorOption2 =
-        mSubNoValidatorSub.addOption("someValue2", "", &secondVar);
-    doTestNoValidatorInSubManager.template operator()<Type1, Type2>(
-        mSubNoValidator, nlohmann::json(nlohmann::json::value_t::object),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue1"),
-                       mSubNoValidatorOption1),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue2"),
-                       mSubNoValidatorOption2));
+        // With sub manager. Sub manager has no validators of its own.
+        ConfigManager mSubNoValidator;
+        ConfigManager& mSubNoValidatorSub =
+            mSubNoValidator.addSubManager({"some"s, "manager"s});
+        decltype(auto) mSubNoValidatorOption1 =
+            mSubNoValidatorSub.addOption("someValue1", "", &firstVar);
+        decltype(auto) mSubNoValidatorOption2 =
+            mSubNoValidatorSub.addOption("someValue2", "", &secondVar);
+        doTestNoValidatorInSubManager.template operator()<Type1, Type2>(
+            mSubNoValidator, nlohmann::json(nlohmann::json::value_t::object),
+            std::make_pair(
+                nlohmann::json::json_pointer("/some/manager/someValue1"),
+                mSubNoValidatorOption1),
+            std::make_pair(
+                nlohmann::json::json_pointer("/some/manager/someValue2"),
+                mSubNoValidatorOption2));
 
-    /*
-    With sub manager.
-    Covers the following cases:
-    - Sub manager has validators of its own, however the manager does not.
-    - Sub manager has validators of its own, as does the manager.
-    */
-    ConfigManager mSubWithValidator;
-    ConfigManager& mSubWithValidatorSub = mSubWithValidator.addSubManager({"some"s, "manager"s});
-    decltype(auto) mSubWithValidatorOption1 =
-        mSubWithValidatorSub.addOption("someValue1", "", &firstVar);
-    decltype(auto) mSubWithValidatorOption2 =
-        mSubWithValidatorSub.addOption("someValue2", "", &secondVar);
-    doTestAlwaysValidatorInSubManager.template operator()<Type1, Type2>(
-        mSubWithValidator, mSubWithValidatorSub, nlohmann::json(nlohmann::json::value_t::object),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue1"),
-                       mSubWithValidatorOption1),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue2"),
-                       mSubWithValidatorOption2));
-  };
+        /*
+        With sub manager.
+        Covers the following cases:
+        - Sub manager has validators of its own, however the manager does not.
+        - Sub manager has validators of its own, as does the manager.
+        */
+        ConfigManager mSubWithValidator;
+        ConfigManager& mSubWithValidatorSub =
+            mSubWithValidator.addSubManager({"some"s, "manager"s});
+        decltype(auto) mSubWithValidatorOption1 =
+            mSubWithValidatorSub.addOption("someValue1", "", &firstVar);
+        decltype(auto) mSubWithValidatorOption2 =
+            mSubWithValidatorSub.addOption("someValue2", "", &secondVar);
+        doTestAlwaysValidatorInSubManager.template operator()<Type1, Type2>(
+            mSubWithValidator, mSubWithValidatorSub,
+            nlohmann::json(nlohmann::json::value_t::object),
+            std::make_pair(
+                nlohmann::json::json_pointer("/some/manager/someValue1"),
+                mSubWithValidatorOption1),
+            std::make_pair(
+                nlohmann::json::json_pointer("/some/manager/someValue2"),
+                mSubWithValidatorOption2));
+      };
 
   callGivenLambdaWithAllCombinationsOfTypes.template operator()<2>(
       doDoubleParameterTests, callGivenLambdaWithAllCombinationsOfTypes);
@@ -1083,7 +1201,8 @@ TEST(ConfigManagerTest, AddValidator) {
   // Testing, if validators with different parameter types work, when added to
   // the same config manager.
   auto doDifferentParameterTests = [&addValidatorToConfigManager,
-                                    &generateValidatorName]<typename Type1, typename Type2>() {
+                                    &generateValidatorName]<typename Type1,
+                                                            typename Type2>() {
     // Variables for config options.
     Type1 var1;
     Type2 var2;
@@ -1103,7 +1222,8 @@ TEST(ConfigManagerTest, AddValidator) {
     */
     auto checkAllValidAndInvalidValueCombinations =
         [&generateValidatorName]<typename T1, typename T2>(
-            ConfigManager& m, const std::pair<nlohmann::json::json_pointer, size_t>& validator1,
+            ConfigManager& m,
+            const std::pair<nlohmann::json::json_pointer, size_t>& validator1,
             const std::pair<nlohmann::json::json_pointer, size_t>& validator2) {
           /*
           Input for `parseConfig`. One contains values, that are valid for all
@@ -1125,7 +1245,8 @@ TEST(ConfigManagerTest, AddValidator) {
           invalidValueJson[validator2.first] =
               createDummyValueForValidator<Type2>(validator2.second + 1);
           checkValidator(m, validValueJson, invalidValueJson,
-                         generateValidatorName.template operator()<Type1>(validator1.second));
+                         generateValidatorName.template operator()<Type1>(
+                             validator1.second));
 
           // Value for `validator1` is valid. Value for `validator2` is invalid.
           invalidValueJson[validator1.first] =
@@ -1133,32 +1254,40 @@ TEST(ConfigManagerTest, AddValidator) {
           invalidValueJson[validator2.first] =
               createDummyValueForValidator<Type2>(validator2.second);
           checkValidator(m, validValueJson, invalidValueJson,
-                         generateValidatorName.template operator()<Type2>(validator2.second));
+                         generateValidatorName.template operator()<Type2>(
+                             validator2.second));
         };
 
     // No sub manager.
     ConfigManager mNoSub;
     decltype(auto) mNoSubOption1 = mNoSub.addOption("someValue1", "", &var1);
     decltype(auto) mNoSubOption2 = mNoSub.addOption("someValue2", "", &var2);
-    addValidatorToConfigManager.template operator()<Type1>(1, mNoSub, mNoSubOption1);
-    addValidatorToConfigManager.template operator()<Type2>(1, mNoSub, mNoSubOption2);
+    addValidatorToConfigManager.template operator()<Type1>(1, mNoSub,
+                                                           mNoSubOption1);
+    addValidatorToConfigManager.template operator()<Type2>(1, mNoSub,
+                                                           mNoSubOption2);
     checkAllValidAndInvalidValueCombinations.template operator()<Type1, Type2>(
         mNoSub, std::make_pair(nlohmann::json::json_pointer("/someValue1"), 1),
         std::make_pair(nlohmann::json::json_pointer("/someValue2"), 1));
 
     // With sub manager. Sub manager has no validators of its own.
     ConfigManager mSubNoValidator;
-    ConfigManager& mSubNoValidatorSub = mSubNoValidator.addSubManager({"some"s, "manager"s});
-    decltype(auto) mSubNoValidatorOption1 = mSubNoValidatorSub.addOption("someValue1", "", &var1);
-    decltype(auto) mSubNoValidatorOption2 = mSubNoValidatorSub.addOption("someValue2", "", &var2);
-    addValidatorToConfigManager.template operator()<Type1>(1, mSubNoValidator,
-                                                           mSubNoValidatorOption1);
-    addValidatorToConfigManager.template operator()<Type2>(1, mSubNoValidator,
-                                                           mSubNoValidatorOption2);
+    ConfigManager& mSubNoValidatorSub =
+        mSubNoValidator.addSubManager({"some"s, "manager"s});
+    decltype(auto) mSubNoValidatorOption1 =
+        mSubNoValidatorSub.addOption("someValue1", "", &var1);
+    decltype(auto) mSubNoValidatorOption2 =
+        mSubNoValidatorSub.addOption("someValue2", "", &var2);
+    addValidatorToConfigManager.template operator()<Type1>(
+        1, mSubNoValidator, mSubNoValidatorOption1);
+    addValidatorToConfigManager.template operator()<Type2>(
+        1, mSubNoValidator, mSubNoValidatorOption2);
     checkAllValidAndInvalidValueCombinations.template operator()<Type1, Type2>(
         mSubNoValidator,
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue1"), 1),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue2"), 1));
+        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue1"),
+                       1),
+        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue2"),
+                       1));
 
     // Sub manager has validators of its own, however the manager does not.
     ConfigManager mNoValidatorSubValidator;
@@ -1168,14 +1297,16 @@ TEST(ConfigManagerTest, AddValidator) {
         mNoValidatorSubValidatorSub.addOption("someValue1", "", &var1);
     decltype(auto) mNoValidatorSubValidatorOption2 =
         mNoValidatorSubValidatorSub.addOption("someValue2", "", &var2);
-    addValidatorToConfigManager.template operator()<Type1>(1, mNoValidatorSubValidatorSub,
-                                                           mNoValidatorSubValidatorOption1);
-    addValidatorToConfigManager.template operator()<Type2>(1, mNoValidatorSubValidatorSub,
-                                                           mNoValidatorSubValidatorOption2);
+    addValidatorToConfigManager.template operator()<Type1>(
+        1, mNoValidatorSubValidatorSub, mNoValidatorSubValidatorOption1);
+    addValidatorToConfigManager.template operator()<Type2>(
+        1, mNoValidatorSubValidatorSub, mNoValidatorSubValidatorOption2);
     checkAllValidAndInvalidValueCombinations.template operator()<Type1, Type2>(
         mNoValidatorSubValidator,
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue1"), 1),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue2"), 1));
+        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue1"),
+                       1),
+        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue2"),
+                       1));
 
     // Sub manager has validators of its own, as does the manager.
     ConfigManager mValidatorSubValidator;
@@ -1185,14 +1316,16 @@ TEST(ConfigManagerTest, AddValidator) {
         mValidatorSubValidatorSub.addOption("someValue1", "", &var1);
     decltype(auto) mValidatorSubValidatorOption2 =
         mValidatorSubValidatorSub.addOption("someValue2", "", &var2);
-    addValidatorToConfigManager.template operator()<Type1>(1, mValidatorSubValidator,
-                                                           mValidatorSubValidatorOption1);
-    addValidatorToConfigManager.template operator()<Type2>(1, mValidatorSubValidatorSub,
-                                                           mValidatorSubValidatorOption2);
+    addValidatorToConfigManager.template operator()<Type1>(
+        1, mValidatorSubValidator, mValidatorSubValidatorOption1);
+    addValidatorToConfigManager.template operator()<Type2>(
+        1, mValidatorSubValidatorSub, mValidatorSubValidatorOption2);
     checkAllValidAndInvalidValueCombinations.template operator()<Type1, Type2>(
         mValidatorSubValidator,
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue1"), 1),
-        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue2"), 1));
+        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue1"),
+                       1),
+        std::make_pair(nlohmann::json::json_pointer("/some/manager/someValue2"),
+                       1));
   };
 
   callGivenLambdaWithAllCombinationsOfTypes.template operator()<2>(
@@ -1201,8 +1334,8 @@ TEST(ConfigManagerTest, AddValidator) {
 
 TEST(ConfigManagerTest, AddValidatorException) {
   /*
-  Test, if there is an exception, when we give `addValidator` configuration options, that are not
-  contained in the corresponding configuration manager.
+  Test, if there is an exception, when we give `addValidator` configuration
+  options, that are not contained in the corresponding configuration manager.
   */
   auto doValidatorParameterNotInConfigManagerTest = []<typename T>() {
     // Variable for the configuration options.
@@ -1214,15 +1347,19 @@ TEST(ConfigManagerTest, AddValidatorException) {
     /*
     @brief Check, if a call to the `addValidator` function behaves as wanted.
     */
-    auto checkAddValidatorBehavior = [&validatorDummyFunction](
-                                         ConfigManager& m, const ConfigOptionProxy<T> validOption,
-                                         const ConfigOptionProxy<T> notValidOption) {
-      ASSERT_NO_THROW(m.addValidator(validatorDummyFunction, "", validOption));
-      AD_EXPECT_THROW_WITH_MESSAGE(
-          m.addValidator(validatorDummyFunction, notValidOption.getConfigOption().getIdentifier(),
-                         notValidOption),
-          ::testing::ContainsRegex(notValidOption.getConfigOption().getIdentifier()));
-    };
+    auto checkAddValidatorBehavior =
+        [&validatorDummyFunction](ConfigManager& m,
+                                  const ConfigOptionProxy<T> validOption,
+                                  const ConfigOptionProxy<T> notValidOption) {
+          ASSERT_NO_THROW(
+              m.addValidator(validatorDummyFunction, "", validOption));
+          AD_EXPECT_THROW_WITH_MESSAGE(
+              m.addValidator(validatorDummyFunction,
+                             notValidOption.getConfigOption().getIdentifier(),
+                             notValidOption),
+              ::testing::ContainsRegex(
+                  notValidOption.getConfigOption().getIdentifier()));
+        };
 
     // An outside configuration option.
     ConfigOption outsideOption("outside", "", &var);
@@ -1235,43 +1372,61 @@ TEST(ConfigManagerTest, AddValidatorException) {
 
     // With sub manager.
     ConfigManager mWithSub;
-    decltype(auto) mWithSubOption = mWithSub.addOption("someTopOption", "", &var);
+    decltype(auto) mWithSubOption =
+        mWithSub.addOption("someTopOption", "", &var);
     ConfigManager& mWithSubSub = mWithSub.addSubManager({"Some"s, "manager"s});
-    decltype(auto) mWithSubSubOption = mWithSubSub.addOption("someSubOption", "", &var);
+    decltype(auto) mWithSubSubOption =
+        mWithSubSub.addOption("someSubOption", "", &var);
     checkAddValidatorBehavior(mWithSub, mWithSubOption, outsideOptionProxy);
     checkAddValidatorBehavior(mWithSub, mWithSubSubOption, outsideOptionProxy);
-    checkAddValidatorBehavior(mWithSubSub, mWithSubSubOption, outsideOptionProxy);
+    checkAddValidatorBehavior(mWithSubSub, mWithSubSubOption,
+                              outsideOptionProxy);
     checkAddValidatorBehavior(mWithSubSub, mWithSubSubOption, mWithSubOption);
 
     // With 2 sub manager.
     ConfigManager mWith2Sub;
-    decltype(auto) mWith2SubOption = mWith2Sub.addOption("someTopOption", "", &var);
-    ConfigManager& mWith2SubSub1 = mWith2Sub.addSubManager({"Some"s, "manager"s});
-    decltype(auto) mWith2SubSub1Option = mWith2SubSub1.addOption("someSubOption1", "", &var);
-    ConfigManager& mWith2SubSub2 = mWith2Sub.addSubManager({"Some"s, "other"s, "manager"s});
-    decltype(auto) mWith2SubSub2Option = mWith2SubSub2.addOption("someSubOption2", "", &var);
+    decltype(auto) mWith2SubOption =
+        mWith2Sub.addOption("someTopOption", "", &var);
+    ConfigManager& mWith2SubSub1 =
+        mWith2Sub.addSubManager({"Some"s, "manager"s});
+    decltype(auto) mWith2SubSub1Option =
+        mWith2SubSub1.addOption("someSubOption1", "", &var);
+    ConfigManager& mWith2SubSub2 =
+        mWith2Sub.addSubManager({"Some"s, "other"s, "manager"s});
+    decltype(auto) mWith2SubSub2Option =
+        mWith2SubSub2.addOption("someSubOption2", "", &var);
     checkAddValidatorBehavior(mWith2Sub, mWith2SubOption, outsideOptionProxy);
-    checkAddValidatorBehavior(mWith2Sub, mWith2SubSub1Option, outsideOptionProxy);
-    checkAddValidatorBehavior(mWith2Sub, mWith2SubSub2Option, outsideOptionProxy);
-    checkAddValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option, outsideOptionProxy);
-    checkAddValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option, mWith2SubOption);
-    checkAddValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option, mWith2SubSub2Option);
-    checkAddValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, outsideOptionProxy);
-    checkAddValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, mWith2SubOption);
-    checkAddValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, mWith2SubSub1Option);
+    checkAddValidatorBehavior(mWith2Sub, mWith2SubSub1Option,
+                              outsideOptionProxy);
+    checkAddValidatorBehavior(mWith2Sub, mWith2SubSub2Option,
+                              outsideOptionProxy);
+    checkAddValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option,
+                              outsideOptionProxy);
+    checkAddValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option,
+                              mWith2SubOption);
+    checkAddValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option,
+                              mWith2SubSub2Option);
+    checkAddValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option,
+                              outsideOptionProxy);
+    checkAddValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option,
+                              mWith2SubOption);
+    checkAddValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option,
+                              mWith2SubSub1Option);
   };
 
   doForTypeInConfigOptionValueType(doValidatorParameterNotInConfigManagerTest);
 }
 
 TEST(ConfigManagerTest, AddOptionValidator) {
-  // Generate a lambda, that requires all the given configuration option to have the wanted string
-  // as the representation of their value.
-  auto generateValueAsStringComparison = [](std::string_view valueStringRepresentation) {
-    return [wantedString = std::string(valueStringRepresentation)](const auto&... options) {
-      return ((options.getValueAsString() == wantedString) && ...);
-    };
-  };
+  // Generate a lambda, that requires all the given configuration option to have
+  // the wanted string as the representation of their value.
+  auto generateValueAsStringComparison =
+      [](std::string_view valueStringRepresentation) {
+        return [wantedString = std::string(valueStringRepresentation)](
+                   const auto&... options) {
+          return ((options.getValueAsString() == wantedString) && ...);
+        };
+      };
 
   // Variables for configuration options.
   int firstVar;
@@ -1281,58 +1436,71 @@ TEST(ConfigManagerTest, AddOptionValidator) {
   ConfigManager managerWithNoSubManager;
   decltype(auto) managerWithNoSubManagerOption1 =
       managerWithNoSubManager.addOption("someOption1", "", &firstVar);
-  managerWithNoSubManager.addOptionValidator(generateValueAsStringComparison("10"), "someOption1",
-                                             managerWithNoSubManagerOption1);
-  checkValidator(managerWithNoSubManager, nlohmann::json::parse(R"--({"someOption1" : 10})--"),
-                 nlohmann::json::parse(R"--({"someOption1" : 1})--"), "someOption1");
+  managerWithNoSubManager.addOptionValidator(
+      generateValueAsStringComparison("10"), "someOption1",
+      managerWithNoSubManagerOption1);
+  checkValidator(managerWithNoSubManager,
+                 nlohmann::json::parse(R"--({"someOption1" : 10})--"),
+                 nlohmann::json::parse(R"--({"someOption1" : 1})--"),
+                 "someOption1");
   decltype(auto) managerWithNoSubManagerOption2 =
       managerWithNoSubManager.addOption("someOption2", "", &secondVar);
-  managerWithNoSubManager.addOptionValidator(generateValueAsStringComparison("10"), "Both options",
-                                             managerWithNoSubManagerOption1,
-                                             managerWithNoSubManagerOption2);
-  checkValidator(managerWithNoSubManager,
-                 nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 10})--"),
-                 nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 1})--"),
-                 "Both options");
+  managerWithNoSubManager.addOptionValidator(
+      generateValueAsStringComparison("10"), "Both options",
+      managerWithNoSubManagerOption1, managerWithNoSubManagerOption2);
+  checkValidator(
+      managerWithNoSubManager,
+      nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 10})--"),
+      nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 1})--"),
+      "Both options");
 
   // With sub manager. Sub manager has no validators of its own.
   ConfigManager managerWithSubManagerWhoHasNoValidators;
   decltype(auto) managerWithSubManagerWhoHasNoValidatorsOption =
-      managerWithSubManagerWhoHasNoValidators.addOption("someOption", "", &firstVar, 4);
+      managerWithSubManagerWhoHasNoValidators.addOption("someOption", "",
+                                                        &firstVar, 4);
   ConfigManager& managerWithSubManagerWhoHasNoValidatorsSubManager =
-      managerWithSubManagerWhoHasNoValidators.addSubManager({"Sub"s, "manager"s});
+      managerWithSubManagerWhoHasNoValidators.addSubManager(
+          {"Sub"s, "manager"s});
   decltype(auto) managerWithSubManagerWhoHasNoValidatorsSubManagerOption =
-      managerWithSubManagerWhoHasNoValidatorsSubManager.addOption("someOption", "", &secondVar, 4);
+      managerWithSubManagerWhoHasNoValidatorsSubManager.addOption(
+          "someOption", "", &secondVar, 4);
   managerWithSubManagerWhoHasNoValidators.addOptionValidator(
       generateValueAsStringComparison("10"), "Sub manager option",
       managerWithSubManagerWhoHasNoValidatorsSubManagerOption);
-  checkValidator(managerWithSubManagerWhoHasNoValidators,
-                 nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 10}}})--"),
-                 nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 1}}})--"),
-                 "Sub manager option");
+  checkValidator(
+      managerWithSubManagerWhoHasNoValidators,
+      nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 10}}})--"),
+      nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 1}}})--"),
+      "Sub manager option");
   managerWithSubManagerWhoHasNoValidators.addOptionValidator(
       generateValueAsStringComparison("10"), "Both options",
       managerWithSubManagerWhoHasNoValidatorsSubManagerOption,
       managerWithSubManagerWhoHasNoValidatorsOption);
   checkValidator(
       managerWithSubManagerWhoHasNoValidators,
-      nlohmann::json::parse(R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 10}}})--"),
-      nlohmann::json::parse(R"--({"someOption" : 1, "Sub":{"manager" : {"someOption" : 10}}})--"),
+      nlohmann::json::parse(
+          R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 10}}})--"),
+      nlohmann::json::parse(
+          R"--({"someOption" : 1, "Sub":{"manager" : {"someOption" : 10}}})--"),
       "Both options");
 
   // Sub manager has validators of its own, however the manager does not.
   ConfigManager managerHasNoValidatorsButSubManagerDoes;
   ConfigManager& managerHasNoValidatorsButSubManagerDoesSubManager =
-      managerHasNoValidatorsButSubManagerDoes.addSubManager({"Sub"s, "manager"s});
+      managerHasNoValidatorsButSubManagerDoes.addSubManager(
+          {"Sub"s, "manager"s});
   decltype(auto) managerHasNoValidatorsButSubManagerDoesSubManagerOption =
-      managerHasNoValidatorsButSubManagerDoesSubManager.addOption("someOption", "", &firstVar, 4);
+      managerHasNoValidatorsButSubManagerDoesSubManager.addOption(
+          "someOption", "", &firstVar, 4);
   managerHasNoValidatorsButSubManagerDoesSubManager.addOptionValidator(
       generateValueAsStringComparison("10"), "Sub manager option",
       managerHasNoValidatorsButSubManagerDoesSubManagerOption);
-  checkValidator(managerHasNoValidatorsButSubManagerDoes,
-                 nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 10}}})--"),
-                 nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 1}}})--"),
-                 "Sub manager option");
+  checkValidator(
+      managerHasNoValidatorsButSubManagerDoes,
+      nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 10}}})--"),
+      nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 1}}})--"),
+      "Sub manager option");
 
   // Sub manager has validators of its own, as does the manager.
   ConfigManager bothHaveValidators;
@@ -1342,20 +1510,25 @@ TEST(ConfigManagerTest, AddOptionValidator) {
       bothHaveValidators.addSubManager({"Sub"s, "manager"s});
   decltype(auto) bothHaveValidatorsSubManagerOption =
       bothHaveValidatorsSubManager.addOption("someOption", "", &secondVar, 4);
-  bothHaveValidators.addOptionValidator(generateValueAsStringComparison("10"), "Top manager option",
+  bothHaveValidators.addOptionValidator(generateValueAsStringComparison("10"),
+                                        "Top manager option",
                                         bothHaveValidatorsOption);
-  bothHaveValidatorsSubManager.addOptionValidator(generateValueAsStringComparison("20"),
-                                                  "Sub manager option",
-                                                  bothHaveValidatorsSubManagerOption);
+  bothHaveValidatorsSubManager.addOptionValidator(
+      generateValueAsStringComparison("20"), "Sub manager option",
+      bothHaveValidatorsSubManagerOption);
   checkValidator(
       bothHaveValidators,
-      nlohmann::json::parse(R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 20}}})--"),
-      nlohmann::json::parse(R"--({"someOption" : 1, "Sub":{"manager" : {"someOption" : 20}}})--"),
+      nlohmann::json::parse(
+          R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 20}}})--"),
+      nlohmann::json::parse(
+          R"--({"someOption" : 1, "Sub":{"manager" : {"someOption" : 20}}})--"),
       "Top manager option");
   checkValidator(
       bothHaveValidators,
-      nlohmann::json::parse(R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 20}}})--"),
-      nlohmann::json::parse(R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 2}}})--"),
+      nlohmann::json::parse(
+          R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 20}}})--"),
+      nlohmann::json::parse(
+          R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 2}}})--"),
       "Sub manager option");
 }
 
@@ -1367,18 +1540,23 @@ TEST(ConfigManagerTest, AddOptionValidatorException) {
   auto validatorDummyFunction = [](const ConfigOption&) { return true; };
 
   /*
-  @brief Check, if a call to the `addOptionValidator` function behaves as wanted.
+  @brief Check, if a call to the `addOptionValidator` function behaves as
+  wanted.
   */
-  auto checkAddOptionValidatorBehavior = [&validatorDummyFunction]<typename T>(
-                                             ConfigManager& m,
-                                             const ConfigOptionProxy<T> validOption,
-                                             const ConfigOptionProxy<T> notValidOption) {
-    ASSERT_NO_THROW(m.addOptionValidator(validatorDummyFunction, "", validOption));
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        m.addOptionValidator(validatorDummyFunction,
-                             notValidOption.getConfigOption().getIdentifier(), notValidOption),
-        ::testing::ContainsRegex(notValidOption.getConfigOption().getIdentifier()));
-  };
+  auto checkAddOptionValidatorBehavior =
+      [&validatorDummyFunction]<typename T>(
+          ConfigManager& m, const ConfigOptionProxy<T> validOption,
+          const ConfigOptionProxy<T> notValidOption) {
+        ASSERT_NO_THROW(
+            m.addOptionValidator(validatorDummyFunction, "", validOption));
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            m.addOptionValidator(
+                validatorDummyFunction,
+                notValidOption.getConfigOption().getIdentifier(),
+                notValidOption),
+            ::testing::ContainsRegex(
+                notValidOption.getConfigOption().getIdentifier()));
+      };
 
   // An outside configuration option.
   ConfigOption outsideOption("outside", "", &var);
@@ -1393,28 +1571,45 @@ TEST(ConfigManagerTest, AddOptionValidatorException) {
   ConfigManager mWithSub;
   decltype(auto) mWithSubOption = mWithSub.addOption("someTopOption", "", &var);
   ConfigManager& mWithSubSub = mWithSub.addSubManager({"Some"s, "manager"s});
-  decltype(auto) mWithSubSubOption = mWithSubSub.addOption("someSubOption", "", &var);
+  decltype(auto) mWithSubSubOption =
+      mWithSubSub.addOption("someSubOption", "", &var);
   checkAddOptionValidatorBehavior(mWithSub, mWithSubOption, outsideOptionProxy);
-  checkAddOptionValidatorBehavior(mWithSub, mWithSubSubOption, outsideOptionProxy);
-  checkAddOptionValidatorBehavior(mWithSubSub, mWithSubSubOption, outsideOptionProxy);
-  checkAddOptionValidatorBehavior(mWithSubSub, mWithSubSubOption, mWithSubOption);
+  checkAddOptionValidatorBehavior(mWithSub, mWithSubSubOption,
+                                  outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWithSubSub, mWithSubSubOption,
+                                  outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWithSubSub, mWithSubSubOption,
+                                  mWithSubOption);
 
   // With 2 sub manager.
   ConfigManager mWith2Sub;
-  decltype(auto) mWith2SubOption = mWith2Sub.addOption("someTopOption", "", &var);
+  decltype(auto) mWith2SubOption =
+      mWith2Sub.addOption("someTopOption", "", &var);
   ConfigManager& mWith2SubSub1 = mWith2Sub.addSubManager({"Some"s, "manager"s});
-  decltype(auto) mWith2SubSub1Option = mWith2SubSub1.addOption("someSubOption1", "", &var);
-  ConfigManager& mWith2SubSub2 = mWith2Sub.addSubManager({"Some"s, "other"s, "manager"s});
-  decltype(auto) mWith2SubSub2Option = mWith2SubSub2.addOption("someSubOption2", "", &var);
-  checkAddOptionValidatorBehavior(mWith2Sub, mWith2SubOption, outsideOptionProxy);
-  checkAddOptionValidatorBehavior(mWith2Sub, mWith2SubSub1Option, outsideOptionProxy);
-  checkAddOptionValidatorBehavior(mWith2Sub, mWith2SubSub2Option, outsideOptionProxy);
-  checkAddOptionValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option, outsideOptionProxy);
-  checkAddOptionValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option, mWith2SubOption);
-  checkAddOptionValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option, mWith2SubSub2Option);
-  checkAddOptionValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, outsideOptionProxy);
-  checkAddOptionValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, mWith2SubOption);
-  checkAddOptionValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, mWith2SubSub1Option);
+  decltype(auto) mWith2SubSub1Option =
+      mWith2SubSub1.addOption("someSubOption1", "", &var);
+  ConfigManager& mWith2SubSub2 =
+      mWith2Sub.addSubManager({"Some"s, "other"s, "manager"s});
+  decltype(auto) mWith2SubSub2Option =
+      mWith2SubSub2.addOption("someSubOption2", "", &var);
+  checkAddOptionValidatorBehavior(mWith2Sub, mWith2SubOption,
+                                  outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWith2Sub, mWith2SubSub1Option,
+                                  outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWith2Sub, mWith2SubSub2Option,
+                                  outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option,
+                                  outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option,
+                                  mWith2SubOption);
+  checkAddOptionValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option,
+                                  mWith2SubSub2Option);
+  checkAddOptionValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option,
+                                  outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option,
+                                  mWith2SubOption);
+  checkAddOptionValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option,
+                                  mWith2SubSub1Option);
 }
 
 TEST(ConfigManagerTest, ContainsOption) {
@@ -1432,45 +1627,64 @@ TEST(ConfigManagerTest, ContainsOption) {
 
   // Single sub manager.
   ConfigManager& subManagerDepth1Num1 = m.addSubManager({"subManager1"s});
-  ASSERT_FALSE(subManagerDepth1Num1.containsOption(topManagerOption.getConfigOption()));
+  ASSERT_FALSE(
+      subManagerDepth1Num1.containsOption(topManagerOption.getConfigOption()));
   ASSERT_FALSE(subManagerDepth1Num1.containsOption(outsideOption));
   decltype(auto) subManagerDepth1Num1Option =
       subManagerDepth1Num1.addOption("SubManager1", "", &var);
-  ASSERT_FALSE(subManagerDepth1Num1.containsOption(topManagerOption.getConfigOption()));
+  ASSERT_FALSE(
+      subManagerDepth1Num1.containsOption(topManagerOption.getConfigOption()));
   ASSERT_FALSE(subManagerDepth1Num1.containsOption(outsideOption));
-  ASSERT_TRUE(subManagerDepth1Num1.containsOption(subManagerDepth1Num1Option.getConfigOption()));
+  ASSERT_TRUE(subManagerDepth1Num1.containsOption(
+      subManagerDepth1Num1Option.getConfigOption()));
   ASSERT_TRUE(m.containsOption(subManagerDepth1Num1Option.getConfigOption()));
 
   // Second sub manager.
   ConfigManager& subManagerDepth1Num2 = m.addSubManager({"subManager2"s});
-  ASSERT_FALSE(subManagerDepth1Num2.containsOption(topManagerOption.getConfigOption()));
+  ASSERT_FALSE(
+      subManagerDepth1Num2.containsOption(topManagerOption.getConfigOption()));
   ASSERT_FALSE(subManagerDepth1Num2.containsOption(outsideOption));
-  ASSERT_FALSE(subManagerDepth1Num2.containsOption(subManagerDepth1Num1Option.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth1Num2.containsOption(
+      subManagerDepth1Num1Option.getConfigOption()));
   decltype(auto) subManagerDepth1Num2Option =
       subManagerDepth1Num2.addOption("SubManager2", "", &var);
-  ASSERT_FALSE(subManagerDepth1Num2.containsOption(topManagerOption.getConfigOption()));
+  ASSERT_FALSE(
+      subManagerDepth1Num2.containsOption(topManagerOption.getConfigOption()));
   ASSERT_FALSE(subManagerDepth1Num2.containsOption(outsideOption));
-  ASSERT_FALSE(subManagerDepth1Num2.containsOption(subManagerDepth1Num1Option.getConfigOption()));
-  ASSERT_TRUE(subManagerDepth1Num2.containsOption(subManagerDepth1Num2Option.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth1Num1.containsOption(subManagerDepth1Num2Option.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth1Num2.containsOption(
+      subManagerDepth1Num1Option.getConfigOption()));
+  ASSERT_TRUE(subManagerDepth1Num2.containsOption(
+      subManagerDepth1Num2Option.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth1Num1.containsOption(
+      subManagerDepth1Num2Option.getConfigOption()));
   ASSERT_TRUE(m.containsOption(subManagerDepth1Num2Option.getConfigOption()));
 
   // Sub manager in the second sub manager.
-  ConfigManager& subManagerDepth2Num = subManagerDepth1Num2.addSubManager({"subManagerDepth2"s});
-  ASSERT_FALSE(subManagerDepth2Num.containsOption(topManagerOption.getConfigOption()));
+  ConfigManager& subManagerDepth2Num =
+      subManagerDepth1Num2.addSubManager({"subManagerDepth2"s});
+  ASSERT_FALSE(
+      subManagerDepth2Num.containsOption(topManagerOption.getConfigOption()));
   ASSERT_FALSE(subManagerDepth2Num.containsOption(outsideOption));
-  ASSERT_FALSE(subManagerDepth2Num.containsOption(subManagerDepth1Num1Option.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth2Num.containsOption(subManagerDepth1Num2Option.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth2Num.containsOption(
+      subManagerDepth1Num1Option.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth2Num.containsOption(
+      subManagerDepth1Num2Option.getConfigOption()));
   decltype(auto) subManagerDepth2NumOption =
       subManagerDepth2Num.addOption("SubManagerDepth2", "", &var);
-  ASSERT_FALSE(subManagerDepth2Num.containsOption(topManagerOption.getConfigOption()));
+  ASSERT_FALSE(
+      subManagerDepth2Num.containsOption(topManagerOption.getConfigOption()));
   ASSERT_FALSE(subManagerDepth2Num.containsOption(outsideOption));
-  ASSERT_FALSE(subManagerDepth2Num.containsOption(subManagerDepth1Num1Option.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth2Num.containsOption(subManagerDepth1Num2Option.getConfigOption()));
-  ASSERT_TRUE(subManagerDepth2Num.containsOption(subManagerDepth2NumOption.getConfigOption()));
-  ASSERT_TRUE(subManagerDepth1Num2.containsOption(subManagerDepth2NumOption.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth2Num.containsOption(
+      subManagerDepth1Num1Option.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth2Num.containsOption(
+      subManagerDepth1Num2Option.getConfigOption()));
+  ASSERT_TRUE(subManagerDepth2Num.containsOption(
+      subManagerDepth2NumOption.getConfigOption()));
+  ASSERT_TRUE(subManagerDepth1Num2.containsOption(
+      subManagerDepth2NumOption.getConfigOption()));
   ASSERT_TRUE(m.containsOption(subManagerDepth2NumOption.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth1Num1.containsOption(subManagerDepth2NumOption.getConfigOption()));
+  ASSERT_FALSE(subManagerDepth1Num1.containsOption(
+      subManagerDepth2NumOption.getConfigOption()));
 }
 
 }  // namespace ad_utility
