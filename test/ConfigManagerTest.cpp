@@ -1613,78 +1613,120 @@ TEST(ConfigManagerTest, AddOptionValidatorException) {
 }
 
 TEST(ConfigManagerTest, ContainsOption) {
+  /*
+  @brief Verify, that the given configuration options are (not) contained in the
+  given configuration manager.
+
+  @param optionsAndWantedStatus A list of configuration options together with
+  the information, if they should be contained in `m`. If true, it should be, if
+  false, it shouldn't.
+  */
+  using ContainmentStatusVector =
+      std::vector<std::pair<const ConfigOption*, bool>>;
+  auto checkContainmentStatus =
+      [](const ConfigManager& m,
+         const ContainmentStatusVector& optionsAndWantedStatus) {
+        std::ranges::for_each(
+            optionsAndWantedStatus,
+            [&m](const ContainmentStatusVector::value_type& p) {
+              if (p.second) {
+                ASSERT_TRUE(m.containsOption(*p.first));
+              } else {
+                ASSERT_FALSE(m.containsOption(*p.first));
+              }
+            });
+      };
+
   // Variable for the configuration options.
   int var;
 
   // Outside configuration option.
   const ConfigOption outsideOption("OutsideOption", "", &var);
 
+  // The vectors for all `ConfigManager` for the vector parameter in
+  // `checkContainmentStatus`. Mainly to reduce duplication.
+  ContainmentStatusVector mContainmentStatusVector{{&outsideOption, false}};
+  ContainmentStatusVector subManagerDepth1Num1ContainmentStatusVector{
+      {&outsideOption, false}};
+  ContainmentStatusVector subManagerDepth1Num2ContainmentStatusVector{
+      {&outsideOption, false}};
+  ContainmentStatusVector subManagerDepth2ContainmentStatusVector{
+      {&outsideOption, false}};
+
   // Without sub manager.
   ConfigManager m;
-  ASSERT_FALSE(m.containsOption(outsideOption));
+  checkContainmentStatus(m, mContainmentStatusVector);
   decltype(auto) topManagerOption = m.addOption("TopLevel", "", &var);
-  ASSERT_TRUE(m.containsOption(topManagerOption.getConfigOption()));
+  mContainmentStatusVector.push_back(
+      {&topManagerOption.getConfigOption(), true});
+  subManagerDepth1Num1ContainmentStatusVector.push_back(
+      {&topManagerOption.getConfigOption(), false});
+  subManagerDepth1Num2ContainmentStatusVector.push_back(
+      {&topManagerOption.getConfigOption(), false});
+  subManagerDepth2ContainmentStatusVector.push_back(
+      {&topManagerOption.getConfigOption(), false});
+  checkContainmentStatus(m, mContainmentStatusVector);
 
   // Single sub manager.
   ConfigManager& subManagerDepth1Num1 = m.addSubManager({"subManager1"s});
-  ASSERT_FALSE(
-      subManagerDepth1Num1.containsOption(topManagerOption.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth1Num1.containsOption(outsideOption));
+  checkContainmentStatus(subManagerDepth1Num1,
+                         subManagerDepth1Num1ContainmentStatusVector);
   decltype(auto) subManagerDepth1Num1Option =
       subManagerDepth1Num1.addOption("SubManager1", "", &var);
-  ASSERT_FALSE(
-      subManagerDepth1Num1.containsOption(topManagerOption.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth1Num1.containsOption(outsideOption));
-  ASSERT_TRUE(subManagerDepth1Num1.containsOption(
-      subManagerDepth1Num1Option.getConfigOption()));
-  ASSERT_TRUE(m.containsOption(subManagerDepth1Num1Option.getConfigOption()));
+  mContainmentStatusVector.push_back(
+      {&subManagerDepth1Num1Option.getConfigOption(), true});
+  subManagerDepth1Num1ContainmentStatusVector.push_back(
+      {&subManagerDepth1Num1Option.getConfigOption(), true});
+  subManagerDepth1Num2ContainmentStatusVector.push_back(
+      {&subManagerDepth1Num1Option.getConfigOption(), false});
+  subManagerDepth2ContainmentStatusVector.push_back(
+      {&subManagerDepth1Num1Option.getConfigOption(), false});
+  checkContainmentStatus(subManagerDepth1Num1,
+                         subManagerDepth1Num1ContainmentStatusVector);
+  checkContainmentStatus(m, mContainmentStatusVector);
 
   // Second sub manager.
   ConfigManager& subManagerDepth1Num2 = m.addSubManager({"subManager2"s});
-  ASSERT_FALSE(
-      subManagerDepth1Num2.containsOption(topManagerOption.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth1Num2.containsOption(outsideOption));
-  ASSERT_FALSE(subManagerDepth1Num2.containsOption(
-      subManagerDepth1Num1Option.getConfigOption()));
+  checkContainmentStatus(subManagerDepth1Num2,
+                         subManagerDepth1Num2ContainmentStatusVector);
   decltype(auto) subManagerDepth1Num2Option =
       subManagerDepth1Num2.addOption("SubManager2", "", &var);
-  ASSERT_FALSE(
-      subManagerDepth1Num2.containsOption(topManagerOption.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth1Num2.containsOption(outsideOption));
-  ASSERT_FALSE(subManagerDepth1Num2.containsOption(
-      subManagerDepth1Num1Option.getConfigOption()));
-  ASSERT_TRUE(subManagerDepth1Num2.containsOption(
-      subManagerDepth1Num2Option.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth1Num1.containsOption(
-      subManagerDepth1Num2Option.getConfigOption()));
-  ASSERT_TRUE(m.containsOption(subManagerDepth1Num2Option.getConfigOption()));
+  mContainmentStatusVector.push_back(
+      {&subManagerDepth1Num2Option.getConfigOption(), true});
+  subManagerDepth1Num1ContainmentStatusVector.push_back(
+      {&subManagerDepth1Num2Option.getConfigOption(), false});
+  subManagerDepth1Num2ContainmentStatusVector.push_back(
+      {&subManagerDepth1Num2Option.getConfigOption(), true});
+  subManagerDepth2ContainmentStatusVector.push_back(
+      {&subManagerDepth1Num2Option.getConfigOption(), false});
+  checkContainmentStatus(subManagerDepth1Num1,
+                         subManagerDepth1Num1ContainmentStatusVector);
+  checkContainmentStatus(m, mContainmentStatusVector);
+  checkContainmentStatus(subManagerDepth1Num2,
+                         subManagerDepth1Num2ContainmentStatusVector);
 
   // Sub manager in the second sub manager.
-  ConfigManager& subManagerDepth2Num =
+  ConfigManager& subManagerDepth2 =
       subManagerDepth1Num2.addSubManager({"subManagerDepth2"s});
-  ASSERT_FALSE(
-      subManagerDepth2Num.containsOption(topManagerOption.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth2Num.containsOption(outsideOption));
-  ASSERT_FALSE(subManagerDepth2Num.containsOption(
-      subManagerDepth1Num1Option.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth2Num.containsOption(
-      subManagerDepth1Num2Option.getConfigOption()));
-  decltype(auto) subManagerDepth2NumOption =
-      subManagerDepth2Num.addOption("SubManagerDepth2", "", &var);
-  ASSERT_FALSE(
-      subManagerDepth2Num.containsOption(topManagerOption.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth2Num.containsOption(outsideOption));
-  ASSERT_FALSE(subManagerDepth2Num.containsOption(
-      subManagerDepth1Num1Option.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth2Num.containsOption(
-      subManagerDepth1Num2Option.getConfigOption()));
-  ASSERT_TRUE(subManagerDepth2Num.containsOption(
-      subManagerDepth2NumOption.getConfigOption()));
-  ASSERT_TRUE(subManagerDepth1Num2.containsOption(
-      subManagerDepth2NumOption.getConfigOption()));
-  ASSERT_TRUE(m.containsOption(subManagerDepth2NumOption.getConfigOption()));
-  ASSERT_FALSE(subManagerDepth1Num1.containsOption(
-      subManagerDepth2NumOption.getConfigOption()));
+  checkContainmentStatus(subManagerDepth2,
+                         subManagerDepth2ContainmentStatusVector);
+  decltype(auto) subManagerDepth2Option =
+      subManagerDepth2.addOption("SubManagerDepth2", "", &var);
+  mContainmentStatusVector.push_back(
+      {&subManagerDepth2Option.getConfigOption(), true});
+  subManagerDepth1Num1ContainmentStatusVector.push_back(
+      {&subManagerDepth2Option.getConfigOption(), false});
+  subManagerDepth1Num2ContainmentStatusVector.push_back(
+      {&subManagerDepth2Option.getConfigOption(), true});
+  subManagerDepth2ContainmentStatusVector.push_back(
+      {&subManagerDepth2Option.getConfigOption(), true});
+  checkContainmentStatus(subManagerDepth1Num1,
+                         subManagerDepth1Num1ContainmentStatusVector);
+  checkContainmentStatus(m, mContainmentStatusVector);
+  checkContainmentStatus(subManagerDepth1Num2,
+                         subManagerDepth1Num2ContainmentStatusVector);
+  checkContainmentStatus(subManagerDepth2,
+                         subManagerDepth2ContainmentStatusVector);
 }
 
 }  // namespace ad_utility
