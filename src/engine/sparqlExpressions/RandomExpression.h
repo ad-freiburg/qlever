@@ -25,7 +25,11 @@ class RandomExpression : public SparqlExpression {
     for (size_t i = 0; i < numElements; ++i) {
       result.push_back(Id::makeFromInt(randInt() >> Id::numDatatypeBits));
     }
-    return result;
+    if (result.size() != 1) {
+      return result;
+    } else {
+      return result.at(0);
+    }
   }
 
   // Get a unique identifier for this expression, used as cache key.
