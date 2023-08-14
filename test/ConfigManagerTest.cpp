@@ -1264,4 +1264,157 @@ TEST(ConfigManagerTest, AddValidatorException) {
   doForTypeInConfigOptionValueType(doValidatorParameterNotInConfigManagerTest);
 }
 
+TEST(ConfigManagerTest, AddOptionValidator) {
+  // Generate a lambda, that requires all the given configuration option to have the wanted string
+  // as the representation of their value.
+  auto generateValueAsStringComparison = [](std::string_view valueStringRepresentation) {
+    return [wantedString = std::string(valueStringRepresentation)](const auto&... options) {
+      return ((options.getValueAsString() == wantedString) && ...);
+    };
+  };
+
+  // Variables for configuration options.
+  int firstVar;
+  int secondVar;
+
+  // Manager without a sub manager.
+  ConfigManager managerWithNoSubManager;
+  decltype(auto) managerWithNoSubManagerOption1 =
+      managerWithNoSubManager.addOption("someOption1", "", &firstVar);
+  managerWithNoSubManager.addOptionValidator(generateValueAsStringComparison("10"), "someOption1",
+                                             managerWithNoSubManagerOption1);
+  checkValidator(managerWithNoSubManager, nlohmann::json::parse(R"--({"someOption1" : 10})--"),
+                 nlohmann::json::parse(R"--({"someOption1" : 1})--"), "someOption1");
+  decltype(auto) managerWithNoSubManagerOption2 =
+      managerWithNoSubManager.addOption("someOption2", "", &secondVar);
+  managerWithNoSubManager.addOptionValidator(generateValueAsStringComparison("10"), "Both options",
+                                             managerWithNoSubManagerOption1,
+                                             managerWithNoSubManagerOption2);
+  checkValidator(managerWithNoSubManager,
+                 nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 10})--"),
+                 nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 1})--"),
+                 "Both options");
+
+  // With sub manager. Sub manager has no validators of its own.
+  ConfigManager managerWithSubManagerWhoHasNoValidators;
+  decltype(auto) managerWithSubManagerWhoHasNoValidatorsOption =
+      managerWithSubManagerWhoHasNoValidators.addOption("someOption", "", &firstVar, 4);
+  ConfigManager& managerWithSubManagerWhoHasNoValidatorsSubManager =
+      managerWithSubManagerWhoHasNoValidators.addSubManager({"Sub"s, "manager"s});
+  decltype(auto) managerWithSubManagerWhoHasNoValidatorsSubManagerOption =
+      managerWithSubManagerWhoHasNoValidatorsSubManager.addOption("someOption", "", &secondVar, 4);
+  managerWithSubManagerWhoHasNoValidators.addOptionValidator(
+      generateValueAsStringComparison("10"), "Sub manager option",
+      managerWithSubManagerWhoHasNoValidatorsSubManagerOption);
+  checkValidator(managerWithSubManagerWhoHasNoValidators,
+                 nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 10}}})--"),
+                 nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 1}}})--"),
+                 "Sub manager option");
+  managerWithSubManagerWhoHasNoValidators.addOptionValidator(
+      generateValueAsStringComparison("10"), "Both options",
+      managerWithSubManagerWhoHasNoValidatorsSubManagerOption,
+      managerWithSubManagerWhoHasNoValidatorsOption);
+  checkValidator(
+      managerWithSubManagerWhoHasNoValidators,
+      nlohmann::json::parse(R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 10}}})--"),
+      nlohmann::json::parse(R"--({"someOption" : 1, "Sub":{"manager" : {"someOption" : 10}}})--"),
+      "Both options");
+
+  // Sub manager has validators of its own, however the manager does not.
+  ConfigManager managerHasNoValidatorsButSubManagerDoes;
+  ConfigManager& managerHasNoValidatorsButSubManagerDoesSubManager =
+      managerHasNoValidatorsButSubManagerDoes.addSubManager({"Sub"s, "manager"s});
+  decltype(auto) managerHasNoValidatorsButSubManagerDoesSubManagerOption =
+      managerHasNoValidatorsButSubManagerDoesSubManager.addOption("someOption", "", &firstVar, 4);
+  managerHasNoValidatorsButSubManagerDoesSubManager.addOptionValidator(
+      generateValueAsStringComparison("10"), "Sub manager option",
+      managerHasNoValidatorsButSubManagerDoesSubManagerOption);
+  checkValidator(managerHasNoValidatorsButSubManagerDoes,
+                 nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 10}}})--"),
+                 nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 1}}})--"),
+                 "Sub manager option");
+
+  // Sub manager has validators of its own, as does the manager.
+  ConfigManager bothHaveValidators;
+  decltype(auto) bothHaveValidatorsOption =
+      bothHaveValidators.addOption("someOption", "", &firstVar, 4);
+  ConfigManager& bothHaveValidatorsSubManager =
+      bothHaveValidators.addSubManager({"Sub"s, "manager"s});
+  decltype(auto) bothHaveValidatorsSubManagerOption =
+      bothHaveValidatorsSubManager.addOption("someOption", "", &secondVar, 4);
+  bothHaveValidators.addOptionValidator(generateValueAsStringComparison("10"), "Top manager option",
+                                        bothHaveValidatorsOption);
+  bothHaveValidatorsSubManager.addOptionValidator(generateValueAsStringComparison("20"),
+                                                  "Sub manager option",
+                                                  bothHaveValidatorsSubManagerOption);
+  checkValidator(
+      bothHaveValidators,
+      nlohmann::json::parse(R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 20}}})--"),
+      nlohmann::json::parse(R"--({"someOption" : 1, "Sub":{"manager" : {"someOption" : 20}}})--"),
+      "Top manager option");
+  checkValidator(
+      bothHaveValidators,
+      nlohmann::json::parse(R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 20}}})--"),
+      nlohmann::json::parse(R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 2}}})--"),
+      "Sub manager option");
+}
+
+TEST(ConfigManagerTest, AddOptionValidatorException) {
+  // Variable for the configuration options.
+  int var;
+
+  // Dummy validator function.
+  auto validatorDummyFunction = [](const ConfigOption&) { return true; };
+
+  /*
+  @brief Check, if a call to the `addOptionValidator` function behaves as wanted.
+  */
+  auto checkAddOptionValidatorBehavior = [&validatorDummyFunction]<typename T>(
+                                             ConfigManager& m,
+                                             const ConfigOptionProxy<T> validOption,
+                                             const ConfigOptionProxy<T> notValidOption) {
+    ASSERT_NO_THROW(m.addOptionValidator(validatorDummyFunction, "", validOption));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        m.addOptionValidator(validatorDummyFunction,
+                             notValidOption.getConfigOption().getIdentifier(), notValidOption),
+        ::testing::ContainsRegex(notValidOption.getConfigOption().getIdentifier()));
+  };
+
+  // An outside configuration option.
+  ConfigOption outsideOption("outside", "", &var);
+  ConfigOptionProxy<int> outsideOptionProxy(outsideOption);
+
+  // No sub manager.
+  ConfigManager mNoSub;
+  decltype(auto) mNoSubOption = mNoSub.addOption("someOption", "", &var);
+  checkAddOptionValidatorBehavior(mNoSub, mNoSubOption, outsideOptionProxy);
+
+  // With sub manager.
+  ConfigManager mWithSub;
+  decltype(auto) mWithSubOption = mWithSub.addOption("someTopOption", "", &var);
+  ConfigManager& mWithSubSub = mWithSub.addSubManager({"Some"s, "manager"s});
+  decltype(auto) mWithSubSubOption = mWithSubSub.addOption("someSubOption", "", &var);
+  checkAddOptionValidatorBehavior(mWithSub, mWithSubOption, outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWithSub, mWithSubSubOption, outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWithSubSub, mWithSubSubOption, outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWithSubSub, mWithSubSubOption, mWithSubOption);
+
+  // With 2 sub manager.
+  ConfigManager mWith2Sub;
+  decltype(auto) mWith2SubOption = mWith2Sub.addOption("someTopOption", "", &var);
+  ConfigManager& mWith2SubSub1 = mWith2Sub.addSubManager({"Some"s, "manager"s});
+  decltype(auto) mWith2SubSub1Option = mWith2SubSub1.addOption("someSubOption1", "", &var);
+  ConfigManager& mWith2SubSub2 = mWith2Sub.addSubManager({"Some"s, "other"s, "manager"s});
+  decltype(auto) mWith2SubSub2Option = mWith2SubSub2.addOption("someSubOption2", "", &var);
+  checkAddOptionValidatorBehavior(mWith2Sub, mWith2SubOption, outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWith2Sub, mWith2SubSub1Option, outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWith2Sub, mWith2SubSub2Option, outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option, outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option, mWith2SubOption);
+  checkAddOptionValidatorBehavior(mWith2SubSub1, mWith2SubSub1Option, mWith2SubSub2Option);
+  checkAddOptionValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, outsideOptionProxy);
+  checkAddOptionValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, mWith2SubOption);
+  checkAddOptionValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, mWith2SubSub1Option);
+}
+
 }  // namespace ad_utility
