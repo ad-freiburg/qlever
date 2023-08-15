@@ -34,7 +34,7 @@ inline auto wktLongitude = [](const std::optional<std::string>& point) {
   return detail::wktLongitudeImpl(point.value());
 };
 
-// Parse the latitute coordinate from a WKT point (it's the second coordinate).
+// Parse the latitude coordinate from a WKT point (it's the second coordinate).
 inline auto wktLatitude = [](const std::optional<std::string>& point) {
   if (!point.has_value()) {
     return std::numeric_limits<double>::quiet_NaN();

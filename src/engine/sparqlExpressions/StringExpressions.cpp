@@ -20,7 +20,7 @@ class StrExpression : public StrExpressionImpl {
 // getter is deduced automatically. If the child of the expression is the
 // `STR()` expression, then the `StringValueGetter` will be used (which also
 // returns string values for IRIs, numeric literals, etc.), otherwise the
-// `LiteralFromIdGetter` is used (which returns `std::nullopt` for these cases.
+// `LiteralFromIdGetter` is used (which returns `std::nullopt` for these cases).
 template <size_t N, typename Function>
 class StringExpressionImpl : public SparqlExpression {
  private:

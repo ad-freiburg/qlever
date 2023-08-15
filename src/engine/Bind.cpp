@@ -149,6 +149,7 @@ void Bind::computeExpressionBind(
                      T&& singleResult) mutable {
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
+
     if constexpr (isVariable) {
       auto column =
           getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;
@@ -170,7 +171,8 @@ void Bind::computeExpressionBind(
         if (it != resultGenerator.end()) {
           Id constantId =
               sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(*it), *outputLocalVocab);
+                  std::move(*it), *outputLocalVocab,
+                  getExecutionContext()->getIndex().getVocab());
           for (size_t i = 0; i < inSize; ++i) {
             output(i, inCols) = constantId;
           }
@@ -178,10 +180,11 @@ void Bind::computeExpressionBind(
       } else {
         size_t i = 0;
         // We deliberately move the values from the generator.
+        const auto& vocab = getExecutionContext()->getIndex().getVocab();
         for (auto& resultValue : resultGenerator) {
           output(i, inCols) =
               sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(resultValue), *outputLocalVocab);
+                  std::move(resultValue), *outputLocalVocab, vocab);
           i++;
         }
       }

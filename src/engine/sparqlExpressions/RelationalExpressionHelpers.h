@@ -144,7 +144,7 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
       auto res = makeValueId(x, context);
       if constexpr (ad_utility::isSimilar<decltype(res), Id>) {
         // We need the same return type on all cases when visiting a variant, so
-        // we need to
+        // we need to return a pair here.
         return std::pair{res, res};
       } else {
         return res;
@@ -199,7 +199,7 @@ inline const auto compareIdsOrStrings =
           comparisonForIncompatibleTypes>(
           y, x.first, x.second, getComparisonForSwappedArguments(Comp));
     } else {
-      // The `variant` is so that both types are shown in the compiler error
+      // The `variant` is such that both types are shown in the compiler error
       // message once the `static_assert` fails.
       static_assert(
           ad_utility::alwaysFalse<std::variant<decltype(x), decltype(y)>>);

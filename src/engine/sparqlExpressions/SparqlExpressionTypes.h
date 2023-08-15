@@ -10,6 +10,7 @@
 #include "engine/ResultTable.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
+#include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/ConstexprSmallString.h"
@@ -51,9 +52,10 @@ class VectorWithMemoryLimit
 };
 
 // A class to store the results of expressions that can yield strings or IDs as
-// their result. It is also used for expressions that can only yield strings. It
-// is currently implemented as a thin wrapper around a `variant`, but a more
-// sophisticated implementation could be done in the future.
+// their result (for example IF and COALESCE). It is also used for expressions
+// that can only yield strings. It is currently implemented as a thin wrapper
+// around a `variant`, but a more sophisticated implementation could be done in
+// the future.
 using IdOrStringBase = std::variant<ValueId, std::string>;
 class IdOrString : public IdOrStringBase,
                    public VisitMixin<IdOrString, IdOrStringBase> {
@@ -242,17 +244,16 @@ namespace detail {
 /// Get Id of constant result of type T.
 template <SingleExpressionResult T, typename LocalVocabT>
 requires isConstantResult<T>
-Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
+Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab,
+                                const auto& vocabulary) {
   if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
   } else if constexpr (ad_utility::isSimilar<T, IdOrString>) {
     return std::visit(
-        [&localVocab]<typename R>(R&& el) mutable {
-          // TODO<joka921> Should we also look in the vocabulary for the new
-          // strings?
+        [&localVocab, &vocabulary]<typename R>(R&& el) mutable {
           if constexpr (ad_utility::isSimilar<R, string>) {
-            return Id::makeFromLocalVocabIndex(
-                localVocab.getIndexAndAddIfNotContained(std::forward<R>(el)));
+            return TripleComponent{std::forward<R>(el)}.toValueId(vocabulary,
+                                                                  localVocab);
           } else {
             static_assert(ad_utility::isSimilar<R, Id>);
             return el;

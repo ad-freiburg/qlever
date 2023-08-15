@@ -191,6 +191,7 @@ void GroupBy::processGroup(
   evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
       sparqlExpression::copyExpressionResultIfNotVector(expressionResult);
 
+  const auto& vocab = getExecutionContext()->getIndex().getVocab();
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
@@ -199,7 +200,7 @@ void GroupBy::processGroup(
       resultEntry = singleResult;
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          singleResult, *localVocab);
+          singleResult, *localVocab, vocab);
     } else {
       // This should never happen since aggregates always return constants.
       AD_FAIL();

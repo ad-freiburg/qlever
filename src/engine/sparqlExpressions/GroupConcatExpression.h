@@ -29,11 +29,11 @@ class GroupConcatExpression : public SparqlExpression {
     auto impl = [context,
                  this](SingleExpressionResult auto&& el) -> ExpressionResult {
       std::string result;
-      auto implForDistinctOrNot = [&result, this, context](auto generator) {
+      auto groupConcatImpl = [&result, this, context](auto generator) {
         // TODO<joka921> Make this a configurable constant.
         result.reserve(20000);
         for (auto& inp : generator) {
-          auto&& s = detail::StringValueGetter{}(std::move(inp), context);
+          const auto& s = detail::StringValueGetter{}(std::move(inp), context);
           if (s.has_value()) {
             if (!result.empty()) {
               result.append(separator_);
@@ -45,10 +45,10 @@ class GroupConcatExpression : public SparqlExpression {
       auto generator =
           detail::makeGenerator(AD_FWD(el), context->size(), context);
       if (distinct_) {
-        implForDistinctOrNot(detail::getUniqueElements(context, context->size(),
-                                                       std::move(generator)));
+        groupConcatImpl(detail::getUniqueElements(context, context->size(),
+                                                  std::move(generator)));
       } else {
-        implForDistinctOrNot(std::move(generator));
+        groupConcatImpl(std::move(generator));
       }
       result.shrink_to_fit();
       return IdOrString(std::move(result));

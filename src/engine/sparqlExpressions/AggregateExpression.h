@@ -23,22 +23,20 @@ inline auto noop = []<typename T>(T&& result, size_t) {
 // the result.
 namespace detail {
 
-// For distinct we must put the operands into the hash set before
+// For DISTINCT we must put the operands into the hash set before
 // applying the `valueGetter`. For example, COUNT(?x), where ?x matches
 // three different strings, the value getter always returns `1`, but
 // we still have three distinct inputs.
-// Unevaluated operation to get the proper `ResultType`. With `auto`, we
-// would get the operand type, which is not necessarily the `ResultType`.
-// For example, in the COUNT aggregate we calculate a sum of boolean
-// values, but the result is not boolean.
-inline auto getUniqueElements =
-    []<typename Ops>(const EvaluationContext* context, size_t inputSize,
-                     Ops ops) -> cppcoro::generator<typename Ops::value_type> {
-  ad_utility::HashSetWithMemoryLimit<typename Ops::value_type> uniqueHashSet(
-      inputSize, context->_allocator);
-  for (auto& el : ops) {
-    if (uniqueHashSet.insert(el).second) {
-      auto elForYielding = std::move(el);
+inline auto getUniqueElements = []<typename OperandGenerator>(
+                                    const EvaluationContext* context,
+                                    size_t inputSize,
+                                    OperandGenerator operandGenerator)
+    -> cppcoro::generator<typename OperandGenerator::value_type> {
+  ad_utility::HashSetWithMemoryLimit<typename OperandGenerator::value_type>
+      uniqueHashSet(inputSize, context->_allocator);
+  for (auto& operand : operandGenerator) {
+    if (uniqueHashSet.insert(operand).second) {
+      auto elForYielding = std::move(operand);
       co_yield elForYielding;
     }
   }
@@ -114,29 +112,6 @@ class AggregateExpression : public SparqlExpression {
     auto operands =
         makeGenerator(std::forward<Operand>(operand), inputSize, context);
 
-    // For distinct we must put the operands into the hash set before
-    // applying the `valueGetter`. For example, COUNT(?x), where ?x matches
-    // three different strings, the value getter always returns `1`, but
-    // we still have three distinct inputs.
-    // Unevaluated operation to get the proper `ResultType`. With `auto`, we
-    // would get the operand type, which is not necessarily the `ResultType`.
-    // For example, in the COUNT aggregate we calculate a sum of boolean
-    // values, but the result is not boolean.
-    /*
-    auto getUniqueElements = [context, inputSize](auto&& ops)
-        -> cppcoro::generator<typename decltype(operands)::value_type> {
-      ad_utility::HashSetWithMemoryLimit<
-          typename decltype(operands)::value_type>
-          uniqueHashSet(inputSize, context->_allocator);
-      for (auto& el : ops) {
-        if (uniqueHashSet.insert(el).second) {
-          auto elForYielding = std::move(el);
-          co_yield elForYielding;
-        }
-      }
-    };
-     */
-
     auto impl = [&valueGetter, context, &finalOperation,
                  &callFunction](auto&& inputs) {
       auto it = inputs.begin();
@@ -165,7 +140,7 @@ class AggregateExpression : public SparqlExpression {
       }
     }();
 
-    // Currently the intermediate results can be ras `double` or `int` values
+    // Currently the intermediate results can be `double` or `int` values
     // which then have to be converted to an ID again.
     // TODO<joka921> Check if this is really necessary, or if we can also use
     // IDs in the intermediate steps without loss of efficiency.
