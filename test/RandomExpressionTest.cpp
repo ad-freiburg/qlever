@@ -40,9 +40,9 @@ TEST(RandomExpression, evaluate) {
   ASSERT_GE(numSwaps, 100);
   ASSERT_LE(numSwaps, 900);
 
-  // When we are inside a GROUP BY, we don't expect a vector but a single ID.
+  // When we are part of a GROUP BY, we don't expect a vector but a single ID.
   {
-    evaluationContext._isInsideGroupBy = true;
+    evaluationContext._isPartOfGroupBy = true;
     auto resultAsVariant2 = RandomExpression{}.evaluate(&evaluationContext);
     ASSERT_TRUE(std::holds_alternative<Id>(resultAsVariant2));
   }
