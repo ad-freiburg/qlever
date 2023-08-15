@@ -155,6 +155,10 @@ struct EvaluationContext {
   // `_variableToColumnMapPreviousResults`.
   std::vector<ExpressionResult> _previousResultsFromSameGroup;
 
+  // Used to modify the behavior of the RAND() expression when it is inside a
+  // GROUP BY.
+  bool _isInsideGroupBy = false;
+
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
                     const VariableToColumnMap& variableToColumnMap,

@@ -253,6 +253,9 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
       getInternallyVisibleVariableColumns();
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
 
+  // Let the evaluation know that we are inside a GROUP BY
+  evaluationContext._isInsideGroupBy = true;
+
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
     result.emplace_back();
     size_t rowIdx = result.size() - 1;
