@@ -4,9 +4,7 @@
 
 #include "util/antlr/ANTLRErrorHandling.h"
 
-namespace ad_utility {
-namespace antlr_utility {
-namespace detail {
+namespace ad_utility::antlr_utility::detail {
 
 std::string generateExceptionMessage(antlr4::Token* offendingSymbol,
                                      const std::string& msg) {
@@ -21,6 +19,4 @@ std::string generateExceptionMessage(antlr4::Token* offendingSymbol,
     return absl::StrCat("Token \"", offendingSymbol->getText(), "\": ", msg);
   }
 }
-}  // namespace detail
-}  // namespace antlr_utility
-}  // namespace ad_utility
+}  // namespace ad_utility::antlr_utility::detail

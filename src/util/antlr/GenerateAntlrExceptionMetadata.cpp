@@ -12,8 +12,7 @@
 
 #include "util/Exception.h"
 
-namespace ad_utility {
-namespace antlr_utility {
+namespace ad_utility::antlr_utility {
 // _____________________________________________________________________________
 ExceptionMetadata generateAntlrExceptionMetadataWithParser(
     antlr4::Parser* parser, const antlr4::Token* offendingToken, size_t line,
@@ -61,5 +60,4 @@ ExceptionMetadata generateAntlrExceptionMetadata(
     AD_FAIL();  // Should be unreachable.
   }
 }
-}  // namespace antlr_utility
-}  // namespace ad_utility
+}  // namespace ad_utility::antlr_utility

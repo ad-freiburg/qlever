@@ -9,13 +9,11 @@
 #include "ParserRuleContext.h"
 #include "util/ParseException.h"
 
-namespace ad_utility {
-namespace antlr_utility {
+namespace ad_utility::antlr_utility {
 ExceptionMetadata generateAntlrExceptionMetadata(
     const antlr4::ParserRuleContext* ctx);
 
 ExceptionMetadata generateAntlrExceptionMetadata(
     antlr4::Recognizer* recognizer, const antlr4::Token* offendingToken,
     size_t line, size_t charPositionInLine);
-}  // namespace antlr_utility
-}  // namespace ad_utility
+}  // namespace ad_utility::antlr_utility

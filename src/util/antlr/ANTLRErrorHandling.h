@@ -16,8 +16,7 @@
 #include "util/ParseException.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
 
-namespace ad_utility {
-namespace antlr_utility {
+namespace ad_utility::antlr_utility {
 namespace detail {
 std::string generateExceptionMessage(antlr4::Token* offendingSymbol,
                                      const std::string& msg);
@@ -46,5 +45,4 @@ struct ThrowingErrorListener : public antlr4::BaseErrorListener {
                                        charPositionInLine)};
   }
 };
-}  // namespace antlr_utility
-}  // namespace ad_utility
+}  // namespace ad_utility::antlr_utility
