@@ -19,18 +19,20 @@ function print_usage {
   echo "Runs QLevers end to end tests."
   echo ""
   echo "Options:"
-  echo "  -i  Do not rebuild the scientists index."
+  echo "  -i  Reuse a prebuilt index from this directory. Must point to the main directory of QLever, not the e2e_data subdirectory"
   echo "  -d  Directory of the QLever binaries (relative to the main directory), default: 'build'"
 }
 
 REBUILD_THE_INDEX="YES"
+INDEX_DIRECTORY="." #if not set, we will build the index ourselves.
 BINARY_DIRECTORY="build"
 
-while getopts ":id:" arg; do
+while getopts ":i:d:" arg; do
   case ${arg} in
     i)
       echo "The index will not be rebuilt"
       REBUILD_THE_INDEX="NO"
+      INDEX_DIRECTORY="${OPTARG}"
     ;;
     d)
       BINARY_DIRECTORY="${OPTARG}"
@@ -72,7 +74,7 @@ else
 fi
 export PYTHON_BINARY=`which python3`
 
-INDEX_DIR="$PROJECT_DIR/e2e_data"
+INDEX_DIR="$PROJECT_DIR/$INDEX_DIRECTORY/e2e_data"
 INPUT_DIR="$PROJECT_DIR/e2e_data/scientist-collection"
 ZIPPED_INPUT="$PROJECT_DIR/e2e/scientist-collection.zip"
 INPUT_PREFIX="scientists"
