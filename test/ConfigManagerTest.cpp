@@ -41,7 +41,7 @@ to.
 to.
 */
 template <typename T>
-void checkOption(ConfigOptionProxy<T> option, const T& externalVariable,
+void checkOption(NonConstConfigOptionProxy<T> option, const T& externalVariable,
                  const bool wasSet, const T& wantedValue) {
   ASSERT_EQ(wasSet, option.getConfigOption().wasSet());
 
@@ -916,7 +916,7 @@ TEST(ConfigManagerTest, AddValidator) {
   auto addValidatorToConfigManager =
       [&generateValidatorName, &adjustVariantArgument ]<typename... Ts>(
           size_t variant, ConfigManager & m,
-          const ConfigOptionProxy<Ts>... validatorArguments)
+          NonConstConfigOptionProxy<Ts>... validatorArguments)
           requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
     // Add the new validator
     m.addValidator(
@@ -1010,7 +1010,7 @@ TEST(ConfigManagerTest, AddValidator) {
        testGeneratedValidatorsOfConfigManager ]<typename... Ts>(
           ConfigManager & m, const nlohmann::json& defaultValues,
           const std::pair<nlohmann::json::json_pointer,
-                          ConfigOptionProxy<Ts>>&... validatorArguments)
+                          NonConstConfigOptionProxy<Ts>>&... validatorArguments)
           requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
     // How many validators are to be added?
     constexpr size_t NUMBER_OF_VALIDATORS{5};
@@ -1054,7 +1054,7 @@ TEST(ConfigManagerTest, AddValidator) {
           ConfigManager & m, ConfigManager & subM,
           const nlohmann::json& defaultValues,
           const std::pair<nlohmann::json::json_pointer,
-                          ConfigOptionProxy<Ts>>&... validatorArguments)
+                          NonConstConfigOptionProxy<Ts>>&... validatorArguments)
           requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
     // How many validators are to be added to each of the managers?
     constexpr size_t NUMBER_OF_VALIDATORS{5};
@@ -1349,8 +1349,8 @@ TEST(ConfigManagerTest, AddValidatorException) {
     */
     auto checkAddValidatorBehavior =
         [&validatorDummyFunction](ConfigManager& m,
-                                  const ConfigOptionProxy<T> validOption,
-                                  const ConfigOptionProxy<T> notValidOption) {
+                                  NonConstConfigOptionProxy<T> validOption,
+                                  NonConstConfigOptionProxy<T> notValidOption) {
           ASSERT_NO_THROW(
               m.addValidator(validatorDummyFunction, "", validOption));
           AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1363,7 +1363,7 @@ TEST(ConfigManagerTest, AddValidatorException) {
 
     // An outside configuration option.
     ConfigOption outsideOption("outside", "", &var);
-    ConfigOptionProxy<T> outsideOptionProxy(outsideOption);
+    NonConstConfigOptionProxy<T> outsideOptionProxy(outsideOption);
 
     // No sub manager.
     ConfigManager mNoSub;
@@ -1545,8 +1545,8 @@ TEST(ConfigManagerTest, AddOptionValidatorException) {
   */
   auto checkAddOptionValidatorBehavior =
       [&validatorDummyFunction]<typename T>(
-          ConfigManager& m, const ConfigOptionProxy<T> validOption,
-          const ConfigOptionProxy<T> notValidOption) {
+          ConfigManager& m, NonConstConfigOptionProxy<T> validOption,
+          NonConstConfigOptionProxy<T> notValidOption) {
         ASSERT_NO_THROW(
             m.addOptionValidator(validatorDummyFunction, "", validOption));
         AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1560,7 +1560,7 @@ TEST(ConfigManagerTest, AddOptionValidatorException) {
 
   // An outside configuration option.
   ConfigOption outsideOption("outside", "", &var);
-  ConfigOptionProxy<int> outsideOptionProxy(outsideOption);
+  NonConstConfigOptionProxy<int> outsideOptionProxy(outsideOption);
 
   // No sub manager.
   ConfigManager mNoSub;

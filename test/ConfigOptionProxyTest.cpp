@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <concepts>
 #include <type_traits>
 
 #include "../test/util/ConfigOptionHelpers.h"
@@ -13,19 +14,29 @@
 
 namespace ad_utility {
 
-TEST(ConfigOptionProxy, Constructor) {
+/*
+@brief Test, if the constructor for `ConfigOption` works as wanted.
+
+@tparam ProxyType The type of the proxy class.
+@tparam OptionType Exists to define, if the test should be done with
+`ConfigOption`, or `const ConfigOption`.
+*/
+template <template <typename> typename ProxyType, typename OptionType>
+requires std::same_as<OptionType, ConfigOption> ||
+         std::same_as<OptionType, const ConfigOption>
+void basicConstructorTest() {
   // Test construction for a given type.
   auto doTest = []<typename T>() {
     // Does the normal constructor work?
     T varForConfigOption;
-    ConfigOption opt("testOption", "", &varForConfigOption);
-    ASSERT_EQ(&opt, &ConfigOptionProxy<T>(opt).getConfigOption());
+    OptionType opt("testOption", "", &varForConfigOption);
+    ASSERT_EQ(&opt, &ProxyType<T>(opt).getConfigOption());
 
     // Is there an exception, if we give a config option of the wrong type?
     doForTypeInConfigOptionValueType([&opt]<typename WrongT>() {
       if constexpr (!std::is_same_v<T, WrongT>) {
         AD_EXPECT_THROW_WITH_MESSAGE(
-            ConfigOptionProxy<WrongT> someProxy(opt),
+            ProxyType<WrongT> someProxy(opt),
             ::testing::ContainsRegex(R"--(testOption': Mismatch)--"));
       }
     });
@@ -33,6 +44,41 @@ TEST(ConfigOptionProxy, Constructor) {
 
   // Do the test for all possible types.
   doForTypeInConfigOptionValueType(doTest);
+}
+
+TEST(ConfigOptionProxy, NonConstConfigOptionProxyConstructor) {
+  basicConstructorTest<NonConstConfigOptionProxy, ConfigOption>();
+}
+
+TEST(ConfigOptionProxy, ConstConfigOptionProxyConstructor) {
+  basicConstructorTest<ConstConfigOptionProxy, ConfigOption>();
+
+  // Does it work with const `configOption`?
+  basicConstructorTest<ConstConfigOptionProxy, const ConfigOption>();
+
+  // Does construction with a `NonConstConfigOptionProxy` work?
+  doForTypeInConfigOptionValueType([]<typename T>() {
+    T varForConfigOption;
+    ConfigOption opt("testOption", "", &varForConfigOption);
+    NonConstConfigOptionProxy<T> nonConstProxy(opt);
+    ConstConfigOptionProxy<T> constProxy(nonConstProxy);
+    ASSERT_EQ(&nonConstProxy.getConfigOption(), &constProxy.getConfigOption());
+  });
+}
+
+TEST(ConfigOptionProxy, GetConfigOption) {
+  // Simple test, if the returned `ConfigOption` are(n't) const.
+  doForTypeInConfigOptionValueType([]<typename T>() {
+    T varForConfigOption;
+    ConfigOption opt("testOption", "", &varForConfigOption);
+    NonConstConfigOptionProxy<T> nonConstProxy(opt);
+    ConstConfigOptionProxy<T> constProxy(opt);
+    static_assert(!std::is_const_v<std::remove_reference_t<
+                      decltype(nonConstProxy.getConfigOption())>>);
+    static_assert(
+        std::is_const_v<
+            std::remove_reference_t<decltype(constProxy.getConfigOption())>>);
+  });
 }
 
 }  // namespace ad_utility
