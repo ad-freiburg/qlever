@@ -253,7 +253,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
       getInternallyVisibleVariableColumns();
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
 
-  // Let the evaluation know that we are inside a GROUP BY
+  // Let the evaluation know that we are part of a GROUP BY.
   evaluationContext._isPartOfGroupBy = true;
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {

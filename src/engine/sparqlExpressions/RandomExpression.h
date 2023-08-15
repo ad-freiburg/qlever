@@ -23,7 +23,7 @@ class RandomExpression : public SparqlExpression {
     result.reserve(numElements);
     FastRandomIntGenerator<int64_t> randInt;
 
-    // Inside a GROUP BY we only return one value per group.
+    // As part of a GROUP BY we only return one value per group.
     if (context->_isPartOfGroupBy) {
       return Id::makeFromInt(randInt() >> Id::numDatatypeBits);
     }
