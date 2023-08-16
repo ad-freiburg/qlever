@@ -10,12 +10,14 @@
 #include "engine/ResultTable.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
+#include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/ConstexprSmallString.h"
 #include "util/Generator.h"
 #include "util/HashMap.h"
 #include "util/TypeTraits.h"
+#include "util/VisitMixin.h"
 
 namespace sparqlExpression {
 
@@ -49,8 +51,24 @@ class VectorWithMemoryLimit
   }
 };
 
-/// A list of StrongIds that all have the same datatype.
-using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
+// A class to store the results of expressions that can yield strings or IDs as
+// their result (for example IF and COALESCE). It is also used for expressions
+// that can only yield strings. It is currently implemented as a thin wrapper
+// around a `variant`, but a more sophisticated implementation could be done in
+// the future.
+using IdOrStringBase = std::variant<ValueId, std::string>;
+class IdOrString : public IdOrStringBase,
+                   public VisitMixin<IdOrString, IdOrStringBase> {
+ public:
+  using IdOrStringBase::IdOrStringBase;
+  explicit IdOrString(std::optional<std::string> s) {
+    if (s.has_value()) {
+      emplace<std::string>(std::move(s.value()));
+    } else {
+      emplace<Id>(Id::makeUndefined());
+    }
+  }
+};
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
@@ -59,7 +77,7 @@ using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
 namespace detail {
 // For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
 // possible expression result types.
-using ConstantTypes = std::tuple<string, ValueId>;
+using ConstantTypes = std::tuple<IdOrString, ValueId>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
@@ -225,13 +243,22 @@ struct EvaluationContext {
 namespace detail {
 /// Get Id of constant result of type T.
 template <SingleExpressionResult T, typename LocalVocabT>
+requires isConstantResult<T> && std::is_rvalue_reference_v<T&&>
 Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
-  static_assert(isConstantResult<T>);
-  if constexpr (ad_utility::isSimilar<T, string>) {
-    return Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(std::forward<T>(result)));
-  } else if constexpr (ad_utility::isSimilar<T, Id>) {
+  if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
+  } else if constexpr (ad_utility::isSimilar<T, IdOrString>) {
+    return std::visit(
+        [&localVocab]<typename R>(R&& el) mutable {
+          if constexpr (ad_utility::isSimilar<R, string>) {
+            return Id::makeFromLocalVocabIndex(
+                localVocab.getIndexAndAddIfNotContained(std::forward<R>(el)));
+          } else {
+            static_assert(ad_utility::isSimilar<R, Id>);
+            return el;
+          }
+        },
+        AD_FWD(result));
   } else {
     static_assert(ad_utility::alwaysFalse<T>);
   }

@@ -149,6 +149,7 @@ void Bind::computeExpressionBind(
                      T&& singleResult) mutable {
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
+
     if constexpr (isVariable) {
       auto column =
           getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;

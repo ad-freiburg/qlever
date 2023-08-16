@@ -199,7 +199,7 @@ void GroupBy::processGroup(
       resultEntry = singleResult;
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          singleResult, *localVocab);
+          AD_FWD(singleResult), *localVocab);
     } else {
       // This should never happen since aggregates always return constants.
       AD_FAIL();

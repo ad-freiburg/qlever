@@ -197,7 +197,7 @@ void writeMappedIdsToExtVec(const auto& input,
 void writePartialVocabularyToFile(const ItemVec& els, const string& fileName);
 
 /**
- * @brief Take an Array of HashMaps of Strings to Ids and insert all the
+ * @brief Take an Array of HashMaps of strings to Ids and insert all the
  * elements from all the hashMaps into a single vector No reordering or
  * deduplication is done, so result.size() == summed size of all the hash maps
  */
