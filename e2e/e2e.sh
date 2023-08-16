@@ -19,7 +19,7 @@ function print_usage {
   echo "Runs QLevers end to end tests."
   echo ""
   echo "Options:"
-  echo "  -i  Reuse a prebuilt index from this directory. Must point to the main directory of QLever, not the e2e_data subdirectory"
+  echo "  -i  Use index from the given directory (which must be the root directory of the working copy of QLever, not the e2e_data subdirectory)"
   echo "  -d  Directory of the QLever binaries (relative to the main directory), default: 'build'"
 }
 
@@ -90,7 +90,6 @@ if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.index.pso" ]; then
   # Can't check for the scientist-collection directory because
   # Travis' caching creates it
   if [ ! -e "$INPUT.nt" ]; then
-  	# Why the hell is this a ZIP that can't easily be decompressed from stdin?!?
   	unzip -j "$ZIPPED_INPUT" -d "$INPUT_DIR/"
   fi;
 
