@@ -714,6 +714,7 @@ std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
   return textVocab_[WordVocabIndex::make(wordIndex)].value();
 }
 
+// ____________________________________________________________________________
 void IndexImpl::callFixedGetContextListForWords(const string& words,
                                                 IdTable* result) const {
   int width = result->numColumns();
@@ -746,6 +747,11 @@ void IndexImpl::getContextListForWords(const string& words,
     wep = getWordPostingsForTerm(terms[0]);
   }
 
+  AD_CONTRACT_CHECK(wep.wids_.size() >= terms.size());
+  for (size_t i = 0; i < terms.size(); i++) {
+    AD_CONTRACT_CHECK(wep.wids_[i].size() == wep.cids_.size());
+  }
+
   LOG(DEBUG) << "Packing lists into a ResultTable\n...";
   IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
   result.reserve(wep.cids_.size());
@@ -772,7 +778,7 @@ Index::WordEntityPostings IndexImpl::readWordCl(
       tbmd._cl._nofElements, tbmd._cl._startContextlist,
       static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),
       &TextRecordIndex::make);
-  wep.wids_[0] = readFreqComprList<WordIndex>(
+  wep.wids_.at(0) = readFreqComprList<WordIndex>(
       tbmd._cl._nofElements, tbmd._cl._startWordlist,
       static_cast<size_t>(tbmd._cl._startScorelist - tbmd._cl._startWordlist));
   wep.scores_ = readFreqComprList<Score>(

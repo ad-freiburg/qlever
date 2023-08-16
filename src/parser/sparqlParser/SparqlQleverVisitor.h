@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <absl/strings/str_split.h>
 #include <antlr4-runtime.h>
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
