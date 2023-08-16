@@ -31,8 +31,6 @@ class RelationalExpression : public SparqlExpression {
 
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  std::span<SparqlExpression::Ptr> children() override;
-
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
@@ -45,6 +43,9 @@ class RelationalExpression : public SparqlExpression {
   Estimates getEstimatesForFilterExpression(
       uint64_t inputSizeEstimate,
       const std::optional<Variable>& firstSortedVariable) const override;
+
+ private:
+  std::span<SparqlExpression::Ptr> childrenImpl() override;
 };
 
 }  // namespace sparqlExpression::relational
