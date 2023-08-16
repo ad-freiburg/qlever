@@ -35,13 +35,13 @@ class NaryExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override;
-
-  // _________________________________________________________________________
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
  private:
+  // _________________________________________________________________________
+  std::span<SparqlExpression::Ptr> childrenImpl() override;
+
   // Evaluate the `naryOperation` on the `operands` using the `context`.
   template <SingleExpressionResult... Operands>
   static ExpressionResult evaluateOnChildrenOperands(
@@ -167,7 +167,7 @@ ExpressionResult NaryExpression<NaryOperation>::evaluate(
 // _____________________________________________________________________________
 template <typename Op>
 requires(isOperation<Op>)
-std::span<SparqlExpression::Ptr> NaryExpression<Op>::children() {
+std::span<SparqlExpression::Ptr> NaryExpression<Op>::childrenImpl() {
   return {children_.data(), children_.size()};
 }
 

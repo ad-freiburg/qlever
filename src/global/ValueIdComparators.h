@@ -554,7 +554,7 @@ inline ComparisonResult compareWithEqualIds(ValueId a, ValueId bBegin,
         return typesAreCompatible ? fromBool(compareEqual())
                                   : ComparisonResult::Undef;
       } else {
-        return compareEqual();
+        return fromBool(compareEqual());
       }
     }
     case NE: {
@@ -567,7 +567,7 @@ inline ComparisonResult compareWithEqualIds(ValueId a, ValueId bBegin,
         return typesAreCompatible ? fromBool(!compareEqual())
                                   : ComparisonResult::Undef;
       } else {
-        return !typesAreCompatible || !compareEqual();
+        return fromBool(!typesAreCompatible || !compareEqual());
       }
     }
     case GE:

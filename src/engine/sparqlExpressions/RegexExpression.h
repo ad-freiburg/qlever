@@ -32,8 +32,6 @@ class RegexExpression : public SparqlExpression {
 
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  std::span<SparqlExpression::Ptr> children() override;
-
   // _________________________________________________________________________
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
@@ -47,6 +45,7 @@ class RegexExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
  private:
+  std::span<SparqlExpression::Ptr> childrenImpl() override;
   // Internal implementations that are called by `evaluate`.
   ExpressionResult evaluatePrefixRegex(
       const Variable& variable,
