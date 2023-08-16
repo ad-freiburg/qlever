@@ -143,9 +143,13 @@ find_package(OpenSSL REQUIRED)
 function (qlever_target_link_libraries target)
     # memorySize is a utility library for defining memory sizes.
     if (${target} STREQUAL "memorySize")
-        target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings absl::str_format ICU::uc ICU::i18n)
+        target_link_libraries(${target} ${ARGN} absl::flat_hash_map
+            absl::flat_hash_set absl::strings absl::str_format ICU::uc
+            ICU::i18n)
     else()
-        target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings absl::str_format ICU::uc ICU::i18n memorySize)
+        target_link_libraries(${target} ${ARGN} absl::flat_hash_map
+            absl::flat_hash_set absl::strings absl::str_format ICU::uc ICU::i18n
+            memorySize)
     endif()
 endfunction()
 
