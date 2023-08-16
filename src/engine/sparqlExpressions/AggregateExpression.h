@@ -5,6 +5,7 @@
 #ifndef QLEVER_AGGREGATEEXPRESSION_H
 #define QLEVER_AGGREGATEEXPRESSION_H
 
+#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/ValueIdComparators.h"
@@ -21,6 +22,25 @@ inline auto noop = []<typename T>(T&& result, size_t) {
 // then executes the `FinalOperation` (possibly the `noop` lambda from above) on
 // the result.
 namespace detail {
+
+// For DISTINCT we must put the operands into the hash set before
+// applying the `valueGetter`. For example, COUNT(?x), where ?x matches
+// three different strings, the value getter always returns `1`, but
+// we still have three distinct inputs.
+inline auto getUniqueElements = []<typename OperandGenerator>(
+                                    const EvaluationContext* context,
+                                    size_t inputSize,
+                                    OperandGenerator operandGenerator)
+    -> cppcoro::generator<typename OperandGenerator::value_type> {
+  ad_utility::HashSetWithMemoryLimit<typename OperandGenerator::value_type>
+      uniqueHashSet(inputSize, context->_allocator);
+  for (auto& operand : operandGenerator) {
+    if (uniqueHashSet.insert(operand).second) {
+      auto elForYielding = std::move(operand);
+      co_yield elForYielding;
+    }
+  }
+};
 template <typename AggregateOperation, typename FinalOperation = decltype(noop)>
 class AggregateExpression : public SparqlExpression {
  public:
@@ -30,9 +50,6 @@ class AggregateExpression : public SparqlExpression {
 
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;
-
-  // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override;
 
   // _________________________________________________________________________
   vector<Variable> getUnaggregatedVariables() override;
@@ -81,62 +98,62 @@ class AggregateExpression : public SparqlExpression {
     }
 
     const auto& valueGetter = std::get<0>(aggregateOperation._valueGetters);
-
-    if (!distinct) {
-      auto values = detail::valueGetterGenerator(
-          inputSize, context, std::forward<Operand>(operand), valueGetter);
-      auto it = values.begin();
-      // Unevaluated operation to get the proper `ResultType`. With `auto`, we
-      // would get the operand type, which is not necessarily the `ResultType`.
-      // For example, in the COUNT aggregate we calculate a sum of boolean
-      // values, but the result is not boolean.
-      using ResultType = std::decay_t<decltype(aggregateOperation._function(
-          std::move(*it), *it))>;
-      ResultType result = *it;
-      for (++it; it != values.end(); ++it) {
-        result =
-            aggregateOperation._function(std::move(result), std::move(*it));
-      }
-      result = finalOperation(std::move(result), inputSize);
-      if constexpr (requires { makeNumericId(result); }) {
-        return makeNumericId(result);
+    auto callFunction = [&aggregateOperation, context](
+                            auto&& x, auto&& y) -> decltype(auto) {
+      if constexpr (requires {
+                      aggregateOperation._function(AD_FWD(x), AD_FWD(y));
+                    }) {
+        return aggregateOperation._function(AD_FWD(x), AD_FWD(y));
       } else {
-        return result;
+        return aggregateOperation._function(AD_FWD(x), AD_FWD(y), context);
       }
-    } else {
-      // The operands *without* applying the `valueGetter`.
-      auto operands =
-          makeGenerator(std::forward<Operand>(operand), inputSize, context);
+    };
+    // The operands *without* applying the `valueGetter`.
+    auto operands =
+        makeGenerator(std::forward<Operand>(operand), inputSize, context);
 
-      // For distinct we must put the operands into the hash set before
-      // applying the `valueGetter`. For example, COUNT(?x), where ?x matches
-      // three different strings, the value getter always returns `1`, but
-      // we still have three distinct inputs.
-      auto it = operands.begin();
-      // Unevaluated operation to get the proper `ResultType`. With `auto`, we
-      // would get the operand type, which is not necessarily the `ResultType`.
-      // For example, in the COUNT aggregate we calculate a sum of boolean
-      // values, but the result is not boolean.
-      using ResultType = std::decay_t<decltype(aggregateOperation._function(
+    auto impl = [&valueGetter, context, &finalOperation,
+                 &callFunction](auto&& inputs) {
+      auto it = inputs.begin();
+      AD_CORRECTNESS_CHECK(it != inputs.end());
+
+      using ResultType = std::decay_t<decltype(callFunction(
           std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
       ResultType result = valueGetter(*it, context);
-      ad_utility::HashSetWithMemoryLimit<
-          typename decltype(operands)::value_type>
-          uniqueHashSet({*it}, inputSize, context->_allocator);
-      for (++it; it != operands.end(); ++it) {
-        if (uniqueHashSet.insert(*it).second) {
-          result = aggregateOperation._function(
-              std::move(result), valueGetter(std::move(*it), context));
-        }
+      size_t numValues = 1;
+
+      for (++it; it != inputs.end(); ++it) {
+        result = callFunction(std::move(result),
+                              valueGetter(std::move(*it), context));
+        ++numValues;
       }
-      result = finalOperation(std::move(result), uniqueHashSet.size());
-      if constexpr (requires { makeNumericId(result); }) {
-        return makeNumericId(result);
+      result = finalOperation(std::move(result), numValues);
+      return result;
+    };
+    auto result = [&]() {
+      if (distinct) {
+        auto uniqueValues =
+            getUniqueElements(context, inputSize, std::move(operands));
+        return impl(std::move(uniqueValues));
       } else {
-        return result;
+        return impl(std::move(operands));
       }
+    }();
+
+    // Currently the intermediate results can be `double` or `int` values
+    // which then have to be converted to an ID again.
+    // TODO<joka921> Check if this is really necessary, or if we can also use
+    // IDs in the intermediate steps without loss of efficiency.
+    if constexpr (requires { makeNumericId(result); }) {
+      return makeNumericId(result);
+    } else {
+      return result;
     }
   };
+
+ private:
+  // _________________________________________________________________________
+  std::span<SparqlExpression::Ptr> childrenImpl() override;
 
  protected:
   bool _distinct;
@@ -205,42 +222,40 @@ using AvgExpression =
     detail::AggregateExpression<AGG_OP<decltype(addForSum), NumericValueGetter>,
                                 decltype(averageFinalOp)>;
 
+// TODO<joka921> Comment
+template <valueIdComparators::Comparison Comp>
+inline const auto compareIdsOrStrings =
+    []<typename T, typename U>(const T& a, const U& b,
+                               const EvaluationContext* ctx) -> IdOrString {
+  // TODO<joka921> moveTheStrings.
+  return toBoolNotUndef(
+             sparqlExpression::compareIdsOrStrings<
+                 Comp, valueIdComparators::ComparisonForIncompatibleTypes::
+                           CompareByType>(a, b, ctx))
+             ? IdOrString{a}
+             : IdOrString{b};
+};
 // Min and Max.
-template <typename comparator, valueIdComparators::Comparison comparison>
+template <valueIdComparators::Comparison comparison>
 inline const auto minMaxLambdaForAllTypes = []<SingleExpressionResult T>(
-                                                const T& a, const T& b) {
-  if constexpr (std::is_arithmetic_v<T> ||
-                ad_utility::isSimilar<T, std::string>) {
-    // TODO<joka921> Also implement correct comparisons for `std::string`
-    // using ICU that respect the locale
-    return comparator{}(a, b);
-  } else if constexpr (ad_utility::isSimilar<T, Id>) {
-    if (a.getDatatype() == Datatype::Undefined ||
-        b.getDatatype() == Datatype::Undefined) {
-      // If one of the values is undefined, we just return the other.
-      static_assert(0u == Id::makeUndefined().getBits());
-      return Id::fromBits(a.getBits() | b.getBits());
-    }
-    return toBoolNotUndef(valueIdComparators::compareIds<
-                          valueIdComparators::ComparisonForIncompatibleTypes::
-                              CompareByType>(a, b, comparison))
-               ? a
-               : b;
+                                                const T& a, const T& b,
+                                                EvaluationContext* ctx) {
+  auto actualImpl = [ctx](const auto& x, const auto& y) {
+    return compareIdsOrStrings<comparison>(x, y, ctx);
+  };
+  if constexpr (ad_utility::isSimilar<T, Id>) {
+    return std::get<Id>(actualImpl(a, b));
   } else {
-    return ad_utility::alwaysFalse<T>;
+    auto base = [](const IdOrString& i) -> const IdOrStringBase& { return i; };
+    // TODO<joka921> We should definitely move strings here.
+    return std::visit(actualImpl, base(a), base(b));
   }
 };
 
-constexpr inline auto min = [](const auto& a, const auto& b) {
-  return std::min(a, b);
-};
-constexpr inline auto max = [](const auto& a, const auto& b) {
-  return std::max(a, b);
-};
 constexpr inline auto minLambdaForAllTypes =
-    minMaxLambdaForAllTypes<decltype(min), valueIdComparators::Comparison::LT>;
+    minMaxLambdaForAllTypes<valueIdComparators::Comparison::LT>;
 constexpr inline auto maxLambdaForAllTypes =
-    minMaxLambdaForAllTypes<decltype(max), valueIdComparators::Comparison::GT>;
+    minMaxLambdaForAllTypes<valueIdComparators::Comparison::GT>;
 // MIN
 using MinExpression =
     AGG_EXP<decltype(minLambdaForAllTypes), ActualValueGetter>;

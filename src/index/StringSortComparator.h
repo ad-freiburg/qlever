@@ -359,8 +359,8 @@ class LocaleManager {
 
 /**
  * @brief This class compares strings according to proper Unicode collation,
- * e.g. Strings from the text index vocabulary. To Compare components of RDFS
- * triples use the TripleComponentComparator defined below
+ * e.g. strings from the text index vocabulary. To compare components of
+ * RDFS triples use the `TripleComponentComparator` defined below
  */
 class SimpleStringComparator {
  public:

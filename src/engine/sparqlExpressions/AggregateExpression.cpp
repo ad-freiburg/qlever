@@ -26,15 +26,18 @@ AggregateExpression<AggregateOperation, FinalOperation>::evaluate(
     EvaluationContext* context) const {
   auto childResult = _child->evaluate(context);
 
-  return ad_utility::visitWithVariantsAndParameters(
-      evaluateOnChildOperand, _aggregateOp, FinalOperation{}, context,
-      _distinct, std::move(childResult));
+  return std::visit(
+      [this, context](auto&& arg) {
+        return evaluateOnChildOperand(_aggregateOp, FinalOperation{}, context,
+                                      _distinct, AD_FWD(arg));
+      },
+      std::move(childResult));
 }
 
 // _________________________________________________________________________
 template <typename AggregateOperation, typename FinalOperation>
 std::span<SparqlExpression::Ptr>
-AggregateExpression<AggregateOperation, FinalOperation>::children() {
+AggregateExpression<AggregateOperation, FinalOperation>::childrenImpl() {
   return {&_child, 1};
 }
 
@@ -71,14 +74,11 @@ AggregateExpression<AggregateOperation, FinalOperation>::getVariableForCount()
       Operation<2, FunctionAndValueGetters<__VA_ARGS__>>>;
 INSTANTIATE_AGG_EXP(decltype(addForSum), NumericValueGetter);
 
-INSTANTIATE_AGG_EXP(decltype(count), IsValidValueGetter);
-INSTANTIATE_AGG_EXP(decltype(minLambdaForAllTypes), ActualValueGetter);
-INSTANTIATE_AGG_EXP(decltype(maxLambdaForAllTypes), ActualValueGetter);
-
 template class AggregateExpression<
     AGG_OP<decltype(addForSum), NumericValueGetter>, decltype(averageFinalOp)>;
 
-// Needed for the GroupConcatExpression
-INSTANTIATE_AGG_EXP(PerformConcat, StringValueGetter);
+INSTANTIATE_AGG_EXP(decltype(count), IsValidValueGetter);
+INSTANTIATE_AGG_EXP(decltype(minLambdaForAllTypes), ActualValueGetter);
+INSTANTIATE_AGG_EXP(decltype(maxLambdaForAllTypes), ActualValueGetter);
 }  // namespace detail
 }  // namespace sparqlExpression
