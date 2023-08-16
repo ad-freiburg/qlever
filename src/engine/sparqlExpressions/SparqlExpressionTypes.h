@@ -244,16 +244,15 @@ namespace detail {
 /// Get Id of constant result of type T.
 template <SingleExpressionResult T, typename LocalVocabT>
 requires isConstantResult<T> && std::is_rvalue_reference_v<T&&>
-Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab,
-                                const auto& vocabulary) {
+Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
   } else if constexpr (ad_utility::isSimilar<T, IdOrString>) {
     return std::visit(
-        [&localVocab, &vocabulary]<typename R>(R&& el) mutable {
+        [&localVocab]<typename R>(R&& el) mutable {
           if constexpr (ad_utility::isSimilar<R, string>) {
-            return TripleComponent{std::forward<R>(el)}.toValueId(vocabulary,
-                                                                  localVocab);
+            return Id::makeFromLocalVocabIndex(
+                localVocab.getIndexAndAddIfNotContained(std::forward<R>(el)));
           } else {
             static_assert(ad_utility::isSimilar<R, Id>);
             return el;

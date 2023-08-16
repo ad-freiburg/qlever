@@ -171,8 +171,7 @@ void Bind::computeExpressionBind(
         if (it != resultGenerator.end()) {
           Id constantId =
               sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(*it), *outputLocalVocab,
-                  getExecutionContext()->getIndex().getVocab());
+                  std::move(*it), *outputLocalVocab);
           for (size_t i = 0; i < inSize; ++i) {
             output(i, inCols) = constantId;
           }
@@ -180,11 +179,10 @@ void Bind::computeExpressionBind(
       } else {
         size_t i = 0;
         // We deliberately move the values from the generator.
-        const auto& vocab = getExecutionContext()->getIndex().getVocab();
         for (auto& resultValue : resultGenerator) {
           output(i, inCols) =
               sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(resultValue), *outputLocalVocab, vocab);
+                  std::move(resultValue), *outputLocalVocab);
           i++;
         }
       }
