@@ -81,20 +81,20 @@ INPUT_PREFIX="scientists"
 INPUT="$INPUT_DIR/$INPUT_PREFIX"
 
 mkdir -p "$INDEX_DIR"
-# Can't check for the scientist-collection directory because
-# Travis' caching creates it
-if [ ! -e "$INPUT.nt" ]; then
-	# Why the hell is this a ZIP that can't easily be decompressed from stdin?!?
-	unzip -j "$ZIPPED_INPUT" -d "$INPUT_DIR/"
-fi;
-
-
 INDEX_PREFIX="scientists-index"
 INDEX="$INDEX_DIR/$INDEX_PREFIX"
 
 
-# Delete and rebuild the index
+# Delete and rebuild the index if necessary
 if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.index.pso" ]; then
+  # Can't check for the scientist-collection directory because
+  # Travis' caching creates it
+  if [ ! -e "$INPUT.nt" ]; then
+  	# Why the hell is this a ZIP that can't easily be decompressed from stdin?!?
+  	unzip -j "$ZIPPED_INPUT" -d "$INPUT_DIR/"
+  fi;
+
+
 	rm -f "$INDEX.*"
 	pushd "$BINARY_DIR"
 	echo "Building index $INDEX"
