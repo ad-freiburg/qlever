@@ -80,7 +80,7 @@ class FTSAlgorithms {
       vector<Id>* lastListEids);
 
   // Writes the wep entries to an IdTable but at most k contexts per entity. The
-  // rest gets discarded. Note that the contexts with the highest textscore get
+  // rest gets discarded. Note that the contexts with the highest score get
   // selected.
   template <int WIDTH>
   static void aggScoresAndTakeTopKContexts(const Index::WordEntityPostings& wep,
@@ -92,7 +92,7 @@ class FTSAlgorithms {
                                          IdTable* dynResult);
 
   // Writes the wep entries to an IdTable but at most k contexts per entity. The
-  // rest gets discarded. Note that the contexts with the highest textscore get
+  // rest gets discarded. Note that the contexts with the highest score get
   // selected. Also calculates the right combinations of the multiple entities.
   template <int WIDTH>
   static void multVarsAggScoresAndTakeTopKContexts(
@@ -105,7 +105,7 @@ class FTSAlgorithms {
       const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 
   // Writes the wep entries to an IdTable but at most k contexts per entity. The
-  // rest gets discarded. Note that the contexts with the highest textscore get
+  // rest gets discarded. Note that the contexts with the highest score get
   // selected. Also filters out entries whose entity is not in the HashMap.
   template <int WIDTH>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
@@ -120,7 +120,7 @@ class FTSAlgorithms {
       IdTable* dynResult);
 
   // Writes the wep entries to an IdTable but at most k contexts per entity. The
-  // rest gets discarded. Note that the contexts with the highest textscore get
+  // rest gets discarded. Note that the contexts with the highest score get
   // selected. Also calculates the right combinations of the multiple entities
   // and filters out entries whose entity is not in the HashMap.
   template <int WIDTH>
