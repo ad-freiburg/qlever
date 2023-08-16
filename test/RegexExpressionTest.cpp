@@ -32,8 +32,7 @@ RegexExpression makeRegexExpression(
   SparqlExpression::Ptr variableExpression =
       std::make_unique<VariableExpression>(Variable{std::move(variable)});
   if (childAsStr) {
-    variableExpression =
-        std::make_unique<StrExpression>(std::move(variableExpression));
+    variableExpression = makeStrExpression(std::move(variableExpression));
   }
   auto regexExpression = std::make_unique<StringLiteralExpression>(lit(regex));
   std::optional<SparqlExpression::Ptr> flagsExpression = std::nullopt;
@@ -50,17 +49,21 @@ RegexExpression makeRegexExpression(
 // Test that the expression `leftValue Comp rightValue`, when evaluated on the
 // `TestContext` (see above), yields the `expected` result.
 void testWithExplicitResult(const SparqlExpression& expression,
-                            std::vector<Bool> expected,
+                            std::vector<bool> expectedAsBool,
                             source_location l = source_location::current()) {
   static TestContext ctx;
   auto trace = generateLocationTrace(l, "testWithExplicitResult");
   auto resultAsVariant = expression.evaluate(&ctx.context);
-  const auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
+  const auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
+  std::vector<Id> expected;
+  std::ranges::transform(expectedAsBool, std::back_inserter(expected),
+                         &Id::makeFromBool);
+
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 }
 
 auto testNonPrefixRegex = [](std::string variable, std::string regex,
-                             const std::vector<Bool>& expectedResult,
+                             const std::vector<bool>& expectedResult,
                              bool childAsStr = false,
                              source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "testNonPrefixRegex");
@@ -98,7 +101,7 @@ TEST(RegexExpression, nonPrefixRegex) {
 
 auto testNonPrefixRegexWithFlags =
     [](std::string variable, std::string regex, std::string flags,
-       const std::vector<Bool>& expectedResult,
+       const std::vector<bool>& expectedResult,
        source_location l = source_location::current()) {
       auto trace = generateLocationTrace(l, "testNonPrefixRegexWithFlags");
       auto expr = makeRegexExpression(std::move(variable), std::move(regex),
@@ -152,7 +155,7 @@ TEST(RegexExpression, getPrefixRegex) {
 
 auto testPrefixRegexUnorderedColumn =
     [](std::string variable, std::string regex,
-       const std::vector<Bool>& expectedResult, bool childAsStr = false,
+       const std::vector<bool>& expectedResult, bool childAsStr = false,
        source_location l = source_location::current()) {
       auto trace = generateLocationTrace(l, "testUnorderedPrefix");
       auto expr = makeRegexExpression(std::move(variable), std::move(regex),

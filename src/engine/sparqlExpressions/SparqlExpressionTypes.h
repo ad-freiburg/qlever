@@ -49,45 +49,6 @@ class VectorWithMemoryLimit
   }
 };
 
-/// A simple wrapper around a bool that prevents the strangely-behaving
-/// std::vector<bool> optimization.
-struct Bool {
-  bool _value;
-  // Implicit conversion from and to bool.
-  Bool(bool value) : _value{value} {}
-
-  operator bool() const { return _value; }
-
-  // Default construction yields undefined value.
-  Bool() = default;
-
-  bool operator==(const Bool& b) const = default;
-
-  // Make the type hashable for absl, see
-  // https://abseil.io/docs/cpp/guides/hash.
-  template <typename H>
-  friend H AbslHashValue(H h, const Bool& b) {
-    return H::combine(std::move(h), b._value);
-  }
-};
-
-}  // namespace sparqlExpression
-
-// Specializations of std::common_type for the Bool type.
-namespace std {
-template <typename T>
-struct common_type<T, sparqlExpression::Bool> {
-  using type = std::common_type_t<T, bool>;
-};
-
-template <typename T>
-struct common_type<sparqlExpression::Bool, T> {
-  using type = std::common_type_t<T, bool>;
-};
-}  // namespace std
-
-namespace sparqlExpression {
-
 /// A list of StrongIds that all have the same datatype.
 using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
 
@@ -98,7 +59,7 @@ using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
 namespace detail {
 // For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
 // possible expression result types.
-using ConstantTypes = std::tuple<double, int64_t, Bool, string, ValueId>;
+using ConstantTypes = std::tuple<string, ValueId>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
@@ -269,18 +230,10 @@ Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, string>) {
     return Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained(std::forward<T>(result)));
-  } else if constexpr (ad_utility::isSimilar<double, T>) {
-    return Id::makeFromDouble(result);
   } else if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
-  } else if constexpr (ad_utility::isSimilar<T, Bool>) {
-    return Id::makeFromBool(result);
   } else {
-    static_assert(ad_utility::isSimilar<int64_t, T> ||
-                  ad_utility::isSimilar<Bool, T>);
-    // This currently covers int and bool.
-    // TODO<joka921> represent bool in the `ValueId` class and adapt this.
-    return Id::makeFromInt(result);
+    static_assert(ad_utility::alwaysFalse<T>);
   }
 }
 

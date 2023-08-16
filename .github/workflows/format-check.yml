@@ -19,6 +19,8 @@ jobs:
       - uses: actions/checkout@v3
       - name: Install dependencies
         run:  |
+            # The following line currently seems to be necessary to work around a bug in the installation.
+            sudo apt remove python3-lldb-*
             wget https://apt.llvm.org/llvm.sh
             sudo chmod +x llvm.sh
             sed   's/apt-key del/echo/' llvm.sh -iy
