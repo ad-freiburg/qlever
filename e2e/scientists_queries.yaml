@@ -157,6 +157,22 @@ queries:
       - contains_row: [ 280, "<New_York_City>" ]
       - order_numeric: { "dir": "DESC", "var": "?count" }
 
+  - query: group-by-and-rand
+    type: no-text
+    sparql: |
+      SELECT (COUNT(?x) as ?count) ?place WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Place_of_birth> ?place .
+          ?x <Gender> <Female>
+      }
+      GROUP BY ?place
+      ORDER BY RAND()
+    checks:
+      - num_cols: 2
+      - num_rows : 638
+      - selected: [ "?count", "?place" ]
+      - contains_row: [ 27, "<New_York_City>" ]
+
 
   # TODO<joka> reintroduce order by DESC((COUNT(?x) as ?count)) as soon as
   #  ordering by an expression while grouping is implemented
