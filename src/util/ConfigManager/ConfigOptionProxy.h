@@ -28,8 +28,8 @@ to. Must be `ConfigOption`, or `const ConfigOption`.
 */
 template <typename T, typename ConfigOptionType>
 requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes> &&
-         (std::same_as<std::decay_t<ConfigOptionType>, ConfigOption> ||
-          std::same_as<std::decay_t<ConfigOptionType>, const ConfigOption>)
+         (std::same_as<ConfigOptionType, ConfigOption> ||
+          std::same_as<ConfigOptionType, const ConfigOption>)
 class ConfigOptionProxyImplementation {
   ConfigOptionType* option_ = nullptr;
 
