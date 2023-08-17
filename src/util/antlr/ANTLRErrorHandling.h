@@ -6,29 +6,43 @@
 
 #pragma once
 
+#include <concepts>
 #include <string>
 
 #include "BaseErrorListener.h"
-#include "ParserRuleContext.h"
 #include "Recognizer.h"
 #include "Token.h"
 #include "absl/strings/str_cat.h"
 #include "util/ParseException.h"
+#include "util/antlr/GenerateAntlrExceptionMetadata.h"
 
-ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
-                                   antlr4::Token* offendingToken, size_t line,
-                                   size_t charPositionInLine);
+namespace ad_utility::antlr_utility {
+namespace detail {
+std::string generateExceptionMessage(antlr4::Token* offendingSymbol,
+                                     const std::string& msg);
+}  // namespace detail
 
-ExceptionMetadata generateMetadata(antlr4::ParserRuleContext* ctx);
+/*
+antlr::ANTLRErrorListener that raises encountered syntaxErrors as
+exceptions of type `GrammarParseException`. The line, position in the line and
+antlr error message are included as exception cause.
 
-/**
- * antlr::ANTLRErrorListener that raises encountered syntaxErrors as
- * ParseException. The line, position in the line and antlr error message are
- * included as exception cause.
- */
+For an example of a valid `GrammarParseException` see
+`InvalidSparqlQueryException`.
+*/
+template <typename GrammarParseException>
+requires std::derived_from<GrammarParseException, ParseException> &&
+         std::constructible_from<GrammarParseException, std::string_view,
+                                 std::optional<ExceptionMetadata>>
 struct ThrowingErrorListener : public antlr4::BaseErrorListener {
   void syntaxError(antlr4::Recognizer* recognizer,
                    antlr4::Token* offendingSymbol, size_t line,
                    size_t charPositionInLine, const std::string& msg,
-                   std::exception_ptr e) override;
+                   [[maybe_unused]] std::exception_ptr e) override {
+    throw GrammarParseException{
+        detail::generateExceptionMessage(offendingSymbol, msg),
+        generateAntlrExceptionMetadata(recognizer, offendingSymbol, line,
+                                       charPositionInLine)};
+  }
 };
+}  // namespace ad_utility::antlr_utility

@@ -142,7 +142,8 @@ nlohmann::json ConfigManager::parseShortHand(
   // The default in ANTLR is to log all errors to the console and to continue
   // the parsing. We need to turn parse errors into exceptions instead to
   // propagate them to the user.
-  ThrowingErrorListener errorListener{};
+  antlr_utility::ThrowingErrorListener<InvalidConfigShortHandParseException>
+      errorListener{};
   parser.removeErrorListeners();
   parser.addErrorListener(&errorListener);
   lexer.removeErrorListeners();
