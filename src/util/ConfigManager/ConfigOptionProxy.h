@@ -40,13 +40,7 @@ class ConfigOptionProxyImplementation {
   explicit ConfigOptionProxyImplementation(ConfigOptionType& opt)
       : option_(&opt) {
     // Make sure, that the given `ConfigOption` holds values of the right type.
-    if (!opt.template holdsType<T>()) {
-      throw std::runtime_error(absl::StrCat(
-          "Error while creating 'ConfigOptionProxy' for 'ConfigOption' '",
-          opt.getIdentifier(),
-          "': Mismatch between the template type of proxy and the type of "
-          "values, the configuration option can hold."));
-    }
+    AD_CONTRACT_CHECK(opt.template holdsType<T>());
   }
 
   // Get access to the configuration option, this is a proxy for. Const access

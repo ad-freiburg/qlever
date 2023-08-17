@@ -35,9 +35,7 @@ void basicConstructorTest() {
     // Is there an exception, if we give a config option of the wrong type?
     doForTypeInConfigOptionValueType([&opt]<typename WrongT>() {
       if constexpr (!std::is_same_v<T, WrongT>) {
-        AD_EXPECT_THROW_WITH_MESSAGE(
-            ProxyType<WrongT> someProxy(opt),
-            ::testing::ContainsRegex(R"--(testOption': Mismatch)--"));
+        ASSERT_ANY_THROW(ProxyType<WrongT> someProxy(opt));
       }
     });
   };
