@@ -132,14 +132,13 @@ std::optional<MediaType> toMediaType(std::string_view s) {
 }
 
 // For use with `ThrowingErrorListener` in `parseAcceptHeader`.
-
 class InvalidMediaTypeParseException : public ParseException {
  public:
   explicit InvalidMediaTypeParseException(
       std::string_view cause,
       std::optional<ExceptionMetadata> metadata = std::nullopt)
       : ParseException{cause, std::move(metadata),
-                       "Invalid media type parse:"} {}
+                       "Parsing of media type failed:"} {}
 };
 
 // ___________________________________________________________________________
