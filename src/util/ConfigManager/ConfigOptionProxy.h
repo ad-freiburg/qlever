@@ -58,12 +58,13 @@ class ConfigOptionProxyImplementation {
   }
 
   // (Implicit) conversion to `ConfigOptionType&`.
-  operator ConfigOptionType&() const requires(std::is_const_v<ConfigOptionType>)
-  {
+  explicit(false) operator ConfigOptionType&() const
+      requires(std::is_const_v<ConfigOptionType>) {
     return getConfigOption();
   }
 
-  operator ConfigOptionType&() requires(!std::is_const_v<ConfigOptionType>) {
+  explicit(false) operator ConfigOptionType&()
+      requires(!std::is_const_v<ConfigOptionType>) {
     return getConfigOption();
   }
 };
@@ -92,7 +93,7 @@ class NonConstConfigOptionProxy
   explicit NonConstConfigOptionProxy(ConfigOption& opt) : Base(opt) {}
 
   // Implicit conversion from not const to const is allowed.
-  operator ConstConfigOptionProxy<T>() {
+  explicit(false) operator ConstConfigOptionProxy<T>() {
     return ConstConfigOptionProxy<T>(Base::getConfigOption());
   }
 };
