@@ -56,6 +56,16 @@ class ConfigOptionProxyImplementation {
     AD_CORRECTNESS_CHECK(option_ != nullptr);
     return *option_;
   }
+
+  // (Implicit) conversion to `ConfigOptionType&`.
+  operator ConfigOptionType&() const requires(std::is_const_v<ConfigOptionType>)
+  {
+    return getConfigOption();
+  }
+
+  operator ConfigOptionType&() requires(!std::is_const_v<ConfigOptionType>) {
+    return getConfigOption();
+  }
 };
 
 }  // namespace detail

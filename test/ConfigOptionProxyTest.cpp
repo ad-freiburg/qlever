@@ -79,4 +79,34 @@ TEST(ConfigOptionProxy, GetConfigOption) {
   });
 }
 
+TEST(ConfigOptionProxy, ConversionToConfigOption) {
+  // A function variant of `std::identity`, where you can give the type.
+  auto identity = []<typename Type>(Type t) -> Type { return t; };
+
+  doForTypeInConfigOptionValueType([&identity]<typename T>() {
+    T varForConfigOption;
+    ConfigOption opt("testOption", "", &varForConfigOption);
+    NonConstConfigOptionProxy<T> nonConstProxy(opt);
+    ConstConfigOptionProxy<T> constProxy(opt);
+
+    // Does the (implicit) conversion work and return the same object, as the
+    // one given?
+    ASSERT_EQ(&opt, &static_cast<ConfigOption&>(nonConstProxy));
+    ASSERT_EQ(&opt,
+              &identity.template operator()<ConfigOption&>(nonConstProxy));
+    ASSERT_EQ(&opt, &static_cast<const ConfigOption&>(nonConstProxy));
+    ASSERT_EQ(&opt, &identity.template operator()<const ConfigOption&>(
+                        nonConstProxy));
+    ASSERT_EQ(&opt, &static_cast<const ConfigOption&>(constProxy));
+    ASSERT_EQ(&opt,
+              &identity.template operator()<const ConfigOption&>(constProxy));
+
+    // Does the cast to `ConfigOption` create a different instance?
+    const ConfigOption& opt2 = static_cast<ConfigOption>(nonConstProxy);
+    ASSERT_NE(&opt, &opt2);
+    const ConfigOption& opt3 = static_cast<ConfigOption>(constProxy);
+    ASSERT_NE(&opt, &opt3);
+  });
+}
+
 }  // namespace ad_utility
