@@ -37,6 +37,11 @@ jobs:
       build-type: Release
       BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
     steps:
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin' # See 'Supported distributions' for available options
+          java-version: '17'
       - name: Print concurrency key
         run: echo "${{ github.workflow }} @ ${{ github.event.workflow_run.head_repository.full_name || github.ref}} @ ${{ github.event.workflow_run.head_branch || github.event.workflow_run.pull_requests[0].url || github.head_ref || github.ref }}"
       - name: 'Download artifact'

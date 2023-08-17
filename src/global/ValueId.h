@@ -181,7 +181,7 @@ class ValueId {
   }
 
   /// Create a `ValueId` for a boolean value.
-  static ValueId makeFromBool(bool b) noexcept {
+  static constexpr ValueId makeFromBool(bool b) noexcept {
     auto bits = static_cast<T>(b);
     return addDatatypeBits(bits, Datatype::Bool);
   }

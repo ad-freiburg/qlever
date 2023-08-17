@@ -17,6 +17,8 @@
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/json.h"
 
+using namespace std::string_literals;
+
 namespace ad_utility {
 
 /*
@@ -40,36 +42,6 @@ void checkOption(const ad_utility::ConfigOption& option,
   }
 }
 
-TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
-  ad_utility::ConfigManager config{};
-
-  // Configuration options for testing.
-  int notUsed;
-
-  config.createConfigOption(
-      {"Shared_part", "Unique_part_1", "Sense_of_existence"}, "", &notUsed,
-      std::optional{42});
-
-  config.createConfigOption(
-      {"Shared_part", "Unique_part_2", "Sense_of_existence"}, "", &notUsed);
-
-  // Where those two options added?
-  ASSERT_EQ(config.configurationOptions_.size(), 2);
-
-  checkOption<int>(config.getConfigurationOptionByNestedKeys(
-                       {"Shared_part", "Unique_part_1", "Sense_of_existence"}),
-                   notUsed, true, 42);
-  checkOption<int>(config.getConfigurationOptionByNestedKeys(
-                       {"Shared_part", "Unique_part_2", "Sense_of_existence"}),
-                   notUsed, false, 42);
-
-  // Trying to get a configuration option, that does not exist, should cause
-  // an exception.
-  ASSERT_THROW(
-      config.getConfigurationOptionByNestedKeys({"Shared_part", "Getsbourgh"}),
-      ad_utility::NoConfigOptionFoundException);
-}
-
 /*
 The exceptions for adding configuration options.
 */
@@ -78,13 +50,14 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
 
   // Configuration options for testing.
   int notUsed;
-  config.createConfigOption<int>(
-      {"Shared_part", "Unique_part_1", "Sense_of_existence"}, "", &notUsed, 42);
+  config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s},
+                   "", &notUsed, 42);
 
   // Trying to add a configuration option with the same name at the same
   // place, should cause an error.
-  ASSERT_THROW(config.createConfigOption<int>(
-      {"Shared_part", "Unique_part_1", "Sense_of_existence"}, "", &notUsed, 42);
+  ASSERT_THROW(config.addOption(
+      {"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}, "", &notUsed,
+      42);
                , ad_utility::ConfigManagerOptionPathAlreadyinUseException);
 
   /*
@@ -92,8 +65,8 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
   Reason: The last key is used as the name for the to be created `ConfigOption`.
   An empty vector doesn't work with that.
   */
-  ASSERT_ANY_THROW(config.createConfigOption<int>(std::vector<std::string>{},
-                                                  "", &notUsed, 42););
+  ASSERT_ANY_THROW(
+      config.addOption(std::vector<std::string>{}, "", &notUsed, 42););
 
   /*
   Trying to add a configuration option with a path containing strings with
@@ -102,9 +75,8 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
   configuration grammar. Ergo, you can't set values, with such paths per short
   hand, which we don't want.
   */
-  ASSERT_THROW(config.createConfigOption<int>(
-      std::vector<std::string>{"Shared part", "Sense_of_existence"}, "",
-      &notUsed, 42);
+  ASSERT_THROW(config.addOption({"Shared part"s, "Sense_of_existence"s}, "",
+                                &notUsed, 42);
                , ad_utility::NotValidShortHandNameException);
 }
 
@@ -116,34 +88,22 @@ TEST(ConfigManagerTest, ParseConfig) {
   int secondInt;
   int thirdInt;
 
-  config.createConfigOption<int>(
-      std::vector<std::string>{"depth_0", "Option_0"},
-      "Must be set. Has no default value.", &firstInt);
-  config.createConfigOption<int>({"depth_0", "depth_1", "Option_1"},
-                                 "Must be set. Has no default value.",
-                                 &secondInt);
-  config.createConfigOption<int>("Option_2", "Has a default value.", &thirdInt,
-                                 2);
-
-  // For easier access to the options.
-  auto getOption = [&config](const size_t& optionNumber) {
-    if (optionNumber == 0) {
-      return config.getConfigurationOptionByNestedKeys({"depth_0", "Option_0"});
-    } else if (optionNumber == 1) {
-      return config.getConfigurationOptionByNestedKeys(
-          {"depth_0", "depth_1", "Option_1"});
-    } else {
-      return config.getConfigurationOptionByNestedKeys({"Option_2"});
-    }
-  };
+  const ConfigOption& optionZero =
+      config.addOption({"depth_0"s, "Option_0"s},
+                       "Must be set. Has no default value.", &firstInt);
+  const ConfigOption& optionOne =
+      config.addOption({"depth_0"s, "depth_1"s, "Option_1"s},
+                       "Must be set. Has no default value.", &secondInt);
+  const ConfigOption& optionTwo =
+      config.addOption("Option_2", "Has a default value.", &thirdInt, 2);
 
   // Does the option with the default already have a value?
-  checkOption<int>(getOption(2), thirdInt, true, 2);
+  checkOption<int>(optionTwo, thirdInt, true, 2);
 
   // The other two should never have set the variable, that the internal pointer
   // points to.
-  checkOption<int>(getOption(0), firstInt, false, 2);
-  checkOption<int>(getOption(1), secondInt, false, 2);
+  checkOption<int>(optionZero, firstInt, false, 2);
+  checkOption<int>(optionOne, secondInt, false, 2);
 
   // The json for testing `parseConfig`. Sets all of the configuration
   // options.
@@ -160,9 +120,9 @@ TEST(ConfigManagerTest, ParseConfig) {
   // Set and check.
   config.parseConfig(testJson);
 
-  checkOption<int>(getOption(0), firstInt, true, 10);
-  checkOption<int>(getOption(1), secondInt, true, 11);
-  checkOption<int>(getOption(2), thirdInt, true, 12);
+  checkOption<int>(optionZero, firstInt, true, 10);
+  checkOption<int>(optionOne, secondInt, true, 11);
+  checkOption<int>(optionTwo, thirdInt, true, 12);
 }
 
 TEST(ConfigManagerTest, ParseConfigExceptionTest) {
@@ -171,13 +131,11 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
   // Add one option with default and one without.
   int notUsedInt;
   std::vector<int> notUsedVector;
-  config.createConfigOption<int>(
-      std::vector<std::string>{"depth_0", "Without_default"},
-      "Must be set. Has no default value.", &notUsedInt);
-  config.createConfigOption<std::vector<int>>(
-      std::vector<std::string>{"depth_0", "With_default"},
-      "Must not be set. Has default value.", &notUsedVector,
-      std::vector{40, 41});
+  config.addOption({"depth_0"s, "Without_default"s},
+                   "Must be set. Has no default value.", &notUsedInt);
+  config.addOption({"depth_0"s, "With_default"s},
+                   "Must not be set. Has default value.", &notUsedVector,
+                   {40, 41});
 
   // Should throw an exception, if we don't set all options, that must be set.
   ASSERT_THROW(config.parseConfig(nlohmann::json::parse(R"--({})--")),
@@ -232,122 +190,109 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
 
   // Add integer options.
   int somePositiveNumberInt;
-  config.createConfigOption<int>("somePositiveNumber",
-                                 "Must be set. Has no default value.",
-                                 &somePositiveNumberInt);
+  const ConfigOption& somePositiveNumber = config.addOption(
+      "somePositiveNumber", "Must be set. Has no default value.",
+      &somePositiveNumberInt);
   int someNegativNumberInt;
-  config.createConfigOption<int>("someNegativNumber",
-                                 "Must be set. Has no default value.",
-                                 &someNegativNumberInt);
+  const ConfigOption& someNegativNumber = config.addOption(
+      "someNegativNumber", "Must be set. Has no default value.",
+      &someNegativNumberInt);
 
   // Add integer list.
   std::vector<int> someIntegerlistIntVector;
-  config.createConfigOption<std::vector<int>>(
-      "someIntegerlist", "Must be set. Has no default value.",
-      &someIntegerlistIntVector);
+  const ConfigOption& someIntegerlist =
+      config.addOption("someIntegerlist", "Must be set. Has no default value.",
+                       &someIntegerlistIntVector);
 
   // Add floating point options.
   float somePositiveFloatingPointFloat;
-  config.createConfigOption<float>("somePositiveFloatingPoint",
-                                   "Must be set. Has no default value.",
-                                   &somePositiveFloatingPointFloat);
+  const ConfigOption& somePositiveFloatingPoint = config.addOption(
+      "somePositiveFloatingPoint", "Must be set. Has no default value.",
+      &somePositiveFloatingPointFloat);
   float someNegativFloatingPointFloat;
-  config.createConfigOption<float>("someNegativFloatingPoint",
-                                   "Must be set. Has no default value.",
-                                   &someNegativFloatingPointFloat);
+  const ConfigOption& someNegativFloatingPoint = config.addOption(
+      "someNegativFloatingPoint", "Must be set. Has no default value.",
+      &someNegativFloatingPointFloat);
 
   // Add floating point list.
   std::vector<float> someFloatingPointListFloatVector;
-  config.createConfigOption<std::vector<float>>(
+  const ConfigOption& someFloatingPointList = config.addOption(
       "someFloatingPointList", "Must be set. Has no default value.",
       &someFloatingPointListFloatVector);
 
   // Add boolean options.
   bool boolTrueBool;
-  config.createConfigOption<bool>(
+  const ConfigOption& boolTrue = config.addOption(
       "boolTrue", "Must be set. Has no default value.", &boolTrueBool);
   bool boolFalseBool;
-  config.createConfigOption<bool>(
+  const ConfigOption& boolFalse = config.addOption(
       "boolFalse", "Must be set. Has no default value.", &boolFalseBool);
 
   // Add boolean list.
   std::vector<bool> someBooleanListBoolVector;
-  config.createConfigOption<std::vector<bool>>(
-      "someBooleanList", "Must be set. Has no default value.",
-      &someBooleanListBoolVector);
+  const ConfigOption& someBooleanList =
+      config.addOption("someBooleanList", "Must be set. Has no default value.",
+                       &someBooleanListBoolVector);
 
   // Add string option.
   std::string myNameString;
-  config.createConfigOption<std::string>(
+  const ConfigOption& myName = config.addOption(
       "myName", "Must be set. Has no default value.", &myNameString);
 
   // Add string list.
   std::vector<std::string> someStringListStringVector;
-  config.createConfigOption<std::vector<std::string>>(
-      "someStringList", "Must be set. Has no default value.",
-      &someStringListStringVector);
+  const ConfigOption& someStringList =
+      config.addOption("someStringList", "Must be set. Has no default value.",
+                       &someStringListStringVector);
 
   // Add option with deeper level.
   std::vector<int> deeperIntVector;
-  config.createConfigOption<std::vector<int>>(
-      {"depth", "here", "list"}, "Must be set. Has no default value.",
-      &deeperIntVector);
+  const ConfigOption& deeperIntVectorOption =
+      config.addOption({"depth"s, "here"s, "list"s},
+                       "Must be set. Has no default value.", &deeperIntVector);
 
   // This one will not be changed, in order to test, that options, that are
   // not set at run time, are not changed.
   int noChangeInt;
-  config.createConfigOption<int>("No_change", "", &noChangeInt, 10);
+  const ConfigOption& noChange =
+      config.addOption("No_change", "", &noChangeInt, 10);
 
   // Set those.
   config.parseConfig(ad_utility::ConfigManager::parseShortHand(
       R"--(somePositiveNumber : 42, someNegativNumber : -42, someIntegerlist : [40, 41], somePositiveFloatingPoint : 4.2, someNegativFloatingPoint : -4.2, someFloatingPointList : [4.1, 4.2], boolTrue : true, boolFalse : false, someBooleanList : [true, false, true], myName : "Bernd", someStringList : ["t1", "t2"], depth : { here : {list : [7,8]}})--"));
 
-  checkOption<int>(
-      config.getConfigurationOptionByNestedKeys({"somePositiveNumber"}),
-      somePositiveNumberInt, true, 42);
-  checkOption<int>(
-      config.getConfigurationOptionByNestedKeys({"someNegativNumber"}),
-      someNegativNumberInt, true, -42);
+  checkOption<int>(somePositiveNumber, somePositiveNumberInt, true, 42);
+  checkOption<int>(someNegativNumber, someNegativNumberInt, true, -42);
 
-  checkOption<std::vector<int>>(
-      config.getConfigurationOptionByNestedKeys({"someIntegerlist"}),
-      someIntegerlistIntVector, true, std::vector{40, 41});
+  checkOption<std::vector<int>>(someIntegerlist, someIntegerlistIntVector, true,
+                                std::vector{40, 41});
 
-  checkOption<float>(
-      config.getConfigurationOptionByNestedKeys({"somePositiveFloatingPoint"}),
-      somePositiveFloatingPointFloat, true, 4.2f);
-  checkOption<float>(
-      config.getConfigurationOptionByNestedKeys({"someNegativFloatingPoint"}),
-      someNegativFloatingPointFloat, true, -4.2f);
+  checkOption<float>(somePositiveFloatingPoint, somePositiveFloatingPointFloat,
+                     true, 4.2f);
+  checkOption<float>(someNegativFloatingPoint, someNegativFloatingPointFloat,
+                     true, -4.2f);
 
-  checkOption<std::vector<float>>(
-      config.getConfigurationOptionByNestedKeys({"someFloatingPointList"}),
-      someFloatingPointListFloatVector, true, {4.1f, 4.2f});
+  checkOption<std::vector<float>>(someFloatingPointList,
+                                  someFloatingPointListFloatVector, true,
+                                  {4.1f, 4.2f});
 
-  checkOption<bool>(config.getConfigurationOptionByNestedKeys({"boolTrue"}),
-                    boolTrueBool, true, true);
-  checkOption<bool>(config.getConfigurationOptionByNestedKeys({"boolFalse"}),
-                    boolFalseBool, true, false);
+  checkOption<bool>(boolTrue, boolTrueBool, true, true);
+  checkOption<bool>(boolFalse, boolFalseBool, true, false);
 
-  checkOption<std::vector<bool>>(
-      config.getConfigurationOptionByNestedKeys({"someBooleanList"}),
-      someBooleanListBoolVector, true, std::vector{true, false, true});
+  checkOption<std::vector<bool>>(someBooleanList, someBooleanListBoolVector,
+                                 true, std::vector{true, false, true});
 
-  checkOption<std::string>(
-      config.getConfigurationOptionByNestedKeys({"myName"}), myNameString, true,
-      std::string{"Bernd"});
+  checkOption<std::string>(myName, myNameString, true, std::string{"Bernd"});
 
-  checkOption<std::vector<std::string>>(
-      config.getConfigurationOptionByNestedKeys({"someStringList"}),
-      someStringListStringVector, true, std::vector<std::string>{"t1", "t2"});
+  checkOption<std::vector<std::string>>(someStringList,
+                                        someStringListStringVector, true,
+                                        std::vector<std::string>{"t1", "t2"});
 
-  checkOption<std::vector<int>>(
-      config.getConfigurationOptionByNestedKeys({"depth", "here", "list"}),
-      deeperIntVector, true, std::vector{7, 8});
+  checkOption<std::vector<int>>(deeperIntVectorOption, deeperIntVector, true,
+                                std::vector{7, 8});
 
   // Is the "No Change" unchanged?
-  checkOption<int>(config.getConfigurationOptionByNestedKeys({"No_change"}),
-                   noChangeInt, true, 10);
+  checkOption<int>(noChange, noChangeInt, true, 10);
 
   // Multiple key value pairs with the same key are not allowed.
   AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::ConfigManager::parseShortHand(
@@ -370,8 +315,8 @@ TEST(ConfigManagerTest, PrintConfigurationDocExistence) {
 
   // Can you print a non-empty one?
   int notUsed;
-  config.createConfigOption<int>("WithDefault", "", &notUsed, 42);
-  config.createConfigOption<int>("WithoutDefault", "", &notUsed);
+  config.addOption("WithDefault", "", &notUsed, 42);
+  config.addOption("WithoutDefault", "", &notUsed);
   ASSERT_NO_THROW(config.printConfigurationDoc(false));
   ASSERT_NO_THROW(config.printConfigurationDoc(true));
 }
