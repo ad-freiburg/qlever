@@ -19,18 +19,20 @@ function print_usage {
   echo "Runs QLevers end to end tests."
   echo ""
   echo "Options:"
-  echo "  -i  Do not rebuild the scientists index."
+  echo "  -i  Use index from the given directory (which must be the root directory of the working copy of QLever, not the e2e_data subdirectory)"
   echo "  -d  Directory of the QLever binaries (relative to the main directory), default: 'build'"
 }
 
 REBUILD_THE_INDEX="YES"
+INDEX_DIRECTORY="." #if not set, we will build the index ourselves.
 BINARY_DIRECTORY="build"
 
-while getopts ":id:" arg; do
+while getopts ":i:d:" arg; do
   case ${arg} in
     i)
       echo "The index will not be rebuilt"
       REBUILD_THE_INDEX="NO"
+      INDEX_DIRECTORY="${OPTARG}"
     ;;
     d)
       BINARY_DIRECTORY="${OPTARG}"
@@ -72,27 +74,26 @@ else
 fi
 export PYTHON_BINARY=`which python3`
 
-INDEX_DIR="$PROJECT_DIR/e2e_data"
+INDEX_DIR="$PROJECT_DIR/$INDEX_DIRECTORY/e2e_data"
 INPUT_DIR="$PROJECT_DIR/e2e_data/scientist-collection"
 ZIPPED_INPUT="$PROJECT_DIR/e2e/scientist-collection.zip"
 INPUT_PREFIX="scientists"
 INPUT="$INPUT_DIR/$INPUT_PREFIX"
 
 mkdir -p "$INDEX_DIR"
-# Can't check for the scientist-collection directory because
-# Travis' caching creates it
-if [ ! -e "$INPUT.nt" ]; then
-	# Why the hell is this a ZIP that can't easily be decompressed from stdin?!?
-	unzip -j "$ZIPPED_INPUT" -d "$INPUT_DIR/"
-fi;
-
-
 INDEX_PREFIX="scientists-index"
 INDEX="$INDEX_DIR/$INDEX_PREFIX"
 
 
-# Delete and rebuild the index
+# Delete and rebuild the index if necessary
 if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.index.pso" ]; then
+  # Can't check for the scientist-collection directory because
+  # Travis' caching creates it
+  if [ ! -e "$INPUT.nt" ]; then
+  	unzip -j "$ZIPPED_INPUT" -d "$INPUT_DIR/"
+  fi;
+
+
 	rm -f "$INDEX.*"
 	pushd "$BINARY_DIR"
 	echo "Building index $INDEX"
