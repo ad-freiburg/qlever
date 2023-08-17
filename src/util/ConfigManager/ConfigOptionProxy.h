@@ -31,7 +31,7 @@ requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes> &&
          (std::same_as<ConfigOptionType, ConfigOption> ||
           std::same_as<ConfigOptionType, const ConfigOption>)
 class ConfigOptionProxyImplementation {
-  ConfigOptionType* option_ = nullptr;
+  ConfigOptionType* option_;
 
  public:
   using Type = T;
