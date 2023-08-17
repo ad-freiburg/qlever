@@ -214,9 +214,11 @@ class ConfigManager {
 
   @param pathToOption Describes a path in json, that points to the value held by
   the configuration option.
+
+  @return The added config option.
   */
-  void addConfigOption(const std::vector<std::string>& pathToOption,
-                       ConfigOption&& option);
+  const ConfigOption& addConfigOption(
+      const std::vector<std::string>& pathToOption, ConfigOption&& option);
 
   /*
   @brief Return string representation of a `std::vector<std::string>`.
@@ -268,18 +270,15 @@ class ConfigManager {
       verifyPathToConfigOption(pathToOption, "");
     }
 
-    addConfigOption(
-        pathToOption,
-        ConfigOption(pathToOption.back(), optionDescription,
-                     variableToPutValueOfTheOptionIn, defaultValue));
-
     /*
     The `unqiue_ptr` was created, by creating a new `ConfigOption` via it's
     move constructor. Which is why, we can't just return the `ConfigOption`
     we created here.
     */
-    return ConstConfigOptionProxy<OptionType>(
-        *configurationOptions_.at(createJsonPointerString(pathToOption)).get());
+    return ConstConfigOptionProxy<OptionType>(addConfigOption(
+        pathToOption,
+        ConfigOption(pathToOption.back(), optionDescription,
+                     variableToPutValueOfTheOptionIn, defaultValue)));
   }
 
   /*
