@@ -22,6 +22,12 @@ class RandomExpression : public SparqlExpression {
     const size_t numElements = context->_endIndex - context->_beginIndex;
     result.reserve(numElements);
     FastRandomIntGenerator<int64_t> randInt;
+
+    // As part of a GROUP BY we only return one value per group.
+    if (context->_isPartOfGroupBy) {
+      return Id::makeFromInt(randInt() >> Id::numDatatypeBits);
+    }
+
     for (size_t i = 0; i < numElements; ++i) {
       result.push_back(Id::makeFromInt(randInt() >> Id::numDatatypeBits));
     }
@@ -36,7 +42,7 @@ class RandomExpression : public SparqlExpression {
 
  private:
   // Get the direct child expressions.
-  std::span<SparqlExpression::Ptr> children() override { return {}; }
+  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 }  // namespace sparqlExpression

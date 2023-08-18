@@ -295,30 +295,30 @@ TEST(RelationalExpression, DoubleAndDouble) {
 }
 
 TEST(RelationalExpression, StringAndString) {
-  testLessThanGreaterThanEqualHelper<std::string, std::string>(
+  testLessThanGreaterThanEqualHelper<IdOrString, IdOrString>(
       {"alpha", "beta"}, {"sigma", "delta"}, {"epsilon", "epsilon"});
   // TODO<joka921> These tests only work, when we actually use unicode
   // comparisons for the string based expressions.
   // TODO<joka921> Add an example for strings that are bytewise different but
   // equal on the unicode level (e.g.`ä` vs `a + dots`.
-  // testLessThanGreaterThanEqualHelper<std::string, std::string>({"Alpha",
+  // testLessThanGreaterThanEqualHelper<IdOrString, IdOrString>({"Alpha",
   // "beta"},
   // {"beta", "äpfel"}, {"xxx", "xxx"});
 }
 
 TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
   auto stringVec =
-      VectorWithMemoryLimit<std::string>({"hallo", "by", ""}, makeAllocator());
+      VectorWithMemoryLimit<IdOrString>({"hallo", "by", ""}, makeAllocator());
   auto intVec =
       VectorWithMemoryLimit<int64_t>({-12365, 0, 12}, makeAllocator());
   auto doubleVec =
       VectorWithMemoryLimit<double>({-12.365, 0, 12.1e5}, makeAllocator());
-  testUndefHelper(int64_t{3}, "hallo"s);
-  testUndefHelper(int64_t{3}, "3"s);
-  testUndefHelper(-12.0, "hallo"s);
-  testUndefHelper(-12.0, "-12.0"s);
-  testUndefHelper(intVec.clone(), "someString"s);
-  testUndefHelper(doubleVec.clone(), "someString"s);
+  testUndefHelper(int64_t{3}, IdOrString{"hallo"});
+  testUndefHelper(int64_t{3}, IdOrString{"3"});
+  testUndefHelper(-12.0, IdOrString{"hallo"});
+  testUndefHelper(-12.0, IdOrString{"-12.0"});
+  testUndefHelper(intVec.clone(), IdOrString{"someString"});
+  testUndefHelper(doubleVec.clone(), IdOrString{"someString"});
   testUndefHelper(int64_t{3}, stringVec.clone());
   testUndefHelper(intVec.clone(), stringVec.clone());
   testUndefHelper(doubleVec.clone(), stringVec.clone());
@@ -534,19 +534,20 @@ TEST(RelationalExpression, NumericConstantAndNumericVector) {
 }
 
 TEST(RelationalExpression, StringConstantsAndStringVector) {
-  VectorWithMemoryLimit<std::string> vec(
+  VectorWithMemoryLimit<IdOrString> vec(
       {"alpha", "alpaka", "bertram", "sigma", "zeta", "kaulquappe", "caesar",
        "caesar", "caesar"},
       makeAllocator());
-  testLessThanGreaterThanEqualMultipleValuesHelper("caesar"s, vec.clone());
+  testLessThanGreaterThanEqualMultipleValuesHelper(IdOrString{"caesar"},
+                                                   vec.clone());
 
   // TODO<joka921> These tests only work, when we actually use unicode
   // comparisons for the string based expressions. TODDO<joka921> Add an example
   // for strings that are bytewise different but equal on the unicode level
   // (e.g.`ä` vs `a + dots`.
-  // VectorWithMemoryLimit<std::string> vec2({"AlpHa", "älpaka", "Æ", "sigma",
+  // VectorWithMemoryLimit<IdOrString> vec2({"AlpHa", "älpaka", "Æ", "sigma",
   // "Eta", "kaulQuappe", "Caesar", "Caesar", "Caesare"}, alloc);
-  // testLessThanGreaterThanEqualHelper<std::string, std::string>({"Alpha",
+  // testLessThanGreaterThanEqualHelper<IdOrString, IdOrString>({"Alpha",
   // "beta"},
   // {"beta", "äpfel"}, {"xxx", "xxx"});
 }
@@ -590,11 +591,11 @@ TEST(RelationalExpression, DoubleVectorAndIntVector) {
 }
 
 TEST(RelationalExpression, StringVectorAndStringVector) {
-  VectorWithMemoryLimit<std::string> vecA{
+  VectorWithMemoryLimit<IdOrString> vecA{
       {"alpha", "beta", "g", "epsilon", "fraud", "capitalism", "", "bo'sä30",
        "Me"},
       makeAllocator()};
-  VectorWithMemoryLimit<std::string> vecB{
+  VectorWithMemoryLimit<IdOrString> vecB{
       {"alph", "alpha", "f", "epsiloo", "freud", "communism", "", "bo'sä30",
        "Me"},
       makeAllocator()};
@@ -654,18 +655,20 @@ TEST(RelationalExpression, VariableAndConstant) {
                              {false, false, true});
 
   // ?vocab column is `"Beta", "alpha", "älpha"
-  testWithExplicitResult<LE>(Variable{"?vocab"}, "\"älpha\""s,
+  testWithExplicitResult<LE>(Variable{"?vocab"}, IdOrString{"\"älpha\""},
                              {false, true, true});
-  testWithExplicitResult<GT>(Variable{"?vocab"}, "\"alpha\""s,
+  testWithExplicitResult<GT>(Variable{"?vocab"}, IdOrString{"\"alpha\""},
                              {true, false, true});
-  testWithExplicitResult<LT>("\"atm\""s, Variable{"?vocab"},
+  testWithExplicitResult<LT>(IdOrString{"\"atm\""}, Variable{"?vocab"},
                              {true, false, false});
 
   // ?mixed column is `1, -0.1, <x>`
   auto U = Id::makeUndefined();
   auto B = ad_utility::testing::BoolId;
-  testWithExplicitIdResult<GT>("<xa>"s, Variable{"?mixed"}, {U, U, B(true)});
-  testWithExplicitIdResult<LT>("<u>"s, Variable{"?mixed"}, {U, U, B(true)});
+  testWithExplicitIdResult<GT>(IdOrString{"<xa>"}, Variable{"?mixed"},
+                               {U, U, B(true)});
+  testWithExplicitIdResult<LT>(IdOrString{"<u>"}, Variable{"?mixed"},
+                               {U, U, B(true)});
 
   // Note: `1` and `<x>` are "not compatible", so even the "not equal"
   // comparison returns false.
@@ -749,7 +752,7 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<GE>(ints, int64_t{-1}, {{{0, 3}}});
   testSortedVariableAndConstant<LE>(ints, 0.3, {{{0, 1}, {2, 3}}});
   // ints and strings are always incompatible.
-  testSortedVariableAndConstant<NE>(ints, "a string"s, {});
+  testSortedVariableAndConstant<NE>(ints, IdOrString{"a string"}, {});
 
   testSortedVariableAndConstant<GT>(doubles, int64_t{0}, {{{0, 2}}});
   testSortedVariableAndConstant<EQ>(doubles, 2.8, {{{1, 2}}});
@@ -759,10 +762,11 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<EQ>(numeric, 1.0, {{{0, 1}}});
   testSortedVariableAndConstant<NE>(numeric, 3.4, {{{0, 1}, {2, 3}}});
 
-  testSortedVariableAndConstant<GT>(vocab, "\"alpha\""s, {{{1, 3}}});
-  testSortedVariableAndConstant<GE>(vocab, "\"alpha\""s, {{{0, 3}}});
-  testSortedVariableAndConstant<LE>(vocab, "\"ball\""s, {{{0, 2}}});
-  testSortedVariableAndConstant<NE>(vocab, "\"älpha\""s, {{{0, 1}, {2, 3}}});
+  testSortedVariableAndConstant<GT>(vocab, IdOrString{"\"alpha\""}, {{{1, 3}}});
+  testSortedVariableAndConstant<GE>(vocab, IdOrString{"\"alpha\""}, {{{0, 3}}});
+  testSortedVariableAndConstant<LE>(vocab, IdOrString{"\"ball\""}, {{{0, 2}}});
+  testSortedVariableAndConstant<NE>(vocab, IdOrString{"\"älpha\""},
+                                    {{{0, 1}, {2, 3}}});
   testSortedVariableAndConstant<LE>(vocab, inf, {});
 
   // Note: vocab entries and numeric values are not compatible, so every
@@ -772,7 +776,7 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   // Note: only *numeric* values that are not equal to 1.0 are considered here.
   testSortedVariableAndConstant<NE>(mixed, 1.0, {{{1, 2}}});
   testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}});
-  testSortedVariableAndConstant<LE>(mixed, "<z>"s, {{{2, 3}}});
+  testSortedVariableAndConstant<LE>(mixed, IdOrString{"<z>"}, {{{2, 3}}});
 }
 
 // TODO<joka921> We currently do not have tests for the `LocalVocab` case,

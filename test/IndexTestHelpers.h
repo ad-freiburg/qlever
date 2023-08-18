@@ -99,6 +99,7 @@ inline Index makeTestIndex(const std::string& indexBasename,
   index.setUsePatterns(usePatterns);
   index.setLoadAllPermutations(loadAllPermutations);
   index.createFromOnDiskIndex(indexBasename);
+  ad_utility::setGlobalLoggingStream(&std::cout);
   return index;
 }
 

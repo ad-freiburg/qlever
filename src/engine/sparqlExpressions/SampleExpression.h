@@ -35,7 +35,7 @@ class SampleExpression : public SparqlExpression {
   }
 
   // __________________________________________________________________________
-  std::span<Ptr> children() override { return {&_child, 1}; }
+  std::span<Ptr> childrenImpl() override { return {&_child, 1}; }
 
  private:
   Ptr _child;

@@ -26,6 +26,7 @@
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/HashMap.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
@@ -45,11 +46,13 @@ class ConfigManager {
   The string key describes their location in the json object literal, by
   representing a json pointer in string form.
   */
-  absl::flat_hash_map<std::string, ConfigOption> configurationOptions_;
+  ad_utility::HashMap<std::string, std::unique_ptr<ConfigOption>>
+      configurationOptions_;
 
  public:
   /*
-  @brief Creates and adds a new configuration option.
+  @brief Creates and adds a new configuration option without a default value.
+  This configuration option must always be set at runtime.
 
   @tparam OptionType The type of value, the configuration option can hold.
 
@@ -60,47 +63,88 @@ class ConfigManager {
   @param variableToPutValueOfTheOptionIn The value held by the configuration
   option will be copied into this variable, whenever the value in the
   configuration option changes.
-  @param defaultValue A default value for the configuration option. If none is
-  given, signified by an empty optional, then a value for the configuration
-  option MUST be given at runtime.
+
+  @return A reference to the newly created configuration option. This reference
+  will stay valid, even after adding more options.
   */
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  void createConfigOption(const std::vector<std::string>& pathToOption,
-                          std::string_view optionDescription,
-                          OptionType* variableToPutValueOfTheOptionIn,
-                          std::optional<OptionType> defaultValue =
-                              std::optional<OptionType>(std::nullopt)) {
-    /*
-    We need a non-empty path to construct a ConfigOption object, the `verify...`
-    function always throws an exception for this case. No need to duplicate the
-    error code.
-    */
-    if (pathToOption.empty()) {
-      verifyPathToConfigOption(pathToOption, "");
-    }
+  const ConfigOption& addOption(const std::vector<std::string>& pathToOption,
+                                std::string_view optionDescription,
+                                OptionType* variableToPutValueOfTheOptionIn) {
+    return addOptionImpl(pathToOption, optionDescription,
+                         variableToPutValueOfTheOptionIn,
+                         std::optional<OptionType>(std::nullopt));
+  }
 
-    addConfigOption(
-        pathToOption,
-        ConfigOption(pathToOption.back(), optionDescription,
-                     variableToPutValueOfTheOptionIn, defaultValue));
+  /*
+  @brief Creates and adds a new configuration option with a default value.
+  Setting this option at runtime is optional and not required.
+
+  @tparam OptionType The type of value, the configuration option can hold.
+
+  @param pathToOption Describes a path in json, that points to the value held by
+  the configuration option. The last key in the vector is the name of the
+  configuration option.
+  @param optionDescription A description for the configuration option.
+  @param variableToPutValueOfTheOptionIn The value held by the configuration
+  option will be copied into this variable, whenever the value in the
+  configuration option changes.
+  @param defaultValue A default value for the configuration option.
+
+  @return A reference to the newly created configuration option. This reference
+  will stay valid, even after adding more options.
+  */
+  template <typename OptionType,
+            std::same_as<OptionType> DefaultValueType = OptionType>
+  requires ad_utility::isTypeContainedIn<OptionType,
+                                         ConfigOption::AvailableTypes>
+  const ConfigOption& addOption(const std::vector<std::string>& pathToOption,
+                                std::string_view optionDescription,
+                                OptionType* variableToPutValueOfTheOptionIn,
+                                DefaultValueType defaultValue) {
+    return addOptionImpl(pathToOption, optionDescription,
+                         variableToPutValueOfTheOptionIn,
+                         std::optional<OptionType>(std::move(defaultValue)));
   }
 
   /*
   @brief Creates and adds a new configuration option, just like in the other
-  `createConfigOption`. But instead of a `pathToOption`, there is only an
+  `addOption`. But instead of a `pathToOption`, there is only an
   `optionName`, which describes a path only made out of this single string.
+
+  @return A reference to the newly created configuration option. This reference
+  will stay valid, even after adding more options.
   */
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  void createConfigOption(std::string optionName,
-                          std::string_view optionDescription,
-                          OptionType* variableToPutValueOfTheOptionIn,
-                          std::optional<OptionType> defaultValue =
-                              std::optional<OptionType>(std::nullopt)) {
-    createConfigOption<OptionType>(
+  const ConfigOption& addOption(std::string optionName,
+                                std::string_view optionDescription,
+                                OptionType* variableToPutValueOfTheOptionIn) {
+    return addOption<OptionType>(
+        std::vector<std::string>{std::move(optionName)}, optionDescription,
+        variableToPutValueOfTheOptionIn);
+  }
+
+  /*
+  @brief Creates and adds a new configuration option, just like in the other
+  `addOption`. But instead of a `pathToOption`, there is only an
+  `optionName`, which describes a path only made out of this single string.
+
+  @return A reference to the newly created configuration option. This reference
+  will stay valid, even after adding more options.
+  */
+  template <typename OptionType,
+            std::same_as<OptionType> DefaultValueType = OptionType>
+  requires ad_utility::isTypeContainedIn<OptionType,
+                                         ConfigOption::AvailableTypes>
+  const ConfigOption& addOption(std::string optionName,
+                                std::string_view optionDescription,
+                                OptionType* variableToPutValueOfTheOptionIn,
+                                DefaultValueType defaultValue) {
+    return addOption<OptionType>(
         std::vector<std::string>{std::move(optionName)}, optionDescription,
         variableToPutValueOfTheOptionIn, std::move(defaultValue));
   }
@@ -140,8 +184,6 @@ class ConfigManager {
   std::string printConfigurationDoc(bool printCurrentJsonConfiguration) const;
 
  private:
-  // For testing.
-  FRIEND_TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest);
   FRIEND_TEST(ConfigManagerTest, ParseConfig);
   FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
   FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
@@ -174,16 +216,6 @@ class ConfigManager {
                        ConfigOption&& option);
 
   /*
-  @brief Return the underlying configuration option, if it's at the position
-  described by the `keys`. If there is no configuration option at that
-  place, an exception will be thrown.
-
-  @param keys The keys for looking up the configuration option.
-  */
-  const ConfigOption& getConfigurationOptionByNestedKeys(
-      const std::vector<std::string>& keys) const;
-
-  /*
   @brief Return string representation of a `std::vector<std::string>`.
   */
   static std::string vectorOfKeysForJsonToString(
@@ -195,5 +227,63 @@ class ConfigManager {
   "Configuration option 'x' was not set at runtime, using default value 'y'.".
   */
   std::string getListOfNotChangedConfigOptionsWithDefaultValuesAsString() const;
+
+  /*
+  @brief Creates and adds a new configuration option.
+
+  @tparam OptionType The type of value, the configuration option can hold.
+
+  @param pathToOption Describes a path in json, that points to the value held by
+  the configuration option. The last key in the vector is the name of the
+  configuration option.
+  @param optionDescription A description for the configuration option.
+  @param variableToPutValueOfTheOptionIn The value held by the configuration
+  option will be copied into this variable, whenever the value in the
+  configuration option changes.
+  @param defaultValue A default value for the configuration option. If none is
+  given, signified by an empty optional, then a value for the configuration
+  option MUST be given at runtime.
+
+  @return A reference to the newly created configuration option. Will stay
+  valid, even after more options.
+  */
+  template <typename OptionType>
+  requires ad_utility::isTypeContainedIn<OptionType,
+                                         ConfigOption::AvailableTypes>
+  const ConfigOption& addOptionImpl(
+      const std::vector<std::string>& pathToOption,
+      std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn,
+      std::optional<OptionType> defaultValue =
+          std::optional<OptionType>(std::nullopt)) {
+    /*
+    We need a non-empty path to construct a ConfigOption object, the `verify...`
+    function always throws an exception for this case. No need to duplicate the
+    error code.
+    */
+    if (pathToOption.empty()) {
+      verifyPathToConfigOption(pathToOption, "");
+    }
+
+    addConfigOption(
+        pathToOption,
+        ConfigOption(pathToOption.back(), optionDescription,
+                     variableToPutValueOfTheOptionIn, defaultValue));
+
+    /*
+    The `unqiue_ptr` was created, by creating a new `ConfigOption` via it's
+    move constructor. Which is why, we can't just return the `ConfigOption`
+    we created here.
+    */
+    return *configurationOptions_.at(createJsonPointerString(pathToOption))
+                .get();
+  }
+
+  /*
+  @brief Provide a range of tuples, that hold references to the key value pairs
+  in `configurationOptions_`, but with the pointer dereferenced.
+  */
+  auto configurationOptions();
+  auto configurationOptions() const;
 };
 }  // namespace ad_utility

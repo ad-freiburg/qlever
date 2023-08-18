@@ -27,7 +27,7 @@ struct DummyExpression : public SparqlExpression {
     return "DummyDummyDummDumm";
   }
 
-  std::span<SparqlExpression::Ptr> children() override { return {}; }
+  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 // Make a `ValueId` from an int/ a double. Shorter name, as it will be used
