@@ -20,11 +20,14 @@ using std::vector;
 using ad_utility::HashSet;
 
 class FTSAlgorithms {
+  using WordEntityPostings = Index::WordEntityPostings;
+
  public:
-  // Filters all wep entries out where the wid does not lay inside the idRange.
-  static Index::WordEntityPostings filterByRange(
+  // Filters all wep entries out where the wid does not lay inside the
+  // idRange.
+  static WordEntityPostings filterByRange(
       const IdRange<WordVocabIndex>& idRange,
-      const Index::WordEntityPostings& wepPreFilter);
+      const WordEntityPostings& wepPreFilter);
 
   // Intersects matchingContextsWep and eBlockWep on the cids_ attribute. If
   // there are multiple matches for the same cid then we calculate every
@@ -40,9 +43,9 @@ class FTSAlgorithms {
   // resultWep.cids_                  : 4 5 5 5 5
   // resultWep.eids_                  : 2 1 2 2 1
   // resultWep.wids_.at(0)            : 4 3 4 3 4
-  static Index::WordEntityPostings crossIntersect(
-      const Index::WordEntityPostings& matchingContextsWep,
-      const Index::WordEntityPostings& eBlockWep);
+  static WordEntityPostings crossIntersect(
+      const WordEntityPostings& matchingContextsWep,
+      const WordEntityPostings& eBlockWep);
 
   // Intersects a list of weps on the cids_ attribute.
   // If there are multiple matches for the same cid the we calculate every
@@ -75,20 +78,20 @@ class FTSAlgorithms {
   // wepResult.wids_[2]:  23 23 23 23 23 23 23 23
   // wepResult.wids_[3]:  33 29 33 29 33 29 42 31
 
-  static Index::WordEntityPostings crossIntersectKWay(
-      const vector<Index::WordEntityPostings>& wepVecs,
+  static WordEntityPostings crossIntersectKWay(
+      const vector<WordEntityPostings>& wepVecs,
       vector<Id>* lastListEids);
 
   // Writes the wep entries to an IdTable but at most k contexts per entity. The
   // rest gets discarded. Note that the contexts with the highest score get
   // selected.
   template <int WIDTH>
-  static void aggScoresAndTakeTopKContexts(const Index::WordEntityPostings& wep,
+  static void aggScoresAndTakeTopKContexts(const WordEntityPostings& wep,
                                            size_t k, IdTable* dynResult);
 
   // Special case where k == 1.
   template <int WIDTH>
-  static void aggScoresAndTakeTopContext(const Index::WordEntityPostings& wep,
+  static void aggScoresAndTakeTopContext(const WordEntityPostings& wep,
                                          IdTable* dynResult);
 
   // Writes the wep entries to an IdTable but at most k contexts per entity. The
@@ -96,27 +99,27 @@ class FTSAlgorithms {
   // selected. Also calculates the right combinations of the multiple entities.
   template <int WIDTH>
   static void multVarsAggScoresAndTakeTopKContexts(
-      const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+      const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
       IdTable* dynResult);
 
   // Special case where k == 1.
   template <int WIDTH>
   static void multVarsAggScoresAndTakeTopContext(
-      const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
+      const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 
   // Writes the wep entries to an IdTable but at most k contexts per entity. The
   // rest gets discarded. Note that the contexts with the highest score get
   // selected. Also filters out entries whose entity is not in the HashMap.
   template <int WIDTH>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
-      const Index::WordEntityPostings& wep,
+      const WordEntityPostings& wep,
       const ad_utility::HashMap<Id, IdTable>& fMap, size_t k,
       IdTable* dynResult);
 
   // Same but for a HashSet instead of a HashMap
   template <int WIDTH>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
-      const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+      const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
       IdTable* dynResult);
 
   // Writes the wep entries to an IdTable but at most k contexts per entity. The
@@ -125,13 +128,13 @@ class FTSAlgorithms {
   // and filters out entries whose entity is not in the HashMap.
   template <int WIDTH>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
-      const Index::WordEntityPostings& wep,
+      const WordEntityPostings& wep,
       const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars,
       size_t kLimit, IdTable* dynResult);
 
   // Same but for a HashSet instead of a HashMap
   template <int WIDTH>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
-      const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
+      const WordEntityPostings& wep, const HashSet<Id>& fSet,
       size_t nofVars, size_t kLimit, IdTable* dynResult);
 };

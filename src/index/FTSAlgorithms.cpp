@@ -18,7 +18,7 @@ using std::pair;
 // _____________________________________________________________________________
 Index::WordEntityPostings FTSAlgorithms::filterByRange(
     const IdRange<WordVocabIndex>& idRange,
-    const Index::WordEntityPostings& wepPreFilter) {
+    const WordEntityPostings& wepPreFilter) {
   AD_CONTRACT_CHECK(wepPreFilter.wids_.size() == 1);
   AD_CONTRACT_CHECK(wepPreFilter.cids_.size() ==
                     wepPreFilter.wids_.at(0).size());
@@ -26,7 +26,7 @@ Index::WordEntityPostings FTSAlgorithms::filterByRange(
   LOG(DEBUG) << "Filtering " << wepPreFilter.cids_.size()
              << " elements by ID range...\n";
 
-  Index::WordEntityPostings wepResult;
+  WordEntityPostings wepResult;
   const vector<WordIndex>& wordIdsInput = wepPreFilter.wids_.at(0);
   vector<WordIndex>& wordIdsResult = wepResult.wids_.at(0);
 
@@ -65,8 +65,8 @@ Index::WordEntityPostings FTSAlgorithms::filterByRange(
 
 // _____________________________________________________________________________
 Index::WordEntityPostings FTSAlgorithms::crossIntersect(
-    const Index::WordEntityPostings& matchingContextsWep,
-    const Index::WordEntityPostings& eBlockWep) {
+    const WordEntityPostings& matchingContextsWep,
+    const WordEntityPostings& eBlockWep) {
   AD_CONTRACT_CHECK(matchingContextsWep.wids_.size() == 1);
   LOG(DEBUG)
       << "Intersection to filter the word-entity postings from a block so that "
@@ -75,7 +75,7 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersect(
   LOG(DEBUG) << "matchingContextsWep.cids_ size: "
              << matchingContextsWep.cids_.size() << '\n';
   LOG(DEBUG) << "eBlockWep.cids_ size: " << eBlockWep.cids_.size() << '\n';
-  Index::WordEntityPostings resultWep;
+  WordEntityPostings resultWep;
   // Handle trivial empty case
   if (matchingContextsWep.cids_.empty() || eBlockWep.cids_.empty()) {
     return resultWep;
@@ -131,11 +131,10 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersect(
 
 // _____________________________________________________________________________
 Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
-    const vector<Index::WordEntityPostings>& wepVecs,
-    vector<Id>* lastListEids) {
+    const vector<WordEntityPostings>& wepVecs, vector<Id>* lastListEids) {
   size_t k = wepVecs.size();
   AD_CONTRACT_CHECK(k >= 1);
-  Index::WordEntityPostings resultWep;
+  WordEntityPostings resultWep;
   resultWep.wids_.resize(k);
   {
     if (wepVecs[k - 1].cids_.empty()) {
@@ -290,8 +289,8 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
 
 // _____________________________________________________________________________
 template <int WIDTH>
-void FTSAlgorithms::aggScoresAndTakeTopKContexts(
-    const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult) {
+void FTSAlgorithms::aggScoresAndTakeTopKContexts(const WordEntityPostings& wep,
+                                                 size_t k, IdTable* dynResult) {
   AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.eids_.size());
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.scores_.size());
@@ -388,32 +387,32 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
 }
 
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts<0>(
-    const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t k, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts<1>(
-    const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t k, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts<2>(
-    const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t k, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts<3>(
-    const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t k, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts<4>(
-    const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t k, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts<5>(
-    const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t k, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts<6>(
-    const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t k, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts<7>(
-    const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t k, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts<8>(
-    const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t k, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts<9>(
-    const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t k, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts<10>(
-    const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t k, IdTable* dynResult);
 
 // _____________________________________________________________________________
 template <int WIDTH>
-void FTSAlgorithms::aggScoresAndTakeTopContext(
-    const Index::WordEntityPostings& wep, IdTable* dynResult) {
+void FTSAlgorithms::aggScoresAndTakeTopContext(const WordEntityPostings& wep,
+                                               IdTable* dynResult) {
   AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
   LOG(DEBUG) << "Special case with 1 contexts per entity...\n";
   using AggMapContextAndEntityToWord =
@@ -483,32 +482,32 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
 }
 
 template void FTSAlgorithms::aggScoresAndTakeTopContext<0>(
-    const Index::WordEntityPostings& wep, IdTable* dynResult);
+    const WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<1>(
-    const Index::WordEntityPostings& wep, IdTable* dynResult);
+    const WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<2>(
-    const Index::WordEntityPostings& wep, IdTable* dynResult);
+    const WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<3>(
-    const Index::WordEntityPostings& wep, IdTable* dynResult);
+    const WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<4>(
-    const Index::WordEntityPostings& wep, IdTable* dynResult);
+    const WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<5>(
-    const Index::WordEntityPostings& wep, IdTable* dynResult);
+    const WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<6>(
-    const Index::WordEntityPostings& wep, IdTable* dynResult);
+    const WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<7>(
-    const Index::WordEntityPostings& wep, IdTable* dynResult);
+    const WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<8>(
-    const Index::WordEntityPostings& wep, IdTable* dynResult);
+    const WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<9>(
-    const Index::WordEntityPostings& wep, IdTable* dynResult);
+    const WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<10>(
-    const Index::WordEntityPostings& wep, IdTable* dynResult);
+    const WordEntityPostings& wep, IdTable* dynResult);
 
 // _____________________________________________________________________________
 template <int WIDTH>
 void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
-    const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+    const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
     IdTable* dynResult) {
   AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
 
@@ -674,43 +673,43 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
 }
 
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<0>(
-    const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+    const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
     IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<1>(
-    const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+    const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
     IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<2>(
-    const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+    const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
     IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<3>(
-    const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+    const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
     IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<4>(
-    const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+    const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
     IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<5>(
-    const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+    const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
     IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<6>(
-    const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+    const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
     IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<7>(
-    const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+    const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
     IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<8>(
-    const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+    const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
     IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<9>(
-    const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+    const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
     IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<10>(
-    const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+    const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
     IdTable* dynResult);
 
 // _____________________________________________________________________________
 template <int WIDTH>
 void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
-    const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult) {
+    const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult) {
   AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
   LOG(DEBUG) << "Special case with 1 contexts per entity...\n";
 
@@ -858,34 +857,33 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
 }
 
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<0>(
-    const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<1>(
-    const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<2>(
-    const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<3>(
-    const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<4>(
-    const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<5>(
-    const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<6>(
-    const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<7>(
-    const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<8>(
-    const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<9>(
-    const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<10>(
-    const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
+    const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 
 // _____________________________________________________________________________
 template <int WIDTH>
 void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k,
-    IdTable* dynResult) {
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t k, IdTable* dynResult) {
   AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.eids_.size());
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.scores_.size());
@@ -982,48 +980,48 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
 };
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<0>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t k, IdTable* dynResult);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<1>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t k, IdTable* dynResult);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<2>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t k, IdTable* dynResult);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<3>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t k, IdTable* dynResult);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<4>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t k, IdTable* dynResult);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<5>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t k, IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<6>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t k, IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<7>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t k, IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<8>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t k, IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<9>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t k, IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<10>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t k, IdTable* dynResult);
 
 // _____________________________________________________________________________
 template <int WIDTH>
 void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult) {
   AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.eids_.size());
@@ -1114,45 +1112,44 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
 };
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<0>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<1>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<2>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<3>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<4>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<5>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<6>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<7>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<8>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<9>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult);
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<10>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult);
 
 // _____________________________________________________________________________
 template <int WIDTH>
 void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
-    IdTable* dynResult) {
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t nofVars, size_t kLimit, IdTable* dynResult) {
   AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
   if (wep.cids_.empty() || fMap.empty()) {
     return;
@@ -1344,60 +1341,49 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
 }
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<0>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
-    IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<1>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
-    IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<2>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
-    IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<3>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
-    IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<4>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
-    IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<5>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
-    IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<6>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
-    IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<7>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
-    IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<8>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
-    IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<9>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
-    IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<10>(
-    const Index::WordEntityPostings& wep,
-    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
-    IdTable* dynResult);
+    const WordEntityPostings& wep, const ad_utility::HashMap<Id, IdTable>& fMap,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
 
 // _____________________________________________________________________________
 template <int WIDTH>
 void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
-    size_t nofVars, size_t kLimit, IdTable* dynResult) {
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+    size_t kLimit, IdTable* dynResult) {
   AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
   if (wep.cids_.empty() || fSet.empty()) {
     return;
@@ -1581,40 +1567,40 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
 }
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<0>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
-    size_t nofVars, size_t kLimit, IdTable* dynResult);
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+    size_t kLimit, IdTable* dynResult);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<1>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
-    size_t nofVars, size_t kLimit, IdTable* dynResult);
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+    size_t kLimit, IdTable* dynResult);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<2>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
-    size_t nofVars, size_t kLimit, IdTable* dynResult);
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+    size_t kLimit, IdTable* dynResult);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<3>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
-    size_t nofVars, size_t kLimit, IdTable* dynResult);
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+    size_t kLimit, IdTable* dynResult);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<4>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
-    size_t nofVars, size_t kLimit, IdTable* dynResult);
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+    size_t kLimit, IdTable* dynResult);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<5>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
-    size_t nofVars, size_t kLimit, IdTable* dynResult);
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+    size_t kLimit, IdTable* dynResult);
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<6>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
-    size_t nofVars, size_t kLimit, IdTable* dynResult);
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+    size_t kLimit, IdTable* dynResult);
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<7>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
-    size_t nofVars, size_t kLimit, IdTable* dynResult);
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+    size_t kLimit, IdTable* dynResult);
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<8>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
-    size_t nofVars, size_t kLimit, IdTable* dynResult);
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+    size_t kLimit, IdTable* dynResult);
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<9>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
-    size_t nofVars, size_t kLimit, IdTable* dynResult);
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+    size_t kLimit, IdTable* dynResult);
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<10>(
-    const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
-    size_t nofVars, size_t kLimit, IdTable* dynResult);
+    const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+    size_t kLimit, IdTable* dynResult);

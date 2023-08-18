@@ -1000,7 +1000,7 @@ vector<TripleWithPropertyPath> Visitor::visit(
   // Similarly if a triple `?var ql:contains-word "words"` is contained in the
   // query, then the variable `ql_matchingword_var` is implicitly created and
   // visible in the query body.
-  auto setMatchingWordAndTextscoreVisibleIfPresent = [this](
+  auto setMatchingWordAndTextscoreVisibleIfPresent = [this, ctx](
                                                          VarOrTerm& subject,
                                                          VarOrPath& predicate,
                                                          VarOrTerm& object) {
@@ -1009,9 +1009,10 @@ vector<TripleWithPropertyPath> Visitor::visit(
         if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
           addVisibleVariable(var->getTextScoreVariable());
           string name = object.toSparql();
-          if (!((name[0] == '"' && name[name.size() - 1] == '"') ||
-                (name[0] == '\'' && name[name.size() - 1] == '\''))) {
-            AD_THROW(
+          if (!((name.starts_with('"') && name.ends_with('"')) ||
+                (name.starts_with('\'') && name.ends_with('\'')))) {
+            reportError(
+                ctx,
                 "ql:contains-word has to be followed by a string in quotes");
           }
           for (std::string_view s : std::vector<std::string>(

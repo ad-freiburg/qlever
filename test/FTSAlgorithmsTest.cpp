@@ -13,7 +13,11 @@
 using namespace ad_utility::testing;
 
 namespace {
-auto T = [](const auto& id) { return TextRecordIndex::make(id); };
+auto TRID = [](const auto& id) {
+  return TextRecordIndex::make(id);
+};                         // makes a TextRecordIndex
+auto TVID = TextRecordId;  // makes a ValueId
+auto W = WordVocabId;
 auto V = VocabId;
 }  // namespace
 
@@ -30,7 +34,7 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   ASSERT_EQ(0u, resultWep.cids_.size());
 
   // None
-  wep.cids_ = {T(0)};
+  wep.cids_ = {TRID(0)};
   wep.wids_ = {{2}};
   wep.scores_ = {1};
 
@@ -38,23 +42,25 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   ASSERT_EQ(0u, resultWep.cids_.size());
 
   // Match
-  wep.cids_ = {T(0), T(0), T(1), T(2), T(3)};
+  wep.cids_ = {TRID(0), TRID(0), TRID(1), TRID(2), TRID(3)};
   wep.wids_ = {{2, 5, 7, 5, 6}};
   wep.scores_ = {1, 1, 1, 1, 1};
 
   resultWep = FTSAlgorithms::filterByRange(idRange, wep);
-  EXPECT_THAT(resultWep.cids_, ::testing::ElementsAre(T(0), T(1), T(2), T(3)));
+  EXPECT_THAT(resultWep.cids_,
+              ::testing::ElementsAre(TRID(0), TRID(1), TRID(2), TRID(3)));
   EXPECT_THAT(resultWep.eids_, ::testing::ElementsAre());
   EXPECT_THAT(resultWep.scores_, ::testing::ElementsAre(1, 1, 1, 1));
   EXPECT_THAT(resultWep.wids_[0], ::testing::ElementsAre(5, 7, 5, 6));
 
-  wep.cids_ = {T(0), T(0), T(1), T(2), T(3), T(4)};
+  wep.cids_ = {TRID(0), TRID(0), TRID(1), TRID(2), TRID(3), TRID(4)};
   wep.wids_ = {{2, 5, 7, 5, 6, 8}};
   wep.scores_ = {1, 1, 1, 1, 1, 1};
 
   // Partial
   resultWep = FTSAlgorithms::filterByRange(idRange, wep);
-  EXPECT_THAT(resultWep.cids_, ::testing::ElementsAre(T(0), T(1), T(2), T(3)));
+  EXPECT_THAT(resultWep.cids_,
+              ::testing::ElementsAre(TRID(0), TRID(1), TRID(2), TRID(3)));
   EXPECT_THAT(resultWep.eids_, ::testing::ElementsAre());
   EXPECT_THAT(resultWep.scores_, ::testing::ElementsAre(1, 1, 1, 1));
   EXPECT_THAT(resultWep.wids_[0], ::testing::ElementsAre(5, 7, 5, 6));
@@ -70,7 +76,7 @@ TEST(FTSAlgorithmsTest, crossIntersectTest) {
   ASSERT_EQ(0u, resultWep.eids_.size());
   ASSERT_EQ(0u, resultWep.scores_.size());
 
-  matchingContextsWep.cids_ = {T(0), T(2)};
+  matchingContextsWep.cids_ = {TRID(0), TRID(2)};
   matchingContextsWep.wids_ = {{1, 4}};
   matchingContextsWep.scores_ = {1, 1};
 
@@ -80,32 +86,34 @@ TEST(FTSAlgorithmsTest, crossIntersectTest) {
   ASSERT_EQ(0u, resultWep.eids_.size());
   ASSERT_EQ(0u, resultWep.scores_.size());
 
-  eBlockWep.cids_ = {T(1), T(2), T(2), T(4)};
+  eBlockWep.cids_ = {TRID(1), TRID(2), TRID(2), TRID(4)};
   eBlockWep.eids_ = {V(10), V(1), V(1), V(2)};
   eBlockWep.scores_ = {1, 1, 1, 1};
 
   resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
-  EXPECT_THAT(resultWep.cids_, ::testing::ElementsAre(T(2), T(2)));
+  EXPECT_THAT(resultWep.cids_, ::testing::ElementsAre(TRID(2), TRID(2)));
   EXPECT_THAT(resultWep.eids_, ::testing::ElementsAre(V(1), V(1)));
   EXPECT_THAT(resultWep.scores_, ::testing::ElementsAre(1, 1));
   EXPECT_THAT(resultWep.wids_[0], ::testing::ElementsAre(4, 4));
 
-  matchingContextsWep.cids_ = {T(0), T(2), T(2), T(3)};
+  matchingContextsWep.cids_ = {TRID(0), TRID(2), TRID(2), TRID(3)};
   matchingContextsWep.wids_ = {{1, 4, 8, 4}};
   matchingContextsWep.scores_ = {1, 1, 1, 1};
 
   resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
-  EXPECT_THAT(resultWep.cids_, ::testing::ElementsAre(T(2), T(2), T(2), T(2)));
+  EXPECT_THAT(resultWep.cids_,
+              ::testing::ElementsAre(TRID(2), TRID(2), TRID(2), TRID(2)));
   EXPECT_THAT(resultWep.eids_, ::testing::ElementsAre(V(1), V(1), V(1), V(1)));
   EXPECT_THAT(resultWep.scores_, ::testing::ElementsAre(1, 1, 1, 1));
   EXPECT_THAT(resultWep.wids_[0], ::testing::ElementsAre(4, 8, 4, 8));
 
-  eBlockWep.cids_ = {T(0), T(2)};
+  eBlockWep.cids_ = {TRID(0), TRID(2)};
   eBlockWep.eids_ = {V(10), V(1)};
   eBlockWep.scores_ = {1, 1};
 
   resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
-  EXPECT_THAT(resultWep.cids_, ::testing::ElementsAre(T(0), T(2), T(2)));
+  EXPECT_THAT(resultWep.cids_,
+              ::testing::ElementsAre(TRID(0), TRID(2), TRID(2)));
   EXPECT_THAT(resultWep.eids_, ::testing::ElementsAre(V(10), V(1), V(1)));
   EXPECT_THAT(resultWep.scores_, ::testing::ElementsAre(1, 1, 1));
   EXPECT_THAT(resultWep.wids_[0], ::testing::ElementsAre(1, 4, 8));
@@ -117,17 +125,17 @@ TEST(FTSAlgorithmsTest, crossIntersectKWayTest) {
 
   Index::WordEntityPostings wep1;
   wep1.scores_ = {1, 1, 1, 1};
-  wep1.cids_ = {T(0), T(1), T(2), T(10)};
+  wep1.cids_ = {TRID(0), TRID(1), TRID(2), TRID(10)};
   wep1.wids_ = {{3, 2, 5, 3}};
 
   Index::WordEntityPostings wep2;
   wep2.scores_ = {1, 1, 1, 1};
-  wep2.cids_ = {T(0), T(0), T(0), T(10)};
+  wep2.cids_ = {TRID(0), TRID(0), TRID(0), TRID(10)};
   wep2.wids_ = {{8, 7, 6, 9}};
 
   Index::WordEntityPostings wep3;
   wep3.scores_ = {1, 1, 1, 3};
-  wep3.cids_ = {T(0), T(6), T(8), T(10)};
+  wep3.cids_ = {TRID(0), TRID(6), TRID(8), TRID(10)};
   wep3.wids_ = {{23, 22, 25, 23}};
 
   wepVecs.push_back(wep1);
@@ -136,7 +144,8 @@ TEST(FTSAlgorithmsTest, crossIntersectKWayTest) {
 
   // No eids / no special case
   resultWep = FTSAlgorithms::crossIntersectKWay(wepVecs, nullptr);
-  EXPECT_THAT(resultWep.cids_, ::testing::ElementsAre(T(0), T(0), T(0), T(10)));
+  EXPECT_THAT(resultWep.cids_,
+              ::testing::ElementsAre(TRID(0), TRID(0), TRID(0), TRID(10)));
   EXPECT_THAT(resultWep.eids_, ::testing::ElementsAre());
   EXPECT_THAT(resultWep.scores_, ::testing::ElementsAre(3, 3, 3, 5));
   EXPECT_THAT(resultWep.wids_[0], ::testing::ElementsAre(3, 3, 3, 3));
@@ -147,16 +156,17 @@ TEST(FTSAlgorithmsTest, crossIntersectKWayTest) {
   vector<Id> eids = {V(1), V(4), V(1), V(4), V(1), V(2), V(3)};
 
   Index::WordEntityPostings wep4;
-  wep4.cids_ = {T(0), T(0), T(3), T(4), T(10), T(10), T(11)};
+  wep4.cids_ = {TRID(0),  TRID(0),  TRID(3), TRID(4),
+                TRID(10), TRID(10), TRID(11)};
   wep4.scores_ = {1, 4, 1, 4, 1, 4, 1};
   wep4.wids_ = {{33, 29, 45, 76, 42, 31, 30}};
 
   wepVecs.push_back(wep4);
 
   resultWep = FTSAlgorithms::crossIntersectKWay(wepVecs, &eids);
-  EXPECT_THAT(
-      resultWep.cids_,
-      ::testing::ElementsAre(T(0), T(0), T(0), T(0), T(0), T(0), T(10), T(10)));
+  EXPECT_THAT(resultWep.cids_,
+              ::testing::ElementsAre(TRID(0), TRID(0), TRID(0), TRID(0),
+                                     TRID(0), TRID(0), TRID(10), TRID(10)));
   EXPECT_THAT(resultWep.eids_, ::testing::ElementsAre(V(1), V(4), V(1), V(4),
                                                       V(1), V(4), V(1), V(2)));
   EXPECT_THAT(resultWep.scores_,
@@ -184,7 +194,7 @@ TEST(FTSAlgorithmsTest, crossIntersectKWayTest) {
   vector<Index::WordEntityPostings> wepVecs3;
 
   wep5.scores_ = {1, 1};
-  wep5.cids_ = {T(0), T(0)};
+  wep5.cids_ = {TRID(0), TRID(0)};
   wep5.wids_ = {{3, 2}};
 
   wepVecs3.push_back(wep5);
@@ -202,7 +212,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
   FTSAlgorithms::aggScoresAndTakeTopKContexts<4>(wep, 2, &result);
   ASSERT_EQ(0u, result.size());
 
-  wep.cids_ = {T(0), T(1), T(2), T(2)};
+  wep.cids_ = {TRID(0), TRID(1), TRID(2), TRID(2)};
   wep.eids_ = {V(0), V(0), V(0), V(0)};
   wep.scores_ = {0, 1, 2, 2};
   wep.wids_ = {{1, 1, 2, 3}};
@@ -217,16 +227,13 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
                        (a[2] == b[2] && (a[3] < b[3] || (a[3] == b[3])))));
             });
   EXPECT_THAT(result.getColumn(0),
-              ::testing::ElementsAre(TextRecordId(1u), TextRecordId(2u),
-                                     TextRecordId(2u)));
+              ::testing::ElementsAre(TVID(1u), TVID(2u), TVID(2u)));
   EXPECT_THAT(result.getColumn(1),
               ::testing::ElementsAre(IntId(3u), IntId(3u), IntId(3u)));
   EXPECT_THAT(result.getColumn(2), ::testing::ElementsAre(V(0u), V(0u), V(0u)));
-  EXPECT_THAT(result.getColumn(3),
-              ::testing::ElementsAre(WordVocabId(1u), WordVocabId(2u),
-                                     WordVocabId(3u)));
+  EXPECT_THAT(result.getColumn(3), ::testing::ElementsAre(W(1u), W(2u), W(3u)));
 
-  wep.cids_ = {T(0), T(1), T(2), T(4)};
+  wep.cids_ = {TRID(0), TRID(1), TRID(2), TRID(4)};
   wep.eids_ = {V(0), V(0), V(0), V(1)};
   wep.scores_ = {0, 1, 2, 1};
   wep.wids_ = {{1, 1, 2, 4}, {5, 7, 8, 9}};
@@ -245,17 +252,12 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
                         (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
             });
   EXPECT_THAT(result.getColumn(0),
-              ::testing::ElementsAre(TextRecordId(1u), TextRecordId(2u),
-                                     TextRecordId(4u)));
+              ::testing::ElementsAre(TVID(1u), TVID(2u), TVID(4u)));
   EXPECT_THAT(result.getColumn(1),
               ::testing::ElementsAre(IntId(3u), IntId(3u), IntId(1u)));
   EXPECT_THAT(result.getColumn(2), ::testing::ElementsAre(V(0u), V(0u), V(1u)));
-  EXPECT_THAT(result.getColumn(3),
-              ::testing::ElementsAre(WordVocabId(1u), WordVocabId(2u),
-                                     WordVocabId(4u)));
-  EXPECT_THAT(result.getColumn(4),
-              ::testing::ElementsAre(WordVocabId(7u), WordVocabId(8u),
-                                     WordVocabId(9u)));
+  EXPECT_THAT(result.getColumn(3), ::testing::ElementsAre(W(1u), W(2u), W(4u)));
+  EXPECT_THAT(result.getColumn(4), ::testing::ElementsAre(W(7u), W(8u), W(9u)));
 
   result.clear();
   FTSAlgorithms::aggScoresAndTakeTopKContexts<5>(wep, 1, &result);
@@ -268,15 +270,12 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
                        (a[2] == b[2] &&
                         (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
             });
-  EXPECT_THAT(result.getColumn(0),
-              ::testing::ElementsAre(TextRecordId(2u), TextRecordId(4u)));
+  EXPECT_THAT(result.getColumn(0), ::testing::ElementsAre(TVID(2u), TVID(4u)));
   EXPECT_THAT(result.getColumn(1),
               ::testing::ElementsAre(IntId(3u), IntId(1u)));
   EXPECT_THAT(result.getColumn(2), ::testing::ElementsAre(V(0u), V(1u)));
-  EXPECT_THAT(result.getColumn(3),
-              ::testing::ElementsAre(WordVocabId(2u), WordVocabId(4u)));
-  EXPECT_THAT(result.getColumn(4),
-              ::testing::ElementsAre(WordVocabId(8u), WordVocabId(9u)));
+  EXPECT_THAT(result.getColumn(3), ::testing::ElementsAre(W(2u), W(4u)));
+  EXPECT_THAT(result.getColumn(4), ::testing::ElementsAre(W(8u), W(9u)));
 };
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
@@ -300,7 +299,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   result.setNumColumns(5);
   width = result.numColumns();
 
-  wep.cids_ = {T(0), T(1), T(2), T(2)};
+  wep.cids_ = {TRID(0), TRID(1), TRID(2), TRID(2)};
   wep.eids_ = {V(0), V(0), V(0), V(0)};
   wep.scores_ = {0, 1, 2, 2};
   wep.wids_ = {{1, 1, 2, 3}, {5, 7, 8, 9}};
@@ -315,22 +314,19 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
                        (a[2] == b[2] &&
                         (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
             });
-  EXPECT_THAT(result.getColumn(0),
-              ::testing::ElementsAre(TextRecordId(2u), TextRecordId(2u)));
+  EXPECT_THAT(result.getColumn(0), ::testing::ElementsAre(TVID(2u), TVID(2u)));
   EXPECT_THAT(result.getColumn(1),
               ::testing::ElementsAre(IntId(3u), IntId(3u)));
   EXPECT_THAT(result.getColumn(2), ::testing::ElementsAre(V(0u), V(0u)));
-  EXPECT_THAT(result.getColumn(3),
-              ::testing::ElementsAre(WordVocabId(2u), WordVocabId(3u)));
-  EXPECT_THAT(result.getColumn(4),
-              ::testing::ElementsAre(WordVocabId(8u), WordVocabId(9u)));
+  EXPECT_THAT(result.getColumn(3), ::testing::ElementsAre(W(2u), W(3u)));
+  EXPECT_THAT(result.getColumn(4), ::testing::ElementsAre(W(8u), W(9u)));
 
   result.clear();
 
   result.setNumColumns(4);
   width = result.numColumns();
 
-  wep.cids_ = {T(0), T(1), T(2), T(3)};
+  wep.cids_ = {TRID(0), TRID(1), TRID(2), TRID(3)};
   wep.eids_ = {V(0), V(0), V(0), V(1)};
   wep.scores_ = {0, 1, 2, 1};
   wep.wids_ = {{1, 1, 2, 4}};
@@ -344,17 +340,15 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
                       (a[2] < b[2] ||
                        (a[2] == b[2] && (a[3] < b[3] || a[3] == b[3]))));
             });
-  EXPECT_THAT(result.getColumn(0),
-              ::testing::ElementsAre(TextRecordId(2u), TextRecordId(3u)));
+  EXPECT_THAT(result.getColumn(0), ::testing::ElementsAre(TVID(2u), TVID(3u)));
   EXPECT_THAT(result.getColumn(1),
               ::testing::ElementsAre(IntId(3u), IntId(1u)));
   EXPECT_THAT(result.getColumn(2), ::testing::ElementsAre(V(0u), V(1u)));
-  EXPECT_THAT(result.getColumn(3),
-              ::testing::ElementsAre(WordVocabId(2u), WordVocabId(4u)));
+  EXPECT_THAT(result.getColumn(3), ::testing::ElementsAre(W(2u), W(4u)));
 
   result.clear();
 
-  wep.cids_ = {T(0), T(1), T(2), T(3), T(4)};
+  wep.cids_ = {TRID(0), TRID(1), TRID(2), TRID(3), TRID(4)};
   wep.eids_ = {V(0), V(0), V(0), V(1), V(0)};
   wep.scores_ = {0, 1, 2, 1, 10};
   wep.wids_ = {{1, 1, 2, 4, 4}};
@@ -371,13 +365,11 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
                       (a[2] < b[2] ||
                        (a[2] == b[2] && (a[3] < b[3] || a[3] == b[3]))));
             });
-  EXPECT_THAT(result.getColumn(0),
-              ::testing::ElementsAre(TextRecordId(3u), TextRecordId(4u)));
+  EXPECT_THAT(result.getColumn(0), ::testing::ElementsAre(TVID(3u), TVID(4u)));
   EXPECT_THAT(result.getColumn(1),
               ::testing::ElementsAre(IntId(1u), IntId(4u)));
   EXPECT_THAT(result.getColumn(2), ::testing::ElementsAre(V(1u), V(0u)));
-  EXPECT_THAT(result.getColumn(3),
-              ::testing::ElementsAre(WordVocabId(4u), WordVocabId(4u)));
+  EXPECT_THAT(result.getColumn(3), ::testing::ElementsAre(W(4u), W(4u)));
 };
 
 TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
@@ -402,7 +394,7 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   callFixed(width, wep, nofVars, k, &resWV);
   ASSERT_EQ(0u, resWV.size());
 
-  wep.cids_ = {T(0), T(1), T(1), T(2), T(2), T(2)};
+  wep.cids_ = {TRID(0), TRID(1), TRID(1), TRID(2), TRID(2), TRID(2)};
   wep.eids_ = {V(0), V(0), V(1), V(0), V(2), V(2)};
   wep.scores_ = {1, 10, 3, 1, 1, 1};
   wep.wids_ = {{1, 1, 2, 1, 3, 5}, {6, 9, 8, 8, 7, 9}};
@@ -433,13 +425,11 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
                        (a[2] == b[2] &&
                         (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
             });
-  EXPECT_THAT(resW6.getColumn(0),
-              ::testing::ElementsAre(
-                  TextRecordId(1u), TextRecordId(1u), TextRecordId(1u),
-                  TextRecordId(1u), TextRecordId(1u), TextRecordId(1u),
-                  TextRecordId(2u), TextRecordId(2u), TextRecordId(2u),
-                  TextRecordId(2u), TextRecordId(2u), TextRecordId(2u),
-                  TextRecordId(2u), TextRecordId(2u)));
+  EXPECT_THAT(
+      resW6.getColumn(0),
+      ::testing::ElementsAre(TVID(1u), TVID(1u), TVID(1u), TVID(1u), TVID(1u),
+                             TVID(1u), TVID(2u), TVID(2u), TVID(2u), TVID(2u),
+                             TVID(2u), TVID(2u), TVID(2u), TVID(2u)));
   EXPECT_THAT(resW6.getColumn(1),
               ::testing::ElementsAre(IntId(3u), IntId(1u), IntId(1u), IntId(1u),
                                      IntId(1u), IntId(1u), IntId(1u), IntId(1u),
@@ -455,18 +445,12 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
                              V(2u), V(2u), V(0u), V(0u), V(0u), V(2u), V(2u)));
   EXPECT_THAT(
       resW6.getColumn(4),
-      ::testing::ElementsAre(WordVocabId(1u), WordVocabId(1u), WordVocabId(2u),
-                             WordVocabId(1u), WordVocabId(2u), WordVocabId(2u),
-                             WordVocabId(1u), WordVocabId(3u), WordVocabId(5u),
-                             WordVocabId(1u), WordVocabId(3u), WordVocabId(5u),
-                             WordVocabId(3u), WordVocabId(5u)));
+      ::testing::ElementsAre(W(1u), W(1u), W(2u), W(1u), W(2u), W(2u), W(1u),
+                             W(3u), W(5u), W(1u), W(3u), W(5u), W(3u), W(5u)));
   EXPECT_THAT(
       resW6.getColumn(5),
-      ::testing::ElementsAre(WordVocabId(9u), WordVocabId(9u), WordVocabId(8u),
-                             WordVocabId(9u), WordVocabId(8u), WordVocabId(8u),
-                             WordVocabId(8u), WordVocabId(7u), WordVocabId(9u),
-                             WordVocabId(8u), WordVocabId(7u), WordVocabId(9u),
-                             WordVocabId(7u), WordVocabId(9u)));
+      ::testing::ElementsAre(W(9u), W(9u), W(8u), W(9u), W(8u), W(8u), W(8u),
+                             W(7u), W(9u), W(8u), W(7u), W(9u), W(7u), W(9u)));
 
   k = 2;
   resW6.clear();
@@ -480,13 +464,11 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
                        (a[2] == b[2] &&
                         (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
             });
-  EXPECT_THAT(resW6.getColumn(0),
-              ::testing::ElementsAre(
-                  TextRecordId(0u), TextRecordId(1u), TextRecordId(1u),
-                  TextRecordId(1u), TextRecordId(1u), TextRecordId(1u),
-                  TextRecordId(1u), TextRecordId(2u), TextRecordId(2u),
-                  TextRecordId(2u), TextRecordId(2u), TextRecordId(2u),
-                  TextRecordId(2u), TextRecordId(2u), TextRecordId(2u)));
+  EXPECT_THAT(
+      resW6.getColumn(0),
+      ::testing::ElementsAre(TVID(0u), TVID(1u), TVID(1u), TVID(1u), TVID(1u),
+                             TVID(1u), TVID(1u), TVID(2u), TVID(2u), TVID(2u),
+                             TVID(2u), TVID(2u), TVID(2u), TVID(2u), TVID(2u)));
   EXPECT_THAT(resW6.getColumn(1),
               ::testing::ElementsAre(IntId(3u), IntId(3u), IntId(1u), IntId(1u),
                                      IntId(1u), IntId(1u), IntId(1u), IntId(1u),
@@ -500,22 +482,16 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
               ::testing::ElementsAre(V(0u), V(0u), V(1u), V(1u), V(0u), V(0u),
                                      V(1u), V(2u), V(2u), V(2u), V(0u), V(0u),
                                      V(0u), V(2u), V(2u)));
-  EXPECT_THAT(
-      resW6.getColumn(4),
-      ::testing::ElementsAre(
-          WordVocabId(1u), WordVocabId(1u), WordVocabId(1u), WordVocabId(2u),
-          WordVocabId(1u), WordVocabId(2u), WordVocabId(2u), WordVocabId(1u),
-          WordVocabId(3u), WordVocabId(5u), WordVocabId(1u), WordVocabId(3u),
-          WordVocabId(5u), WordVocabId(3u), WordVocabId(5u)));
-  EXPECT_THAT(
-      resW6.getColumn(5),
-      ::testing::ElementsAre(
-          WordVocabId(6u), WordVocabId(9u), WordVocabId(9u), WordVocabId(8u),
-          WordVocabId(9u), WordVocabId(8u), WordVocabId(8u), WordVocabId(8u),
-          WordVocabId(7u), WordVocabId(9u), WordVocabId(8u), WordVocabId(7u),
-          WordVocabId(9u), WordVocabId(7u), WordVocabId(9u)));
+  EXPECT_THAT(resW6.getColumn(4),
+              ::testing::ElementsAre(W(1u), W(1u), W(1u), W(2u), W(1u), W(2u),
+                                     W(2u), W(1u), W(3u), W(5u), W(1u), W(3u),
+                                     W(5u), W(3u), W(5u)));
+  EXPECT_THAT(resW6.getColumn(5),
+              ::testing::ElementsAre(W(6u), W(9u), W(9u), W(8u), W(9u), W(8u),
+                                     W(8u), W(8u), W(7u), W(9u), W(8u), W(7u),
+                                     W(9u), W(7u), W(9u)));
 
-  wep.cids_ = {T(0), T(0), T(0)};
+  wep.cids_ = {TRID(0), TRID(0), TRID(0)};
   wep.eids_ = {V(0), V(1), V(2)};
   wep.scores_ = {1, 10, 3};
   wep.wids_ = {{1, 1, 1}};
@@ -537,7 +513,7 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   nofVars = 2;
   width = resW6.numColumns();
 
-  wep.cids_ = {T(0), T(1), T(2)};
+  wep.cids_ = {TRID(0), TRID(1), TRID(2)};
   wep.eids_ = {V(0), V(0), V(0)};
   wep.scores_ = {1, 10, 11};
   wep.wids_ = {{1, 1, 2}, {6, 9, 13}};
@@ -545,12 +521,12 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   callFixed(width, wep, nofVars, k, &resW6);
 
   ASSERT_EQ(1u, resW6.size());
-  EXPECT_THAT(resW6.getColumn(0), ::testing::ElementsAre(TextRecordId(2u)));
+  EXPECT_THAT(resW6.getColumn(0), ::testing::ElementsAre(TVID(2u)));
   EXPECT_THAT(resW6.getColumn(1), ::testing::ElementsAre(IntId(3u)));
   EXPECT_THAT(resW6.getColumn(2), ::testing::ElementsAre(V(0u)));
   EXPECT_THAT(resW6.getColumn(3), ::testing::ElementsAre(V(0u)));
-  EXPECT_THAT(resW6.getColumn(4), ::testing::ElementsAre(WordVocabId(2u)));
-  EXPECT_THAT(resW6.getColumn(5), ::testing::ElementsAre(WordVocabId(13u)));
+  EXPECT_THAT(resW6.getColumn(4), ::testing::ElementsAre(W(2u)));
+  EXPECT_THAT(resW6.getColumn(5), ::testing::ElementsAre(W(13u)));
 
   k = 2;
 
@@ -566,15 +542,12 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
                        (a[2] == b[2] &&
                         (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
             });
-  EXPECT_THAT(resW6.getColumn(0),
-              ::testing::ElementsAre(TextRecordId(1u), TextRecordId(2u)));
+  EXPECT_THAT(resW6.getColumn(0), ::testing::ElementsAre(TVID(1u), TVID(2u)));
   EXPECT_THAT(resW6.getColumn(1), ::testing::ElementsAre(IntId(3u), IntId(3u)));
   EXPECT_THAT(resW6.getColumn(2), ::testing::ElementsAre(V(0u), V(0u)));
   EXPECT_THAT(resW6.getColumn(3), ::testing::ElementsAre(V(0u), V(0u)));
-  EXPECT_THAT(resW6.getColumn(4),
-              ::testing::ElementsAre(WordVocabId(1u), WordVocabId(2u)));
-  EXPECT_THAT(resW6.getColumn(5),
-              ::testing::ElementsAre(WordVocabId(9u), WordVocabId(13u)));
+  EXPECT_THAT(resW6.getColumn(4), ::testing::ElementsAre(W(1u), W(2u)));
+  EXPECT_THAT(resW6.getColumn(5), ::testing::ElementsAre(W(9u), W(13u)));
 }
 
 TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
@@ -604,7 +577,7 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
       wep, fSet1, k, &resW3);
   ASSERT_EQ(0u, resW3.size());
 
-  wep.cids_ = {T(0), T(1), T(1), T(2), T(2), T(2)};
+  wep.cids_ = {TRID(0), TRID(1), TRID(1), TRID(2), TRID(2), TRID(2)};
   wep.eids_ = {V(0), V(0), V(1), V(0), V(1), V(2)};
   wep.scores_ = {10, 1, 1, 1, 3, 1};
   wep.wids_ = {{1, 1, 2, 1, 3, 5}, {11, 13, 12, 14, 15, 10}};
@@ -644,11 +617,11 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
       },
       wep, fMap1, k, &resW5);
   ASSERT_EQ(1u, resW5.size());
-  EXPECT_THAT(resW5.getColumn(0), ::testing::ElementsAre(TextRecordId(2u)));
+  EXPECT_THAT(resW5.getColumn(0), ::testing::ElementsAre(TVID(2u)));
   EXPECT_THAT(resW5.getColumn(1), ::testing::ElementsAre(IntId(2u)));
   EXPECT_THAT(resW5.getColumn(2), ::testing::ElementsAre(V(1u)));
-  EXPECT_THAT(resW5.getColumn(3), ::testing::ElementsAre(WordVocabId(3u)));
-  EXPECT_THAT(resW5.getColumn(4), ::testing::ElementsAre(WordVocabId(15u)));
+  EXPECT_THAT(resW5.getColumn(3), ::testing::ElementsAre(W(3u)));
+  EXPECT_THAT(resW5.getColumn(4), ::testing::ElementsAre(W(15u)));
   resW5.clear();
 
   ad_utility::callFixedSize(
@@ -659,14 +632,14 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
       },
       wep, fSet1, k, &resW5);
   ASSERT_EQ(1u, resW5.size());
-  EXPECT_THAT(resW5.getColumn(0), ::testing::ElementsAre(TextRecordId(2u)));
+  EXPECT_THAT(resW5.getColumn(0), ::testing::ElementsAre(TVID(2u)));
   EXPECT_THAT(resW5.getColumn(1), ::testing::ElementsAre(IntId(2u)));
   EXPECT_THAT(resW5.getColumn(2), ::testing::ElementsAre(V(1u)));
-  EXPECT_THAT(resW5.getColumn(3), ::testing::ElementsAre(WordVocabId(3u)));
-  EXPECT_THAT(resW5.getColumn(4), ::testing::ElementsAre(WordVocabId(15u)));
+  EXPECT_THAT(resW5.getColumn(3), ::testing::ElementsAre(W(3u)));
+  EXPECT_THAT(resW5.getColumn(4), ::testing::ElementsAre(W(15u)));
   resW5.clear();
 
-  wep.cids_ = {T(0), T(1), T(1), T(2), T(2), T(2)};
+  wep.cids_ = {TRID(0), TRID(1), TRID(1), TRID(2), TRID(2), TRID(2)};
   wep.eids_ = {V(0), V(0), V(1), V(0), V(1), V(1)};
   wep.scores_ = {10, 1, 1, 1, 3, 3};
   wep.wids_ = {{1, 1, 2, 1, 3, 5}, {11, 13, 12, 14, 15, 10}};
@@ -679,14 +652,11 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
       },
       wep, fMap1, k, &resW5);
   ASSERT_EQ(2u, resW5.size());
-  EXPECT_THAT(resW5.getColumn(0),
-              ::testing::ElementsAre(TextRecordId(2u), TextRecordId(2u)));
+  EXPECT_THAT(resW5.getColumn(0), ::testing::ElementsAre(TVID(2u), TVID(2u)));
   EXPECT_THAT(resW5.getColumn(1), ::testing::ElementsAre(IntId(2u), IntId(2u)));
   EXPECT_THAT(resW5.getColumn(2), ::testing::ElementsAre(V(1u), V(1u)));
-  EXPECT_THAT(resW5.getColumn(3),
-              ::testing::ElementsAre(WordVocabId(3u), WordVocabId(5u)));
-  EXPECT_THAT(resW5.getColumn(4),
-              ::testing::ElementsAre(WordVocabId(15u), WordVocabId(10u)));
+  EXPECT_THAT(resW5.getColumn(3), ::testing::ElementsAre(W(3u), W(5u)));
+  EXPECT_THAT(resW5.getColumn(4), ::testing::ElementsAre(W(15u), W(10u)));
   resW5.clear();
 
   ad_utility::callFixedSize(
@@ -697,17 +667,14 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
       },
       wep, fSet1, k, &resW5);
   ASSERT_EQ(2u, resW5.size());
-  EXPECT_THAT(resW5.getColumn(0),
-              ::testing::ElementsAre(TextRecordId(2u), TextRecordId(2u)));
+  EXPECT_THAT(resW5.getColumn(0), ::testing::ElementsAre(TVID(2u), TVID(2u)));
   EXPECT_THAT(resW5.getColumn(1), ::testing::ElementsAre(IntId(2u), IntId(2u)));
   EXPECT_THAT(resW5.getColumn(2), ::testing::ElementsAre(V(1u), V(1u)));
-  EXPECT_THAT(resW5.getColumn(3),
-              ::testing::ElementsAre(WordVocabId(3u), WordVocabId(5u)));
-  EXPECT_THAT(resW5.getColumn(4),
-              ::testing::ElementsAre(WordVocabId(15u), WordVocabId(10u)));
+  EXPECT_THAT(resW5.getColumn(3), ::testing::ElementsAre(W(3u), W(5u)));
+  EXPECT_THAT(resW5.getColumn(4), ::testing::ElementsAre(W(15u), W(10u)));
   resW5.clear();
 
-  wep.cids_ = {T(0), T(1), T(1), T(2), T(2), T(2)};
+  wep.cids_ = {TRID(0), TRID(1), TRID(1), TRID(2), TRID(2), TRID(2)};
   wep.eids_ = {V(0), V(0), V(1), V(0), V(1), V(2)};
   wep.scores_ = {10, 1, 1, 1, 3, 1};
   wep.wids_ = {{1, 1, 2, 1, 3, 5}, {11, 13, 12, 14, 15, 10}};
@@ -777,7 +744,7 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
 TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
   Index::WordEntityPostings wep;
 
-  wep.cids_ = {T(0), T(1), T(1), T(2), T(2), T(2)};
+  wep.cids_ = {TRID(0), TRID(1), TRID(1), TRID(2), TRID(2), TRID(2)};
   wep.eids_ = {V(0), V(0), V(1), V(0), V(2), V(2)};
   wep.scores_ = {1, 10, 3, 1, 1, 1};
   wep.wids_ = {{1, 1, 2, 1, 3, 5}, {6, 9, 8, 8, 7, 9}};
@@ -833,9 +800,8 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
             });
 
   EXPECT_THAT(resW6.getColumn(0),
-              ::testing::ElementsAre(TextRecordId(1u), TextRecordId(1u),
-                                     TextRecordId(1u), TextRecordId(2u),
-                                     TextRecordId(2u), TextRecordId(2u)));
+              ::testing::ElementsAre(TVID(1u), TVID(1u), TVID(1u), TVID(2u),
+                                     TVID(2u), TVID(2u)));
   EXPECT_THAT(resW6.getColumn(1),
               ::testing::ElementsAre(IntId(3u), IntId(1u), IntId(1u), IntId(1u),
                                      IntId(1u), IntId(1u)));
@@ -844,13 +810,9 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
   EXPECT_THAT(resW6.getColumn(3),
               ::testing::ElementsAre(V(0u), V(0u), V(0u), V(0u), V(0u), V(0u)));
   EXPECT_THAT(resW6.getColumn(4),
-              ::testing::ElementsAre(WordVocabId(1u), WordVocabId(1u),
-                                     WordVocabId(2u), WordVocabId(1u),
-                                     WordVocabId(3u), WordVocabId(5u)));
+              ::testing::ElementsAre(W(1u), W(1u), W(2u), W(1u), W(3u), W(5u)));
   EXPECT_THAT(resW6.getColumn(5),
-              ::testing::ElementsAre(WordVocabId(9u), WordVocabId(9u),
-                                     WordVocabId(8u), WordVocabId(8u),
-                                     WordVocabId(7u), WordVocabId(9u)));
+              ::testing::ElementsAre(W(9u), W(9u), W(8u), W(8u), W(7u), W(9u)));
 
   resW6.clear();
 
@@ -867,9 +829,8 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
             });
 
   EXPECT_THAT(resW6.getColumn(0),
-              ::testing::ElementsAre(TextRecordId(1u), TextRecordId(1u),
-                                     TextRecordId(1u), TextRecordId(2u),
-                                     TextRecordId(2u), TextRecordId(2u)));
+              ::testing::ElementsAre(TVID(1u), TVID(1u), TVID(1u), TVID(2u),
+                                     TVID(2u), TVID(2u)));
   EXPECT_THAT(resW6.getColumn(1),
               ::testing::ElementsAre(IntId(3u), IntId(1u), IntId(1u), IntId(1u),
                                      IntId(1u), IntId(1u)));
@@ -878,13 +839,9 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
   EXPECT_THAT(resW6.getColumn(3),
               ::testing::ElementsAre(V(0u), V(0u), V(0u), V(0u), V(0u), V(0u)));
   EXPECT_THAT(resW6.getColumn(4),
-              ::testing::ElementsAre(WordVocabId(1u), WordVocabId(1u),
-                                     WordVocabId(2u), WordVocabId(1u),
-                                     WordVocabId(3u), WordVocabId(5u)));
+              ::testing::ElementsAre(W(1u), W(1u), W(2u), W(1u), W(3u), W(5u)));
   EXPECT_THAT(resW6.getColumn(5),
-              ::testing::ElementsAre(WordVocabId(9u), WordVocabId(9u),
-                                     WordVocabId(8u), WordVocabId(8u),
-                                     WordVocabId(7u), WordVocabId(9u)));
+              ::testing::ElementsAre(W(9u), W(9u), W(8u), W(8u), W(7u), W(9u)));
 
   resW6.clear();
 
@@ -901,10 +858,8 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
                         (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
             });
   EXPECT_THAT(resW6.getColumn(0),
-              ::testing::ElementsAre(TextRecordId(0u), TextRecordId(1u),
-                                     TextRecordId(1u), TextRecordId(1u),
-                                     TextRecordId(2u), TextRecordId(2u),
-                                     TextRecordId(2u), TextRecordId(2u)));
+              ::testing::ElementsAre(TVID(0u), TVID(1u), TVID(1u), TVID(1u),
+                                     TVID(2u), TVID(2u), TVID(2u), TVID(2u)));
   EXPECT_THAT(
       resW6.getColumn(1),
       ::testing::ElementsAre(IntId(3u), IntId(3u), IntId(1u), IntId(1u),
@@ -915,16 +870,12 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
   EXPECT_THAT(resW6.getColumn(3),
               ::testing::ElementsAre(V(0u), V(0u), V(0u), V(0u), V(0u), V(0u),
                                      V(0u), V(0u)));
-  EXPECT_THAT(
-      resW6.getColumn(4),
-      ::testing::ElementsAre(WordVocabId(1u), WordVocabId(1u), WordVocabId(1u),
-                             WordVocabId(2u), WordVocabId(1u), WordVocabId(1u),
-                             WordVocabId(3u), WordVocabId(5u)));
-  EXPECT_THAT(
-      resW6.getColumn(5),
-      ::testing::ElementsAre(WordVocabId(6u), WordVocabId(9u), WordVocabId(9u),
-                             WordVocabId(8u), WordVocabId(8u), WordVocabId(8u),
-                             WordVocabId(7u), WordVocabId(9u)));
+  EXPECT_THAT(resW6.getColumn(4),
+              ::testing::ElementsAre(W(1u), W(1u), W(1u), W(2u), W(1u), W(1u),
+                                     W(3u), W(5u)));
+  EXPECT_THAT(resW6.getColumn(5),
+              ::testing::ElementsAre(W(6u), W(9u), W(9u), W(8u), W(8u), W(8u),
+                                     W(7u), W(9u)));
 
   resW6.clear();
 
@@ -939,10 +890,8 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
                         (a[3] < b[3] || (a[3] == b[3] && a[4] < b[4])))));
             });
   EXPECT_THAT(resW6.getColumn(0),
-              ::testing::ElementsAre(TextRecordId(0u), TextRecordId(1u),
-                                     TextRecordId(1u), TextRecordId(1u),
-                                     TextRecordId(2u), TextRecordId(2u),
-                                     TextRecordId(2u), TextRecordId(2u)));
+              ::testing::ElementsAre(TVID(0u), TVID(1u), TVID(1u), TVID(1u),
+                                     TVID(2u), TVID(2u), TVID(2u), TVID(2u)));
   EXPECT_THAT(
       resW6.getColumn(1),
       ::testing::ElementsAre(IntId(3u), IntId(3u), IntId(1u), IntId(1u),
@@ -953,18 +902,14 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
   EXPECT_THAT(resW6.getColumn(3),
               ::testing::ElementsAre(V(0u), V(0u), V(0u), V(0u), V(0u), V(0u),
                                      V(0u), V(0u)));
-  EXPECT_THAT(
-      resW6.getColumn(4),
-      ::testing::ElementsAre(WordVocabId(1u), WordVocabId(1u), WordVocabId(1u),
-                             WordVocabId(2u), WordVocabId(1u), WordVocabId(1u),
-                             WordVocabId(3u), WordVocabId(5u)));
-  EXPECT_THAT(
-      resW6.getColumn(5),
-      ::testing::ElementsAre(WordVocabId(6u), WordVocabId(9u), WordVocabId(9u),
-                             WordVocabId(8u), WordVocabId(8u), WordVocabId(8u),
-                             WordVocabId(7u), WordVocabId(9u)));
+  EXPECT_THAT(resW6.getColumn(4),
+              ::testing::ElementsAre(W(1u), W(1u), W(1u), W(2u), W(1u), W(1u),
+                                     W(3u), W(5u)));
+  EXPECT_THAT(resW6.getColumn(5),
+              ::testing::ElementsAre(W(6u), W(9u), W(9u), W(8u), W(8u), W(8u),
+                                     W(7u), W(9u)));
 
-  wep.cids_ = {T(0), T(1), T(2)};
+  wep.cids_ = {TRID(0), TRID(1), TRID(2)};
   wep.eids_ = {V(0), V(0), V(0)};
   wep.scores_ = {1, 10, 11};
   wep.wids_ = {{1, 1, 2}, {6, 9, 13}};
@@ -975,21 +920,21 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
   test(width, wep, fMap1, nofVars, k, &resW6);
 
   ASSERT_EQ(1u, resW6.size());
-  EXPECT_THAT(resW6.getColumn(0), ::testing::ElementsAre(TextRecordId(2u)));
+  EXPECT_THAT(resW6.getColumn(0), ::testing::ElementsAre(TVID(2u)));
   EXPECT_THAT(resW6.getColumn(1), ::testing::ElementsAre(IntId(3u)));
   EXPECT_THAT(resW6.getColumn(2), ::testing::ElementsAre(V(0u)));
   EXPECT_THAT(resW6.getColumn(3), ::testing::ElementsAre(V(0u)));
-  EXPECT_THAT(resW6.getColumn(4), ::testing::ElementsAre(WordVocabId(2u)));
-  EXPECT_THAT(resW6.getColumn(5), ::testing::ElementsAre(WordVocabId(13u)));
+  EXPECT_THAT(resW6.getColumn(4), ::testing::ElementsAre(W(2u)));
+  EXPECT_THAT(resW6.getColumn(5), ::testing::ElementsAre(W(13u)));
 
   resW6.clear();
   test(width, wep, fSet1, nofVars, k, &resW6);
 
   ASSERT_EQ(1u, resW6.size());
-  EXPECT_THAT(resW6.getColumn(0), ::testing::ElementsAre(TextRecordId(2u)));
+  EXPECT_THAT(resW6.getColumn(0), ::testing::ElementsAre(TVID(2u)));
   EXPECT_THAT(resW6.getColumn(1), ::testing::ElementsAre(IntId(3u)));
   EXPECT_THAT(resW6.getColumn(2), ::testing::ElementsAre(V(0u)));
   EXPECT_THAT(resW6.getColumn(3), ::testing::ElementsAre(V(0u)));
-  EXPECT_THAT(resW6.getColumn(4), ::testing::ElementsAre(WordVocabId(2u)));
-  EXPECT_THAT(resW6.getColumn(5), ::testing::ElementsAre(WordVocabId(13u)));
+  EXPECT_THAT(resW6.getColumn(4), ::testing::ElementsAre(W(2u)));
+  EXPECT_THAT(resW6.getColumn(5), ::testing::ElementsAre(W(13u)));
 }
