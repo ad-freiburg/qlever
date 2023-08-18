@@ -87,6 +87,13 @@ class ConfigOption {
   */
   bool wasSet() const;
 
+  // Returns, if this configuration option holds values of the given type.
+  template <typename Type>
+  requires ad_utility::isTypeContainedIn<Type, ConfigOption::AvailableTypes>
+  constexpr bool holdsType() const {
+    return std::holds_alternative<Data<Type>>(data_);
+  }
+
   /*
   @brief Sets the variable, that the internal pointer points to. Throws an
   exception, should the given value have a different type, than what the
