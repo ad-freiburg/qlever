@@ -27,7 +27,6 @@
 #include "util/HashMap.h"
 #include "util/OverloadCallOperator.h"
 #include "util/StringUtils.h"
-#include "util/antlr/ANTLRErrorHandling.h"
 
 template <typename T>
 class Reversed {
@@ -110,7 +109,7 @@ class SparqlQleverVisitor {
   void visit(Parser::PrologueContext* ctx);
 
   // ___________________________________________________________________________
-  [[noreturn]] static void visit(Parser::BaseDeclContext* ctx);
+  [[noreturn]] static void visit(const Parser::BaseDeclContext* ctx);
 
   // ___________________________________________________________________________
   void visit(Parser::PrefixDeclContext* ctx);
@@ -135,11 +134,12 @@ class SparqlQleverVisitor {
   // will always throw an exception because the corresponding feature is not
   // (yet) supported by QLever. If they have return types other than void this
   // is to make the usage of abstractions like `visitAlternative` easier.
-  [[noreturn]] static ParsedQuery visit(Parser::DescribeQueryContext* ctx);
+  [[noreturn]] static ParsedQuery visit(
+      const Parser::DescribeQueryContext* ctx);
 
-  [[noreturn]] static ParsedQuery visit(Parser::AskQueryContext* ctx);
+  [[noreturn]] static ParsedQuery visit(const Parser::AskQueryContext* ctx);
 
-  [[noreturn]] static void visit(Parser::DatasetClauseContext* ctx);
+  [[noreturn]] static void visit(const Parser::DatasetClauseContext* ctx);
 
   [[noreturn]] static void visit(Parser::DefaultGraphClauseContext* ctx);
 
@@ -198,7 +198,7 @@ class SparqlQleverVisitor {
       Parser::OptionalGraphPatternContext* ctx);
 
   [[noreturn]] static parsedQuery::GraphPatternOperation visit(
-      Parser::GraphGraphPatternContext* ctx);
+      const Parser::GraphGraphPatternContext* ctx);
 
   [[nodiscard]] parsedQuery::Service visit(
       Parser::ServiceGraphPatternContext* ctx);
@@ -293,7 +293,7 @@ class SparqlQleverVisitor {
   [[nodiscard]] PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
   [[noreturn]] static PropertyPath visit(
-      Parser::PathNegatedPropertySetContext*);
+      const Parser::PathNegatedPropertySetContext*);
 
   [[noreturn]] static PropertyPath visit(
       Parser::PathOneInPropertySetContext* ctx);
@@ -386,13 +386,14 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] ExpressionPtr visit(Parser::LangExpressionContext* ctx);
 
-  [[noreturn]] static void visit(Parser::SubstringExpressionContext* ctx);
+  [[noreturn]] static void visit(const Parser::SubstringExpressionContext* ctx);
 
-  [[noreturn]] static void visit(Parser::StrReplaceExpressionContext* ctx);
+  [[noreturn]] static void visit(
+      const Parser::StrReplaceExpressionContext* ctx);
 
-  [[noreturn]] static void visit(Parser::ExistsFuncContext* ctx);
+  [[noreturn]] static void visit(const Parser::ExistsFuncContext* ctx);
 
-  [[noreturn]] static void visit(Parser::NotExistsFuncContext* ctx);
+  [[noreturn]] static void visit(const Parser::NotExistsFuncContext* ctx);
 
   [[nodiscard]] ExpressionPtr visit(Parser::AggregateContext* ctx);
 
@@ -454,7 +455,7 @@ class SparqlQleverVisitor {
   // `visitIriOrFunction`.
   [[nodiscard]] static ExpressionPtr processIriFunctionCall(
       const std::string& iri, std::vector<ExpressionPtr> argList,
-      antlr4::ParserRuleContext*);
+      const antlr4::ParserRuleContext*);
 
   void addVisibleVariable(Variable var);
 
@@ -512,24 +513,25 @@ class SparqlQleverVisitor {
   void visitIf(Ctx* ctx) requires voidWhenVisited<SparqlQleverVisitor, Ctx>;
 
  public:
-  [[noreturn]] static void reportError(antlr4::ParserRuleContext* ctx,
+  [[noreturn]] static void reportError(const antlr4::ParserRuleContext* ctx,
                                        const std::string& msg);
 
-  [[noreturn]] static void reportNotSupported(antlr4::ParserRuleContext* ctx,
-                                              const std::string& feature);
+  [[noreturn]] static void reportNotSupported(
+      const antlr4::ParserRuleContext* ctx, const std::string& feature);
 
  private:
   // Throw an exception if the `expression` contains the `LANG()` function. The
   // `context` will be used to create the exception metadata.
   static void checkUnsupportedLangOperation(
-      antlr4::ParserRuleContext* context,
+      const antlr4::ParserRuleContext* context,
       const SparqlExpressionPimpl& expression);
 
   // Similar to `checkUnsupportedLangOperation` but doesn't throw for the
   // expression `LANG(?someVariable) = "someLangtag"` which is supported by
   // QLever inside a FILTER clause.
   static void checkUnsupportedLangOperationAllowFilters(
-      antlr4::ParserRuleContext* ctx, const SparqlExpressionPimpl& expression);
+      const antlr4::ParserRuleContext* ctx,
+      const SparqlExpressionPimpl& expression);
 
   // Parse both `ConstructTriplesContext` and `TriplesTemplateContext` because
   // they have the same structure.
