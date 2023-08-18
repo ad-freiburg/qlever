@@ -89,15 +89,18 @@ TEST(ConfigOptionProxy, ConversionToConfigOption) {
     NonConstConfigOptionProxy<T> nonConstProxy(opt);
     ConstConfigOptionProxy<T> constProxy(opt);
 
-    // Does the (implicit) conversion work and return the same object, as the
+    // Does the explicit conversion work and return the same object, as the
     // one given?
     ASSERT_EQ(&opt, &static_cast<ConfigOption&>(nonConstProxy));
+    ASSERT_EQ(&opt, &static_cast<const ConfigOption&>(nonConstProxy));
+    ASSERT_EQ(&opt, &static_cast<const ConfigOption&>(constProxy));
+
+    // Does the implicit conversion work and return the same object, as the
+    // one given?
     ASSERT_EQ(&opt,
               &identity.template operator()<ConfigOption&>(nonConstProxy));
-    ASSERT_EQ(&opt, &static_cast<const ConfigOption&>(nonConstProxy));
     ASSERT_EQ(&opt, &identity.template operator()<const ConfigOption&>(
                         nonConstProxy));
-    ASSERT_EQ(&opt, &static_cast<const ConfigOption&>(constProxy));
     ASSERT_EQ(&opt,
               &identity.template operator()<const ConfigOption&>(constProxy));
 
