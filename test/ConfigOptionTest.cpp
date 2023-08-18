@@ -12,15 +12,15 @@
 #include <vector>
 
 #include "../test/util/ConfigOptionHelpers.h"
+#include "../test/util/ValidatorFunctionHelpers.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
+#include "util/GTestHelpers.h"
 #include "util/json.h"
 
-// Easier usage.
-using ConfigOption = ad_utility::ConfigOption;
-
+namespace ad_utility {
 /*
 Not all identifiers are allowed for configuration options.
 */
@@ -386,3 +386,120 @@ TEST(ConfigOptionTest, HoldsType) {
 
   doForTypeInConfigOptionValueType(doTest);
 }
+
+TEST(ConfigOptionTest, AddValidator) {
+  /*
+  Very simple check for the `set`-functions of `configOption`. Simply checks, if
+  the valid value can be set without exception and if the not valid one throws
+  an exception with the wanted message.
+  */
+  auto checkSet = []<typename T>(ConfigOption& option, const T& validValue,
+                                 const T& notValidValue,
+                                 std::string_view expectedErrorMessage) {
+    ASSERT_NO_THROW(option.setValue(validValue));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        option.setValue(notValidValue),
+        ::testing::ContainsRegex(expectedErrorMessage));
+
+    // Convert the values to json representation.
+    nlohmann::json validValueAsJson(validValue);
+    nlohmann::json notValidValueAsJson(notValidValue);
+
+    ASSERT_NO_THROW(option.setValueWithJson(validValueAsJson));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        option.setValueWithJson(notValidValueAsJson),
+        ::testing::ContainsRegex(expectedErrorMessage));
+  };
+
+  // Once again, we use `doForTypeInConfigOptionValueType` and need to create a
+  // function for executing a test.
+  auto doTest = [&checkSet]<typename Type>() {
+    Type var{};
+    ConfigOption option("Test", "", &var);
+
+    // Single validator.
+    option.addValidator(
+        generateSingleParameterValidatorFunction<Type>(1),
+        absl::StrCat(ConfigOption::availableTypesToString<Type>(),
+                     " validator 1"));
+    // Using the invariant of our function generator, to create valid and none
+    // valid values for the test.
+    checkSet(option, createDummyValueForValidator<Type>(0),
+             createDummyValueForValidator<Type>(1),
+             absl::StrCat(ConfigOption::availableTypesToString<Type>(),
+                          " validator 1"));
+
+    // Multiple validators.
+    constexpr size_t NUMBER_OF_VALIDATORS{50};
+    for (size_t i = 2; i < NUMBER_OF_VALIDATORS + 2; i++) {
+      /*
+      Special handeling for `bool`, because it only has two values and that
+      doesn't really work with our test for multiple validators, which uses the
+      invariant property of our lambda generation function.
+      */
+      if constexpr (std::is_same_v<Type, bool>) {
+        option.addValidator(
+            generateSingleParameterValidatorFunction<Type>(i * 2 + 1),
+            absl::StrCat(ConfigOption::availableTypesToString<Type>(),
+                         " validator ", i * 2 + 1));
+        checkSet(option, createDummyValueForValidator<Type>(0),
+                 createDummyValueForValidator<Type>(1),
+                 absl::StrCat(ConfigOption::availableTypesToString<Type>(),
+                              " validator 1"));
+      } else {
+        option.addValidator(
+            generateSingleParameterValidatorFunction<Type>(i),
+            absl::StrCat(ConfigOption::availableTypesToString<Type>(),
+                         " validator ", i));
+
+        // Using the invariant of our function generator, to create valid and
+        // none valid values for all added validators.
+        for (size_t validatorNumber = 1; validatorNumber <= i;
+             validatorNumber++) {
+          checkSet(option, createDummyValueForValidator<Type>(i + 1),
+                   createDummyValueForValidator<Type>(validatorNumber),
+                   absl::StrCat(ConfigOption::availableTypesToString<Type>(),
+                                " validator ", validatorNumber));
+        }
+      }
+    }
+  };
+
+  // Test everything.
+  doForTypeInConfigOptionValueType(doTest);
+}
+
+// Most errors, when adding a validator function, are found at compile time, but
+// a few are not.
+TEST(ConfigOptionTest, AddValidatorExceptions) {
+  // Creates a configuration option of the given type and checks, if adding a
+  // valid validator, which takes the wrong type of argument, doens't work.
+  auto doTest = []<typename Type>() {
+    Type var{};
+    ConfigOption option("Test", "", &var);
+
+    // Try adding a validator for every type, that configuration options
+    // support.
+    doForTypeInConfigOptionValueType([&option]<typename T>() {
+      const std::string validatorName =
+          absl::StrCat(ConfigOption::availableTypesToString<T>(), " validator");
+      auto validatorFunction = [](const T&) { return true; };
+
+      if constexpr (std::regular_invocable<decltype(validatorFunction),
+                                           const Type&>) {
+        // Right type shouldn't throw any erros. Note: Implicit conversion makes
+        // this a bit more complicated.
+        ASSERT_NO_THROW(option.addValidator(validatorFunction, validatorName));
+      } else {
+        // Wrong type should throw an erro.
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            option.addValidator(validatorFunction, validatorName),
+            ::testing::ContainsRegex(
+                "Adding of validator to configuration option 'Test' failed."));
+      }
+    });
+  };
+
+  doForTypeInConfigOptionValueType(doTest);
+}
+}  // namespace ad_utility

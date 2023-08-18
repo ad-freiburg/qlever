@@ -71,7 +71,7 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConstConfigOptionProxy<OptionType> addOption(
+  ConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn) {
@@ -102,7 +102,7 @@ class ConfigManager {
             std::same_as<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConstConfigOptionProxy<OptionType> addOption(
+  ConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn,
@@ -123,7 +123,7 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConstConfigOptionProxy<OptionType> addOption(
+  ConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn) {
     return addOption<OptionType>(
@@ -143,7 +143,7 @@ class ConfigManager {
             std::same_as<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConstConfigOptionProxy<OptionType> addOption(
+  ConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn,
       DefaultValueType defaultValue) {
@@ -217,8 +217,8 @@ class ConfigManager {
 
   @return The added config option.
   */
-  const ConfigOption& addConfigOption(
-      const std::vector<std::string>& pathToOption, ConfigOption&& option);
+  ConfigOption& addConfigOption(const std::vector<std::string>& pathToOption,
+                                ConfigOption&& option);
 
   /*
   @brief Return string representation of a `std::vector<std::string>`.
@@ -255,7 +255,7 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConstConfigOptionProxy<OptionType> addOptionImpl(
+  ConfigOptionProxy<OptionType> addOptionImpl(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn,
@@ -275,7 +275,7 @@ class ConfigManager {
     move constructor. Which is why, we can't just return the `ConfigOption`
     we created here.
     */
-    return ConstConfigOptionProxy<OptionType>(addConfigOption(
+    return ConfigOptionProxy<OptionType>(addConfigOption(
         pathToOption,
         ConfigOption(pathToOption.back(), optionDescription,
                      variableToPutValueOfTheOptionIn, defaultValue)));

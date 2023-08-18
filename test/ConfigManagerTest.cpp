@@ -319,4 +319,35 @@ TEST(ConfigManagerTest, PrintConfigurationDocExistence) {
   ASSERT_NO_THROW(config.printConfigurationDoc(false));
   ASSERT_NO_THROW(config.printConfigurationDoc(true));
 }
+
+/*
+@brief Quick check, if `parseConfig` works with the registered validators.
+
+@param jsonWithValidValues When parsing this, no exceptions should be thrown.
+@param jsonWithNonValidValues When parsing this, an exception should be thrown.
+@param containedInExpectedErrorMessage What kind of text should be contained in
+the exception thrown for `jsonWithNonValidValues`. Validators have custom
+exception messages, so they should be identifiable.
+*/
+void checkValidator(ConfigManager& manager,
+                    const nlohmann::json& jsonWithValidValues,
+                    const nlohmann::json& jsonWithNonValidValues,
+                    std::string_view containedInExpectedErrorMessage) {
+  ASSERT_NO_THROW(manager.parseConfig(jsonWithValidValues));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.parseConfig(jsonWithNonValidValues),
+      ::testing::ContainsRegex(containedInExpectedErrorMessage));
+}
+
+TEST(ConfigManagerTest, ConfigOptionWithValidator) {
+  ConfigManager managerWithoutSubManager{};
+  int notUsedInt;
+  managerWithoutSubManager.addOption("h", "", &notUsedInt)
+      .getConfigOption()
+      .addValidator([](const int& n) { return 0 <= n && n <= 24; },
+                    "Validator of h");
+  checkValidator(managerWithoutSubManager,
+                 nlohmann::json::parse(R"--({"h" : 10})--"),
+                 nlohmann::json::parse(R"--({"h" : 100})--"), "Validator of h");
+}
 }  // namespace ad_utility
