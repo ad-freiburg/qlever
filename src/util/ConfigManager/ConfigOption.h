@@ -321,6 +321,7 @@ class ConfigOption {
  private:
   FRIEND_TEST(ConfigOptionTest, AddValidator);
   FRIEND_TEST(ConfigOptionTest, AddValidatorExceptions);
+  FRIEND_TEST(ConfigManagerTest, AddValidator);
 
   /*
   @brief Return the string representation/name of the type, of the currently

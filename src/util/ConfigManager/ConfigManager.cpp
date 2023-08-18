@@ -246,6 +246,9 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
       throw ConfigOptionWasntSetException(key);
     }
   }
+
+  // Check with the validators, if all the new values are valid.
+  verifyWithValidators();
 }
 
 // ____________________________________________________________________________
@@ -355,5 +358,21 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
       std::views::transform(defaultConfigurationOptionToString);
 
   return ad_utility::lazyStrJoin(unchangedFromDefaultConfigOptions, "\n");
+}
+// ____________________________________________________________________________
+void ConfigManager::verifyWithValidators() const {
+  std::ranges::for_each(validators_,
+                        [](auto& validator) { std::invoke(validator); });
+};
+
+// ____________________________________________________________________________
+bool ConfigManager::containsOption(const ConfigOption& opt) const {
+  // Collect a view of all `configOption` addresses.
+  const auto allOptions =
+      std::views::values(configurationOptions()) |
+      std::views::transform([](const ConfigOption& opt) { return &opt; });
+
+  // Check, if the address of the given `opt` is contained.
+  return std::ranges::find(allOptions, &opt) != allOptions.end();
 }
 }  // namespace ad_utility

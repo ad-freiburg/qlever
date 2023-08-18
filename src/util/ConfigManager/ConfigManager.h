@@ -50,6 +50,13 @@ class ConfigManager {
   ad_utility::HashMap<std::string, std::unique_ptr<ConfigOption>>
       configurationOptions_;
 
+  /*
+  List of the added validators. Whenever the values of the options are set,
+  they are called afterwards with `verifyWithValidators` to make sure, that
+  the new values are valid.
+  */
+  std::vector<std::function<bool(void)>> validators_;
+
  public:
   /*
   @brief Creates and adds a new configuration option without a default value.
@@ -160,6 +167,7 @@ class ConfigManager {
   at runtime.
   - Same, if there are values for configuration options, that do not exist.
   - `j` is anything but a json object literal.
+  - Any of the added validators return false.
   */
   void parseConfig(const nlohmann::json& j);
 
@@ -186,10 +194,45 @@ class ConfigManager {
   */
   std::string printConfigurationDoc(bool printCurrentJsonConfiguration) const;
 
+  /*
+  @brief Add a function to the configuration manager for verifying, that the
+  values of the given configuration options are valid. Will always be called
+  after parsing.
+
+  @tparam ValidatorParameterTypes The types of the values in the
+  `validatorParameter`. Can be left up to type deduction.
+
+  @param validatorFunction Checks, if the values of the given configuration
+  options are valid. Should return true, if they are valid.
+  @param errorMessage A `std::runtime_error` with this as an error message will
+  get thrown, if the `validatorFunction` returns false.
+  @param validatorParameter Proxies for the configuration options, whos values
+  will be passed to the validator function as function arguments. Will keep the
+  same order.
+  */
+  template <typename... ValidatorParameterTypes>
+  void addValidator(
+      Validator<ValidatorParameterTypes...> auto validatorFunction,
+      std::string_view errorMessage,
+      ConfigOptionProxy<ValidatorParameterTypes>... validatorParameter)
+      requires(sizeof...(validatorParameter) > 0 &&
+               sizeof...(ValidatorParameterTypes) ==
+                   sizeof...(validatorParameter)) {
+    addValidatorImpl(
+        "addValidator",
+        []<typename T>(ConstConfigOptionProxy<T> opt) {
+          return opt.getConfigOption().template getValue<std::decay_t<T>>();
+        },
+        validatorFunction, errorMessage,
+        static_cast<ConstConfigOptionProxy<ValidatorParameterTypes>>(
+            validatorParameter)...);
+  }
+
  private:
   FRIEND_TEST(ConfigManagerTest, ParseConfig);
   FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
   FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
+  FRIEND_TEST(ConfigManagerTest, ContainsOption);
 
   /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
@@ -287,5 +330,78 @@ class ConfigManager {
   */
   auto configurationOptions();
   auto configurationOptions() const;
+
+  /*
+  @brief Call all the validators to check, if the current value is valid.
+  */
+  void verifyWithValidators() const;
+
+  /*
+  Checks, if the given configuration option is contained in the manager, or
+  any of it's sub manager.
+  Note: This checks for identity, not equality.
+  */
+  bool containsOption(const ConfigOption& opt) const;
+
+  /*
+  @brief The implementation of `addValidator` and `addOptionValidator`.
+
+  @param addValidatorFunctionName The name of the function, that is calling this
+  implementation. So that people can easier identify them.
+  @param translationFunction Transforms the given `ConfigOptionProxy` in the
+  value form for the validator function.
+  @param validatorFunction Should return true, if the transformed
+  `ConfigOptionProxy` represent valid values. For example: There configuration
+  options were all set at run time, or contain numbers bigger than 10.
+  @param errorMessage A `std::runtime_error` with this as an error message will
+  get thrown, if the `validatorFunction` returns false.
+  @param parameterProxy Proxies for the configuration options, who will be
+  passed to the validator function as function arguments, after being
+  transformed. Will keep the same order.
+  */
+  template <typename TranslationFunction, typename ValidatorFunction,
+            isInstantiation<ConstConfigOptionProxy>... ValidatorParameter>
+  requires(std::invocable<TranslationFunction, const ValidatorParameter> &&
+           ...) &&
+          Validator<ValidatorFunction,
+                    std::invoke_result_t<TranslationFunction,
+                                         ValidatorParameter>...> &&
+          (sizeof...(ValidatorParameter) > 0)
+  void addValidatorImpl(std::string_view addValidatorFunctionName,
+                        TranslationFunction translationFunction,
+                        ValidatorFunction validatorFunction,
+                        std::string_view errorMessage,
+                        const ValidatorParameter... parameterProxy) {
+    // Check, if we contain all the configuration options, that were given us.
+    auto checkIfContainOption = [this, &addValidatorFunctionName]<typename T>(
+                                    ConstConfigOptionProxy<T> opt) {
+      if (!containsOption(opt.getConfigOption())) {
+        throw std::runtime_error(absl::StrCat(
+            "Error while adding validator with ", addValidatorFunctionName,
+            ": The given configuration "
+            "option '",
+            opt.getConfigOption().getIdentifier(),
+            "' is not contained in the configuration manager, or its sub "
+            "managers."));
+      }
+    };
+    (checkIfContainOption(parameterProxy), ...);
+
+    /*
+    Add a function wrapper to our list of validators, that calls the
+    `validatorFunction` with the config options and throws an exception, if the
+    `validatorFunction` returns false.
+    */
+    validators_.emplace_back([translationFunction, validatorFunction,
+                              errorMessage = std::string(errorMessage),
+                              parameterProxy...]() {
+      if (!std::invoke(validatorFunction,
+                       std::invoke(translationFunction, parameterProxy)...)) {
+        throw std::runtime_error(errorMessage);
+      } else {
+        return true;
+      }
+    });
+  }
 };
 }  // namespace ad_utility
