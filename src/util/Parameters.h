@@ -6,8 +6,10 @@
 #define QLEVER_PARAMETERS_H
 
 #include <atomic>
+#include <concepts>
 #include <optional>
 #include <tuple>
+#include <type_traits>
 
 #include "./ConstexprMap.h"
 #include "./ConstexprSmallString.h"
@@ -31,6 +33,25 @@ struct ParameterBase {
   virtual ~ParameterBase() = default;
 };
 
+// Concepts for the template types of `Parameter`.
+template <typename T>
+concept ParameterValueType =
+    std::same_as<std::decay_t<T>, T> && std::default_initializable<T> &&
+    std::move_constructible<T> && std::movable<T>;
+
+template <typename FunctionType, typename ToType>
+concept ParameterFromStringType =
+    std::default_initializable<FunctionType> &&
+    std::invocable<FunctionType, const std::string&> &&
+    std::same_as<ToType,
+                 std::invoke_result_t<FunctionType, const std::string&>>;
+
+template <typename FunctionType, typename FromType>
+concept ParameterToStringType =
+    std::default_initializable<FunctionType> &&
+    std::invocable<FunctionType, FromType> &&
+    std::same_as<std::string, std::invoke_result_t<FunctionType, FromType>>;
+
 /// Abstraction for a parameter that connects a (compile time) `Name` to a
 /// runtime value.
 /// \tparam Type The type of the parameter value
@@ -40,8 +61,8 @@ struct ParameterBase {
 ///         a std::string representation.
 /// \tparam Name The Name of the parameter (there are typically a lot of
 ///         parameters with the same `Type`).
-template <typename Type, typename FromString, typename ToString,
-          ParameterName Name>
+template <ParameterValueType Type, ParameterFromStringType<Type> FromString,
+          ParameterToStringType<Type> ToString, ParameterName Name>
 struct Parameter : public ParameterBase {
   constexpr static ParameterName name = Name;
 
