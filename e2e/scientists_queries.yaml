@@ -1573,4 +1573,18 @@ queries:
       - num_rows : 0
       - selected: [ "?x" ]
 
-
+  - query: SUBSTR
+    type: no-text
+    sparql: |
+      SELECT ?x (SUBSTR(STR(?x), 1, 2) as ?sub) WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Gender> <Female>  .
+          FILTER (?x > <Yzz>) .
+      }
+    checks:
+      - num_cols: 2
+      - num_rows: 12
+      - selected: [ "?x", "?sub" ]
+      - contains_row: [ "<Zelda_Rubinstein>", "Ze" ]
+      - contains_row: [ "<Zhang_Peili>", "Zh" ]
+      - contains_row: [ "<Zlata_Bartl>", "Zl" ]

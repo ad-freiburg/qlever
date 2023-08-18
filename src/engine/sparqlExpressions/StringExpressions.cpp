@@ -63,7 +63,7 @@ class StringExpressionImpl : public SparqlExpression {
   }
 };
 
-// Compute string length.
+// STRLEN
 inline auto strlen = [](std::optional<std::string> s) {
   if (!s.has_value()) {
     return Id::makeUndefined();
@@ -72,6 +72,7 @@ inline auto strlen = [](std::optional<std::string> s) {
 };
 using StrlenExpression = StringExpressionImpl<1, decltype(strlen)>;
 
+// SUBSTR
 inline auto substr = [](std::optional<std::string> s, NumericValue start,
                         NumericValue length) -> IdOrString {
   if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
@@ -88,42 +89,41 @@ inline auto substr = [](std::optional<std::string> s, NumericValue start,
     return std::string{};
   }
 
-  auto roundImpl = []<typename T>(const T& value) {
-    AD_CORRECTNESS_CHECK(value >= 0);
+  auto roundImpl = []<typename T>(const T& value) -> int64_t {
     if constexpr (std::floating_point<T>) {
-      return static_cast<size_t>(std::round(value));
+      if (value < 0) {
+        return static_cast<int64_t>(-std::round(-value));
+      } else {
+        return static_cast<int64_t>(std::round(value));
+      }
+    } else if constexpr (std::integral<T>) {
+      return static_cast<int64_t>(value);
     } else {
-      static_assert(std::integral<T>);
-      return static_cast<size_t>(value);
+      AD_FAIL();
     }
   };
 
-  auto clamp = [sz = s.value().size(), &roundImpl](NumericValue n,
-                                                   bool shift) -> std::size_t {
-    auto impl = [sz, &roundImpl, shift]<typename T>(T value) -> std::size_t {
-      if constexpr (std::is_same_v<NotNumeric, T>) {
-        AD_FAIL();
-      } else {
-        // In SPARQL the SUBSTR expression is 1-based.
-        if (shift) {
-          value -= 1;
-        }
-        if (value < 0) {
-          return 0;
-        }
-        if (static_cast<size_t>(value) > sz) {
-          return sz;
-        }
-        return roundImpl(value);
-      }
-    };
-    return std::visit(impl, n);
-  };
+  int64_t startInt = std::visit(roundImpl, start) - 1;
+  int64_t lengthInt = std::visit(roundImpl, length);
+
+  // If the starting position is negative, we have to correct the length.
+  if (startInt < 0) {
+    lengthInt += startInt;
+  }
 
   const auto& str = s.value();
-  auto startI = clamp(start, true);
-  auto lengthI = clamp(length, false);
-  return std::string{ad_utility::getUTF8Substring(str, startI, lengthI)};
+  auto clamp = [sz = str.size()](int64_t n) -> std::size_t {
+    if (n < 0) {
+      return 0;
+    }
+    if (static_cast<size_t>(n) > sz) {
+      return sz;
+    }
+    return static_cast<size_t>(n);
+  };
+
+  return std::string{
+      ad_utility::getUTF8Substring(str, clamp(startInt), clamp(lengthInt))};
 };
 
 using SubstrExpression =
