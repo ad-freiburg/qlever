@@ -1561,6 +1561,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return visit(ctx->regexExpression());
   } else if (ctx->langExpression()) {
     return visit(ctx->langExpression());
+  } else if (ctx->substringExpression()) {
+    return visit(ctx->substringExpression());
   }
   // Get the function name and the arguments. Note that we do not have to check
   // the number of arguments like for `processIriFunctionCall`, since the number
@@ -1636,8 +1638,17 @@ ExpressionPtr Visitor::visit(Parser::LangExpressionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(const Parser::SubstringExpressionContext* ctx) {
-  reportNotSupported(ctx, "The SUBSTR function is");
+SparqlExpression::Ptr Visitor::visit(Parser::SubstringExpressionContext* ctx) {
+  auto children = visitVector(ctx->expression());
+  AD_CORRECTNESS_CHECK(children.size() == 2 || children.size() == 3);
+  if (children.size() == 2) {
+    children.push_back(
+        std::make_unique<IdExpression>(Id::makeFromInt(Id::maxInt)));
+  }
+  AD_CONTRACT_CHECK(children.size() == 3);
+  return sparqlExpression::makeSubstrExpression(std::move(children.at(0)),
+                                                std::move(children.at(1)),
+                                                std::move(children.at(2)));
 }
 
 // ____________________________________________________________________________________
