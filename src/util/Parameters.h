@@ -17,6 +17,7 @@
 #include "./HashSet.h"
 #include "./TupleForEach.h"
 #include "./TypeTraits.h"
+#include "util/MemorySize/MemorySize.h"
 
 namespace ad_utility {
 using ParameterName = ad_utility::ConstexprSmallString<100>;
@@ -151,6 +152,13 @@ using SizeT = Parameter<size_t, szt, toString, Name>;
 
 template <ParameterName Name>
 using String = Parameter<std::string, std::identity, std::identity, Name>;
+
+template <ParameterName Name>
+using MemorySizeParameter =
+    Parameter<MemorySize, decltype([](const std::string& str) {
+                return MemorySize::parse(str);
+              }),
+              decltype([](const MemorySize& m) { return m.asString(); }), Name>;
 
 }  // namespace detail::parameterShortNames
 

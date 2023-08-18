@@ -5,9 +5,11 @@
 #include <gtest/gtest.h>
 
 #include "../src/util/Parameters.h"
+#include "util/MemorySize/MemorySize.h"
 using namespace ad_utility;
 
 using namespace detail::parameterShortNames;
+using namespace memory_literals;
 
 TEST(Parameters, First) {
   using FloatParameter = Float<"Float">;
@@ -39,4 +41,22 @@ TEST(Parameters, First) {
   ASSERT_EQ("134", map.at("SizeT"));
   ASSERT_EQ("42.000000", map.at("Float"));
   ASSERT_EQ("16.200000", map.at("Double"));
+}
+
+// Basic test, if the parameter for `MemorySize` works.
+TEST(Parameters, MemorySizeParameter) {
+  // Compare a given `MemorySizeParameter` with a given `MemorySize`.
+  auto compareWithMemorySize = [](const auto& parameter,
+                                  const MemorySize& expectedValue) {
+    ASSERT_EQ(expectedValue.getBytes(), parameter.get().getBytes());
+    ASSERT_STREQ(expectedValue.asString().c_str(),
+                 parameter.toString().c_str());
+  };
+
+  MemorySizeParameter<"Memory"> m(6_GB);
+  compareWithMemorySize(m, 6_GB);
+  m.set(6_MB);
+  compareWithMemorySize(m, 6_MB);
+  m.setFromString("6 TB");
+  compareWithMemorySize(m, 6_TB);
 }
