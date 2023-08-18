@@ -45,7 +45,7 @@ void basicConstructorTest() {
 }
 
 TEST(ConfigOptionProxy, NonConstConfigOptionProxyConstructor) {
-  basicConstructorTest<NonConstConfigOptionProxy, ConfigOption>();
+  basicConstructorTest<ConfigOptionProxy, ConfigOption>();
 }
 
 TEST(ConfigOptionProxy, ConstConfigOptionProxyConstructor) {
@@ -58,7 +58,7 @@ TEST(ConfigOptionProxy, ConstConfigOptionProxyConstructor) {
   doForTypeInConfigOptionValueType([]<typename T>() {
     T varForConfigOption;
     ConfigOption opt("testOption", "", &varForConfigOption);
-    NonConstConfigOptionProxy<T> nonConstProxy(opt);
+    ConfigOptionProxy<T> nonConstProxy(opt);
     ConstConfigOptionProxy<T> constProxy(nonConstProxy);
     ASSERT_EQ(&nonConstProxy.getConfigOption(), &constProxy.getConfigOption());
   });
@@ -69,7 +69,7 @@ TEST(ConfigOptionProxy, GetConfigOption) {
   doForTypeInConfigOptionValueType([]<typename T>() {
     T varForConfigOption;
     ConfigOption opt("testOption", "", &varForConfigOption);
-    NonConstConfigOptionProxy<T> nonConstProxy(opt);
+    ConfigOptionProxy<T> nonConstProxy(opt);
     ConstConfigOptionProxy<T> constProxy(opt);
     static_assert(!std::is_const_v<std::remove_reference_t<
                       decltype(nonConstProxy.getConfigOption())>>);
@@ -86,7 +86,7 @@ TEST(ConfigOptionProxy, ConversionToConfigOption) {
   doForTypeInConfigOptionValueType([&identity]<typename T>() {
     T varForConfigOption;
     ConfigOption opt("testOption", "", &varForConfigOption);
-    NonConstConfigOptionProxy<T> nonConstProxy(opt);
+    ConfigOptionProxy<T> nonConstProxy(opt);
     ConstConfigOptionProxy<T> constProxy(opt);
 
     // Does the explicit conversion work and return the same object, as the

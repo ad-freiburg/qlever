@@ -85,12 +85,12 @@ class ConstConfigOptionProxy
 // A non const proxy/reference to a `ConfigOption`. Also saves the type of
 // value, that the configuration option holds.
 template <typename T>
-class NonConstConfigOptionProxy
+class ConfigOptionProxy
     : public detail::ConfigOptionProxyImplementation<T, ConfigOption> {
   using Base = detail::ConfigOptionProxyImplementation<T, ConfigOption>;
 
  public:
-  explicit NonConstConfigOptionProxy(ConfigOption& opt) : Base(opt) {}
+  explicit ConfigOptionProxy(ConfigOption& opt) : Base(opt) {}
 
   // Implicit conversion from not const to const is allowed.
   explicit(false) operator ConstConfigOptionProxy<T>() {
