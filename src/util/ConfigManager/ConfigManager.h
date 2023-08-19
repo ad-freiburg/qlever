@@ -358,9 +358,8 @@ class ConfigManager {
   void verifyWithValidators() const;
 
   /*
-  Checks, if the given configuration option is contained in the manager, or
-  any of it's sub manager.
-  Note: This checks for identity, not equality.
+  Checks, if the given configuration option is contained in the manager.
+  Note: This checks for identity (pointer equality), not semantic equality.
   */
   bool containsOption(const ConfigOption& opt) const;
 
