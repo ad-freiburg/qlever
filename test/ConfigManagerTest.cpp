@@ -710,4 +710,38 @@ TEST(ConfigManagerTest, AddOptionValidatorException) {
   decltype(auto) mNoSubOption = mNoSub.addOption("someOption", "", &var);
   checkAddOptionValidatorBehavior(mNoSub, mNoSubOption, outsideOptionProxy);
 }
+
+TEST(ConfigManagerTest, ContainsOption) {
+  /*
+  @brief Verify, that the given configuration options are (not) contained in the
+  given configuration manager.
+
+  @param optionsAndWantedStatus A list of configuration options together with
+  the information, if they should be contained in `m`. If true, it should be, if
+  false, it shouldn't.
+  */
+  using ContainmentStatusVector = std::vector<std::pair<const ConfigOption*, bool>>;
+  auto checkContainmentStatus = [](const ConfigManager& m,
+                                   const ContainmentStatusVector& optionsAndWantedStatus) {
+    std::ranges::for_each(optionsAndWantedStatus,
+                          [&m](const ContainmentStatusVector::value_type& p) {
+                            if (p.second) {
+                              ASSERT_TRUE(m.containsOption(*p.first));
+                            } else {
+                              ASSERT_FALSE(m.containsOption(*p.first));
+                            }
+                          });
+  };
+
+  // Variable for the configuration options.
+  int var;
+
+  // Outside configuration option.
+  const ConfigOption outsideOption("OutsideOption", "", &var);
+
+  ConfigManager m;
+  checkContainmentStatus(m, {{&outsideOption, false}});
+  decltype(auto) topManagerOption = m.addOption("TopLevel", "", &var);
+  checkContainmentStatus(m, {{&outsideOption, false}, {&topManagerOption.getConfigOption(), true}});
+}
 }  // namespace ad_utility
