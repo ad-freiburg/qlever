@@ -3,7 +3,8 @@
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 namespace sparqlExpression {
-namespace detail {
+namespace {
+using namespace sparqlExpression::detail;
 // String functions.
 [[maybe_unused]] auto strImpl = [](std::optional<std::string> s) {
   return IdOrString{std::move(s)};
@@ -65,7 +66,7 @@ inline auto strlen = [](std::optional<std::string> s) {
 using StrlenExpression = StringExpressionImpl<1, decltype(strlen)>;
 
 // LCASE
-static auto lowercaseImpl = [](std::optional<std::string> input) -> IdOrString {
+auto lowercaseImpl = [](std::optional<std::string> input) -> IdOrString {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
@@ -75,7 +76,7 @@ static auto lowercaseImpl = [](std::optional<std::string> input) -> IdOrString {
 using LowercaseExpression = StringExpressionImpl<1, decltype(lowercaseImpl)>;
 
 // UCASE
-static auto uppercaseImpl = [](std::optional<std::string> input) -> IdOrString {
+auto uppercaseImpl = [](std::optional<std::string> input) -> IdOrString {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
@@ -84,7 +85,7 @@ static auto uppercaseImpl = [](std::optional<std::string> input) -> IdOrString {
 };
 using UppercaseExpression = StringExpressionImpl<1, decltype(uppercaseImpl)>;
 
-}  // namespace detail
+}  // namespace
 using namespace detail;
 SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child) {
   return std::make_unique<StrExpression>(std::move(child));
