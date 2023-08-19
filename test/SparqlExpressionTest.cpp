@@ -509,7 +509,7 @@ TEST(SparqlExpression, builtInNumericFunctions) {
   checkRound(input, round);
 }
 
-// Test the custom numeric functions implemented so far (log, exp).
+// Test the correctness of the math functions.
 TEST(SparqlExpression, customNumericFunctions) {
   auto nan = std::numeric_limits<double>::quiet_NaN();
   testUnaryExpression(makeLogExpression,
@@ -521,6 +521,15 @@ TEST(SparqlExpression, customNumericFunctions) {
   testUnaryExpression(makeSqrtExpression,
                       std::vector<Id>{B(false), B(true), I(0), D(2), I(-1), U},
                       std::vector<Id>{D(0), D(1), D(0), D(sqrt(2)), D(nan), U});
+  testUnaryExpression(makeSinExpression,
+                      std::vector<Id>{B(false), I(0), D(1), U},
+                      std::vector<Id>{D(0), D(0), D(sin(1)), U});
+  testUnaryExpression(makeCosExpression,
+                      std::vector<Id>{B(false), I(0), D(1), U},
+                      std::vector<Id>{D(1), D(1), D(cos(1)), U});
+  testUnaryExpression(makeTanExpression,
+                      std::vector<Id>{B(false), I(0), D(1), U},
+                      std::vector<Id>{D(0), D(0), D(tan(1)), U});
 }
 
 // ________________________________________________________________________________________
