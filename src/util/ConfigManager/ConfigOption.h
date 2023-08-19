@@ -72,11 +72,12 @@ class ConfigOption {
   bool configurationOptionWasSet_ = false;
 
   /*
-  List of the added validators. Whenever the value of this option is set,
+  List of the added validators. Whenever the values of the options are set,
   they are called afterwards with `verifyWithValidators` to make sure, that
-  the new value is valid.
+  the new values are valid.
+  If the new value isn't valid, it throws an exception.
   */
-  std::vector<std::function<bool(void)>> validators_;
+  std::vector<std::function<void(void)>> validators_;
 
  public:
   // No default constructor.
@@ -302,8 +303,6 @@ class ConfigOption {
 
               if (!std::invoke(validatorFunction, *valuePointer)) {
                 throw std::runtime_error(errorMessage);
-              } else {
-                return true;
               }
             });
           } else {

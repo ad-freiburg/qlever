@@ -54,8 +54,9 @@ class ConfigManager {
   List of the added validators. Whenever the values of the options are set,
   they are called afterwards with `verifyWithValidators` to make sure, that
   the new values are valid.
+  If the new value isn't valid, it throws an exception.
   */
-  std::vector<std::function<bool(void)>> validators_;
+  std::vector<std::function<void(void)>> validators_;
 
  public:
   /*
@@ -419,8 +420,6 @@ class ConfigManager {
               validatorFunction,
               std::invoke(translationFunction, configOptionsToBeChecked)...)) {
         throw std::runtime_error(errorMessage);
-      } else {
-        return true;
       }
     });
   }
