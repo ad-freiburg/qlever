@@ -33,8 +33,8 @@ class Index {
   // statistics (number of triples, distinct number of subjects, etc.) for which
   // the value differs when you also consider the added triples.
   struct NumNormalAndInternal {
-    size_t normal_;
-    size_t internal_;
+    size_t normal_{};
+    size_t internal_{};
     size_t normalAndInternal_() const { return normal_ + internal_; }
     bool operator==(const NumNormalAndInternal&) const = default;
   };

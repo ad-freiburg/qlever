@@ -635,3 +635,33 @@ TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
   testWithParser.template operator()<TurtleParallelParser<Tokenizer>>(false);
   ad_utility::deleteFile(filename);
 }
+
+// _______________________________________________________________________
+TEST(TurtleParserTest, EmptyInput) {
+  std::string filename{"turtleParserEmptyInput.dat"};
+  { auto of = ad_utility::makeOfstream(filename); }
+  auto testWithParser = [&]<typename Parser>(bool useBatchInterface) {
+    Parser parserChild{filename};
+    TurtleParserBase& parser = parserChild;
+
+    std::vector<TurtleTriple> result;
+    if (useBatchInterface) {
+      while (auto batch = parser.getBatch()) {
+        result.insert(result.end(), batch.value().begin(), batch.value().end());
+        parser.printAndResetQueueStatistics();
+      }
+    } else {
+      TurtleTriple next;
+      while (parser.getLine(next)) {
+        result.push_back(next);
+      }
+    }
+    EXPECT_THAT(result, ::testing::ElementsAre());
+  };
+
+  testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(true);
+  testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(false);
+  testWithParser.template operator()<TurtleParallelParser<Tokenizer>>(true);
+  testWithParser.template operator()<TurtleParallelParser<Tokenizer>>(false);
+  ad_utility::deleteFile(filename);
+}
