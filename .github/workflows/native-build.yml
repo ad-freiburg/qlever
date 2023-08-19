@@ -48,6 +48,15 @@ jobs:
 
 
     steps:
+    - name: print java before
+      run: java --version
+    - name: Setup Java
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin' # See 'Supported distributions' for available options
+        java-version: '17'
+    - name: print java after
+      run: java --version
     - uses: actions/checkout@v3
       with:
         submodules: 'recursive'
