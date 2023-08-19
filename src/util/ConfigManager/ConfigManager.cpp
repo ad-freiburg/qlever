@@ -79,41 +79,32 @@ std::string ConfigManager::createJsonPointerString(
 }
 
 // ____________________________________________________________________________
-void ConfigManager::verifyPathToConfigOption(
-    const std::vector<std::string>& pathToOption,
-    std::string_view optionName) const {
+void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
   // We need at least a name in the path.
-  if (pathToOption.empty()) {
+  if (path.empty()) {
     throw std::runtime_error(
-        "The vector 'pathToOption' is empty, which is not allowed. We need at "
-        "least a name for a working path to a configuration option.");
+        "The vector 'path' is empty, which is not allowed. We need at least a "
+        "name for a working path to a configuration option, or manager.");
   }
 
   /*
-  The last entry in the path is the name of the configuration option. If it
-  isn't, something has gone wrong.
-  */
-  AD_CORRECTNESS_CHECK(pathToOption.back() == optionName);
-
-  /*
-  A string must be a valid `NAME` in the short hand. Otherwise, the option can't
+  A string must be a valid `NAME` in the short hand. Otherwise, an option can't
   get accessed with the short hand.
   */
-  if (auto failedKey =
-          std::ranges::find_if_not(pathToOption, isNameInShortHand);
-      failedKey != pathToOption.end()) {
+  if (auto failedKey = std::ranges::find_if_not(path, isNameInShortHand);
+      failedKey != path.end()) {
     /*
     One of the keys failed. `failedKey` is an iterator pointing to the key.
     */
-    throw NotValidShortHandNameException(
-        *failedKey, vectorOfKeysForJsonToString(pathToOption));
+    throw NotValidShortHandNameException(*failedKey,
+                                         vectorOfKeysForJsonToString(path));
   }
 
-  // Is there already a configuration option with the same identifier at the
-  // same location?
-  if (configurationOptions_.contains(createJsonPointerString(pathToOption))) {
+  // Is there already a configuration option with the same identifier at
+  // the same location?
+  if (configurationOptions_.contains(createJsonPointerString(path))) {
     throw ConfigManagerOptionPathAlreadyinUseException(
-        vectorOfKeysForJsonToString(pathToOption), printConfigurationDoc(true));
+        vectorOfKeysForJsonToString(path), printConfigurationDoc(true));
   }
 }
 
@@ -121,7 +112,7 @@ void ConfigManager::verifyPathToConfigOption(
 ConfigOption& ConfigManager::addConfigOption(
     const std::vector<std::string>& pathToOption, ConfigOption&& option) {
   // Is the path valid?
-  verifyPathToConfigOption(pathToOption, option.getIdentifier());
+  verifyPath(pathToOption);
 
   // Add the configuration option and return the inserted elements.
   return *configurationOptions_

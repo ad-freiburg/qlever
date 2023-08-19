@@ -242,15 +242,12 @@ class ConfigManager {
       const std::vector<std::string>& keys);
 
   /*
-  @brief Verifies, that the given path is a valid path for an option, with this
-  name. If not, throws exceptions.
+  @brief Verifies, that the given path is a valid path for an option. If not,
+  throws exceptions.
 
-  @param pathToOption Describes a path in json, that points to the value held by
-  the configuration option.
-  @param optionName The identifier of the `ConfigOption`.
+  @param pathToOption Describes a path in json.
   */
-  void verifyPathToConfigOption(const std::vector<std::string>& pathToOption,
-                                std::string_view optionName) const;
+  void verifyPath(const std::vector<std::string>& path) const;
 
   /*
   @brief Adds a configuration option, that can be accessed with the given path.
@@ -304,14 +301,7 @@ class ConfigManager {
       OptionType* variableToPutValueOfTheOptionIn,
       std::optional<OptionType> defaultValue =
           std::optional<OptionType>(std::nullopt)) {
-    /*
-    We need a non-empty path to construct a ConfigOption object, the `verify...`
-    function always throws an exception for this case. No need to duplicate the
-    error code.
-    */
-    if (pathToOption.empty()) {
-      verifyPathToConfigOption(pathToOption, "");
-    }
+    verifyPath(pathToOption);
 
     /*
     The `unqiue_ptr` was created, by creating a new `ConfigOption` via it's
