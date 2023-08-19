@@ -649,4 +649,65 @@ TEST(ConfigManagerTest, AddValidatorException) {
 
   doForTypeInConfigOptionValueType(doValidatorParameterNotInConfigManagerTest);
 }
+
+TEST(ConfigManagerTest, AddOptionValidator) {
+  // Generate a lambda, that requires all the given configuration option to have
+  // the wanted string as the representation of their value.
+  auto generateValueAsStringComparison = [](std::string_view valueStringRepresentation) {
+    return [wantedString = std::string(valueStringRepresentation)](const auto&... options) {
+      return ((options.getValueAsString() == wantedString) && ...);
+    };
+  };
+
+  // Variables for configuration options.
+  int firstVar;
+  int secondVar;
+
+  ConfigManager managerWithNoSubManager;
+  decltype(auto) managerWithNoSubManagerOption1 =
+      managerWithNoSubManager.addOption("someOption1", "", &firstVar);
+  managerWithNoSubManager.addOptionValidator(generateValueAsStringComparison("10"), "someOption1",
+                                             managerWithNoSubManagerOption1);
+  checkValidator(managerWithNoSubManager, nlohmann::json::parse(R"--({"someOption1" : 10})--"),
+                 nlohmann::json::parse(R"--({"someOption1" : 1})--"), "someOption1");
+  decltype(auto) managerWithNoSubManagerOption2 =
+      managerWithNoSubManager.addOption("someOption2", "", &secondVar);
+  managerWithNoSubManager.addOptionValidator(generateValueAsStringComparison("10"), "Both options",
+                                             managerWithNoSubManagerOption1,
+                                             managerWithNoSubManagerOption2);
+  checkValidator(managerWithNoSubManager,
+                 nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 10})--"),
+                 nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 1})--"),
+                 "Both options");
+}
+
+TEST(ConfigManagerTest, AddOptionValidatorException) {
+  // Variable for the configuration options.
+  int var;
+
+  // Dummy validator function.
+  auto validatorDummyFunction = [](const ConfigOption&) { return true; };
+
+  /*
+  @brief Check, if a call to the `addOptionValidator` function behaves as
+  wanted.
+  */
+  auto checkAddOptionValidatorBehavior = [&validatorDummyFunction]<typename T>(
+                                             ConfigManager& m, ConfigOptionProxy<T> validOption,
+                                             ConfigOptionProxy<T> notValidOption) {
+    ASSERT_NO_THROW(m.addOptionValidator(validatorDummyFunction, "", validOption));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        m.addOptionValidator(validatorDummyFunction,
+                             notValidOption.getConfigOption().getIdentifier(), notValidOption),
+        ::testing::ContainsRegex(notValidOption.getConfigOption().getIdentifier()));
+  };
+
+  // An outside configuration option.
+  ConfigOption outsideOption("outside", "", &var);
+  ConfigOptionProxy<int> outsideOptionProxy(outsideOption);
+
+  ConfigManager mNoSub;
+  decltype(auto) mNoSubOption = mNoSub.addOption("someOption", "", &var);
+  checkAddOptionValidatorBehavior(mNoSub, mNoSubOption, outsideOptionProxy);
+}
 }  // namespace ad_utility

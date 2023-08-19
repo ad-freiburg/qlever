@@ -228,6 +228,39 @@ class ConfigManager {
             validatorParameter)...);
   }
 
+  /*
+  @brief Add a function to the configuration manager for verifying, that the
+  given configuration options are valid. Will always be called after parsing.
+
+  @tparam ValidatorParameterTypes Must be instances of `ConfigOptionProxy`. Can
+  be left up to type deduction.
+
+  @param validatorFunction Checks, if the given configuration options are valid.
+  Should return true, if they are valid.
+  @param errorMessage A `std::runtime_error` with this as an error message will
+  get thrown, if the `validatorFunction` returns false.
+  @param validatorParameter Proxies for the configuration options, who will be
+  passed to the validator function as function arguments. Will keep the same
+  order.
+  */
+  template <isInstantiation<ConfigOptionProxy>... ValidatorParameterTypes>
+  void addOptionValidator(
+      Validator<decltype(std::declval<ValidatorParameterTypes>()
+                             .getConfigOption())...> auto validatorFunction,
+      std::string_view errorMessage,
+      ValidatorParameterTypes... validatorParameter)
+      requires(sizeof...(validatorParameter) > 0) {
+    addValidatorImpl(
+        "addOptionValidator",
+        []<typename T>(ConstConfigOptionProxy<T> opt) {
+          return opt.getConfigOption();
+        },
+        validatorFunction, errorMessage,
+        static_cast<
+            ConstConfigOptionProxy<typename ValidatorParameterTypes::Type>>(
+            validatorParameter)...);
+  }
+
  private:
   FRIEND_TEST(ConfigManagerTest, ParseConfig);
   FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
