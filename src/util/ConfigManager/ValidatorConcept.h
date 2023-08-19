@@ -13,10 +13,8 @@ namespace ad_utility {
 // bool.
 template <typename Func, typename... ParameterTypes>
 concept Validator =
-    std::regular_invocable<Func, const std::decay_t<ParameterTypes>&...> &&
-    std::same_as<
-        std::invoke_result_t<Func, const std::decay_t<ParameterTypes>&...>,
-        bool>;
+    std::regular_invocable<Func, const ParameterTypes&...> &&
+    std::same_as<std::invoke_result_t<Func, const ParameterTypes&...>, bool>;
 
 /*
 The validator has only a single parameter and this parameter is contained in
