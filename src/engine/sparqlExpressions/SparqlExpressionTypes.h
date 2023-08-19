@@ -70,9 +70,8 @@ class IdOrString : public IdOrStringBase,
   }
 };
 
-inline void PrintTo(const IdOrString& var,
-                    std::ostream* os) {  // requires requires{(..., (*os <<
-                                         // std::declval<Ts>()));} {
+// Print an `IdOrString` for googletest.
+inline void PrintTo(const IdOrString& var, std::ostream* os) {
   std::visit(
       [&os](const auto& s) {
         auto& stream = *os;

@@ -73,23 +73,16 @@ inline auto strlen = [](std::optional<std::string> s) {
 using StrlenExpression = StringExpressionImpl<1, decltype(strlen)>;
 
 // SUBSTR
-inline auto substr = [](std::optional<std::string> s, NumericValue start,
-                        NumericValue length) -> IdOrString {
-  if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
-      std::holds_alternative<NotNumeric>(length)) {
-    return Id::makeUndefined();
-  }
-
-  auto isNan = [](NumericValue n) {
+class SubstrImpl {
+ private:
+  static bool isNan(NumericValue n) {
     auto ptr = std::get_if<double>(&n);
     return ptr != nullptr && std::isnan(*ptr);
   };
 
-  if (isNan(start) || isNan(length)) {
-    return std::string{};
-  }
-
-  auto roundImpl = []<typename T>(const T& value) -> int64_t {
+  // Round an integer or floating point to the nearest integer according to the
+  // SPARQL standard. This means that -1.5 is rounded to -1.
+  static constexpr auto round = []<typename T>(const T& value) -> int64_t {
     if constexpr (std::floating_point<T>) {
       if (value < 0) {
         return static_cast<int64_t>(-std::round(-value));
@@ -103,32 +96,50 @@ inline auto substr = [](std::optional<std::string> s, NumericValue start,
     }
   };
 
-  int64_t startInt = std::visit(roundImpl, start) - 1;
-  int64_t lengthInt = std::visit(roundImpl, length);
+ public:
+  IdOrString operator()(std::optional<std::string> s, NumericValue start,
+                        NumericValue length) const {
+    if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
+        std::holds_alternative<NotNumeric>(length)) {
+      return Id::makeUndefined();
+    }
 
-  // If the starting position is negative, we have to correct the length.
-  if (startInt < 0) {
-    lengthInt += startInt;
+    if (isNan(start) || isNan(length)) {
+      return std::string{};
+    }
+
+    // In SPARQL indices are 1-based, but the implemenetation we use is 0 based,
+    // hence the `- 1`.
+    int64_t startInt = std::visit(round, start) - 1;
+    int64_t lengthInt = std::visit(round, length);
+
+    // If the starting position is negative, we have to correct the length.
+    if (startInt < 0) {
+      lengthInt += startInt;
+    }
+
+    const auto& str = s.value();
+    // Clamp the number such that it is in `[0, str.size()]`. That way we end up
+    // with valid arguments for the `getUTF8Substring` method below for both
+    // starting position and length since all the other corner cases have been
+    // dealt with above.
+    auto clamp = [sz = str.size()](int64_t n) -> std::size_t {
+      if (n < 0) {
+        return 0;
+      }
+      if (static_cast<size_t>(n) > sz) {
+        return sz;
+      }
+      return static_cast<size_t>(n);
+    };
+
+    return std::string{
+        ad_utility::getUTF8Substring(str, clamp(startInt), clamp(lengthInt))};
   }
-
-  const auto& str = s.value();
-  auto clamp = [sz = str.size()](int64_t n) -> std::size_t {
-    if (n < 0) {
-      return 0;
-    }
-    if (static_cast<size_t>(n) > sz) {
-      return sz;
-    }
-    return static_cast<size_t>(n);
-  };
-
-  return std::string{
-      ad_utility::getUTF8Substring(str, clamp(startInt), clamp(lengthInt))};
 };
 
 using SubstrExpression =
-    StringExpressionImpl<3, decltype(substr), NumericValueGetter,
-                         NumericValueGetter>;
+    StringExpressionImpl<3, SubstrImpl, NumericValueGetter, NumericValueGetter>;
 
 }  // namespace detail
 using namespace detail;
