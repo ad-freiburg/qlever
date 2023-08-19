@@ -143,7 +143,7 @@ std::string getLowercaseUtf8(std::string_view s) {
 }
 
 // Get the uppercase value. For details see `getLowercaseUtf8` above
-std::string getUppercaseUtf8(std::string_view s) {
+inline std::string getUppercaseUtf8(std::string_view s) {
   std::string result;
   icu::StringByteSink<std::string> sink(&result);
   UErrorCode err = U_ZERO_ERROR;
