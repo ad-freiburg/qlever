@@ -1431,10 +1431,10 @@ TEST(SparqlParser, SubstringExpression) {
   // accordingly.
   expectBuiltInCall(
       "SUBSTR(?x, 7)",
-      matchNaryWithChildrenMatchers(
-          &makeSubstrExpression, variableExpressionMatcher(V{"?x"}),
-          idExpressionMatcher(IntId(7)),
-          idExpressionMatcher(IntId(576460752303423487))));
+      matchNaryWithChildrenMatchers(&makeSubstrExpression,
+                                    variableExpressionMatcher(V{"?x"}),
+                                    idExpressionMatcher(IntId(7)),
+                                    idExpressionMatcher(IntId(Id::maxInt))));
   // Too few arguments
   expectBuiltInCallFails("SUBSTR(?x)");
   // Too many arguments
