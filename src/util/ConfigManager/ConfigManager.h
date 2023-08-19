@@ -206,16 +206,16 @@ class ConfigManager {
   options are valid. Should return true, if they are valid.
   @param errorMessage A `std::runtime_error` with this as an error message will
   get thrown, if the `validatorFunction` returns false.
-  @param validatorParameter Proxies for the configuration options, whos values
-  will be passed to the validator function as function arguments. Will keep the
-  same order.
+  @param configOptionsToBeChecked Proxies for the configuration options, whos
+  values will be passed to the validator function as function arguments. Will
+  keep the same order.
   */
   template <typename... ValidatorParameterTypes>
   void addValidator(
       Validator<ValidatorParameterTypes...> auto validatorFunction,
       std::string_view errorMessage,
-      ConfigOptionProxy<ValidatorParameterTypes>... validatorParameter)
-      requires(sizeof...(validatorParameter) > 0) {
+      ConfigOptionProxy<ValidatorParameterTypes>... configOptionsToBeChecked)
+      requires(sizeof...(configOptionsToBeChecked) > 0) {
     addValidatorImpl(
         "addValidator",
         []<typename T>(ConstConfigOptionProxy<T> opt) {
@@ -223,7 +223,7 @@ class ConfigManager {
         },
         validatorFunction, errorMessage,
         static_cast<ConstConfigOptionProxy<ValidatorParameterTypes>>(
-            validatorParameter)...);
+            configOptionsToBeChecked)...);
   }
 
   /*
@@ -237,17 +237,17 @@ class ConfigManager {
   Should return true, if they are valid.
   @param errorMessage A `std::runtime_error` with this as an error message will
   get thrown, if the `validatorFunction` returns false.
-  @param validatorParameter Proxies for the configuration options, who will be
-  passed to the validator function as function arguments. Will keep the same
-  order.
+  @param configOptionsToBeChecked Proxies for the configuration options, who
+  will be passed to the validator function as function arguments. Will keep the
+  same order.
   */
   template <isInstantiation<ConfigOptionProxy>... ValidatorParameterTypes>
   void addOptionValidator(
       Validator<decltype(std::declval<ValidatorParameterTypes>()
                              .getConfigOption())...> auto validatorFunction,
       std::string_view errorMessage,
-      ValidatorParameterTypes... validatorParameter)
-      requires(sizeof...(validatorParameter) > 0) {
+      ValidatorParameterTypes... configOptionsToBeChecked)
+      requires(sizeof...(configOptionsToBeChecked) > 0) {
     addValidatorImpl(
         "addOptionValidator",
         []<typename T>(ConstConfigOptionProxy<T> opt) {
@@ -256,7 +256,7 @@ class ConfigManager {
         validatorFunction, errorMessage,
         static_cast<
             ConstConfigOptionProxy<typename ValidatorParameterTypes::Type>>(
-            validatorParameter)...);
+            configOptionsToBeChecked)...);
   }
 
  private:
@@ -376,8 +376,8 @@ class ConfigManager {
   options were all set at run time, or contain numbers bigger than 10.
   @param errorMessage A `std::runtime_error` with this as an error message will
   get thrown, if the `validatorFunction` returns false.
-  @param parameterProxy Proxies for the configuration options, who will be
-  passed to the validator function as function arguments, after being
+  @param configOptionsToBeChecked Proxies for the configuration options, who
+  will be passed to the validator function as function arguments, after being
   transformed. Will keep the same order.
   */
   template <typename TranslationFunction, typename ValidatorFunction,
@@ -392,7 +392,7 @@ class ConfigManager {
                         TranslationFunction translationFunction,
                         ValidatorFunction validatorFunction,
                         std::string_view errorMessage,
-                        const ValidatorParameter... parameterProxy) {
+                        const ValidatorParameter... configOptionsToBeChecked) {
     // Check, if we contain all the configuration options, that were given us.
     auto checkIfContainOption = [this, &addValidatorFunctionName]<typename T>(
                                     ConstConfigOptionProxy<T> opt) {
@@ -406,7 +406,7 @@ class ConfigManager {
             "managers."));
       }
     };
-    (checkIfContainOption(parameterProxy), ...);
+    (checkIfContainOption(configOptionsToBeChecked), ...);
 
     /*
     Add a function wrapper to our list of validators, that calls the
@@ -415,9 +415,10 @@ class ConfigManager {
     */
     validators_.emplace_back([translationFunction, validatorFunction,
                               errorMessage = std::string(errorMessage),
-                              parameterProxy...]() {
-      if (!std::invoke(validatorFunction,
-                       std::invoke(translationFunction, parameterProxy)...)) {
+                              configOptionsToBeChecked...]() {
+      if (!std::invoke(
+              validatorFunction,
+              std::invoke(translationFunction, configOptionsToBeChecked)...)) {
         throw std::runtime_error(errorMessage);
       } else {
         return true;
