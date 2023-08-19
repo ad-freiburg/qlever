@@ -215,9 +215,7 @@ class ConfigManager {
       Validator<ValidatorParameterTypes...> auto validatorFunction,
       std::string_view errorMessage,
       ConfigOptionProxy<ValidatorParameterTypes>... validatorParameter)
-      requires(sizeof...(validatorParameter) > 0 &&
-               sizeof...(ValidatorParameterTypes) ==
-                   sizeof...(validatorParameter)) {
+      requires(sizeof...(validatorParameter) > 0) {
     addValidatorImpl(
         "addValidator",
         []<typename T>(ConstConfigOptionProxy<T> opt) {
