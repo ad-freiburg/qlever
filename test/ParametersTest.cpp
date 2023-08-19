@@ -60,3 +60,16 @@ TEST(Parameters, MemorySizeParameter) {
   m.setFromString("6 TB");
   compareWithMemorySize(m, 6_TB);
 }
+
+// Basic test, if the concept works.
+TEST(Parameters, ParameterConcept) {
+  // Test the parameter short names.
+  static_assert(isParameter<Float<"Float">>);
+  static_assert(isParameter<Double<"Double">>);
+  static_assert(isParameter<SizeT<"SizeT">>);
+  static_assert(isParameter<MemorySizeParameter<"MemorySizeParameter">>);
+
+  // Test some other random types.
+  static_assert(!isParameter<std::string>);
+  static_assert(!isParameter<ParameterName>);
+}

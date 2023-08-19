@@ -121,6 +121,21 @@ struct Parameter : public ParameterBase {
   }
 };
 
+// Concept for `Parameter`.
+namespace detail::parameterConceptImpl {
+template <typename T>
+struct ParameterConceptImpl : std::false_type {};
+
+template <ParameterValueType Type, ParameterFromStringType<Type> FromString,
+          ParameterToStringType<Type> ToString, ParameterName Name>
+struct ParameterConceptImpl<Parameter<Type, FromString, ToString, Name>>
+    : std::true_type {};
+}  // namespace detail::parameterConceptImpl
+
+template <typename T>
+concept isParameter =
+    detail::parameterConceptImpl::ParameterConceptImpl<T>::value;
+
 namespace detail::parameterShortNames {
 
 // TODO<joka921> Replace these by versions that actually parse the whole
@@ -150,6 +165,7 @@ using Double = Parameter<double, dbl, toString, Name>;
 template <ParameterName Name>
 using SizeT = Parameter<size_t, szt, toString, Name>;
 
+// TODO This type doesn't compile, because it doesn't fulfill all concepts.
 template <ParameterName Name>
 using String = Parameter<std::string, std::identity, std::identity, Name>;
 
@@ -170,7 +186,7 @@ using MemorySizeParameter =
 /// "increase the cache size by 20%") nor an atomic update of multiple
 /// parameters at the same time. If needed, this functionality could be added
 /// to the current implementation.
-template <typename... ParameterTypes>
+template <isParameter... ParameterTypes>
 class Parameters {
  private:
   using Tuple = std::tuple<ad_utility::Synchronized<ParameterTypes>...>;
