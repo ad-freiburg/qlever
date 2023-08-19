@@ -64,6 +64,26 @@ inline auto strlen = [](std::optional<std::string> s) {
 };
 using StrlenExpression = StringExpressionImpl<1, decltype(strlen)>;
 
+// LCASE
+static auto lowercaseImpl = [](std::optional<std::string> input) -> IdOrString {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    return ad_utility::getLowercaseUtf8(input.value());
+  }
+};
+using LowercaseExpression = StringExpressionImpl<1, decltype(lowercaseImpl)>;
+
+// UCASE
+static auto uppercaseImpl = [](std::optional<std::string> input) -> IdOrString {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    return ad_utility::getUppercaseUtf8(input.value());
+  }
+};
+using UppercaseExpression = StringExpressionImpl<1, decltype(uppercaseImpl)>;
+
 }  // namespace detail
 using namespace detail;
 SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child) {
@@ -71,5 +91,13 @@ SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child) {
 }
 SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child) {
   return std::make_unique<StrlenExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeLowercaseExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<LowercaseExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeUppercaseExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<UppercaseExpression>(std::move(child));
 }
 }  // namespace sparqlExpression

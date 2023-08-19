@@ -15,13 +15,18 @@
 
 using ad_utility::constantTimeEquals;
 using ad_utility::getLowercaseUtf8;
+using ad_utility::getUppercaseUtf8;
 using ad_utility::getUTF8Substring;
 
 TEST(StringUtilsTest, getLowercaseUtf8) {
-  setlocale(LC_CTYPE, "");
-  ASSERT_EQ("schindler's list", getLowercaseUtf8("Schindler's List"));
-  ASSERT_EQ("#+-_foo__bar++", getLowercaseUtf8("#+-_foo__Bar++"));
-  ASSERT_EQ("fôéßaéé", getLowercaseUtf8("FÔÉßaéÉ"));
+  EXPECT_EQ("schindler's list", getLowercaseUtf8("Schindler's List"));
+  EXPECT_EQ("#+-_foo__bar++", getLowercaseUtf8("#+-_foo__Bar++"));
+  EXPECT_EQ("fôéßaéé", getLowercaseUtf8("FÔÉßaéÉ"));
+}
+TEST(StringUtilsTest, getUppercaseUtf8) {
+  EXPECT_EQ("SCHINDLER'S LIST", getUppercaseUtf8("Schindler's List"));
+  EXPECT_EQ("#+-_BIMM__BAMM++", getUppercaseUtf8("#+-_bImM__baMm++"));
+  EXPECT_EQ("FÔÉSSAÉÉ", getUppercaseUtf8("FôéßaÉé"));
 }
 
 TEST(StringUtilsTest, getUTF8Substring) {
