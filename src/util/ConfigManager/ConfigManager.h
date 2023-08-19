@@ -28,6 +28,7 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
+#include "util/StringUtils.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
@@ -402,11 +403,19 @@ class ConfigManager {
             ": The given configuration "
             "option '",
             opt.getConfigOption().getIdentifier(),
-            "' is not contained in the configuration manager, or its sub "
-            "managers."));
+            "' is not contained in the configuration manager."));
       }
     };
     (checkIfContainOption(configOptionsToBeChecked), ...);
+
+    // Create the expanded error message.
+    const std::array<std::string, sizeof...(ValidatorParameter)> optionNames{
+        absl::StrCat("'",
+                     configOptionsToBeChecked.getConfigOption().getIdentifier(),
+                     "'")...};
+    std::string expandedErrorMessage =
+        absl::StrCat("Validity check of configuration options ",
+                     lazyStrJoin(optionNames, ", "), " failed: ", errorMessage);
 
     /*
     Add a function wrapper to our list of validators, that calls the
@@ -414,7 +423,7 @@ class ConfigManager {
     `validatorFunction` returns false.
     */
     validators_.emplace_back([translationFunction, validatorFunction,
-                              errorMessage = std::string(errorMessage),
+                              errorMessage = std::move(expandedErrorMessage),
                               configOptionsToBeChecked...]() {
       if (!std::invoke(
               validatorFunction,

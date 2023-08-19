@@ -491,7 +491,7 @@ TEST(ConfigOptionTest, AddValidatorExceptions) {
         // this a bit more complicated.
         ASSERT_NO_THROW(option.addValidator(validatorFunction, validatorName));
       } else {
-        // Wrong type should throw an erro.
+        // Wrong type should throw an error.
         AD_EXPECT_THROW_WITH_MESSAGE(
             option.addValidator(validatorFunction, validatorName),
             ::testing::ContainsRegex(

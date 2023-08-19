@@ -296,15 +296,17 @@ class ConfigOption {
             `validatorFunction` with the value and throws an exception, if the
             `validatorFunction` returns false.
             */
-            validators_.emplace_back([validatorFunction,
-                                      valuePointer = data.variablePointer_,
-                                      errorMessage]() mutable {
-              AD_CORRECTNESS_CHECK(valuePointer != nullptr);
+            validators_.emplace_back(
+                [validatorFunction, valuePointer = data.variablePointer_,
+                 expandedErrorMessage = absl::StrCat(
+                     "Validity check of configuration option '",
+                     getIdentifier(), "' failed: ", errorMessage)]() mutable {
+                  AD_CORRECTNESS_CHECK(valuePointer != nullptr);
 
-              if (!std::invoke(validatorFunction, *valuePointer)) {
-                throw std::runtime_error(errorMessage);
-              }
-            });
+                  if (!std::invoke(validatorFunction, *valuePointer)) {
+                    throw std::runtime_error(expandedErrorMessage);
+                  }
+                });
           } else {
             throw std::runtime_error(absl::StrCat(
                 "Adding of validator to configuration option '", identifier_,
