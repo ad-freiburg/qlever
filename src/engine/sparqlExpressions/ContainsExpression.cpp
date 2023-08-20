@@ -7,7 +7,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/ValueIdComparators.h"
 #include "re2/re2.h"
-#include <Rtree/Rtree.h>
+#include <util/Rtree.h>
 
 using namespace std::literals;
 
@@ -127,7 +127,7 @@ namespace sparqlExpression {
             multiBoxGeo treeResults = rtree.SearchTree(boundingBox_->value, "./rtree_build");
 
             for (rTreeValue item : treeResults) {
-                long long id = item.second;
+                long long id = item.id;
                 resultIds.insert(id);
             }
         }

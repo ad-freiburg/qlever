@@ -239,6 +239,13 @@ template void IndexImpl::createFromFile<TurtleParserAuto>(
 template <class Parser>
 IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     const string& filename, size_t linesPerPartial) {
+  try {
+    Rtree rtree = Rtree(1300000000);
+    rtree.BuildTree("vocab_raw", 16, "./rtree_build");
+    LOG(INFO) << "Finished building the Rtree" << std::endl;
+  } catch (const std::exception &e) {
+    LOG(INFO) << e.what() << std::endl;
+  }
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
   auto parser = std::make_shared<Parser>(filename);
@@ -400,17 +407,27 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto wordWriter =
         vocab_.makeUncompressingWordWriter(onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
 
-    auto internalVocabularyAction = [&wordWriter](const auto& word, const auto& index) {
-      wordWriter.push(word.data(), word.size());
-      Rtree::ConvertWordToRtreeEntry(word, index, "./ConversionTest");
-    };
+    std::ofstream convertOfs = std::ofstream(onDiskBase_ + ".vocabulary.boundingbox.tmp", std::ios::binary);
 
-    auto externalVocabularyAction = [](const auto& word, const auto& index) {
-      Rtree::ConvertWordToRtreeEntry(word, index, "./ConversionTest");
+    auto internalVocabularyAction = [&wordWriter, &convertOfs](const auto& word, const auto& index) {
+      wordWriter.push(word.data(), word.size());
+      std::optional<boxGeo> boundingBox = Rtree::ConvertWordToRtreeEntry(word);
+      if (boundingBox) {
+        Rtree::SaveEntry(boundingBox.value(), index, convertOfs);
+      }
+    };
+    auto externalVocabularyAction = [&convertOfs](const auto& word, const auto& index) {
+      std::optional<boxGeo> boundingBox = Rtree::ConvertWordToRtreeEntry(word);
+      if (boundingBox) {
+        Rtree::SaveEntry(boundingBox.value(), index, convertOfs);
+      }
     };
 
     VocabularyMerger::VocabularyMetaData result = v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
                              internalVocabularyAction, externalVocabularyAction);
+
+    convertOfs.close();
+
     return result;
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
@@ -421,11 +438,14 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
             << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
             << std::endl;
 
-  LOG(INFO) << "Loading the Rtree entries..." << std::endl;
-  Rtree rtree = Rtree();
-  multiBoxGeo entries = rtree.LoadEntries("./ConversionTest");
   LOG(INFO) << "Building the Rtree..." << std::endl;
-  rtree.BuildTree(entries, 16, "./rtree_build");
+  try {
+    Rtree rtree = Rtree(1300000000);
+    rtree.BuildTree(onDiskBase_ + ".vocabulary", 16, "./rtree_build");
+    LOG(INFO) << "Finished building the Rtree" << std::endl;
+  } catch (const std::exception &e) {
+    LOG(INFO) << e.what() << std::endl;
+  }
 
   res.idTriples = std::move(idTriples);
   res.actualPartialSizes = std::move(actualPartialSizes);
@@ -691,8 +711,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
         patterns_, hasPattern_);
   }
 
-  // Load the Rtree
-  rtree_ = Rtree();
+  // Load the Rtree TODO
 }
 
 // _____________________________________________________________________________

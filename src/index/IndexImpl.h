@@ -31,7 +31,7 @@
 #include <util/MmapVector.h>
 #include <util/Timer.h>
 #include <util/json.h>
-#include <Rtree/Rtree.h>
+#include <util/Rtree.h>
 
 #include <array>
 #include <fstream>
@@ -120,7 +120,7 @@ class IndexImpl {
   size_t totalVocabularySize_ = 0;
   bool vocabPrefixCompressed_ = true;
   Index::TextVocab textVocab_;
-  Rtree rtree_;
+  Rtree rtree_ = Rtree(4000000000);
 
   TextMetaData textMeta_;
   DocsDB docsDB_;

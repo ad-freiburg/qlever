@@ -111,7 +111,7 @@ endif()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.74 COMPONENTS iostreams program_options REQUIRED)
+find_package(Boost 1.76 COMPONENTS iostreams serialization program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 
@@ -129,7 +129,7 @@ find_package(OpenSSL REQUIRED)
 # `target_link_libraries` that additionally links against the common
 # libraries.
 function (qlever_target_link_libraries target)
-    target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings rtree)
+    target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings)
 endfunction()
 
 
@@ -207,12 +207,6 @@ if (ENABLE_EXPENSIVE_CHECKS)
     message(STATUS "Enabling checks that potentially have a significant runtime overhead")
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
 endif()
-
-###############################
-# RTREE
-###############################
-add_subdirectory(third_party/rtree)
-include_directories(SYSTEM third_party/rtree/)
 
 ################################
 # STXXL

@@ -16,7 +16,7 @@
 #include "index/StringSortComparator.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
-#include <Rtree/Rtree.h>
+#include <util/Rtree.h>
 
 // Forward declarations.
 class IdTable;
