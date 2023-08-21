@@ -123,6 +123,22 @@ string getUppercase(const string& orig) {
   return retVal;
 }
 
+namespace detail {
+// The common implementation of `getLowercaseUtf8` and `getUppercaseUtf8` (for
+// details see below).
+std::string getCaseUtf8Impl(std::string_view s, auto impl) {
+  std::string result;
+  icu::StringByteSink<std::string> sink(&result);
+  UErrorCode err = U_ZERO_ERROR;
+  impl("", 0, icu::StringPiece{s.data(), static_cast<int32_t>(s.size())}, sink,
+       nullptr, err);
+  if (U_FAILURE(err)) {
+    throw std::runtime_error(u_errorName(err));
+  }
+  return result;
+}
+}  // namespace detail
+
 // ____________________________________________________________________________
 /*
  * @brief convert a UTF-8 String to lowercase according to the held locale
@@ -130,30 +146,16 @@ string getUppercase(const string& orig) {
  * @return The lowercase version of s, also encoded as UTF-8
  */
 std::string getLowercaseUtf8(std::string_view s) {
-  std::string result;
-  icu::StringByteSink<std::string> sink(&result);
-  UErrorCode err = U_ZERO_ERROR;
-  icu::CaseMap::utf8ToLower(
-      "", 0, icu::StringPiece{s.data(), static_cast<int32_t>(s.size())}, sink,
-      nullptr, err);
-  if (U_FAILURE(err)) {
-    throw std::runtime_error(u_errorName(err));
-  }
-  return result;
+  return detail::getCaseUtf8Impl(s, [](auto&&... args) {
+    return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
+  });
 }
 
 // Get the uppercase value. For details see `getLowercaseUtf8` above
 inline std::string getUppercaseUtf8(std::string_view s) {
-  std::string result;
-  icu::StringByteSink<std::string> sink(&result);
-  UErrorCode err = U_ZERO_ERROR;
-  icu::CaseMap::utf8ToUpper(
-      "", 0, icu::StringPiece{s.data(), static_cast<int32_t>(s.size())}, sink,
-      nullptr, err);
-  if (U_FAILURE(err)) {
-    throw std::runtime_error(u_errorName(err));
-  }
-  return result;
+  return detail::getCaseUtf8Impl(s, [](auto&&... args) {
+    return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
+  });
 }
 
 /**
