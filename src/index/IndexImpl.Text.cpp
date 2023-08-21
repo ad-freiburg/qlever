@@ -4,8 +4,6 @@
 //          Johannes Kalmbach <johannes.kalmbach@gmail.com>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "index/IndexImpl.h"
-
 #include <absl/strings/str_split.h>
 
 #include <algorithm>
@@ -16,6 +14,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "index/FTSAlgorithms.h"
+#include "index/IndexImpl.h"
 #include "parser/ContextFileParser.h"
 #include "util/Conversions.h"
 #include "util/Simple8bCode.h"
@@ -122,7 +121,7 @@ void IndexImpl::addTextFromContextFile(const string& contextFile,
   v.reserve(nofLines);
   processWordsForInvertedLists(contextFile, addWordsFromLiterals, v);
   LOG(DEBUG) << "Sorting text index, #elements = " << v.size() << std::endl;
-  stxxl::sort(begin(v), end(v), SortText(), stxxlMemoryInBytes() / 3);
+  stxxl::sort(begin(v), end(v), SortText(), stxxlMemory().getBytes() / 3);
   LOG(DEBUG) << "Sort done" << std::endl;
   createTextIndex(indexFilename, v);
   openTextFileHandle();

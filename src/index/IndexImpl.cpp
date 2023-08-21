@@ -4,8 +4,6 @@
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./IndexImpl.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -13,6 +11,7 @@
 #include <optional>
 #include <unordered_map>
 
+#include "./IndexImpl.h"
 #include "CompilationInfo.h"
 #include "absl/strings/str_join.h"
 #include "index/IndexFormatVersion.h"
@@ -168,7 +167,7 @@ void IndexImpl::createFromFile(const string& filename) {
     numTriplesNormal += !std::ranges::any_of(triple, isInternalId);
   };
 
-  StxxlSorter<SortBySPO> spoSorter{stxxlMemoryInBytes() / 5};
+  StxxlSorter<SortBySPO> spoSorter{stxxlMemory().getBytes() / 5};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
   auto uniqueSorter = ad_utility::uniqueView(psoSorter.sortedView());
@@ -184,7 +183,7 @@ void IndexImpl::createFromFile(const string& filename) {
 
   if (loadAllPermutations_) {
     // After the SPO permutation, create patterns if so desired.
-    StxxlSorter<SortByOSP> ospSorter{stxxlMemoryInBytes() / 5};
+    StxxlSorter<SortByOSP> ospSorter{stxxlMemory().getBytes() / 5};
     size_t numSubjectsNormal = 0;
     auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
     if (usePatterns_) {
@@ -425,7 +424,7 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
 
   // Iterate over all partial vocabularies.
   TripleVec::bufreader_type reader(data);
-  auto resultPtr = std::make_unique<PsoSorter>(stxxlMemoryInBytes() / 5);
+  auto resultPtr = std::make_unique<PsoSorter>(stxxlMemory().getBytes() / 5);
   auto& result = *resultPtr;
   size_t i = 0;
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();

@@ -9,6 +9,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
+#include "util/MemorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
 // `QueryExecutionContext` that store a small example knowledge graph. Those can
@@ -21,7 +22,7 @@ namespace ad_utility::testing {
 inline Index makeIndexWithTestSettings() {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
-  index.stxxlMemoryInBytes() = 1024ul * 1024ul * 50;
+  index.stxxlMemory() = MemorySize::bytes(1024ul * 1024ul * 50ul);
   return index;
 }
 
