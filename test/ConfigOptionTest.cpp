@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "../test/util/ConfigOptionHelpers.h"
-#include "../test/util/ValidatorFunctionHelpers.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"

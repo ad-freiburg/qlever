@@ -18,7 +18,6 @@
 #include "gtest/gtest_prod.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigUtil.h"
-#include "util/ConfigManager/ValidatorConcept.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"

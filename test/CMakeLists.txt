@@ -326,8 +326,6 @@ addLinkAndDiscoverTest(ConfigManagerTest configManager)
 
 addLinkAndDiscoverTest(ConfigOptionTest configManager)
 
-addLinkAndDiscoverTest(ValidatorConceptTest)
-
 addLinkAndDiscoverTest(ConfigOptionProxyTest configManager)
 
 addLinkAndDiscoverTest(ConfigUtilTest configManager)

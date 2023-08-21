@@ -35,6 +35,18 @@
 namespace ad_utility {
 
 /*
+A validator function is any invocable object, who takes the given parameter
+types, in the same order and transformed to `const type&`, and returns a
+bool.
+
+This concept is used for `ConfigManager::addValidator`.
+*/
+template <typename Func, typename... ParameterTypes>
+concept Validator =
+    std::regular_invocable<Func, const ParameterTypes&...> &&
+    std::same_as<std::invoke_result_t<Func, const ParameterTypes&...>, bool>;
+
+/*
 Manages a bunch of `ConfigOption`s.
 */
 class ConfigManager {
