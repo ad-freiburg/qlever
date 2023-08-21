@@ -830,11 +830,6 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
     }
     this->prefixMap_ = std::move(declarationParser.getPrefixMap());
     auto remainder = declarationParser.getUnparsedRemainder();
-    if (remainder.empty()) {
-      declarationParser.raiseManually(
-          "The prologue (prefix/base declarations) seems to be longer than the "
-          "parser's block size. This should never happen, please report this");
-    }
     remainingBatchFromInitialization_.clear();
     remainingBatchFromInitialization_.reserve(remainder.size());
     std::copy(remainder.begin(), remainder.end(),

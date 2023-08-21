@@ -5,6 +5,7 @@
 #include <iostream>
 #include <string>
 
+#include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -637,10 +638,14 @@ TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
 }
 
 // _______________________________________________________________________
-TEST(TurtleParserTest, EmptyInput) {
+TEST(TurtleParserTest, emptyInput) {
   std::string filename{"turtleParserEmptyInput.dat"};
-  { auto of = ad_utility::makeOfstream(filename); }
-  auto testWithParser = [&]<typename Parser>(bool useBatchInterface) {
+  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
+                                             std::string_view input = "") {
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
     Parser parserChild{filename};
     TurtleParserBase& parser = parserChild;
 
@@ -657,11 +662,16 @@ TEST(TurtleParserTest, EmptyInput) {
       }
     }
     EXPECT_THAT(result, ::testing::ElementsAre());
+    ad_utility::deleteFile(filename);
   };
 
   testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(true);
   testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(false);
   testWithParser.template operator()<TurtleParallelParser<Tokenizer>>(true);
   testWithParser.template operator()<TurtleParallelParser<Tokenizer>>(false);
-  ad_utility::deleteFile(filename);
+  std::string onlyPrefixes = "PREFIX bim: <http://www.bimm.bam.de/blubb/>";
+  testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(
+      true, onlyPrefixes);
+  testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(
+      false, onlyPrefixes);
 }
