@@ -1,8 +1,13 @@
-// Copyright 2015, University of Freiburg,
+// Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//
+// Authors: Björn Buchhold <buchhold@gmail.com>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
+
 #pragma once
 
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -26,6 +31,7 @@ static const size_t DISTINCT_LHS_PER_BLOCK = 10'000;
 static const size_t USE_BLOCKS_INDEX_SIZE_TRESHOLD = 20'000;
 
 static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
+static const size_t TEXT_LIMIT_DEFAULT = std::numeric_limits<size_t>::max();
 
 static const size_t GALLOP_THRESHOLD = 1000;
 
@@ -56,12 +62,6 @@ static const std::string INTERNAL_ENTITIES_URI_PREFIX =
 static const std::string LANGUAGE_PREDICATE =
     INTERNAL_ENTITIES_URI_PREFIX + "langtag>";
 
-// NOTE: Only `VALUE_DATE_PREFIX` is still in use (until we switch to our new
-// `Date` class).
-static const char VALUE_PREFIX[] = ":v:";
-static const char VALUE_FLOAT_PREFIX[] = ":v:float:";
-static const char VALUE_DATE_PREFIX[] = ":v:date:";
-
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
 static const char XSD_DATETIME_TYPE[] =
@@ -71,12 +71,12 @@ static const char XSD_GYEAR_TYPE[] = "http://www.w3.org/2001/XMLSchema#gYear";
 static const char XSD_GYEARMONTH_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#gYearMonth";
 
-static const char XSD_INT_TYPE[] = "http://www.w3.org/2001/XMLSchema#int";
+constexpr inline char XSD_INT_TYPE[] = "http://www.w3.org/2001/XMLSchema#int";
 static const char XSD_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#integer";
 static const char XSD_FLOAT_TYPE[] = "http://www.w3.org/2001/XMLSchema#float";
 static const char XSD_DOUBLE_TYPE[] = "http://www.w3.org/2001/XMLSchema#double";
-static const char XSD_DECIMAL_TYPE[] =
+constexpr inline char XSD_DECIMAL_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#decimal";
 
 static const char XSD_NON_POSITIVE_INTEGER_TYPE[] =
@@ -98,7 +98,7 @@ static const char XSD_UNSIGNED_BYTE_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#unsignedByte";
 static const char XSD_POSITIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#positiveInteger";
-static const char XSD_BOOLEAN_TYPE[] =
+constexpr inline char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
 static const char RDF_PREFIX[] = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 static const char VALUE_DATE_TIME_SEPARATOR[] = "T";
@@ -125,6 +125,12 @@ static const std::string WARNING_ASCII_ONLY_PREFIXES =
 // "literals, and the regex \". *\\n\" only matches at the end of a triple. "
 // "Most Turtle files fulfill these properties (e.g. that from Wikidata), "
 // "but not all";
+
+static const std::string WARNING_PARALLEL_PARSING =
+    "You specified \"parallel-parsing = true\", which enables faster parsing "
+    "for TTL files that don't include multiline literals with unescaped "
+    "newline characters and that have newline characters after the end of "
+    "triples.";
 static const std::string LOCALE_DEFAULT_LANG = "en";
 static const std::string LOCALE_DEFAULT_COUNTRY = "US";
 static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;
@@ -179,8 +185,12 @@ inline auto& RuntimeParameters() {
       // factor than the remaining time, then the sort is canceled with a
       // timeout exception.
       Double<"sort-estimate-cancellation-factor">{3.0},
-      SizeT<"cache-max-num-entries">{1000}, SizeT<"cache-max-size-gb">{30},
-      SizeT<"cache-max-size-gb-single-entry">{5}};
+      SizeT<"cache-max-num-entries">{1000},
+      SizeT<"cache-max-size-gb">{30},
+      SizeT<"cache-max-size-gb-single-entry">{5},
+      SizeT<"lazy-index-scan-queue-size">{20},
+      SizeT<"lazy-index-scan-num-threads">{10},
+      SizeT<"lazy-index-scan-max-size-materialization">{1'000'000}};
   return params;
 }
 

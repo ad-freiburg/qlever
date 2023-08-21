@@ -31,7 +31,8 @@ TextOperationWithoutFilter::TextOperationWithoutFilter(
 VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
     const {
   VariableToColumnMap vcmap;
-  auto addDefinedVar = [&vcmap, index = 0](const Variable& var) mutable {
+  auto addDefinedVar = [&vcmap,
+                        index = ColumnIndex{0}](const Variable& var) mutable {
     vcmap[var] = makeAlwaysDefinedColumn(index);
     ++index;
   };
@@ -104,7 +105,7 @@ void TextOperationWithoutFilter::computeResultMultVars(IdTable* idTable) const {
 }
 
 // _____________________________________________________________________________
-size_t TextOperationWithoutFilter::getSizeEstimateBeforeLimit() {
+uint64_t TextOperationWithoutFilter::getSizeEstimateBeforeLimit() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
     double nofEntitiesSingleVar;
     if (_executionContext) {

@@ -1,7 +1,11 @@
 include(GoogleTest)
 
-# Link binary ${basename} against `gmock_main`, the threading library,
-# and all libraries that are specified as additional arguments.
+# Needed for creating the `testUil`-library.
+add_subdirectory(util)
+
+# Link binary ${basename} against `gmock_main`, the threading library, the
+# general test utilities and all libraries that are specified as additional
+# arguments.
 function (linkTest basename)
     qlever_target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
@@ -20,7 +24,7 @@ endfunction()
 # if a test binary requires multiple sources
 function(linkAndDiscoverTest basename)
     linkTest(${basename} ${ARGN})
-    gtest_discover_tests(${basename} ${basename})
+    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600)
 endfunction()
 
 # Usage: `linkAndDiscoverTestSerial(basename, [additionalLibraries...]`
@@ -36,7 +40,7 @@ endfunction()
 if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
     add_executable(QLeverAllUnitTestsMain)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(QLeverAllUnitTestsMain gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
     gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
             TRUE)
 else()
@@ -80,11 +84,14 @@ function(addAndLinkTest basename)
     linkTest(${basename} ${ARGN})
 endfunction()
 
-addLinkAndDiscoverTest(ValueIdComparatorsTest)
+add_subdirectory(engine)
+add_subdirectory(parser)
 
-addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
-addLinkAndDiscoverTest(StringUtilsTest ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
+
+addLinkAndDiscoverTest(StringUtilsTest)
 
 addLinkAndDiscoverTest(CacheTest)
 
@@ -95,7 +102,7 @@ addLinkAndDiscoverTestSerial(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
-addLinkAndDiscoverTest(ContextFileParserTest parser ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(ContextFileParserTest parser)
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
 
@@ -108,11 +115,9 @@ addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
 addLinkAndDiscoverTest(EngineTest engine)
 
-addLinkAndDiscoverTest(JoinTest engine)
+addLinkAndDiscoverTest(JoinTest engine testUtil)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
-
-addLinkAndDiscoverTest(ConversionsTest util)
 
 addLinkAndDiscoverTest(HashMapTest)
 
@@ -133,17 +138,17 @@ addLinkAndDiscoverTest(UnionTest engine)
 
 if (SINGLE_TEST_BINARY)
     target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 util ${ICU_LIBRARIES})
+    qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 util)
 else()
     add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-    linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
+    linkAndDiscoverTest(TokenTest parser re2 util)
 endif()
 
 addLinkAndDiscoverTest(TurtleParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
-addLinkAndDiscoverTest(IdTableTest)
+addLinkAndDiscoverTest(IdTableTest util)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
 
@@ -151,9 +156,9 @@ addLinkAndDiscoverTest(BatchedPipelineTest)
 
 addLinkAndDiscoverTest(TupleHelpersTest)
 
-addLinkAndDiscoverTest(StringSortComparatorTest ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(StringSortComparatorTest)
 
-addLinkAndDiscoverTest(PriorityQueueTest ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(PriorityQueueTest)
 
 addLinkAndDiscoverTest(SynchronizedTest)
 
@@ -205,7 +210,7 @@ addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
 
 addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
 
-addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary)
 
 addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
@@ -213,9 +218,6 @@ addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(MilestoneIdTest)
 
-# The VocabularyOnDisk uses mmap which fails when the tests are run in
-# parallel. This should be fixed by using distinct filenames for each test case.
-# TODO<qup42, joka921> fix this
 addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(VocabularyTest index)
@@ -238,7 +240,7 @@ addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
 
-addLinkAndDiscoverTest(TriplesViewTest)
+addLinkAndDiscoverTest(TriplesViewTest util)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 
@@ -248,11 +250,11 @@ addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
 addLinkAndDiscoverTest(HttpUtilsTest util http)
 
-addLinkAndDiscoverTest(DateTest)
+addLinkAndDiscoverTest(DateTest util parser)
 
 addLinkAndDiscoverTest(TripleComponentTest parser)
 
-addLinkAndDiscoverTest(ValueIdTest)
+addLinkAndDiscoverTest(ValueIdTest util)
 
 addLinkAndDiscoverTest(LambdaHelpersTest)
 
@@ -286,7 +288,7 @@ addLinkAndDiscoverTest(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
 
-addLinkAndDiscoverTest(CompressedRelationsTest index)
+addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
 
@@ -306,24 +308,46 @@ addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
 addLinkAndDiscoverTest(ExceptionHandlingTest)
 
-addLinkAndDiscoverTest(SparqlExpressionTypesTest)
+addLinkAndDiscoverTest(SparqlExpressionTypesTest util)
 
 addLinkAndDiscoverTest(LimitOffsetClauseTest)
 
 addLinkAndDiscoverTest(OperationTest engine)
 
-addLinkAndDiscoverTest(RuntimeInformationTest engine)
+addLinkAndDiscoverTest(RuntimeInformationTest engine index)
 
-addLinkAndDiscoverTest(VariableToColumnMapTest engine)
+addLinkAndDiscoverTest(VariableToColumnMapTest parser)
 
 addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
 addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
 
-addLinkAndDiscoverTest(BenchmarkConfigurationTest benchmark)
+addLinkAndDiscoverTest(ConfigManagerTest configManager)
+
+addLinkAndDiscoverTest(ConfigOptionTest configManager)
+
+addLinkAndDiscoverTest(ConfigOptionProxyTest configManager)
+
+addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 
 addLinkAndDiscoverTest(FindUndefRangesTest)
 
-addLinkAndDiscoverTest(AddCombinedRowToTableTest)
+addLinkAndDiscoverTest(AddCombinedRowToTableTest util)
+
+addLinkAndDiscoverTest(CtreHelpersTest)
+
+addLinkAndDiscoverTest(ComparisonWithNanTest)
+
+addLinkAndDiscoverTest(ThreadSafeQueueTest)
+
+addLinkAndDiscoverTest(IdTableHelpersTest testUtil)
+
+addLinkAndDiscoverTest(GeneratorTest)
+
+addLinkAndDiscoverTest(MemorySizeTest memorySize)
+
+addLinkAndDiscoverTest(JsonUtilTest)
+
+addLinkAndDiscoverTest(JoinAlgorithmsTest)

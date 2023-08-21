@@ -14,7 +14,7 @@
 #include <index/IndexBuilderTypes.h>
 #include <index/IndexMetaData.h>
 #include <index/PatternCreator.h>
-#include <index/Permutations.h>
+#include <index/Permutation.h>
 #include <index/StxxlSortFunctors.h>
 #include <index/TextMetaData.h>
 #include <index/Vocabulary.h>
@@ -110,11 +110,13 @@ class IndexImpl {
   string onDiskBase_;
   string settingsFileName_;
   bool onlyAsciiTurtlePrefixes_ = false;
+  bool useParallelParser_ = true;
   TurtleParserIntegerOverflowBehavior turtleParserIntegerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
   bool keepTempFiles_ = false;
   uint64_t stxxlMemoryInBytes_ = DEFAULT_STXXL_MEMORY_IN_BYTES;
+  uint64_t blocksizePermutationInBytes_ = BLOCKSIZE_COMPRESSED_METADATA;
   json configurationJson_;
   Index::Vocab vocab_;
   size_t totalVocabularySize_ = 0;
@@ -135,7 +137,7 @@ class IndexImpl {
   bool usePatterns_ = false;
   double avgNumDistinctPredicatesPerSubject_;
   double avgNumDistinctSubjectsPerPredicate_;
-  size_t numDistinctSubjectPredicatePairs_;
+  uint64_t numDistinctSubjectPredicatePairs_;
 
   size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
@@ -159,18 +161,20 @@ class IndexImpl {
    */
   CompactVectorOfStrings<Id> hasPredicate_;
 
+  ad_utility::AllocatorWithLimit<Id> allocator_;
+
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  Permutation pos_{"POS", ".pos", {1, 2, 0}};
-  Permutation pso_{"PSO", ".pso", {1, 0, 2}};
-  Permutation sop_{"SOP", ".sop", {0, 2, 1}};
-  Permutation spo_{"SPO", ".spo", {0, 1, 2}};
-  Permutation ops_{"OPS", ".ops", {2, 1, 0}};
-  Permutation osp_{"OSP", ".osp", {2, 0, 1}};
+  Permutation pos_{Permutation::Enum::POS, allocator_};
+  Permutation pso_{Permutation::Enum::PSO, allocator_};
+  Permutation sop_{Permutation::Enum::SOP, allocator_};
+  Permutation spo_{Permutation::Enum::SPO, allocator_};
+  Permutation ops_{Permutation::Enum::OPS, allocator_};
+  Permutation osp_{Permutation::Enum::OSP, allocator_};
 
  public:
-  IndexImpl();
+  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 
   // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
@@ -203,7 +207,6 @@ class IndexImpl {
   // Will write vocabulary and on-disk index data.
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
-  template <class Parser>
   void createFromFile(const string& filename);
 
   void addPatternsToExistingIndex();
@@ -353,12 +356,6 @@ class IndexImpl {
     return docsDB_.getTextExcerpt(cid);
   }
 
-  // Only for debug reasons and external encoding tests.
-  // Supply an empty vector to dump all lists above a size threshold.
-  void dumpAsciiLists(const vector<string>& lists, bool decodeGapsFreq) const;
-
-  void dumpAsciiLists(const TextBlockMetaData& tbmd) const;
-
   float getAverageNofEntityContexts() const {
     return textMeta_.getAverageNofEntityContexts();
   };
@@ -375,6 +372,10 @@ class IndexImpl {
 
   uint64_t& stxxlMemoryInBytes() { return stxxlMemoryInBytes_; }
   const uint64_t& stxxlMemoryInBytes() const { return stxxlMemoryInBytes_; }
+
+  uint64_t& blocksizePermutationInBytes() {
+    return blocksizePermutationInBytes_;
+  }
 
   void setOnDiskBase(const std::string& onDiskBase);
 
@@ -396,7 +397,7 @@ class IndexImpl {
     return textMeta_.getNofEntityPostings();
   }
 
-  bool hasAllPermutations() const { return SPO()._isLoaded; }
+  bool hasAllPermutations() const { return SPO().isLoaded_; }
 
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,
@@ -405,53 +406,21 @@ class IndexImpl {
   // ___________________________________________________________________
   vector<float> getMultiplicities(Permutation::Enum permutation) const;
 
-  /**
-   * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
-   * permutation for a specific key value of X
-   * @tparam Permutation The permutations IndexImpl::POS()... have different
-   * types
-   * @param key The key (in Id space) for which to search, e.g. fixed value for
-   * O in OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of IndexImpl class).
-   */
-  void scan(Id key, IdTable* result, const Permutation::Enum& p,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
-  /**
-   * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
-   * permutation for a specific key value of X
-   * @tparam Permutation The permutations IndexImpl::POS()... have different
-   * types
-   * @param key The key (as a raw string that is yet to be transformed to index
-   * space) for which to search, e.g. fixed value for O in OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of IndexImpl class).
-   */
-  void scan(const TripleComponent& key, IdTable* result,
-            Permutation::Enum permutation,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
-  /**
-   * @brief Perform a scan for two keys i.e. retrieve all Z from the XYZ
-   * permutation for specific key values of X and Y.
-   * @param col0String The first key (as a raw string that is yet to be
-   * transformed to index space) for which to search, e.g. fixed value for O in
-   * OSP permutation.
-   * @param col1String The second key (as a raw string that is yet to be
-   * transformed to index space) for which to search, e.g. fixed value for S in
-   * OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of IndexImpl class).
-   */
   // _____________________________________________________________________________
-  void scan(const TripleComponent& col0String,
-            const TripleComponent& col1String, IdTable* result,
-            const Permutation::Enum& permutation,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+  IdTable scan(
+      const TripleComponent& col0String,
+      std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+      const Permutation::Enum& permutation,
+      ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+  // _____________________________________________________________________________
+  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+               ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+  // _____________________________________________________________________________
+  size_t getResultSizeOfScan(const TripleComponent& col0,
+                             const TripleComponent& col1,
+                             const Permutation::Enum& permutation) const;
 
  private:
   // Private member functions
@@ -461,13 +430,12 @@ class IndexImpl {
   // permutations. Member vocab_ will be empty after this because it is not
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
-  template <class Parser>
-  IndexBuilderDataAsPsoSorter createIdTriplesAndVocab(const string& ntFile);
+  IndexBuilderDataAsPsoSorter createIdTriplesAndVocab(
+      std::shared_ptr<TurtleParserBase> parser);
 
   // ___________________________________________________________________
-  template <class Parser>
-  IndexBuilderDataAsStxxlVector passFileForVocabulary(const string& ntFile,
-                                                      size_t linesPerPartial);
+  IndexBuilderDataAsStxxlVector passFileForVocabulary(
+      std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial);
 
   /**
    * @brief Everything that has to be done when we have seen all the triples
@@ -603,8 +571,6 @@ class IndexImpl {
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
-  bool isEntityBlockId(TextBlockIndex blockIndex) const;
-
   //! Writes a list of elements (have to be able to be cast to unit64_t)
   //! to file.
   //! Returns the number of bytes written.
@@ -654,7 +620,6 @@ class IndexImpl {
   void readConfiguration();
 
   // initialize the index-build-time settings for the vocabulary
-  template <class Parser>
   void readIndexBuilderSettingsFromFile();
 
   /**

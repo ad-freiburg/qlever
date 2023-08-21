@@ -36,9 +36,10 @@ TEST(SelectClause, VariablesAndAliases) {
   SelectClause clause;
   std::vector<SelectClause::VarOrAlias> v{
       Variable{"?x"},
-      Alias{
-          {std::make_unique<sparqlExpression::BoolExpression>(false), "false"},
-          Variable{"?y"}},
+      Alias{{std::make_unique<sparqlExpression::IdExpression>(
+                 Id::makeFromBool(false)),
+             "false"},
+            Variable{"?y"}},
       Variable{"?z"}};
   clause.setSelected(v);
   EXPECT_THAT(clause.getSelectedVariables(),

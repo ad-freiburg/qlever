@@ -36,6 +36,7 @@ class LangExpression : public SparqlExpression {
     AD_FAIL();
   }
 
-  std::span<SparqlExpression::Ptr> children() override { AD_FAIL(); }
+ private:
+  std::span<SparqlExpression::Ptr> childrenImpl() override { AD_FAIL(); }
 };
 }  // namespace sparqlExpression

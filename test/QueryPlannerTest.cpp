@@ -8,6 +8,7 @@
 #include "./QueryPlannerTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/QueryPlanner.h"
+#include "global/Constants.h"
 #include "parser/SparqlParser.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -564,16 +565,15 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(27493u, qet.getCostEstimate());
   ASSERT_EQ(
-      "{\n  ORDER BY on columns:asc(0) \n  {\n    JOIN\n    {\n      SCAN "
-      "POS with P = \"<pre/profession>\", O = \"<pre/Actor>\"\n      "
-      "qet-width: 1 \n    } join-column: [0]\n    |X|\n    {\n      "
-      "SORT(internal) on columns:asc(1) \n      {\n        JOIN\n        {\n "
-      "         SCAN POS with P = \"<pre/born-in>\"\n          qet-width: 2 "
-      "\n        } join-column: [0]\n        |X|\n        {\n          SCAN "
-      "POS with P = \"<pre/in>\", O = \"<pre/Europe>\"\n          qet-width: "
-      "1 \n        } join-column: [0]\n        qet-width: 2 \n      }\n      "
-      "qet-width: 2 \n    } join-column: [1]\n    qet-width: 2 \n  }\n  "
-      "qet-width: 2 \n}",
+      "{\n  ORDER BY on columns:asc(0) \n  {\n    JOIN\n    {\n      "
+      "SORT(internal) on columns:asc(1) \n      {\n        JOIN\n        {\n   "
+      "       SCAN POS with P = \"<pre/profession>\", O = \"<pre/Actor>\"\n    "
+      "      qet-width: 1 \n        } join-column: [0]\n        |X|\n        "
+      "{\n          SCAN PSO with P = \"<pre/born-in>\"\n          qet-width: "
+      "2 \n        } join-column: [0]\n        qet-width: 2 \n      }\n      "
+      "qet-width: 2 \n    } join-column: [1]\n    |X|\n    {\n      SCAN POS "
+      "with P = \"<pre/in>\", O = \"<pre/Europe>\"\n      qet-width: 1 \n    } "
+      "join-column: [0]\n    qet-width: 2 \n  }\n  qet-width: 2 \n}",
       qet.asString());
 }
 
@@ -643,11 +643,11 @@ TEST(QueryPlannerTest, threeVarTriples) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN PSO with P = \"<p>\", S = \"<s>\"\n    "
-        "qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    SORT(internal) "
-        "on columns:asc(1) \n    {\n      SCAN FOR FULL INDEX OSP (DUMMY "
-        "OPERATION)\n      qet-width: 3 \n    }\n    qet-width: 3 \n  } "
-        "join-column: [1]\n  qet-width: 3 \n}",
+        "{\n  JOIN\n  {\n    SORT(internal) on columns:asc(1) \n    {\n      "
+        "SCAN FOR FULL INDEX OSP (DUMMY OPERATION)\n      qet-width: 3 \n    "
+        "}\n    qet-width: 3 \n  } join-column: [1]\n  |X|\n  {\n    SCAN PSO "
+        "with P = \"<p>\", S = \"<s>\"\n    qet-width: 1 \n  } join-column: "
+        "[0]\n  qet-width: 3 \n}",
         qet.asString());
   }
   {
@@ -657,11 +657,11 @@ TEST(QueryPlannerTest, threeVarTriples) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN SOP with S = \"<s>\", O = \"<o>\"\n    "
-        "qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    SORT(internal) "
-        "on columns:asc(1) \n    {\n      SCAN FOR FULL INDEX OSP (DUMMY "
-        "OPERATION)\n      qet-width: 3 \n    }\n    qet-width: 3 \n  } "
-        "join-column: [1]\n  qet-width: 3 \n}",
+        "{\n  JOIN\n  {\n    SORT(internal) on columns:asc(1) \n    {\n      "
+        "SCAN FOR FULL INDEX OSP (DUMMY OPERATION)\n      qet-width: 3 \n    "
+        "}\n    qet-width: 3 \n  } join-column: [1]\n  |X|\n  {\n    SCAN SOP "
+        "with S = \"<s>\", O = \"<o>\"\n    qet-width: 1 \n  } join-column: "
+        "[0]\n  qet-width: 3 \n}",
         qet.asString());
   }
   {
@@ -671,52 +671,40 @@ TEST(QueryPlannerTest, threeVarTriples) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN PSO with P = \"<p>\", S = \"<s>\"\n    "
-        "qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    SORT(internal) "
-        "on columns:asc(1) \n    {\n      SCAN FOR FULL INDEX OPS (DUMMY "
-        "OPERATION)\n      qet-width: 3 \n    }\n    qet-width: 3 \n  } "
-        "join-column: [1]\n  qet-width: 3 \n}",
+        "{\n  JOIN\n  {\n    SORT(internal) on columns:asc(1) \n    {\n      "
+        "SCAN FOR FULL INDEX OPS (DUMMY OPERATION)\n      qet-width: 3 \n    "
+        "}\n    qet-width: 3 \n  } join-column: [1]\n  |X|\n  {\n    SCAN PSO "
+        "with P = \"<p>\", S = \"<s>\"\n    qet-width: 1 \n  } join-column: "
+        "[0]\n  qet-width: 3 \n}",
         qet.asString());
   }
 }
 
 TEST(QueryPlannerTest, threeVarTriplesTCJ) {
-  {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?x ?p ?o WHERE {"
-        "<s> ?p ?x . ?x ?p ?o }");
-    QueryPlanner qp(nullptr);
-    ASSERT_THROW(qp.createExecutionTree(pq), ad_utility::Exception);
-  }
+  h::expect(
+      "SELECT ?x ?p ?o WHERE {"
+      "<s> ?p ?x . ?x ?p ?o }",
+      h::MultiColumnJoin(h::IndexScan("<s>", Var{"?p"}, Var{"?x"}),
+                         h::IndexScan(Var{"?x"}, Var{"?p"}, Var{"?o"})));
 
-  {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?s ?p ?o WHERE {"
-        "?s ?p ?o . ?s ?p <x> }");
-    QueryPlanner qp(nullptr);
-    ASSERT_THROW(QueryExecutionTree qet = qp.createExecutionTree(pq),
-                 ad_utility::Exception);
-  }
+  h::expect(
+      "SELECT ?s ?p ?o WHERE {"
+      "?s ?p ?o . ?s ?p <x> }",
+      h::MultiColumnJoin(h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}),
+                         h::IndexScan(Var{"?s"}, Var{"?p"}, "<x>")));
 }
 
 TEST(QueryPlannerTest, threeVarXthreeVarException) {
-  try {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?s ?s2 WHERE {"
-        "?s ?p ?o . ?s2 ?p ?o }");
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    FAIL() << "Was expecting exception, but got" << qet.asString() << std::endl;
-  } catch (const ad_utility::Exception& e) {
-    ASSERT_THAT(
-        e.what(),
-        ::testing::StartsWith(
-            "Could not find a suitable execution tree. "
-            "Likely cause: Queries that require joins of the full index with "
-            "itself are not supported at the moment."));
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
-  }
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "SELECT ?s ?s2 WHERE {"
+      "?s ?p ?o . ?s2 ?p ?o }");
+  QueryPlanner qp(nullptr);
+  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  h::expect(
+      "SELECT ?s ?s2 WHERE {"
+      "?s ?p ?o . ?s2 ?p ?o }",
+      h::MultiColumnJoin(h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}),
+                         h::IndexScan(Var{"?s2"}, Var{"?p"}, Var{"?o"})));
 }
 
 TEST(QueryExecutionTreeTest, testBooksbyNewman) {
@@ -772,11 +760,11 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
       "WHERE  {?c ql:contains-word \"search engine\"}");
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(
-      "{\n  TEXT OPERATION WITHOUT FILTER: co-occurrence with words:"
-      " \"search engine\" and 0 variables with textLimit = 1\n"
-      "  qet-width: 2 \n}",
-      qet.asString());
+  ASSERT_EQ(absl::StrCat(
+                "{\n  TEXT OPERATION WITHOUT FILTER: co-occurrence with words:",
+                " \"search engine\" and 0 variables with textLimit = ",
+                TEXT_LIMIT_DEFAULT, "\n", "  qet-width: 2 \n}"),
+            qet.asString());
 }
 
 TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
@@ -788,7 +776,7 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
       "?y :Contained_by :Europe ."
       "?c ql:contains-entity ?x ."
       "?c ql:contains-word \"cocaine\" ."
-      "}");
+      "} TEXTLIMIT 1");
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
@@ -814,7 +802,7 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
       "?c ql:contains-entity ?x ."
       "?c ql:contains-word \"friend*\" ."
       "?c ql:contains-entity ?y ."
-      "}");
+      "} TEXTLIMIT 1");
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
@@ -836,23 +824,21 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
       "?c ql:contains-entity ?s ."
       "?s <is-a> <Scientist> ."
       "?c2 ql:contains-entity ?s ."
-      "?c2 ql:contains-word \"manhattan project\"}");
+      "?c2 ql:contains-word \"manhattan project\"} TEXTLIMIT 1");
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
-
-      "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
-      "\"manhattan project\" and 1 variables with textLimit = 1 filtered "
-      "by\n  {\n    JOIN\n    {\n      SCAN POS with P = \"<is-a>\", O = "
-      "\"<Scientist>\"\n      qet-width: 1 \n    } join-column: [0]\n    "
-      "|X|\n    {\n      SORT(internal) on columns:asc(2) \n      {\n       "
-      " TEXT OPERATION "
-      "WITH FILTER: co-occurrence with words: \"friend*\" and 2 variables "
-      "with textLimit = 1 filtered by\n        {\n          SCAN POS with P "
-      "= \"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n        "
-      "}\n         filtered on column 0\n        qet-width: 4 \n      }\n    "
-      "  qet-width: 4 \n    } join-column: [2]\n    qet-width: 4 \n  }\n   "
-      "filtered on column 0\n  qet-width: 6 \n}",
+      "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: \"manhattan "
+      "project\" and 1 variables with textLimit = 1 filtered by\n  {\n    "
+      "JOIN\n    {\n      SORT(internal) on columns:asc(2) \n      {\n        "
+      "TEXT OPERATION WITH FILTER: co-occurrence with words: \"friend*\" and 2 "
+      "variables with textLimit = 1 filtered by\n        {\n          SCAN POS "
+      "with P = \"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n    "
+      "    }\n         filtered on column 0\n        qet-width: 4 \n      }\n  "
+      "    qet-width: 4 \n    } join-column: [2]\n    |X|\n    {\n      SCAN "
+      "POS with P = \"<is-a>\", O = \"<Scientist>\"\n      qet-width: 1 \n    "
+      "} join-column: [0]\n    qet-width: 4 \n  }\n   filtered on column 2\n  "
+      "qet-width: 6 \n}",
       qet.asString());
 }
 
@@ -1017,84 +1003,78 @@ TEST(QueryPlannerTest, testSimpleOptional) {
 }
 
 TEST(QueryPlannerTest, SimpleTripleOneVariable) {
-  using enum IndexScan::ScanType;
+  using enum Permutation::Enum;
 
   // With only one variable, there are always two permutations that will yield
   // exactly the same result. The query planner consistently chosses one of
   // them.
   h::expect("SELECT * WHERE { ?s <p> <o> }",
-            h::IndexScan(Var{"?s"}, "<p>", "<o>", {POS_BOUND_O}));
+            h::IndexScan(Var{"?s"}, "<p>", "<o>", {POS}));
   h::expect("SELECT * WHERE { <s> ?p <o> }",
-            h::IndexScan("<s>", "?p", "<o>", {SOP_BOUND_O}));
+            h::IndexScan("<s>", Var{"?p"}, "<o>", {SOP}));
   h::expect("SELECT * WHERE { <s> <p> ?o }",
-            h::IndexScan("<s>", "<p>", Var{"?o"}, {PSO_BOUND_S}));
+            h::IndexScan("<s>", "<p>", Var{"?o"}, {PSO}));
 }
 
 TEST(QueryPlannerTest, SimpleTripleTwoVariables) {
-  using enum IndexScan::ScanType;
+  using enum Permutation::Enum;
 
   // Fixed predicate.
 
   // Without `Order By`, two orderings are possible, both are fine.
-  h::expect(
-      "SELECT * WHERE { ?s <p> ?o }",
-      h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {POS_FREE_O, PSO_FREE_S}));
+  h::expect("SELECT * WHERE { ?s <p> ?o }",
+            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {POS, PSO}));
   // Must always be a single index scan, never index scan + sorting.
   h::expect("SELECT * WHERE { ?s <p> ?o } INTERNAL SORT BY ?o",
-            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {POS_FREE_O}));
+            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {POS}));
   h::expect("SELECT * WHERE { ?s <p> ?o } INTERNAL SORT BY ?s",
-            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {PSO_FREE_S}));
+            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {PSO}));
 
   // Fixed subject.
   h::expect("SELECT * WHERE { <s> ?p ?o }",
-            h::IndexScan("<s>", "?p", Var{"?o"}, {SOP_FREE_O, SPO_FREE_P}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP, SPO}));
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
-            h::IndexScan("<s>", "?p", Var{"?o"}, {SOP_FREE_O}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP}));
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
-            h::IndexScan("<s>", "?p", Var{"?o"}, {SPO_FREE_P}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SPO}));
 
   // Fixed object.
   h::expect("SELECT * WHERE { <s> ?p ?o }",
-            h::IndexScan("<s>", "?p", Var{"?o"}, {SOP_FREE_O, SPO_FREE_P}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP, SPO}));
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
-            h::IndexScan("<s>", "?p", Var{"?o"}, {SOP_FREE_O}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP}));
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
-            h::IndexScan("<s>", "?p", Var{"?o"}, {SPO_FREE_P}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SPO}));
 }
 
 TEST(QueryPlannerTest, SimpleTripleThreeVariables) {
-  using enum IndexScan::ScanType;
+  using enum Permutation::Enum;
 
   // Fixed predicate.
   // Don't care about the sorting.
   h::expect("SELECT * WHERE { ?s ?p ?o }",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"},
-                         {FULL_INDEX_SCAN_SPO, FULL_INDEX_SCAN_SOP,
-                          FULL_INDEX_SCAN_PSO, FULL_INDEX_SCAN_POS,
-                          FULL_INDEX_SCAN_OSP, FULL_INDEX_SCAN_OPS}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"},
+                         {SPO, SOP, PSO, POS, OSP, OPS}));
 
   // Sorted by one variable, two possible permutations remain.
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"},
-                         {FULL_INDEX_SCAN_SPO, FULL_INDEX_SCAN_SOP}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {SPO, SOP}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"},
-                         {FULL_INDEX_SCAN_POS, FULL_INDEX_SCAN_PSO}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {POS, PSO}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"},
-                         {FULL_INDEX_SCAN_OSP, FULL_INDEX_SCAN_OPS}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {OSP, OPS}));
 
   // Sorted by two variables, this makes the permutation unique.
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?o",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"}, {FULL_INDEX_SCAN_SOP}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {SOP}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?p",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"}, {FULL_INDEX_SCAN_SPO}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {SPO}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o ?s",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"}, {FULL_INDEX_SCAN_OSP}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {OSP}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o ?p",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"}, {FULL_INDEX_SCAN_OPS}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {OPS}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?s",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"}, {FULL_INDEX_SCAN_PSO}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {PSO}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?o",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"}, {FULL_INDEX_SCAN_POS}));
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {POS}));
 }

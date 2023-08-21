@@ -55,7 +55,7 @@ class GroupByTest : public ::testing::Test {
     _index.setKbName("group_by_test");
     _index.setTextName("group_by_test");
     _index.setOnDiskBase("group_ty_test");
-    _index.createFromFile<TurtleParserAuto>("group_by_test.nt");
+    _index.createFromFile("group_by_test.nt");
     _index.addTextFromContextFile("group_by_test.words", false);
     _index.buildDocsDB("group_by_test.documents");
 
@@ -98,9 +98,6 @@ TEST_F(GroupByTest, doGroupBy) {
   s.insert("<entity1>");
   s.insert("<entity2>");
   s.insert("<entity3>");
-  s.insert(ad_utility::convertFloatStringToIndexWord("1.1231"));
-  s.insert(ad_utility::convertFloatStringToIndexWord("-5"));
-  s.insert(ad_utility::convertFloatStringToIndexWord("17"));
   vocab.createFromSet(s);
 
   // Create an input result table with a local vocabulary.
@@ -333,18 +330,18 @@ struct GroupBySpecialCount : ::testing::Test {
   Variable varA{"?a"};
   QueryExecutionContext* qec = getQec();
   SparqlTriple xyzTriple{Variable{"?x"}, "?y", Variable{"?z"}};
-  Tree xyzScanSortedByX = makeExecutionTree<IndexScan>(
-      qec, IndexScan::FULL_INDEX_SCAN_SOP, xyzTriple);
-  Tree xyzScanSortedByY = makeExecutionTree<IndexScan>(
-      qec, IndexScan::FULL_INDEX_SCAN_POS, xyzTriple);
+  Tree xyzScanSortedByX =
+      makeExecutionTree<IndexScan>(qec, Permutation::Enum::SOP, xyzTriple);
+  Tree xyzScanSortedByY =
+      makeExecutionTree<IndexScan>(qec, Permutation::Enum::POS, xyzTriple);
   Tree xScan = makeExecutionTree<IndexScan>(
-      qec, IndexScan::PSO_BOUND_S,
+      qec, Permutation::Enum::PSO,
       SparqlTriple{{"<x>"}, {"<label>"}, Variable{"?x"}});
   Tree xyScan = makeExecutionTree<IndexScan>(
-      qec, IndexScan::PSO_FREE_S,
+      qec, Permutation::Enum::PSO,
       SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
   Tree xScanEmptyResult = makeExecutionTree<IndexScan>(
-      qec, IndexScan::PSO_BOUND_S,
+      qec, Permutation::Enum::PSO,
       SparqlTriple{{"<x>"}, {"<notInKg>"}, Variable{"?x"}});
 
   Tree invalidJoin = makeExecutionTree<Join>(qec, xScan, xScan, 0, 0);
@@ -711,14 +708,14 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   using namespace sparqlExpression;
 
   // Create `Alias` object for `(AVG(?a + ?b) AS ?x)`.
-  auto sum = make<AddExpression>(make<VariableExpression>(varA),
-                                 make<VariableExpression>(varB));
+  auto sum = makeAddExpression(make<VariableExpression>(varA),
+                               make<VariableExpression>(varB));
   auto avg = make<AvgExpression>(false, std::move(sum));
   auto alias1 = Alias{SparqlExpressionPimpl{std::move(avg), "avg(?a + ?b"},
                       Variable{"?x"}};
 
   // Create `Alias` object for `(?a + COUNT(?b) AS ?y)`.
-  auto expr2 = make<AddExpression>(
+  auto expr2 = makeAddExpression(
       make<VariableExpression>(varA),
       make<CountExpression>(false, make<VariableExpression>(varB)));
   auto alias2 = Alias{SparqlExpressionPimpl{std::move(expr2), "?a + COUNT(?b)"},
@@ -773,14 +770,14 @@ TEST(GroupBy, AliasResultReused) {
   using namespace sparqlExpression;
 
   // Create `Alias` object for `(AVG(?a + ?b) AS ?x)`.
-  auto sum = make<AddExpression>(make<VariableExpression>(varA),
-                                 make<VariableExpression>(varB));
+  auto sum = makeAddExpression(make<VariableExpression>(varA),
+                               make<VariableExpression>(varB));
   auto avg = make<AvgExpression>(false, std::move(sum));
   auto alias1 = Alias{SparqlExpressionPimpl{std::move(avg), "avg(?a + ?b"},
                       Variable{"?x"}};
 
   // Create `Alias` object for `(?a + COUNT(?b) AS ?y)`.
-  auto expr2 = make<AddExpression>(
+  auto expr2 = makeAddExpression(
       make<VariableExpression>(Variable{"?x"}),
       make<CountExpression>(false, make<VariableExpression>(varB)));
   auto alias2 = Alias{SparqlExpressionPimpl{std::move(expr2), "?x + COUNT(?b)"},
@@ -836,6 +833,6 @@ TEST(GroupBy, AddedHavingRows) {
               ::testing::UnorderedElementsAreArray(expectedVariables));
   const auto& table = res->idTable();
   auto i = IntId;
-  auto expected = makeIdTableFromVector({{i(0), i(3), i(1)}});
+  auto expected = makeIdTableFromVector({{i(0), i(3), Id::makeFromBool(true)}});
   EXPECT_EQ(table, expected);
 }

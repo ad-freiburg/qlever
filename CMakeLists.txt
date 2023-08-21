@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(QLever C CXX)
 
 # C/C++ Versions
-set (CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,20 +11,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # on clang and g++
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0")
-      MESSAGE(FATAL_ERROR, "G++ versions older than 11.0 are not supported by QLever")
+      MESSAGE(FATAL_ERROR "G++ versions older than 11.0 are not supported by QLever")
   else()
       add_compile_options(-fcoroutines)
   endif()
 
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "14.0.0")
-        MESSAGE(FATAL_ERROR, "Clang++ versions older than 14.0 are not supported by QLever")
-    elseif(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
-        add_compile_options(-fcoroutines-ts)
-        # starting from Clang 16, coroutines are enabled by default for C++ 20
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
+        MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif()
 else()
-    MESSAGE(FATAL_ERROR, "QLever currently only supports the G++ or LLVM-Clang++ compilers")
+    MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif()
 
 ## Build targets for address sanitizer
@@ -49,7 +46,7 @@ endif ()
 
 if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU") AND
    (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "12") AND
-   (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12.2"))
+   (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13"))
     message(STATUS "Adding -Wno-error for g++12.0 because of the many false positive warnings from stdlib headers")
     add_compile_options(-Wno-error)
     else()
@@ -83,12 +80,17 @@ find_package(Threads REQUIRED)
 # ICU (for proper collation
 ################################
 find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
-include_directories(${ICU_INCLUDE_DIR})
 
 ###################################
 # JEMALLOC
 ###################################
-if (${JEMALLOC_MANUALLY_INSTALLED})
+
+find_package(jemalloc QUIET)
+if (TARGET jemalloc::jemalloc)
+  MESSAGE(STATUS "Use jemalloc that was installed via conan")
+  link_libraries(jemalloc::jemalloc)
+
+elseif (${JEMALLOC_MANUALLY_INSTALLED})
   link_libraries(jemalloc)
 else()
   find_package(PkgConfig)
@@ -99,13 +101,24 @@ else()
     include_directories(${JEMALLOC_INCLUDE_DIRS})
     link_libraries(${JEMALLOC_LIBRARIES})
   else ()
-    message(FATAL_ERROR "Jemalloc is required, but could not be found via
+    message(WARNING "Jemalloc could not be found via
     pkg-config. If you are sure that you have installed jemalloc on your system
     (e.g. via `apt install libjemalloc-dev` on Ubuntu), you might try rerunning
     cmake with `-DJEMALLOC_MANUALLY_INSTALLED=True`. This is currently necessary
-    on Ubuntu 18.04, where pkg-config does not find jemalloc.")
+    on Ubuntu 18.04, where pkg-config does not find jemalloc. Continuing without jemalloc,
+    this will impact the performance, most notably of the IndexBuilder")
   endif()
 endif()
+
+### ZSTD
+find_package(ZSTD QUIET)
+if (TARGET zstd::libzstd_static)
+    MESSAGE(STATUS "Use zstd that was installed via conan")
+    link_libraries(zstd::libzstd_static)
+else()
+link_libraries(zstd)
+endif()
+
 
 
 ######################################
@@ -129,7 +142,7 @@ find_package(OpenSSL REQUIRED)
 # `target_link_libraries` that additionally links against the common
 # libraries.
 function (qlever_target_link_libraries target)
-    target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings)
+    target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings absl::str_format ICU::uc ICU::i18n)
 endfunction()
 
 
@@ -332,3 +345,6 @@ qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT
 
 add_executable(PermutationExporterMain src/index/PermutationExporterMain.cpp)
 qlever_target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
+qlever_target_link_libraries(PrintIndexVersionMain util)

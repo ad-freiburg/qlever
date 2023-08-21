@@ -14,13 +14,12 @@ using std::string;
 // _____________________________________________________________________________
 OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
                            std::shared_ptr<QueryExecutionTree> t1,
-                           std::shared_ptr<QueryExecutionTree> t2,
-                           const std::vector<std::array<ColumnIndex, 2>>& jcs)
+                           std::shared_ptr<QueryExecutionTree> t2)
     : Operation(qec),
       _left{std::move(t1)},
       _right{std::move(t2)},
-      _joinColumns(jcs) {
-  AD_CONTRACT_CHECK(!jcs.empty());
+      _joinColumns(QueryExecutionTree::getJoinColumns(*_left, *_right)) {
+  AD_CORRECTNESS_CHECK(!_joinColumns.empty());
 
   // If `_right` contains no UNDEF in the join columns and at most one column in
   // `_left` contains UNDEF values, and that column is the last join column,
@@ -53,10 +52,8 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
   }
 
   // The inputs must be sorted by the join columns.
-  auto [sortedLeft, sortedRight] = QueryExecutionTree::createSortedTrees(
+  std::tie(_left, _right) = QueryExecutionTree::createSortedTrees(
       std::move(_left), std::move(_right), _joinColumns);
-  _left = std::move(sortedLeft);
-  _right = std::move(sortedRight);
 }
 
 // _____________________________________________________________________________
@@ -139,8 +136,8 @@ size_t OptionalJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-vector<size_t> OptionalJoin::resultSortedOn() const {
-  std::vector<size_t> sortedOn;
+vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
+  std::vector<ColumnIndex> sortedOn;
   // The result is sorted on all join columns from the left subtree.
   for (const auto& [joinColumnLeft, joinColumnRight] : _joinColumns) {
     (void)joinColumnRight;
@@ -158,7 +155,7 @@ float OptionalJoin::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t OptionalJoin::getSizeEstimateBeforeLimit() {
+uint64_t OptionalJoin::getSizeEstimateBeforeLimit() {
   if (!_multiplicitiesComputed) {
     computeSizeEstimateAndMultiplicities();
   }
@@ -364,5 +361,5 @@ void OptionalJoin::optionalJoin(
     }
     Engine::sort(*result, cols);
   }
-  result->permuteColumns(joinColumnData.permutationResult());
+  result->setColumnSubset(joinColumnData.permutationResult());
 }

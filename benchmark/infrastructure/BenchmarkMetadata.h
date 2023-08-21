@@ -37,7 +37,7 @@ class BenchmarkMetadata {
    *
    * @param prettyPrint If false, the json string will contain no new lines
    * and will be in the most compact form available. If true, the json string
-   * will have new lines and indention, if his compact form is longer than 50
+   * will have new lines and indentation, if his compact form is longer than 50
    * symbols.
    */
   std::string asJsonString(bool prettyPrint) const {

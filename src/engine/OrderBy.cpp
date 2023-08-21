@@ -20,7 +20,7 @@ size_t OrderBy::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 OrderBy::OrderBy(QueryExecutionContext* qec,
                  std::shared_ptr<QueryExecutionTree> subtree,
-                 vector<pair<size_t, bool>> sortIndices)
+                 vector<pair<ColumnIndex, bool>> sortIndices)
     : Operation{qec},
       subtree_{std::move(subtree)},
       sortIndices_{std::move(sortIndices)} {
@@ -117,9 +117,11 @@ ResultTable OrderBy::computeResult() {
       if (row1[column] == row2[column]) {
         continue;
       }
-      bool isLessThan = valueIdComparators::compareIds<
-          valueIdComparators::ComparisonForIncompatibleTypes::CompareByType>(
-          row1[column], row2[column], valueIdComparators::Comparison::LT);
+      bool isLessThan =
+          toBoolNotUndef(valueIdComparators::compareIds<
+                         valueIdComparators::ComparisonForIncompatibleTypes::
+                             CompareByType>(
+              row1[column], row2[column], valueIdComparators::Comparison::LT));
       return isLessThan != isDescending;
     }
     return false;

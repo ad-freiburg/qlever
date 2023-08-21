@@ -36,8 +36,7 @@ class OptionalJoin : public Operation {
  public:
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1,
-               std::shared_ptr<QueryExecutionTree> t2,
-               const std::vector<std::array<ColumnIndex, 2>>& joinCols);
+               std::shared_ptr<QueryExecutionTree> t2);
 
  private:
   string asStringImpl(size_t indent = 0) const override;
@@ -47,7 +46,7 @@ class OptionalJoin : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<size_t> resultSortedOn() const override;
+  vector<ColumnIndex> resultSortedOn() const override;
 
   void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
@@ -59,7 +58,7 @@ class OptionalJoin : public Operation {
   float getMultiplicity(size_t col) override;
 
  private:
-  size_t getSizeEstimateBeforeLimit() override;
+  uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
   size_t getCostEstimate() override;

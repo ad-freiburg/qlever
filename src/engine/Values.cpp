@@ -42,7 +42,7 @@ size_t Values::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-vector<size_t> Values::resultSortedOn() const { return {}; }
+vector<ColumnIndex> Values::resultSortedOn() const { return {}; }
 
 // ____________________________________________________________________________
 VariableToColumnMap Values::computeVariableToColumnMap() const {
@@ -79,7 +79,7 @@ float Values::getMultiplicity(size_t col) {
 }
 
 // ____________________________________________________________________________
-size_t Values::getSizeEstimateBeforeLimit() {
+uint64_t Values::getSizeEstimateBeforeLimit() {
   return parsedValues_._values.size();
 }
 

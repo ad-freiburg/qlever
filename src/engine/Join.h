@@ -8,6 +8,7 @@
 
 #include <list>
 
+#include "engine/IndexScan.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/HashMap.h"
@@ -21,8 +22,10 @@ class Join : public Operation {
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
-  size_t _leftJoinCol;
-  size_t _rightJoinCol;
+  ColumnIndex _leftJoinCol;
+  ColumnIndex _rightJoinCol;
+
+  Variable _joinVar{"?notSet"};
 
   bool _keepJoinColumn;
 
@@ -33,8 +36,8 @@ class Join : public Operation {
 
  public:
   Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
-       std::shared_ptr<QueryExecutionTree> t2, size_t t1JoinCol,
-       size_t t2JoinCol, bool keepJoinColumn = true);
+       std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
+       ColumnIndex t2JoinCol, bool keepJoinColumn = true);
 
   // A very explicit constructor, which initializes an invalid join object (it
   // has no subtrees, which violates class invariants). These invalid Join
@@ -52,7 +55,7 @@ class Join : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<size_t> resultSortedOn() const override;
+  virtual vector<ColumnIndex> resultSortedOn() const override;
 
   virtual void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
@@ -61,7 +64,7 @@ class Join : public Operation {
   }
 
  private:
-  size_t getSizeEstimateBeforeLimit() override {
+  uint64_t getSizeEstimateBeforeLimit() override {
     if (!_sizeEstimateComputed) {
       computeSizeEstimateAndMultiplicities();
       _sizeEstimateComputed = true;
@@ -99,8 +102,8 @@ class Join : public Operation {
    * TODO Move the merge join into it's own function and make this function
    * a proper switch.
    **/
-  void join(const IdTable& a, size_t jc1, const IdTable& b, size_t jc2,
-            IdTable* result) const;
+  void join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
+            ColumnIndex jc2, IdTable* result) const;
 
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning
@@ -115,8 +118,8 @@ class Join : public Operation {
    * @return The result is only sorted, if the bigger table is sorted.
    * Otherwise it is not sorted.
    **/
-  void hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
-                size_t jc2, IdTable* dynRes);
+  void hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
+                ColumnIndex jc2, IdTable* dynRes);
 
   static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
     return tree->getType() == QueryExecutionTree::SCAN &&
@@ -133,7 +136,22 @@ class Join : public Operation {
 
   ResultTable computeResultForJoinWithFullScanDummy();
 
-  using ScanMethodType = std::function<void(Id, IdTable*)>;
+  // A special implementation that is called when both children are
+  // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
+  // `IndexScan`s that is actually needed without fully materializing them.
+  IdTable computeResultForTwoIndexScans();
+
+  // A special implementation that is called when one of the children is an
+  // `IndexScan`. The argument `scanIsLeft` determines whether the `IndexScan`
+  // is the left or the right child of this `Join`. This needs to be known to
+  // determine the correct order of the columns in the result.
+  template <bool scanIsLeft>
+  IdTable computeResultForIndexScanAndIdTable(const IdTable& idTable,
+                                              ColumnIndex joinColTable,
+                                              IndexScan& scan,
+                                              ColumnIndex joinColScan);
+
+  using ScanMethodType = std::function<IdTable(Id)>;
 
   ScanMethodType getScanMethod(
       std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;
@@ -159,13 +177,13 @@ class Join : public Operation {
    */
   template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
   static void addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
-                                      const size_t jcRowB,
+                                      const ColumnIndex jcRowB,
                                       IdTableStatic<TABLE_WIDTH>* table);
 
   /*
    * @brief The implementation of hashJoin.
    */
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  void hashJoinImpl(const IdTable& dynA, size_t jc1, const IdTable& dynB,
-                    size_t jc2, IdTable* dynRes);
+  void hashJoinImpl(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
+                    ColumnIndex jc2, IdTable* dynRes);
 };

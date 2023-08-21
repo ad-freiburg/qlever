@@ -9,8 +9,9 @@
 #include <set>
 #include <utility>
 
-#include "../util/HashMap.h"
-#include "../util/HashSet.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
+#include "util/SuppressWarnings.h"
 
 using std::pair;
 
@@ -193,6 +194,7 @@ Index::WordEntityPostings FTSAlgorithms::intersectKWay(
       }
     }
   }
+  AD_CORRECTNESS_CHECK(minSize != std::numeric_limits<size_t>::max());
 
   resultWep.cids_.reserve(minSize + 2);
   resultWep.cids_.resize(minSize);
@@ -294,32 +296,6 @@ Index::WordEntityPostings FTSAlgorithms::intersectKWay(
 }
 
 // _____________________________________________________________________________
-void FTSAlgorithms::getTopKByScores(const vector<Id>& cids,
-                                    const vector<Score>& scores, size_t k,
-                                    WidthOneList* result) {
-  AD_CONTRACT_CHECK(cids.size() == scores.size());
-  k = std::min(k, cids.size());
-  LOG(DEBUG) << "Call getTopKByScores (partial sort of " << cids.size()
-             << " contexts by score)...\n";
-  vector<size_t> indices;
-  indices.resize(scores.size());
-  for (size_t i = 0; i < indices.size(); ++i) {
-    indices[i] = i;
-  }
-  LOG(DEBUG) << "Doing the partial sort...\n";
-  std::partial_sort(
-      indices.begin(), indices.begin() + k, indices.end(),
-      [&scores](size_t a, size_t b) { return scores[a] > scores[b]; });
-  LOG(DEBUG) << "Packing the final WidthOneList of cIds...\n";
-  result->reserve(k + 2);
-  result->resize(k);
-  for (size_t i = 0; i < k; ++i) {
-    (*result)[i] = {{cids[indices[i]]}};
-  }
-  LOG(DEBUG) << "Done with getTopKByScores.\n";
-}
-
-// _____________________________________________________________________________
 void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult) {
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.eids_.size());
@@ -364,7 +340,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     }
   }
   IdTableStatic<3> result = std::move(*dynResult).toStatic<3>();
-  result.reserve(map.size() * k + 2);
+  result.reserve(map.size() + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     const Id eid = it->first;
     const Id entityScore = Id::makeFromInt(it->second.first);
@@ -395,17 +371,19 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes,
   if (nonAggRes.empty()) return;
 
   size_t width = nonAggRes[0].size();
-  std::sort(nonAggRes.begin(), nonAggRes.end(),
-            [&width](const Row& l, const Row& r) {
-              if (l[0] == r[0]) {
-                for (size_t i = 3; i < width; ++i) {
-                  if (l[i] == r[i]) continue;
-                  return l[i] < r[i];
-                }
-                return l[1] < r[1];
-              }
-              return l[0] < r[0];
-            });
+  std::ranges::sort(nonAggRes, [width](const Row& l, const Row& r) {
+    if (l[0] != r[0]) {
+      return l[0] < r[0];
+    }
+    for (size_t i = 3; i < width; ++i) {
+      DISABLE_WARNINGS_GCC_13
+      if (l[i] != r[i]) {
+        ENABLE_WARNINGS_GCC_13
+        return l[i] < r[i];
+      }
+    }
+    return l[1] < r[1];
+  });
 
   res.push_back(nonAggRes[0]);
   size_t contextsInResult = 1;
@@ -941,7 +919,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     }
   }
   IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
-  result.reserve(map.size() * k + 2);
+  result.reserve(map.size() + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     const Id eid = it->first;
     const Id score = Id::makeFromInt(it->second.first);
@@ -1046,7 +1024,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     }
   }
   IdTableStatic<3> result = std::move(*dynResult).toStatic<3>();
-  result.reserve(map.size() * k + 2);
+  result.reserve(map.size() + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     const Id eid = it->first;
     const Id score = Id::makeFromInt(it->second.first);

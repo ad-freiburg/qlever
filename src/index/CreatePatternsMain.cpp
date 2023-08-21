@@ -116,7 +116,7 @@ int main(int argc, char** argv) {
   cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
-    Index index;
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.setUsePatterns(false);
     index.createFromOnDiskIndex(baseName);
     index.addPatternsToExistingIndex();

@@ -19,39 +19,34 @@ function print_usage {
   echo "Runs QLevers end to end tests."
   echo ""
   echo "Options:"
-  echo "  -i --no-index    Do not rebuild the scientists index."
+  echo "  -i  Use index from the given directory (which must be the root directory of the working copy of QLever, not the e2e_data subdirectory)"
+  echo "  -d  Directory of the QLever binaries (relative to the main directory), default: 'build'"
 }
 
 REBUILD_THE_INDEX="YES"
+INDEX_DIRECTORY="." #if not set, we will build the index ourselves.
+BINARY_DIRECTORY="build"
 
-# Parse the command line arguments
-ARGS=$(getopt -o i --long no-index -- "$@")
-
-if ! [ $? -eq 0 ] ; then
-  print_usage
-  exit 1
-fi
-
-eval set -- "$ARGS"
-while true; do
-  case "$1" in
-    -i|--no-index)
+while getopts ":i:d:" arg; do
+  case ${arg} in
+    i)
       echo "The index will not be rebuilt"
       REBUILD_THE_INDEX="NO"
-      ;;
-   --)
-     shift
-     break
-     ;;
+      INDEX_DIRECTORY="${OPTARG}"
+    ;;
+    d)
+      BINARY_DIRECTORY="${OPTARG}"
+    ;;
+  \?) echo "Invalid option: -$OPTARG exiting" >&2
+      print_usage
+      exit
+  ;;
+  :) echo "Option -$OPTARG requires an argument" >&2
+     print_usage
+     exit
+  ;;
   esac
-  shift
 done
-
-if ! [ "$#" -eq 0 ] ; then
-  echo "Unexpected command line arguments '$@'"
-  print_usage
-  exit 1
-fi
 
 # Fail on unset variables and any non zero return-codes
 set -Eeuo pipefail
@@ -62,7 +57,8 @@ PROJECT_DIR="$(readlink -f -- "$(dirname "${BASH_SOURCE[0]}")/..")"
 # Change to the project directory so we can use simple relative paths
 echo "Changing to project directory: $PROJECT_DIR"
 pushd "$PROJECT_DIR"
-BINARY_DIR="$(readlink -f -- ./build)"
+echo "relative binary dir is $BINARY_DIRECTORY"
+BINARY_DIR=$(readlink -f -- $BINARY_DIRECTORY)
 if [ ! -e "$BINARY_DIR" ]; then
 	BINARY_DIR="$(readlink -f -- .)"
 fi
@@ -78,27 +74,26 @@ else
 fi
 export PYTHON_BINARY=`which python3`
 
-INDEX_DIR="$PROJECT_DIR/e2e_data"
+INDEX_DIR="$PROJECT_DIR/$INDEX_DIRECTORY/e2e_data"
 INPUT_DIR="$PROJECT_DIR/e2e_data/scientist-collection"
 ZIPPED_INPUT="$PROJECT_DIR/e2e/scientist-collection.zip"
 INPUT_PREFIX="scientists"
 INPUT="$INPUT_DIR/$INPUT_PREFIX"
 
 mkdir -p "$INDEX_DIR"
-# Can't check for the scientist-collection directory because
-# Travis' caching creates it
-if [ ! -e "$INPUT.nt" ]; then
-	# Why the hell is this a ZIP that can't easily be decompressed from stdin?!?
-	unzip -j "$ZIPPED_INPUT" -d "$INPUT_DIR/"
-fi;
-
-
 INDEX_PREFIX="scientists-index"
 INDEX="$INDEX_DIR/$INDEX_PREFIX"
 
 
-# Delete and rebuild the index
-if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.vocabulary" ]; then
+# Delete and rebuild the index if necessary
+if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.index.pso" ]; then
+  # Can't check for the scientist-collection directory because
+  # Travis' caching creates it
+  if [ ! -e "$INPUT.nt" ]; then
+  	unzip -j "$ZIPPED_INPUT" -d "$INPUT_DIR/"
+  fi;
+
+
 	rm -f "$INDEX.*"
 	pushd "$BINARY_DIR"
 	echo "Building index $INDEX"
@@ -135,5 +130,5 @@ if [ $i -ge 60 ]; then
 fi
 
 echo "ServerMain was succesfully started, running queries ..."
-$PYTHON_BINARY "$PROJECT_DIR/e2e/queryit.py" "$PROJECT_DIR/e2e/scientists_queries.yaml" "http://localhost:9099" &> "$BINARY_DIR/query_log.txt" || bail "Querying Server failed"
+$PYTHON_BINARY "$PROJECT_DIR/e2e/queryit.py" "$PROJECT_DIR/e2e/scientists_queries.yaml" "http://localhost:9099" | tee "$BINARY_DIR/query_log.txt" || bail "Querying Server failed"
 popd

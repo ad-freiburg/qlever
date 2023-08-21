@@ -56,7 +56,7 @@ class HasPredicateScan : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  [[nodiscard]] vector<size_t> resultSortedOn() const override;
+  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
 
   void setTextLimit(size_t limit) override;
 
@@ -65,7 +65,7 @@ class HasPredicateScan : public Operation {
   float getMultiplicity(size_t col) override;
 
  private:
-  size_t getSizeEstimateBeforeLimit() override;
+  uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
   size_t getCostEstimate() override;

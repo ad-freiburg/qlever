@@ -83,9 +83,9 @@ size_t GroupBy::getResultWidth() const {
   return getInternallyVisibleVariableColumns().size();
 }
 
-vector<size_t> GroupBy::resultSortedOn() const {
+vector<ColumnIndex> GroupBy::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
-  vector<size_t> sortedOn;
+  vector<ColumnIndex> sortedOn;
   sortedOn.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
     sortedOn.push_back(varCols[var].columnIndex_);
@@ -93,8 +93,9 @@ vector<size_t> GroupBy::resultSortedOn() const {
   return sortedOn;
 }
 
-vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
-  vector<size_t> cols;
+vector<ColumnIndex> GroupBy::computeSortColumns(
+    const QueryExecutionTree* subtree) {
+  vector<ColumnIndex> cols;
   if (_groupByVariables.empty()) {
     // the entire input is a single group, no sorting needs to be done
     return cols;
@@ -102,10 +103,10 @@ vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
 
   const auto& inVarColMap = subtree->getVariableColumns();
 
-  std::unordered_set<size_t> sortColSet;
+  std::unordered_set<ColumnIndex> sortColSet;
 
   for (const auto& var : _groupByVariables) {
-    size_t col = inVarColMap.at(var).columnIndex_;
+    ColumnIndex col = inVarColMap.at(var).columnIndex_;
     // avoid sorting by a column twice
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);
@@ -147,7 +148,7 @@ float GroupBy::getMultiplicity(size_t col) {
   return 1;
 }
 
-size_t GroupBy::getSizeEstimateBeforeLimit() {
+uint64_t GroupBy::getSizeEstimateBeforeLimit() {
   if (_groupByVariables.empty()) {
     return 1;
   }
@@ -198,7 +199,7 @@ void GroupBy::processGroup(
       resultEntry = singleResult;
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          singleResult, *localVocab);
+          AD_FWD(singleResult), *localVocab);
     } else {
       // This should never happen since aggregates always return constants.
       AD_FAIL();
@@ -251,6 +252,9 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   evaluationContext._variableToColumnMapPreviousResults =
       getInternallyVisibleVariableColumns();
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
+
+  // Let the evaluation know that we are part of a GROUP BY.
+  evaluationContext._isPartOfGroupBy = true;
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
     result.emplace_back();
@@ -473,7 +477,7 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
         getExecutionContext()->getIndex().getPimpl().getPermutation(
             permutationEnum.value());
     IdTableStatic<NUM_COLS> table = std::move(*idTable).toStatic<NUM_COLS>();
-    const auto& metaData = permutation._meta.data();
+    const auto& metaData = permutation.meta_.data();
     // TODO<joka921> the reserve is too large because of the ignored
     // triples. We would need to incorporate the information how many
     // added "relations" are in each permutationEnum during index building.
@@ -534,7 +538,7 @@ std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
   }
   {
     auto v = variableThatMustBeContained;
-    if (v != indexScan->getSubject() && v.name() != indexScan->getPredicate() &&
+    if (v != indexScan->getSubject() && v != indexScan->getPredicate() &&
         v != indexScan->getObject()) {
       return std::nullopt;
     }
@@ -542,7 +546,7 @@ std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
 
   if (variableByWhichToSort == indexScan->getSubject()) {
     return Permutation::SPO;
-  } else if (variableByWhichToSort.name() == indexScan->getPredicate()) {
+  } else if (variableByWhichToSort == indexScan->getPredicate()) {
     return Permutation::POS;
   } else if (variableByWhichToSort == indexScan->getObject()) {
     return Permutation::OSP;

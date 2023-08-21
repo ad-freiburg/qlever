@@ -4,13 +4,24 @@
 
 #pragma once
 
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <functional>
+#include <iterator>
+#include <ranges>
+#include <sstream>
 #include <string>
 #include <string_view>
+
+#include "util/Concepts.h"
+#include "util/Exception.h"
+#include "util/Forward.h"
 
 using std::string;
 using std::string_view;
@@ -43,6 +54,37 @@ inline string getLastPartOfString(const string& text, const char separator);
  */
 inline size_t findLiteralEnd(std::string_view input,
                              std::string_view literalEnd);
+
+/*
+@brief Add elements of the range to a stream, with the `separator` between the
+elements.
+
+@tparam Range An input range, whos dereferenced iterators can be inserted into
+streams.
+
+@param separator Will be put between each of the string representations
+of the range elements.
+*/
+template <std::ranges::input_range Range>
+requires ad_utility::Streamable<
+    std::iter_reference_t<std::ranges::iterator_t<Range>>>
+void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator);
+
+// Similar to the overload of `lazyStrJoin` above, but the result is returned as
+// a string.
+template <std::ranges::input_range Range>
+requires ad_utility::Streamable<
+    std::iter_reference_t<std::ranges::iterator_t<Range>>>
+std::string lazyStrJoin(Range&& r, std::string_view separator);
+
+/*
+@brief Adds indentation before the given string and directly after new line
+characters.
+
+@param indentationSymbol What the indentation should look like..
+*/
+inline std::string addIndentation(std::string_view str,
+                                  std::string_view indentationSymbol);
 
 // *****************************************************************************
 // Definitions:
@@ -242,6 +284,55 @@ constexpr bool constantTimeEquals(std::string_view view1,
         view.size()};
   };
   return impl(toVolatile(view1), toVolatile(view2));
+}
+
+// _________________________________________________________________________
+template <std::ranges::input_range Range>
+requires ad_utility::Streamable<
+    std::iter_reference_t<std::ranges::iterator_t<Range>>>
+void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
+  auto begin = std::begin(r);
+  auto end = std::end(r);
+
+  // Is the range empty?
+  if (begin == end) {
+    return;
+  }
+
+  // Add the first entry without a seperator.
+  *stream << *begin;
+
+  // Add the remaining entries.
+  ++begin;
+  std::ranges::for_each(begin, end,
+                        [&stream, &separator](const auto& listItem) {
+                          *stream << separator << listItem;
+                        },
+                        {});
+}
+
+// _________________________________________________________________________
+template <std::ranges::input_range Range>
+requires ad_utility::Streamable<
+    std::iter_reference_t<std::ranges::iterator_t<Range>>>
+std::string lazyStrJoin(Range&& r, std::string_view separator) {
+  std::ostringstream stream;
+  lazyStrJoin(&stream, AD_FWD(r), separator);
+  return std::move(stream).str();
+}
+
+// ___________________________________________________________________________
+std::string addIndentation(std::string_view str,
+                           std::string_view indentationSymbol) {
+  // An empty indentation makes no sense. Must be an error.
+  AD_CONTRACT_CHECK(!indentationSymbol.empty());
+
+  // Add an indentation to the beginning and replace a new line with a new line,
+  // directly followed by the indentation.
+  return absl::StrCat(
+      indentationSymbol,
+      absl::StrReplaceAll(str,
+                          {{"\n", absl::StrCat("\n", indentationSymbol)}}));
 }
 
 }  // namespace ad_utility

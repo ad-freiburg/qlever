@@ -71,16 +71,16 @@ void appendVector(std::vector<T>& destination, U&& source) {
  */
 template <typename Range, typename F>
 auto transform(Range&& input, F unaryOp) {
-  using Output = std::decay_t<decltype(unaryOp(
-      *ad_utility::makeForwardingIterator<Range>(input.begin())))>;
+  using Output = std::decay_t<decltype(std::invoke(
+      unaryOp, *ad_utility::makeForwardingIterator<Range>(input.begin())))>;
   std::vector<Output> out;
   out.reserve(input.size());
-  std::transform(ad_utility::makeForwardingIterator<Range>(input.begin()),
-                 ad_utility::makeForwardingIterator<Range>(input.end()),
-                 std::back_inserter(out), unaryOp);
+  std::ranges::transform(
+      ad_utility::makeForwardingIterator<Range>(input.begin()),
+      ad_utility::makeForwardingIterator<Range>(input.end()),
+      std::back_inserter(out), unaryOp);
   return out;
 }
-
 /*
 @brief Takes two vectors, pairs up their content at the same index positions
 and copies them into `std::pair`s, who are returned inside a vector.

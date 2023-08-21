@@ -19,7 +19,7 @@ namespace ad_utility::testing {
 // such that very small indices, as they are typically used for unit tests,
 // can be built without a lot of time and memory overhead.
 inline Index makeIndexWithTestSettings() {
-  Index index;
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
   index.stxxlMemoryInBytes() = 1024ul * 1024ul * 50;
   return index;
@@ -63,7 +63,8 @@ inline Index makeTestIndex(const std::string& indexBasename,
                            std::string turtleInput = "",
                            bool loadAllPermutations = true,
                            bool usePatterns = true,
-                           bool usePrefixCompression = true) {
+                           bool usePrefixCompression = true,
+                           size_t blocksizePermutationsInBytes = 32) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
@@ -83,15 +84,22 @@ inline Index makeTestIndex(const std::string& indexBasename,
   f.close();
   {
     Index index = makeIndexWithTestSettings();
+    // This is enough for 2 triples per block. This is deliberately chosen as a
+    // small value, s.t. the tiny knowledge graphs from unit tests also contain
+    // multiple blocks. Should this value or the semantics of it (how many
+    // triples it may store) ever change, then some unit tests might have to be
+    // adapted.
+    index.blocksizePermutationsInBytes() = blocksizePermutationsInBytes;
     index.setOnDiskBase(indexBasename);
     index.setUsePatterns(usePatterns);
     index.setPrefixCompression(usePrefixCompression);
-    index.createFromFile<TurtleParserAuto>(inputFilename);
+    index.createFromFile(inputFilename);
   }
-  Index index;
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setUsePatterns(usePatterns);
   index.setLoadAllPermutations(loadAllPermutations);
   index.createFromOnDiskIndex(indexBasename);
+  ad_utility::setGlobalLoggingStream(&std::cout);
   return index;
 }
 
@@ -102,7 +110,8 @@ inline Index makeTestIndex(const std::string& indexBasename,
 inline QueryExecutionContext* getQec(std::string turtleInput = "",
                                      bool loadAllPermutations = true,
                                      bool usePatterns = true,
-                                     bool usePrefixCompression = true) {
+                                     bool usePrefixCompression = true,
+                                     size_t blocksizePermutationsInBytes = 32) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -124,11 +133,11 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "",
             *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{});
   };
 
-  using Key = std::tuple<std::string, bool, bool, bool>;
+  using Key = std::tuple<std::string, bool, bool, bool, size_t>;
   static ad_utility::HashMap<Key, Context> contextMap;
 
-  auto key =
-      Key{turtleInput, loadAllPermutations, usePatterns, usePrefixCompression};
+  auto key = Key{turtleInput, loadAllPermutations, usePatterns,
+                 usePrefixCompression, blocksizePermutationsInBytes};
 
   if (!contextMap.contains(key)) {
     std::string testIndexBasename =
@@ -145,7 +154,8 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "",
                      }},
                      std::make_unique<Index>(makeTestIndex(
                          testIndexBasename, turtleInput, loadAllPermutations,
-                         usePatterns, usePrefixCompression)),
+                         usePatterns, usePrefixCompression,
+                         blocksizePermutationsInBytes)),
                      std::make_unique<QueryResultCache>()});
   }
   return contextMap.at(key).qec_.get();

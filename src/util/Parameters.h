@@ -103,11 +103,19 @@ namespace detail::parameterShortNames {
 
 // TODO<joka921> Replace these by versions that actually parse the whole
 // string.
-using fl = decltype([](const auto& s) { return std::stof(s); });
-using dbl = decltype([](const auto& s) { return std::stod(s); });
-using szt = decltype([](const auto& s) { return std::stoull(s); });
+struct fl {
+  float operator()(const auto& s) const { return std::stof(s); }
+};
+struct dbl {
+  double operator()(const auto& s) const { return std::stod(s); }
+};
+struct szt {
+  size_t operator()(const auto& s) const { return std::stoull(s); }
+};
 
-using toString = decltype([](const auto& s) { return std::to_string(s); });
+struct toString {
+  std::string operator()(const auto& s) const { return std::to_string(s); }
+};
 
 /// Partial template specialization for Parameters with common types (numeric
 /// types and strings)

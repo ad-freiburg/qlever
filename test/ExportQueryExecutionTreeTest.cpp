@@ -122,10 +122,16 @@ void runConstructQueryTestCase(
 // `TestCaseSelectQuery`. This function can only be used when there is a single
 // variable in the result. The `values` then become the bindings of that
 // variable.
-nlohmann::json makeExpectedQLeverJSON(const std::vector<std::string>& values) {
+nlohmann::json makeExpectedQLeverJSON(
+    const std::vector<std::optional<std::string>>& values) {
   nlohmann::json j;
   for (const auto& value : values) {
-    j.push_back(std::vector{value});
+    if (value.has_value()) {
+      j.push_back(std::vector{value.value()});
+    } else {
+      j.emplace_back();
+      j.back().push_back(nullptr);
+    }
   }
   return j;
 }
@@ -159,6 +165,7 @@ nlohmann::json makeExpectedSparqlJSON(
   nlohmann::json j;
   j["head"]["vars"].push_back("o");
   auto& res = j["results"]["bindings"];
+  res = std::vector<std::string>{};
   for (const auto& binding : bindings) {
     res.emplace_back();
     res.back()["o"] = binding;
@@ -173,7 +180,6 @@ TEST(ExportQueryExecutionTree, Integers) {
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   TestCaseSelectQuery testCase{
       kg, query, 3,
-      // TODO<joka921> the ORDER BY of negative numbers is incorrect.
       // TSV
       "?o\n"
       "-42019234865781\n"
@@ -199,7 +205,6 @@ TEST(ExportQueryExecutionTree, Integers) {
 
   TestCaseConstructQuery testCaseConstruct{
       kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3,
-      // TODO<joka921> the ORDER BY of negative numbers is incorrect.
       // TSV
       "<s>\t<p>\t-42019234865781\n"
       "<s>\t<p>\t42\n"
@@ -223,6 +228,81 @@ TEST(ExportQueryExecutionTree, Integers) {
 }
 
 // ____________________________________________________________________________
+TEST(ExportQueryExecutionTree, Bool) {
+  std::string kg = "<s> <p> true . <s> <p> false.";
+  std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+  TestCaseSelectQuery testCase{
+      kg, query, 2,
+      // TSV
+      "?o\n"
+      "false\n"
+      "true\n",
+      // CSV
+      "o\n"
+      "false\n"
+      "true\n",
+      makeExpectedQLeverJSON(
+          {"\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s,
+           "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
+                           "literal", "false"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
+                           "literal", "true")})};
+  runSelectQueryTestCase(testCase);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 2,
+      // TSV
+      "<s>\t<p>\tfalse\n"
+      "<s>\t<p>\ttrue\n",
+      // CSV
+      "<s>,<p>,false\n"
+      "<s>,<p>,true\n",
+      // Turtle
+      "<s> <p> false .\n"
+      "<s> <p> true .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"<s>"s, "<p>"s, "false"s});
+        j.push_back(std::vector{"<s>"s, "<p>"s, "true"s});
+        return j;
+      }()};
+  runConstructQueryTestCase(testCaseConstruct);
+}
+
+// ____________________________________________________________________________
+TEST(ExportQueryExecutionTree, UnusedVariable) {
+  std::string kg = "<s> <p> true . <s> <p> false.";
+  std::string query = "SELECT ?o WHERE {?s ?p ?x} ORDER BY ?s";
+  TestCaseSelectQuery testCase{
+      kg, query, 2,
+      // TSV
+      "?o\n"
+      "\n"
+      "\n",
+      // CSV
+      "o\n"
+      "\n"
+      "\n",
+      makeExpectedQLeverJSON({std::nullopt, std::nullopt}),
+      makeExpectedSparqlJSON({})};
+  runSelectQueryTestCase(testCase);
+
+  // If we use a variable that is always unbound in a CONSTRUCT triple, then
+  // the result for this triple will be empty.
+  TestCaseConstructQuery testCaseConstruct{
+      kg, "CONSTRUCT {?x ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 0,
+      // TSV
+      "",
+      // CSV
+      "",
+      // Turtle
+      "", []() { return nlohmann::json::parse("[]"); }()};
+  runConstructQueryTestCase(testCaseConstruct);
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, Floats) {
   std::string kg =
       "<s> <p> 42.2 . <s> <p> -42019234865.781e12 . <s> <p> "
@@ -232,8 +312,6 @@ TEST(ExportQueryExecutionTree, Floats) {
       kg,
       query,
       3,
-      // TODO<joka921> The sorting is wrong, and the formatting of the negative
-      // number is strange.
       // TSV
       "?o\n"
       "-42019234865780982022144\n"
@@ -294,8 +372,11 @@ TEST(ExportQueryExecutionTree, Dates) {
       1,
       // TSV
       "?o\n"
-      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",
-      // Note: the duplicate quotes are due to the escaping for CSV.
+      "1950-01-01T00:00:00\n",
+      // should be
+      // "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",
+      // but that is a bug in the TSV export for another PR. Note: the duplicate
+      // quotes are due to the escaping for CSV.
       "o\n"
       "1950-01-01T00:00:00\n",
       makeExpectedQLeverJSON(
@@ -312,11 +393,15 @@ TEST(ExportQueryExecutionTree, Dates) {
       1,
       // TSV
       "<s>\t<p>\t\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/"
-      "XMLSchema#dateTime>\n",
-      // TSV
+      "XMLSchema#dateTime>\n",  // missing
+                                // "^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",
+      // CSV
+      // TODO<joka921> This format is wrong, but this is is due to the way that
+      // CONSTRUCT queries are currently exported. This has to be fixed in a
+      // different PR.
       "<s>,<p>,\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/"
-      // Turtle
       "XMLSchema#dateTime>\"\n",
+      // Turtle
       "<s> <p> "
       "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> "
       ".\n",
@@ -401,7 +486,6 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
-      // TODO<joka921> the ORDER BY of negative numbers is incorrect.
       // TSV
       "<s>\t<p>\t\"Some\"Where Over,\"@en-ca\n",
       // CSV
@@ -412,6 +496,48 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
         nlohmann::json j;
         j.push_back(
             std::vector{"<s>"s, "<p>"s, "\"Some\"Where\tOver,\"@en-ca"s});
+        return j;
+      }(),
+  };
+  runConstructQueryTestCase(testCaseConstruct);
+}
+
+// ____________________________________________________________________________
+TEST(ExportQueryExecutionTree, LiteralWithDatatype) {
+  std::string kg = "<s> <p> \"something\"^^<www.example.org/bim>";
+  std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+  TestCaseSelectQuery testCase{
+      kg, query, 1,
+      // TSV
+      "?o\n"
+      "\"something\"^^<www.example.org/bim>\n",
+      // CSV
+      "o\n"
+      "something\n",
+      makeExpectedQLeverJSON({"\"something\"^^<www.example.org/bim>"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding("www.example.org/bim", "literal", "something")})};
+  runSelectQueryTestCase(testCase);
+  testCase.kg = "<s> <x> <y>";
+  testCase.query =
+      "SELECT ?o WHERE { VALUES ?o {\"something\"^^<www.example.org/bim>}} "
+      "ORDER BY ?o";
+  runSelectQueryTestCase(testCase);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
+      // TSV
+      "<s>\t<p>\t\"something\"^^<www.example.org/bim>\n",
+      // CSV
+      "<s>,<p>,\"\"\"something\"\"^^<www.example.org/bim>\"\n",
+      // Turtle
+      "<s> <p> \"something\"^^<www.example.org/bim> .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"<s>"s, "<p>"s,
+                                "\"something\"^^<www.example.org/bim>"s});
         return j;
       }(),
   };
@@ -563,6 +689,16 @@ TEST(ExportQueryExecutionTree, CornerCases) {
   auto resultNoColumns = runJSONQuery(kg, queryNoVariablesVisible,
                                       ad_utility::MediaType::sparqlJson);
   ASSERT_TRUE(resultNoColumns["result"]["bindings"].empty());
+
+  auto qec = ad_utility::testing::getQec(kg);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(), Id::max(),
+                                                   LocalVocab{}),
+      ::testing::ContainsRegex("should be unreachable"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(
+          ad_utility::testing::VocabId(12)),
+      ::testing::ContainsRegex("should be unreachable"));
 }
 
 // TODO<joka921> Unit tests for the more complex CONSTRUCT export (combination

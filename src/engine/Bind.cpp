@@ -14,7 +14,7 @@
 size_t Bind::getResultWidth() const { return _subtree->getResultWidth() + 1; }
 
 // BIND doesn't change the number of result rows
-size_t Bind::getSizeEstimateBeforeLimit() {
+uint64_t Bind::getSizeEstimateBeforeLimit() {
   return _subtree->getSizeEstimate();
 }
 
@@ -42,7 +42,7 @@ float Bind::getMultiplicity(size_t col) {
 string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 
 // _____________________________________________________________________________
-[[nodiscard]] vector<size_t> Bind::resultSortedOn() const {
+[[nodiscard]] vector<ColumnIndex> Bind::resultSortedOn() const {
   // We always append the result column of the BIND at the end and this column
   // is not sorted, so the sequence of indices of the sorted columns do not
   // change.
@@ -149,6 +149,7 @@ void Bind::computeExpressionBind(
                      T&& singleResult) mutable {
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
+
     if constexpr (isVariable) {
       auto column =
           getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;

@@ -12,9 +12,9 @@
 #include <variant>
 #include <vector>
 
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/CopyableUniquePtr.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -29,6 +29,16 @@ namespace ad_benchmark {
  * organizing those measured times.
  */
 class BenchmarkResults {
+  /*
+  A quick explanation, **why** this class uses pointers:
+  All the container for benchmark measurements are created in place and then a
+  reference to the new container returned. This returning of a reference is the
+  sole reason for the usage of pointers.
+  Otherwise adding more entries to the vectors, could lead to all previous
+  references being made invalid, because a vector had to re-allocate memory.
+  If the entries are pointers to the objects, the references to the object stay
+  valid and we don't have this problem.
+  */
   template <typename T>
   using PointerVector = std::vector<ad_utility::CopyableUniquePtr<T>>;
 
@@ -101,11 +111,15 @@ class BenchmarkResults {
   std::vector<ResultGroup> getGroups() const;
 
   /*
-   * @brief Creates and returns an empty table.
-   *
-   * @param descriptor The name/identifier of the table.
-   * @param rowNames,columnNames The names for the rows/columns.
-   */
+  @brief Creates and returns an empty table.
+
+  @param descriptor A string to identify this instance in json format later.
+  @param rowNames The names for the rows. The amount of rows in this table is
+  equal to the amount of row names. Important: This first column will be filled
+  with those names.
+  @param columnNames The names for the columns. The amount of columns in this
+  table is equal to the amount of column names.
+  */
   ResultTable& addTable(const std::string& descriptor,
                         const std::vector<std::string>& rowNames,
                         const std::vector<std::string>& columnNames);
@@ -126,16 +140,16 @@ between a collection of benchmarks of any type (single, group, table) and
 the processing/management of those benchmarks.
 */
 class BenchmarkInterface {
+  /*
+  For adding configuration options and getting the values passed at runtime.
+  If you want to add configuration options, do it in the constructor of your
+  class.
+  */
+  ad_utility::ConfigManager manager_;
+
  public:
   // A human-readable name that will be printed as part of the output.
   virtual std::string name() const = 0;
-
-  // Used to transport values, that you want to set at runtime.
-  virtual void parseConfiguration(
-      [[maybe_unused]] const BenchmarkConfiguration& config) {
-    // Default behaviour.
-    return;
-  };
 
   /*
   For the general metadata of a class. Mostly information, that is the same
@@ -162,6 +176,10 @@ class BenchmarkInterface {
 
   // Without this, we get memory problems.
   virtual ~BenchmarkInterface() = default;
+
+  // Needed for manipulation by the infrastructure.
+  ad_utility::ConfigManager& getConfigManager() { return manager_; }
+  const ad_utility::ConfigManager& getConfigManager() const { return manager_; }
 };
 
 /*
@@ -190,11 +208,10 @@ class BenchmarkRegister {
   explicit BenchmarkRegister(BenchmarkPointer&& benchmarkClasseInstance);
 
   /*
-  @brief Passes the `BenchmarkConfiguration` to the `parseConfiguration`
-   function of all the registered instances of benchmark classes.
+  @brief Passes the `nlohmann::json` object to the
+  `ConfigManager::parseConfig()` of every registered benchmark class.
   */
-  static void passConfigurationToAllRegisteredBenchmarks(
-      const BenchmarkConfiguration& config = BenchmarkConfiguration{});
+  static void parseConfigWithAllRegisteredBenchmarks(const nlohmann::json& j);
 
   /*
    * @brief Measures all the registered benchmarks and returns the resulting

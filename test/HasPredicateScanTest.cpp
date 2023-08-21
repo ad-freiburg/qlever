@@ -43,14 +43,14 @@ class DummyOperation : public Operation {
 
   virtual size_t getResultWidth() const override { return 2; }
 
-  virtual vector<size_t> resultSortedOn() const override { return {1}; }
+  virtual vector<ColumnIndex> resultSortedOn() const override { return {1}; }
 
   virtual void setTextLimit(size_t limit) override { (void)limit; }
 
   virtual size_t getCostEstimate() override { return 10; }
 
  private:
-  virtual size_t getSizeEstimateBeforeLimit() override { return 10; }
+  virtual uint64_t getSizeEstimateBeforeLimit() override { return 10; }
 
  public:
   virtual float getMultiplicity(size_t col) override {
@@ -245,7 +245,7 @@ TEST(HasPredicateScan, subtreeS) {
   CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
   CompactVectorOfStrings<Id> patterns(patternsSrc);
 
-  Index index;
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   QueryResultCache cache{};
   QueryExecutionContext ctx(index, &cache, makeAllocator(),
                             SortPerformanceEstimator{});

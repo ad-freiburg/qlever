@@ -48,16 +48,29 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
   ResultGroup group("group");
 
   ASSERT_EQ(group.descriptor_, "group");
-  ASSERT_EQ(group.entries_.size(), 0);
+  ASSERT_EQ(group.resultEntries_.size(), 0);
+  ASSERT_EQ(group.resultTables_.size(), 0);
 
   // Adding a measurement and checking, if it was added correctly.
   ResultEntry& entry = group.addMeasurement("new entry", createWaitLambda(100));
 
-  ASSERT_EQ(group.entries_.size(), 1);
+  ASSERT_EQ(group.resultEntries_.size(), 1);
   ASSERT_EQ(entry.descriptor_, "new entry");
 
   // The time measurements can't be 100% accurat, so we give it a 'window'.
   ASSERT_NEAR(0.1, entry.measuredTime_, 0.01);
+
+  // Adding a table and checking, if it was added correctly.
+  const std::vector<std::string> rowNames = {"row1", "row2"};
+  const std::vector<std::string> columnNames = {"column1"};
+  ResultTable& table = group.addTable("table", rowNames, columnNames);
+
+  ASSERT_EQ(group.resultTables_.size(), 1);
+  ASSERT_EQ(table.descriptor_, "table");
+  ASSERT_EQ(table.numRows(), 2);
+  ASSERT_EQ(table.numColumns(), 1);
+  ASSERT_EQ(table.getEntry<std::string>(0, 0), rowNames.at(0));
+  ASSERT_EQ(table.getEntry<std::string>(1, 0), rowNames.at(1));
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultTable) {

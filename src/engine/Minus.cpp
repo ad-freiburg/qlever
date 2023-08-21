@@ -12,21 +12,11 @@ using std::string;
 // _____________________________________________________________________________
 Minus::Minus(QueryExecutionContext* qec,
              std::shared_ptr<QueryExecutionTree> left,
-             std::shared_ptr<QueryExecutionTree> right,
-             std::vector<std::array<size_t, 2>> matchedColumns)
-    : Operation{qec},
-      _left{std::move(left)},
-      _right{std::move(right)},
-      _matchedColumns{std::move(matchedColumns)} {
-  // Check that the invariant (inputs are sorted on the matched columns) holds.
-  auto l = _left->resultSortedOn();
-  auto r = _right->resultSortedOn();
-  AD_CONTRACT_CHECK(_matchedColumns.size() <= l.size());
-  AD_CONTRACT_CHECK(_matchedColumns.size() <= r.size());
-  for (size_t i = 0; i < _matchedColumns.size(); ++i) {
-    AD_CONTRACT_CHECK(_matchedColumns[i][0] == l[i]);
-    AD_CONTRACT_CHECK(_matchedColumns[i][1] == r[i]);
-  }
+             std::shared_ptr<QueryExecutionTree> right)
+    : Operation{qec} {
+  std::tie(_left, _right, _matchedColumns) =
+      QueryExecutionTree::getSortedSubtreesAndJoinColumns(std::move(left),
+                                                          std::move(right));
 }
 
 // _____________________________________________________________________________
@@ -81,7 +71,9 @@ VariableToColumnMap Minus::computeVariableToColumnMap() const {
 size_t Minus::getResultWidth() const { return _left->getResultWidth(); }
 
 // _____________________________________________________________________________
-vector<size_t> Minus::resultSortedOn() const { return _left->resultSortedOn(); }
+vector<ColumnIndex> Minus::resultSortedOn() const {
+  return _left->resultSortedOn();
+}
 
 // _____________________________________________________________________________
 float Minus::getMultiplicity(size_t col) {
@@ -91,7 +83,7 @@ float Minus::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t Minus::getSizeEstimateBeforeLimit() {
+uint64_t Minus::getSizeEstimateBeforeLimit() {
   // This is an upper bound on the size as an arbitrary number
   // of rows might be deleted in this operation.
   return _left->getSizeEstimate();
@@ -212,7 +204,7 @@ finish:
 template <int A_WIDTH, int B_WIDTH>
 Minus::RowComparison Minus::isRowEqSkipFirst(
     const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
-    size_t ib, const std::vector<std::array<size_t, 2>>& joinColumns) {
+    size_t ib, const std::vector<std::array<ColumnIndex, 2>>& joinColumns) {
   for (size_t i = 1; i < joinColumns.size(); ++i) {
     Id va{a(ia, joinColumns[i][0])};
     Id vb{b(ib, joinColumns[i][1])};
