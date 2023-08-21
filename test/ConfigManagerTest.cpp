@@ -350,6 +350,42 @@ TEST(ConfigManagerTest, HumanReadableAddValidator) {
       "Exactly one bool must be choosen.");
 }
 
+// Human readable examples for `addOptionValidator`.
+TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
+  // Check, if all the options have a default value.
+  ConfigManager mAllWithDefault;
+  int firstInt;
+  decltype(auto) firstOption = mAllWithDefault.addOption("firstOption", "", &firstInt, 10);
+  mAllWithDefault.addOptionValidator([](const ConfigOption& opt) { return opt.hasDefaultValue(); },
+                                     "Every option must have a default value.", firstOption);
+  ASSERT_NO_THROW(mAllWithDefault.parseConfig(nlohmann::json::parse(R"--({"firstOption": 4})--")));
+  int secondInt;
+  decltype(auto) secondOption = mAllWithDefault.addOption("secondOption", "", &secondInt);
+  mAllWithDefault.addOptionValidator(
+      [](const ConfigOption& opt1, const ConfigOption& opt2) {
+        return opt1.hasDefaultValue() && opt2.hasDefaultValue();
+      },
+      "Every option must have a default value.", firstOption, secondOption);
+  ASSERT_ANY_THROW(mAllWithDefault.parseConfig(
+      nlohmann::json::parse(R"--({"firstOption": 4, "secondOption" : 7})--")));
+
+  // We want, that all options names start with the letter `d`.
+  ConfigManager mFirstLetter;
+  decltype(auto) correctLetter = mFirstLetter.addOption("dValue", "", &firstInt);
+  mFirstLetter.addOptionValidator(
+      [](const ConfigOption& opt) { return opt.getIdentifier().starts_with('d'); },
+      "Every option name must start with the letter d.", correctLetter);
+  ASSERT_NO_THROW(mFirstLetter.parseConfig(nlohmann::json::parse(R"--({"dValue": 4})--")));
+  decltype(auto) wrongLetter = mFirstLetter.addOption("value", "", &secondInt);
+  mFirstLetter.addOptionValidator(
+      [](const ConfigOption& opt1, const ConfigOption& opt2) {
+        return opt1.getIdentifier().starts_with('d') && opt2.getIdentifier().starts_with('d');
+      },
+      "Every option name must start with the letter d.", correctLetter, wrongLetter);
+  ASSERT_ANY_THROW(
+      mFirstLetter.parseConfig(nlohmann::json::parse(R"--({"dValue": 4, "Value" : 7})--")));
+}
+
 /*
 @brief Generate a value of the given type. Used for generating test values in
 cooperation with `generateSingleParameterValidatorFunction`, while keeping the
@@ -758,42 +794,6 @@ TEST(ConfigManagerTest, AddValidatorException) {
   };
 
   doForTypeInConfigOptionValueType(doValidatorParameterNotInConfigManagerTest);
-}
-
-// Human readable examples for `addOptionValidator`.
-TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
-  // Check, if all the options have a default value.
-  ConfigManager mAllWithDefault;
-  int firstInt;
-  decltype(auto) firstOption = mAllWithDefault.addOption("firstOption", "", &firstInt, 10);
-  mAllWithDefault.addOptionValidator([](const ConfigOption& opt) { return opt.hasDefaultValue(); },
-                                     "Every option must have a default value.", firstOption);
-  ASSERT_NO_THROW(mAllWithDefault.parseConfig(nlohmann::json::parse(R"--({"firstOption": 4})--")));
-  int secondInt;
-  decltype(auto) secondOption = mAllWithDefault.addOption("secondOption", "", &secondInt);
-  mAllWithDefault.addOptionValidator(
-      [](const ConfigOption& opt1, const ConfigOption& opt2) {
-        return opt1.hasDefaultValue() && opt2.hasDefaultValue();
-      },
-      "Every option must have a default value.", firstOption, secondOption);
-  ASSERT_ANY_THROW(mAllWithDefault.parseConfig(
-      nlohmann::json::parse(R"--({"firstOption": 4, "secondOption" : 7})--")));
-
-  // We want, that all options names start with the letter `d`.
-  ConfigManager mFirstLetter;
-  decltype(auto) correctLetter = mFirstLetter.addOption("dValue", "", &firstInt);
-  mFirstLetter.addOptionValidator(
-      [](const ConfigOption& opt) { return opt.getIdentifier().starts_with('d'); },
-      "Every option name must start with the letter d.", correctLetter);
-  ASSERT_NO_THROW(mFirstLetter.parseConfig(nlohmann::json::parse(R"--({"dValue": 4})--")));
-  decltype(auto) wrongLetter = mFirstLetter.addOption("value", "", &secondInt);
-  mFirstLetter.addOptionValidator(
-      [](const ConfigOption& opt1, const ConfigOption& opt2) {
-        return opt1.getIdentifier().starts_with('d') && opt2.getIdentifier().starts_with('d');
-      },
-      "Every option name must start with the letter d.", correctLetter, wrongLetter);
-  ASSERT_ANY_THROW(
-      mFirstLetter.parseConfig(nlohmann::json::parse(R"--({"dValue": 4, "Value" : 7})--")));
 }
 
 TEST(ConfigManagerTest, AddOptionValidator) {
