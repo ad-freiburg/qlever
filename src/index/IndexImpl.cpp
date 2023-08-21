@@ -239,13 +239,6 @@ template void IndexImpl::createFromFile<TurtleParserAuto>(
 template <class Parser>
 IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     const string& filename, size_t linesPerPartial) {
-  try {
-    Rtree rtree = Rtree(1300000000);
-    rtree.BuildTree("vocab_raw", 16, "./rtree_build");
-    LOG(INFO) << "Finished building the Rtree" << std::endl;
-  } catch (const std::exception &e) {
-    LOG(INFO) << e.what() << std::endl;
-  }
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
   auto parser = std::make_shared<Parser>(filename);

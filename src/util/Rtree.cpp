@@ -40,7 +40,7 @@ static void centerOrdering(multiBoxWithOrderIndex& boxes, size_t dim) {
 OrderedBoxes SortInput(const std::string& onDiskBase, size_t M, uintmax_t maxBuildingRamUsage, bool workInRam) {
   OrderedBoxes orderedInputRectangles;
 
-  ad_utility::BackgroundStxxlSorter<rTreeValue, sortRuleLambdaX> sorterRectsD0Basic = ad_utility::BackgroundStxxlSorter<rTreeValue, sortRuleLambdaX>(std::ceil(maxBuildingRamUsage / 3.0));
+  ad_utility::BackgroundStxxlSorter<rTreeValue, sortRuleLambdaX> sorterRectsD0Basic = ad_utility::BackgroundStxxlSorter<rTreeValue, sortRuleLambdaX>(std::ceil((maxBuildingRamUsage < 9999999999 ? maxBuildingRamUsage : 9999999999) / 3.0));
   multiBoxGeo rectsD0Basic;
 
   if (workInRam) {
@@ -62,7 +62,7 @@ OrderedBoxes SortInput(const std::string& onDiskBase, size_t M, uintmax_t maxBui
   double globalMaxX = -1;
   double globalMaxY = -1;
 
-  ad_utility::BackgroundStxxlSorter<rTreeValueWithOrderIndex, sortRuleLambdaYWithIndex> sorterRectsD1 = ad_utility::BackgroundStxxlSorter<rTreeValueWithOrderIndex, sortRuleLambdaYWithIndex>(std::ceil(maxBuildingRamUsage / 3.0));
+  ad_utility::BackgroundStxxlSorter<rTreeValueWithOrderIndex, sortRuleLambdaYWithIndex> sorterRectsD1 = ad_utility::BackgroundStxxlSorter<rTreeValueWithOrderIndex, sortRuleLambdaYWithIndex>(std::ceil((maxBuildingRamUsage < 9999999999 ? maxBuildingRamUsage : 9999999999) / 3.0));
   std::shared_ptr<multiBoxWithOrderIndex> RectanglesD1WithOrder = std::make_shared<multiBoxWithOrderIndex>();
 
   if (workInRam) {
@@ -111,7 +111,7 @@ OrderedBoxes SortInput(const std::string& onDiskBase, size_t M, uintmax_t maxBui
 
   long long ySize = 0;
   std::ofstream r1File = std::ofstream(onDiskBase + ".boundingbox.d1.tmp", std::ios::binary);
-  ad_utility::BackgroundStxxlSorter<rTreeValueWithOrderIndex, sortRuleLambdaXWithIndex> sorterRectsD0 = ad_utility::BackgroundStxxlSorter<rTreeValueWithOrderIndex, sortRuleLambdaXWithIndex>(std::ceil(maxBuildingRamUsage / 3.0));
+  ad_utility::BackgroundStxxlSorter<rTreeValueWithOrderIndex, sortRuleLambdaXWithIndex> sorterRectsD0 = ad_utility::BackgroundStxxlSorter<rTreeValueWithOrderIndex, sortRuleLambdaXWithIndex>(std::ceil((maxBuildingRamUsage < 9999999999 ? maxBuildingRamUsage : 9999999999) / 3.0));
   std::shared_ptr<multiBoxWithOrderIndex> RectanglesD0WithOrder = std::make_shared<multiBoxWithOrderIndex>();
   std::shared_ptr<multiBoxWithOrderIndex> r1Small = std::make_shared<multiBoxWithOrderIndex>();
   // placeholder
@@ -320,13 +320,7 @@ void Rtree::BuildTree(const std::string& onDiskBase, size_t M, const std::string
   long long fileLines = std::ceil(std::filesystem::file_size(file) / (4 * sizeof(double) + sizeof(uint64_t) + 2 * sizeof(long long)));
   bool workInRam = (std::filesystem::file_size(file) + fileLines * 2 * sizeof(long long)) * 4 < this->maxBuildingRamUsage;
 
-  if (workInRam) {
-    std::cout << "Building in ram" << std::endl;
-  } else {
-    std::cout << "Building on disk" << std::endl;
-  }
   OrderedBoxes orderedInputRectangles = SortInput(onDiskBase, M, maxBuildingRamUsage, workInRam);
-  std::cout << "Finished intital sorting" << std::endl;
 
   // build the tree in a depth first approach
   std::stack<ConstructionNode> layerStack;
