@@ -819,8 +819,7 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
 template <typename Tokenizer_T>
 void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
   fileBuffer_.open(filename);
-  auto batch = fileBuffer_.getNextBlock();
-  if (!batch) {
+  if (auto batch = fileBuffer_.getNextBlock(); !batch) {
     LOG(WARN) << "Empty input to the turtle parser" << std::endl;
     batch.emplace();
   } else {
