@@ -337,7 +337,7 @@ TEST(ConfigManagerTest, HumanReadableAddValidator) {
   bool boolThree;
   decltype(auto) boolThreeOption = m.addOption("boolThree", "", &boolThree, false);
   m.addValidator(
-      [](const bool& one, const bool& two, const bool& three) {
+      [](bool one, bool two, bool three) {
         return (one && !two && !three) || (!one && two && !three) || (!one && !two && three);
       },
       "Exactly one bool must be choosen.", boolOneOption, boolTwoOption, boolThreeOption);
