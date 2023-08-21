@@ -15,6 +15,7 @@
 
 using ad_utility::constantTimeEquals;
 using ad_utility::getUTF8Substring;
+using ad_utility::utf8ToLower;
 using ad_utility::utf8ToUpper;
 
 TEST(StringUtilsTest, utf8ToLower) {
