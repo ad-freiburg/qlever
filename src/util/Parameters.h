@@ -38,20 +38,21 @@ struct ParameterBase {
 template <typename T>
 concept ParameterValueType =
     std::same_as<std::decay_t<T>, T> && std::default_initializable<T> &&
-    std::move_constructible<T> && std::movable<T>;
+    std::movable<T> && std::copyable<T>;
 
 template <typename FunctionType, typename ToType>
 concept ParameterFromStringType =
     std::default_initializable<FunctionType> &&
     std::invocable<FunctionType, const std::string&> &&
-    std::same_as<ToType,
-                 std::invoke_result_t<FunctionType, const std::string&>>;
+    ad_utility::isSimilar<
+        ToType, std::invoke_result_t<FunctionType, const std::string&>>;
 
 template <typename FunctionType, typename FromType>
 concept ParameterToStringType =
     std::default_initializable<FunctionType> &&
     std::invocable<FunctionType, FromType> &&
-    std::same_as<std::string, std::invoke_result_t<FunctionType, FromType>>;
+    ad_utility::isSimilar<std::string,
+                          std::invoke_result_t<FunctionType, FromType>>;
 
 /// Abstraction for a parameter that connects a (compile time) `Name` to a
 /// runtime value.
@@ -165,7 +166,6 @@ using Double = Parameter<double, dbl, toString, Name>;
 template <ParameterName Name>
 using SizeT = Parameter<size_t, szt, toString, Name>;
 
-// TODO This type doesn't compile, because it doesn't fulfill all concepts.
 template <ParameterName Name>
 using String = Parameter<std::string, std::identity, std::identity, Name>;
 

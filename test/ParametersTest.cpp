@@ -67,6 +67,7 @@ TEST(Parameters, ParameterConcept) {
   static_assert(isParameter<Float<"Float">>);
   static_assert(isParameter<Double<"Double">>);
   static_assert(isParameter<SizeT<"SizeT">>);
+  static_assert(isParameter<String<"String">>);
   static_assert(isParameter<MemorySizeParameter<"MemorySizeParameter">>);
 
   // Test some other random types.
