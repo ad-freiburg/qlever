@@ -812,7 +812,7 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
       "\"\n    qet-width: 1 \n  }\n   filtered on column 0\n "
       " qet-width: 5 \n}",
       qet.asString());
-      auto c = Variable{"?c"};
+  auto c = Variable{"?c"};
   ASSERT_EQ(0u, qet.getVariableColumn(c));
   ASSERT_EQ(1u, qet.getVariableColumn(c.getTextScoreVariable()));
   ASSERT_EQ(2u, qet.getVariableColumn(Variable{"?y"}));

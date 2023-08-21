@@ -79,8 +79,7 @@ class FTSAlgorithms {
   // wepResult.wids_[3]:  33 29 33 29 33 29 42 31
 
   static WordEntityPostings crossIntersectKWay(
-      const vector<WordEntityPostings>& wepVecs,
-      vector<Id>* lastListEids);
+      const vector<WordEntityPostings>& wepVecs, vector<Id>* lastListEids);
 
   // Writes the wep entries to an IdTable but at most k contexts per entity. The
   // rest gets discarded. Note that the contexts with the highest score get
@@ -104,8 +103,9 @@ class FTSAlgorithms {
 
   // Special case where k == 1.
   template <int WIDTH>
-  static void multVarsAggScoresAndTakeTopContext(
-      const WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
+  static void multVarsAggScoresAndTakeTopContext(const WordEntityPostings& wep,
+                                                 size_t nofVars,
+                                                 IdTable* dynResult);
 
   // Writes the wep entries to an IdTable but at most k contexts per entity. The
   // rest gets discarded. Note that the contexts with the highest score get
@@ -135,6 +135,6 @@ class FTSAlgorithms {
   // Same but for a HashSet instead of a HashMap
   template <int WIDTH>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
-      const WordEntityPostings& wep, const HashSet<Id>& fSet,
-      size_t nofVars, size_t kLimit, IdTable* dynResult);
+      const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+      size_t kLimit, IdTable* dynResult);
 };
