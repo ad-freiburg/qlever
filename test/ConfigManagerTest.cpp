@@ -75,9 +75,9 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
   configuration grammar. Ergo, you can't set values, with such paths per short
   hand, which we don't want.
   */
-  /*ASSERT_THROW(config.addOption({"Shared part"s, "Sense_of_existence"s}, "",
+  ASSERT_THROW(config.addOption({"Shared part"s, "Sense_of_existence"s}, "",
                                 &notUsed, 42);
-               , ad_utility::NotValidShortHandNameException);*/
+               , ad_utility::NotValidShortHandNameException);
 }
 
 TEST(ConfigManagerTest, ParseConfig) {
@@ -89,7 +89,7 @@ TEST(ConfigManagerTest, ParseConfig) {
   int thirdInt;
 
   decltype(auto) optionZero =
-      config.addOption({"depth_0"s, "Option_0"s, "Option_0"s},
+      config.addOption({"depth_0"s, "Option_0"s},
                        "Must be set. Has no default value.", &firstInt);
   decltype(auto) optionOne =
       config.addOption({"depth_0"s, "depth_1"s, "Option_1"s},
@@ -131,9 +131,9 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
   // Add one option with default and one without.
   int notUsedInt;
   std::vector<int> notUsedVector;
-  config.addOption({"depth_0"s, "Without_default"s, ""},
+  config.addOption({"depth_0"s, "Without_default"s},
                    "Must be set. Has no default value.", &notUsedInt);
-  config.addOption({"depth_0"s, "With_default"s, ""},
+  config.addOption({"depth_0"s, "With_default"s},
                    "Must not be set. Has default value.", &notUsedVector,
                    {40, 41});
 
