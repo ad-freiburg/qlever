@@ -2,11 +2,11 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "./util/AllocatorTestHelpers.h"
-#include "./util/GTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "util/AllocatorTestHelpers.h"
+#include "util/GTestHelpers.h"
 
 using namespace sparqlExpression;
 
@@ -22,4 +22,16 @@ TEST(SparqlExpressionTypes, expressionResultCopyIfNotVector) {
       b = copyExpressionResultIfNotVector(a),
       ::testing::StartsWith(
           "Tried to copy an expression result that is a vector."));
+}
+
+TEST(SparqlExpressionTypes, printIdOrString) {
+  std::stringstream str;
+  IdOrString idOrString{Id::makeUndefined()};
+  PrintTo(idOrString, &str);
+  ASSERT_EQ(str.str(), "Undefined:Undefined");
+  idOrString = "bimm";
+  // Clear the stringstream.
+  str.str({});
+  PrintTo(idOrString, &str);
+  ASSERT_EQ(str.str(), "bimm");
 }
