@@ -318,16 +318,16 @@ TEST(ConfigManagerTest, HumanReadableAddValidator) {
   // two validators.
   int someInt;
   decltype(auto) numberInRangeOption = m.addOption("numberInRange", "", &someInt);
-  m.addValidator([](const int& num) { return num <= 100; }, "'numberInRange' is bigger than 100.",
+  m.addValidator([](const int& num) { return num <= 100; }, "'numberInRange' must be <=100.",
                  numberInRangeOption);
-  m.addValidator([](const int& num) { return num > 49; }, "'numberInRange' is smaller than 50.",
+  m.addValidator([](const int& num) { return num > 49; }, "'numberInRange' must be >=50.",
                  numberInRangeOption);
   checkValidator(m, nlohmann::json::parse(R"--({"numberInRange" : 60})--"),
                  nlohmann::json::parse(R"--({"numberInRange" : 101})--"),
-                 "'numberInRange' is bigger than 100.");
+                 "'numberInRange' must be <=100.");
   checkValidator(m, nlohmann::json::parse(R"--({"numberInRange" : 60})--"),
                  nlohmann::json::parse(R"--({"numberInRange" : 42})--"),
-                 "'numberInRange' is smaller than 50.");
+                 "'numberInRange' must be >=50.");
 
   // Only one of the bools should be true.
   bool boolOne;
@@ -340,14 +340,14 @@ TEST(ConfigManagerTest, HumanReadableAddValidator) {
       [](const bool& one, const bool& two, const bool& three) {
         return (one && !two && !three) || (!one && two && !three) || (!one && !two && three);
       },
-      "More than one bool option was choosen.", boolOneOption, boolTwoOption, boolThreeOption);
+      "Exactly one bool must be choosen.", boolOneOption, boolTwoOption, boolThreeOption);
   checkValidator(
       m,
       nlohmann::json::parse(
           R"--({"numberInRange" : 60, "boolOne": true, "boolTwo": false, "boolThree": false})--"),
       nlohmann::json::parse(
           R"--({"numberInRange" : 60, "boolOne": true, "boolTwo": true, "boolThree": false})--"),
-      "More than one bool option was choosen.");
+      "Exactly one bool must be choosen.");
 }
 
 /*
@@ -767,7 +767,7 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
   int firstInt;
   decltype(auto) firstOption = mAllWithDefault.addOption("firstOption", "", &firstInt, 10);
   mAllWithDefault.addOptionValidator([](const ConfigOption& opt) { return opt.hasDefaultValue(); },
-                                     "One of the options has no default value.", firstOption);
+                                     "Every option must have a default value.", firstOption);
   ASSERT_NO_THROW(mAllWithDefault.parseConfig(nlohmann::json::parse(R"--({"firstOption": 4})--")));
   int secondInt;
   decltype(auto) secondOption = mAllWithDefault.addOption("secondOption", "", &secondInt);
@@ -775,7 +775,7 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
       [](const ConfigOption& opt1, const ConfigOption& opt2) {
         return opt1.hasDefaultValue() && opt2.hasDefaultValue();
       },
-      "One of the options has no default value.", firstOption, secondOption);
+      "Every option must have a default value.", firstOption, secondOption);
   ASSERT_ANY_THROW(mAllWithDefault.parseConfig(
       nlohmann::json::parse(R"--({"firstOption": 4, "secondOption" : 7})--")));
 
@@ -784,14 +784,14 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
   decltype(auto) correctLetter = mFirstLetter.addOption("dValue", "", &firstInt);
   mFirstLetter.addOptionValidator(
       [](const ConfigOption& opt) { return opt.getIdentifier().starts_with('d'); },
-      "One of the option names doesn't start with the letter d.", correctLetter);
+      "Every option name must start with the letter d.", correctLetter);
   ASSERT_NO_THROW(mFirstLetter.parseConfig(nlohmann::json::parse(R"--({"dValue": 4})--")));
   decltype(auto) wrongLetter = mFirstLetter.addOption("value", "", &secondInt);
   mFirstLetter.addOptionValidator(
       [](const ConfigOption& opt1, const ConfigOption& opt2) {
         return opt1.getIdentifier().starts_with('d') && opt2.getIdentifier().starts_with('d');
       },
-      "One of the option names doesn't start with the letter d.", correctLetter, wrongLetter);
+      "Every option name must start with the letter d.", correctLetter, wrongLetter);
   ASSERT_ANY_THROW(
       mFirstLetter.parseConfig(nlohmann::json::parse(R"--({"dValue": 4, "Value" : 7})--")));
 }
