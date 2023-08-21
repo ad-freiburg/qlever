@@ -24,7 +24,7 @@ namespace sparqlExpression {
 
         ExpressionResult evaluate(EvaluationContext *context) const override;
 
-        std::span<SparqlExpression::Ptr> children() override;
+        std::span<SparqlExpression::Ptr> childrenImpl() override;
 
         // _________________________________________________________________________
         [[nodiscard]] string getCacheKey(

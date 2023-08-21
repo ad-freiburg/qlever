@@ -159,7 +159,7 @@ class SparqlExpression {
   }
 
   // Get the direct child expressions.
-  virtual std::span<SparqlExpression::Ptr> children() {
+  virtual std::span<SparqlExpression::Ptr> children() final {
     return childrenImpl();
   }
   virtual std::span<const SparqlExpression::Ptr> children() const final {

@@ -11,7 +11,7 @@
 
 using namespace std::literals;
 
-/*class BoundingBoxType {
+class BoundingBoxType {
  public:
   boxGeo value{};
 
@@ -109,7 +109,7 @@ namespace sparqlExpression {
     }
 
 // ___________________________________________________________________________
-    std::span<SparqlExpression::Ptr> ContainsExpression::children() {
+    std::span<SparqlExpression::Ptr> ContainsExpression::childrenImpl() {
         return {&child_, 1};
     }
 
@@ -133,14 +133,14 @@ namespace sparqlExpression {
         }
 
         auto resultSize = context->size();
-        VectorWithMemoryLimit<bool> result{context->_allocator};
+        VectorWithMemoryLimit<Id> result{context->_allocator};
         result.reserve(resultSize);
 
         for (auto id : detail::makeGenerator(*variablePtr, resultSize, context)) {
-            result.push_back(resultIds.contains(id.getInt()));
+            result.push_back(Id::makeFromBool(resultIds.contains(id.getInt())));
         }
 
         return result;
     }
 
-}  // namespace sparqlExpression*/
+}  // namespace sparqlExpression
