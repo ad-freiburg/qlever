@@ -387,33 +387,71 @@ TEST(ConfigOptionTest, HoldsType) {
   doForTypeInConfigOptionValueType(doTest);
 }
 
+/*
+Very simple check for the `set`-functions of `configOption`. Simply checks, if
+the valid value can be set without exception and if the not valid one throws
+an exception with the wanted message.
+*/
+template <typename T>
+void checkSet(ConfigOption& option, const T& validValue, const T& notValidValue,
+              std::string_view expectedErrorMessage) {
+  ASSERT_NO_THROW(option.setValue(validValue));
+  AD_EXPECT_THROW_WITH_MESSAGE(option.setValue(notValidValue),
+                               ::testing::ContainsRegex(expectedErrorMessage));
+
+  // Convert the values to json representation.
+  nlohmann::json validValueAsJson(validValue);
+  nlohmann::json notValidValueAsJson(notValidValue);
+
+  ASSERT_NO_THROW(option.setValueWithJson(validValueAsJson));
+  AD_EXPECT_THROW_WITH_MESSAGE(option.setValueWithJson(notValidValueAsJson),
+                               ::testing::ContainsRegex(expectedErrorMessage));
+}
+
+// Some human readable examples.
+TEST(ConfigOptionTest, HumanReadableAddValidator) {
+  // Even number between two numbers. Done by adding multiple validators.
+  size_t someNumber;
+  ConfigOption numberOption("NumberOption", "Some validator example option.",
+                            &someNumber, {3uL});
+  numberOption.addValidator([](const size_t& num) { return num % 2 == 0; },
+                            "Not an even number.");
+  numberOption.addValidator([](const size_t& num) { return num <= 20; },
+                            "Bigger than 20.");
+  numberOption.addValidator([](const size_t& num) { return num >= 10; },
+                            "Smaller than 10.");
+  checkSet(numberOption, 18uL, 15uL, "Not an even number"s);
+  checkSet(numberOption, 18uL, 22uL, "Bigger than 20."s);
+  checkSet(numberOption, 18uL, 8uL, "Smaller than 10."s);
+
+  // The string is one of a limited number of options.
+  std::string someString;
+  ConfigOption stringOption("StringOption", "Some validator example option.",
+                            &someString, {"Arizona"s});
+  stringOption.addValidator(
+      [](const std::string& str) {
+        return str == "Steve"s || str == "Mark"s || str == "Bill";
+      },
+      "Not one of the boys.");
+  checkSet(stringOption, "Steve"s, "Dennis"s, "Not one of the boys."s);
+  checkSet(stringOption, "Mark"s, "Harold"s, "Not one of the boys."s);
+  checkSet(stringOption, "Bill"s, "Francis"s, "Not one of the boys."s);
+
+  // List of floats, with at least one entry.
+  std::vector<float> someFloatList;
+  ConfigOption floatListOption(
+      "FloatListOption", "Some validator example option.", &someFloatList);
+  floatListOption.addValidator(
+      [](const std::vector<float>& list) { return !list.empty(); },
+      "The list is empty.");
+  checkSet<std::vector<float>>(floatListOption, {7.8f}, {},
+                               "The list is empty."s);
+}
+
 TEST(ConfigOptionTest, AddValidator) {
-  /*
-  Very simple check for the `set`-functions of `configOption`. Simply checks, if
-  the valid value can be set without exception and if the not valid one throws
-  an exception with the wanted message.
-  */
-  auto checkSet = []<typename T>(ConfigOption& option, const T& validValue,
-                                 const T& notValidValue,
-                                 std::string_view expectedErrorMessage) {
-    ASSERT_NO_THROW(option.setValue(validValue));
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        option.setValue(notValidValue),
-        ::testing::ContainsRegex(expectedErrorMessage));
-
-    // Convert the values to json representation.
-    nlohmann::json validValueAsJson(validValue);
-    nlohmann::json notValidValueAsJson(notValidValue);
-
-    ASSERT_NO_THROW(option.setValueWithJson(validValueAsJson));
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        option.setValueWithJson(notValidValueAsJson),
-        ::testing::ContainsRegex(expectedErrorMessage));
-  };
-
   // Once again, we use `doForTypeInConfigOptionValueType` and need to create a
   // function for executing a test.
-  auto doTest = [&checkSet]<typename Type>() {
+  auto doTest = []<typename Type>() {
     Type var{};
     ConfigOption option("Test", "", &var);
 
