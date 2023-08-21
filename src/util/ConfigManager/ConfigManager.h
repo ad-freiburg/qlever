@@ -421,10 +421,9 @@ class ConfigManager {
     (checkIfContainOption(configOptionsToBeChecked), ...);
 
     // Create the expanded error message.
-    const std::array<std::string, sizeof...(ValidatorParameter)> optionNames{
-        absl::StrCat("'",
-                     configOptionsToBeChecked.getConfigOption().getIdentifier(),
-                     "'")...};
+    const std::array optionNames{absl::StrCat(
+        "'", configOptionsToBeChecked.getConfigOption().getIdentifier(),
+        "'")...};
     std::string expandedErrorMessage =
         absl::StrCat("Validity check of configuration options ",
                      lazyStrJoin(optionNames, ", "), " failed: ", errorMessage);

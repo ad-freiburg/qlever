@@ -386,25 +386,4 @@ TEST(ConfigOptionTest, HoldsType) {
   doForTypeInConfigOptionValueType(doTest);
 }
 
-/*
-Very simple check for the `set`-functions of `configOption`. Simply checks, if
-the valid value can be set without exception and if the not valid one throws
-an exception with the wanted message.
-*/
-template <typename T>
-void checkSet(ConfigOption& option, const T& validValue, const T& notValidValue,
-              std::string_view expectedErrorMessage) {
-  ASSERT_NO_THROW(option.setValue(validValue));
-  AD_EXPECT_THROW_WITH_MESSAGE(option.setValue(notValidValue),
-                               ::testing::ContainsRegex(expectedErrorMessage));
-
-  // Convert the values to json representation.
-  nlohmann::json validValueAsJson(validValue);
-  nlohmann::json notValidValueAsJson(notValidValue);
-
-  ASSERT_NO_THROW(option.setValueWithJson(validValueAsJson));
-  AD_EXPECT_THROW_WITH_MESSAGE(option.setValueWithJson(notValidValueAsJson),
-                               ::testing::ContainsRegex(expectedErrorMessage));
-}
-
 }  // namespace ad_utility
