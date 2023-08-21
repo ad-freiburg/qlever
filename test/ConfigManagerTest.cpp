@@ -341,18 +341,6 @@ void checkValidator(ConfigManager& manager,
       ::testing::ContainsRegex(containedInExpectedErrorMessage));
 }
 
-TEST(ConfigManagerTest, ConfigOptionWithValidator) {
-  ConfigManager managerWithoutSubManager{};
-  int notUsedInt;
-  managerWithoutSubManager.addOption("h", "", &notUsedInt)
-      .getConfigOption()
-      .addValidator([](const int& n) { return 0 <= n && n <= 24; },
-                    "Validator of h");
-  checkValidator(managerWithoutSubManager,
-                 nlohmann::json::parse(R"--({"h" : 10})--"),
-                 nlohmann::json::parse(R"--({"h" : 100})--"), "Validator of h");
-}
-
 // Human readable examples for `addValidator`.
 TEST(ConfigManagerTest, HumanReadableAddValidator) {
   ConfigManager m{};

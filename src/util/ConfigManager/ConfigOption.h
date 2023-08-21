@@ -71,14 +71,6 @@ class ConfigOption {
   // true, if they are used.
   bool configurationOptionWasSet_ = false;
 
-  /*
-  List of the added validators. Whenever the values of the options are set,
-  they are called afterwards with `verifyWithValidators` to make sure, that
-  the new values are valid.
-  If the new value isn't valid, it throws an exception.
-  */
-  std::vector<std::function<void(void)>> validators_;
-
  public:
   // No default constructor.
   ConfigOption() = delete;
@@ -117,7 +109,6 @@ class ConfigOption {
     if (auto* data = std::get_if<Data<T>>(&data_); data != nullptr) {
       *(data->variablePointer_) = value;
       configurationOptionWasSet_ = true;
-      verifyWithValidators();
     } else {
       throw ConfigOptionSetWrongTypeException(identifier_,
                                               getActualValueTypeAsString(),
@@ -258,67 +249,6 @@ class ConfigOption {
     }
   }
 
-  /*
-  @brief Add a function to the configuration option for verifying, that the
-  value of the configuration option is valid. Will always be called after
-  setting the value of the configuration option.
-
-  @tparam ValidatorFunction A function, that takes a single argument of type
-  `const T&`, with `T` being the type of value, this config options holds, and
-  returns a bool.
-
-  @param validatorFunction Checks, if the value of the configuration option is
-  valid. Should return true, if it is valid.
-  @param errorMessage A `std::runtime_error` with this as an error message will
-  get thrown, if the `validatorFunction` returns false.
- */
-  template <isValidatorWithSingleParameterTypeOutOfVariant<AvailableTypes>
-                ValidatorFunction>
-  void addValidator(ValidatorFunction validatorFunction,
-                    const std::string& errorMessage) {
-    /*
-    Deducing the exact parameter of a given callable object is a major hassle
-    and neigh impossible. Instead we just use the internal type.
-    */
-    std::visit(
-        [this, &validatorFunction,
-         &errorMessage]<typename T>(const Data<T>& data) {
-          /*
-          Can `validatorFunction` be called with the type of this
-          configuration option?
-          Note: This also allows implicit conversion. For example, a function
-          that takes an int, would work for a configuration option that holds a
-          bool.
-          */
-          if constexpr (Validator<ValidatorFunction, const T&>) {
-            /*
-            Add a function wrapper to our list of validators, that calls the
-            `validatorFunction` with the value and throws an exception, if the
-            `validatorFunction` returns false.
-            */
-            validators_.emplace_back(
-                [validatorFunction, valuePointer = data.variablePointer_,
-                 expandedErrorMessage = absl::StrCat(
-                     "Validity check of configuration option '",
-                     getIdentifier(), "' failed: ", errorMessage)]() mutable {
-                  AD_CORRECTNESS_CHECK(valuePointer != nullptr);
-
-                  if (!std::invoke(validatorFunction, *valuePointer)) {
-                    throw std::runtime_error(expandedErrorMessage);
-                  }
-                });
-          } else {
-            throw std::runtime_error(absl::StrCat(
-                "Adding of validator to configuration option '", identifier_,
-                "' failed. Configuration option holds value of type '",
-                getActualValueTypeAsString(),
-                "', yet validator function is not invocable with a parameter "
-                "of this type."));
-          }
-        },
-        data_);
-  }
-
  private:
   FRIEND_TEST(ConfigOptionTest, AddValidator);
   FRIEND_TEST(ConfigOptionTest, AddValidatorExceptions);
@@ -345,11 +275,6 @@ class ConfigOption {
   */
   static std::string contentOfAvailableTypesToString(
       const std::optional<AvailableTypes>& v);
-
-  /*
-  @brief Call all the validators to check, if the current value is valid.
-  */
-  void verifyWithValidators() const;
 };
 
 }  // namespace ad_utility

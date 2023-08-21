@@ -314,9 +314,4 @@ std::string ConfigOption::getActualValueTypeAsString() const {
       []<typename T>(const Data<T>&) { return availableTypesToString<T>(); },
       data_);
 }
-
-// ____________________________________________________________________________
-void ConfigOption::verifyWithValidators() const {
-  std::ranges::for_each(validators_, [](auto& validator) { validator(); });
-};
 }  // namespace ad_utility
