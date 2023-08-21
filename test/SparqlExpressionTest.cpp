@@ -453,6 +453,16 @@ TEST(SparqlExpression, stringOperators) {
   EXPECT_NE(c2a, c3a);
   EXPECT_NE(c1a, c3a);
 }
+auto checkUcase =
+    std::bind_front(testUnaryExpression, &makeUppercaseExpression);
+auto checkLcase =
+    std::bind_front(testUnaryExpression, &makeLowercaseExpression);
+TEST(SparqlExpression, uppercaseAndLowercase) {
+  checkLcase(IdOrStrings{"One", "tWÖ", U, I(12)},
+             IdOrStrings{"one", "twö", U, U});
+  checkUcase(IdOrStrings{"One", "tWÖ", U, I(12)},
+             IdOrStrings{"ONE", "TWÖ", U, U});
+}
 
 static auto checkSubstr =
     std::bind_front(testNaryExpression, makeSubstrExpression);

@@ -1583,6 +1583,10 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeStrExpression);
   } else if (functionName == "strlen") {
     return createUnary(&makeStrlenExpression);
+  } else if (functionName == "ucase") {
+    return createUnary(&makeUppercaseExpression);
+  } else if (functionName == "lcase") {
+    return createUnary(&makeLowercaseExpression);
   } else if (functionName == "year") {
     return createUnary(&makeYearExpression);
   } else if (functionName == "month") {

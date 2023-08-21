@@ -1652,7 +1652,7 @@ string stripAndLowercaseLiteral(std::string_view lit) {
                        lit.ends_with('"'));
   lit.remove_prefix(1);
   lit.remove_suffix(1);
-  return ad_utility::getLowercaseUtf8(lit);
+  return ad_utility::utf8ToLower(lit);
 }
 }  // namespace
 
