@@ -15,30 +15,4 @@ template <typename Func, typename... ParameterTypes>
 concept Validator =
     std::regular_invocable<Func, const ParameterTypes&...> &&
     std::same_as<std::invoke_result_t<Func, const ParameterTypes&...>, bool>;
-
-/*
-The validator has only a single parameter and this parameter is contained in
-a given list.
-*/
-template <typename Func, typename... Ts>
-concept ValidatorWithSingleParameterTypeOutOfList =
-    ((Validator<Func, Ts>) || ...);
-
-namespace detail {
-template <typename Func, typename T>
-struct isValidatorWithSingleParameterTypeOutOfVariantImpl : std::false_type {};
-
-template <typename Func, typename... Ts>
-requires ValidatorWithSingleParameterTypeOutOfList<Func, Ts...>
-struct isValidatorWithSingleParameterTypeOutOfVariantImpl<Func,
-                                                          std::variant<Ts...>>
-    : std::true_type {};
-}  // namespace detail
-
-// The validator has only a single parameter and this parameter is contained in
-// a given variant.
-template <typename Func, typename VariantType>
-concept isValidatorWithSingleParameterTypeOutOfVariant =
-    detail::isValidatorWithSingleParameterTypeOutOfVariantImpl<
-        Func, VariantType>::value;
 }  // namespace ad_utility
