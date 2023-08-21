@@ -820,7 +820,8 @@ template <typename Tokenizer_T>
 void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
   fileBuffer_.open(filename);
   if (auto batch = fileBuffer_.getNextBlock(); !batch) {
-    LOG(WARN) << "Empty input to the turtle parser" << std::endl;
+    LOG(WARN) << "Empty input to the TURTLE parser, is this what you intended?"
+              << std::endl;
     batch.emplace();
   } else {
     TurtleStringParser<Tokenizer_T> declarationParser{};
