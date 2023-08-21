@@ -21,7 +21,7 @@ static const ad_utility::MemorySize DEFAULT_STXXL_MEMORY = 5'000'000'000_B;
 static const ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1000_MB;
 static const size_t STXXL_DISK_SIZE_INDEX_TEST = 10;
 
-static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 4;
+static constexpr ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
 
 static const size_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
