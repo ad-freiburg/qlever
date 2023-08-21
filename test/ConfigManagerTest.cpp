@@ -14,6 +14,7 @@
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
+#include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/json.h"
 
@@ -30,14 +31,13 @@ to.
 @param wantedValue The value, that the configuration option should have been set
 to.
 */
-template <typename T, typename DecayedT = std::decay_t<T>>
-void checkOption(const ad_utility::ConfigOption& option,
-                 const DecayedT& externalVariable, const bool wasSet,
-                 const DecayedT& wantedValue) {
-  ASSERT_EQ(wasSet, option.wasSet());
+template <typename T>
+void checkOption(ConstConfigOptionProxy<T> option, const T& externalVariable,
+                 const bool wasSet, const T& wantedValue) {
+  ASSERT_EQ(wasSet, option.getConfigOption().wasSet());
 
   if (wasSet) {
-    ASSERT_EQ(wantedValue, option.getValue<DecayedT>());
+    ASSERT_EQ(wantedValue, option.getConfigOption().template getValue<T>());
     ASSERT_EQ(wantedValue, externalVariable);
   }
 }
@@ -88,13 +88,13 @@ TEST(ConfigManagerTest, ParseConfig) {
   int secondInt;
   int thirdInt;
 
-  const ConfigOption& optionZero =
+  decltype(auto) optionZero =
       config.addOption({"depth_0"s, "Option_0"s},
                        "Must be set. Has no default value.", &firstInt);
-  const ConfigOption& optionOne =
+  decltype(auto) optionOne =
       config.addOption({"depth_0"s, "depth_1"s, "Option_1"s},
                        "Must be set. Has no default value.", &secondInt);
-  const ConfigOption& optionTwo =
+  decltype(auto) optionTwo =
       config.addOption("Option_2", "Has a default value.", &thirdInt, 2);
 
   // Does the option with the default already have a value?
@@ -190,72 +190,71 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
 
   // Add integer options.
   int somePositiveNumberInt;
-  const ConfigOption& somePositiveNumber = config.addOption(
+  decltype(auto) somePositiveNumber = config.addOption(
       "somePositiveNumber", "Must be set. Has no default value.",
       &somePositiveNumberInt);
   int someNegativNumberInt;
-  const ConfigOption& someNegativNumber = config.addOption(
+  decltype(auto) someNegativNumber = config.addOption(
       "someNegativNumber", "Must be set. Has no default value.",
       &someNegativNumberInt);
 
   // Add integer list.
   std::vector<int> someIntegerlistIntVector;
-  const ConfigOption& someIntegerlist =
+  decltype(auto) someIntegerlist =
       config.addOption("someIntegerlist", "Must be set. Has no default value.",
                        &someIntegerlistIntVector);
 
   // Add floating point options.
   float somePositiveFloatingPointFloat;
-  const ConfigOption& somePositiveFloatingPoint = config.addOption(
+  decltype(auto) somePositiveFloatingPoint = config.addOption(
       "somePositiveFloatingPoint", "Must be set. Has no default value.",
       &somePositiveFloatingPointFloat);
   float someNegativFloatingPointFloat;
-  const ConfigOption& someNegativFloatingPoint = config.addOption(
+  decltype(auto) someNegativFloatingPoint = config.addOption(
       "someNegativFloatingPoint", "Must be set. Has no default value.",
       &someNegativFloatingPointFloat);
 
   // Add floating point list.
   std::vector<float> someFloatingPointListFloatVector;
-  const ConfigOption& someFloatingPointList = config.addOption(
+  decltype(auto) someFloatingPointList = config.addOption(
       "someFloatingPointList", "Must be set. Has no default value.",
       &someFloatingPointListFloatVector);
 
   // Add boolean options.
   bool boolTrueBool;
-  const ConfigOption& boolTrue = config.addOption(
+  decltype(auto) boolTrue = config.addOption(
       "boolTrue", "Must be set. Has no default value.", &boolTrueBool);
   bool boolFalseBool;
-  const ConfigOption& boolFalse = config.addOption(
+  decltype(auto) boolFalse = config.addOption(
       "boolFalse", "Must be set. Has no default value.", &boolFalseBool);
 
   // Add boolean list.
   std::vector<bool> someBooleanListBoolVector;
-  const ConfigOption& someBooleanList =
+  decltype(auto) someBooleanList =
       config.addOption("someBooleanList", "Must be set. Has no default value.",
                        &someBooleanListBoolVector);
 
   // Add string option.
   std::string myNameString;
-  const ConfigOption& myName = config.addOption(
+  decltype(auto) myName = config.addOption(
       "myName", "Must be set. Has no default value.", &myNameString);
 
   // Add string list.
   std::vector<std::string> someStringListStringVector;
-  const ConfigOption& someStringList =
+  decltype(auto) someStringList =
       config.addOption("someStringList", "Must be set. Has no default value.",
                        &someStringListStringVector);
 
   // Add option with deeper level.
   std::vector<int> deeperIntVector;
-  const ConfigOption& deeperIntVectorOption =
+  decltype(auto) deeperIntVectorOption =
       config.addOption({"depth"s, "here"s, "list"s},
                        "Must be set. Has no default value.", &deeperIntVector);
 
   // This one will not be changed, in order to test, that options, that are
   // not set at run time, are not changed.
   int noChangeInt;
-  const ConfigOption& noChange =
-      config.addOption("No_change", "", &noChangeInt, 10);
+  decltype(auto) noChange = config.addOption("No_change", "", &noChangeInt, 10);
 
   // Set those.
   config.parseConfig(ad_utility::ConfigManager::parseShortHand(
