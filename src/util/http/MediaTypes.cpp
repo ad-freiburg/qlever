@@ -131,6 +131,16 @@ std::optional<MediaType> toMediaType(std::string_view s) {
   }
 }
 
+// For use with `ThrowingErrorListener` in `parseAcceptHeader`.
+class InvalidMediaTypeParseException : public ParseException {
+ public:
+  explicit InvalidMediaTypeParseException(
+      std::string_view cause,
+      std::optional<ExceptionMetadata> metadata = std::nullopt)
+      : ParseException{cause, std::move(metadata),
+                       "Parsing of media type failed:"} {}
+};
+
 // ___________________________________________________________________________
 std::vector<MediaTypeWithQuality> parseAcceptHeader(
     std::string_view acceptHeader, std::vector<MediaType> supportedMediaTypes) {
@@ -140,7 +150,8 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
     antlr4::ANTLRInputStream stream{input};
     AcceptHeaderLexer lexer{&stream};
     antlr4::CommonTokenStream tokens{&lexer};
-    ThrowingErrorListener errorListener_{};
+    antlr_utility::ThrowingErrorListener<InvalidMediaTypeParseException>
+        errorListener_{};
 
    public:
     AcceptHeaderParser parser{&tokens};

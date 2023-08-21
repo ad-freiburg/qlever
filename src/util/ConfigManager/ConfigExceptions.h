@@ -8,9 +8,23 @@
 #include <string>
 #include <string_view>
 
+#include "util/ParseException.h"
 #include "util/json.h"
 
 namespace ad_utility {
+
+/*
+@brief A custom exception, for when there are parsing error with the short hand.
+*/
+class InvalidConfigShortHandParseException : public ParseException {
+ public:
+  explicit InvalidConfigShortHandParseException(
+      std::string_view cause,
+      std::optional<ExceptionMetadata> metadata = std::nullopt)
+      : ParseException{cause, std::move(metadata),
+                       "Invalid config short hand:"} {}
+};
+
 /*
 @brief Provides the normal structure for exceptions, where the class constructor
 builds a string message, which will be later returned.

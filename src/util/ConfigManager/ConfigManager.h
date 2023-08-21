@@ -22,6 +22,7 @@
 
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigOption.h"
+#include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConfigManager/ConfigUtil.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/Exception.h"
@@ -70,9 +71,10 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption& addOption(const std::vector<std::string>& pathToOption,
-                                std::string_view optionDescription,
-                                OptionType* variableToPutValueOfTheOptionIn) {
+  ConstConfigOptionProxy<OptionType> addOption(
+      const std::vector<std::string>& pathToOption,
+      std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn) {
     return addOptionImpl(pathToOption, optionDescription,
                          variableToPutValueOfTheOptionIn,
                          std::optional<OptionType>(std::nullopt));
@@ -100,10 +102,11 @@ class ConfigManager {
             std::same_as<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption& addOption(const std::vector<std::string>& pathToOption,
-                                std::string_view optionDescription,
-                                OptionType* variableToPutValueOfTheOptionIn,
-                                DefaultValueType defaultValue) {
+  ConstConfigOptionProxy<OptionType> addOption(
+      const std::vector<std::string>& pathToOption,
+      std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn,
+      DefaultValueType defaultValue) {
     return addOptionImpl(pathToOption, optionDescription,
                          variableToPutValueOfTheOptionIn,
                          std::optional<OptionType>(std::move(defaultValue)));
@@ -120,9 +123,9 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption& addOption(std::string optionName,
-                                std::string_view optionDescription,
-                                OptionType* variableToPutValueOfTheOptionIn) {
+  ConstConfigOptionProxy<OptionType> addOption(
+      std::string optionName, std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn) {
     return addOption<OptionType>(
         std::vector<std::string>{std::move(optionName)}, optionDescription,
         variableToPutValueOfTheOptionIn);
@@ -140,10 +143,10 @@ class ConfigManager {
             std::same_as<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption& addOption(std::string optionName,
-                                std::string_view optionDescription,
-                                OptionType* variableToPutValueOfTheOptionIn,
-                                DefaultValueType defaultValue) {
+  ConstConfigOptionProxy<OptionType> addOption(
+      std::string optionName, std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn,
+      DefaultValueType defaultValue) {
     return addOption<OptionType>(
         std::vector<std::string>{std::move(optionName)}, optionDescription,
         variableToPutValueOfTheOptionIn, std::move(defaultValue));
@@ -211,9 +214,11 @@ class ConfigManager {
 
   @param pathToOption Describes a path in json, that points to the value held by
   the configuration option.
+
+  @return The added config option.
   */
-  void addConfigOption(const std::vector<std::string>& pathToOption,
-                       ConfigOption&& option);
+  const ConfigOption& addConfigOption(
+      const std::vector<std::string>& pathToOption, ConfigOption&& option);
 
   /*
   @brief Return string representation of a `std::vector<std::string>`.
@@ -250,7 +255,7 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  const ConfigOption& addOptionImpl(
+  ConstConfigOptionProxy<OptionType> addOptionImpl(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn,
@@ -265,18 +270,15 @@ class ConfigManager {
       verifyPathToConfigOption(pathToOption, "");
     }
 
-    addConfigOption(
-        pathToOption,
-        ConfigOption(pathToOption.back(), optionDescription,
-                     variableToPutValueOfTheOptionIn, defaultValue));
-
     /*
     The `unqiue_ptr` was created, by creating a new `ConfigOption` via it's
     move constructor. Which is why, we can't just return the `ConfigOption`
     we created here.
     */
-    return *configurationOptions_.at(createJsonPointerString(pathToOption))
-                .get();
+    return ConstConfigOptionProxy<OptionType>(addConfigOption(
+        pathToOption,
+        ConfigOption(pathToOption.back(), optionDescription,
+                     variableToPutValueOfTheOptionIn, defaultValue)));
   }
 
   /*

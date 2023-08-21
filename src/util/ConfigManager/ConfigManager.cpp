@@ -119,15 +119,16 @@ void ConfigManager::verifyPathToConfigOption(
 }
 
 // ____________________________________________________________________________
-void ConfigManager::addConfigOption(
+const ConfigOption& ConfigManager::addConfigOption(
     const std::vector<std::string>& pathToOption, ConfigOption&& option) {
   // Is the path valid?
   verifyPathToConfigOption(pathToOption, option.getIdentifier());
 
-  // Add the configuration option.
-  configurationOptions_.insert(
-      {createJsonPointerString(pathToOption),
-       std::make_unique<ConfigOption>(std::move(option))});
+  // Add the configuration option and return the inserted elements.
+  return *configurationOptions_
+              .insert({createJsonPointerString(pathToOption),
+                       std::make_unique<ConfigOption>(std::move(option))})
+              .first->second;
 }
 
 // ____________________________________________________________________________
@@ -142,7 +143,8 @@ nlohmann::json ConfigManager::parseShortHand(
   // The default in ANTLR is to log all errors to the console and to continue
   // the parsing. We need to turn parse errors into exceptions instead to
   // propagate them to the user.
-  ThrowingErrorListener errorListener{};
+  antlr_utility::ThrowingErrorListener<InvalidConfigShortHandParseException>
+      errorListener{};
   parser.removeErrorListeners();
   parser.addErrorListener(&errorListener);
   lexer.removeErrorListeners();

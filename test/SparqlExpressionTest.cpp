@@ -80,7 +80,7 @@ auto checkResultsEqual = []<SingleExpressionResult A, SingleExpressionResult B>(
             expected, [](const Id id) { return matchId(id); });
         ASSERT_THAT(actual, ::testing::ElementsAreArray(matcherVec));
       } else {
-        ASSERT_EQ(actual, expected);
+        ASSERT_THAT(actual, ::testing::ElementsAreArray(expected));
       }
 
     } else {
@@ -452,6 +452,65 @@ TEST(SparqlExpression, stringOperators) {
   EXPECT_NE(c1a, c2a);
   EXPECT_NE(c2a, c3a);
   EXPECT_NE(c1a, c3a);
+}
+
+static auto checkSubstr =
+    std::bind_front(testNaryExpression, makeSubstrExpression);
+TEST(SparqlExpression, substr) {
+  auto strs = [](const IdOrStrings& input) {
+    return VectorWithMemoryLimit<IdOrString>(input.begin(), input.end(), alloc);
+  };
+
+  // Remember: The start position (the second argument to the SUBSTR expression)
+  // is 1-based.
+  checkSubstr(strs({"one", "two", "three"}), strs({"one", "two", "three"}),
+              I(1), I(12));
+  checkSubstr(strs({"one", "two", "three"}), strs({"one", "two", "three"}),
+              I(0), I(12));
+  checkSubstr(strs({"one", "two", "three"}), strs({"one", "two", "three"}),
+              I(-2), I(12));
+
+  checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}), I(2),
+              I(12));
+  checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}), D(1.8),
+              D(11.7));
+  checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}),
+              D(2.449), D(12.449));
+
+  // An actual substring from the middle
+  checkSubstr(strs({"es", "os", "re"}), strs({"ones", "twos", "threes"}), I(3),
+              I(2));
+
+  // Subtle corner case if the starting position is negative
+  // Only the letters at positions  `p < -3 + 6 = 3` are exported (the first two
+  // letters, remember that the positions are 1-based).
+  checkSubstr(strs({"on", "tw", "th"}), strs({"ones", "twos", "threes"}), I(-3),
+              I(6));
+
+  // Correct handling of UTF-8 multibyte characters.
+  checkSubstr(strs({"pfel", "pfel", "pfel"}),
+              strs({"uApfel", "uÄpfel", "uöpfel"}), I(3), I(18));
+
+  // corner cases: 0 or negative length, or invalid numeric parameter
+  checkSubstr(strs({"", "", ""}), strs({"ones", "twos", "threes"}), D(naN),
+              I(2));
+  checkSubstr(strs({"", "", ""}), strs({"ones", "twos", "threes"}), I(2),
+              D(naN));
+  checkSubstr(strs({"", "", ""}), strs({"ones", "twos", "threes"}), I(2), I(0));
+  checkSubstr(strs({"", "", ""}), strs({"ones", "twos", "threes"}), I(2),
+              D(-3.8));
+
+  // Invalid datatypes
+  // First must be string.
+  auto Ux = IdOrString{U};
+  checkSubstr(Ux, I(3), I(4), I(7));
+  checkSubstr(Ux, U, I(4), I(7));
+  checkSubstr(Ux, Ux, I(4), I(7));
+  // Second and third must be numeric;
+  checkSubstr(Ux, IdOrString{"hello"}, U, I(4));
+  checkSubstr(Ux, IdOrString{"hello"}, IdOrString{"bye"}, I(17));
+  checkSubstr(Ux, IdOrString{"hello"}, I(4), U);
+  checkSubstr(Ux, IdOrString{"hello"}, I(4), IdOrString{"bye"});
 }
 
 // _____________________________________________________________________________________

@@ -66,9 +66,9 @@ class ParseException : public std::exception {
   std::string causeWithMetadata_;
 };
 
-class InvalidQueryException : public ParseException {
+class InvalidSparqlQueryException : public ParseException {
  public:
-  explicit InvalidQueryException(
+  explicit InvalidSparqlQueryException(
       std::string_view cause,
       std::optional<ExceptionMetadata> metadata = std::nullopt)
       : ParseException{cause, std::move(metadata), "Invalid SPARQL query:"} {}
