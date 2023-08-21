@@ -849,7 +849,11 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
                << std::endl;
 
     vector<Index::WordEntityPostings> wepVecs;
+    vector<size_t> skipColumns;
     for (size_t i = 0; i < terms.size(); ++i) {
+      if (!terms[i].ends_with('*')) {
+        skipColumns.push_back(i);
+      }
       if (i != useElFromTerm) {
         wepVecs.push_back(getWordPostingsForTerm(terms[i]));
       }
@@ -857,6 +861,31 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
     wepVecs.push_back(getEntityPostingsForTerm(terms[useElFromTerm]));
     resultWep =
         FTSAlgorithms::crossIntersectKWay(wepVecs, &wepVecs.back().eids_);
+
+    // Restore column order by:
+    // Deleting columns, where the term doesn't end with a '*' and moving the
+    // usElFromTerm column back to its original place
+    vector<vector<WordIndex>> newWidVec;
+    newWidVec.resize(terms.size() - skipColumns.size());
+    size_t j = 0;
+    size_t k = 0;
+    for (size_t i = 0; i < terms.size(); ++i) {
+      if (!skipColumns.empty() && i == skipColumns[k]) {
+        k = std::min(k + 1, skipColumns.size() - 1);
+      } else {
+        if (i == useElFromTerm) {
+          newWidVec[j] = resultWep.wids_.back();
+          j++;
+        } else if (i > useElFromTerm) {
+          newWidVec[j] = resultWep.wids_[i - 1];
+          j++;
+        } else {
+          newWidVec[j] = resultWep.wids_[i];
+          j++;
+        }
+      }
+    }
+    resultWep.wids_ = newWidVec;
   } else {
     // Special case: Just one word to deal with.
     resultWep = getEntityPostingsForTerm(terms[0]);
