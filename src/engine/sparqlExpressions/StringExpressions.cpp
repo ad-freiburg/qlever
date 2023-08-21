@@ -141,6 +141,46 @@ class SubstrImpl {
 using SubstrExpression =
     StringExpressionImpl<3, SubstrImpl, NumericValueGetter, NumericValueGetter>;
 
+// STRSTARTS
+[[maybe_unused]] auto strStartsImpl =
+    [](std::optional<std::string> haystack,
+       std::optional<std::string> needle) -> Id {
+  if (!haystack.has_value() || !needle.has_value()) {
+    return Id::makeUndefined();
+  }
+  return Id::makeFromBool(haystack.value().starts_with(needle.value()));
+};
+
+using StrStartsExpression =
+    StringExpressionImpl<2, decltype(strStartsImpl), StringValueGetter>;
+
+// STRENDS
+[[maybe_unused]] auto strEndsImpl =
+    [](std::optional<std::string> haystack,
+       std::optional<std::string> needle) -> Id {
+  if (!haystack.has_value() || !needle.has_value()) {
+    return Id::makeUndefined();
+  }
+  return Id::makeFromBool(haystack.value().starts_with(needle.value()));
+};
+
+using StrEndsExpression =
+    StringExpressionImpl<2, decltype(strEndsImpl), StringValueGetter>;
+
+// STRCONTAINS
+[[maybe_unused]] auto containsImpl =
+    [](std::optional<std::string> haystack,
+       std::optional<std::string> needle) -> Id {
+  if (!haystack.has_value() || !needle.has_value()) {
+    return Id::makeUndefined();
+  }
+  return Id::makeFromBool(
+      haystack.value().find(needle.value()) != std::string::npos);
+};
+
+using ContainsExpression =
+    StringExpressionImpl<2, decltype(containsImpl), StringValueGetter>;
+
 }  // namespace detail
 using namespace detail;
 SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child) {
@@ -156,4 +196,15 @@ SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
   return std::make_unique<SubstrExpression>(std::move(string), std::move(start),
                                             std::move(length));
 }
+    SparqlExpression::Ptr makeStrStartsExpression(SparqlExpression::Ptr child1,
+                                                  SparqlExpression::Ptr child2);
+    SparqlExpression::Ptr makeStrEndsExpression(SparqlExpression::Ptr child1,
+                                                SparqlExpression::Ptr child2);
+    SparqlExpression::Ptr makeContainsExpression(SparqlExpression::Ptr child1,
+                                                 SparqlExpression::Ptr child2);
+    SparqlExpression::Ptr makeStrAfterExpression(SparqlExpression::Ptr child1,
+                                                 SparqlExpression::Ptr child2);
+    SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
+                                                  SparqlExpression::Ptr child2);
+    SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
 }  // namespace sparqlExpression
