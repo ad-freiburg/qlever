@@ -78,7 +78,7 @@ using StrlenExpression = StringExpressionImpl<1, decltype(strlen)>;
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    return ad_utility::getLowercaseUtf8(input.value());
+    return ad_utility::utf8ToLower(input.value());
   }
 };
 using LowercaseExpression = StringExpressionImpl<1, decltype(lowercaseImpl)>;
@@ -89,7 +89,7 @@ using LowercaseExpression = StringExpressionImpl<1, decltype(lowercaseImpl)>;
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    return ad_utility::getUppercaseUtf8(input.value());
+    return ad_utility::utf8ToUpper(input.value());
   }
 };
 using UppercaseExpression = StringExpressionImpl<1, decltype(uppercaseImpl)>;
