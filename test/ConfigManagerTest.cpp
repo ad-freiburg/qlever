@@ -33,8 +33,8 @@ to.
 to.
 */
 template <typename T>
-void checkOption(ConstConfigOptionProxy<T> option, const T& externalVariable, const bool wasSet,
-                 const T& wantedValue) {
+void checkOption(ConstConfigOptionProxy<T> option, const T& externalVariable,
+                 const bool wasSet, const T& wantedValue) {
   ASSERT_EQ(wasSet, option.getConfigOption().wasSet());
 
   if (wasSet) {
@@ -51,20 +51,23 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
 
   // Configuration options for testing.
   int notUsed;
-  config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}, "", &notUsed, 42);
+  config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s},
+                   "", &notUsed, 42);
 
   // Trying to add a configuration option with the same name at the same
   // place, should cause an error.
-  ASSERT_THROW(
-      config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}, "", &notUsed, 42);
-      , ad_utility::ConfigManagerOptionPathAlreadyinUseException);
+  ASSERT_THROW(config.addOption(
+      {"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}, "", &notUsed,
+      42);
+               , ad_utility::ConfigManagerOptionPathAlreadyinUseException);
 
   /*
   An empty vector that should cause an exception.
   Reason: The last key is used as the name for the to be created `ConfigOption`.
   An empty vector doesn't work with that.
   */
-  ASSERT_ANY_THROW(config.addOption(std::vector<std::string>{}, "", &notUsed, 42););
+  ASSERT_ANY_THROW(
+      config.addOption(std::vector<std::string>{}, "", &notUsed, 42););
 
   /*
   Trying to add a configuration option with a path containing strings with
@@ -73,7 +76,8 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
   configuration grammar. Ergo, you can't set values, with such paths per short
   hand, which we don't want.
   */
-  ASSERT_THROW(config.addOption({"Shared part"s, "Sense_of_existence"s}, "", &notUsed, 42);
+  ASSERT_THROW(config.addOption({"Shared part"s, "Sense_of_existence"s}, "",
+                                &notUsed, 42);
                , ad_utility::NotValidShortHandNameException);
 }
 
@@ -86,10 +90,13 @@ TEST(ConfigManagerTest, ParseConfig) {
   int thirdInt;
 
   decltype(auto) optionZero =
-      config.addOption({"depth_0"s, "Option_0"s}, "Must be set. Has no default value.", &firstInt);
-  decltype(auto) optionOne = config.addOption({"depth_0"s, "depth_1"s, "Option_1"s},
-                                              "Must be set. Has no default value.", &secondInt);
-  decltype(auto) optionTwo = config.addOption("Option_2", "Has a default value.", &thirdInt, 2);
+      config.addOption({"depth_0"s, "Option_0"s},
+                       "Must be set. Has no default value.", &firstInt);
+  decltype(auto) optionOne =
+      config.addOption({"depth_0"s, "depth_1"s, "Option_1"s},
+                       "Must be set. Has no default value.", &secondInt);
+  decltype(auto) optionTwo =
+      config.addOption("Option_2", "Has a default value.", &thirdInt, 2);
 
   // Does the option with the default already have a value?
   checkOption<int>(optionTwo, thirdInt, true, 2);
@@ -125,10 +132,11 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
   // Add one option with default and one without.
   int notUsedInt;
   std::vector<int> notUsedVector;
-  config.addOption({"depth_0"s, "Without_default"s}, "Must be set. Has no default value.",
-                   &notUsedInt);
-  config.addOption({"depth_0"s, "With_default"s}, "Must not be set. Has default value.",
-                   &notUsedVector, {40, 41});
+  config.addOption({"depth_0"s, "Without_default"s},
+                   "Must be set. Has no default value.", &notUsedInt);
+  config.addOption({"depth_0"s, "With_default"s},
+                   "Must not be set. Has default value.", &notUsedVector,
+                   {40, 41});
 
   // Should throw an exception, if we don't set all options, that must be set.
   ASSERT_THROW(config.parseConfig(nlohmann::json::parse(R"--({})--")),
@@ -155,20 +163,27 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
       ::testing::ContainsRegex(R"('/depth_0/With_default/value')"));
 
   // Parsing with a non json object literal is not allowed.
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::array)),
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::array)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::boolean)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::null)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::number_float)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(config.parseConfig(
+                   nlohmann::json(nlohmann::json::value_t::number_integer)),
                ConfigManagerParseConfigNotJsonObjectLiteralException);
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::boolean)),
+  ASSERT_THROW(config.parseConfig(
+                   nlohmann::json(nlohmann::json::value_t::number_unsigned)),
                ConfigManagerParseConfigNotJsonObjectLiteralException);
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::null)),
-               ConfigManagerParseConfigNotJsonObjectLiteralException);
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::number_float)),
-               ConfigManagerParseConfigNotJsonObjectLiteralException);
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::number_integer)),
-               ConfigManagerParseConfigNotJsonObjectLiteralException);
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::number_unsigned)),
-               ConfigManagerParseConfigNotJsonObjectLiteralException);
-  ASSERT_THROW(config.parseConfig(nlohmann::json(nlohmann::json::value_t::string)),
-               ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::string)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
 }
 
 TEST(ConfigManagerTest, ParseShortHandTest) {
@@ -177,59 +192,65 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   // Add integer options.
   int somePositiveNumberInt;
   decltype(auto) somePositiveNumber = config.addOption(
-      "somePositiveNumber", "Must be set. Has no default value.", &somePositiveNumberInt);
+      "somePositiveNumber", "Must be set. Has no default value.",
+      &somePositiveNumberInt);
   int someNegativNumberInt;
   decltype(auto) someNegativNumber = config.addOption(
-      "someNegativNumber", "Must be set. Has no default value.", &someNegativNumberInt);
+      "someNegativNumber", "Must be set. Has no default value.",
+      &someNegativNumberInt);
 
   // Add integer list.
   std::vector<int> someIntegerlistIntVector;
-  decltype(auto) someIntegerlist = config.addOption(
-      "someIntegerlist", "Must be set. Has no default value.", &someIntegerlistIntVector);
+  decltype(auto) someIntegerlist =
+      config.addOption("someIntegerlist", "Must be set. Has no default value.",
+                       &someIntegerlistIntVector);
 
   // Add floating point options.
   float somePositiveFloatingPointFloat;
-  decltype(auto) somePositiveFloatingPoint =
-      config.addOption("somePositiveFloatingPoint", "Must be set. Has no default value.",
-                       &somePositiveFloatingPointFloat);
+  decltype(auto) somePositiveFloatingPoint = config.addOption(
+      "somePositiveFloatingPoint", "Must be set. Has no default value.",
+      &somePositiveFloatingPointFloat);
   float someNegativFloatingPointFloat;
-  decltype(auto) someNegativFloatingPoint =
-      config.addOption("someNegativFloatingPoint", "Must be set. Has no default value.",
-                       &someNegativFloatingPointFloat);
+  decltype(auto) someNegativFloatingPoint = config.addOption(
+      "someNegativFloatingPoint", "Must be set. Has no default value.",
+      &someNegativFloatingPointFloat);
 
   // Add floating point list.
   std::vector<float> someFloatingPointListFloatVector;
-  decltype(auto) someFloatingPointList =
-      config.addOption("someFloatingPointList", "Must be set. Has no default value.",
-                       &someFloatingPointListFloatVector);
+  decltype(auto) someFloatingPointList = config.addOption(
+      "someFloatingPointList", "Must be set. Has no default value.",
+      &someFloatingPointListFloatVector);
 
   // Add boolean options.
   bool boolTrueBool;
-  decltype(auto) boolTrue =
-      config.addOption("boolTrue", "Must be set. Has no default value.", &boolTrueBool);
+  decltype(auto) boolTrue = config.addOption(
+      "boolTrue", "Must be set. Has no default value.", &boolTrueBool);
   bool boolFalseBool;
-  decltype(auto) boolFalse =
-      config.addOption("boolFalse", "Must be set. Has no default value.", &boolFalseBool);
+  decltype(auto) boolFalse = config.addOption(
+      "boolFalse", "Must be set. Has no default value.", &boolFalseBool);
 
   // Add boolean list.
   std::vector<bool> someBooleanListBoolVector;
-  decltype(auto) someBooleanList = config.addOption(
-      "someBooleanList", "Must be set. Has no default value.", &someBooleanListBoolVector);
+  decltype(auto) someBooleanList =
+      config.addOption("someBooleanList", "Must be set. Has no default value.",
+                       &someBooleanListBoolVector);
 
   // Add string option.
   std::string myNameString;
-  decltype(auto) myName =
-      config.addOption("myName", "Must be set. Has no default value.", &myNameString);
+  decltype(auto) myName = config.addOption(
+      "myName", "Must be set. Has no default value.", &myNameString);
 
   // Add string list.
   std::vector<std::string> someStringListStringVector;
-  decltype(auto) someStringList = config.addOption(
-      "someStringList", "Must be set. Has no default value.", &someStringListStringVector);
+  decltype(auto) someStringList =
+      config.addOption("someStringList", "Must be set. Has no default value.",
+                       &someStringListStringVector);
 
   // Add option with deeper level.
   std::vector<int> deeperIntVector;
-  decltype(auto) deeperIntVectorOption = config.addOption(
-      {"depth"s, "here"s, "list"s}, "Must be set. Has no default value.", &deeperIntVector);
+  decltype(auto) deeperIntVectorOption =
+      config.addOption({"depth"s, "here"s, "list"s},
+                       "Must be set. Has no default value.", &deeperIntVector);
 
   // This one will not be changed, in order to test, that options, that are
   // not set at run time, are not changed.
@@ -246,36 +267,43 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   checkOption<std::vector<int>>(someIntegerlist, someIntegerlistIntVector, true,
                                 std::vector{40, 41});
 
-  checkOption<float>(somePositiveFloatingPoint, somePositiveFloatingPointFloat, true, 4.2f);
-  checkOption<float>(someNegativFloatingPoint, someNegativFloatingPointFloat, true, -4.2f);
+  checkOption<float>(somePositiveFloatingPoint, somePositiveFloatingPointFloat,
+                     true, 4.2f);
+  checkOption<float>(someNegativFloatingPoint, someNegativFloatingPointFloat,
+                     true, -4.2f);
 
-  checkOption<std::vector<float>>(someFloatingPointList, someFloatingPointListFloatVector, true,
+  checkOption<std::vector<float>>(someFloatingPointList,
+                                  someFloatingPointListFloatVector, true,
                                   {4.1f, 4.2f});
 
   checkOption<bool>(boolTrue, boolTrueBool, true, true);
   checkOption<bool>(boolFalse, boolFalseBool, true, false);
 
-  checkOption<std::vector<bool>>(someBooleanList, someBooleanListBoolVector, true,
-                                 std::vector{true, false, true});
+  checkOption<std::vector<bool>>(someBooleanList, someBooleanListBoolVector,
+                                 true, std::vector{true, false, true});
 
   checkOption<std::string>(myName, myNameString, true, std::string{"Bernd"});
 
-  checkOption<std::vector<std::string>>(someStringList, someStringListStringVector, true,
+  checkOption<std::vector<std::string>>(someStringList,
+                                        someStringListStringVector, true,
                                         std::vector<std::string>{"t1", "t2"});
 
-  checkOption<std::vector<int>>(deeperIntVectorOption, deeperIntVector, true, std::vector{7, 8});
+  checkOption<std::vector<int>>(deeperIntVectorOption, deeperIntVector, true,
+                                std::vector{7, 8});
 
   // Is the "No Change" unchanged?
   checkOption<int>(noChange, noChangeInt, true, 10);
 
   // Multiple key value pairs with the same key are not allowed.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      ad_utility::ConfigManager::parseShortHand(R"(complicatedKey:42, complicatedKey:43)");
-      , ::testing::ContainsRegex("'complicatedKey'"));
+  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::ConfigManager::parseShortHand(
+                                   R"(complicatedKey:42, complicatedKey:43)");
+                               , ::testing::ContainsRegex("'complicatedKey'"));
 
   // Final test: Is there an exception, if we try to parse the wrong syntax?
-  ASSERT_ANY_THROW(ad_utility::ConfigManager::parseShortHand(R"--({"myName" : "Bernd")})--"));
-  ASSERT_ANY_THROW(ad_utility::ConfigManager::parseShortHand(R"--("myName" = "Bernd";)--"));
+  ASSERT_ANY_THROW(ad_utility::ConfigManager::parseShortHand(
+      R"--({"myName" : "Bernd")})--"));
+  ASSERT_ANY_THROW(
+      ad_utility::ConfigManager::parseShortHand(R"--("myName" = "Bernd";)--"));
 }
 
 TEST(ConfigManagerTest, PrintConfigurationDocExistence) {
@@ -302,12 +330,14 @@ TEST(ConfigManagerTest, PrintConfigurationDocExistence) {
 the exception thrown for `jsonWithNonValidValues`. Validators have custom
 exception messages, so they should be identifiable.
 */
-void checkValidator(ConfigManager& manager, const nlohmann::json& jsonWithValidValues,
+void checkValidator(ConfigManager& manager,
+                    const nlohmann::json& jsonWithValidValues,
                     const nlohmann::json& jsonWithNonValidValues,
                     std::string_view containedInExpectedErrorMessage) {
   ASSERT_NO_THROW(manager.parseConfig(jsonWithValidValues));
-  AD_EXPECT_THROW_WITH_MESSAGE(manager.parseConfig(jsonWithNonValidValues),
-                               ::testing::ContainsRegex(containedInExpectedErrorMessage));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.parseConfig(jsonWithNonValidValues),
+      ::testing::ContainsRegex(containedInExpectedErrorMessage));
 }
 
 // Human readable examples for `addValidator`.
@@ -317,11 +347,12 @@ TEST(ConfigManagerTest, HumanReadableAddValidator) {
   // The number of the option should be in a range. We define the range by using
   // two validators.
   int someInt;
-  decltype(auto) numberInRangeOption = m.addOption("numberInRange", "", &someInt);
-  m.addValidator([](const int& num) { return num <= 100; }, "'numberInRange' must be <=100.",
-                 numberInRangeOption);
-  m.addValidator([](const int& num) { return num > 49; }, "'numberInRange' must be >=50.",
-                 numberInRangeOption);
+  decltype(auto) numberInRangeOption =
+      m.addOption("numberInRange", "", &someInt);
+  m.addValidator([](const int& num) { return num <= 100; },
+                 "'numberInRange' must be <=100.", numberInRangeOption);
+  m.addValidator([](const int& num) { return num > 49; },
+                 "'numberInRange' must be >=50.", numberInRangeOption);
   checkValidator(m, nlohmann::json::parse(R"--({"numberInRange" : 60})--"),
                  nlohmann::json::parse(R"--({"numberInRange" : 101})--"),
                  "'numberInRange' must be <=100.");
@@ -335,12 +366,15 @@ TEST(ConfigManagerTest, HumanReadableAddValidator) {
   bool boolTwo;
   decltype(auto) boolTwoOption = m.addOption("boolTwo", "", &boolTwo, false);
   bool boolThree;
-  decltype(auto) boolThreeOption = m.addOption("boolThree", "", &boolThree, false);
+  decltype(auto) boolThreeOption =
+      m.addOption("boolThree", "", &boolThree, false);
   m.addValidator(
       [](bool one, bool two, bool three) {
-        return (one && !two && !three) || (!one && two && !three) || (!one && !two && three);
+        return (one && !two && !three) || (!one && two && !three) ||
+               (!one && !two && three);
       },
-      "Exactly one bool must be choosen.", boolOneOption, boolTwoOption, boolThreeOption);
+      "Exactly one bool must be choosen.", boolOneOption, boolTwoOption,
+      boolThreeOption);
   checkValidator(
       m,
       nlohmann::json::parse(
@@ -355,12 +389,16 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
   // Check, if all the options have a default value.
   ConfigManager mAllWithDefault;
   int firstInt;
-  decltype(auto) firstOption = mAllWithDefault.addOption("firstOption", "", &firstInt, 10);
-  mAllWithDefault.addOptionValidator([](const ConfigOption& opt) { return opt.hasDefaultValue(); },
-                                     "Every option must have a default value.", firstOption);
-  ASSERT_NO_THROW(mAllWithDefault.parseConfig(nlohmann::json::parse(R"--({"firstOption": 4})--")));
+  decltype(auto) firstOption =
+      mAllWithDefault.addOption("firstOption", "", &firstInt, 10);
+  mAllWithDefault.addOptionValidator(
+      [](const ConfigOption& opt) { return opt.hasDefaultValue(); },
+      "Every option must have a default value.", firstOption);
+  ASSERT_NO_THROW(mAllWithDefault.parseConfig(
+      nlohmann::json::parse(R"--({"firstOption": 4})--")));
   int secondInt;
-  decltype(auto) secondOption = mAllWithDefault.addOption("secondOption", "", &secondInt);
+  decltype(auto) secondOption =
+      mAllWithDefault.addOption("secondOption", "", &secondInt);
   mAllWithDefault.addOptionValidator(
       [](const ConfigOption& opt1, const ConfigOption& opt2) {
         return opt1.hasDefaultValue() && opt2.hasDefaultValue();
@@ -371,19 +409,25 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
 
   // We want, that all options names start with the letter `d`.
   ConfigManager mFirstLetter;
-  decltype(auto) correctLetter = mFirstLetter.addOption("dValue", "", &firstInt);
+  decltype(auto) correctLetter =
+      mFirstLetter.addOption("dValue", "", &firstInt);
   mFirstLetter.addOptionValidator(
-      [](const ConfigOption& opt) { return opt.getIdentifier().starts_with('d'); },
+      [](const ConfigOption& opt) {
+        return opt.getIdentifier().starts_with('d');
+      },
       "Every option name must start with the letter d.", correctLetter);
-  ASSERT_NO_THROW(mFirstLetter.parseConfig(nlohmann::json::parse(R"--({"dValue": 4})--")));
+  ASSERT_NO_THROW(
+      mFirstLetter.parseConfig(nlohmann::json::parse(R"--({"dValue": 4})--")));
   decltype(auto) wrongLetter = mFirstLetter.addOption("value", "", &secondInt);
   mFirstLetter.addOptionValidator(
       [](const ConfigOption& opt1, const ConfigOption& opt2) {
-        return opt1.getIdentifier().starts_with('d') && opt2.getIdentifier().starts_with('d');
+        return opt1.getIdentifier().starts_with('d') &&
+               opt2.getIdentifier().starts_with('d');
       },
-      "Every option name must start with the letter d.", correctLetter, wrongLetter);
-  ASSERT_ANY_THROW(
-      mFirstLetter.parseConfig(nlohmann::json::parse(R"--({"dValue": 4, "Value" : 7})--")));
+      "Every option name must start with the letter d.", correctLetter,
+      wrongLetter);
+  ASSERT_ANY_THROW(mFirstLetter.parseConfig(
+      nlohmann::json::parse(R"--({"dValue": 4, "Value" : 7})--")));
 }
 
 /*
@@ -403,7 +447,8 @@ Type createDummyValueForValidator(size_t variant) {
       stream << i;
     }
     return stream.str();
-  } else if constexpr (std::is_same_v<Type, int> || std::is_same_v<Type, size_t>) {
+  } else if constexpr (std::is_same_v<Type, int> ||
+                       std::is_same_v<Type, size_t>) {
     // Return uneven numbers.
     return static_cast<Type>(variant) * 2 + 1;
   } else if constexpr (std::is_same_v<Type, float>) {
@@ -438,8 +483,10 @@ what the exact difference is, see the code.
 */
 template <typename ParameterType>
 auto generateSingleParameterValidatorFunction(size_t variant) {
-  if constexpr (std::is_same_v<ParameterType, bool> || std::is_same_v<ParameterType, std::string> ||
-                std::is_same_v<ParameterType, int> || std::is_same_v<ParameterType, size_t> ||
+  if constexpr (std::is_same_v<ParameterType, bool> ||
+                std::is_same_v<ParameterType, std::string> ||
+                std::is_same_v<ParameterType, int> ||
+                std::is_same_v<ParameterType, size_t> ||
                 std::is_same_v<ParameterType, float>) {
     return [compareTo = createDummyValueForValidator<ParameterType>(variant)](
                const ParameterType& n) { return n != compareTo; };
@@ -455,8 +502,8 @@ auto generateSingleParameterValidatorFunction(size_t variant) {
       }
 
       for (size_t i = 0; i < variant + 1; i++) {
-        if (generateSingleParameterValidatorFunction<typename ParameterType::value_type>(i)(
-                v.at(i))) {
+        if (generateSingleParameterValidatorFunction<
+                typename ParameterType::value_type>(i)(v.at(i))) {
           return true;
         }
       }
@@ -488,10 +535,12 @@ TEST(ConfigManagerTest, AddValidator) {
           func.template operator()<Ts...>();
         } else {
           doForTypeInConfigOptionValueType(
-              [&callGivenLambdaWithAllCombinationsOfTypes, &func]<typename T>() {
+              [&callGivenLambdaWithAllCombinationsOfTypes,
+               &func]<typename T>() {
                 callGivenLambdaWithAllCombinationsOfTypes
                     .template operator()<NumTemplateParameter - 1, T, Ts...>(
-                        AD_FWD(func), AD_FWD(callGivenLambdaWithAllCombinationsOfTypes));
+                        AD_FWD(func),
+                        AD_FWD(callGivenLambdaWithAllCombinationsOfTypes));
               });
         }
       };
@@ -507,7 +556,8 @@ TEST(ConfigManagerTest, AddValidator) {
   @tparam T Same `T` as for `createDummyValueForValidator` and
   `generateSingleParameterValidatorFunction`.
   */
-  auto adjustVariantArgument = []<typename T>(size_t variantThatNeedsPossibleAdjustment) -> size_t {
+  auto adjustVariantArgument =
+      []<typename T>(size_t variantThatNeedsPossibleAdjustment) -> size_t {
     if constexpr (std::is_same_v<T, bool>) {
       /*
       Even numbers for `variant` always result in true, regardless if
@@ -533,7 +583,9 @@ TEST(ConfigManagerTest, AddValidator) {
   auto generateValidatorName = []<typename... Ts>(size_t id) {
     return absl::StrCat(
         "Config manager validator<",
-        lazyStrJoin(std::array{ConfigOption::availableTypesToString<Ts>()...}, ", "), "> ", id);
+        lazyStrJoin(std::array{ConfigOption::availableTypesToString<Ts>()...},
+                    ", "),
+        "> ", id);
   };
 
   /*
@@ -551,16 +603,19 @@ TEST(ConfigManagerTest, AddValidator) {
   */
   auto addValidatorToConfigManager =
       [&generateValidatorName, &adjustVariantArgument ]<typename... Ts>(
-          size_t variant, ConfigManager & m, ConstConfigOptionProxy<Ts>... validatorArguments)
+          size_t variant, ConfigManager & m,
+          ConstConfigOptionProxy<Ts>... validatorArguments)
           requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
     // Add the new validator
     m.addValidator(
         [variant, &adjustVariantArgument](const Ts&... args) {
           return (generateSingleParameterValidatorFunction<Ts>(
-                      adjustVariantArgument.template operator()<Ts>(variant))(args) ||
+                      adjustVariantArgument.template operator()<Ts>(variant))(
+                      args) ||
                   ...);
         },
-        generateValidatorName.template operator()<Ts...>(variant), validatorArguments...);
+        generateValidatorName.template operator()<Ts...>(variant),
+        validatorArguments...);
   };
 
   /*
@@ -585,11 +640,13 @@ TEST(ConfigManagerTest, AddValidator) {
       [&generateValidatorName, &adjustVariantArgument ]<typename... Ts>(
           size_t variantStart, size_t variantEnd, ConfigManager & m,
           const nlohmann::json& defaultValues,
-          const std::same_as<nlohmann::json::json_pointer> auto&... configOptionPaths)
+          const std::same_as<
+              nlohmann::json::json_pointer> auto&... configOptionPaths)
           requires(sizeof...(Ts) == sizeof...(configOptionPaths)) {
     // Using the invariant of our function generator, to create valid
     // and none valid values for all added validators.
-    for (size_t validatorNumber = variantStart; validatorNumber < variantEnd; validatorNumber++) {
+    for (size_t validatorNumber = variantStart; validatorNumber < variantEnd;
+         validatorNumber++) {
       nlohmann::json validJson(defaultValues);
       ((validJson[configOptionPaths] = createDummyValueForValidator<Ts>(
             adjustVariantArgument.template operator()<Ts>(variantEnd) + 1)),
@@ -611,8 +668,9 @@ TEST(ConfigManagerTest, AddValidator) {
         checkValidator(m, validJson, invalidJson,
                        generateValidatorName.template operator()<Ts...>(0));
       } else {
-        checkValidator(m, validJson, invalidJson,
-                       generateValidatorName.template operator()<Ts...>(validatorNumber));
+        checkValidator(
+            m, validJson, invalidJson,
+            generateValidatorName.template operator()<Ts...>(validatorNumber));
       }
     }
   };
@@ -637,7 +695,8 @@ TEST(ConfigManagerTest, AddValidator) {
   here.
   */
   auto doTestNoValidatorInSubManager =
-      [&addValidatorToConfigManager, &testGeneratedValidatorsOfConfigManager ]<typename... Ts>(
+      [&addValidatorToConfigManager, &
+       testGeneratedValidatorsOfConfigManager ]<typename... Ts>(
           ConfigManager & m, const nlohmann::json& defaultValues,
           const std::pair<nlohmann::json::json_pointer,
                           ConstConfigOptionProxy<Ts>>&... validatorArguments)
@@ -647,7 +706,8 @@ TEST(ConfigManagerTest, AddValidator) {
 
     for (size_t i = 0; i < NUMBER_OF_VALIDATORS; i++) {
       // Add a new validator
-      addValidatorToConfigManager.template operator()<Ts...>(i, m, validatorArguments.second...);
+      addValidatorToConfigManager.template operator()<Ts...>(
+          i, m, validatorArguments.second...);
 
       // Test all the added validators.
       testGeneratedValidatorsOfConfigManager.template operator()<Ts...>(
@@ -656,35 +716,43 @@ TEST(ConfigManagerTest, AddValidator) {
   };
 
   // Does all tests for single parameter validators for a given type.
-  auto doSingleParameterTests = [&doTestNoValidatorInSubManager]<typename Type>() {
-    // Variables needed for configuration options.
-    Type firstVar;
+  auto doSingleParameterTests =
+      [&doTestNoValidatorInSubManager]<typename Type>() {
+        // Variables needed for configuration options.
+        Type firstVar;
 
-    ConfigManager mNoSub;
-    decltype(auto) mNoSubOption = mNoSub.addOption("someValue", "", &firstVar);
-    doTestNoValidatorInSubManager.template operator()<Type>(
-        mNoSub, nlohmann::json(nlohmann::json::value_t::object),
-        std::make_pair(nlohmann::json::json_pointer("/someValue"), mNoSubOption));
-  };
+        ConfigManager mNoSub;
+        decltype(auto) mNoSubOption =
+            mNoSub.addOption("someValue", "", &firstVar);
+        doTestNoValidatorInSubManager.template operator()<Type>(
+            mNoSub, nlohmann::json(nlohmann::json::value_t::object),
+            std::make_pair(nlohmann::json::json_pointer("/someValue"),
+                           mNoSubOption));
+      };
 
   callGivenLambdaWithAllCombinationsOfTypes.template operator()<1>(
       doSingleParameterTests, callGivenLambdaWithAllCombinationsOfTypes);
 
   // Does all tests for validators with two parameter types for the given type
   // combination.
-  auto doDoubleParameterTests = [&doTestNoValidatorInSubManager]<typename Type1, typename Type2>() {
-    // Variables needed for configuration options.
-    Type1 firstVar;
-    Type2 secondVar;
+  auto doDoubleParameterTests =
+      [&doTestNoValidatorInSubManager]<typename Type1, typename Type2>() {
+        // Variables needed for configuration options.
+        Type1 firstVar;
+        Type2 secondVar;
 
-    ConfigManager mNoSub;
-    decltype(auto) mNoSubOption1 = mNoSub.addOption("someValue1", "", &firstVar);
-    decltype(auto) mNoSubOption2 = mNoSub.addOption("someValue2", "", &secondVar);
-    doTestNoValidatorInSubManager.template operator()<Type1, Type2>(
-        mNoSub, nlohmann::json(nlohmann::json::value_t::object),
-        std::make_pair(nlohmann::json::json_pointer("/someValue1"), mNoSubOption1),
-        std::make_pair(nlohmann::json::json_pointer("/someValue2"), mNoSubOption2));
-  };
+        ConfigManager mNoSub;
+        decltype(auto) mNoSubOption1 =
+            mNoSub.addOption("someValue1", "", &firstVar);
+        decltype(auto) mNoSubOption2 =
+            mNoSub.addOption("someValue2", "", &secondVar);
+        doTestNoValidatorInSubManager.template operator()<Type1, Type2>(
+            mNoSub, nlohmann::json(nlohmann::json::value_t::object),
+            std::make_pair(nlohmann::json::json_pointer("/someValue1"),
+                           mNoSubOption1),
+            std::make_pair(nlohmann::json::json_pointer("/someValue2"),
+                           mNoSubOption2));
+      };
 
   callGivenLambdaWithAllCombinationsOfTypes.template operator()<2>(
       doDoubleParameterTests, callGivenLambdaWithAllCombinationsOfTypes);
@@ -692,7 +760,8 @@ TEST(ConfigManagerTest, AddValidator) {
   // Testing, if validators with different parameter types work, when added to
   // the same config manager.
   auto doDifferentParameterTests = [&addValidatorToConfigManager,
-                                    &generateValidatorName]<typename Type1, typename Type2>() {
+                                    &generateValidatorName]<typename Type1,
+                                                            typename Type2>() {
     // Variables for config options.
     Type1 var1;
     Type2 var2;
@@ -712,7 +781,8 @@ TEST(ConfigManagerTest, AddValidator) {
     */
     auto checkAllValidAndInvalidValueCombinations =
         [&generateValidatorName]<typename T1, typename T2>(
-            ConfigManager& m, const std::pair<nlohmann::json::json_pointer, size_t>& validator1,
+            ConfigManager& m,
+            const std::pair<nlohmann::json::json_pointer, size_t>& validator1,
             const std::pair<nlohmann::json::json_pointer, size_t>& validator2) {
           /*
           Input for `parseConfig`. One contains values, that are valid for all
@@ -734,7 +804,8 @@ TEST(ConfigManagerTest, AddValidator) {
           invalidValueJson[validator2.first] =
               createDummyValueForValidator<Type2>(validator2.second + 1);
           checkValidator(m, validValueJson, invalidValueJson,
-                         generateValidatorName.template operator()<Type1>(validator1.second));
+                         generateValidatorName.template operator()<Type1>(
+                             validator1.second));
 
           // Value for `validator1` is valid. Value for `validator2` is invalid.
           invalidValueJson[validator1.first] =
@@ -742,14 +813,17 @@ TEST(ConfigManagerTest, AddValidator) {
           invalidValueJson[validator2.first] =
               createDummyValueForValidator<Type2>(validator2.second);
           checkValidator(m, validValueJson, invalidValueJson,
-                         generateValidatorName.template operator()<Type2>(validator2.second));
+                         generateValidatorName.template operator()<Type2>(
+                             validator2.second));
         };
 
     ConfigManager mNoSub;
     decltype(auto) mNoSubOption1 = mNoSub.addOption("someValue1", "", &var1);
     decltype(auto) mNoSubOption2 = mNoSub.addOption("someValue2", "", &var2);
-    addValidatorToConfigManager.template operator()<Type1>(1, mNoSub, mNoSubOption1);
-    addValidatorToConfigManager.template operator()<Type2>(1, mNoSub, mNoSubOption2);
+    addValidatorToConfigManager.template operator()<Type1>(1, mNoSub,
+                                                           mNoSubOption1);
+    addValidatorToConfigManager.template operator()<Type2>(1, mNoSub,
+                                                           mNoSubOption2);
     checkAllValidAndInvalidValueCombinations.template operator()<Type1, Type2>(
         mNoSub, std::make_pair(nlohmann::json::json_pointer("/someValue1"), 1),
         std::make_pair(nlohmann::json::json_pointer("/someValue2"), 1));
@@ -774,15 +848,19 @@ TEST(ConfigManagerTest, AddValidatorException) {
     /*
     @brief Check, if a call to the `addValidator` function behaves as wanted.
     */
-    auto checkAddValidatorBehavior = [&validatorDummyFunction](
-                                         ConfigManager& m, ConstConfigOptionProxy<T> validOption,
-                                         ConstConfigOptionProxy<T> notValidOption) {
-      ASSERT_NO_THROW(m.addValidator(validatorDummyFunction, "", validOption));
-      AD_EXPECT_THROW_WITH_MESSAGE(
-          m.addValidator(validatorDummyFunction, notValidOption.getConfigOption().getIdentifier(),
-                         notValidOption),
-          ::testing::ContainsRegex(notValidOption.getConfigOption().getIdentifier()));
-    };
+    auto checkAddValidatorBehavior =
+        [&validatorDummyFunction](ConfigManager& m,
+                                  ConstConfigOptionProxy<T> validOption,
+                                  ConstConfigOptionProxy<T> notValidOption) {
+          ASSERT_NO_THROW(
+              m.addValidator(validatorDummyFunction, "", validOption));
+          AD_EXPECT_THROW_WITH_MESSAGE(
+              m.addValidator(validatorDummyFunction,
+                             notValidOption.getConfigOption().getIdentifier(),
+                             notValidOption),
+              ::testing::ContainsRegex(
+                  notValidOption.getConfigOption().getIdentifier()));
+        };
 
     // An outside configuration option.
     ConfigOption outsideOption("outside", "", &var);
@@ -799,11 +877,13 @@ TEST(ConfigManagerTest, AddValidatorException) {
 TEST(ConfigManagerTest, AddOptionValidator) {
   // Generate a lambda, that requires all the given configuration option to have
   // the wanted string as the representation of their value.
-  auto generateValueAsStringComparison = [](std::string_view valueStringRepresentation) {
-    return [wantedString = std::string(valueStringRepresentation)](const auto&... options) {
-      return ((options.getValueAsString() == wantedString) && ...);
-    };
-  };
+  auto generateValueAsStringComparison =
+      [](std::string_view valueStringRepresentation) {
+        return [wantedString = std::string(valueStringRepresentation)](
+                   const auto&... options) {
+          return ((options.getValueAsString() == wantedString) && ...);
+        };
+      };
 
   // Variables for configuration options.
   int firstVar;
@@ -812,19 +892,23 @@ TEST(ConfigManagerTest, AddOptionValidator) {
   ConfigManager managerWithNoSubManager;
   decltype(auto) managerWithNoSubManagerOption1 =
       managerWithNoSubManager.addOption("someOption1", "", &firstVar);
-  managerWithNoSubManager.addOptionValidator(generateValueAsStringComparison("10"), "someOption1",
-                                             managerWithNoSubManagerOption1);
-  checkValidator(managerWithNoSubManager, nlohmann::json::parse(R"--({"someOption1" : 10})--"),
-                 nlohmann::json::parse(R"--({"someOption1" : 1})--"), "someOption1");
+  managerWithNoSubManager.addOptionValidator(
+      generateValueAsStringComparison("10"), "someOption1",
+      managerWithNoSubManagerOption1);
+  checkValidator(managerWithNoSubManager,
+                 nlohmann::json::parse(R"--({"someOption1" : 10})--"),
+                 nlohmann::json::parse(R"--({"someOption1" : 1})--"),
+                 "someOption1");
   decltype(auto) managerWithNoSubManagerOption2 =
       managerWithNoSubManager.addOption("someOption2", "", &secondVar);
-  managerWithNoSubManager.addOptionValidator(generateValueAsStringComparison("10"), "Both options",
-                                             managerWithNoSubManagerOption1,
-                                             managerWithNoSubManagerOption2);
-  checkValidator(managerWithNoSubManager,
-                 nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 10})--"),
-                 nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 1})--"),
-                 "Both options");
+  managerWithNoSubManager.addOptionValidator(
+      generateValueAsStringComparison("10"), "Both options",
+      managerWithNoSubManagerOption1, managerWithNoSubManagerOption2);
+  checkValidator(
+      managerWithNoSubManager,
+      nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 10})--"),
+      nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 1})--"),
+      "Both options");
 }
 
 TEST(ConfigManagerTest, AddOptionValidatorException) {
@@ -839,13 +923,18 @@ TEST(ConfigManagerTest, AddOptionValidatorException) {
   wanted.
   */
   auto checkAddOptionValidatorBehavior =
-      [&validatorDummyFunction]<typename T>(ConfigManager& m, ConstConfigOptionProxy<T> validOption,
-                                            ConstConfigOptionProxy<T> notValidOption) {
-        ASSERT_NO_THROW(m.addOptionValidator(validatorDummyFunction, "", validOption));
+      [&validatorDummyFunction]<typename T>(
+          ConfigManager& m, ConstConfigOptionProxy<T> validOption,
+          ConstConfigOptionProxy<T> notValidOption) {
+        ASSERT_NO_THROW(
+            m.addOptionValidator(validatorDummyFunction, "", validOption));
         AD_EXPECT_THROW_WITH_MESSAGE(
-            m.addOptionValidator(validatorDummyFunction,
-                                 notValidOption.getConfigOption().getIdentifier(), notValidOption),
-            ::testing::ContainsRegex(notValidOption.getConfigOption().getIdentifier()));
+            m.addOptionValidator(
+                validatorDummyFunction,
+                notValidOption.getConfigOption().getIdentifier(),
+                notValidOption),
+            ::testing::ContainsRegex(
+                notValidOption.getConfigOption().getIdentifier()));
       };
 
   // An outside configuration option.
@@ -866,18 +955,21 @@ TEST(ConfigManagerTest, ContainsOption) {
   the information, if they should be contained in `m`. If true, it should be, if
   false, it shouldn't.
   */
-  using ContainmentStatusVector = std::vector<std::pair<const ConfigOption*, bool>>;
-  auto checkContainmentStatus = [](const ConfigManager& m,
-                                   const ContainmentStatusVector& optionsAndWantedStatus) {
-    std::ranges::for_each(optionsAndWantedStatus,
-                          [&m](const ContainmentStatusVector::value_type& p) {
-                            if (p.second) {
-                              ASSERT_TRUE(m.containsOption(*p.first));
-                            } else {
-                              ASSERT_FALSE(m.containsOption(*p.first));
-                            }
-                          });
-  };
+  using ContainmentStatusVector =
+      std::vector<std::pair<const ConfigOption*, bool>>;
+  auto checkContainmentStatus =
+      [](const ConfigManager& m,
+         const ContainmentStatusVector& optionsAndWantedStatus) {
+        std::ranges::for_each(
+            optionsAndWantedStatus,
+            [&m](const ContainmentStatusVector::value_type& p) {
+              if (p.second) {
+                ASSERT_TRUE(m.containsOption(*p.first));
+              } else {
+                ASSERT_FALSE(m.containsOption(*p.first));
+              }
+            });
+      };
 
   // Variable for the configuration options.
   int var;
@@ -888,7 +980,8 @@ TEST(ConfigManagerTest, ContainsOption) {
   ConfigManager m;
   checkContainmentStatus(m, {{&outsideOption, false}});
   decltype(auto) topManagerOption = m.addOption("TopLevel", "", &var);
-  checkContainmentStatus(m, {{&outsideOption, false}, {&topManagerOption.getConfigOption(), true}});
+  checkContainmentStatus(m, {{&outsideOption, false},
+                             {&topManagerOption.getConfigOption(), true}});
 }
 
 /*
@@ -909,7 +1002,8 @@ constexpr void passCartesianPorductToLambda(Func func) {
 TEST(ConfigManagerTest, ValidatorConcept) {
   // Lambda function types for easier test creation.
   using SingleIntValidatorFunction = decltype([](const int&) { return true; });
-  using DoubleIntValidatorFunction = decltype([](const int&, const int&) { return true; });
+  using DoubleIntValidatorFunction =
+      decltype([](const int&, const int&) { return true; });
 
   // Valid function.
   static_assert(ad_utility::Validator<SingleIntValidatorFunction, int>);
@@ -919,65 +1013,87 @@ TEST(ConfigManagerTest, ValidatorConcept) {
   static_assert(!ad_utility::Validator<SingleIntValidatorFunction>);
   static_assert(!ad_utility::Validator<SingleIntValidatorFunction, int, int>);
   static_assert(!ad_utility::Validator<DoubleIntValidatorFunction>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, int, int, int, int>);
+  static_assert(
+      !ad_utility::Validator<DoubleIntValidatorFunction, int, int, int, int>);
 
   // Function is valid, but the parameter types are of the wrong object type.
-  static_assert(!ad_utility::Validator<SingleIntValidatorFunction, std::vector<bool>>);
-  static_assert(!ad_utility::Validator<SingleIntValidatorFunction, std::string>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, std::vector<bool>, int>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, int, std::vector<bool>>);
   static_assert(
-      !ad_utility::Validator<DoubleIntValidatorFunction, std::vector<bool>, std::vector<bool>>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, std::string, int>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, int, std::string>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, std::string, std::string>);
+      !ad_utility::Validator<SingleIntValidatorFunction, std::vector<bool>>);
+  static_assert(
+      !ad_utility::Validator<SingleIntValidatorFunction, std::string>);
+  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction,
+                                       std::vector<bool>, int>);
+  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, int,
+                                       std::vector<bool>>);
+  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction,
+                                       std::vector<bool>, std::vector<bool>>);
+  static_assert(
+      !ad_utility::Validator<DoubleIntValidatorFunction, std::string, int>);
+  static_assert(
+      !ad_utility::Validator<DoubleIntValidatorFunction, int, std::string>);
+  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, std::string,
+                                       std::string>);
 
   // The given function is not valid.
 
   // The parameter types of the function are wrong, but the return type is
   // correct.
-  static_assert(!ad_utility::Validator<decltype([](int&) { return true; }), int>);
-  static_assert(!ad_utility::Validator<decltype([](int&&) { return true; }), int>);
-  static_assert(!ad_utility::Validator<decltype([](const int&&) { return true; }), int>);
+  static_assert(
+      !ad_utility::Validator<decltype([](int&) { return true; }), int>);
+  static_assert(
+      !ad_utility::Validator<decltype([](int&&) { return true; }), int>);
+  static_assert(
+      !ad_utility::Validator<decltype([](const int&&) { return true; }), int>);
 
   auto validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper =
       []<typename FirstParameter, typename SecondParameter>() {
         static_assert(
-            !ad_utility::Validator<decltype([](FirstParameter, SecondParameter) { return true; }),
-                                   int, int>);
+            !ad_utility::Validator<
+                decltype([](FirstParameter, SecondParameter) { return true; }),
+                int, int>);
       };
   passCartesianPorductToLambda<
-      decltype(validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper), int&, int&&,
-      const int&&>(validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper);
+      decltype(validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper),
+      int&, int&&, const int&&>(
+      validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper);
 
   // Parameter types are correct, but return type is wrong.
   static_assert(!ad_utility::Validator<decltype([](int n) { return n; }), int>);
-  static_assert(!ad_utility::Validator<decltype([](const int n) { return n; }), int>);
-  static_assert(!ad_utility::Validator<decltype([](const int& n) { return n; }), int>);
+  static_assert(
+      !ad_utility::Validator<decltype([](const int n) { return n; }), int>);
+  static_assert(
+      !ad_utility::Validator<decltype([](const int& n) { return n; }), int>);
 
   auto validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper =
       []<typename FirstParameter, typename SecondParameter>() {
         static_assert(
-            !ad_utility::Validator<decltype([](FirstParameter n, SecondParameter) { return n; }),
+            !ad_utility::Validator<decltype([](FirstParameter n,
+                                               SecondParameter) { return n; }),
                                    int, int>);
       };
   passCartesianPorductToLambda<
-      decltype(validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper), int, const int,
-      const int&>(validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper);
+      decltype(validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper),
+      int, const int, const int&>(
+      validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper);
 
   // Both the parameter types and the return type is wrong.
-  static_assert(!ad_utility::Validator<decltype([](int& n) { return n; }), int>);
-  static_assert(!ad_utility::Validator<decltype([](int&& n) { return n; }), int>);
-  static_assert(!ad_utility::Validator<decltype([](const int&& n) { return n; }), int>);
+  static_assert(
+      !ad_utility::Validator<decltype([](int& n) { return n; }), int>);
+  static_assert(
+      !ad_utility::Validator<decltype([](int&& n) { return n; }), int>);
+  static_assert(
+      !ad_utility::Validator<decltype([](const int&& n) { return n; }), int>);
 
   auto validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper =
       []<typename FirstParameter, typename SecondParameter>() {
         static_assert(
-            !ad_utility::Validator<decltype([](FirstParameter n, SecondParameter) { return n; }),
+            !ad_utility::Validator<decltype([](FirstParameter n,
+                                               SecondParameter) { return n; }),
                                    int, int>);
       };
   passCartesianPorductToLambda<
-      decltype(validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper), int&, int&&,
-      const int&&>(validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper);
+      decltype(validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper),
+      int&, int&&, const int&&>(
+      validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper);
 }
 }  // namespace ad_utility
