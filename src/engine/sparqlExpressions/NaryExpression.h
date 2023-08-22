@@ -48,5 +48,10 @@ SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
+                                           SparqlExpression::Ptr start,
+                                           SparqlExpression::Ptr length);
 
+SparqlExpression::Ptr makeUppercaseExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeLowercaseExpression(SparqlExpression::Ptr child);
 }  // namespace sparqlExpression

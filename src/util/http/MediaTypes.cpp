@@ -96,7 +96,7 @@ const string& mediaTypeForFilename(std::string_view filename) {
       return filename.substr(pos);
     }
   }();
-  auto extLower = ad_utility::getLowercaseUtf8(ext);
+  auto extLower = ad_utility::utf8ToLower(ext);
   const auto& map = detail::getSuffixToMediaTypeStringMap();
   if (map.contains(extLower)) {
     return map.at(extLower);
@@ -122,7 +122,7 @@ const std::string& getType(MediaType t) {
 
 // ________________________________________________________________________
 std::optional<MediaType> toMediaType(std::string_view s) {
-  auto lowercase = ad_utility::getLowercaseUtf8(s);
+  auto lowercase = ad_utility::utf8ToLower(s);
   const auto& m = detail::getStringToMediaTypeMap();
   if (m.contains(lowercase)) {
     return m.at(lowercase);
