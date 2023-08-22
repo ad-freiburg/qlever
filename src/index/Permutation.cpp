@@ -10,8 +10,7 @@
 // _____________________________________________________________________
 Permutation::Permutation(Enum permutation, Allocator allocator)
     : readableName_(toString(permutation)),
-      fileSuffix_(
-          absl::StrCat(".", ad_utility::getLowercaseUtf8(readableName_))),
+      fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
       keyOrder_(toKeyOrder(permutation)),
       reader_{std::move(allocator)} {}
 

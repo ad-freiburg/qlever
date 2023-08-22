@@ -51,6 +51,9 @@ SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
                                            SparqlExpression::Ptr start,
                                            SparqlExpression::Ptr length);
+
+SparqlExpression::Ptr makeUppercaseExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeLowercaseExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeStrStartsExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeStrEndsExpression(SparqlExpression::Ptr child1,

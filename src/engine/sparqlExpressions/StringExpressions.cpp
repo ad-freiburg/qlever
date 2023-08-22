@@ -3,7 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 namespace sparqlExpression {
-namespace detail {
+namespace detail::string_expressions {
 // String functions.
 [[maybe_unused]] auto strImpl = [](std::optional<std::string> s) {
   return IdOrString{std::move(s)};
@@ -89,12 +89,34 @@ struct LiftStringFunction {
 };
 
 // STRLEN
-inline auto strlen = [](const std::string& s) -> Id {
+[[maybe_unused]] auto strlen = [](const std::string& s) -> Id {
   return Id::makeFromInt(static_cast<int64_t>(s.size()));
 };
 
 using StrlenExpression =
     StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
+
+// LCASE
+[[maybe_unused]] auto lowercaseImpl =
+    [](std::optional<std::string> input) -> IdOrString {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    return ad_utility::utf8ToLower(input.value());
+  }
+};
+using LowercaseExpression = StringExpressionImpl<1, decltype(lowercaseImpl)>;
+
+// UCASE
+[[maybe_unused]] auto uppercaseImpl =
+    [](std::optional<std::string> input) -> IdOrString {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    return ad_utility::utf8ToUpper(input.value());
+  }
+};
+using UppercaseExpression = StringExpressionImpl<1, decltype(uppercaseImpl)>;
 
 // SUBSTR
 class SubstrImpl {
@@ -238,10 +260,28 @@ Ptr makeStrlenExpression(Ptr child) { return make<StrlenExpression>(child); }
 
 Ptr makeSubstrExpression(Ptr string, Ptr start, Ptr length) {
   return make<SubstrExpression>(string, start, length);
+}  // namespace detail::string_expressions
+using namespace detail::string_expressions;
+SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<StrExpression>(std::move(child));
 }
 Ptr makeStrStartsExpression(Ptr child1, Ptr child2) {
   return make<StrStartsExpression>(child1, child2);
 }
+
+SparqlExpression::Ptr makeLowercaseExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<LowercaseExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeUppercaseExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<UppercaseExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
+                                           SparqlExpression::Ptr start,
+                                           SparqlExpression::Ptr length) {
+  return std::make_unique<SubstrExpression>(std::move(string), std::move(start),
+                                            std::move(length));
 Ptr makeStrEndsExpression(Ptr child1, Ptr child2) {
   return make<StrEndsExpression>(child1, child2);
 }

@@ -24,6 +24,7 @@ jobs:
         compiler-version: [11, 12, 13, 16]
         warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
+        expensive-tests: [true]
         exclude:
           - compiler: gcc
             compiler-version: 16
@@ -39,9 +40,12 @@ jobs:
           - compiler: clang
             compiler-version: 16
             ubsan-flags: " -fsanitize=undefined"
+            build-type: Release
+            expensive-tests: false
           - compiler: clang
             compiler-version: 16
             build-type: Debug
+            expensive-tests: false
             ubsan-flags: " -fsanitize=thread -O1 -g"
 
     runs-on: ubuntu-22.04
@@ -88,7 +92,7 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true -DENABLE_EXPENSIVE_CHECKS=true
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=${{matrix.expensive-tests}} -DENABLE_EXPENSIVE_CHECKS=true
 
     - name: Build
         # Build your program with the given configuration
