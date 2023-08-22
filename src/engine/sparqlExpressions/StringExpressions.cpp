@@ -63,27 +63,33 @@ class StringExpressionImpl : public SparqlExpression {
   }
 };
 
-template <typename Impl, typename... args>
-using ReturnTypeImpl = std::conditional_t<ad_utility::isSimilar<Id, std::invoke_result<Impl, args...>>, Id, IdOrString>;
-
 // A helper function TODO<joka921> comment.
 template <typename Impl>
-class LiftStringFunction {
-  template <typename... Arguments>
-  auto operator()(
-      Arguments... arguments) const -> ReturnTypeImpl<Impl, Arguments...> {
+struct LiftStringFunction {
+  template <std::same_as<std::optional<std::string>>... Arguments>
+  auto operator()(Arguments... arguments) const {
+    using ResultOfImpl =
+        decltype(std::invoke(Impl{}, std::move(arguments.value())...));
+    static_assert(std::same_as<ResultOfImpl, Id> ||
+                      std::same_as<ResultOfImpl, std::string>,
+                  "Template argument of `LiftStringFunction` must return `Id` "
+                  "or `std::string`");
+    using Result = std::conditional_t<ad_utility::isSimilar<ResultOfImpl, Id>,
+                                      Id, IdOrString>;
     if ((... || !arguments.has_value())) {
-      return Id::makeUndefined();
+      return Result{Id::makeUndefined()};
     }
-    return std::invoke(Impl{}, std::move(arguments.value())...);
+    return Result{std::invoke(Impl{}, std::move(arguments.value())...)};
   }
 };
 
 // STRLEN
-inline auto strlen = [](std::string s) {
+inline auto strlen = [](const std::string& s) -> Id {
   return Id::makeFromInt(static_cast<int64_t>(s.size()));
 };
-using StrlenExpression = StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
+
+using StrlenExpression =
+    StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
 
 // SUBSTR
 class SubstrImpl {
@@ -155,75 +161,62 @@ using SubstrExpression =
     StringExpressionImpl<3, SubstrImpl, NumericValueGetter, NumericValueGetter>;
 
 // STRSTARTS
-[[maybe_unused]] auto strStartsImpl =
-    [](std::optional<std::string> haystack,
-       std::optional<std::string> needle) -> Id {
-  if (!haystack.has_value() || !needle.has_value()) {
-    return Id::makeUndefined();
-  }
-  return Id::makeFromBool(haystack.value().starts_with(needle.value()));
+[[maybe_unused]] auto strStartsImpl = [](const std::string& haystack,
+                                         const std::string& needle) -> Id {
+  return Id::makeFromBool(haystack.starts_with(needle));
 };
 
 using StrStartsExpression =
-    StringExpressionImpl<2, decltype(strStartsImpl), StringValueGetter>;
+    StringExpressionImpl<2, LiftStringFunction<decltype(strStartsImpl)>,
+                         StringValueGetter>;
 
 // STRENDS
-[[maybe_unused]] auto strEndsImpl =
-    [](std::optional<std::string> haystack,
-       std::optional<std::string> needle) -> Id {
-  if (!haystack.has_value() || !needle.has_value()) {
-    return Id::makeUndefined();
-  }
-  return Id::makeFromBool(haystack.value().ends_with(needle.value()));
+[[maybe_unused]] auto strEndsImpl = [](const std::string& haystack,
+                                       const std::string& needle) -> Id {
+  return Id::makeFromBool(haystack.ends_with(needle));
 };
 
 using StrEndsExpression =
-    StringExpressionImpl<2, decltype(strEndsImpl), StringValueGetter>;
+    StringExpressionImpl<2, LiftStringFunction<decltype(strEndsImpl)>,
+                         StringValueGetter>;
 
 // STRCONTAINS
-[[maybe_unused]] auto containsImpl =
-    [](std::string haystack,
-       std::string needle) -> Id {
-  return Id::makeFromBool(haystack.find(needle) !=
-                          std::string::npos);
+[[maybe_unused]] auto containsImpl = [](const std::string& haystack,
+                                        const std::string& needle) -> Id {
+  return Id::makeFromBool(haystack.find(needle) != std::string::npos);
 };
 
 using ContainsExpression =
-    StringExpressionImpl<2, LiftStringFunction<decltype(containsImpl)>, StringValueGetter>;
+    StringExpressionImpl<2, LiftStringFunction<decltype(containsImpl)>,
+                         StringValueGetter>;
 
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](std::optional<std::string> haystack,
-       std::optional<std::string> needle) -> IdOrString {
-  if (!haystack.has_value() || !needle.has_value()) {
-    return Id::makeUndefined();
-  }
-  const auto& h = haystack.value();
-  const auto& n = needle.value();
+    [](std::string haystack, const std::string& needle) -> std::string {
   // Required by the SPARQL standard.
-  if (n.empty()) {
-    return std::move(h);
+  if (needle.empty()) {
+    return haystack;
   }
-  auto pos = h.find(n);
-  if (pos >= h.size()) {
+  auto pos = haystack.find(needle);
+  if (pos >= haystack.size()) {
     return "";
   }
   if constexpr (isStrAfter) {
-    return h.substr(pos + n.size());
+    return haystack.substr(pos + needle.size());
   } else {
     // STRBEFORE
-    return h.substr(0, pos);
+    return haystack.substr(0, pos);
   }
 };
 
-using StrAfterExpression =
-    StringExpressionImpl<2, decltype(strAfterOrBeforeImpl<true>),
-                         StringValueGetter>;
+using StrAfterExpression = StringExpressionImpl<
+    2, LiftStringFunction<decltype(strAfterOrBeforeImpl<true>)>,
+    StringValueGetter>;
 
-using StrBeforeExpression =
-    StringExpressionImpl<2, decltype(strAfterOrBeforeImpl<false>),
-                         StringValueGetter>;
+using StrBeforeExpression = StringExpressionImpl<
+    2, LiftStringFunction<decltype(strAfterOrBeforeImpl<false>)>,
+    StringValueGetter>;
 
 }  // namespace detail
 using namespace detail;
