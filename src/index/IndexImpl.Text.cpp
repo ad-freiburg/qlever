@@ -740,11 +740,13 @@ void IndexImpl::getContextListForWords(const string& words,
   vector<size_t> skipColumns;
   if (terms.size() > 1) {
     vector<Index::WordEntityPostings> wepVecs;
+    size_t i = 0;
     for (auto& term : terms) {
       if (!term.ends_with('*')) {
         skipColumns.push_back(i);
       }
       wepVecs.push_back(getWordPostingsForTerm(term));
+      i++;
     }
     wep = FTSAlgorithms::crossIntersectKWay(wepVecs, nullptr);
   } else {
