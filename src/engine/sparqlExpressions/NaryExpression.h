@@ -60,4 +60,14 @@ SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
 
 SparqlExpression::Ptr makeUppercaseExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLowercaseExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeStrStartsExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeStrEndsExpression(SparqlExpression::Ptr child1,
+                                            SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeContainsExpression(SparqlExpression::Ptr child1,
+                                             SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeStrAfterExpression(SparqlExpression::Ptr child1,
+                                             SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2);
 }  // namespace sparqlExpression

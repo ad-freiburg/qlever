@@ -1608,13 +1608,29 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   // `NaryExpression.h`.
   auto createUnary = [&argList]<typename Function>(Function function)
       requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
-    AD_CONTRACT_CHECK(argList.size() == 1);
+    AD_CORRECTNESS_CHECK(argList.size() == 1);
     return function(std::move(argList[0]));
+  };
+  auto createBinary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                     ExpressionPtr> {
+    AD_CONTRACT_CHECK(argList.size() == 2);
+    return function(std::move(argList[0]), std::move(argList[1]));
   };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
   } else if (functionName == "strlen") {
     return createUnary(&makeStrlenExpression);
+  } else if (functionName == "strbefore") {
+    return createBinary(&makeStrBeforeExpression);
+  } else if (functionName == "strafter") {
+    return createBinary(&makeStrAfterExpression);
+  } else if (functionName == "contains") {
+    return createBinary(&makeContainsExpression);
+  } else if (functionName == "strends") {
+    return createBinary(&makeStrEndsExpression);
+  } else if (functionName == "strstarts") {
+    return createBinary(&makeStrStartsExpression);
   } else if (functionName == "ucase") {
     return createUnary(&makeUppercaseExpression);
   } else if (functionName == "lcase") {

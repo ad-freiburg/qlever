@@ -1431,7 +1431,8 @@ TEST(SparqlParser, FunctionCall) {
       "<http://www.no-existing-prefixes.com/notExisting>()");
 }
 
-TEST(SparqlParser, SubstringExpression) {
+// ______________________________________________________________________________
+TEST(SparqlParser, substringExpression) {
   using namespace sparqlExpression;
   using namespace builtInCallTestHelpers;
   using V = Variable;
@@ -1453,4 +1454,23 @@ TEST(SparqlParser, SubstringExpression) {
   expectBuiltInCallFails("SUBSTR(?x)");
   // Too many arguments
   expectBuiltInCallFails("SUBSTR(?x), 3, 8, 12");
+}
+
+// _________________________________________________________
+TEST(SparqlParser, binaryStringExpressions) {
+  using namespace sparqlExpression;
+  using namespace builtInCallTestHelpers;
+  using V = Variable;
+  auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
+  auto expectBuiltInCallFails = ExpectParseFails<&Parser::builtInCall>{};
+
+  auto makeMatcher = [](auto function) {
+    return matchNary(function, V{"?x"}, V{"?y"});
+  };
+
+  expectBuiltInCall("STRSTARTS(?x, ?y)", makeMatcher(&makeStrStartsExpression));
+  expectBuiltInCall("STRENDS(?x, ?y)", makeMatcher(&makeStrEndsExpression));
+  expectBuiltInCall("CONTAINS(?x, ?y)", makeMatcher(&makeContainsExpression));
+  expectBuiltInCall("STRAFTER(?x, ?y)", makeMatcher(&makeStrAfterExpression));
+  expectBuiltInCall("STRBEFORE(?x, ?y)", makeMatcher(&makeStrBeforeExpression));
 }
