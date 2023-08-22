@@ -55,38 +55,70 @@ std::string Visitor::getOriginalInputForContext(
 ExpressionPtr Visitor::processIriFunctionCall(
     const std::string& iri, std::vector<ExpressionPtr> argList,
     const antlr4::ParserRuleContext* ctx) {
-  // Lambda that checks the number of arguments and throws an error if it's
-  // not right.
-  auto checkNumArgs = [&argList, &ctx](const std::string_view prefix,
-                                       const std::string_view functionName,
-                                       size_t numArgs) {
+  std::string_view functionName = iri;
+  std::string_view prefixName;
+  // Helper lambda that checks if `functionName` starts with the given prefix.
+  // If yes, remove the prefix and the final `>` from `functionName` and set
+  // `prefixName` to the short name of the prefix; see `global/Constants.h`.
+  auto checkPrefix = [&functionName, &prefixName](
+                         std::pair<std::string_view, std::string_view> prefix) {
+    if (functionName.starts_with(prefix.second)) {
+      prefixName = prefix.first;
+      functionName.remove_prefix(prefix.second.size());
+      AD_CONTRACT_CHECK(functionName.ends_with('>'));
+      functionName.remove_suffix(1);
+      return true;
+    } else {
+      return false;
+    }
+  };
+  // Helper lambda that checks the number of arguments and throws an error
+  // if it's not right. The `functionName` and `prefixName` are used for the
+  // error message.
+  auto checkNumArgs = [&argList, &ctx, &functionName,
+                       &prefixName](size_t numArgs) {
     static std::array<std::string, 6> wordForNumArgs = {
         "no", "one", "two", "three", "four", "five"};
     if (argList.size() != numArgs) {
       reportError(ctx,
-                  absl::StrCat("Function ", prefix, functionName, " takes ",
+                  absl::StrCat("Function ", prefixName, functionName, " takes ",
                                numArgs < 5 ? wordForNumArgs[numArgs]
                                            : std::to_string(numArgs),
                                numArgs == 1 ? " argument" : " arguments"));
     }
   };
-
-  constexpr static std::string_view geofPrefix =
-      "<http://www.opengis.net/def/function/geosparql/";
-  if (std::string_view iriView = iri; iriView.starts_with(geofPrefix)) {
-    iriView.remove_prefix(geofPrefix.size());
-    AD_CONTRACT_CHECK(iriView.ends_with('>'));
-    iriView.remove_suffix(1);
-    if (iriView == "distance") {
-      checkNumArgs("geof:", iriView, 2);
+  // Geo functions.
+  if (checkPrefix(GEOF_PREFIX)) {
+    if (functionName == "distance") {
+      checkNumArgs(2);
       return sparqlExpression::makeDistExpression(std::move(argList[0]),
                                                   std::move(argList[1]));
-    } else if (iriView == "longitude") {
-      checkNumArgs("geof:", iriView, 1);
+    } else if (functionName == "longitude") {
+      checkNumArgs(1);
       return sparqlExpression::makeLongitudeExpression(std::move(argList[0]));
-    } else if (iriView == "latitude") {
-      checkNumArgs("geof:", iriView, 1);
+    } else if (functionName == "latitude") {
+      checkNumArgs(1);
       return sparqlExpression::makeLatitudeExpression(std::move(argList[0]));
+    }
+  } else if (checkPrefix(MATH_PREFIX)) {
+    if (functionName == "log") {
+      checkNumArgs(1);
+      return sparqlExpression::makeLogExpression(std::move(argList[0]));
+    } else if (functionName == "exp") {
+      checkNumArgs(1);
+      return sparqlExpression::makeExpExpression(std::move(argList[0]));
+    } else if (functionName == "sqrt") {
+      checkNumArgs(1);
+      return sparqlExpression::makeSqrtExpression(std::move(argList[0]));
+    } else if (functionName == "sin") {
+      checkNumArgs(1);
+      return sparqlExpression::makeSinExpression(std::move(argList[0]));
+    } else if (functionName == "cos") {
+      checkNumArgs(1);
+      return sparqlExpression::makeCosExpression(std::move(argList[0]));
+    } else if (functionName == "tan") {
+      checkNumArgs(1);
+      return sparqlExpression::makeTanExpression(std::move(argList[0]));
     }
   }
   reportNotSupported(ctx, "Function \"" + iri + "\" is");

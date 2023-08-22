@@ -548,7 +548,8 @@ TEST(SparqlExpression, unaryMinus) {
   checkMinus(IdOrStrings{"true", "false", "", "<blibb>"}, Ids{U, U, U, U});
 }
 
-TEST(SparqlExpression, ceilFloorAbsRound) {
+// Test the built-in numeric functions (floor, abs, round, ceil).
+TEST(SparqlExpression, builtInNumericFunctions) {
   auto bindUnary = [](auto f) {
     return std::bind_front(testUnaryExpression, f);
   };
@@ -575,6 +576,30 @@ TEST(SparqlExpression, ceilFloorAbsRound) {
   checkFloor(input, floor);
   checkCeil(input, ceil);
   checkRound(input, round);
+}
+
+// Test the correctness of the math functions.
+TEST(SparqlExpression, customNumericFunctions) {
+  auto nan = std::numeric_limits<double>::quiet_NaN();
+  auto inf = std::numeric_limits<double>::infinity();
+  testUnaryExpression(makeLogExpression,
+                      std::vector<Id>{I(1), D(2), D(exp(1)), D(0)},
+                      std::vector<Id>{D(0), D(log(2)), D(1), D(-inf)});
+  testUnaryExpression(makeExpExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-inf)},
+                      std::vector<Id>{D(1), D(exp(1)), D(exp(2)), D(0)});
+  testUnaryExpression(makeSqrtExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(0), D(1), D(sqrt(2)), D(nan)});
+  testUnaryExpression(makeSinExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(0), D(sin(1)), D(sin(2)), D(sin(-1))});
+  testUnaryExpression(makeCosExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(1), D(cos(1)), D(cos(2)), D(cos(-1))});
+  testUnaryExpression(makeTanExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(0), D(tan(1)), D(tan(2)), D(tan(-1))});
 }
 
 // ________________________________________________________________________________________
