@@ -581,24 +581,25 @@ TEST(SparqlExpression, builtInNumericFunctions) {
 // Test the correctness of the math functions.
 TEST(SparqlExpression, customNumericFunctions) {
   auto nan = std::numeric_limits<double>::quiet_NaN();
+  auto inf = std::numeric_limits<double>::infinity();
   testUnaryExpression(makeLogExpression,
-                      std::vector<Id>{B(false), B(true), I(1), D(exp(1)), U},
-                      std::vector<Id>{D(nan), D(0), D(0), D(1), U});
+                      std::vector<Id>{I(1), D(2), D(exp(1)), D(0)},
+                      std::vector<Id>{D(0), D(log(2)), D(1), D(-inf)});
   testUnaryExpression(makeExpExpression,
-                      std::vector<Id>{B(false), B(true), I(0), D(1), U},
-                      std::vector<Id>{D(1), D(exp(1)), D(1), D(exp(1)), U});
+                      std::vector<Id>{I(0), D(1), D(2), D(-inf)},
+                      std::vector<Id>{D(1), D(exp(1)), D(exp(2)), D(0)});
   testUnaryExpression(makeSqrtExpression,
-                      std::vector<Id>{B(false), B(true), I(0), D(2), I(-1), U},
-                      std::vector<Id>{D(0), D(1), D(0), D(sqrt(2)), D(nan), U});
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(0), D(1), D(sqrt(2)), D(nan)});
   testUnaryExpression(makeSinExpression,
-                      std::vector<Id>{B(false), I(0), D(1), U},
-                      std::vector<Id>{D(0), D(0), D(sin(1)), U});
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(0), D(sin(1)), D(sin(2)), D(sin(-1))});
   testUnaryExpression(makeCosExpression,
-                      std::vector<Id>{B(false), I(0), D(1), U},
-                      std::vector<Id>{D(1), D(1), D(cos(1)), U});
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(1), D(cos(1)), D(cos(2)), D(cos(-1))});
   testUnaryExpression(makeTanExpression,
-                      std::vector<Id>{B(false), I(0), D(1), U},
-                      std::vector<Id>{D(0), D(0), D(tan(1)), U});
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(0), D(tan(1)), D(tan(2)), D(tan(-1))});
 }
 
 // ________________________________________________________________________________________

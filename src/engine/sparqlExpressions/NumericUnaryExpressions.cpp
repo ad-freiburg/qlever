@@ -71,9 +71,7 @@ inline const auto floor = makeNumericExpression<decltype(floorImpl)>();
 using FloorExpression = NARY<1, FV<decltype(floor), NumericValueGetter>>;
 
 // Natural Logarithm.
-inline const auto logImpl = []<typename T>(T num) {
-  return num > 0 ? std::log(num) : std::numeric_limits<double>::quiet_NaN();
-};
+inline const auto logImpl = []<typename T>(T num) { return std::log(num); };
 inline const auto log = makeNumericExpression<decltype(logImpl)>();
 using LogExpression = NARY<1, FV<decltype(log), NumericValueGetter>>;
 
@@ -83,23 +81,21 @@ inline const auto exp = makeNumericExpression<decltype(expImpl)>();
 using ExpExpression = NARY<1, FV<decltype(exp), NumericValueGetter>>;
 
 // Square root.
-inline const auto sqrtImpl = []<typename T>(T num) {
-  return num >= 0 ? std::sqrt(num) : std::numeric_limits<double>::quiet_NaN();
-};
+inline const auto sqrtImpl = []<typename T>(T num) { return std::sqrt(num); };
 inline const auto sqrt = makeNumericExpression<decltype(sqrtImpl)>();
 using SqrtExpression = NARY<1, FV<decltype(sqrt), NumericValueGetter>>;
 
-// Sinus.
+// Sine.
 inline const auto sinImpl = []<typename T>(T num) { return std::sin(num); };
 inline const auto sin = makeNumericExpression<decltype(sinImpl)>();
 using SinExpression = NARY<1, FV<decltype(sin), NumericValueGetter>>;
 
-// Cosinus.
+// Cosine.
 inline const auto cosImpl = []<typename T>(T num) { return std::cos(num); };
 inline const auto cos = makeNumericExpression<decltype(cosImpl)>();
 using CosExpression = NARY<1, FV<decltype(cos), NumericValueGetter>>;
 
-// Tangens.
+// Tangent.
 inline const auto tanImpl = []<typename T>(T num) { return std::tan(num); };
 inline const auto tan = makeNumericExpression<decltype(tanImpl)>();
 using TanExpression = NARY<1, FV<decltype(tan), NumericValueGetter>>;
