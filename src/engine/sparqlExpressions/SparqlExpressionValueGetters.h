@@ -107,6 +107,11 @@ struct StringValueGetter {
   std::optional<string> operator()(ValueId, const EvaluationContext*) const;
 
   std::optional<string> operator()(string s, const EvaluationContext*) const {
+    // Strip quotes
+    // TODO<joka921> Use stronger types to encode literals/ IRIs/ ETC
+    if (s.size() >= 2 && s.starts_with('"') && s.ends_with('"')) {
+      return s.substr(1, s.size() - 2);
+    }
     return s;
   }
 
@@ -148,8 +153,11 @@ struct LiteralFromIdGetter {
                                    const EvaluationContext* context) const;
   std::optional<string> operator()(std::string s,
                                    const EvaluationContext*) const {
-    // TODO<joka921> `string` should be a type that is aware of Literals vs
-    // strings.
+    // Strip quotes
+    // TODO<joka921> Use stronger types to encode literals/ IRIs/ ETC
+    if (s.size() >= 2 && s.starts_with('"') && s.ends_with('"')) {
+      return s.substr(1, s.size() - 2);
+    }
     return s;
   }
 

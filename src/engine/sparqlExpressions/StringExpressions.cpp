@@ -79,8 +79,9 @@ struct LiftStringFunction {
                       std::same_as<ResultOfFunction, std::string>,
                   "Template argument of `LiftStringFunction` must return `Id` "
                   "or `std::string`");
-    using Result = std::conditional_t<ad_utility::isSimilar<ResultOfFunction, Id>,
-                                      Id, IdOrString>;
+    using Result =
+        std::conditional_t<ad_utility::isSimilar<ResultOfFunction, Id>, Id,
+                           IdOrString>;
     if ((... || !arguments.has_value())) {
       return Result{Id::makeUndefined()};
     }
@@ -245,8 +246,8 @@ using StrBeforeExpression = StringExpressionImpl<
     2, LiftStringFunction<decltype(strAfterOrBeforeImpl<false>)>,
     StringValueGetter>;
 
-}  // namespace detail
-using namespace detail;
+}  // namespace detail::string_expressions
+using namespace detail::string_expressions;
 using std::make_unique;
 using std::move;
 using Ptr = SparqlExpression::Ptr;
@@ -260,28 +261,20 @@ Ptr makeStrlenExpression(Ptr child) { return make<StrlenExpression>(child); }
 
 Ptr makeSubstrExpression(Ptr string, Ptr start, Ptr length) {
   return make<SubstrExpression>(string, start, length);
-}  // namespace detail::string_expressions
-using namespace detail::string_expressions;
-SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<StrExpression>(std::move(child));
 }
+
 Ptr makeStrStartsExpression(Ptr child1, Ptr child2) {
   return make<StrStartsExpression>(child1, child2);
 }
 
-SparqlExpression::Ptr makeLowercaseExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<LowercaseExpression>(std::move(child));
+Ptr makeLowercaseExpression(Ptr child) {
+  return make<LowercaseExpression>(child);
 }
 
-SparqlExpression::Ptr makeUppercaseExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<UppercaseExpression>(std::move(child));
+Ptr makeUppercaseExpression(Ptr child) {
+  return make<UppercaseExpression>(child);
 }
 
-SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
-                                           SparqlExpression::Ptr start,
-                                           SparqlExpression::Ptr length) {
-  return std::make_unique<SubstrExpression>(std::move(string), std::move(start),
-                                            std::move(length));
 Ptr makeStrEndsExpression(Ptr child1, Ptr child2) {
   return make<StrEndsExpression>(child1, child2);
 }
