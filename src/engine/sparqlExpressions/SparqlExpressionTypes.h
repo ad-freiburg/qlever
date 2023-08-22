@@ -70,6 +70,16 @@ class IdOrString : public IdOrStringBase,
   }
 };
 
+// Print an `IdOrString` for googletest.
+inline void PrintTo(const IdOrString& var, std::ostream* os) {
+  std::visit(
+      [&os](const auto& s) {
+        auto& stream = *os;
+        stream << s;
+      },
+      var);
+}
+
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
 /// the row indices in which a boolean expression evaluates to "true". Constant

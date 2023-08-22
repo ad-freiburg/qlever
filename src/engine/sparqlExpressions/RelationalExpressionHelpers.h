@@ -104,6 +104,7 @@ constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
     case Comparison::GT:
       return Comparison::LT;
   }
+  AD_FAIL();
 }
 
 // Return the ID range `[begin, end)` in which the entries of the vocabulary
