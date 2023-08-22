@@ -15,13 +15,8 @@
 #include <string>
 #include <vector>
 
-using std::cerr;
-using std::cout;
-using std::endl;
-using std::flush;
 using std::size_t;
 using std::string;
-using std::vector;
 
 namespace po = boost::program_options;
 
