@@ -161,7 +161,7 @@ using StrStartsExpression =
   if (!haystack.has_value() || !needle.has_value()) {
     return Id::makeUndefined();
   }
-  return Id::makeFromBool(haystack.value().starts_with(needle.value()));
+  return Id::makeFromBool(haystack.value().ends_with(needle.value()));
 };
 
 using StrEndsExpression =
@@ -174,8 +174,8 @@ using StrEndsExpression =
   if (!haystack.has_value() || !needle.has_value()) {
     return Id::makeUndefined();
   }
-  return Id::makeFromBool(
-      haystack.value().find(needle.value()) != std::string::npos);
+  return Id::makeFromBool(haystack.value().find(needle.value()) !=
+                          std::string::npos);
 };
 
 using ContainsExpression =
@@ -186,32 +186,34 @@ template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
     [](std::optional<std::string> haystack,
        std::optional<std::string> needle) -> IdOrString {
-      if (!haystack.has_value() || !needle.has_value()) {
-        return Id::makeUndefined();
-      }
-      const auto &h = haystack.value();
-      const auto&n = needle.value();
-      // Required by the SPARQL standard.
-      if (n.empty()) {
-        return std::move(h);
-      }
-      auto pos = h.find(n);
-      if (pos >= h.size()) {
-        return "";
-      }
-      if constexpr (isStrAfter) {
-        return h.substr(pos + n.size());
-      } else {
-        // STRBEFORE
-        return h.substr(0, pos);
-      }
-    };
+  if (!haystack.has_value() || !needle.has_value()) {
+    return Id::makeUndefined();
+  }
+  const auto& h = haystack.value();
+  const auto& n = needle.value();
+  // Required by the SPARQL standard.
+  if (n.empty()) {
+    return std::move(h);
+  }
+  auto pos = h.find(n);
+  if (pos >= h.size()) {
+    return "";
+  }
+  if constexpr (isStrAfter) {
+    return h.substr(pos + n.size());
+  } else {
+    // STRBEFORE
+    return h.substr(0, pos);
+  }
+};
 
 using StrAfterExpression =
-    StringExpressionImpl<2, decltype(strAfterOrBeforeImpl<true>), StringValueGetter>;
+    StringExpressionImpl<2, decltype(strAfterOrBeforeImpl<true>),
+                         StringValueGetter>;
 
 using StrBeforeExpression =
-    StringExpressionImpl<2, decltype(strAfterOrBeforeImpl<false>), StringValueGetter>;
+    StringExpressionImpl<2, decltype(strAfterOrBeforeImpl<false>),
+                         StringValueGetter>;
 
 }  // namespace detail
 using namespace detail;

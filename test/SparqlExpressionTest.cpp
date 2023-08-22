@@ -160,15 +160,19 @@ auto testBinaryExpression = [](auto makeExpression,
   testNaryExpression(makeExpression, expected, op1, op2);
 };
 
-auto testBinaryExpressionVec = []<SingleExpressionResult Exp, SingleExpressionResult Op1, SingleExpressionResult Op2>(auto makeExpression,
-                               std::vector<Exp> expected,
-                               std::vector<Op1> op1,
-                               std::vector<Op2> op2,
-                               source_location l = source_location::current()) {
-  auto t = generateLocationTrace(l, "testBinaryExpressionVec");
+// Test a binary expression, but the operands and expected result are passed in
+// via `std::vector`, not as a `VectorWithMemoryLimit`. This makes the usage
+// simpler.
+auto testBinaryExpressionVec =
+    []<SingleExpressionResult Exp, SingleExpressionResult Op1,
+       SingleExpressionResult Op2>(
+        auto makeExpression, std::vector<Exp> expected, std::vector<Op1> op1,
+        std::vector<Op2> op2, source_location l = source_location::current()) {
+      auto t = generateLocationTrace(l, "testBinaryExpressionVec");
 
-  testNaryExpression(makeExpression, expected, op1, op2);
-};
+      testNaryExpression(makeExpression, liftVector(expected), liftVector(op1),
+                         liftVector(op2));
+    };
 
 auto testOr =
     std::bind_front(testBinaryExpressionCommutative, &makeOrExpression);
@@ -342,9 +346,11 @@ TEST(SparqlExpression, arithmeticOperators) {
 }
 
 // Helper function to lift a `vector<T>` to `vectorWithMemoryLimit<T>`
-template<typename T>
+template <typename T>
 VectorWithMemoryLimit<T> liftVector(std::vector<T> vec) {
-e Helper lambda to enable testing a unary expression in one line (see below).
+  return VectorWithMemoryLimit<T>{std::make_move_iterator(vec.begin()),
+                                  std::make_move_iterator(vec.end()), alloc};
+}
 //
 // TODO: The tests above could also be simplified (and made much more readable)
 // in this vein.
@@ -354,11 +360,8 @@ auto testUnaryExpression =
         std::vector<OutputType> expected,
         source_location l = source_location::current()) {
       auto trace = generateLocationTrace(l);
-      V<OperandType> operandV{std::make_move_iterator(operand.begin()),
-                              std::make_move_iterator(operand.end()), alloc};
-      V<OutputType> expectedV{std::make_move_iterator(expected.begin()),
-                              std::make_move_iterator(expected.end()), alloc};
-      testNaryExpression(makeFunction, expectedV, operandV);
+      testNaryExpression(makeFunction, liftVector(expected),
+                         liftVector(operand));
     };
 
 // Test `YearExpression`, `MonthExpression`, and `DayExpression`.
@@ -469,52 +472,38 @@ TEST(SparqlExpression, stringOperators) {
 }
 
 // Test STRSTARTS, STRENDS, CONTAINS, STRBEFORE, and STRAFTER.
-auto checkStrStarts = std::bind_front(testBinaryExpression, &makeStrStartsExpression);
-auto checkStrEnds = std::bind_front(testBinaryExpression, &makeStrEndsExpression);
-auto checkContains = std::bind_front(testBinaryExpression, &makeContainsExpression);
-auto checkStrAfter = std::bind_front(testBinaryExpression, &makeStrAfterExpression);
-auto checkStrBefore = std::bind_front(testBinaryExpression, &makeStrBeforeExpression);
+auto checkStrStarts =
+    std::bind_front(testBinaryExpressionVec, &makeStrStartsExpression);
+auto checkStrEnds =
+    std::bind_front(testBinaryExpressionVec, &makeStrEndsExpression);
+auto checkContains =
+    std::bind_front(testBinaryExpressionVec, &makeContainsExpression);
+auto checkStrAfter =
+    std::bind_front(testBinaryExpressionVec, &makeStrAfterExpression);
+auto checkStrBefore =
+    std::bind_front(testBinaryExpressionVec, &makeStrBeforeExpression);
 TEST(SparqlExpression, binaryStringOperations) {
-  checkStrlen(IdOrStrings{"one", "two", "three", ""},
-              Ids{I(3), I(3), I(5), I(0)});
-  checkStrlenWithStrChild(IdOrStrings{"one", "two", "three", ""},
-                          Ids{I(3), I(3), I(5), I(0)});
-
-  // Test the different (optimized) behavior depending on whether the STR()
-  // function was applied to the argument.
-  checkStrlen(IdOrStrings{"one", I(1), D(3.6), ""}, Ids{I(3), U, U, I(0)});
-  checkStrlenWithStrChild(IdOrStrings{"one", I(1), D(3.6), ""},
-                          Ids{I(3), I(1), I(3), I(0)});
-  checkStr(Ids{I(1), I(2), I(3)}, IdOrStrings{"1", "2", "3"});
-  checkStr(Ids{D(-1.0), D(1.0), D(2.34)}, IdOrStrings{"-1", "1", "2.34"});
-  checkStr(Ids{B(true), B(false), B(true)},
-           IdOrStrings{"true", "false", "true"});
-  checkStr(IdOrStrings{"one", "two", "three"},
-           IdOrStrings{"one", "two", "three"});
-
-  // A simple test for uniqueness of the cache key.
-  auto c1a = makeStrlenExpression(std::make_unique<IriExpression>("<bim>"))
-      ->getCacheKey({});
-  auto c1b = makeStrlenExpression(std::make_unique<IriExpression>("<bim>"))
-      ->getCacheKey({});
-  auto c2a = makeStrExpression(std::make_unique<IriExpression>("<bim>"))
-      ->getCacheKey({});
-  auto c2b = makeStrExpression(std::make_unique<IriExpression>("<bim>"))
-      ->getCacheKey({});
-  auto c3a = makeStrlenExpression(
-      makeStrExpression(std::make_unique<IriExpression>("<bim>")))
-      ->getCacheKey({});
-  auto c3b = makeStrlenExpression(
-      makeStrExpression(std::make_unique<IriExpression>("<bim>")))
-      ->getCacheKey({});
-
-  EXPECT_EQ(c1a, c1b);
-  EXPECT_EQ(c2a, c2b);
-  EXPECT_EQ(c3a, c3b);
-
-  EXPECT_NE(c1a, c2a);
-  EXPECT_NE(c2a, c3a);
-  EXPECT_NE(c1a, c3a);
+  using S = IdOrStrings;
+  auto F = Id::makeFromBool(false);
+  auto T = Id::makeFromBool(true);
+  checkStrStarts(
+      Ids{T, F, T, F, T, T, F, F, F},
+      S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+      S{"", "x", "", "Hallo", "Häl", "Hällo", "Hällox", "ll", "lo"});
+  checkStrEnds(
+      Ids{T, F, T, F, T, T, F, F, F},
+      S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+      S{"", "x", "", "Hallo", "o", "Hällo", "Hällox", "ll", "H"});
+  checkContains(Ids{T, F, T, F, T, T, F},
+                S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+                S{"", "x", "", "ullo", "ll", "Hällo", "Hällox"});
+  checkStrAfter(S{"", "", "Hällo", "", "o", "", "", "lo"},
+                S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+                S{"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"});
+  checkStrBefore(
+      S{"", "", "Hällo", "", "Hä", "", "", "Hä"},
+      S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+      S{"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"});
 }
 
 // ______________________________________________________________________________

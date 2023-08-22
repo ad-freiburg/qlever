@@ -1579,13 +1579,12 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     AD_CORRECTNESS_CHECK(argList.size() == 1);
     return function(std::move(argList[0]));
   };
-  auto createBinary =
-      [&argList]<typename Function>(Function function)
-          requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                         ExpressionPtr> {
-            AD_CONTRACT_CHECK(argList.size() == 2);
-            return function(std::move(argList[0]), std::move(argList[1]));
-          };
+  auto createBinary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                     ExpressionPtr> {
+    AD_CONTRACT_CHECK(argList.size() == 2);
+    return function(std::move(argList[0]), std::move(argList[1]));
+  };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
   } else if (functionName == "strlen") {
