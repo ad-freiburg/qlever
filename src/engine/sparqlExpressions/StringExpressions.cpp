@@ -220,7 +220,7 @@ using ContainsExpression =
 
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
-[[maybe_unused]] const auto strAfterOrBeforeImpl =
+[[maybe_unused]] auto strAfterOrBeforeImpl =
     [](std::string text, std::string_view pattern) -> std::string {
   // Required by the SPARQL standard.
   if (pattern.empty()) {
@@ -238,13 +238,16 @@ template <bool isStrAfter>
   }
 };
 
-using StrAfterExpression = StringExpressionImpl<
-    2, LiftStringFunction<decltype(strAfterOrBeforeImpl<true>)>,
-    StringValueGetter>;
+auto strAfter = strAfterOrBeforeImpl<true>;
 
-using StrBeforeExpression = StringExpressionImpl<
-    2, LiftStringFunction<decltype(strAfterOrBeforeImpl<false>)>,
-    StringValueGetter>;
+using StrAfterExpression =
+    StringExpressionImpl<2, LiftStringFunction<decltype(strAfter)>,
+                         StringValueGetter>;
+
+auto strBefore = strAfterOrBeforeImpl<false>;
+using StrBeforeExpression =
+    StringExpressionImpl<2, LiftStringFunction<decltype(strBefore)>,
+                         StringValueGetter>;
 
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
