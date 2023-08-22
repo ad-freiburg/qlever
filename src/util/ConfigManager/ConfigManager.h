@@ -92,7 +92,7 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConfigOptionProxy<OptionType> addOption(
+  ConstConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn) {
@@ -123,7 +123,7 @@ class ConfigManager {
             std::same_as<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConfigOptionProxy<OptionType> addOption(
+  ConstConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn,
@@ -144,7 +144,7 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConfigOptionProxy<OptionType> addOption(
+  ConstConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn) {
     return addOption<OptionType>(
@@ -164,7 +164,7 @@ class ConfigManager {
             std::same_as<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConfigOptionProxy<OptionType> addOption(
+  ConstConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn,
       DefaultValueType defaultValue) {
@@ -228,24 +228,23 @@ class ConfigManager {
   void addValidator(
       Validator<ValidatorParameterTypes...> auto validatorFunction,
       std::string_view errorMessage,
-      ConfigOptionProxy<ValidatorParameterTypes>... configOptionsToBeChecked)
+      ConstConfigOptionProxy<
+          ValidatorParameterTypes>... configOptionsToBeChecked)
       requires(sizeof...(configOptionsToBeChecked) > 0) {
     addValidatorImpl(
         "addValidator",
         []<typename T>(ConstConfigOptionProxy<T> opt) {
           return opt.getConfigOption().template getValue<std::decay_t<T>>();
         },
-        validatorFunction, errorMessage,
-        static_cast<ConstConfigOptionProxy<ValidatorParameterTypes>>(
-            configOptionsToBeChecked)...);
+        validatorFunction, errorMessage, configOptionsToBeChecked...);
   }
 
   /*
   @brief Add a function to the configuration manager for verifying, that the
   given configuration options are valid. Will always be called after parsing.
 
-  @tparam ValidatorParameterTypes Must be instances of `ConfigOptionProxy`. Can
-  be left up to type deduction.
+  @tparam ValidatorParameterTypes Must be instances of `ConstConfigOptionProxy`.
+  Can be left up to type deduction.
 
   @param validatorFunction Checks, if the given configuration options are valid.
   Should return true, if they are valid.
@@ -255,7 +254,7 @@ class ConfigManager {
   will be passed to the validator function as function arguments. Will keep the
   same order.
   */
-  template <isInstantiation<ConfigOptionProxy>... ValidatorParameterTypes>
+  template <isInstantiation<ConstConfigOptionProxy>... ValidatorParameterTypes>
   void addOptionValidator(
       Validator<decltype(std::declval<ValidatorParameterTypes>()
                              .getConfigOption())...> auto validatorFunction,
@@ -267,10 +266,7 @@ class ConfigManager {
         []<typename T>(ConstConfigOptionProxy<T> opt) {
           return opt.getConfigOption();
         },
-        validatorFunction, errorMessage,
-        static_cast<
-            ConstConfigOptionProxy<typename ValidatorParameterTypes::Type>>(
-            configOptionsToBeChecked)...);
+        validatorFunction, errorMessage, configOptionsToBeChecked...);
   }
 
  private:
@@ -340,7 +336,7 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  ConfigOptionProxy<OptionType> addOptionImpl(
+  ConstConfigOptionProxy<OptionType> addOptionImpl(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn,
@@ -353,7 +349,7 @@ class ConfigManager {
     move constructor. Which is why, we can't just return the `ConfigOption`
     we created here.
     */
-    return ConfigOptionProxy<OptionType>(addConfigOption(
+    return ConstConfigOptionProxy<OptionType>(addConfigOption(
         pathToOption,
         ConfigOption(pathToOption.back(), optionDescription,
                      variableToPutValueOfTheOptionIn, defaultValue)));
@@ -382,11 +378,12 @@ class ConfigManager {
 
   @param addValidatorFunctionName The name of the function, that is calling this
   implementation. So that people can easier identify them.
-  @param translationFunction Transforms the given `ConfigOptionProxy` in the
-  value form for the validator function.
+  @param translationFunction Transforms the given `ConstConfigOptionProxy` in
+  the value form for the validator function.
   @param validatorFunction Should return true, if the transformed
-  `ConfigOptionProxy` represent valid values. For example: There configuration
-  options were all set at run time, or contain numbers bigger than 10.
+  `ConstConfigOptionProxy` represent valid values. For example: There
+  configuration options were all set at run time, or contain numbers bigger
+  than 10.
   @param errorMessage A `std::runtime_error` with this as an error message will
   get thrown, if the `validatorFunction` returns false.
   @param configOptionsToBeChecked Proxies for the configuration options, who
