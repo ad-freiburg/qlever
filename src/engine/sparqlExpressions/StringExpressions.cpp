@@ -63,14 +63,27 @@ class StringExpressionImpl : public SparqlExpression {
   }
 };
 
-// STRLEN
-inline auto strlen = [](std::optional<std::string> s) {
-  if (!s.has_value()) {
-    return Id::makeUndefined();
+template <typename Impl, typename... args>
+using ReturnTypeImpl = std::conditional_t<ad_utility::isSimilar<Id, std::invoke_result<Impl, args...>>, Id, IdOrString>;
+
+// A helper function TODO<joka921> comment.
+template <typename Impl>
+class LiftStringFunction {
+  template <typename... Arguments>
+  auto operator()(
+      Arguments... arguments) const -> ReturnTypeImpl<Impl, Arguments...> {
+    if ((... || !arguments.has_value())) {
+      return Id::makeUndefined();
+    }
+    return std::invoke(Impl{}, std::move(arguments.value())...);
   }
-  return Id::makeFromInt(static_cast<int64_t>(s.value().size()));
 };
-using StrlenExpression = StringExpressionImpl<1, decltype(strlen)>;
+
+// STRLEN
+inline auto strlen = [](std::string s) {
+  return Id::makeFromInt(static_cast<int64_t>(s.size()));
+};
+using StrlenExpression = StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
 
 // SUBSTR
 class SubstrImpl {
@@ -169,17 +182,14 @@ using StrEndsExpression =
 
 // STRCONTAINS
 [[maybe_unused]] auto containsImpl =
-    [](std::optional<std::string> haystack,
-       std::optional<std::string> needle) -> Id {
-  if (!haystack.has_value() || !needle.has_value()) {
-    return Id::makeUndefined();
-  }
-  return Id::makeFromBool(haystack.value().find(needle.value()) !=
+    [](std::string haystack,
+       std::string needle) -> Id {
+  return Id::makeFromBool(haystack.find(needle) !=
                           std::string::npos);
 };
 
 using ContainsExpression =
-    StringExpressionImpl<2, decltype(containsImpl), StringValueGetter>;
+    StringExpressionImpl<2, LiftStringFunction<decltype(containsImpl)>, StringValueGetter>;
 
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>

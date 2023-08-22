@@ -19,6 +19,7 @@ namespace sparqlExpression::detail {
 struct NotNumeric {};
 // The input to an expression that expects a numeric value.
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
+using IntOrDouble = std::variant<double, int64_t>;
 
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
 // from above) into an `ID`. When `NanToUndef` is `true` then floating point NaN
