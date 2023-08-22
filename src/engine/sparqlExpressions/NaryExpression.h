@@ -52,4 +52,6 @@ SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
                                            SparqlExpression::Ptr start,
                                            SparqlExpression::Ptr length);
 
+SparqlExpression::Ptr makeUppercaseExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeLowercaseExpression(SparqlExpression::Ptr child);
 }  // namespace sparqlExpression
