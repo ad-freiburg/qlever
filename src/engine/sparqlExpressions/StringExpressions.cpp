@@ -90,7 +90,7 @@ struct LiftStringFunction {
 };
 
 // STRLEN
-[[maybe_unused]] auto strlen = [](const std::string& s) -> Id {
+[[maybe_unused]] auto strlen = [](std::string_view s) {
   return Id::makeFromInt(static_cast<int64_t>(s.size()));
 };
 
@@ -189,9 +189,9 @@ using SubstrExpression =
     StringExpressionImpl<3, SubstrImpl, NumericValueGetter, NumericValueGetter>;
 
 // STRSTARTS
-[[maybe_unused]] auto strStartsImpl = [](const std::string& haystack,
-                                         const std::string& needle) -> Id {
-  return Id::makeFromBool(haystack.starts_with(needle));
+[[maybe_unused]] auto strStartsImpl = [](std::string_view text,
+                                         std::string_view pattern) -> Id {
+  return Id::makeFromBool(text.starts_with(pattern));
 };
 
 using StrStartsExpression =
@@ -199,9 +199,9 @@ using StrStartsExpression =
                          StringValueGetter>;
 
 // STRENDS
-[[maybe_unused]] auto strEndsImpl = [](const std::string& haystack,
-                                       const std::string& needle) -> Id {
-  return Id::makeFromBool(haystack.ends_with(needle));
+[[maybe_unused]] auto strEndsImpl = [](std::string_view text,
+                                       std::string_view pattern) {
+  return Id::makeFromBool(text.ends_with(pattern));
 };
 
 using StrEndsExpression =
@@ -209,9 +209,9 @@ using StrEndsExpression =
                          StringValueGetter>;
 
 // STRCONTAINS
-[[maybe_unused]] auto containsImpl = [](const std::string& haystack,
-                                        const std::string& needle) -> Id {
-  return Id::makeFromBool(haystack.find(needle) != std::string::npos);
+[[maybe_unused]] auto containsImpl = [](std::string_view text,
+                                        std::string_view pattern) {
+  return Id::makeFromBool(text.find(pattern) != std::string::npos);
 };
 
 using ContainsExpression =
@@ -220,21 +220,21 @@ using ContainsExpression =
 
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
-[[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](std::string haystack, const std::string& needle) -> std::string {
+[[maybe_unused]] const auto strAfterOrBeforeImpl =
+    [](std::string text, std::string_view pattern) -> std::string {
   // Required by the SPARQL standard.
-  if (needle.empty()) {
-    return haystack;
+  if (pattern.empty()) {
+    return text;
   }
-  auto pos = haystack.find(needle);
-  if (pos >= haystack.size()) {
+  auto pos = text.find(pattern);
+  if (pos >= text.size()) {
     return "";
   }
   if constexpr (isStrAfter) {
-    return haystack.substr(pos + needle.size());
+    return text.substr(pos + pattern.size());
   } else {
     // STRBEFORE
-    return haystack.substr(0, pos);
+    return text.substr(0, pos);
   }
 };
 
@@ -250,41 +250,41 @@ using StrBeforeExpression = StringExpressionImpl<
 using namespace detail::string_expressions;
 using std::make_unique;
 using std::move;
-using Ptr = SparqlExpression::Ptr;
+using Expr = SparqlExpression::Ptr;
 
 template <typename T>
-Ptr make(std::same_as<Ptr> auto&... children) {
+Expr make(std::same_as<Expr> auto&... children) {
   return std::make_unique<T>(std::move(children)...);
 }
-Ptr makeStrExpression(Ptr child) { return make<StrExpression>(child); }
-Ptr makeStrlenExpression(Ptr child) { return make<StrlenExpression>(child); }
+Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }
+Expr makeStrlenExpression(Expr child) { return make<StrlenExpression>(child); }
 
-Ptr makeSubstrExpression(Ptr string, Ptr start, Ptr length) {
+Expr makeSubstrExpression(Expr string, Expr start, Expr length) {
   return make<SubstrExpression>(string, start, length);
 }
 
-Ptr makeStrStartsExpression(Ptr child1, Ptr child2) {
+Expr makeStrStartsExpression(Expr child1, Expr child2) {
   return make<StrStartsExpression>(child1, child2);
 }
 
-Ptr makeLowercaseExpression(Ptr child) {
+Expr makeLowercaseExpression(Expr child) {
   return make<LowercaseExpression>(child);
 }
 
-Ptr makeUppercaseExpression(Ptr child) {
+Expr makeUppercaseExpression(Expr child) {
   return make<UppercaseExpression>(child);
 }
 
-Ptr makeStrEndsExpression(Ptr child1, Ptr child2) {
+Expr makeStrEndsExpression(Expr child1, Expr child2) {
   return make<StrEndsExpression>(child1, child2);
 }
-Ptr makeStrAfterExpression(Ptr child1, Ptr child2) {
+Expr makeStrAfterExpression(Expr child1, Expr child2) {
   return make<StrAfterExpression>(child1, child2);
 }
-Ptr makeStrBeforeExpression(Ptr child1, Ptr child2) {
+Expr makeStrBeforeExpression(Expr child1, Expr child2) {
   return make<StrBeforeExpression>(child1, child2);
 }
-Ptr makeContainsExpression(Ptr child1, Ptr child2) {
+Expr makeContainsExpression(Expr child1, Expr child2) {
   return make<ContainsExpression>(child1, child2);
 }
 }  // namespace sparqlExpression
