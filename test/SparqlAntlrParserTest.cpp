@@ -1273,6 +1273,8 @@ TEST(SparqlParser, builtInCall) {
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
   auto expectFails = ExpectParseFails<&Parser::builtInCall>{};
   expectBuiltInCall("StrLEN(?x)", matchUnary(&makeStrlenExpression));
+  expectBuiltInCall("ucaSe(?x)", matchUnary(&makeUppercaseExpression));
+  expectBuiltInCall("lCase(?x)", matchUnary(&makeLowercaseExpression));
   expectBuiltInCall("StR(?x)", matchUnary(&makeStrExpression));
   expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
   expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));

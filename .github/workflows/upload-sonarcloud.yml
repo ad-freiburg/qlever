@@ -37,11 +37,6 @@ jobs:
       build-type: Release
       BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
     steps:
-      - name: Setup Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin' # See 'Supported distributions' for available options
-          java-version: '17'
       - name: Print concurrency key
         run: echo "${{ github.workflow }} @ ${{ github.event.workflow_run.head_repository.full_name || github.ref}} @ ${{ github.event.workflow_run.head_branch || github.event.workflow_run.pull_requests[0].url || github.head_ref || github.ref }}"
       - name: 'Download artifact'
@@ -115,7 +110,7 @@ jobs:
       - name: "Move qlever sources up"
         run: shopt -s dotglob && mv qlever-source/* .
       - name: Install sonar-scanner and build-wrapper
-        uses: SonarSource/sonarcloud-github-c-cpp@v1
+        uses: SonarSource/sonarcloud-github-c-cpp@v2
       - name: Install dependencies
         run:  |
           sudo gem install apt-spy2
@@ -147,12 +142,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          export JAVA_HOME="${{env.JAVA_HOME}}"
           sonar-scanner --define sonar.cfamily.build-wrapper-output=build_wrapper_output_directory -Dsonar.scm.revision=${{ github.event.workflow_run.head_sha }} -Dsonar.pullrequest.key=${{ fromJson(steps.get_pr_data.outputs.data).number }} -Dsonar.pullrequest.branch=${{ fromJson(steps.get_pr_data.outputs.data).head.ref }} -Dsonar.pullrequest.base=${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
       - name: SonarCloud Scan on push
         if: github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.event.repository.full_name
         run: |
-          export JAVA_HOME="${{env.JAVA_HOME}}"
           sonar-scanner --define sonar.cfamily.build-wrapper-output=build_wrapper_output_directory -Dsonar.scm.revision=${{ github.event.workflow_run.head_sha }} -Dsonar.branch.name=${{ github.event.workflow_run.head_branch }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

@@ -3,7 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 namespace sparqlExpression {
-namespace detail {
+namespace detail::string_expressions {
 // String functions.
 [[maybe_unused]] auto strImpl = [](std::optional<std::string> s) {
   return IdOrString{std::move(s)};
@@ -64,13 +64,35 @@ class StringExpressionImpl : public SparqlExpression {
 };
 
 // STRLEN
-inline auto strlen = [](std::optional<std::string> s) {
+[[maybe_unused]] auto strlen = [](std::optional<std::string> s) {
   if (!s.has_value()) {
     return Id::makeUndefined();
   }
   return Id::makeFromInt(static_cast<int64_t>(s.value().size()));
 };
 using StrlenExpression = StringExpressionImpl<1, decltype(strlen)>;
+
+// LCASE
+[[maybe_unused]] auto lowercaseImpl =
+    [](std::optional<std::string> input) -> IdOrString {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    return ad_utility::utf8ToLower(input.value());
+  }
+};
+using LowercaseExpression = StringExpressionImpl<1, decltype(lowercaseImpl)>;
+
+// UCASE
+[[maybe_unused]] auto uppercaseImpl =
+    [](std::optional<std::string> input) -> IdOrString {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    return ad_utility::utf8ToUpper(input.value());
+  }
+};
+using UppercaseExpression = StringExpressionImpl<1, decltype(uppercaseImpl)>;
 
 // SUBSTR
 class SubstrImpl {
@@ -140,14 +162,21 @@ class SubstrImpl {
 
 using SubstrExpression =
     StringExpressionImpl<3, SubstrImpl, NumericValueGetter, NumericValueGetter>;
-
-}  // namespace detail
-using namespace detail;
+}  // namespace detail::string_expressions
+using namespace detail::string_expressions;
 SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child) {
   return std::make_unique<StrExpression>(std::move(child));
 }
 SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child) {
   return std::make_unique<StrlenExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeLowercaseExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<LowercaseExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeUppercaseExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<UppercaseExpression>(std::move(child));
 }
 
 SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,

@@ -14,14 +14,19 @@
 #include "util/StringUtils.h"
 
 using ad_utility::constantTimeEquals;
-using ad_utility::getLowercaseUtf8;
 using ad_utility::getUTF8Substring;
+using ad_utility::utf8ToLower;
+using ad_utility::utf8ToUpper;
 
-TEST(StringUtilsTest, getLowercaseUtf8) {
-  setlocale(LC_CTYPE, "");
-  ASSERT_EQ("schindler's list", getLowercaseUtf8("Schindler's List"));
-  ASSERT_EQ("#+-_foo__bar++", getLowercaseUtf8("#+-_foo__Bar++"));
-  ASSERT_EQ("fôéßaéé", getLowercaseUtf8("FÔÉßaéÉ"));
+TEST(StringUtilsTest, utf8ToLower) {
+  EXPECT_EQ("schindler's list", utf8ToLower("Schindler's List"));
+  EXPECT_EQ("#+-_foo__bar++", utf8ToLower("#+-_foo__Bar++"));
+  EXPECT_EQ("fôéßaéé", utf8ToLower("FÔÉßaéÉ"));
+}
+TEST(StringUtilsTest, utf8ToUpper) {
+  EXPECT_EQ("SCHINDLER'S LIST", utf8ToUpper("Schindler's List"));
+  EXPECT_EQ("#+-_BIMM__BAMM++", utf8ToUpper("#+-_bImM__baMm++"));
+  EXPECT_EQ("FÔÉSSAÉÉ", utf8ToUpper("FôéßaÉé"));
 }
 
 TEST(StringUtilsTest, getUTF8Substring) {
