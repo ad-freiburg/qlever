@@ -181,30 +181,67 @@ using StrEndsExpression =
 using ContainsExpression =
     StringExpressionImpl<2, decltype(containsImpl), StringValueGetter>;
 
+// STRAFTER / STRBEFORE
+template <bool isStrAfter>
+[[maybe_unused]] auto strAfterOrBeforeImpl =
+    [](std::optional<std::string> haystack,
+       std::optional<std::string> needle) -> IdOrString {
+      if (!haystack.has_value() || !needle.has_value()) {
+        return Id::makeUndefined();
+      }
+      const auto &h = haystack.value();
+      const auto&n = needle.value();
+      // Required by the SPARQL standard.
+      if (n.empty()) {
+        return std::move(h);
+      }
+      auto pos = h.find(n);
+      if (pos >= h.size()) {
+        return "";
+      }
+      if constexpr (isStrAfter) {
+        return h.substr(pos + n.size());
+      } else {
+        // STRBEFORE
+        return h.substr(0, pos);
+      }
+    };
+
+using StrAfterExpression =
+    StringExpressionImpl<2, decltype(strAfterOrBeforeImpl<true>), StringValueGetter>;
+
+using StrBeforeExpression =
+    StringExpressionImpl<2, decltype(strAfterOrBeforeImpl<false>), StringValueGetter>;
+
 }  // namespace detail
 using namespace detail;
-SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<StrExpression>(std::move(child));
-}
-SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<StrlenExpression>(std::move(child));
-}
+using std::make_unique;
+using std::move;
+using Ptr = SparqlExpression::Ptr;
 
-SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
-                                           SparqlExpression::Ptr start,
-                                           SparqlExpression::Ptr length) {
-  return std::make_unique<SubstrExpression>(std::move(string), std::move(start),
-                                            std::move(length));
+template <typename T>
+Ptr make(std::same_as<Ptr> auto&... children) {
+  return std::make_unique<T>(std::move(children)...);
 }
-    SparqlExpression::Ptr makeStrStartsExpression(SparqlExpression::Ptr child1,
-                                                  SparqlExpression::Ptr child2);
-    SparqlExpression::Ptr makeStrEndsExpression(SparqlExpression::Ptr child1,
-                                                SparqlExpression::Ptr child2);
-    SparqlExpression::Ptr makeContainsExpression(SparqlExpression::Ptr child1,
-                                                 SparqlExpression::Ptr child2);
-    SparqlExpression::Ptr makeStrAfterExpression(SparqlExpression::Ptr child1,
-                                                 SparqlExpression::Ptr child2);
-    SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
-                                                  SparqlExpression::Ptr child2);
-    SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
+Ptr makeStrExpression(Ptr child) { return make<StrExpression>(child); }
+Ptr makeStrlenExpression(Ptr child) { return make<StrlenExpression>(child); }
+
+Ptr makeSubstrExpression(Ptr string, Ptr start, Ptr length) {
+  return make<SubstrExpression>(string, start, length);
+}
+Ptr makeStrStartsExpression(Ptr child1, Ptr child2) {
+  return make<StrStartsExpression>(child1, child2);
+}
+Ptr makeStrEndsExpression(Ptr child1, Ptr child2) {
+  return make<StrEndsExpression>(child1, child2);
+}
+Ptr makeStrAfterExpression(Ptr child1, Ptr child2) {
+  return make<StrAfterExpression>(child1, child2);
+}
+Ptr makeStrBeforeExpression(Ptr child1, Ptr child2) {
+  return make<StrBeforeExpression>(child1, child2);
+}
+Ptr makeContainsExpression(Ptr child1, Ptr child2) {
+  return make<ContainsExpression>(child1, child2);
+}
 }  // namespace sparqlExpression

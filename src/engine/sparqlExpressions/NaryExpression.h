@@ -61,6 +61,4 @@ SparqlExpression::Ptr makeStrAfterExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
-SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
-
 }  // namespace sparqlExpression

@@ -160,6 +160,16 @@ auto testBinaryExpression = [](auto makeExpression,
   testNaryExpression(makeExpression, expected, op1, op2);
 };
 
+auto testBinaryExpressionVec = []<SingleExpressionResult Exp, SingleExpressionResult Op1, SingleExpressionResult Op2>(auto makeExpression,
+                               std::vector<Exp> expected,
+                               std::vector<Op1> op1,
+                               std::vector<Op2> op2,
+                               source_location l = source_location::current()) {
+  auto t = generateLocationTrace(l, "testBinaryExpressionVec");
+
+  testNaryExpression(makeExpression, expected, op1, op2);
+};
+
 auto testOr =
     std::bind_front(testBinaryExpressionCommutative, &makeOrExpression);
 auto testAnd =
@@ -331,7 +341,10 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(times13, mixed, D(1.0 / 1.3));
 }
 
-// Helper lambda to enable testing a unary expression in one line (see below).
+// Helper function to lift a `vector<T>` to `vectorWithMemoryLimit<T>`
+template<typename T>
+VectorWithMemoryLimit<T> liftVector(std::vector<T> vec) {
+e Helper lambda to enable testing a unary expression in one line (see below).
 //
 // TODO: The tests above could also be simplified (and made much more readable)
 // in this vein.
@@ -411,6 +424,7 @@ static auto makeStrlenWithStr = [](auto arg) {
 };
 auto checkStrlenWithStrChild =
     std::bind_front(testUnaryExpression, makeStrlenWithStr);
+
 TEST(SparqlExpression, stringOperators) {
   checkStrlen(IdOrStrings{"one", "two", "three", ""},
               Ids{I(3), I(3), I(5), I(0)});
@@ -454,6 +468,56 @@ TEST(SparqlExpression, stringOperators) {
   EXPECT_NE(c1a, c3a);
 }
 
+// Test STRSTARTS, STRENDS, CONTAINS, STRBEFORE, and STRAFTER.
+auto checkStrStarts = std::bind_front(testBinaryExpression, &makeStrStartsExpression);
+auto checkStrEnds = std::bind_front(testBinaryExpression, &makeStrEndsExpression);
+auto checkContains = std::bind_front(testBinaryExpression, &makeContainsExpression);
+auto checkStrAfter = std::bind_front(testBinaryExpression, &makeStrAfterExpression);
+auto checkStrBefore = std::bind_front(testBinaryExpression, &makeStrBeforeExpression);
+TEST(SparqlExpression, binaryStringOperations) {
+  checkStrlen(IdOrStrings{"one", "two", "three", ""},
+              Ids{I(3), I(3), I(5), I(0)});
+  checkStrlenWithStrChild(IdOrStrings{"one", "two", "three", ""},
+                          Ids{I(3), I(3), I(5), I(0)});
+
+  // Test the different (optimized) behavior depending on whether the STR()
+  // function was applied to the argument.
+  checkStrlen(IdOrStrings{"one", I(1), D(3.6), ""}, Ids{I(3), U, U, I(0)});
+  checkStrlenWithStrChild(IdOrStrings{"one", I(1), D(3.6), ""},
+                          Ids{I(3), I(1), I(3), I(0)});
+  checkStr(Ids{I(1), I(2), I(3)}, IdOrStrings{"1", "2", "3"});
+  checkStr(Ids{D(-1.0), D(1.0), D(2.34)}, IdOrStrings{"-1", "1", "2.34"});
+  checkStr(Ids{B(true), B(false), B(true)},
+           IdOrStrings{"true", "false", "true"});
+  checkStr(IdOrStrings{"one", "two", "three"},
+           IdOrStrings{"one", "two", "three"});
+
+  // A simple test for uniqueness of the cache key.
+  auto c1a = makeStrlenExpression(std::make_unique<IriExpression>("<bim>"))
+      ->getCacheKey({});
+  auto c1b = makeStrlenExpression(std::make_unique<IriExpression>("<bim>"))
+      ->getCacheKey({});
+  auto c2a = makeStrExpression(std::make_unique<IriExpression>("<bim>"))
+      ->getCacheKey({});
+  auto c2b = makeStrExpression(std::make_unique<IriExpression>("<bim>"))
+      ->getCacheKey({});
+  auto c3a = makeStrlenExpression(
+      makeStrExpression(std::make_unique<IriExpression>("<bim>")))
+      ->getCacheKey({});
+  auto c3b = makeStrlenExpression(
+      makeStrExpression(std::make_unique<IriExpression>("<bim>")))
+      ->getCacheKey({});
+
+  EXPECT_EQ(c1a, c1b);
+  EXPECT_EQ(c2a, c2b);
+  EXPECT_EQ(c3a, c3b);
+
+  EXPECT_NE(c1a, c2a);
+  EXPECT_NE(c2a, c3a);
+  EXPECT_NE(c1a, c3a);
+}
+
+// ______________________________________________________________________________
 static auto checkSubstr =
     std::bind_front(testNaryExpression, makeSubstrExpression);
 TEST(SparqlExpression, substr) {
