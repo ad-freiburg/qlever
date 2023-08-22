@@ -39,7 +39,7 @@ inline string getLowercase(const string& orig);
 
 inline string getUppercase(const string& orig);
 
-inline string getLowercaseUtf8(std::string_view s);
+inline string utf8ToLower(std::string_view s);
 
 inline std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view s,
                                                          size_t prefixLength);
@@ -123,23 +123,40 @@ string getUppercase(const string& orig) {
   return retVal;
 }
 
+namespace detail {
+// The common implementation of `utf8ToLower` and `utf8ToUpper` (for
+// details see below).
+std::string utf8StringTransform(std::string_view s, auto transformation) {
+  std::string result;
+  icu::StringByteSink<std::string> sink(&result);
+  UErrorCode err = U_ZERO_ERROR;
+  transformation("", 0,
+                 icu::StringPiece{s.data(), static_cast<int32_t>(s.size())},
+                 sink, nullptr, err);
+  if (U_FAILURE(err)) {
+    throw std::runtime_error(u_errorName(err));
+  }
+  return result;
+}
+}  // namespace detail
+
 // ____________________________________________________________________________
 /*
  * @brief convert a UTF-8 String to lowercase according to the held locale
  * @param s UTF-8 encoded string
  * @return The lowercase version of s, also encoded as UTF-8
  */
-std::string getLowercaseUtf8(std::string_view s) {
-  std::string result;
-  icu::StringByteSink<std::string> sink(&result);
-  UErrorCode err = U_ZERO_ERROR;
-  icu::CaseMap::utf8ToLower(
-      "", 0, icu::StringPiece{s.data(), static_cast<int32_t>(s.size())}, sink,
-      nullptr, err);
-  if (U_FAILURE(err)) {
-    throw std::runtime_error(u_errorName(err));
-  }
-  return result;
+std::string utf8ToLower(std::string_view s) {
+  return detail::utf8StringTransform(s, [](auto&&... args) {
+    return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
+  });
+}
+
+// Get the uppercase value. For details see `utf8ToLower` above
+inline std::string utf8ToUpper(std::string_view s) {
+  return detail::utf8StringTransform(s, [](auto&&... args) {
+    return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
+  });
 }
 
 /**

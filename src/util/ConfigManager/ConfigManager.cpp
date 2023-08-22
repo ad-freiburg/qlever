@@ -119,15 +119,16 @@ void ConfigManager::verifyPathToConfigOption(
 }
 
 // ____________________________________________________________________________
-void ConfigManager::addConfigOption(
+const ConfigOption& ConfigManager::addConfigOption(
     const std::vector<std::string>& pathToOption, ConfigOption&& option) {
   // Is the path valid?
   verifyPathToConfigOption(pathToOption, option.getIdentifier());
 
-  // Add the configuration option.
-  configurationOptions_.insert(
-      {createJsonPointerString(pathToOption),
-       std::make_unique<ConfigOption>(std::move(option))});
+  // Add the configuration option and return the inserted elements.
+  return *configurationOptions_
+              .insert({createJsonPointerString(pathToOption),
+                       std::make_unique<ConfigOption>(std::move(option))})
+              .first->second;
 }
 
 // ____________________________________________________________________________
