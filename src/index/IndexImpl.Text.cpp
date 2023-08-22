@@ -737,9 +737,13 @@ void IndexImpl::getContextListForWords(const string& words,
   AD_CONTRACT_CHECK(!terms.empty());
 
   Index::WordEntityPostings wep;
+  vector<size_t> skipColumns;
   if (terms.size() > 1) {
     vector<Index::WordEntityPostings> wepVecs;
     for (auto& term : terms) {
+      if (!term.ends_with('*')) {
+        skipColumns.push_back(i);
+      }
       wepVecs.push_back(getWordPostingsForTerm(term));
     }
     wep = FTSAlgorithms::crossIntersectKWay(wepVecs, nullptr);
@@ -760,9 +764,17 @@ void IndexImpl::getContextListForWords(const string& words,
   for (size_t i = 0; i < wep.cids_.size(); ++i) {
     row[0] = Id::makeFromTextRecordIndex(wep.cids_[i]);
     row[1] = Id::makeFromInt(wep.scores_[i]);
+    size_t k = 0;
+    size_t n = 0;
     for (size_t j = 0; j < terms.size(); j++) {
-      row[2 + j] =
+      // skip columns that don't end with a '*'
+      if (n < skipColumns.size() && j == skipColumns[n]) {
+        n++;
+        continue;
+      }
+      row[2 + k] =
           Id::makeFromWordVocabIndex(WordVocabIndex::make(wep.wids_[j][i]));
+      k++;
     }
     result.push_back(row);
   }
@@ -870,8 +882,8 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
     size_t j = 0;
     size_t k = 0;
     for (size_t i = 0; i < terms.size(); ++i) {
-      if (!skipColumns.empty() && i == skipColumns[k]) {
-        k = std::min(k + 1, skipColumns.size() - 1);
+      if (k < skipColumns.size() && i == skipColumns[k]) {
+        k++;
       } else {
         if (i == useElFromTerm) {
           newWidVec[j] = resultWep.wids_.back();
