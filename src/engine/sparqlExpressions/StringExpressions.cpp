@@ -63,23 +63,28 @@ class StringExpressionImpl : public SparqlExpression {
   }
 };
 
-// A helper function TODO<joka921> comment.
-template <typename Impl>
+// Lift a `Function` that takes one or multiple `std::string`s (possibly via
+// references) and returns an `Id` or `std::string` to a function that takes the
+// same number of `std::optional<std::string>` and returns `Id` or `IdOrString`.
+// If any of the optionals is `std::nullopt`, then UNDEF is returned, else the
+// result of the `Function` with the values of the optionals. This is a useful
+// helper function for implementing expressions that work on strings.
+template <typename Function>
 struct LiftStringFunction {
   template <std::same_as<std::optional<std::string>>... Arguments>
   auto operator()(Arguments... arguments) const {
-    using ResultOfImpl =
-        decltype(std::invoke(Impl{}, std::move(arguments.value())...));
-    static_assert(std::same_as<ResultOfImpl, Id> ||
-                      std::same_as<ResultOfImpl, std::string>,
+    using ResultOfFunction =
+        decltype(std::invoke(Function{}, std::move(arguments.value())...));
+    static_assert(std::same_as<ResultOfFunction, Id> ||
+                      std::same_as<ResultOfFunction, std::string>,
                   "Template argument of `LiftStringFunction` must return `Id` "
                   "or `std::string`");
-    using Result = std::conditional_t<ad_utility::isSimilar<ResultOfImpl, Id>,
+    using Result = std::conditional_t<ad_utility::isSimilar<ResultOfFunction, Id>,
                                       Id, IdOrString>;
     if ((... || !arguments.has_value())) {
       return Result{Id::makeUndefined()};
     }
-    return Result{std::invoke(Impl{}, std::move(arguments.value())...)};
+    return Result{std::invoke(Function{}, std::move(arguments.value())...)};
   }
 };
 
