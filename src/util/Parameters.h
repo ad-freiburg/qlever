@@ -155,6 +155,16 @@ struct toString {
   std::string operator()(const auto& s) const { return std::to_string(s); }
 };
 
+// To/from string for `MemorySize`.
+struct MemorySizeToString {
+  std::string operator()(const MemorySize& m) { return m.asString(); }
+};
+struct MemorySizeFromString {
+  MemorySize operator()(const std::string& str) {
+    return MemorySize::parse(str);
+  }
+};
+
 /// Partial template specialization for Parameters with common types (numeric
 /// types and strings)
 template <ParameterName Name>
@@ -171,10 +181,7 @@ using String = Parameter<std::string, std::identity, std::identity, Name>;
 
 template <ParameterName Name>
 using MemorySizeParameter =
-    Parameter<MemorySize, decltype([](const std::string& str) {
-                return MemorySize::parse(str);
-              }),
-              decltype([](const MemorySize& m) { return m.asString(); }), Name>;
+    Parameter<MemorySize, MemorySizeFromString, MemorySizeToString, Name>;
 
 }  // namespace detail::parameterShortNames
 

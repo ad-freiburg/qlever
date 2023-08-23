@@ -69,6 +69,37 @@ inline const auto floorImpl = []<typename T>(T num) {
 };
 inline const auto floor = makeNumericExpression<decltype(floorImpl)>();
 using FloorExpression = NARY<1, FV<decltype(floor), NumericValueGetter>>;
+
+// Natural Logarithm.
+inline const auto logImpl = []<typename T>(T num) { return std::log(num); };
+inline const auto log = makeNumericExpression<decltype(logImpl)>();
+using LogExpression = NARY<1, FV<decltype(log), NumericValueGetter>>;
+
+// Exponentiation.
+inline const auto expImpl = []<typename T>(T num) { return std::exp(num); };
+inline const auto exp = makeNumericExpression<decltype(expImpl)>();
+using ExpExpression = NARY<1, FV<decltype(exp), NumericValueGetter>>;
+
+// Square root.
+inline const auto sqrtImpl = []<typename T>(T num) { return std::sqrt(num); };
+inline const auto sqrt = makeNumericExpression<decltype(sqrtImpl)>();
+using SqrtExpression = NARY<1, FV<decltype(sqrt), NumericValueGetter>>;
+
+// Sine.
+inline const auto sinImpl = []<typename T>(T num) { return std::sin(num); };
+inline const auto sin = makeNumericExpression<decltype(sinImpl)>();
+using SinExpression = NARY<1, FV<decltype(sin), NumericValueGetter>>;
+
+// Cosine.
+inline const auto cosImpl = []<typename T>(T num) { return std::cos(num); };
+inline const auto cos = makeNumericExpression<decltype(cosImpl)>();
+using CosExpression = NARY<1, FV<decltype(cos), NumericValueGetter>>;
+
+// Tangent.
+inline const auto tanImpl = []<typename T>(T num) { return std::tan(num); };
+inline const auto tan = makeNumericExpression<decltype(tanImpl)>();
+using TanExpression = NARY<1, FV<decltype(tan), NumericValueGetter>>;
+
 }  // namespace detail
 
 using namespace detail;
@@ -83,6 +114,24 @@ SparqlExpression::Ptr makeCeilExpression(SparqlExpression::Ptr child) {
 }
 SparqlExpression::Ptr makeFloorExpression(SparqlExpression::Ptr child) {
   return std::make_unique<FloorExpression>(std::move(child));
+}
+SparqlExpression::Ptr makeLogExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<LogExpression>(std::move(child));
+}
+SparqlExpression::Ptr makeExpExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<ExpExpression>(std::move(child));
+}
+SparqlExpression::Ptr makeSqrtExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<SqrtExpression>(std::move(child));
+}
+SparqlExpression::Ptr makeSinExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<SinExpression>(std::move(child));
+}
+SparqlExpression::Ptr makeCosExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<CosExpression>(std::move(child));
+}
+SparqlExpression::Ptr makeTanExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<TanExpression>(std::move(child));
 }
 
 SparqlExpression::Ptr makeUnaryMinusExpression(SparqlExpression::Ptr child) {

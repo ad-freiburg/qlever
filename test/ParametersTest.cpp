@@ -59,6 +59,13 @@ TEST(Parameters, MemorySizeParameter) {
   compareWithMemorySize(m, 6_MB);
   m.setFromString("6 TB");
   compareWithMemorySize(m, 6_TB);
+
+  // Test, if it works with `Parameters`.
+  Parameters pack(Float<"Float">{2.0f}, SizeT<"SizeT">{3ull},
+                  Double<"Double">{42.1}, MemorySizeParameter<"Memory">{6_GB});
+  ASSERT_EQ(pack.get<"Memory">().getBytes(), (6_GB).getBytes());
+  pack.set("Memory", "6 MB");
+  ASSERT_EQ(pack.get<"Memory">().getBytes(), (6_MB).getBytes());
 }
 
 // Basic test, if the concept works.
