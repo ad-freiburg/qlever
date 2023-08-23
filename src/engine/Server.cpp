@@ -4,8 +4,6 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "engine/Server.h"
-
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -13,7 +11,9 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
+#include "engine/Server.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
 template <typename T>
@@ -48,13 +48,13 @@ Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
   // values of the parameters to the cache.
   RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
-  RuntimeParameters().setOnUpdateAction<"cache-max-size-gb">(
-      [this, toNumIds](size_t newValue) {
-        cache_.setMaxSize(toNumIds(newValue));
+  RuntimeParameters().setOnUpdateAction<"cache-max-size">(
+      [this, toNumIds](ad_utility::MemorySize newValue) {
+        cache_.setMaxSize(toNumIds(newValue.getGigabytes()));
       });
-  RuntimeParameters().setOnUpdateAction<"cache-max-size-gb-single-entry">(
-      [this, toNumIds](size_t newValue) {
-        cache_.setMaxSizeSingleEntry(toNumIds(newValue));
+  RuntimeParameters().setOnUpdateAction<"cache-max-size-single-entry">(
+      [this, toNumIds](ad_utility::MemorySize newValue) {
+        cache_.setMaxSizeSingleEntry(toNumIds(newValue.getGigabytes()));
       });
 }
 

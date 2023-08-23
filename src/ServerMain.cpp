@@ -71,14 +71,13 @@ int main(int argc, char** argv) {
       "Limit on the total amount of memory (in GB) that can be used for "
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
-  add("cache-max-size-gb,c",
-      optionFactory.getProgramOption<"cache-max-size-gb">(),
-      "Maximum memory size in GB for all cache entries (pinned and "
+  add("cache-max-size,c", optionFactory.getProgramOption<"cache-max-size">(),
+      "Maximum memory size for all cache entries (pinned and "
       "not pinned). Note that the cache is part of the total memory "
-      "limited by --memory-max-size-gb.");
-  add("cache-max-size-gb-single-entry,e",
-      optionFactory.getProgramOption<"cache-max-size-gb-single-entry">(),
-      "Maximum size in GB for a single cache entry. That is, "
+      "limited by --memory-max-size.");
+  add("cache-max-size-single-entry,e",
+      optionFactory.getProgramOption<"cache-max-size-single-entry">(),
+      "Maximum size for a single cache entry. That is, "
       "results larger than this will not be cached unless pinned.");
   add("cache-max-num-entries,k",
       optionFactory.getProgramOption<"cache-max-num-entries">(),
