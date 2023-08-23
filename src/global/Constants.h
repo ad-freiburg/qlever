@@ -185,30 +185,24 @@ static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
 // compiler limits for the evaluation of constexpr functions and templates.
 static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
-inline auto& RuntimeParameters() {
-  using ad_utility::detail::parameterShortNames::Double;
-  using ad_utility::detail::parameterShortNames::MemorySizeParameter;
-  using ad_utility::detail::parameterShortNames::SizeT;
-  // NOTE: It is important that the value of the static variable is created by
-  // an immediately invoked lambda, otherwise we get really strange segfaults on
-  // Clang 16 and 17.
-  // TODO<joka921> Figure out whether this is a bug in Clang or whether we
-  // clearly misunderstand something about static initialization.
-  static ad_utility::Parameters params = []() {
-    return ad_utility::Parameters{
-        // If the time estimate for a sort operation is larger by more than this
-        // factor than the remaining time, then the sort is canceled with a
-        // timeout exception.
-        Double<"sort-estimate-cancellation-factor">{3.0},
-        SizeT<"cache-max-num-entries">{1000},
-        MemorySizeParameter<"cache-max-size">{30_GB},
-        MemorySizeParameter<"cache-max-size-single-entry">{5_GB},
-        SizeT<"lazy-index-scan-queue-size">{20},
-        SizeT<"lazy-index-scan-num-threads">{10},
-        SizeT<"lazy-index-scan-max-size-materialization">{1'000'000}};
-  }();
-  return params;
-}
+inline ad_utility::Parameters runtimeParameters{
+    // If the time estimate for a sort operation is larger by more than this
+    // factor than the remaining time, then the sort is canceled with a
+    // timeout exception.
+    ad_utility::detail::parameterShortNames::Double<
+        "sort-estimate-cancellation-factor">{3.0},
+    ad_utility::detail::parameterShortNames::SizeT<"cache-max-num-entries">{
+        1000},
+    ad_utility::detail::parameterShortNames::MemorySizeParameter<
+        "cache-max-size">{30_GB},
+    ad_utility::detail::parameterShortNames::MemorySizeParameter<
+        "cache-max-size-single-entry">{5_GB},
+    ad_utility::detail::parameterShortNames::SizeT<
+        "lazy-index-scan-queue-size">{20},
+    ad_utility::detail::parameterShortNames::SizeT<
+        "lazy-index-scan-num-threads">{10},
+    ad_utility::detail::parameterShortNames::SizeT<
+        "lazy-index-scan-max-size-materialization">{1'000'000}};
 
 #ifdef _PARALLEL_SORT
 static constexpr bool USE_PARALLEL_SORT = true;

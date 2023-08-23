@@ -5,6 +5,7 @@
 #include "CompressedRelation.h"
 
 #include "engine/idTable/IdTable.h"
+#include "global/Constants.h"
 #include "util/Cache.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/ConcurrentCache.h"
@@ -114,7 +115,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     co_return;
   }
   const size_t queueSize =
-      RuntimeParameters().get<"lazy-index-scan-queue-size">();
+      runtimeParameters.get<"lazy-index-scan-queue-size">();
   auto blockIterator = beginBlock;
   std::mutex blockIteratorMutex;
   auto readAndDecompressBlock =
@@ -143,7 +144,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     return std::pair{myIndex, decompressBlock(compressedBlock, block.numRows_)};
   };
   const size_t numThreads =
-      RuntimeParameters().get<"lazy-index-scan-num-threads">();
+      runtimeParameters.get<"lazy-index-scan-num-threads">();
 
   ad_utility::Timer popTimer{ad_utility::timer::Timer::InitialStatus::Started};
   // In case the coroutine is destroyed early we still want to have this
