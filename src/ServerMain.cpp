@@ -15,6 +15,9 @@
 #include <string>
 #include <vector>
 
+#include "util/MemorySize/MemorySize.h"
+#include "util/MemorySize/MemorySizeParser.h"
+
 using std::size_t;
 using std::string;
 
@@ -45,7 +48,7 @@ int main(int argc, char** argv) {
   bool noPatternTrick;
   bool onlyPsoAndPosPermutations;
 
-  NonNegative memoryMaxSizeGb;
+  ad_utility::MemorySize memoryMaxSize;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &RuntimeParameters()};
@@ -65,10 +68,9 @@ int main(int argc, char** argv) {
   add("num-simultaneous-queries,j",
       po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
-  add("memory-max-size-gb,m",
-      po::value<NonNegative>(&memoryMaxSizeGb)
-          ->default_value(static_cast<size_t>(
-              std::ceil(DEFAULT_MEM_FOR_QUERIES.getGigabytes()))),
+  add("memory-max-size,m",
+      po::value<ad_utility::MemorySize>(&memoryMaxSize)
+          ->default_value(DEFAULT_MEM_FOR_QUERIES),
       "Limit on the total amount of memory (in GB) that can be used for "
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
@@ -122,7 +124,8 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, static_cast<int>(numSimultaneousQueries),
-                  memoryMaxSizeGb, std::move(accessToken), !noPatternTrick);
+                  static_cast<size_t>(std::ceil(memoryMaxSize.getGigabytes())),
+                  std::move(accessToken), !noPatternTrick);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
