@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
   add("memory-max-size,m",
       po::value<ad_utility::MemorySize>(&memoryMaxSize)
           ->default_value(DEFAULT_MEM_FOR_QUERIES),
-      "Limit on the total amount of memory (in GB) that can be used for "
+      "Limit on the total amount of memory that can be used for "
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
   add("cache-max-size,c", optionFactory.getProgramOption<"cache-max-size">(),
@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"cache-max-num-entries">(),
       "Maximum number of entries in the cache. If exceeded, remove "
       "least-recently used non-pinned entries from the cache. Note that "
-      "this condition and the size limit specified via --cache-max-size-gb "
+      "this condition and the size limit specified via --cache-max-size "
       "both have to hold (logical AND).");
   add("no-patterns,P", po::bool_switch(&noPatterns),
       "Disable the use of patterns. If disabled, the special predicate "
