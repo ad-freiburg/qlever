@@ -5,6 +5,7 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include "./Index.h"
+
 #include "./IndexImpl.h"
 #include "util/MemorySize/MemorySize.h"
 
