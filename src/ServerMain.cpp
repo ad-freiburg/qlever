@@ -123,8 +123,7 @@ int main(int argc, char** argv) {
             << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
 
   try {
-    Server server(port, static_cast<int>(numSimultaneousQueries),
-                  static_cast<size_t>(std::ceil(memoryMaxSize.getGigabytes())),
+    Server server(port, static_cast<int>(numSimultaneousQueries), memoryMaxSize,
                   std::move(accessToken), !noPatternTrick);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {
