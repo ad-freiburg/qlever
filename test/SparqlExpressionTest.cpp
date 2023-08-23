@@ -160,6 +160,20 @@ auto testBinaryExpression = [](auto makeExpression,
   testNaryExpression(makeExpression, expected, op1, op2);
 };
 
+// Test a binary expression, but the operands and expected result are passed in
+// via `std::vector`, not as a `VectorWithMemoryLimit`. This makes the usage
+// simpler.
+auto testBinaryExpressionVec =
+    []<SingleExpressionResult Exp, SingleExpressionResult Op1,
+       SingleExpressionResult Op2>(
+        auto makeExpression, std::vector<Exp> expected, std::vector<Op1> op1,
+        std::vector<Op2> op2, source_location l = source_location::current()) {
+      auto t = generateLocationTrace(l, "testBinaryExpressionVec");
+
+      testNaryExpression(makeExpression, liftVector(expected), liftVector(op1),
+                         liftVector(op2));
+    };
+
 auto testOr =
     std::bind_front(testBinaryExpressionCommutative, &makeOrExpression);
 auto testAnd =
@@ -331,7 +345,12 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(times13, mixed, D(1.0 / 1.3));
 }
 
-// Helper lambda to enable testing a unary expression in one line (see below).
+// Helper function to lift a `vector<T>` to `vectorWithMemoryLimit<T>`
+template <typename T>
+VectorWithMemoryLimit<T> liftVector(std::vector<T> vec) {
+  return VectorWithMemoryLimit<T>{std::make_move_iterator(vec.begin()),
+                                  std::make_move_iterator(vec.end()), alloc};
+}
 //
 // TODO: The tests above could also be simplified (and made much more readable)
 // in this vein.
@@ -341,11 +360,8 @@ auto testUnaryExpression =
         std::vector<OutputType> expected,
         source_location l = source_location::current()) {
       auto trace = generateLocationTrace(l);
-      V<OperandType> operandV{std::make_move_iterator(operand.begin()),
-                              std::make_move_iterator(operand.end()), alloc};
-      V<OutputType> expectedV{std::make_move_iterator(expected.begin()),
-                              std::make_move_iterator(expected.end()), alloc};
-      testNaryExpression(makeFunction, expectedV, operandV);
+      testNaryExpression(makeFunction, liftVector(expected),
+                         liftVector(operand));
     };
 
 // Test `YearExpression`, `MonthExpression`, and `DayExpression`.
@@ -411,6 +427,7 @@ static auto makeStrlenWithStr = [](auto arg) {
 };
 auto checkStrlenWithStrChild =
     std::bind_front(testUnaryExpression, makeStrlenWithStr);
+
 TEST(SparqlExpression, stringOperators) {
   checkStrlen(IdOrStrings{"one", "two", "three", ""},
               Ids{I(3), I(3), I(5), I(0)});
@@ -464,6 +481,42 @@ TEST(SparqlExpression, uppercaseAndLowercase) {
              IdOrStrings{"ONE", "TWÖ", U, U});
 }
 
+// Test STRSTARTS, STRENDS, CONTAINS, STRBEFORE, and STRAFTER.
+auto checkStrStarts =
+    std::bind_front(testBinaryExpressionVec, &makeStrStartsExpression);
+auto checkStrEnds =
+    std::bind_front(testBinaryExpressionVec, &makeStrEndsExpression);
+auto checkContains =
+    std::bind_front(testBinaryExpressionVec, &makeContainsExpression);
+auto checkStrAfter =
+    std::bind_front(testBinaryExpressionVec, &makeStrAfterExpression);
+auto checkStrBefore =
+    std::bind_front(testBinaryExpressionVec, &makeStrBeforeExpression);
+TEST(SparqlExpression, binaryStringOperations) {
+  using S = IdOrStrings;
+  auto F = Id::makeFromBool(false);
+  auto T = Id::makeFromBool(true);
+  checkStrStarts(
+      Ids{T, F, T, F, T, T, F, F, F},
+      S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+      S{"", "x", "", "Hallo", "Häl", "Hällo", "Hällox", "ll", "lo"});
+  checkStrEnds(
+      Ids{T, F, T, F, T, T, F, F, F},
+      S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+      S{"", "x", "", "Hallo", "o", "Hällo", "Hällox", "ll", "H"});
+  checkContains(Ids{T, F, T, F, T, T, F},
+                S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+                S{"", "x", "", "ullo", "ll", "Hällo", "Hällox"});
+  checkStrAfter(S{"", "", "Hällo", "", "o", "", "", "lo"},
+                S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+                S{"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"});
+  checkStrBefore(
+      S{"", "", "Hällo", "", "Hä", "", "", "Hä"},
+      S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+      S{"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"});
+}
+
+// ______________________________________________________________________________
 static auto checkSubstr =
     std::bind_front(testNaryExpression, makeSubstrExpression);
 TEST(SparqlExpression, substr) {
@@ -548,7 +601,8 @@ TEST(SparqlExpression, unaryMinus) {
   checkMinus(IdOrStrings{"true", "false", "", "<blibb>"}, Ids{U, U, U, U});
 }
 
-TEST(SparqlExpression, ceilFloorAbsRound) {
+// Test the built-in numeric functions (floor, abs, round, ceil).
+TEST(SparqlExpression, builtInNumericFunctions) {
   auto bindUnary = [](auto f) {
     return std::bind_front(testUnaryExpression, f);
   };
@@ -575,6 +629,30 @@ TEST(SparqlExpression, ceilFloorAbsRound) {
   checkFloor(input, floor);
   checkCeil(input, ceil);
   checkRound(input, round);
+}
+
+// Test the correctness of the math functions.
+TEST(SparqlExpression, customNumericFunctions) {
+  auto nan = std::numeric_limits<double>::quiet_NaN();
+  auto inf = std::numeric_limits<double>::infinity();
+  testUnaryExpression(makeLogExpression,
+                      std::vector<Id>{I(1), D(2), D(exp(1)), D(0)},
+                      std::vector<Id>{D(0), D(log(2)), D(1), D(-inf)});
+  testUnaryExpression(makeExpExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-inf)},
+                      std::vector<Id>{D(1), D(exp(1)), D(exp(2)), D(0)});
+  testUnaryExpression(makeSqrtExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(0), D(1), D(sqrt(2)), D(nan)});
+  testUnaryExpression(makeSinExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(0), D(sin(1)), D(sin(2)), D(sin(-1))});
+  testUnaryExpression(makeCosExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(1), D(cos(1)), D(cos(2)), D(cos(-1))});
+  testUnaryExpression(makeTanExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(0), D(tan(1)), D(tan(2)), D(tan(-1))});
 }
 
 // ________________________________________________________________________________________
