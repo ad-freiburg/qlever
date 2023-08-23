@@ -4,6 +4,8 @@
 //          Johannes Kalmbach <johannes.kalmbach@gmail.com>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include "index/IndexImpl.h"
+
 #include <absl/strings/str_split.h>
 
 #include <algorithm>
@@ -14,7 +16,6 @@
 
 #include "engine/CallFixedSize.h"
 #include "index/FTSAlgorithms.h"
-#include "index/IndexImpl.h"
 #include "parser/ContextFileParser.h"
 #include "util/Conversions.h"
 #include "util/Simple8bCode.h"
