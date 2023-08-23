@@ -30,8 +30,8 @@ jobs:
           build-type: Debug
           warnings: "-Wall -Wextra "
           # we disable the `assert()` macro as it messes with the coverage reports
-          asan-flags: "-fsanitize=address -fno-omit-frame-pointer -DNDEBUG"
-          ubsan-flags: " -fsanitize=undefined"
+          asan-flags: "-DNDEBUG"
+          ubsan-flags: ""
           coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
           cmake-flags: "-DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16"
 
