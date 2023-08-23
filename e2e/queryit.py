@@ -119,9 +119,11 @@ def check_row_sparql_json(variables: List[str], gold_row: List[Any],
             gold = gold[1:-1]
         if not actual["type"] == target_type:
             return False
-        if isinstance(gold, int):
-            matches = int(actual["value"]) == gold
+        if isinstance(gold, bool):
+            matches = actual["value"] == str(gold).lower()
             # TODO<joka921> should we also check the datatypes? this is also not done for the qlever_json
+        elif isinstance(gold, int):
+            matches = int(actual["value"]) == gold
         elif isinstance(gold, float):
             matches = abs(gold - float(actual["value"])) <= epsilon
         else:
@@ -152,7 +154,9 @@ def check_row_qlever_json(gold_row: List[Any],
             actual = actual[1:actual.rfind('"')]
         matches = False
         try:
-            if isinstance(gold, int):
+            if isinstance(gold, bool):
+                    matches = actual == str(gold).lower()
+            elif isinstance(gold, int):
                 matches = int(actual) == gold
             elif isinstance(gold, float):
                 matches = abs(gold - float(actual)) <= epsilon

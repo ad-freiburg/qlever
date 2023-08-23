@@ -63,14 +63,39 @@ class StringExpressionImpl : public SparqlExpression {
   }
 };
 
-// STRLEN
-[[maybe_unused]] auto strlen = [](std::optional<std::string> s) {
-  if (!s.has_value()) {
-    return Id::makeUndefined();
+// Lift a `Function` that takes one or multiple `std::string`s (possibly via
+// references) and returns an `Id` or `std::string` to a function that takes the
+// same number of `std::optional<std::string>` and returns `Id` or `IdOrString`.
+// If any of the optionals is `std::nullopt`, then UNDEF is returned, else the
+// result of the `Function` with the values of the optionals. This is a useful
+// helper function for implementing expressions that work on strings.
+template <typename Function>
+struct LiftStringFunction {
+  template <std::same_as<std::optional<std::string>>... Arguments>
+  auto operator()(Arguments... arguments) const {
+    using ResultOfFunction =
+        decltype(std::invoke(Function{}, std::move(arguments.value())...));
+    static_assert(std::same_as<ResultOfFunction, Id> ||
+                      std::same_as<ResultOfFunction, std::string>,
+                  "Template argument of `LiftStringFunction` must return `Id` "
+                  "or `std::string`");
+    using Result =
+        std::conditional_t<ad_utility::isSimilar<ResultOfFunction, Id>, Id,
+                           IdOrString>;
+    if ((... || !arguments.has_value())) {
+      return Result{Id::makeUndefined()};
+    }
+    return Result{std::invoke(Function{}, std::move(arguments.value())...)};
   }
-  return Id::makeFromInt(static_cast<int64_t>(s.value().size()));
 };
-using StrlenExpression = StringExpressionImpl<1, decltype(strlen)>;
+
+// STRLEN
+[[maybe_unused]] auto strlen = [](std::string_view s) {
+  return Id::makeFromInt(static_cast<int64_t>(s.size()));
+};
+
+using StrlenExpression =
+    StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
 
 // LCASE
 [[maybe_unused]] auto lowercaseImpl =
@@ -162,27 +187,107 @@ class SubstrImpl {
 
 using SubstrExpression =
     StringExpressionImpl<3, SubstrImpl, NumericValueGetter, NumericValueGetter>;
+
+// STRSTARTS
+[[maybe_unused]] auto strStartsImpl = [](std::string_view text,
+                                         std::string_view pattern) -> Id {
+  return Id::makeFromBool(text.starts_with(pattern));
+};
+
+using StrStartsExpression =
+    StringExpressionImpl<2, LiftStringFunction<decltype(strStartsImpl)>,
+                         StringValueGetter>;
+
+// STRENDS
+[[maybe_unused]] auto strEndsImpl = [](std::string_view text,
+                                       std::string_view pattern) {
+  return Id::makeFromBool(text.ends_with(pattern));
+};
+
+using StrEndsExpression =
+    StringExpressionImpl<2, LiftStringFunction<decltype(strEndsImpl)>,
+                         StringValueGetter>;
+
+// STRCONTAINS
+[[maybe_unused]] auto containsImpl = [](std::string_view text,
+                                        std::string_view pattern) {
+  return Id::makeFromBool(text.find(pattern) != std::string::npos);
+};
+
+using ContainsExpression =
+    StringExpressionImpl<2, LiftStringFunction<decltype(containsImpl)>,
+                         StringValueGetter>;
+
+// STRAFTER / STRBEFORE
+template <bool isStrAfter>
+[[maybe_unused]] auto strAfterOrBeforeImpl =
+    [](std::string text, std::string_view pattern) -> std::string {
+  // Required by the SPARQL standard.
+  if (pattern.empty()) {
+    return text;
+  }
+  auto pos = text.find(pattern);
+  if (pos >= text.size()) {
+    return "";
+  }
+  if constexpr (isStrAfter) {
+    return text.substr(pos + pattern.size());
+  } else {
+    // STRBEFORE
+    return text.substr(0, pos);
+  }
+};
+
+auto strAfter = strAfterOrBeforeImpl<true>;
+
+using StrAfterExpression =
+    StringExpressionImpl<2, LiftStringFunction<decltype(strAfter)>,
+                         StringValueGetter>;
+
+auto strBefore = strAfterOrBeforeImpl<false>;
+using StrBeforeExpression =
+    StringExpressionImpl<2, LiftStringFunction<decltype(strBefore)>,
+                         StringValueGetter>;
+
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
-SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<StrExpression>(std::move(child));
+using std::make_unique;
+using std::move;
+using Expr = SparqlExpression::Ptr;
+
+template <typename T>
+Expr make(std::same_as<Expr> auto&... children) {
+  return std::make_unique<T>(std::move(children)...);
 }
-SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<StrlenExpression>(std::move(child));
+Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }
+Expr makeStrlenExpression(Expr child) { return make<StrlenExpression>(child); }
+
+Expr makeSubstrExpression(Expr string, Expr start, Expr length) {
+  return make<SubstrExpression>(string, start, length);
 }
 
-SparqlExpression::Ptr makeLowercaseExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<LowercaseExpression>(std::move(child));
+Expr makeStrStartsExpression(Expr child1, Expr child2) {
+  return make<StrStartsExpression>(child1, child2);
 }
 
-SparqlExpression::Ptr makeUppercaseExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<UppercaseExpression>(std::move(child));
+Expr makeLowercaseExpression(Expr child) {
+  return make<LowercaseExpression>(child);
 }
 
-SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
-                                           SparqlExpression::Ptr start,
-                                           SparqlExpression::Ptr length) {
-  return std::make_unique<SubstrExpression>(std::move(string), std::move(start),
-                                            std::move(length));
+Expr makeUppercaseExpression(Expr child) {
+  return make<UppercaseExpression>(child);
+}
+
+Expr makeStrEndsExpression(Expr child1, Expr child2) {
+  return make<StrEndsExpression>(child1, child2);
+}
+Expr makeStrAfterExpression(Expr child1, Expr child2) {
+  return make<StrAfterExpression>(child1, child2);
+}
+Expr makeStrBeforeExpression(Expr child1, Expr child2) {
+  return make<StrBeforeExpression>(child1, child2);
+}
+Expr makeContainsExpression(Expr child1, Expr child2) {
+  return make<ContainsExpression>(child1, child2);
 }
 }  // namespace sparqlExpression
