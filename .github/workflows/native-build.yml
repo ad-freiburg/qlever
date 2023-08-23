@@ -36,7 +36,10 @@ jobs:
             compiler-version: 13
         include:
           - compiler: clang
+            compiler-version: 16
             asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
+            build-type: Release
+            expensive-tests: false
           - compiler: clang
             compiler-version: 16
             ubsan-flags: " -fsanitize=undefined"
