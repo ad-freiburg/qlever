@@ -51,11 +51,13 @@ Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
   RuntimeParameters().setOnUpdateAction<"cache-max-size">(
       [this, toNumIds](ad_utility::MemorySize newValue) {
-        cache_.setMaxSize(toNumIds(newValue.getGigabytes()));
+        cache_.setMaxSize(
+            toNumIds(static_cast<size_t>(std::ceil(newValue.getGigabytes()))));
       });
   RuntimeParameters().setOnUpdateAction<"cache-max-size-single-entry">(
       [this, toNumIds](ad_utility::MemorySize newValue) {
-        cache_.setMaxSizeSingleEntry(toNumIds(newValue.getGigabytes()));
+        cache_.setMaxSizeSingleEntry(
+            toNumIds(static_cast<size_t>(std::ceil(newValue.getGigabytes()))));
       });
 }
 

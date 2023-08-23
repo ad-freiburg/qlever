@@ -157,10 +157,10 @@ struct toString {
 
 // To/from string for `MemorySize`.
 struct MemorySizeToString {
-  std::string operator()(const MemorySize& m) { return m.asString(); }
+  std::string operator()(const MemorySize& m) const { return m.asString(); }
 };
 struct MemorySizeFromString {
-  MemorySize operator()(const std::string& str) {
+  MemorySize operator()(const std::string& str) const {
     return MemorySize::parse(str);
   }
 };

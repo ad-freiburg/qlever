@@ -67,7 +67,8 @@ int main(int argc, char** argv) {
       "The number of queries that can be processed simultaneously.");
   add("memory-max-size-gb,m",
       po::value<NonNegative>(&memoryMaxSizeGb)
-          ->default_value(DEFAULT_MEM_FOR_QUERIES.getGigabytes()),
+          ->default_value(static_cast<size_t>(
+              std::ceil(DEFAULT_MEM_FOR_QUERIES.getGigabytes()))),
       "Limit on the total amount of memory (in GB) that can be used for "
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");

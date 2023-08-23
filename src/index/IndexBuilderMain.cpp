@@ -21,10 +21,6 @@
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFact.h"
 
-using std::cerr;
-using std::cout;
-using std::endl;
-using std::flush;
 using std::string;
 
 #define EMPH_ON "\033[1m"
@@ -154,7 +150,7 @@ int main(int argc, char** argv) {
   }
   if (stxxlMemoryGB.has_value()) {
     index.stxxlMemory() = ad_utility::MemorySize::bytes(
-        1024ul * 1024ul * 1024ul * stxxlMemoryGB.value());
+        1024UL * 1024UL * 1024UL * stxxlMemoryGB.value());
   }
 
   // If no text index name was specified, take the part of the wordsfile after
