@@ -70,4 +70,9 @@ SparqlExpression::Ptr makeStrAfterExpression(SparqlExpression::Ptr child1,
                                              SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
+
+    SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
+                                                  SparqlExpression::Ptr child2, SparqlExpression::Ptr child3);
+    SparqlExpression::Ptr makeCoalesceExpression(std::vector<SparqlExpression::Ptr> children);
+
 }  // namespace sparqlExpression
