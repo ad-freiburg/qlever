@@ -18,6 +18,8 @@ using namespace sparqlExpression::detail;
     NARY_EXPRESSION(IfExpression, 3, FV<decltype(ifImpl), EffectiveBooleanValueGetter, ActualValueGetter, ActualValueGetter>);
 }
 
+class CoalesceExpression:
+
 using namespace detail::conditional_expressions;
 SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child2, SparqlExpression::Ptr child3) {
