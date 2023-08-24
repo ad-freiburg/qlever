@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#ifndef QLEVER_PARAMETERS_H
-#define QLEVER_PARAMETERS_H
+#pragma once
 
 #include <atomic>
 #include <concepts>
@@ -11,13 +10,13 @@
 #include <tuple>
 #include <type_traits>
 
-#include "./ConstexprMap.h"
-#include "./ConstexprSmallString.h"
-#include "./HashMap.h"
-#include "./HashSet.h"
-#include "./TupleForEach.h"
-#include "./TypeTraits.h"
+#include "util/ConstexprMap.h"
+#include "util/ConstexprSmallString.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/TupleForEach.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
 using ParameterName = ad_utility::ConstexprSmallString<100>;
@@ -312,5 +311,3 @@ class Parameters {
   }
 };
 }  // namespace ad_utility
-
-#endif  // QLEVER_PARAMETERS_H
