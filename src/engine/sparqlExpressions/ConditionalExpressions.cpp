@@ -26,7 +26,7 @@ class CoalesceExpression : public SparqlExpression {
   std::vector<SparqlExpression::Ptr> children_;
 
  public:
-  CoalesceExpression(std::vector<SparqlExpression::Ptr> children)
+  explicit CoalesceExpression(std::vector<SparqlExpression::Ptr> children)
       : children_{std::move(children)} {};
   ExpressionResult evaluate(EvaluationContext* context) const override {
     std::vector<ExpressionResult> childResults;
@@ -37,13 +37,12 @@ class CoalesceExpression : public SparqlExpression {
     std::vector<uint64_t> nextUnboundResults;
     unboundResults.reserve(context->size());
     nextUnboundResults.reserve(context->size());
-    for (size_t i = 0; i < unboundResults.size(); ++i) {
+    for (size_t i = 0; i < context->size(); ++i) {
       unboundResults.push_back(i);
     }
-    VectorWithMemoryLimit<IdOrString> results;
+    VectorWithMemoryLimit<IdOrString> results{context->_allocator};
     std::fill_n(std::back_inserter(results), context->size(),
                 IdOrString{Id::makeUndefined()});
-    // TODO<joka921> implement this
 
     auto visitExpressionResult = [&](SingleExpressionResult auto&& res) {
       auto gen =
@@ -84,13 +83,14 @@ class CoalesceExpression : public SparqlExpression {
     auto childKeys = ad_utility::lazyStrJoin(
         children_ | std::views::transform([&varColMap](const auto& childPtr) {
           return childPtr->getCacheKey(varColMap);
-        }));
+        }),
+        ", ");
     return absl::StrCat("COALESCE(", childKeys, ")");
   }
 
  private:
   std::span<SparqlExpression::Ptr> childrenImpl() override {
-    return {children_.data(), children.size()};
+    return {children_.data(), children_.size()};
   }
 };
 
