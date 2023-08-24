@@ -121,7 +121,8 @@ struct Parameter : public ParameterBase {
   }
 };
 
-// Concept for `Parameter`.
+// Concept that checks whether a type is an instantiation of the `Parameter`
+// template.
 namespace detail::parameterConceptImpl {
 template <typename T>
 struct ParameterConceptImpl : std::false_type {};
