@@ -147,15 +147,13 @@ find_package(OpenSSL REQUIRED)
 # is a drop-in replacement for `target_link_libraries` that additionally links
 # against the common libraries.
 function (qlever_target_link_libraries target)
+    target_link_libraries(${target} ${ARGN} absl::flat_hash_map
+        absl::flat_hash_set absl::strings absl::str_format ICU::uc
+        ICU::i18n)
+
     # memorySize is a utility library for defining memory sizes.
-    if (${target} STREQUAL "memorySize")
-        target_link_libraries(${target} ${ARGN} absl::flat_hash_map
-            absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n)
-    else()
-        target_link_libraries(${target} ${ARGN} absl::flat_hash_map
-            absl::flat_hash_set absl::strings absl::str_format ICU::uc ICU::i18n
-            memorySize)
+    if (NOT ${target} STREQUAL "memorySize")
+        target_link_libraries(${target} memorySize)
     endif()
 endfunction()
 
