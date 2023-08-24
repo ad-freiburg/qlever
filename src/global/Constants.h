@@ -17,7 +17,7 @@
 // For access to `memorySize` literals.
 using namespace ad_utility::memory_literals;
 
-static const ad_utility::MemorySize DEFAULT_STXXL_MEMORY = 5'000'000'000_B;
+static const ad_utility::MemorySize DEFAULT_STXXL_MEMORY = 5_GB;
 static const ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1000_MB;
 static const size_t STXXL_DISK_SIZE_INDEX_TEST = 10;
 
