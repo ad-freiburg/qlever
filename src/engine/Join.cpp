@@ -122,7 +122,7 @@ ResultTable Join::computeResult() {
                                    ColumnIndex joinCol) {
     bool isSmall =
         tree.getRootOperation()->getSizeEstimate() <
-        runtimeParameters.get<"lazy-index-scan-max-size-materialization">();
+        RuntimeParameters().get<"lazy-index-scan-max-size-materialization">();
     auto undefStatus =
         tree.getVariableAndInfoByColumnIndex(joinCol).second.mightContainUndef_;
     bool containsUndef =

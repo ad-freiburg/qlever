@@ -4,8 +4,6 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "engine/Server.h"
-
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -13,7 +11,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
-#include "global/Constants.h"
+#include "engine/Server.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -49,14 +47,14 @@ Server::Server(unsigned short port, int numThreads,
   };
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
-  runtimeParameters.setOnUpdateAction<"cache-max-num-entries">(
+  RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
-  runtimeParameters.setOnUpdateAction<"cache-max-size">(
+  RuntimeParameters().setOnUpdateAction<"cache-max-size">(
       [this, toNumIds](ad_utility::MemorySize newValue) {
         cache_.setMaxSize(
             toNumIds(static_cast<size_t>(std::ceil(newValue.getGigabytes()))));
       });
-  runtimeParameters.setOnUpdateAction<"cache-max-size-single-entry">(
+  RuntimeParameters().setOnUpdateAction<"cache-max-size-single-entry">(
       [this, toNumIds](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(
             toNumIds(static_cast<size_t>(std::ceil(newValue.getGigabytes()))));
@@ -318,7 +316,7 @@ Awaitable<void> Server::process(
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
-    response = createJsonResponse(runtimeParameters.toMap(), request);
+    response = createJsonResponse(RuntimeParameters().toMap(), request);
   }
 
   // Ping with or without messsage.
@@ -352,12 +350,12 @@ Awaitable<void> Server::process(
   }
 
   // Set one or several of the runtime parameters.
-  for (auto key : runtimeParameters.getKeys()) {
+  for (auto key : RuntimeParameters().getKeys()) {
     if (auto value = checkParameter(key, std::nullopt, accessTokenOk)) {
       LOG(INFO) << "Setting runtime parameter \"" << key << "\""
                 << " to value \"" << value.value() << "\"" << std::endl;
-      runtimeParameters.set(key, value.value());
-      response = createJsonResponse(runtimeParameters.toMap(), request);
+      RuntimeParameters().set(key, value.value());
+      response = createJsonResponse(RuntimeParameters().toMap(), request);
     }
   }
 

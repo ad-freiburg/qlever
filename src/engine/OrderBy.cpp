@@ -10,7 +10,6 @@
 #include "engine/CallFixedSize.h"
 #include "engine/Comparators.h"
 #include "engine/QueryExecutionTree.h"
-#include "global/Constants.h"
 #include "global/ValueIdComparators.h"
 
 using std::string;
@@ -74,7 +73,7 @@ ResultTable OrderBy::computeResult() {
   // TODO<joka921> proper timeout for sorting operations
   auto remainingTime = _timeoutTimer->wlock()->remainingTime();
   auto sortEstimateCancellationFactor =
-      runtimeParameters.get<"sort-estimate-cancellation-factor">();
+      RuntimeParameters().get<"sort-estimate-cancellation-factor">();
   if (getExecutionContext()->getSortPerformanceEstimator().estimatedSortTime(
           subRes->size(), subRes->width()) >
       remainingTime * sortEstimateCancellationFactor) {

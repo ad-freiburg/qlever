@@ -26,11 +26,11 @@
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
-#include "global/Constants.h"
 #include "util/Forward.h"
 #include "util/Random.h"
 #include "util/SourceLocation.h"
 
+using ad_utility::testing::makeAllocator;
 namespace {
 
 /*
@@ -305,7 +305,7 @@ TEST(JoinTest, joinWithFullScanPSO) {
 TEST(JoinTest, joinWithColumnAndScan) {
   auto test = [](size_t materializationThreshold) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
-    runtimeParameters.set<"lazy-index-scan-max-size-materialization">(
+    RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(
         materializationThreshold);
     qec->getQueryTreeCache().clearAll();
     auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
@@ -337,7 +337,7 @@ TEST(JoinTest, joinWithColumnAndScan) {
 TEST(JoinTest, joinWithColumnAndScanEmptyInput) {
   auto test = [](size_t materializationThreshold) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
-    runtimeParameters.set<"lazy-index-scan-max-size-materialization">(
+    RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(
         materializationThreshold);
     qec->getQueryTreeCache().clearAll();
     auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
@@ -368,7 +368,7 @@ TEST(JoinTest, joinWithColumnAndScanEmptyInput) {
 TEST(JoinTest, joinWithColumnAndScanUndefValues) {
   auto test = [](size_t materializationThreshold) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
-    runtimeParameters.set<"lazy-index-scan-max-size-materialization">(
+    RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(
         materializationThreshold);
     qec->getQueryTreeCache().clearAll();
     auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
@@ -403,7 +403,7 @@ TEST(JoinTest, joinTwoScans) {
   auto test = [](size_t materializationThreshold) {
     auto qec = ad_utility::testing::getQec(
         "<x> <p> 1. <x2> <p> 2. <x> <p2> 3 . <x2> <p2> 4. <x3> <p2> 7. ");
-    runtimeParameters.set<"lazy-index-scan-max-size-materialization">(
+    RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(
         materializationThreshold);
     qec->getQueryTreeCache().clearAll();
     auto scanP = ad_utility::makeExecutionTree<IndexScan>(

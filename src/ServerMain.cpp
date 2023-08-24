@@ -50,7 +50,8 @@ int main(int argc, char** argv) {
 
   ad_utility::MemorySize memoryMaxSize;
 
-  ad_utility::ParameterToProgramOptionFactory optionFactory{&runtimeParameters};
+  ad_utility::ParameterToProgramOptionFactory optionFactory{
+      &RuntimeParameters()};
 
   po::options_description options("Options for ServerMain");
   auto add = [&options]<typename... Args>(Args&&... args) {
