@@ -1,12 +1,12 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Authors:
-//   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Björn Buchhold (2014-2017, buchhold@informatik.uni-freiburg.de)
+// Johannes Kalmbach (2018- , kalmbach@informatik.uni-freiburg.de)
 
-#include "./Index.h"
+#include "index/Index.h"
 
-#include "./IndexImpl.h"
+#include "index/IndexImpl.h"
 #include "util/MemorySize/MemorySize.h"
 
 // ____________________________________________________________________________
