@@ -34,24 +34,70 @@
 #include "util/json.h"
 
 namespace ad_utility {
-static auto configurationOptionsImpl(auto& configurationOptions) {
-  return std::views::transform(configurationOptions, [](auto& pair) {
-    // Make sure, that there is no null pointer.
-    AD_CORRECTNESS_CHECK(pair.second);
+// ____________________________________________________________________________
+template <typename ReturnPointer>
+std::vector<std::pair<std::string, ReturnPointer>>
+ConfigManager::configurationOptionsImpl(auto& configurationOptions,
+                                        std::string_view pathPrefix) {
+  std::vector<std::pair<std::string, ReturnPointer>> collectedOptions;
 
-    // Return a dereferenced reference.
-    return std::tie(pair.first, *pair.second);
-  });
+  std::ranges::for_each(
+      configurationOptions,
+      [&collectedOptions, &pathPrefix](auto pair) {
+        const std::string& pathToCurrentEntry =
+            absl::StrCat(pathPrefix, std::get<0>(pair));
+
+        std::visit(
+            [&collectedOptions, &pathToCurrentEntry]<typename T>(T& var) {
+              // A normal `ConfigOption` can be directly added. For a
+              // `ConfigManager` we have to recursively collect the options.
+              if constexpr (std::is_same_v<std::decay_t<T>, ConfigOption>) {
+                collectedOptions.push_back(
+                    std::make_pair(pathToCurrentEntry, &var));
+              } else {
+                AD_CORRECTNESS_CHECK(
+                    (std::is_same_v<std::decay_t<T>, ConfigManager>));
+                ad_utility::appendVector(
+                    collectedOptions,
+                    configurationOptionsImpl<ReturnPointer>(
+                        var.configurationOptions_, pathToCurrentEntry));
+              }
+            },
+            std::get<1>(pair));
+      },
+      [&pathPrefix](auto& pair) {
+        // Make sure, that there is no null pointer.
+        AD_CORRECTNESS_CHECK(pair.second != nullptr);
+
+        // An empty sub manager tends to point to a logic error on the user
+        // side.
+        if (const ConfigManager* ptr =
+                std::get_if<ConfigManager>(pair.second.get());
+            ptr != nullptr && ptr->configurationOptions_.empty()) {
+          throw std::runtime_error(absl::StrCat(
+              "The sub manager at '", pathPrefix, std::get<0>(pair),
+              "' is empty. Either fill it, or delete it."));
+        }
+
+        // Return a dereferenced reference.
+        return std::tie(pair.first, *pair.second);
+      });
+
+  return collectedOptions;
 }
 
 // ____________________________________________________________________________
-auto ConfigManager::configurationOptions() {
-  return configurationOptionsImpl(configurationOptions_);
+std::vector<std::pair<std::string, ConfigOption*>>
+ConfigManager::configurationOptions(std::string_view pathPrefix) {
+  return configurationOptionsImpl<ConfigOption*>(configurationOptions_,
+                                                 pathPrefix);
 }
 
 // ____________________________________________________________________________
-auto ConfigManager::configurationOptions() const {
-  return configurationOptionsImpl(configurationOptions_);
+std::vector<std::pair<std::string, const ConfigOption*>>
+ConfigManager::configurationOptions(std::string_view pathPrefix) const {
+  return configurationOptionsImpl<const ConfigOption*>(configurationOptions_,
+                                                       pathPrefix);
 }
 
 // ____________________________________________________________________________
@@ -115,11 +161,29 @@ ConfigOption& ConfigManager::addConfigOption(
   // Is the path valid?
   verifyPath(pathToOption);
 
-  // Add the configuration option and return the inserted elements.
-  return *configurationOptions_
-              .insert({createJsonPointerString(pathToOption),
-                       std::make_unique<ConfigOption>(std::move(option))})
-              .first->second;
+  // Add the configuration option and return the inserted element.
+  return std::get<ConfigOption>(
+      *configurationOptions_
+           .insert({createJsonPointerString(pathToOption),
+                    std::make_unique<HashMapEntry::element_type>(
+                        std::move(option))})
+           .first->second);
+}
+
+// ____________________________________________________________________________
+ConfigManager& ConfigManager::addSubManager(
+    const std::vector<std::string>& path) {
+  // Is the path valid?
+  verifyPath(path);
+
+  // The path in json format.
+  const std::string jsonPath = createJsonPointerString(path);
+
+  // Add the configuration manager.
+  configurationOptions_.emplace(
+      jsonPath, std::make_unique<HashMapEntry::element_type>(ConfigManager{}));
+
+  return std::get<ConfigManager>(*configurationOptions_.at(jsonPath));
 }
 
 // ____________________________________________________________________________
@@ -168,6 +232,12 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   */
   const auto& jFlattend = j.flatten();
 
+  // All the configuration options together with their paths.
+  std::vector<std::pair<std::string, ConfigOption*>> allConfigOption =
+      configurationOptions("");
+  ad_utility::HashMap<std::string, ConfigOption*> allConfigOptionHashMap(
+      allConfigOption.begin(), allConfigOption.end());
+
   /*
   We can skip the following check, if `j` is empty. Note: Even if the JSON
   object is empty, its flattened version contains a single dummy entry, so
@@ -186,8 +256,8 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
       // Only returns true, if the given pointer is the path to a
       // configuration option.
       auto isPointerToConfigurationOption =
-          [this](const nlohmann::json::json_pointer& ptr) {
-            return configurationOptions_.contains(ptr.to_string());
+          [&allConfigOptionHashMap](const nlohmann::json::json_pointer& ptr) {
+            return allConfigOptionHashMap.contains(ptr.to_string());
           };
 
       /*
@@ -219,7 +289,9 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   an exception, if a configuration option was given a value of the wrong type,
   or if it HAD to be set, but wasn't.
   */
-  for (auto&& [key, option] : configurationOptions()) {
+  for (auto&& [key, option] : std::views::transform(
+           allConfigOption,
+           [](auto& pair) { return std::tie(pair.first, *pair.second); })) {
     // Set the option, if possible, with the pointer to the position of the
     // current configuration in json.
     if (const nlohmann::json::json_pointer configurationOptionJsonPosition{key};
@@ -246,8 +318,15 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
 // ____________________________________________________________________________
 std::string ConfigManager::printConfigurationDoc(
     bool printCurrentJsonConfiguration) const {
+  // All the configuration options together with their paths.
+  const std::vector<std::pair<std::string, const ConfigOption*>>
+      allConfigOption = configurationOptions("");
+  auto allConfigOptionDereferencedView = std::views::transform(
+      allConfigOption,
+      [](auto& pair) { return std::tie(pair.first, *pair.second); });
+
   // Handeling, for when there are no configuration options.
-  if (configurationOptions_.empty()) {
+  if (allConfigOptionDereferencedView.empty()) {
     return "No configuration options were defined.";
   }
 
@@ -263,7 +342,7 @@ std::string ConfigManager::printConfigurationDoc(
   - The default value of the configuration option.
   - An example value, of the correct type.
   */
-  for (const auto& [path, option] : configurationOptions()) {
+  for (const auto& [path, option] : allConfigOptionDereferencedView) {
     // Pointer to the position of this option in
     // `configuratioOptionsVisualization`.
     const nlohmann::json::json_pointer jsonOptionPointer{path};
@@ -286,7 +365,7 @@ std::string ConfigManager::printConfigurationDoc(
 
   // List the configuration options themselves.
   const std::string& listOfConfigurationOptions = ad_utility::lazyStrJoin(
-      std::views::transform(configurationOptions(),
+      std::views::transform(allConfigOptionDereferencedView,
                             [](const auto& pair) {
                               // Add the location of the option and the option
                               // itself.
@@ -324,9 +403,16 @@ std::string ConfigManager::vectorOfKeysForJsonToString(
 std::string
 ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
     const {
+  // All the configuration options together with their paths.
+  const std::vector<std::pair<std::string, const ConfigOption*>>
+      allConfigOption = configurationOptions("");
+  auto allConfigOptionDereferencedView = std::views::transform(
+      allConfigOption,
+      [](auto& pair) { return std::tie(pair.first, *pair.second); });
+
   // For only looking at the configuration options in our map.
   auto onlyConfigurationOptionsView =
-      std::views::values(configurationOptions());
+      std::views::values(allConfigOptionDereferencedView);
 
   // Returns true, if the `ConfigOption` has a default value and wasn't set at
   // runtime.
@@ -353,18 +439,36 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
 }
 // ____________________________________________________________________________
 void ConfigManager::verifyWithValidators() const {
+  // Check all the validators in sub managers.
+  std::ranges::for_each(
+      configurationOptions_,
+      [](auto pair) {
+        std::visit(
+            []<typename T>(T& var) {
+              // Nothing to do, if we are not looking at a config manager.
+              if constexpr (std::is_same_v<std::decay_t<T>, ConfigManager>) {
+                var.verifyWithValidators();
+              }
+            },
+            std::get<1>(pair));
+      },
+      [](auto& pair) {
+        // Make sure, that there is no null pointer.
+        AD_CORRECTNESS_CHECK(pair.second != nullptr);
+
+        // Return a dereferenced reference.
+        return std::tie(pair.first, *pair.second);
+      });
+
+  // Check all validators, that were directly registered.
   std::ranges::for_each(validators_,
                         [](auto& validator) { std::invoke(validator); });
 };
 
 // ____________________________________________________________________________
 bool ConfigManager::containsOption(const ConfigOption& opt) const {
-  // Collect a view of all `configOption` addresses.
-  const auto allOptions =
-      std::views::values(configurationOptions()) |
-      std::views::transform([](const ConfigOption& option) { return &option; });
-
-  // Check, if the address of the given `opt` is contained.
-  return std::ranges::find(allOptions, &opt) != allOptions.end();
+  const auto allOptions = configurationOptions();
+  const auto allOptionsValues = std::views::values(allOptions);
+  return std::ranges::find(allOptionsValues, &opt) != allOptionsValues.end();
 }
 }  // namespace ad_utility
