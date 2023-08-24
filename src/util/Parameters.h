@@ -134,7 +134,7 @@ struct ParameterConceptImpl<Parameter<Type, FromString, ToString, Name>>
 }  // namespace detail::parameterConceptImpl
 
 template <typename T>
-concept isParameter =
+concept IsParameter =
     detail::parameterConceptImpl::ParameterConceptImpl<T>::value;
 
 namespace detail::parameterShortNames {
@@ -193,7 +193,7 @@ using MemorySizeParameter =
 /// "increase the cache size by 20%") nor an atomic update of multiple
 /// parameters at the same time. If needed, this functionality could be added
 /// to the current implementation.
-template <isParameter... ParameterTypes>
+template <IsParameter... ParameterTypes>
 class Parameters {
  private:
   using Tuple = std::tuple<ad_utility::Synchronized<ParameterTypes>...>;

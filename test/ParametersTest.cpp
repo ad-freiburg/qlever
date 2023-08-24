@@ -71,13 +71,13 @@ TEST(Parameters, MemorySizeParameter) {
 // Basic test, if the concept works.
 TEST(Parameters, ParameterConcept) {
   // Test the parameter short names.
-  static_assert(isParameter<Float<"Float">>);
-  static_assert(isParameter<Double<"Double">>);
-  static_assert(isParameter<SizeT<"SizeT">>);
-  static_assert(isParameter<String<"String">>);
-  static_assert(isParameter<MemorySizeParameter<"MemorySizeParameter">>);
+  static_assert(IsParameter<Float<"Float">>);
+  static_assert(IsParameter<Double<"Double">>);
+  static_assert(IsParameter<SizeT<"SizeT">>);
+  static_assert(IsParameter<String<"String">>);
+  static_assert(IsParameter<MemorySizeParameter<"MemorySizeParameter">>);
 
   // Test some other random types.
-  static_assert(!isParameter<std::string>);
-  static_assert(!isParameter<ParameterName>);
+  static_assert(!IsParameter<std::string>);
+  static_assert(!IsParameter<ParameterName>);
 }
