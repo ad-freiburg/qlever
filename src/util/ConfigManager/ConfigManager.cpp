@@ -80,49 +80,40 @@ std::string ConfigManager::createJsonPointerString(
 }
 
 // ____________________________________________________________________________
-void ConfigManager::verifyPathToConfigOption(
-    const std::vector<std::string>& pathToOption,
-    std::string_view optionName) const {
+void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
   // We need at least a name in the path.
-  if (pathToOption.empty()) {
+  if (path.empty()) {
     throw std::runtime_error(
-        "The vector 'pathToOption' is empty, which is not allowed. We need at "
-        "least a name for a working path to a configuration option.");
+        "It is forbidden to call `addConfigOption` with an empty vector as the "
+        "first argument, because we need a name for the added option.");
   }
 
   /*
-  The last entry in the path is the name of the configuration option. If it
-  isn't, something has gone wrong.
-  */
-  AD_CORRECTNESS_CHECK(pathToOption.back() == optionName);
-
-  /*
-  A string must be a valid `NAME` in the short hand. Otherwise, the option can't
+  A string must be a valid `NAME` in the short hand. Otherwise, an option can't
   get accessed with the short hand.
   */
-  if (auto failedKey =
-          std::ranges::find_if_not(pathToOption, isNameInShortHand);
-      failedKey != pathToOption.end()) {
+  if (auto failedKey = std::ranges::find_if_not(path, isNameInShortHand);
+      failedKey != path.end()) {
     /*
     One of the keys failed. `failedKey` is an iterator pointing to the key.
     */
-    throw NotValidShortHandNameException(
-        *failedKey, vectorOfKeysForJsonToString(pathToOption));
+    throw NotValidShortHandNameException(*failedKey,
+                                         vectorOfKeysForJsonToString(path));
   }
 
-  // Is there already a configuration option with the same identifier at the
-  // same location?
-  if (configurationOptions_.contains(createJsonPointerString(pathToOption))) {
+  // Is there already a configuration option with the same identifier at
+  // the same location?
+  if (configurationOptions_.contains(createJsonPointerString(path))) {
     throw ConfigManagerOptionPathAlreadyinUseException(
-        vectorOfKeysForJsonToString(pathToOption), printConfigurationDoc(true));
+        vectorOfKeysForJsonToString(path), printConfigurationDoc(true));
   }
 }
 
 // ____________________________________________________________________________
-const ConfigOption& ConfigManager::addConfigOption(
+ConfigOption& ConfigManager::addConfigOption(
     const std::vector<std::string>& pathToOption, ConfigOption&& option) {
   // Is the path valid?
-  verifyPathToConfigOption(pathToOption, option.getIdentifier());
+  verifyPath(pathToOption);
 
   // Add the configuration option and return the inserted elements.
   return *configurationOptions_
@@ -247,6 +238,9 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
       throw ConfigOptionWasntSetException(key);
     }
   }
+
+  // Check with the validators, if all the new values are valid.
+  verifyWithValidators();
 }
 
 // ____________________________________________________________________________
@@ -356,5 +350,21 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
       std::views::transform(defaultConfigurationOptionToString);
 
   return ad_utility::lazyStrJoin(unchangedFromDefaultConfigOptions, "\n");
+}
+// ____________________________________________________________________________
+void ConfigManager::verifyWithValidators() const {
+  std::ranges::for_each(validators_,
+                        [](auto& validator) { std::invoke(validator); });
+};
+
+// ____________________________________________________________________________
+bool ConfigManager::containsOption(const ConfigOption& opt) const {
+  // Collect a view of all `configOption` addresses.
+  const auto allOptions =
+      std::views::values(configurationOptions()) |
+      std::views::transform([](const ConfigOption& option) { return &option; });
+
+  // Check, if the address of the given `opt` is contained.
+  return std::ranges::find(allOptions, &opt) != allOptions.end();
 }
 }  // namespace ad_utility
