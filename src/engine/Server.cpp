@@ -21,7 +21,7 @@ using Awaitable = Server::Awaitable<T>;
 
 // __________________________________________________________________________
 Server::Server(unsigned short port, int numThreads,
-               const ad_utility::MemorySize& maxMem, std::string accessToken,
+               ad_utility::MemorySize maxMem, std::string accessToken,
                bool usePatternTrick)
     : numThreads_(numThreads),
       port_(port),

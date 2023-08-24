@@ -31,8 +31,8 @@ using std::vector;
 class Server {
  public:
   explicit Server(unsigned short port, int numThreads,
-                  const ad_utility::MemorySize& maxMemGB,
-                  std::string accessToken, bool usePatternTrick = true);
+                  ad_utility::MemorySize maxMemGB, std::string accessToken,
+                  bool usePatternTrick = true);
 
   virtual ~Server() = default;
 
