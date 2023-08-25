@@ -41,11 +41,10 @@ TEST(HttpServer, HttpTest) {
   httpServer.runInOwnThread();
 
   // Create a client, and send a GET and a POST request in one session.
-  for ([[mabye_unused]] auto i : std::views::iota(0, 1)) {
-    (void)i;
+  {
     std::vector<ad_utility::JThread> threads;
     threads.reserve(100);
-    for ([[mabye_unused]] auto j : std::views::iota(0, 100)) {
+    for (auto j : std::views::iota(0, 100)) {
       (void)j;
       threads.emplace_back([&]() {
         {
@@ -91,7 +90,8 @@ TEST(HttpServer, HttpTest) {
 
   std::vector<ad_utility::JThread> threads;
   threads.reserve(100);
-  for ([[mabye_unused]] auto j : std::views::iota(0, 100)) {
+  for (auto j : std::views::iota(0, 100)) {
+    (void)j;
     threads.emplace_back([&]() {
       // Check that after shutting down, no more new connections are accepted.
       httpServer.shutDown();
