@@ -129,8 +129,8 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
   // We need at least a name in the path.
   if (path.empty()) {
     throw std::runtime_error(
-        "It is forbidden to call `addConfigOption` with an empty vector as the "
-        "first argument, because we need a name for the added option.");
+        "It is forbidden to call `addConfigOption`, or `addSubManager`, with "
+        "an empty vector as the first argument.");
   }
 
   /*
