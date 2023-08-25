@@ -81,6 +81,9 @@ class ValueId {
   static constexpr double minPositiveDouble =
       std::bit_cast<double>(1ull << numDatatypeBits);
 
+  // The largest representable integer value.
+  static constexpr int64_t maxInt = IntegerType::max();
+
   /// This exception is thrown if we try to store a value of an index type
   /// (VocabIndex, LocalVocabIndex, TextRecordIndex) that is larger than
   /// `maxIndex`.
@@ -181,7 +184,7 @@ class ValueId {
   }
 
   /// Create a `ValueId` for a boolean value.
-  static ValueId makeFromBool(bool b) noexcept {
+  static constexpr ValueId makeFromBool(bool b) noexcept {
     auto bits = static_cast<T>(b);
     return addDatatypeBits(bits, Datatype::Bool);
   }

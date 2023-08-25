@@ -11,15 +11,15 @@
 #include <variant>
 #include <vector>
 
+#include "../test/util/ConfigOptionHelpers.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
+#include "util/GTestHelpers.h"
 #include "util/json.h"
 
-// Easier usage.
-using ConfigOption = ad_utility::ConfigOption;
-
+namespace ad_utility {
 /*
 Not all identifiers are allowed for configuration options.
 */
@@ -38,25 +38,6 @@ TEST(ConfigOptionTest, ConstructorException) {
   int* ptr = nullptr;
   ASSERT_THROW(ConfigOption("Option", "", ptr),
                ad_utility::ConfigOptionConstructorNullPointerException);
-}
-
-/*
-@brief Call the function with each of the alternatives in
-`ConfigOption::AvailableTypes` as template parameter.
-
-@tparam Function The loop body should be a templated function, with one
-`typename` template argument and no more. It also shouldn't take any function
-arguments. Should be passed per deduction.
-*/
-template <typename Function>
-static void doForTypeInValueType(Function function) {
-  ad_utility::ConstexprForLoop(
-      std::make_index_sequence<
-          std::variant_size_v<ConfigOption::AvailableTypes>>{},
-      [&function]<size_t index, typename IndexType = std::variant_alternative_t<
-                                    index, ConfigOption::AvailableTypes>>() {
-        function.template operator()<IndexType>();
-      });
 }
 
 /*
@@ -123,7 +104,7 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
   */
   auto otherGettersDontWork =
       []<typename WorkingType>(const ConfigOption& option) {
-        doForTypeInValueType([&option]<typename CurrentType>() {
+        doForTypeInConfigOptionValueType([&option]<typename CurrentType>() {
           if (option.wasSet()) {
             if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
               ASSERT_THROW((option.getValue<CurrentType>()),
@@ -310,11 +291,11 @@ TEST(ConfigOptionTest, ExceptionOnCreation) {
 // meant to hold.
 TEST(ConfigOptionTest, SetValueException) {
   // Try every type combination.
-  doForTypeInValueType([]<typename WorkingType>() {
+  doForTypeInConfigOptionValueType([]<typename WorkingType>() {
     WorkingType notUsed{getConversionTestCase<WorkingType>().value};
     ConfigOption option("option", "", &notUsed);
 
-    doForTypeInValueType([&option, &notUsed]<typename T>() {
+    doForTypeInConfigOptionValueType([&option, &notUsed]<typename T>() {
       if constexpr (std::is_same_v<T, WorkingType>) {
         ASSERT_NO_THROW(option.setValue(notUsed));
       } else {
@@ -352,7 +333,7 @@ TEST(ConfigOptionTest, SetValueWithJson) {
 
     // Does the setter cause an exception, when given any json, that can't be
     // interpreted as the wanted type?
-    doForTypeInValueType([&option]<typename CurrentType>() {
+    doForTypeInConfigOptionValueType([&option]<typename CurrentType>() {
       if constexpr (!std::is_same_v<Type, CurrentType> &&
                     !(std::is_same_v<Type, int> &&
                       std::is_same_v<
@@ -371,12 +352,12 @@ TEST(ConfigOptionTest, SetValueWithJson) {
   };
 
   // Do the test case for every possible type.
-  doForTypeInValueType(doTestCase);
+  doForTypeInConfigOptionValueType(doTestCase);
 }
 
 // Test, if there is a dummy value for any type, that a `ConfigOption` can hold.
 TEST(ConfigOptionTest, DummyValueExistence) {
-  doForTypeInValueType([]<typename T>() {
+  doForTypeInConfigOptionValueType([]<typename T>() {
     T notUsed;
     ConfigOption option("option", "", &notUsed);
 
@@ -385,3 +366,24 @@ TEST(ConfigOptionTest, DummyValueExistence) {
     ASSERT_NE("", option.getDummyValueAsString());
   });
 }
+
+TEST(ConfigOptionTest, HoldsType) {
+  // Test for `configOption` with the given type.
+  auto doTest = []<typename CorrectType>() {
+    // Correct type.
+    CorrectType var;
+    const ConfigOption opt("testOption", "", &var);
+    ASSERT_TRUE(opt.holdsType<CorrectType>());
+
+    // Wrong type.
+    doForTypeInConfigOptionValueType([&opt]<typename WrongType>() {
+      if constexpr (!std::is_same_v<CorrectType, WrongType>) {
+        ASSERT_FALSE(opt.holdsType<WrongType>());
+      }
+    });
+  };
+
+  doForTypeInConfigOptionValueType(doTest);
+}
+
+}  // namespace ad_utility

@@ -11,13 +11,13 @@ namespace sparqlExpression {
 namespace detail {
 NARY_EXPRESSION(LongitudeExpression, 1,
                 FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
-                   StringValueGetter>);
+                   LiteralFromIdGetter>);
 NARY_EXPRESSION(LatitudeExpression, 1,
                 FV<NumericIdWrapper<decltype(ad_utility::wktLatitude), true>,
-                   StringValueGetter>);
+                   LiteralFromIdGetter>);
 NARY_EXPRESSION(DistExpression, 2,
                 FV<NumericIdWrapper<decltype(ad_utility::wktDist), true>,
-                   StringValueGetter>);
+                   LiteralFromIdGetter>);
 
 }  // namespace detail
 

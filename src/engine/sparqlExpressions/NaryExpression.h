@@ -36,6 +36,12 @@ SparqlExpression::Ptr makeRoundExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeAbsExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeCeilExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeFloorExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeLogExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeExpExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeSqrtExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeSinExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeCosExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeTanExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2);
@@ -48,5 +54,20 @@ SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
+                                           SparqlExpression::Ptr start,
+                                           SparqlExpression::Ptr length);
 
+SparqlExpression::Ptr makeUppercaseExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeLowercaseExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeStrStartsExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeStrEndsExpression(SparqlExpression::Ptr child1,
+                                            SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeContainsExpression(SparqlExpression::Ptr child1,
+                                             SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeStrAfterExpression(SparqlExpression::Ptr child1,
+                                             SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2);
 }  // namespace sparqlExpression

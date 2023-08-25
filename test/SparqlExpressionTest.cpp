@@ -36,7 +36,7 @@ auto Voc = ad_utility::testing::VocabId;
 auto U = Id::makeUndefined();
 
 using Ids = std::vector<Id>;
-using Strings = std::vector<std::string>;
+using IdOrStrings = std::vector<IdOrString>;
 
 // Test allocator (the inputs to our `SparqlExpression`s are
 // `VectorWithMemoryLimit`s, and these require an `AllocatorWithLimit`).
@@ -80,7 +80,7 @@ auto checkResultsEqual = []<SingleExpressionResult A, SingleExpressionResult B>(
             expected, [](const Id id) { return matchId(id); });
         ASSERT_THAT(actual, ::testing::ElementsAreArray(matcherVec));
       } else {
-        ASSERT_EQ(actual, expected);
+        ASSERT_THAT(actual, ::testing::ElementsAreArray(expected));
       }
 
     } else {
@@ -160,6 +160,20 @@ auto testBinaryExpression = [](auto makeExpression,
   testNaryExpression(makeExpression, expected, op1, op2);
 };
 
+// Test a binary expression, but the operands and expected result are passed in
+// via `std::vector`, not as a `VectorWithMemoryLimit`. This makes the usage
+// simpler.
+auto testBinaryExpressionVec =
+    []<SingleExpressionResult Exp, SingleExpressionResult Op1,
+       SingleExpressionResult Op2>(
+        auto makeExpression, std::vector<Exp> expected, std::vector<Op1> op1,
+        std::vector<Op2> op2, source_location l = source_location::current()) {
+      auto t = generateLocationTrace(l, "testBinaryExpressionVec");
+
+      testNaryExpression(makeExpression, liftVector(expected), liftVector(op1),
+                         liftVector(op2));
+    };
+
 auto testOr =
     std::bind_front(testBinaryExpressionCommutative, &makeOrExpression);
 auto testAnd =
@@ -180,7 +194,7 @@ TEST(SparqlExpression, logicalOperators) {
           alloc};
   V<Id> dAsBool{{B(true), B(true), B(false), B(false)}, alloc};
 
-  V<std::string> s{{"true", "", "false", ""}, alloc};
+  V<IdOrString> s{{"true", "", "false", ""}, alloc};
   V<Id> sAsBool{{B(true), B(false), B(true), B(false)}, alloc};
 
   V<Id> i{{I(32), I(-42), I(0), I(5)}, alloc};
@@ -249,10 +263,10 @@ TEST(SparqlExpression, logicalOperators) {
   testAnd(allFalse, b, D(nan));
   testAnd(b, b, D(2839.123));
 
-  testOr(allTrue, b, std::string("halo"));
-  testOr(b, b, std::string(""));
-  testAnd(allFalse, b, std::string(""));
-  testAnd(b, b, std::string("yellow"));
+  testOr(allTrue, b, IdOrString{"halo"});
+  testOr(b, b, IdOrString(""));
+  testAnd(allFalse, b, IdOrString(""));
+  testAnd(b, b, IdOrString("yellow"));
 
   // Test the behavior in the presence of UNDEF values.
   Id t = B(true);
@@ -331,7 +345,12 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(times13, mixed, D(1.0 / 1.3));
 }
 
-// Helper lambda to enable testing a unary expression in one line (see below).
+// Helper function to lift a `vector<T>` to `vectorWithMemoryLimit<T>`
+template <typename T>
+VectorWithMemoryLimit<T> liftVector(std::vector<T> vec) {
+  return VectorWithMemoryLimit<T>{std::make_move_iterator(vec.begin()),
+                                  std::make_move_iterator(vec.end()), alloc};
+}
 //
 // TODO: The tests above could also be simplified (and made much more readable)
 // in this vein.
@@ -341,11 +360,8 @@ auto testUnaryExpression =
         std::vector<OutputType> expected,
         source_location l = source_location::current()) {
       auto trace = generateLocationTrace(l);
-      V<OperandType> operandV{std::make_move_iterator(operand.begin()),
-                              std::make_move_iterator(operand.end()), alloc};
-      V<OutputType> expectedV{std::make_move_iterator(expected.begin()),
-                              std::make_move_iterator(expected.end()), alloc};
-      testNaryExpression(makeFunction, expectedV, operandV);
+      testNaryExpression(makeFunction, liftVector(expected),
+                         liftVector(operand));
     };
 
 // Test `YearExpression`, `MonthExpression`, and `DayExpression`.
@@ -400,18 +416,164 @@ TEST(SparqlExpression, dateOperators) {
   auto testYear = std::bind_front(testUnaryExpression, &makeYearExpression);
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
-  testYear(Strings{"noDate"}, Ids{U});
+  testYear(IdOrStrings{"noDate"}, Ids{U});
 }
 
 // Test `StrlenExpression` and `StrExpression`.
 auto checkStrlen = std::bind_front(testUnaryExpression, &makeStrlenExpression);
 auto checkStr = std::bind_front(testUnaryExpression, &makeStrExpression);
+static auto makeStrlenWithStr = [](auto arg) {
+  return makeStrlenExpression(makeStrExpression(std::move(arg)));
+};
+auto checkStrlenWithStrChild =
+    std::bind_front(testUnaryExpression, makeStrlenWithStr);
+
 TEST(SparqlExpression, stringOperators) {
-  checkStrlen(Strings{"one", "two", "three", ""}, Ids{I(3), I(3), I(5), I(0)});
-  checkStr(Ids{I(1), I(2), I(3)}, Strings{"1", "2", "3"});
-  checkStr(Ids{D(-1.0), D(1.0), D(2.34)}, Strings{"-1", "1", "2.34"});
-  checkStr(Ids{B(true), B(false), B(true)}, Strings{"true", "false", "true"});
-  checkStr(Strings{"one", "two", "three"}, Strings{"one", "two", "three"});
+  checkStrlen(IdOrStrings{"one", "two", "three", ""},
+              Ids{I(3), I(3), I(5), I(0)});
+  checkStrlenWithStrChild(IdOrStrings{"one", "two", "three", ""},
+                          Ids{I(3), I(3), I(5), I(0)});
+
+  // Test the different (optimized) behavior depending on whether the STR()
+  // function was applied to the argument.
+  checkStrlen(IdOrStrings{"one", I(1), D(3.6), ""}, Ids{I(3), U, U, I(0)});
+  checkStrlenWithStrChild(IdOrStrings{"one", I(1), D(3.6), ""},
+                          Ids{I(3), I(1), I(3), I(0)});
+  checkStr(Ids{I(1), I(2), I(3)}, IdOrStrings{"1", "2", "3"});
+  checkStr(Ids{D(-1.0), D(1.0), D(2.34)}, IdOrStrings{"-1", "1", "2.34"});
+  checkStr(Ids{B(true), B(false), B(true)},
+           IdOrStrings{"true", "false", "true"});
+  checkStr(IdOrStrings{"one", "two", "three"},
+           IdOrStrings{"one", "two", "three"});
+
+  // A simple test for uniqueness of the cache key.
+  auto c1a = makeStrlenExpression(std::make_unique<IriExpression>("<bim>"))
+                 ->getCacheKey({});
+  auto c1b = makeStrlenExpression(std::make_unique<IriExpression>("<bim>"))
+                 ->getCacheKey({});
+  auto c2a = makeStrExpression(std::make_unique<IriExpression>("<bim>"))
+                 ->getCacheKey({});
+  auto c2b = makeStrExpression(std::make_unique<IriExpression>("<bim>"))
+                 ->getCacheKey({});
+  auto c3a = makeStrlenExpression(
+                 makeStrExpression(std::make_unique<IriExpression>("<bim>")))
+                 ->getCacheKey({});
+  auto c3b = makeStrlenExpression(
+                 makeStrExpression(std::make_unique<IriExpression>("<bim>")))
+                 ->getCacheKey({});
+
+  EXPECT_EQ(c1a, c1b);
+  EXPECT_EQ(c2a, c2b);
+  EXPECT_EQ(c3a, c3b);
+
+  EXPECT_NE(c1a, c2a);
+  EXPECT_NE(c2a, c3a);
+  EXPECT_NE(c1a, c3a);
+}
+auto checkUcase =
+    std::bind_front(testUnaryExpression, &makeUppercaseExpression);
+auto checkLcase =
+    std::bind_front(testUnaryExpression, &makeLowercaseExpression);
+TEST(SparqlExpression, uppercaseAndLowercase) {
+  checkLcase(IdOrStrings{"One", "tWÖ", U, I(12)},
+             IdOrStrings{"one", "twö", U, U});
+  checkUcase(IdOrStrings{"One", "tWÖ", U, I(12)},
+             IdOrStrings{"ONE", "TWÖ", U, U});
+}
+
+// Test STRSTARTS, STRENDS, CONTAINS, STRBEFORE, and STRAFTER.
+auto checkStrStarts =
+    std::bind_front(testBinaryExpressionVec, &makeStrStartsExpression);
+auto checkStrEnds =
+    std::bind_front(testBinaryExpressionVec, &makeStrEndsExpression);
+auto checkContains =
+    std::bind_front(testBinaryExpressionVec, &makeContainsExpression);
+auto checkStrAfter =
+    std::bind_front(testBinaryExpressionVec, &makeStrAfterExpression);
+auto checkStrBefore =
+    std::bind_front(testBinaryExpressionVec, &makeStrBeforeExpression);
+TEST(SparqlExpression, binaryStringOperations) {
+  using S = IdOrStrings;
+  auto F = Id::makeFromBool(false);
+  auto T = Id::makeFromBool(true);
+  checkStrStarts(
+      Ids{T, F, T, F, T, T, F, F, F},
+      S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+      S{"", "x", "", "Hallo", "Häl", "Hällo", "Hällox", "ll", "lo"});
+  checkStrEnds(
+      Ids{T, F, T, F, T, T, F, F, F},
+      S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+      S{"", "x", "", "Hallo", "o", "Hällo", "Hällox", "ll", "H"});
+  checkContains(Ids{T, F, T, F, T, T, F},
+                S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+                S{"", "x", "", "ullo", "ll", "Hällo", "Hällox"});
+  checkStrAfter(S{"", "", "Hällo", "", "o", "", "", "lo"},
+                S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+                S{"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"});
+  checkStrBefore(
+      S{"", "", "Hällo", "", "Hä", "", "", "Hä"},
+      S{"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"},
+      S{"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"});
+}
+
+// ______________________________________________________________________________
+static auto checkSubstr =
+    std::bind_front(testNaryExpression, makeSubstrExpression);
+TEST(SparqlExpression, substr) {
+  auto strs = [](const IdOrStrings& input) {
+    return VectorWithMemoryLimit<IdOrString>(input.begin(), input.end(), alloc);
+  };
+
+  // Remember: The start position (the second argument to the SUBSTR expression)
+  // is 1-based.
+  checkSubstr(strs({"one", "two", "three"}), strs({"one", "two", "three"}),
+              I(1), I(12));
+  checkSubstr(strs({"one", "two", "three"}), strs({"one", "two", "three"}),
+              I(0), I(12));
+  checkSubstr(strs({"one", "two", "three"}), strs({"one", "two", "three"}),
+              I(-2), I(12));
+
+  checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}), I(2),
+              I(12));
+  checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}), D(1.8),
+              D(11.7));
+  checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}),
+              D(2.449), D(12.449));
+
+  // An actual substring from the middle
+  checkSubstr(strs({"es", "os", "re"}), strs({"ones", "twos", "threes"}), I(3),
+              I(2));
+
+  // Subtle corner case if the starting position is negative
+  // Only the letters at positions  `p < -3 + 6 = 3` are exported (the first two
+  // letters, remember that the positions are 1-based).
+  checkSubstr(strs({"on", "tw", "th"}), strs({"ones", "twos", "threes"}), I(-3),
+              I(6));
+
+  // Correct handling of UTF-8 multibyte characters.
+  checkSubstr(strs({"pfel", "pfel", "pfel"}),
+              strs({"uApfel", "uÄpfel", "uöpfel"}), I(3), I(18));
+
+  // corner cases: 0 or negative length, or invalid numeric parameter
+  checkSubstr(strs({"", "", ""}), strs({"ones", "twos", "threes"}), D(naN),
+              I(2));
+  checkSubstr(strs({"", "", ""}), strs({"ones", "twos", "threes"}), I(2),
+              D(naN));
+  checkSubstr(strs({"", "", ""}), strs({"ones", "twos", "threes"}), I(2), I(0));
+  checkSubstr(strs({"", "", ""}), strs({"ones", "twos", "threes"}), I(2),
+              D(-3.8));
+
+  // Invalid datatypes
+  // First must be string.
+  auto Ux = IdOrString{U};
+  checkSubstr(Ux, I(3), I(4), I(7));
+  checkSubstr(Ux, U, I(4), I(7));
+  checkSubstr(Ux, Ux, I(4), I(7));
+  // Second and third must be numeric;
+  checkSubstr(Ux, IdOrString{"hello"}, U, I(4));
+  checkSubstr(Ux, IdOrString{"hello"}, IdOrString{"bye"}, I(17));
+  checkSubstr(Ux, IdOrString{"hello"}, I(4), U);
+  checkSubstr(Ux, IdOrString{"hello"}, I(4), IdOrString{"bye"});
 }
 
 // _____________________________________________________________________________________
@@ -424,7 +586,7 @@ TEST(SparqlExpression, unaryNegate) {
       Ids{B(true), B(false), I(0), I(3), D(0), D(12), D(naN), U},
       Ids{B(false), B(true), B(true), B(false), B(true), B(false), B(true), U});
   // Empty strings are considered to be true.
-  checkNegate(Strings{"true", "false", "", "blibb"},
+  checkNegate(IdOrStrings{"true", "false", "", "blibb"},
               Ids{B(false), B(false), B(true), B(false)});
 }
 
@@ -436,10 +598,11 @@ TEST(SparqlExpression, unaryMinus) {
   checkMinus(
       Ids{B(true), B(false), I(0), I(3), D(0), D(12.8), D(naN), U, Voc(6)},
       Ids{I(-1), I(0), I(0), I(-3), D(-0.0), D(-12.8), D(-naN), U, U});
-  checkMinus(Strings{"true", "false", "", "<blibb>"}, Ids{U, U, U, U});
+  checkMinus(IdOrStrings{"true", "false", "", "<blibb>"}, Ids{U, U, U, U});
 }
 
-TEST(SparqlExpression, ceilFloorAbsRound) {
+// Test the built-in numeric functions (floor, abs, round, ceil).
+TEST(SparqlExpression, builtInNumericFunctions) {
   auto bindUnary = [](auto f) {
     return std::bind_front(testUnaryExpression, f);
   };
@@ -468,6 +631,30 @@ TEST(SparqlExpression, ceilFloorAbsRound) {
   checkRound(input, round);
 }
 
+// Test the correctness of the math functions.
+TEST(SparqlExpression, customNumericFunctions) {
+  auto nan = std::numeric_limits<double>::quiet_NaN();
+  auto inf = std::numeric_limits<double>::infinity();
+  testUnaryExpression(makeLogExpression,
+                      std::vector<Id>{I(1), D(2), D(exp(1)), D(0)},
+                      std::vector<Id>{D(0), D(log(2)), D(1), D(-inf)});
+  testUnaryExpression(makeExpExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-inf)},
+                      std::vector<Id>{D(1), D(exp(1)), D(exp(2)), D(0)});
+  testUnaryExpression(makeSqrtExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(0), D(1), D(sqrt(2)), D(nan)});
+  testUnaryExpression(makeSinExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(0), D(sin(1)), D(sin(2)), D(sin(-1))});
+  testUnaryExpression(makeCosExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(1), D(cos(1)), D(cos(2)), D(cos(-1))});
+  testUnaryExpression(makeTanExpression,
+                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+                      std::vector<Id>{D(0), D(tan(1)), D(tan(2)), D(tan(-1))});
+}
+
 // ________________________________________________________________________________________
 TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLat = std::bind_front(testUnaryExpression, &makeLatitudeExpression);
@@ -475,9 +662,14 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       std::bind_front(testUnaryExpression, &makeLongitudeExpression);
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
 
-  checkLat(Strings{"POINT(24.3 26.8)", "NotAPoint"}, Ids{D(26.8), U});
-  checkLong(Strings{"POINT(24.3 26.8)", "NotAPoint"}, Ids{D(24.3), U});
-  checkDist(D(0.0), "POINT(24.3 26.8)"s, "POINT(24.3 26.8)"s);
-  checkDist(U, "POINT(24.3 26.8)"s, "NotAPoint"s);
-  checkDist(U, "NotAPoint"s, "POINT(24.3 26.8)"s);
+  checkLat(IdOrStrings{"POINT(24.3 26.8)", "NotAPoint", I(12)},
+           Ids{D(26.8), U, U});
+  checkLong(IdOrStrings{D(4.2), "POINT(24.3 26.8)", "NotAPoint"},
+            Ids{U, D(24.3), U});
+  checkDist(D(0.0), IdOrString{"POINT(24.3 26.8)"},
+            IdOrString{"POINT(24.3 26.8)"});
+  checkDist(U, IdOrString{"POINT(24.3 26.8)"}, IdOrString{I(12)});
+  checkDist(U, IdOrString{I(12)}, IdOrString{"POINT(24.3 26.8)"});
+  checkDist(U, IdOrString{"POINT(24.3 26.8)"s}, IdOrString{"NotAPoint"});
+  checkDist(U, IdOrString{"NotAPoint"}, IdOrString{"POINT(24.3 26.8)"});
 }

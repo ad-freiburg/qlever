@@ -15,6 +15,7 @@
 #include <variant>
 
 #include "global/ValueId.h"
+#include "gtest/gtest_prod.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigUtil.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
@@ -86,6 +87,13 @@ class ConfigOption {
   value given at construction, or any setter called.
   */
   bool wasSet() const;
+
+  // Returns, if this configuration option holds values of the given type.
+  template <typename Type>
+  requires ad_utility::isTypeContainedIn<Type, ConfigOption::AvailableTypes>
+  constexpr bool holdsType() const {
+    return std::holds_alternative<Data<Type>>(data_);
+  }
 
   /*
   @brief Sets the variable, that the internal pointer points to. Throws an
@@ -241,6 +249,10 @@ class ConfigOption {
   }
 
  private:
+  FRIEND_TEST(ConfigOptionTest, AddValidator);
+  FRIEND_TEST(ConfigOptionTest, AddValidatorExceptions);
+  FRIEND_TEST(ConfigManagerTest, AddValidator);
+
   /*
   @brief Return the string representation/name of the type, of the currently
   held alternative in the given `value`.

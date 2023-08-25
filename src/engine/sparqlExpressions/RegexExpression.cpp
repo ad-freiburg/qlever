@@ -162,7 +162,7 @@ string RegexExpression::getCacheKey(
 }
 
 // ___________________________________________________________________________
-std::span<SparqlExpression::Ptr> RegexExpression::children() {
+std::span<SparqlExpression::Ptr> RegexExpression::childrenImpl() {
   return {&child_, 1};
 }
 
@@ -237,21 +237,22 @@ ExpressionResult RegexExpression::evaluateNonPrefixRegex(
   auto resultSize = context->size();
   VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(resultSize);
-  if (childIsStrExpression_) {
+
+  auto impl = [&]<typename ValueGetter>(const ValueGetter& getter) {
     for (auto id : detail::makeGenerator(variable, resultSize, context)) {
-      result.push_back(Id::makeFromBool(RE2::PartialMatch(
-          detail::StringValueGetter{}(id, context), std::get<RE2>(regex_))));
-    }
-  } else {
-    for (auto id : detail::makeGenerator(variable, resultSize, context)) {
-      auto optionalString = detail::LiteralFromIdGetter{}(id, context);
-      if (optionalString.has_value()) {
-        result.push_back(Id::makeFromBool(
-            RE2::PartialMatch(optionalString.value(), std::get<RE2>(regex_))));
+      auto str = getter(id, context);
+      if (!str.has_value()) {
+        result.push_back(Id::makeUndefined());
       } else {
-        result.push_back(Id::makeFromBool(false));
+        result.push_back(Id::makeFromBool(
+            RE2::PartialMatch(str.value(), std::get<RE2>(regex_))));
       }
     }
+  };
+  if (childIsStrExpression_) {
+    impl(detail::StringValueGetter{});
+  } else {
+    impl(detail::LiteralFromIdGetter{});
   }
   return result;
 }

@@ -19,6 +19,7 @@ namespace sparqlExpression::detail {
 struct NotNumeric {};
 // The input to an expression that expects a numeric value.
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
+using IntOrDouble = std::variant<double, int64_t>;
 
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
 // from above) into an `ID`. When `NanToUndef` is `true` then floating point NaN
@@ -50,6 +51,11 @@ struct NumericValueGetter {
   }
 
   NumericValue operator()(ValueId id, const EvaluationContext*) const;
+
+  NumericValue operator()(IdOrString s, const EvaluationContext* ctx) const {
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
+  }
 };
 
 /// Return the type exactly as it was passed in.
@@ -71,6 +77,10 @@ struct IsValidValueGetter {
   bool operator()(const string&, const EvaluationContext*) const {
     return true;
   }
+  bool operator()(IdOrString s, const EvaluationContext* ctx) const {
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
+  }
 };
 
 /// Return a boolean value that is used for AND, OR and NOT expressions.
@@ -81,17 +91,35 @@ struct EffectiveBooleanValueGetter {
   Result operator()(ValueId id, const EvaluationContext*) const;
 
   // Nonempty strings are true.
-  Result operator()(std::string_view s, const EvaluationContext*) const {
+  Result operator()(const std::string& s, const EvaluationContext*) const {
     return s.empty() ? Result::False : Result::True;
+  }
+
+  Result operator()(const IdOrString& s, const EvaluationContext* ctx) const {
+    return std::visit(
+        [this, ctx](const auto& el) { return operator()(el, ctx); }, s);
   }
 };
 
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a string value.
 struct StringValueGetter {
-  string operator()(ValueId, const EvaluationContext*) const;
+  std::optional<string> operator()(ValueId, const EvaluationContext*) const;
 
-  string operator()(string s, const EvaluationContext*) const { return s; }
+  std::optional<string> operator()(string s, const EvaluationContext*) const {
+    // Strip quotes
+    // TODO<joka921> Use stronger types to encode literals/ IRIs/ ETC
+    if (s.size() >= 2 && s.starts_with('"') && s.ends_with('"')) {
+      return s.substr(1, s.size() - 2);
+    }
+    return s;
+  }
+
+  std::optional<string> operator()(IdOrString s,
+                                   const EvaluationContext* ctx) const {
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
+  }
 };
 
 /// This class can be used as the `ValueGetter` argument of Expression
@@ -110,6 +138,10 @@ struct DateValueGetter {
   Opt operator()(const std::string&, const EvaluationContext*) const {
     return std::nullopt;
   }
+  Opt operator()(IdOrString s, const EvaluationContext* ctx) const {
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
+  }
 };
 
 // If the `id` points to a literal, return the contents of that literal (without
@@ -119,6 +151,21 @@ struct DateValueGetter {
 struct LiteralFromIdGetter {
   std::optional<string> operator()(ValueId id,
                                    const EvaluationContext* context) const;
+  std::optional<string> operator()(std::string s,
+                                   const EvaluationContext*) const {
+    // Strip quotes
+    // TODO<joka921> Use stronger types to encode literals/ IRIs/ ETC
+    if (s.size() >= 2 && s.starts_with('"') && s.ends_with('"')) {
+      return s.substr(1, s.size() - 2);
+    }
+    return s;
+  }
+
+  std::optional<string> operator()(IdOrString s,
+                                   const EvaluationContext* ctx) const {
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
+  }
 };
 
 }  // namespace sparqlExpression::detail

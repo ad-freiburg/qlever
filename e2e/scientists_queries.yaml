@@ -157,6 +157,22 @@ queries:
       - contains_row: [ 280, "<New_York_City>" ]
       - order_numeric: { "dir": "DESC", "var": "?count" }
 
+  - query: group-by-and-rand
+    type: no-text
+    sparql: |
+      SELECT (COUNT(?x) as ?count) ?place WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Place_of_birth> ?place .
+          ?x <Gender> <Female>
+      }
+      GROUP BY ?place
+      ORDER BY RAND()
+    checks:
+      - num_cols: 2
+      - num_rows : 638
+      - selected: [ "?count", "?place" ]
+      - contains_row: [ 27, "<New_York_City>" ]
+
 
   # TODO<joka> reintroduce order by DESC((COUNT(?x) as ?count)) as soon as
   #  ordering by an expression while grouping is implemented
@@ -1557,4 +1573,53 @@ queries:
       - num_rows : 0
       - selected: [ "?x" ]
 
+  - query: SUBSTR
+    type: no-text
+    sparql: |
+      SELECT ?x (SUBSTR(STR(?x), 4) as ?sub) (SUBSTR(STR(?x), 2, 3) as ?sub2) WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Gender> <Female>  .
+          FILTER (?x > <Yzz>) .
+      }
+    checks:
+      - num_cols: 3
+      - num_rows: 12
+      - selected: [ "?x", "?sub", "?sub2" ]
+      - contains_row: [ "<Zelda_Rubinstein>", "da_Rubinstein",  "eld" ]
+      - contains_row: [ "<Zhang_Peili>",  "ng_Peili", "han" ]
+      - contains_row: [ "<Zlata_Bartl>", "ta_Bartl", "lat" ]
 
+  - query: UCASE and LCASE
+    type: no-text
+    sparql: |
+      SELECT ?x (UCASE(STR(?x)) as ?upper) (LCASE(STR(?x)) as ?lower) WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Gender> <Female>  .
+          FILTER (?x > <Yzz>) .
+      }
+    checks:
+      - num_cols: 3
+      - num_rows: 12
+      - selected: [ "?x", "?upper", "?lower" ]
+      - contains_row: [ "<Zelda_Rubinstein>", "ZELDA_RUBINSTEIN",  "zelda_rubinstein" ]
+      - contains_row: [ "<Zhang_Peili>",  "ZHANG_PEILI", "zhang_peili" ]
+      - contains_row: [ "<Zlata_Bartl>", "ZLATA_BARTL", "zlata_bartl" ]
+
+  - query: STRSTARTS etc
+    type: no-text
+    sparql: |
+      SELECT ?x (STRSTARTS(STR(?x), "Ze") as ?start) (STRENDS(STR(?x), "i") AS ?end) 
+                (CONTAINS(STR(?x), "a_") as ?cont) (STRAFTER(STR(?x), "_") as ?after) 
+                (STRBEFORE(STR(?x), "e") as ?before) 
+                WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Gender> <Female>  .
+          FILTER (?x > <Yzz>) .
+      }
+    checks:
+      - num_cols: 6
+      - num_rows: 12
+      - selected: [ "?x", "?start", "?end", "?cont", "?after", "?before" ]
+      - contains_row: [ "<Zelda_Rubinstein>", true, false, true, "Rubinstein", "Z"]
+      - contains_row: [ "<Zhang_Peili>", false, true, false, "Peili", "Zhang_P" ]
+      - contains_row: [ "<Zlata_Bartl>", false, false, true, "Bartl", "" ]

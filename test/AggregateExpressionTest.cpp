@@ -49,18 +49,19 @@ TEST(AggregateExpression, max) {
   testMaxId({V(7), U, V(2), V(4)}, V(7));
   testMaxId({I(3), U, V(0), L(3), U, (I(-1))}, L(3));
 
-  auto testMaxString = testAggregate<MaxExpression, std::string>;
+  auto testMaxString = testAggregate<MaxExpression, IdOrString>;
   // TODO<joka921> Implement correct comparison on strings
   testMaxString({"alpha", "äpfel", "Beta", "unfug"}, "äpfel");
 }
 
 TEST(AggregateExpression, min) {
   auto testMinId = testAggregate<MinExpression, Id>;
-  testMinId({I(3), U, I(0), I(4), U, (I(-1))}, I(-1));
-  testMinId({V(7), U, V(2), V(4)}, V(2));
-  testMinId({I(3), U, V(0), L(3), U, (I(-1))}, I(-1));
+  testMinId({I(3), I(0), I(4), (I(-1))}, I(-1));
+  testMinId({V(7), V(2), V(4)}, V(2));
+  testMinId({V(7), U, V(2), V(4)}, U);
+  testMinId({I(3), V(0), L(3), (I(-1))}, I(-1));
 
-  auto testMinString = testAggregate<MinExpression, std::string>;
+  auto testMinString = testAggregate<MinExpression, IdOrString>;
   // TODO<joka921> Implement correct comparison on strings
   testMinString({"alpha", "äpfel", "Beta", "unfug"}, "Beta");
 }
@@ -73,7 +74,7 @@ TEST(AggregateExpression, sum) {
   testSumId({I(3), U}, U);
   testSumId({I(3), NaN}, NaN);
 
-  auto testSumString = testAggregate<SumExpression, std::string, Id>;
+  auto testSumString = testAggregate<SumExpression, IdOrString, Id>;
   // TODO<joka921> The result should be `UNDEF` not `NaN`
   testSumString({"alpha", "äpfel", "Beta", "unfug"}, U);
 }
@@ -86,6 +87,6 @@ TEST(AggregateExpression, count) {
   testCountId({U, I(3), U}, I(1));
   testCountId({I(3), NaN, NaN}, I(2), true);
 
-  auto testCountString = testAggregate<CountExpression, std::string, Id>;
+  auto testCountString = testAggregate<CountExpression, IdOrString, Id>;
   testCountString({"alpha", "äpfel", "", "unfug"}, I(4));
 }

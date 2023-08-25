@@ -21,6 +21,7 @@
 #include "parser/data/Variable.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/StringUtils.h"
+#include "util/antlr/GenerateAntlrExceptionMetadata.h"
 
 using namespace ad_utility::sparql_types;
 using namespace sparqlExpression;
@@ -53,39 +54,71 @@ std::string Visitor::getOriginalInputForContext(
 // ___________________________________________________________________________
 ExpressionPtr Visitor::processIriFunctionCall(
     const std::string& iri, std::vector<ExpressionPtr> argList,
-    antlr4::ParserRuleContext* ctx) {
-  // Lambda that checks the number of arguments and throws an error if it's
-  // not right.
-  auto checkNumArgs = [&argList, &ctx](const std::string_view prefix,
-                                       const std::string_view functionName,
-                                       size_t numArgs) {
+    const antlr4::ParserRuleContext* ctx) {
+  std::string_view functionName = iri;
+  std::string_view prefixName;
+  // Helper lambda that checks if `functionName` starts with the given prefix.
+  // If yes, remove the prefix and the final `>` from `functionName` and set
+  // `prefixName` to the short name of the prefix; see `global/Constants.h`.
+  auto checkPrefix = [&functionName, &prefixName](
+                         std::pair<std::string_view, std::string_view> prefix) {
+    if (functionName.starts_with(prefix.second)) {
+      prefixName = prefix.first;
+      functionName.remove_prefix(prefix.second.size());
+      AD_CONTRACT_CHECK(functionName.ends_with('>'));
+      functionName.remove_suffix(1);
+      return true;
+    } else {
+      return false;
+    }
+  };
+  // Helper lambda that checks the number of arguments and throws an error
+  // if it's not right. The `functionName` and `prefixName` are used for the
+  // error message.
+  auto checkNumArgs = [&argList, &ctx, &functionName,
+                       &prefixName](size_t numArgs) {
     static std::array<std::string, 6> wordForNumArgs = {
         "no", "one", "two", "three", "four", "five"};
     if (argList.size() != numArgs) {
       reportError(ctx,
-                  absl::StrCat("Function ", prefix, functionName, " takes ",
+                  absl::StrCat("Function ", prefixName, functionName, " takes ",
                                numArgs < 5 ? wordForNumArgs[numArgs]
                                            : std::to_string(numArgs),
                                numArgs == 1 ? " argument" : " arguments"));
     }
   };
-
-  constexpr static std::string_view geofPrefix =
-      "<http://www.opengis.net/def/function/geosparql/";
-  if (std::string_view iriView = iri; iriView.starts_with(geofPrefix)) {
-    iriView.remove_prefix(geofPrefix.size());
-    AD_CONTRACT_CHECK(iriView.ends_with('>'));
-    iriView.remove_suffix(1);
-    if (iriView == "distance") {
-      checkNumArgs("geof:", iriView, 2);
+  // Geo functions.
+  if (checkPrefix(GEOF_PREFIX)) {
+    if (functionName == "distance") {
+      checkNumArgs(2);
       return sparqlExpression::makeDistExpression(std::move(argList[0]),
                                                   std::move(argList[1]));
-    } else if (iriView == "longitude") {
-      checkNumArgs("geof:", iriView, 1);
+    } else if (functionName == "longitude") {
+      checkNumArgs(1);
       return sparqlExpression::makeLongitudeExpression(std::move(argList[0]));
-    } else if (iriView == "latitude") {
-      checkNumArgs("geof:", iriView, 1);
+    } else if (functionName == "latitude") {
+      checkNumArgs(1);
       return sparqlExpression::makeLatitudeExpression(std::move(argList[0]));
+    }
+  } else if (checkPrefix(MATH_PREFIX)) {
+    if (functionName == "log") {
+      checkNumArgs(1);
+      return sparqlExpression::makeLogExpression(std::move(argList[0]));
+    } else if (functionName == "exp") {
+      checkNumArgs(1);
+      return sparqlExpression::makeExpExpression(std::move(argList[0]));
+    } else if (functionName == "sqrt") {
+      checkNumArgs(1);
+      return sparqlExpression::makeSqrtExpression(std::move(argList[0]));
+    } else if (functionName == "sin") {
+      checkNumArgs(1);
+      return sparqlExpression::makeSinExpression(std::move(argList[0]));
+    } else if (functionName == "cos") {
+      checkNumArgs(1);
+      return sparqlExpression::makeCosExpression(std::move(argList[0]));
+    } else if (functionName == "tan") {
+      checkNumArgs(1);
+      return sparqlExpression::makeTanExpression(std::move(argList[0]));
     }
   }
   reportNotSupported(ctx, "Function \"" + iri + "\" is");
@@ -184,17 +217,17 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
+ParsedQuery Visitor::visit(const Parser::DescribeQueryContext* ctx) {
   reportNotSupported(ctx, "DESCRIBE queries are");
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
+ParsedQuery Visitor::visit(const Parser::AskQueryContext* ctx) {
   reportNotSupported(ctx, "ASK queries are");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::DatasetClauseContext* ctx) {
+void Visitor::visit(const Parser::DatasetClauseContext* ctx) {
   reportNotSupported(ctx, "FROM clauses are");
 }
 
@@ -488,7 +521,7 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
 
 // ____________________________________________________________________________
 parsedQuery::GraphPatternOperation Visitor::visit(
-    Parser::GraphGraphPatternContext* ctx) {
+    const Parser::GraphGraphPatternContext* ctx) {
   reportNotSupported(ctx, "Named Graphs (FROM, GRAPH) are");
 }
 
@@ -645,7 +678,7 @@ void Visitor::visit(Parser::PrologueContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::BaseDeclContext* ctx) {
+void Visitor::visit(const Parser::BaseDeclContext* ctx) {
   reportNotSupported(ctx, "BASE declarations are");
 }
 
@@ -1155,7 +1188,7 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
+PropertyPath Visitor::visit(const Parser::PathNegatedPropertySetContext* ctx) {
   reportNotSupported(ctx, "\"!\" inside a property path is ");
 }
 
@@ -1560,6 +1593,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return visit(ctx->regexExpression());
   } else if (ctx->langExpression()) {
     return visit(ctx->langExpression());
+  } else if (ctx->substringExpression()) {
+    return visit(ctx->substringExpression());
   }
   // Get the function name and the arguments. Note that we do not have to check
   // the number of arguments like for `processIriFunctionCall`, since the number
@@ -1573,13 +1608,33 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   // `NaryExpression.h`.
   auto createUnary = [&argList]<typename Function>(Function function)
       requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
-    AD_CONTRACT_CHECK(argList.size() == 1);
+    AD_CORRECTNESS_CHECK(argList.size() == 1);
     return function(std::move(argList[0]));
+  };
+  auto createBinary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                     ExpressionPtr> {
+    AD_CONTRACT_CHECK(argList.size() == 2);
+    return function(std::move(argList[0]), std::move(argList[1]));
   };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
   } else if (functionName == "strlen") {
     return createUnary(&makeStrlenExpression);
+  } else if (functionName == "strbefore") {
+    return createBinary(&makeStrBeforeExpression);
+  } else if (functionName == "strafter") {
+    return createBinary(&makeStrAfterExpression);
+  } else if (functionName == "contains") {
+    return createBinary(&makeContainsExpression);
+  } else if (functionName == "strends") {
+    return createBinary(&makeStrEndsExpression);
+  } else if (functionName == "strstarts") {
+    return createBinary(&makeStrStartsExpression);
+  } else if (functionName == "ucase") {
+    return createUnary(&makeUppercaseExpression);
+  } else if (functionName == "lcase") {
+    return createUnary(&makeLowercaseExpression);
   } else if (functionName == "year") {
     return createUnary(&makeYearExpression);
   } else if (functionName == "month") {
@@ -1635,22 +1690,31 @@ ExpressionPtr Visitor::visit(Parser::LangExpressionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::SubstringExpressionContext* ctx) {
-  reportNotSupported(ctx, "The SUBSTR function is");
+SparqlExpression::Ptr Visitor::visit(Parser::SubstringExpressionContext* ctx) {
+  auto children = visitVector(ctx->expression());
+  AD_CORRECTNESS_CHECK(children.size() == 2 || children.size() == 3);
+  if (children.size() == 2) {
+    children.push_back(
+        std::make_unique<IdExpression>(Id::makeFromInt(Id::maxInt)));
+  }
+  AD_CONTRACT_CHECK(children.size() == 3);
+  return sparqlExpression::makeSubstrExpression(std::move(children.at(0)),
+                                                std::move(children.at(1)),
+                                                std::move(children.at(2)));
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
+void Visitor::visit(const Parser::StrReplaceExpressionContext* ctx) {
   reportNotSupported(ctx, "The REPLACE function is");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::ExistsFuncContext* ctx) {
+void Visitor::visit(const Parser::ExistsFuncContext* ctx) {
   reportNotSupported(ctx, "The EXISTS function is");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::NotExistsFuncContext* ctx) {
+void Visitor::visit(const Parser::NotExistsFuncContext* ctx) {
   reportNotSupported(ctx, "The NOT EXISTS function is");
 }
 
@@ -1863,39 +1927,41 @@ void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
 }
 
 // _____________________________________________________________________________
-void Visitor::reportError(antlr4::ParserRuleContext* ctx,
+void Visitor::reportError(const antlr4::ParserRuleContext* ctx,
                           const std::string& msg) {
-  throw InvalidQueryException{msg, generateMetadata(ctx)};
+  throw InvalidSparqlQueryException{
+      msg, ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
 }
 
 // _____________________________________________________________________________
-void Visitor::reportNotSupported(antlr4::ParserRuleContext* ctx,
+void Visitor::reportNotSupported(const antlr4::ParserRuleContext* ctx,
                                  const std::string& feature) {
-  throw NotSupportedException{feature + " currently not supported by QLever.",
-                              generateMetadata(ctx)};
+  throw NotSupportedException{
+      feature + " currently not supported by QLever.",
+      ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
 }
 
 // _____________________________________________________________________________
 void Visitor::checkUnsupportedLangOperation(
-    antlr4::ParserRuleContext* ctx,
+    const antlr4::ParserRuleContext* ctx,
     const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
   if (expression.containsLangExpression()) {
     throw NotSupportedException{
         "The LANG function is currently only supported in the construct "
         "FILTER(LANG(?variable) = \"langtag\" by QLever",
-        generateMetadata(ctx)};
+        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
   }
 }
 
 // _____________________________________________________________________________
 void Visitor::checkUnsupportedLangOperationAllowFilters(
-    antlr4::ParserRuleContext* ctx,
+    const antlr4::ParserRuleContext* ctx,
     const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
   if (expression.containsLangExpression() &&
       !expression.getLanguageFilterExpression()) {
     throw NotSupportedException(
         "The LANG() function is only supported by QLever in the construct "
         "FILTER(LANG(?variable) = \"langtag\"",
-        generateMetadata(ctx));
+        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx));
   }
 }

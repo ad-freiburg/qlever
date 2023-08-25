@@ -88,5 +88,5 @@ jobs:
         echo '${{ fromJson(env.index_version_pr)}}'
     - name: E2E on PR using index from Master
       if: env.index_version_master == env.index_version_pr
-      working-directory: ${{github.workspace}}/master
-      run:  e2e/e2e.sh -i -d ../pr/build
+      working-directory: ${{github.workspace}}/pr
+      run:  e2e/e2e.sh -i ../master
