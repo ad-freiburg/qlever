@@ -1284,16 +1284,13 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("floor(?x)", matchUnary(&makeFloorExpression));
   expectBuiltInCall("round(?x)", matchUnary(&makeRoundExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
-  auto makeCoalesceExpressionVariadic = [](std::same_as<SparqlExpression::Ptr> auto... children) {
-    std::vector<SparqlExpression::Ptr> vec;
-    (..., (vec.push_back(std::move(children))));
-    return makeCoalesceExpression(std::move(vec));
-  };
   expectBuiltInCall("COALESCE(?x)", matchUnary(makeCoalesceExpressionVariadic));
   expectBuiltInCall("COALESCE()", matchNary(makeCoalesceExpressionVariadic));
-  expectBuiltInCall("COALESCE(?x, ?y, ?z)", matchNary(makeCoalesceExpressionVariadic, Var{"?x"}, Var{"?y"}, Var{"?z"}));
-  expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"}, Var{"?h"}, Var{"?c"}));
-
+  expectBuiltInCall("COALESCE(?x, ?y, ?z)",
+                    matchNary(makeCoalesceExpressionVariadic, Var{"?x"},
+                              Var{"?y"}, Var{"?z"}));
+  expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
+                                                Var{"?h"}, Var{"?c"}));
 
   // The following three cases delegate to a separate parsing function, so we
   // only perform rather simple checks.
