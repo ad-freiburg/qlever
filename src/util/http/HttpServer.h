@@ -161,11 +161,17 @@ class HttpServer {
       try {
         // Wait for a request (the code only continues after we have received
         // and accepted a request).
+        /*
         auto coroExecutor = co_await net::this_coro::executor;
         auto socket = co_await acceptor_.async_accept(
             coroExecutor, boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
         net::co_spawn(coroExecutor, session(std::move(socket)), net::detached);
+         */
+        auto socket =
+            co_await acceptor_.async_accept(boost::asio::use_awaitable);
+        // Schedule the session such that it may run in parallel to this loop.
+        net::co_spawn(ioContext_, session(std::move(socket)), net::detached);
       } catch (const boost::system::system_error& b) {
         logBeastError(b.code(), "Error in the accept loop");
       }
