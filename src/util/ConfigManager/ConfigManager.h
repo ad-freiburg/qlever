@@ -297,8 +297,8 @@ class ConfigManager {
       const std::vector<std::string>& keys);
 
   /*
-  @brief Verifies, that the given path is a valid path for an option. If not,
-  throws exceptions.
+  @brief Verifies, that the given path is a valid path for an option, or sub
+  manager. If not, throws exceptions.
 
   @param pathToOption Describes a path in json.
   */
