@@ -34,11 +34,6 @@ struct ParameterBase {
 };
 
 // Concepts for the template types of `Parameter`.
-template <typename T>
-concept ParameterValueType =
-    std::same_as<std::decay_t<T>, T> && std::default_initializable<T> &&
-    std::movable<T> && std::copyable<T>;
-
 template <typename FunctionType, typename ToType>
 concept ParameterFromStringType =
     std::default_initializable<FunctionType> &&
@@ -62,7 +57,7 @@ concept ParameterToStringType =
 ///         a std::string representation.
 /// \tparam Name The Name of the parameter (there are typically a lot of
 ///         parameters with the same `Type`).
-template <ParameterValueType Type, ParameterFromStringType<Type> FromString,
+template <std::semiregular Type, ParameterFromStringType<Type> FromString,
           ParameterToStringType<Type> ToString, ParameterName Name>
 struct Parameter : public ParameterBase {
   constexpr static ParameterName name = Name;
@@ -127,7 +122,7 @@ namespace detail::parameterConceptImpl {
 template <typename T>
 struct ParameterConceptImpl : std::false_type {};
 
-template <ParameterValueType Type, ParameterFromStringType<Type> FromString,
+template <std::semiregular Type, ParameterFromStringType<Type> FromString,
           ParameterToStringType<Type> ToString, ParameterName Name>
 struct ParameterConceptImpl<Parameter<Type, FromString, ToString, Name>>
     : std::true_type {};
