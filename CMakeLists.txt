@@ -44,20 +44,6 @@ if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
     endif ()
 endif ()
 
-if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU") AND
-   (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "12") AND
-   (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13"))
-    message(STATUS "Adding -Wno-error for G++12.0 because of the many false positive warnings from stdlib headers")
-    add_compile_options(-Wno-error)
-endif ()
-
-if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU") AND
-(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "13") AND
-(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "14"))
-    message(STATUS "Adding -Wno-array-bounds for G++13 because of the many false positive warnings from stdlib headers")
-    set(ADDITIONAL_COMPILER_FLAGS "${ADDITIONAL_COMPILER_FLAGS} -Wno-array-bounds")
-endif ()
-
 ###############################################################################
 ##### Essential settings #####
 ###############################################################################
