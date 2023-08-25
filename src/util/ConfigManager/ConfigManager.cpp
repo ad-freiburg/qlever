@@ -221,11 +221,12 @@ ConfigManager& ConfigManager::addSubManager(
   // The path in json format.
   const std::string jsonPath = createJsonPointerString(path);
 
-  // Add the configuration manager.
-  configurationOptions_.emplace(
-      jsonPath, std::make_unique<HashMapEntry::element_type>(ConfigManager{}));
-
-  return std::get<ConfigManager>(*configurationOptions_.at(jsonPath));
+  // Add the configuration manager and return the inserted element.
+  return std::get<ConfigManager>(
+      *configurationOptions_
+           .emplace(jsonPath, std::make_unique<HashMapEntry::element_type>(
+                                  ConfigManager{}))
+           .first->second);
 }
 
 // ____________________________________________________________________________
