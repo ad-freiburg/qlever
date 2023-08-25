@@ -46,18 +46,12 @@ void checkOption(ConstConfigOptionProxy<T> option, const T& externalVariable, co
 /*
 The exceptions for adding configuration options.
 */
-TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
+TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
   ad_utility::ConfigManager config{};
 
   // Configuration options for testing.
   int notUsed;
   config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}, "", &notUsed, 42);
-
-  // Trying to add a configuration option with the same name at the same
-  // place, should cause an error.
-  ASSERT_THROW(
-      config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}, "", &notUsed, 42);
-      , ad_utility::ConfigManagerOptionPathAlreadyinUseException);
 
   /*
   An empty vector that should cause an exception.
@@ -75,6 +69,60 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
   */
   ASSERT_THROW(config.addOption({"Shared part"s, "Sense_of_existence"s}, "", &notUsed, 42);
                , ad_utility::NotValidShortHandNameException);
+
+  // Trying to add a configuration option with the same name at the same
+  // place, should cause an error.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}, "", &notUsed, 42),
+      ::testing::ContainsRegex(R"('\[Shared_part\]\[Unique_part_1\]\[Sense_of_existence\]')"));
+
+  /*
+  Trying to add a configuration option, whose entire path is a prefix of the path of an already
+  added option, should cause an exception.
+  After all, this would imply, that the already existing option is part of this new option. Which is
+  not supported at the moment.
+  */
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.addOption({"Shared_part"s, "Unique_part_1"s}, "", &notUsed, 42),
+      ::testing::ContainsRegex(R"('\[Shared_part\]\[Unique_part_1\]')"));
+
+  /*
+  Trying to add a configuration option, who contains the entire path of an already added
+  configuration option as prefix, should cause an exception.
+  After all, this would imply, that the new option is part of the already existing option. Which is
+  not supported at the moment.
+  */
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s, "Answer"s, "42"s},
+                       "", &notUsed, 42),
+      ::testing::ContainsRegex(
+          R"('\[Shared_part\]\[Unique_part_1\]\[Sense_of_existence\]\[Answer\]\[42\]')"));
+
+  /*
+  Trying to add a configuration option, whose entire path is a prefix of the path of an already
+  added sub manager, should cause an exception.
+  After all, this would imply, that the sub manger is part of this new option. Which is not
+  supported at the moment.
+  */
+  config.addSubManager({"sub"s, "manager"s}).addOption("someOpt"s, "", &notUsed, 42);
+  AD_EXPECT_THROW_WITH_MESSAGE(config.addOption("sub"s, "", &notUsed, 42),
+                               ::testing::ContainsRegex(R"('\[sub\]')"));
+
+  /*
+  Trying to add a configuration option, who contains the entire path of an already added
+  sub manger as prefix, should cause an exception.
+  After all, such recursive builds should have been done on `C++` level, not json level.
+  */
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.addOption({"sub"s, "manager"s, "someOption"s}, "", &notUsed, 42),
+      ::testing::ContainsRegex(R"('\[sub\]\[manager\]\[someOption\]')"));
+
+  /*
+  Trying to add a configuration option, whose path is the path of an already added sub manger,
+  should cause an exception.
+  */
+  AD_EXPECT_THROW_WITH_MESSAGE(config.addOption({"sub"s, "manager"s}, "", &notUsed, 42),
+                               ::testing::ContainsRegex(R"('\[sub\]\[manager\]')"));
 }
 
 /*
@@ -87,12 +135,6 @@ TEST(ConfigManagerTest, addSubManagerExceptionTest) {
   int notUsed;
   config.addSubManager({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s})
       .addOption("ignore", "", &notUsed);
-
-  // Trying to add a sub manager with the same name at the same place, should
-  // cause an error.
-  ASSERT_THROW(config.addSubManager({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}),
-               ad_utility::ConfigManagerOptionPathAlreadyinUseException);
-
   // An empty vector that should cause an exception.
   ASSERT_ANY_THROW(config.addSubManager(std::vector<std::string>{}););
 
@@ -105,6 +147,56 @@ TEST(ConfigManagerTest, addSubManagerExceptionTest) {
   */
   ASSERT_THROW(config.addSubManager({"Shared part"s, "Sense_of_existence"s});
                , ad_utility::NotValidShortHandNameException);
+
+  // Trying to add a sub manager with the same name at the same place, should
+  // cause an error.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.addSubManager({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s}),
+      ::testing::ContainsRegex(R"('\[Shared_part\]\[Unique_part_1\]\[Sense_of_existence\]')"));
+
+  /*
+  Trying to add a sub manager, whose entire path is a prefix of the path of an already
+  added sub manger, should cause an exception.
+  After all, such recursive builds should have been done on `C++` level, not json level.
+  */
+  AD_EXPECT_THROW_WITH_MESSAGE(config.addSubManager({"Shared_part"s, "Unique_part_1"s}),
+                               ::testing::ContainsRegex(R"('\[Shared_part\]\[Unique_part_1\]')"));
+
+  /*
+  Trying to add a sub manager, whose path contains the entire path of an already added sub manager
+  as prefix, should cause an exception.
+  After all, such recursive builds should have been done on `C++` level, not json level.
+  */
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      config.addSubManager(
+          {"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s, "Answer"s, "42"s}),
+      ::testing::ContainsRegex(
+          R"('\[Shared_part\]\[Unique_part_1\]\[Sense_of_existence\]\[Answer\]\[42\]')"));
+
+  /*
+  Trying to add a sub manger, whose entire path is a prefix of the path of an already
+  added config option, should cause an exception.
+  After all, such recursive builds should have been done on `C++` level, not json level.
+  */
+  config.addOption({"some"s, "option"s}, "", &notUsed);
+  AD_EXPECT_THROW_WITH_MESSAGE(config.addSubManager({"some"s}),
+                               ::testing::ContainsRegex(R"('\[some\]')"));
+
+  /*
+  Trying to add a sub manager, who contains the entire path of an already added
+  config option as prefix, should cause an exception.
+  After all, this would imply, that the sub manger is part of this option. Which is not
+  supported at the moment.
+  */
+  AD_EXPECT_THROW_WITH_MESSAGE(config.addSubManager({"some"s, "option"s, "manager"s}),
+                               ::testing::ContainsRegex(R"('\[some\]\[option\]\[manager\]')"));
+
+  /*
+  Trying to add a sub manager, whose path is the path of an already added config option, should
+  cause an exception.
+  */
+  AD_EXPECT_THROW_WITH_MESSAGE(config.addSubManager({"some"s, "option"s}),
+                               ::testing::ContainsRegex(R"('\[some\]\[option\]')"));
 }
 
 TEST(ConfigManagerTest, ParseConfigNoSubManager) {

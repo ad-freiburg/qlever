@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -23,6 +21,7 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -147,12 +146,55 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
                                          vectorOfKeysForJsonToString(path));
   }
 
-  // Is there already a configuration option with the same identifier at
-  // the same location?
-  if (configurationOptions_.contains(createJsonPointerString(path))) {
-    throw ConfigManagerOptionPathAlreadyinUseException(
-        vectorOfKeysForJsonToString(path), printConfigurationDoc(true));
-  }
+  /*
+  Checks for path collisions, with already added config options and sub
+  managers.
+
+  The following cases are not allowed:
+  - Same path. Makes it impossible for the user to later identify the correct
+  one.
+  - Prefix of the path of an already exiting option/manager. This would mean,
+  that the old config option, or sub manager, are part of the new config option,
+  or sub manager from the view of json. This is not allowed for a new config
+  option, because there is currently no support to put config options, or sub
+  managers, inside config options. For a new sub manager it's not allowed,
+  because nesting should be done on the `C++` level, not on the json path level.
+  - The path of an already exiting option/manager is a prefix of the new path.
+  The reasons, why it's not allowed, are basically the same.
+  */
+  std::ranges::for_each(
+      std::views::keys(configurationOptions_),
+      [&path, this](std::string_view alreadyAddedPath) {
+        const std::string pathAsJsonPointerString =
+            createJsonPointerString(path);
+
+        // Is there already a path, that is the exact same?
+        if (pathAsJsonPointerString == alreadyAddedPath) {
+          throw std::runtime_error(
+              absl::StrCat("Key error: There is already a configuration "
+                           "option, or sub manager, with the path '",
+                           vectorOfKeysForJsonToString(path), "'\n",
+                           printConfigurationDoc(true), "\n"));
+        }
+
+        // Is the new path a prefix of the path of an already
+        // existing path?
+        if (alreadyAddedPath.starts_with(pathAsJsonPointerString)) {
+          throw std::runtime_error(absl::StrCat(
+              "Key error: The given path '", vectorOfKeysForJsonToString(path),
+              "' is a prefix of a path, '", alreadyAddedPath,
+              "', that is already in use.", "'\n", printConfigurationDoc(true),
+              "\n"));
+        }
+
+        // Is the already existing path a prefix of the new path?
+        if (pathAsJsonPointerString.starts_with(alreadyAddedPath)) {
+          throw std::runtime_error(absl::StrCat(
+              "Key error: The given path '", vectorOfKeysForJsonToString(path),
+              "' has an already in use path '", alreadyAddedPath,
+              "' as an prefix.", "'\n", printConfigurationDoc(true), "\n"));
+        }
+      });
 }
 
 // ____________________________________________________________________________
