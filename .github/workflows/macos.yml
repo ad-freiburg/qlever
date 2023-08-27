@@ -90,3 +90,15 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh;
+
+    - name: Upload ServerMain binary as artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: ServerMain
+        path: ${{github.workspace}}/build/ServerMain
+
+    - name: Upload IndexBuilderMain binary as artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: IndexBuilderMain
+        path: ${{github.workspace}}/build/IndexBuilderMain
