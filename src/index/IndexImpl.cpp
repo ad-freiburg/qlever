@@ -1097,6 +1097,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     turtleParserIntegerOverflowBehavior_ =
         TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
   } else {
+    // TODO This can maybe be replaced with a validator, if the logging of the
+    // information is not needed.
     AD_CONTRACT_CHECK(std::find(allModes.begin(), allModes.end(),
                                 parserIntegerOverflowBehavior) ==
                       allModes.end());
