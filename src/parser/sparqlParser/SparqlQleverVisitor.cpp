@@ -97,10 +97,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
     iriView.remove_prefix(geoPrefixRtree.size());
     AD_CONTRACT_CHECK(iriView.ends_with('>'));
     iriView.remove_suffix(1);
-    /*if (iriView == "boundingBoxContains") {
+    if (iriView == "boundingBoxContains") {
       checkNumArgs("geoRtree:", iriView, 2);
       return std::make_unique<ContainsExpression>(std::move(argList[0]), std::move(argList[1]));
-    }*/
+    }
   }
 
   reportNotSupported(ctx, "Function \"" + iri + "\" is");

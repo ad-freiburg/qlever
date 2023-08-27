@@ -13,9 +13,9 @@ using namespace std::literals;
 
 class BoundingBoxType {
  public:
-  boxGeo value{};
+  Rtree::BoundingBox value{};
 
-  explicit BoundingBoxType(boxGeo boundingBox) {
+  explicit BoundingBoxType(Rtree::BoundingBox boundingBox) {
     this->value = boundingBox;
   }
 };
@@ -126,7 +126,7 @@ namespace sparqlExpression {
             Rtree rtree = context->_qec.getIndex().getRtree();
             multiBoxGeo treeResults = rtree.SearchTree(boundingBox_->value, "./rtree_build");
 
-            for (rTreeValue item : treeResults) {
+            for (RTreeValue item : treeResults) {
                 long long id = item.id;
                 resultIds.insert(id);
             }

@@ -124,7 +124,7 @@ endif()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.76 COMPONENTS iostreams serialization program_options REQUIRED)
+find_package(Boost 1.74 COMPONENTS iostreams serialization program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 
@@ -231,7 +231,6 @@ set(USE_OPENMP OFF CACHE BOOL "Don't use OPENMP as default" FORCE)
 add_subdirectory(third_party/stxxl EXCLUDE_FROM_ALL)
 
 # apply STXXL CXXFLAGS
-
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
 include_directories(SYSTEM ${STXXL_INCLUDE_DIRS})
 

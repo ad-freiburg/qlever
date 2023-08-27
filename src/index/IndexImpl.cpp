@@ -393,13 +393,13 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
     auto internalVocabularyAction = [&wordWriter, &convertOfs](const auto& word, const auto& index) {
       wordWriter.push(word.data(), word.size());
-      std::optional<boxGeo> boundingBox = Rtree::ConvertWordToRtreeEntry(word);
+      std::optional<Rtree::BoundingBox> boundingBox = Rtree::ConvertWordToRtreeEntry(word);
       if (boundingBox) {
         Rtree::SaveEntry(boundingBox.value(), index, convertOfs);
       }
     };
     auto externalVocabularyAction = [&convertOfs](const auto& word, const auto& index) {
-      std::optional<boxGeo> boundingBox = Rtree::ConvertWordToRtreeEntry(word);
+      std::optional<Rtree::BoundingBox> boundingBox = Rtree::ConvertWordToRtreeEntry(word);
       if (boundingBox) {
         Rtree::SaveEntry(boundingBox.value(), index, convertOfs);
       }
