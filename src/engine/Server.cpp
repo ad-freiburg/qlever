@@ -4,8 +4,6 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "engine/Server.h"
-
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -13,6 +11,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
+#include "engine/Server.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -27,8 +26,7 @@ Server::Server(unsigned short port, int numThreads,
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
-      allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-                     maxMem.getBytes()),
+      allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
                  [this](size_t numBytesToAllocate) {
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                                    numBytesToAllocate /

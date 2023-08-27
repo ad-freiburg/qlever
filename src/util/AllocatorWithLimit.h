@@ -100,10 +100,9 @@ class AllocationMemoryLeftThreadsafe {
 // setup a shared Allocation state. For the usage see documentation of the
 // Limited Allocator class
 inline detail::AllocationMemoryLeftThreadsafe
-makeAllocationMemoryLeftThreadsafeObject(size_t n) {
+makeAllocationMemoryLeftThreadsafeObject(MemorySize n) {
   return detail::AllocationMemoryLeftThreadsafe{std::make_shared<
-      ad_utility::Synchronized<detail::AllocationMemoryLeft, SpinLock>>(
-      MemorySize::bytes(n))};
+      ad_utility::Synchronized<detail::AllocationMemoryLeft, SpinLock>>(n)};
 }
 
 /// A Noop lambda that will be used as a template default parameter
@@ -230,7 +229,8 @@ class AllocatorWithLimit {
 // Return a new allocator with the specified limit.
 template <typename T>
 AllocatorWithLimit<T> makeAllocatorWithLimit(size_t limit) {
-  return AllocatorWithLimit<T>{makeAllocationMemoryLeftThreadsafeObject(limit)};
+  return AllocatorWithLimit<T>{
+      makeAllocationMemoryLeftThreadsafeObject(MemorySize::bytes(limit))};
 }
 
 // Return a new allocator with the maximal possible limit.

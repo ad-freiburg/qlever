@@ -968,7 +968,7 @@ TEST(IdTable, shrinkToFit) {
   // necessary to change them if one of our used standard libraries has a
   // different behavior, but this is unlikely due to ABI stability goals between
   // library versions.
-  auto memory = ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000);
+  auto memory = ad_utility::makeAllocationMemoryLeftThreadsafeObject(1_kB);
   IdTable table{2, ad_utility::AllocatorWithLimit<Id>{memory}};
   using namespace ad_utility::memory_literals;
   ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 1_kB);

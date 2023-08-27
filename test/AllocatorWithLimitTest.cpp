@@ -10,11 +10,12 @@
 
 using ad_utility::AllocatorWithLimit;
 using ad_utility::makeAllocationMemoryLeftThreadsafeObject;
+using namespace ad_utility::memory_literals;
 
 using V = std::vector<int, AllocatorWithLimit<int>>;
 TEST(AllocatorWithLimit, initial) {
   AllocatorWithLimit<int> all{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(2'000'000)};
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(2_MB)};
   static_assert(sizeof(int) == 4);
   [[maybe_unused]] auto ptr = all.allocate(250'000);
   ASSERT_EQ(all.numFreeBytes(), 1'000'000);
@@ -31,7 +32,7 @@ TEST(AllocatorWithLimit, initial) {
 }
 
 TEST(AllocatorWithLimit, vector) {
-  V v{AllocatorWithLimit<int>(makeAllocationMemoryLeftThreadsafeObject(18))};
+  V v{AllocatorWithLimit<int>(makeAllocationMemoryLeftThreadsafeObject(18_B))};
   v.push_back(5);  // allocate 4 bytes -> works
   ASSERT_EQ(v.size(), 1u);
   ASSERT_EQ(v[0], 5);
@@ -47,7 +48,7 @@ TEST(AllocatorWithLimit, vector) {
 
 TEST(AllocatorWithLimit, vectorShared) {
   AllocatorWithLimit<int> allocator(
-      makeAllocationMemoryLeftThreadsafeObject(18));
+      makeAllocationMemoryLeftThreadsafeObject(18_B));
   V v{allocator};
   V u{allocator};
   v.push_back(5);  // allocate 4 bytes -> works
@@ -62,9 +63,9 @@ TEST(AllocatorWithLimit, vectorShared) {
 
 TEST(AllocatorWithLimit, equality) {
   AllocatorWithLimit<int> a1{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(20)};
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(20_B)};
   AllocatorWithLimit<int> a2{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(20)};
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(20_B)};
 
   ASSERT_EQ(a1, a1);
   ASSERT_EQ(a2, a2);

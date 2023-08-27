@@ -445,8 +445,9 @@ auto testNotComparableHelper(T leftValue, U rightValue,
                              source_location l = source_location::current()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
+  using namespace ad_utility::memory_literals;
   ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1_kB)};
   VariableToColumnMap map;
   LocalVocab localVocab;
   IdTable table{alloc};

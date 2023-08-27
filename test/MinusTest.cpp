@@ -13,8 +13,9 @@
 
 namespace {
 auto table(size_t cols) {
+  using namespace ad_utility::memory_literals;
   ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1'000'000)};
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1_MB)};
   return IdTable(cols, std::move(alloc));
 }
 auto V = ad_utility::testing::VocabId;

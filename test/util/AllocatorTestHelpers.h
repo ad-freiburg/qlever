@@ -6,13 +6,14 @@
 
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/MemorySize/MemorySize.h"
 
 namespace ad_utility::testing {
 // Create an unlimited allocator.
 inline ad_utility::AllocatorWithLimit<Id>& makeAllocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
+          MemorySize::bytes(std::numeric_limits<size_t>::max()))};
   return a;
 }
 }  // namespace ad_utility::testing
