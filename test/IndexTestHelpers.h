@@ -136,6 +136,8 @@ inline QueryExecutionContext* getQec(
         std::make_unique<QueryExecutionContext>(
             *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{},
             *webSocketManager_, queryRegistry_->uniqueId());
+    std::unique_ptr<boost::asio::io_context> ioContext_ =
+        std::make_unique<boost::asio::io_context>();
   };
 
   using Key = std::tuple<std::optional<string>, bool, bool, bool, size_t>;
@@ -147,21 +149,22 @@ inline QueryExecutionContext* getQec(
   if (!contextMap.contains(key)) {
     std::string testIndexBasename =
         "_staticGlobalTestIndex" + std::to_string(contextMap.size());
-    contextMap.emplace(
-        key, Context{TypeErasedCleanup{[testIndexBasename]() {
-                       for (const std::string& indexFilename :
-                            getAllIndexFilenames(testIndexBasename)) {
-                         // Don't log when a file can't be deleted,
-                         // because the logging might already be
-                         // destroyed.
-                         ad_utility::deleteFile(indexFilename, false);
-                       }
-                     }},
-                     std::make_unique<Index>(makeTestIndex(
-                         testIndexBasename, turtleInput, loadAllPermutations,
-                         usePatterns, usePrefixCompression,
-                         blocksizePermutationsInBytes)),
-                     std::make_unique<QueryResultCache>()});
+    auto context = Context{
+        TypeErasedCleanup{[testIndexBasename]() {
+          for (const std::string& indexFilename :
+               getAllIndexFilenames(testIndexBasename)) {
+            // Don't log when a file can't be deleted,
+            // because the logging might already be
+            // destroyed.
+            ad_utility::deleteFile(indexFilename, false);
+          }
+        }},
+        std::make_unique<Index>(makeTestIndex(
+            testIndexBasename, turtleInput, loadAllPermutations, usePatterns,
+            usePrefixCompression, blocksizePermutationsInBytes)),
+        std::make_unique<QueryResultCache>()};
+    context.webSocketManager_->setIoContext(*context.ioContext_);
+    contextMap.emplace(key, std::move(context));
   }
   return contextMap.at(key).qec_.get();
 }

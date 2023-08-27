@@ -57,7 +57,7 @@ TEST(OperationTest, getResultOnlyCached) {
 
   // We can even use the `onlyReadFromCache` case to upgrade a non-pinned
   // cache-entry to a pinned cache entry
-  QueryExecutionContext qecCopy{*qec};
+  QueryExecutionContext& qecCopy = *getQec();
   qecCopy._pinResult = true;
   NeutralElementOperation n4{&qecCopy};
   EXPECT_EQ(n4.getResult(true, true), result);
