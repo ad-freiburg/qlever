@@ -4,8 +4,6 @@
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./IndexImpl.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -13,6 +11,7 @@
 #include <optional>
 #include <unordered_map>
 
+#include "./IndexImpl.h"
 #include "CompilationInfo.h"
 #include "absl/strings/str_join.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -977,19 +976,32 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 
   // TODO Write a description.
   std::string lang;
-  const ad_utility::ConfigOption& langOption = config.addOption(
-      {"locale"s, "language"s}, "", &lang, LOCALE_DEFAULT_LANG);
+  decltype(auto) langOption = config.addOption({"locale"s, "language"s}, "",
+                                               &lang, LOCALE_DEFAULT_LANG);
 
   // TODO Write a description.
   std::string country;
-  const ad_utility::ConfigOption& countryOption = config.addOption(
+  decltype(auto) countryOption = config.addOption(
       {"locale"s, "country"s}, "", &country, LOCALE_DEFAULT_COUNTRY);
 
   // TODO Write a description.
   bool ignorePunctuation;
-  const ad_utility::ConfigOption& ignorePunctuationOption =
+  decltype(auto) ignorePunctuationOption =
       config.addOption({"locale"s, "ignore-punctuation"s}, "",
                        &ignorePunctuation, LOCALE_DEFAULT_IGNORE_PUNCTUATION);
+
+  // Validator for the entries under `locale`. Either they all must use the
+  // default value, or all must be set at runtime.
+  config.addOptionValidator(
+      [](const ad_utility::ConfigOption& langOpt,
+         const ad_utility::ConfigOption& countryOpt,
+         const ad_utility::ConfigOption& ignorePunctuationOpt) {
+        return langOpt.wasSetAtRuntime() == countryOpt.wasSetAtRuntime() &&
+               countryOpt.wasSetAtRuntime() ==
+                   ignorePunctuationOpt.wasSetAtRuntime();
+      },
+      "All three options under 'locale' must be set, or none of them.",
+      langOption, countryOption, ignorePunctuationOption);
 
   // TODO Write a description.
   config.addOption("ascii-prefixes-only", "", &onlyAsciiTurtlePrefixes_,
@@ -1029,14 +1041,6 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
    * compile time for ICU and will always be UTF-8 so it is not part of the
    * locale setting.
    */
-
-  if (langOption.wasSetAtRuntime() != countryOption.wasSetAtRuntime() ||
-      countryOption.wasSetAtRuntime() !=
-          ignorePunctuationOption.wasSetAtRuntime()) {
-    throw std::runtime_error(absl::StrCat(
-        "All three options under 'locale' must be set, or none of them.",
-        config.printConfigurationDoc(true)));
-  }
 
   LOG(INFO) << "You specified \"locale = " << lang << "_" << country << "\" "
             << "and \"ignore-punctuation = " << ignorePunctuation << "\""
