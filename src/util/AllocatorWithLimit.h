@@ -41,15 +41,17 @@ class AllocationExceedsLimitException : public std::exception {
 // objects at the same time (hence the wrapper class and the synchronization
 // below).
 class AllocationMemoryLeft {
-  size_t free_;  // the number of free bytes
-                 // throw AllocationExceedsLimitException on failure
+  // Remaining free memory.
+  MemorySize free_;
+
  public:
-  AllocationMemoryLeft(size_t n) : free_(n) {}
+  AllocationMemoryLeft(MemorySize n) : free_(n) {}
 
   // Called before memory is allocated.
-  bool decrease_if_enough_left_or_return_false(size_t n) noexcept {
+  bool decrease_if_enough_left_or_return_false(MemorySize n) noexcept {
     if (n <= free_) {
-      free_ -= n;
+      // TODO Shorten, once `MemorySize` gets subtraction support.
+      free_ = MemorySize::bytes(free_.getBytes() - n.getBytes());
       return true;
     } else {
       return false;
@@ -57,16 +59,18 @@ class AllocationMemoryLeft {
   }
 
   // Called before memory is allocated.
-  void decrease_if_enough_left_or_throw(size_t n) {
+  void decrease_if_enough_left_or_throw(MemorySize n) {
     if (!decrease_if_enough_left_or_return_false(n)) {
-      throw AllocationExceedsLimitException{MemorySize::bytes(n),
-                                            MemorySize::bytes(free_)};
+      throw AllocationExceedsLimitException{n, free_};
     }
   }
 
   // Called after memory is deallocated.
-  void increase(size_t n) { free_ += n; }
-  [[nodiscard]] size_t numFreeBytes() const { return free_; }
+  void increase(MemorySize n) {
+    // TODO Shorten, once `MemorySize` gets addition support.
+    free_ = MemorySize::bytes(free_.getBytes() + n.getBytes());
+  }
+  [[nodiscard]] MemorySize amountMemoryLeft() const { return free_; }
 };
 
 /*
@@ -98,7 +102,8 @@ class AllocationMemoryLeftThreadsafe {
 inline detail::AllocationMemoryLeftThreadsafe
 makeAllocationMemoryLeftThreadsafeObject(size_t n) {
   return detail::AllocationMemoryLeftThreadsafe{std::make_shared<
-      ad_utility::Synchronized<detail::AllocationMemoryLeft, SpinLock>>(n)};
+      ad_utility::Synchronized<detail::AllocationMemoryLeft, SpinLock>>(
+      MemorySize::bytes(n))};
 }
 
 /// A Noop lambda that will be used as a template default parameter
@@ -177,10 +182,11 @@ class AllocatorWithLimit {
     const auto bytesNeeded = n * sizeof(T);
     const bool wasEnoughLeft =
         memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
-            bytesNeeded);
+            MemorySize::bytes(bytesNeeded));
     if (!wasEnoughLeft) {
       clearOnAllocation_(n);
-      memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(bytesNeeded);
+      memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(
+          MemorySize::bytes(bytesNeeded));
     }
     // the actual allocation
     return allocator_.allocate(n);
@@ -191,7 +197,7 @@ class AllocatorWithLimit {
     // free the memory
     allocator_.deallocate(p, n);
     // Update the amount of memory left.
-    memoryLeft_.ptr()->wlock()->increase(n * sizeof(T));
+    memoryLeft_.ptr()->wlock()->increase(MemorySize::bytes(n * sizeof(T)));
   }
 
   /// Return the number of bytes, that this allocator and all of its copies
@@ -202,7 +208,8 @@ class AllocatorWithLimit {
     return const_cast<AllocatorWithLimit*>(this)
         ->memoryLeft_.ptr()
         ->wlock()
-        ->numFreeBytes();
+        ->amountMemoryLeft()
+        .getBytes();
   }
 
   const auto& getMemoryLeft() const { return memoryLeft_; }
