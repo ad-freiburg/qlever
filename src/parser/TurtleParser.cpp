@@ -819,25 +819,22 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
 template <typename Tokenizer_T>
 void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
   fileBuffer_.open(filename);
-  auto batch = fileBuffer_.getNextBlock();
-  if (!batch) {
-    throw std::runtime_error("Could not read from the input file or stream");
+  if (auto batch = fileBuffer_.getNextBlock(); !batch) {
+    LOG(WARN) << "Empty input to the TURTLE parser, is this what you intended?"
+              << std::endl;
+    batch.emplace();
+  } else {
+    TurtleStringParser<Tokenizer_T> declarationParser{};
+    declarationParser.setInputStream(std::move(*batch));
+    while (declarationParser.parseDirectiveManually()) {
+    }
+    this->prefixMap_ = std::move(declarationParser.getPrefixMap());
+    auto remainder = declarationParser.getUnparsedRemainder();
+    remainingBatchFromInitialization_.clear();
+    remainingBatchFromInitialization_.reserve(remainder.size());
+    std::copy(remainder.begin(), remainder.end(),
+              std::back_inserter(remainingBatchFromInitialization_));
   }
-  TurtleStringParser<Tokenizer_T> declarationParser{};
-  declarationParser.setInputStream(std::move(*batch));
-  while (declarationParser.parseDirectiveManually()) {
-  }
-  this->prefixMap_ = std::move(declarationParser.getPrefixMap());
-  auto remainder = declarationParser.getUnparsedRemainder();
-  if (remainder.empty()) {
-    declarationParser.raiseManually(
-        "The prologue (prefix/base declarations) seems to be longer than the "
-        "parser's block size. This should never happen, please report this");
-  }
-  remainingBatchFromInitialization_.clear();
-  remainingBatchFromInitialization_.reserve(remainder.size());
-  std::copy(remainder.begin(), remainder.end(),
-            std::back_inserter(remainingBatchFromInitialization_));
 
   // This lambda fetches all the unparsed blocks of triples from the input
   // file and feeds them to the parallel parsers.
