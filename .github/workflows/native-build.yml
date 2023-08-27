@@ -116,13 +116,13 @@ jobs:
     - name: Upload ServerMain binary as artifact
       uses: actions/upload-artifact@v2
       with:
-        name: ${{github.workspace}}/build/ServerMain
-        path: ServerMain
+        name: ServerMain
+        path: ${{github.workspace}}/build/ServerMain
       if: matrix.compiler == 'gcc' && matrix.compiler-version == 13
 
     - name: Upload IndexBuilderMain binary as artifact
       uses: actions/upload-artifact@v2
       with:
-        name: ${{github.workspace}}/build/IndexBuilderMain
-        path: IndexBuilderMain
+        name: IndexBuilderMain
+        path: ${{github.workspace}}/build/IndexBuilderMain
       if: matrix.compiler == 'gcc' && matrix.compiler-version == 13
