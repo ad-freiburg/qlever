@@ -18,8 +18,8 @@ TEST(AllocatorWithLimit, initial) {
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(2_MB)};
   static_assert(sizeof(int) == 4);
   [[maybe_unused]] auto ptr = all.allocate(250'000);
-  ASSERT_EQ(all.numFreeBytes(), 1'000'000);
-  ASSERT_EQ(std::as_const(all).numFreeBytes(), 1'000'000);
+  ASSERT_EQ(all.amountMemoryLeft(), 1_MB);
+  ASSERT_EQ(std::as_const(all).amountMemoryLeft(), 1_MB);
   try {
     all.allocate(500'000);
     FAIL() << "Should have thrown";

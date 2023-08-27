@@ -201,14 +201,13 @@ class AllocatorWithLimit {
 
   /// Return the number of bytes, that this allocator and all of its copies
   /// currently have available
-  [[nodiscard]] size_t numFreeBytes() const {
+  [[nodiscard]] MemorySize amountMemoryLeft() const {
     // casting is ok, because the actual numFreeBytes call
     // is const, and everything else is locking
     return const_cast<AllocatorWithLimit*>(this)
         ->memoryLeft_.ptr()
         ->wlock()
-        ->amountMemoryLeft()
-        .getBytes();
+        ->amountMemoryLeft();
   }
 
   const auto& getMemoryLeft() const { return memoryLeft_; }
@@ -228,15 +227,15 @@ class AllocatorWithLimit {
 
 // Return a new allocator with the specified limit.
 template <typename T>
-AllocatorWithLimit<T> makeAllocatorWithLimit(size_t limit) {
-  return AllocatorWithLimit<T>{
-      makeAllocationMemoryLeftThreadsafeObject(MemorySize::bytes(limit))};
+AllocatorWithLimit<T> makeAllocatorWithLimit(MemorySize limit) {
+  return AllocatorWithLimit<T>{makeAllocationMemoryLeftThreadsafeObject(limit)};
 }
 
 // Return a new allocator with the maximal possible limit.
 template <typename T>
 AllocatorWithLimit<T> makeUnlimitedAllocator() {
-  return makeAllocatorWithLimit<T>(std::numeric_limits<size_t>::max());
+  return makeAllocatorWithLimit<T>(
+      MemorySize::bytes(std::numeric_limits<size_t>::max()));
 }
 
 }  // namespace ad_utility
