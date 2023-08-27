@@ -190,6 +190,8 @@ class AllocatorWithLimit {
     // the actual allocation
     return allocator_.allocate(n);
   }
+  // Overload for use with `MemorySize`.
+  T* allocate(MemorySize n) { return allocate(n.getBytes()); }
 
   // An allocator must have a function "deallocate" with exactly this signature.
   void deallocate(T* p, std::size_t n) {
@@ -198,6 +200,8 @@ class AllocatorWithLimit {
     // Update the amount of memory left.
     memoryLeft_.ptr()->wlock()->increase(MemorySize::bytes(n * sizeof(T)));
   }
+  // Overload for use with `MemorySize`.
+  void deallocate(T* p, MemorySize n) { deallocate(p, n.getBytes()); }
 
   /// Return the number of bytes, that this allocator and all of its copies
   /// currently have available
