@@ -21,8 +21,7 @@ class Minus : public Operation {
 
  public:
   Minus(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> left,
-        std::shared_ptr<QueryExecutionTree> right,
-        std::vector<std::array<ColumnIndex, 2>> matchedColumns);
+        std::shared_ptr<QueryExecutionTree> right);
 
   // Uninitialized Object for testing the computeMinus method
   struct OnlyForTestingTag {};
@@ -48,7 +47,7 @@ class Minus : public Operation {
   float getMultiplicity(size_t col) override;
 
  private:
-  size_t getSizeEstimateBeforeLimit() override;
+  uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
   size_t getCostEstimate() override;

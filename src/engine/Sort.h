@@ -37,7 +37,7 @@ class Sort : public Operation {
   }
 
  private:
-  size_t getSizeEstimateBeforeLimit() override {
+  uint64_t getSizeEstimateBeforeLimit() override {
     return subtree_->getSizeEstimate();
   }
 
@@ -50,8 +50,8 @@ class Sort : public Operation {
 
   virtual size_t getCostEstimate() override {
     size_t size = getSizeEstimateBeforeLimit();
-    size_t logSize = std::max(
-        size_t(2), static_cast<size_t>(logb(static_cast<double>(size))));
+    size_t logSize =
+        size < 4 ? 2 : static_cast<size_t>(logb(static_cast<double>(size)));
     size_t nlogn = size * logSize;
     size_t subcost = subtree_->getCostEstimate();
     return nlogn + subcost;

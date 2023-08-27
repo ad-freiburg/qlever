@@ -88,7 +88,7 @@ class Operation {
   virtual void setTextLimit(size_t limit) = 0;
   virtual size_t getCostEstimate() = 0;
 
-  virtual size_t getSizeEstimate() final {
+  virtual uint64_t getSizeEstimate() final {
     if (_limit._limit.has_value()) {
       return std::min(_limit._limit.value(), getSizeEstimateBeforeLimit());
     } else {
@@ -97,7 +97,7 @@ class Operation {
   }
 
  private:
-  virtual size_t getSizeEstimateBeforeLimit() = 0;
+  virtual uint64_t getSizeEstimateBeforeLimit() = 0;
 
  public:
   virtual float getMultiplicity(size_t col) = 0;
@@ -116,10 +116,22 @@ class Operation {
     return _runtimeInfoWholeQuery;
   }
 
-  // Get the result for the subtree rooted at this element.
-  // Use existing results if they are already available, otherwise
-  // trigger computation.
-  shared_ptr<const ResultTable> getResult(bool isRoot = false);
+  /**
+   * @brief Get the result for the subtree rooted at this element. Use existing
+   * results if they are already available, otherwise trigger computation.
+   * Always returns a non-null pointer, except for when `onlyReadFromCache` is
+   * true (see below).
+   * @param isRoot Has be set to `true` iff this is the root operation of a
+   * complete query to obtain the expected behavior wrt cache pinning and
+   * runtime information in error cases.
+   * @param onlyReadFromCache If set to true the result is only returned if it
+   * can be read from the cache without any computation. If the result is not in
+   * the cache, `nullptr` will be returned.
+   * @return A shared pointer to the result. May only be `nullptr` if
+   * `onlyReadFromCache` is true.
+   */
+  shared_ptr<const ResultTable> getResult(bool isRoot = false,
+                                          bool onlyReadFromCache = false);
 
   // Use the same timeout timer for all children of an operation (= query plan
   // rooted at that operation). As soon as one child times out, the whole
@@ -149,21 +161,6 @@ class Operation {
   // its children), return the variable that is the primary sort key. Else
   // return nullopt.
   virtual std::optional<Variable> getPrimarySortKeyVariable() const final;
-
-  // `IndexScan`s with only one variable are often executed already during
-  // query planning. The result is stored in the cache as well as in the
-  // `IndexScan` object itself. This interface allows to ask an Operation
-  // explicitly whether it stores such a precomputed result. In this case we can
-  // call `computeResult` in O(1) to obtain the precomputed result. This has two
-  // advantages over implicitly reading the result from the cache:
-  // 1. The result might be not in the cache anymore, but the IndexScan still
-  //    stores it.
-  // 2. We can preserve the information, whether the computation was read from
-  //    the cache or actually computed during the query planning or processing.
-  virtual std::optional<std::shared_ptr<const ResultTable>>
-  getPrecomputedResultFromQueryPlanning() {
-    return std::nullopt;
-  }
 
   // Direct access to the `computeResult()` method. This should be only used for
   // testing, otherwise the `getResult()` function should be used which also
@@ -256,20 +253,18 @@ class Operation {
   // children were evaluated nevertheless. For an example usage of this feature
   // see `GroupBy.cpp`
   virtual void updateRuntimeInformationWhenOptimizedOut(
-      std::vector<RuntimeInformation> children);
+      std::vector<RuntimeInformation> children,
+      RuntimeInformation::Status status =
+          RuntimeInformation::Status::optimizedOut);
 
   // Use the already stored runtime info for the children,
   // but set all of them to `optimizedOut`. This can be used, when a complete
   // tree was optimized out. For example when one child of a JOIN operation is
   // empty, the result will be empty, and it is not necessary to evaluate the
   // other child.
-  virtual void updateRuntimeInformationWhenOptimizedOut();
-
-  // Some operations (currently `IndexScans` with only one variable) are
-  // computed during query planning. Get the total time spent in such
-  // computations for this operation and all its descendants. This can be used
-  // to correct the time statistics for the query planning and execution.
-  size_t getTotalExecutionTimeDuringQueryPlanning() const;
+  virtual void updateRuntimeInformationWhenOptimizedOut(
+      RuntimeInformation::Status status =
+          RuntimeInformation::Status::optimizedOut);
 
  private:
   // Create the runtime information in case the evaluation of this operation has

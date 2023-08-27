@@ -96,7 +96,7 @@ const string& mediaTypeForFilename(std::string_view filename) {
       return filename.substr(pos);
     }
   }();
-  auto extLower = ad_utility::getLowercaseUtf8(ext);
+  auto extLower = ad_utility::utf8ToLower(ext);
   const auto& map = detail::getSuffixToMediaTypeStringMap();
   if (map.contains(extLower)) {
     return map.at(extLower);
@@ -122,7 +122,7 @@ const std::string& getType(MediaType t) {
 
 // ________________________________________________________________________
 std::optional<MediaType> toMediaType(std::string_view s) {
-  auto lowercase = ad_utility::getLowercaseUtf8(s);
+  auto lowercase = ad_utility::utf8ToLower(s);
   const auto& m = detail::getStringToMediaTypeMap();
   if (m.contains(lowercase)) {
     return m.at(lowercase);
@@ -130,6 +130,16 @@ std::optional<MediaType> toMediaType(std::string_view s) {
     return std::nullopt;
   }
 }
+
+// For use with `ThrowingErrorListener` in `parseAcceptHeader`.
+class InvalidMediaTypeParseException : public ParseException {
+ public:
+  explicit InvalidMediaTypeParseException(
+      std::string_view cause,
+      std::optional<ExceptionMetadata> metadata = std::nullopt)
+      : ParseException{cause, std::move(metadata),
+                       "Parsing of media type failed:"} {}
+};
 
 // ___________________________________________________________________________
 std::vector<MediaTypeWithQuality> parseAcceptHeader(
@@ -140,7 +150,8 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
     antlr4::ANTLRInputStream stream{input};
     AcceptHeaderLexer lexer{&stream};
     antlr4::CommonTokenStream tokens{&lexer};
-    ThrowingErrorListener errorListener_{};
+    antlr_utility::ThrowingErrorListener<InvalidMediaTypeParseException>
+        errorListener_{};
 
    public:
     AcceptHeaderParser parser{&tokens};

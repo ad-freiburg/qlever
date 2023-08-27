@@ -15,7 +15,6 @@
 #include "parser/ConstructClause.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
-#include "parser/ParseException.h"
 #include "parser/PropertyPath.h"
 #include "parser/SelectClause.h"
 #include "parser/TripleComponent.h"
@@ -31,6 +30,7 @@
 #include "util/Generator.h"
 #include "util/HashMap.h"
 #include "util/OverloadCallOperator.h"
+#include "util/ParseException.h"
 #include "util/StringUtils.h"
 
 using std::string;

@@ -50,7 +50,7 @@ class DummyOperation : public Operation {
   virtual size_t getCostEstimate() override { return 10; }
 
  private:
-  virtual size_t getSizeEstimateBeforeLimit() override { return 10; }
+  virtual uint64_t getSizeEstimateBeforeLimit() override { return 10; }
 
  public:
   virtual float getMultiplicity(size_t col) override {
@@ -245,7 +245,7 @@ TEST(HasPredicateScan, subtreeS) {
   CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
   CompactVectorOfStrings<Id> patterns(patternsSrc);
 
-  Index index;
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   QueryResultCache cache{};
   ad_utility::websocket::WebSocketManager webSocketManager{};
   ad_utility::websocket::common::QueryRegistry queryRegistry{};

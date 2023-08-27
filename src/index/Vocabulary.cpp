@@ -273,8 +273,6 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::getRangesForDatatypes() const
     -> ad_utility::HashMap<Datatypes, std::pair<IndexType, IndexType>> {
   ad_utility::HashMap<Datatypes, std::pair<IndexType, IndexType>> result;
-  result[Datatypes::Float] = prefix_range(VALUE_FLOAT_PREFIX);
-  result[Datatypes::Date] = prefix_range(VALUE_DATE_PREFIX);
   result[Datatypes::Literal] = prefix_range("\"");
   result[Datatypes::Iri] = prefix_range("<");
 

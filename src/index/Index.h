@@ -12,7 +12,7 @@
 
 #include "global/Id.h"
 #include "index/CompressedString.h"
-#include "index/Permutations.h"
+#include "index/Permutation.h"
 #include "index/StringSortComparator.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
@@ -21,13 +21,6 @@
 class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
-
-/**
- * Used as a template argument to the `createFromFile` method, when we do not
- * yet know which tokenizer specialization of the `TurtleParser` we are going
- * to use.
- */
-class TurtleParserAuto {};
 
 class Index {
  private:
@@ -40,8 +33,8 @@ class Index {
   // statistics (number of triples, distinct number of subjects, etc.) for which
   // the value differs when you also consider the added triples.
   struct NumNormalAndInternal {
-    size_t normal_;
-    size_t internal_;
+    size_t normal_{};
+    size_t internal_{};
     size_t normalAndInternal_() const { return normal_ + internal_; }
     bool operator==(const NumNormalAndInternal&) const = default;
   };
@@ -67,7 +60,7 @@ class Index {
   /// Allow move construction, which is mostly used in unit tests.
   Index(Index&&) noexcept;
 
-  Index();
+  explicit Index(ad_utility::AllocatorWithLimit<Id> allocator);
   ~Index();
 
   // Get underlying access to the Pimpl where necessary.
@@ -76,8 +69,6 @@ class Index {
   // Create an index from a file. Will write vocabulary and on-disk index data.
   // NOTE: The index can not directly be used after this call, but has to be
   // setup by `createFromOnDiskIndex` after this call.
-  // TODO<joka921> Make the parser options also a plain enum!
-  template <class Parser>
   void createFromFile(const std::string& filename);
 
   void addPatternsToExistingIndex();
@@ -234,6 +225,8 @@ class Index {
   uint64_t& stxxlMemoryInBytes();
   const uint64_t& stxxlMemoryInBytes() const;
 
+  uint64_t& blocksizePermutationsInBytes();
+
   void setOnDiskBase(const std::string& onDiskBase);
 
   void setSettingsFile(const std::string& filename);
@@ -266,35 +259,9 @@ class Index {
   vector<float> getMultiplicities(Permutation::Enum p) const;
 
   /**
-   * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
-   * permutation for a specific key value of X
-   * @tparam Permutation The permutations Index::POS()... have different types
-   * @param key The key (in Id space) for which to search, e.g. fixed value for
-   * O in OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of Index class).
-   */
-  void scan(Id key, IdTable* result, Permutation::Enum p,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
-  /**
-   * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
-   * permutation for a specific key value of X
-   * @tparam Permutation The permutations Index::POS()... have different types
-   * @param key The key (as a raw string that is yet to be transformed to index
-   * space) for which to search, e.g. fixed value for O in OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of Index class).
-   */
-  void scan(const TripleComponent& key, IdTable* result,
-            const Permutation::Enum& p,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
-  /**
-   * @brief Perform a scan for two keys i.e. retrieve all Z from the XYZ
-   * permutation for specific key values of X and Y.
+   * @brief Perform a scan for one or two keys i.e. retrieve all YZ from the XYZ
+   * permutation for specific key values of X if `col1String` is `nullopt`, and
+   * all Z for the given XY if `col1String` is specified.
    * @tparam Permutation The permutations Index::POS()... have different types
    * @param col0String The first key (as a raw string that is yet to be
    * transformed to index space) for which to search, e.g. fixed value for O in
@@ -306,11 +273,21 @@ class Index {
    * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
    * members of Index class).
    */
-  // _____________________________________________________________________________
-  void scan(const TripleComponent& col0String,
-            const TripleComponent& col1String, IdTable* result,
-            Permutation::Enum p,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+  IdTable scan(
+      const TripleComponent& col0String,
+      std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+      Permutation::Enum p,
+      ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+  // Similar to the overload of `scan` above, but the keys are specified as IDs.
+  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+               ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+  // Similar to the previous overload of `scan`, but only get the exact size of
+  // the scan result.
+  size_t getResultSizeOfScan(const TripleComponent& col0String,
+                             const TripleComponent& col1String,
+                             const Permutation::Enum& permutation) const;
 
   // Get access to the implementation. This should be used rarely as it
   // requires including the rather expensive `IndexImpl.h` header

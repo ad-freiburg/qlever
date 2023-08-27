@@ -92,5 +92,12 @@ TEST(Exception, AD_FAIL) {
 TEST(Excpetion, AD_EXPENSIVE_CHECK) {
 #if (!defined(NDEBUG) || defined(AD_ENABLE_EXPENSIVE_CHECKS))
   ASSERT_ANY_THROW(AD_EXPENSIVE_CHECK(3 > 5));
+#else
+  ASSERT_NO_THROW(AD_EXPENSIVE_CHECK(3 > 5));
 #endif
+  if (ad_utility::areExpensiveChecksEnabled) {
+    ASSERT_ANY_THROW(AD_EXPENSIVE_CHECK(3 > 5));
+  } else {
+    ASSERT_NO_THROW(AD_EXPENSIVE_CHECK(3 > 5));
+  }
 }

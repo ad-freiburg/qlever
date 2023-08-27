@@ -6,38 +6,37 @@
 
 #include "./IndexImpl.h"
 
-#include <CompilationInfo.h>
-#include <absl/strings/str_join.h>
-#include <index/PrefixHeuristic.h>
-#include <index/TriplesView.h>
-#include <index/VocabularyGenerator.h>
-#include <parser/ParallelParseBuffer.h>
-#include <util/BatchedPipeline.h>
-#include <util/CompressionUsingZstd/ZstdWrapper.h>
-#include <util/HashMap.h>
-#include <util/Serializer/FileSerializer.h>
-#include <util/TupleHelpers.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <future>
 #include <optional>
-#include <stxxl/algorithm>
-#include <stxxl/map>
 #include <unordered_map>
+
+#include "CompilationInfo.h"
+#include "absl/strings/str_join.h"
+#include "index/IndexFormatVersion.h"
+#include "index/PrefixHeuristic.h"
+#include "index/TriplesView.h"
+#include "index/VocabularyGenerator.h"
+#include "parser/ParallelParseBuffer.h"
+#include "util/BatchedPipeline.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/HashMap.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/TupleHelpers.h"
 
 using std::array;
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl() = default;
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
+    : allocator_{std::move(allocator)} {};
 
 // _____________________________________________________________________________
-template <class Parser>
 IndexBuilderDataAsPsoSorter IndexImpl::createIdTriplesAndVocab(
-    const string& ntFile) {
+    std::shared_ptr<TurtleParserBase> parser) {
   auto indexBuilderData =
-      passFileForVocabulary<Parser>(ntFile, numTriplesPerBatch_);
+      passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
   totalVocabularySize_ = indexBuilderData.vocabularyMetaData_.numWordsTotal_;
@@ -77,29 +76,33 @@ void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
 }
 
 // _____________________________________________________________________________
-template <class Parser>
 void IndexImpl::createFromFile(const string& filename) {
+  LOG(INFO) << "Processing input triples from " << filename << " ..."
+            << std::endl;
   string indexFilename = onDiskBase_ + ".index";
 
-  readIndexBuilderSettingsFromFile<Parser>();
+  readIndexBuilderSettingsFromFile();
 
-  IndexBuilderDataAsPsoSorter indexBuilderData;
-  if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
+  auto setTokenizer = [this,
+                       &filename]<template <typename> typename ParserTemplate>()
+      -> std::unique_ptr<TurtleParserBase> {
     if (onlyAsciiTurtlePrefixes_) {
-      LOG(DEBUG) << "Using the CTRE library for tokenization" << std::endl;
-      indexBuilderData =
-          createIdTriplesAndVocab<TurtleParallelParser<TokenizerCtre>>(
-              filename);
+      return std::make_unique<ParserTemplate<TokenizerCtre>>(filename);
     } else {
-      LOG(DEBUG) << "Using the Google RE2 library for tokenization"
-                 << std::endl;
-      indexBuilderData =
-          createIdTriplesAndVocab<TurtleParallelParser<Tokenizer>>(filename);
+      return std::make_unique<ParserTemplate<Tokenizer>>(filename);
     }
+  };
 
-  } else {
-    indexBuilderData = createIdTriplesAndVocab<Parser>(filename);
-  }
+  std::unique_ptr<TurtleParserBase> parser = [&setTokenizer, this]() {
+    if (useParallelParser_) {
+      return setTokenizer.template operator()<TurtleParallelParser>();
+    } else {
+      return setTokenizer.template operator()<TurtleStreamParser>();
+    }
+  }();
+
+  IndexBuilderDataAsPsoSorter indexBuilderData =
+      createIdTriplesAndVocab(std::move(parser));
 
   // If we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
@@ -117,7 +120,7 @@ void IndexImpl::createFromFile(const string& filename) {
   LOG(INFO) << "Writing compressed vocabulary to disk ..." << std::endl;
 
   vocab_.buildCodebookForPrefixCompression(prefixes);
-  auto wordReader = vocab_.makeUncompressedDiskIterator(vocabFile);
+  auto wordReader = RdfsVocabulary::makeUncompressedDiskIterator(vocabFile);
   auto wordWriter = vocab_.makeCompressedWordWriter(vocabFileTmp);
   for (const auto& word : wordReader) {
     wordWriter.push(word);
@@ -227,21 +230,9 @@ void IndexImpl::createFromFile(const string& filename) {
   LOG(INFO) << "Index build completed" << std::endl;
 }
 
-// Explicit instantiations.
-template void IndexImpl::createFromFile<TurtleStreamParser<Tokenizer>>(
-    const string& filename);
-template void IndexImpl::createFromFile<TurtleMmapParser<Tokenizer>>(
-    const string& filename);
-template void IndexImpl::createFromFile<TurtleParserAuto>(
-    const string& filename);
-
 // _____________________________________________________________________________
-template <class Parser>
 IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
-    const string& filename, size_t linesPerPartial) {
-  LOG(INFO) << "Processing input triples from " << filename << " ..."
-            << std::endl;
-  auto parser = std::make_shared<Parser>(filename);
+    std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial) {
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   std::unique_ptr<TripleVec> idTriples(new TripleVec());
@@ -306,9 +297,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                     << std::endl;
       }
 
-      if constexpr (requires(Parser p) { p.printAndResetQueueStatistics(); }) {
-        parser->printAndResetQueueStatistics();
-      }
+      parser->printAndResetQueueStatistics();
     }
 
     // localWriter.finish();
@@ -496,8 +485,10 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   }
 
-  CompressedRelationWriter writer1{ad_utility::File(fileName1, "w")};
-  CompressedRelationWriter writer2{ad_utility::File(fileName2, "w")};
+  CompressedRelationWriter writer1{ad_utility::File(fileName1, "w"),
+                                   blocksizePermutationInBytes_};
+  CompressedRelationWriter writer2{ad_utility::File(fileName2, "w"),
+                                   blocksizePermutationInBytes_};
 
   // Iterate over the vector and identify "relation" boundaries, where a
   // "relation" is the sequence of sortedTriples equal first component. For PSO
@@ -585,16 +576,16 @@ IndexImpl::createPermutations(auto&& sortedTriples, const Permutation& p1,
                               const Permutation& p2,
                               auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl(
-      onDiskBase_ + ".index" + p1._fileSuffix,
-      onDiskBase_ + ".index" + p2._fileSuffix, AD_FWD(sortedTriples),
-      p1._keyOrder[0], p1._keyOrder[1], p1._keyOrder[2],
+      onDiskBase_ + ".index" + p1.fileSuffix_,
+      onDiskBase_ + ".index" + p2.fileSuffix_, AD_FWD(sortedTriples),
+      p1.keyOrder_[0], p1.keyOrder_[1], p1.keyOrder_[2],
       AD_FWD(perTripleCallbacks)...);
 
   if (metaData.has_value()) {
     auto& mdv = metaData.value();
-    LOG(INFO) << "Statistics for " << p1._readableName << ": "
+    LOG(INFO) << "Statistics for " << p1.readableName_ << ": "
               << mdv.first.statistics() << std::endl;
-    LOG(INFO) << "Statistics for " << p2._readableName << ": "
+    LOG(INFO) << "Statistics for " << p2.readableName_ << ": "
               << mdv.second.statistics() << std::endl;
   }
 
@@ -609,17 +600,17 @@ void IndexImpl::createPermutationPair(auto&& sortedTriples,
   auto metaData = createPermutations(AD_FWD(sortedTriples), p1, p2,
                                      AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
-  // NOTE: When `setKbName` was called, it set the name of pso_._meta,
-  // pso_._meta, ... which however are not used during index building.
+  // NOTE: When `setKbName` was called, it set the name of pso_.meta_,
+  // pso_.meta_, ... which however are not used during index building.
   // `getKbName` simple reads one of these names.
   metaData.value().first.setName(getKbName());
   metaData.value().second.setName(getKbName());
   if (metaData) {
-    LOG(INFO) << "Writing meta data for " << p1._readableName << " and "
-              << p2._readableName << " ..." << std::endl;
-    ad_utility::File f1(onDiskBase_ + ".index" + p1._fileSuffix, "r+");
+    LOG(INFO) << "Writing meta data for " << p1.readableName_ << " and "
+              << p2.readableName_ << " ..." << std::endl;
+    ad_utility::File f1(onDiskBase_ + ".index" + p1.fileSuffix_, "r+");
     metaData.value().first.appendToFile(&f1);
-    ad_utility::File f2(onDiskBase_ + ".index" + p2._fileSuffix, "r+");
+    ad_utility::File f2(onDiskBase_ + ".index" + p2.fileSuffix_, "r+");
     metaData.value().second.appendToFile(&f2);
   }
 }
@@ -784,7 +775,8 @@ void IndexImpl::setPrefixCompression(bool compressed) {
 void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
   auto configuration = configurationJson_;
-  configuration["git_hash"] = std::string(qlever::version::GitHash);
+  configuration["git-hash"] = std::string(qlever::version::GitHash);
+  configuration["index-format-version"] = qlever::indexFormatVersion;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
@@ -793,14 +785,50 @@ void IndexImpl::writeConfiguration() const {
 void IndexImpl::readConfiguration() {
   auto f = ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE);
   f >> configurationJson_;
-  if (configurationJson_.find("git_hash") != configurationJson_.end()) {
+  if (configurationJson_.find("git-hash") != configurationJson_.end()) {
     LOG(INFO) << "The git hash used to build this index was "
-              << std::string(configurationJson_["git_hash"]).substr(0, 6)
+              << std::string(configurationJson_["git-hash"]).substr(0, 6)
               << std::endl;
   } else {
     LOG(INFO) << "The index was built before git commit hashes were stored in "
                  "the index meta data"
               << std::endl;
+  }
+
+  if (configurationJson_.find("index-format-version") !=
+      configurationJson_.end()) {
+    auto indexFormatVersion = static_cast<qlever::IndexFormatVersion>(
+        configurationJson_["index-format-version"]);
+    const auto& currentVersion = qlever::indexFormatVersion;
+    if (indexFormatVersion != currentVersion) {
+      if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
+        LOG(ERROR) << "The version of QLever you are using is too old for this "
+                      "index. Please use a version of QLever that is "
+                      "compatible with this index"
+                      " (PR = "
+                   << indexFormatVersion.prNumber_ << ", Date = "
+                   << indexFormatVersion.date_.toStringAndType().first << ")."
+                   << std::endl;
+      } else {
+        LOG(ERROR) << "The index is too old for this version of QLever. "
+                      "We recommend that you rebuild the index and start the "
+                      "server with the current master. Alternatively start the "
+                      "engine with a version of QLever that is compatible with "
+                      "this index (PR = "
+                   << indexFormatVersion.prNumber_ << ", Date = "
+                   << indexFormatVersion.date_.toStringAndType().first << ")."
+                   << std::endl;
+      }
+      throw std::runtime_error{
+          "Incompatible index format, see log message for details"};
+    }
+  } else {
+    LOG(ERROR) << "This index was built before versioning was introduced for "
+                  "QLever's index format. Please rebuild your index using the "
+                  "current version of QLever."
+               << std::endl;
+    throw std::runtime_error{
+        "Incompatible index format, see log message for details"};
   }
 
   if (configurationJson_.find("prefixes") != configurationJson_.end()) {
@@ -876,12 +904,12 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     TurtleTriple&& triple) const {
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result._triple;
-  resultTriple[0] = std::move(triple._subject);
-  resultTriple[1] = std::move(triple._predicate);
+  resultTriple[0] = std::move(triple.subject_);
+  resultTriple[1] = std::move(triple.predicate_);
 
   // If the object of the triple can be directly folded into an ID, do so. Note
   // that the actual folding is done by the `TripleComponent`.
-  std::optional<Id> idIfNotString = triple._object.toValueIdIfNotString();
+  std::optional<Id> idIfNotString = triple.object_.toValueIdIfNotString();
 
   // TODO<joka921> The following statement could be simplified by a helper
   // function "optionalCast";
@@ -889,7 +917,7 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     resultTriple[2] = idIfNotString.value();
   } else {
     // `toRdfLiteral` handles literals as well as IRIs correctly.
-    resultTriple[2] = std::move(triple._object).toRdfLiteral();
+    resultTriple[2] = std::move(triple.object_).toRdfLiteral();
   }
 
   for (size_t i = 0; i < 3; ++i) {
@@ -913,7 +941,6 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
 }
 
 // ___________________________________________________________________________
-template <class Parser>
 void IndexImpl::readIndexBuilderSettingsFromFile() {
   json j;  // if we have no settings, we still have to initialize some default
            // values
@@ -977,20 +1004,17 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     configurationJson_["languages-internal"] = j["languages-internal"];
   }
   if (j.count("ascii-prefixes-only")) {
-    if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
-      bool v{j["ascii-prefixes-only"]};
-      if (v) {
-        LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
-        onlyAsciiTurtlePrefixes_ = true;
-      } else {
-        onlyAsciiTurtlePrefixes_ = false;
-      }
-    } else {
-      LOG(WARN) << "You specified the ascii-prefixes-only but a parser that is "
-                   "not the Turtle stream parser. This means that this setting "
-                   "is ignored."
-                << std::endl;
-    }
+    onlyAsciiTurtlePrefixes_ = static_cast<bool>(j["ascii-prefixes-only"]);
+  }
+  if (onlyAsciiTurtlePrefixes_) {
+    LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
+  }
+
+  if (j.count("parallel-parsing")) {
+    useParallelParser_ = static_cast<bool>(j["parallel-parsing"]);
+  }
+  if (useParallelParser_) {
+    LOG(INFO) << WARNING_PARALLEL_PARSING << std::endl;
   }
 
   if (j.count("num-triples-per-batch")) {
@@ -1124,7 +1148,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
 
 // ____________________________________________________________________________
 IndexImpl::NumNormalAndInternal IndexImpl::numTriples() const {
-  return {numTriplesNormal_, PSO()._meta.getNofTriples() - numTriplesNormal_};
+  return {numTriplesNormal_, PSO().meta_.getNofTriples() - numTriplesNormal_};
 }
 
 // ____________________________________________________________________________
@@ -1231,11 +1255,7 @@ size_t IndexImpl::getCardinality(const TripleComponent& comp,
 // TODO<joka921> Once we have an overview over the folding this logic should
 // probably not be in the index class.
 std::optional<string> IndexImpl::idToOptionalString(VocabIndex id) const {
-  auto result = vocab_.indexToOptionalString(id);
-  if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
-    result = ad_utility::convertIndexWordToValueLiteral(result.value());
-  }
-  return result;
+  return vocab_.indexToOptionalString(id);
 }
 
 // ___________________________________________________________________________
@@ -1261,8 +1281,8 @@ vector<float> IndexImpl::getMultiplicities(
   const auto& p = getPermutation(permutation);
   std::optional<Id> keyId = key.toValueId(getVocab());
   vector<float> res;
-  if (keyId.has_value() && p._meta.col0IdExists(keyId.value())) {
-    auto metaData = p._meta.getMetaData(keyId.value());
+  if (keyId.has_value() && p.meta_.col0IdExists(keyId.value())) {
+    auto metaData = p.meta_.getMetaData(keyId.value());
     res.push_back(metaData.getCol1Multiplicity());
     res.push_back(metaData.getCol2Multiplicity());
   } else {
@@ -1281,48 +1301,43 @@ vector<float> IndexImpl::getMultiplicities(
       numTriples / numDistinctSubjects().normalAndInternal_(),
       numTriples / numDistinctPredicates().normalAndInternal_(),
       numTriples / numDistinctObjects().normalAndInternal_()};
-  return {m[p._keyOrder[0]], m[p._keyOrder[1]], m[p._keyOrder[2]]};
-}
-
-// ___________________________________________________________________
-void IndexImpl::scan(Id key, IdTable* result, const Permutation::Enum& p,
-                     ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  getPermutation(p).scan(key, result, std::move(timer));
-}
-
-// ___________________________________________________________________
-void IndexImpl::scan(const TripleComponent& key, IdTable* result,
-                     Permutation::Enum permutation,
-                     ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  const auto& p = getPermutation(permutation);
-  LOG(DEBUG) << "Performing " << p._readableName
-             << " scan for full list for: " << key << "\n";
-
-  if (std::optional<Id> id = key.toValueId(getVocab()); id.has_value()) {
-    LOG(TRACE) << "Successfully got key ID.\n";
-    scan(id.value(), result, permutation, std::move(timer));
-  }
-  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
+  return {m[p.keyOrder_[0]], m[p.keyOrder_[1]], m[p.keyOrder_[2]]};
 }
 
 // _____________________________________________________________________________
-void IndexImpl::scan(const TripleComponent& col0String,
-                     const TripleComponent& col1String, IdTable* result,
-                     const Permutation::Enum& permutation,
-                     ad_utility::SharedConcurrentTimeoutTimer timer) const {
+IdTable IndexImpl::scan(
+    const TripleComponent& col0String,
+    std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+    const Permutation::Enum& permutation,
+    ad_utility::SharedConcurrentTimeoutTimer timer) const {
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
-  std::optional<Id> col1Id = col1String.toValueId(getVocab());
-  const auto& p = getPermutation(permutation);
-  if (!col0Id.has_value() || !col1Id.has_value()) {
-    LOG(DEBUG) << "Key " << col0String << " or key " << col1String
-               << " were not found in the vocabulary \n";
-    return;
+  std::optional<Id> col1Id =
+      col1String.has_value() ? col1String.value().get().toValueId(getVocab())
+                             : std::nullopt;
+  if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
+    size_t numColumns = col1String.has_value() ? 1 : 2;
+    return IdTable{numColumns, allocator_};
   }
+  return scan(col0Id.value(), col1Id, permutation, timer);
+}
+// _____________________________________________________________________________
+IdTable IndexImpl::scan(Id col0Id, std::optional<Id> col1Id,
+                        Permutation::Enum p,
+                        ad_utility::SharedConcurrentTimeoutTimer timer) const {
+  return getPermutation(p).scan(col0Id, col1Id, timer);
+}
 
-  LOG(DEBUG) << "Performing " << p._readableName << "  scan of relation "
-             << col0String << " with fixed subject: " << col1String << "...\n";
-
-  p.scan(col0Id.value(), col1Id.value(), result, timer);
+// _____________________________________________________________________________
+size_t IndexImpl::getResultSizeOfScan(
+    const TripleComponent& col0, const TripleComponent& col1,
+    const Permutation::Enum& permutation) const {
+  std::optional<Id> col0Id = col0.toValueId(getVocab());
+  std::optional<Id> col1Id = col1.toValueId(getVocab());
+  if (!col0Id.has_value() || !col1Id.has_value()) {
+    return 0;
+  }
+  const Permutation& p = getPermutation(permutation);
+  return p.getResultSizeOfScan(col0Id.value(), col1Id.value());
 }
 
 // _____________________________________________________________________________

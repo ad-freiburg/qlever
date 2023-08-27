@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach  (johannes.kalmbach@gmail.com)
 
-#include "./Operation.h"
+#include "engine/Operation.h"
 
 #include "engine/QueryExecutionTree.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -58,9 +58,9 @@ void Operation::recursivelySetTimeoutTimer(
   }
 }
 
-// Get the result for the subtree rooted at this element. Use existing results
-// if they are already available, otherwise trigger computation.
-shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
+// ________________________________________________________________________
+shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
+                                                   bool onlyReadFromCache) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
@@ -154,18 +154,15 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       return CacheValue{std::move(result), getRuntimeInfo()};
     };
 
-    // If the result was already computed during the query planning, then
-    // we can simply return that result, but only if we don't have to pin
-    // it to the cache.
-    if (!pinResult) {
-      auto precomputedResult = getPrecomputedResultFromQueryPlanning();
-      if (precomputedResult.has_value()) {
-        return std::move(precomputedResult.value());
-      }
-    }
+    auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda,
+                                                        onlyReadFromCache)
+                              : cache.computeOnce(cacheKey, computeLambda,
+                                                  onlyReadFromCache);
 
-    auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda)
-                              : cache.computeOnce(cacheKey, computeLambda);
+    if (result._resultPointer == nullptr) {
+      AD_CORRECTNESS_CHECK(onlyReadFromCache);
+      return nullptr;
+    }
 
     updateRuntimeInformationOnSuccess(result, timer.msecs());
     auto resultNumRows = result._resultPointer->resultTable()->size();
@@ -219,7 +216,7 @@ void Operation::updateRuntimeInformationOnSuccess(
   _runtimeInfo.numRows_ = resultTable.size();
   _runtimeInfo.cacheStatus_ = cacheStatus;
 
-  _runtimeInfo.status_ = RuntimeInformation::Status::completed;
+  _runtimeInfo.status_ = RuntimeInformation::Status::fullyMaterialized;
 
   bool wasCached = cacheStatus != ad_utility::CacheStatus::computed;
   // If the result was read from the cache, then we need the additional
@@ -263,21 +260,18 @@ void Operation::updateRuntimeInformationOnSuccess(
 
 // _____________________________________________________________________________
 void Operation::updateRuntimeInformationWhenOptimizedOut(
-    std::vector<RuntimeInformation> children) {
-  _runtimeInfo.status_ = RuntimeInformation::Status::optimizedOut;
+    std::vector<RuntimeInformation> children,
+    RuntimeInformation::Status status) {
+  _runtimeInfo.status_ = status;
   _runtimeInfo.children_ = std::move(children);
   // This operation was optimized out, so its operation time is zero.
   // The operation time is computed as
   // `totalTime_ - #sum of childrens' total time#` in `getOperationTime()`.
   // To set it to zero we thus have to set the `totalTime_` to that sum.
-  _runtimeInfo.totalTime_ = 0;
-  std::ranges::for_each(
-      _runtimeInfo.children_, [this](const RuntimeInformation& child) {
-        if (child.status_ !=
-            RuntimeInformation::Status::completedDuringQueryPlanning) {
-          _runtimeInfo.totalTime_ += child.totalTime_;
-        }
-      });
+  auto timesOfChildren = _runtimeInfo.children_ |
+                         std::views::transform(&RuntimeInformation::totalTime_);
+  _runtimeInfo.totalTime_ =
+      std::accumulate(timesOfChildren.begin(), timesOfChildren.end(), 0.0);
 
   if (_executionContext) {
     _executionContext->signalQueryUpdate(_runtimeInfo);
@@ -285,13 +279,11 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
 }
 
 // _____________________________________________________________________________
-void Operation::updateRuntimeInformationWhenOptimizedOut() {
-  auto setStatus = [](RuntimeInformation& rti, const auto& self) -> void {
-    if (rti.status_ ==
-        RuntimeInformation::Status::completedDuringQueryPlanning) {
-      return;
-    }
-    rti.status_ = RuntimeInformation::Status::optimizedOut;
+void Operation::updateRuntimeInformationWhenOptimizedOut(
+    RuntimeInformation::Status status) {
+  auto setStatus = [&status](RuntimeInformation& rti,
+                             const auto& self) -> void {
+    rti.status_ = status;
     rti.totalTime_ = 0;
     for (auto& child : rti.children_) {
       self(child, self);
@@ -317,21 +309,6 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
 
 // __________________________________________________________________
 void Operation::createRuntimeInfoFromEstimates() {
-  // Handle the case that the result was already computed during the query
-  // planning. In this case, `getResult()` was already called on this object and
-  // the runtime information is already correct.
-  if (getPrecomputedResultFromQueryPlanning().has_value()) {
-    return;
-  }
-  // TODO<joka921> If the above stuff works, this can be removed.
-  auto statusFromPrecomputedResult =
-      [this]() -> std::optional<RuntimeInformation::Status> {
-    if (getPrecomputedResultFromQueryPlanning().has_value()) {
-      return _runtimeInfo.status_;
-    } else {
-      return std::nullopt;
-    }
-  }();
   _runtimeInfo.setColumnNames(getInternallyVisibleVariableColumns());
   const auto numCols = getResultWidth();
   _runtimeInfo.numCols_ = numCols;
@@ -364,12 +341,6 @@ void Operation::createRuntimeInfoFromEstimates() {
     _runtimeInfo.numRows_ = rtiFromCache.numRows_;
     _runtimeInfo.originalTotalTime_ = rtiFromCache.totalTime_;
     _runtimeInfo.originalOperationTime_ = rtiFromCache.getOperationTime();
-  }
-  if (statusFromPrecomputedResult ==
-      RuntimeInformation::Status::completedDuringQueryPlanning) {
-    _runtimeInfo.status_ =
-        RuntimeInformation::Status::completedDuringQueryPlanning;
-    _runtimeInfo.cacheStatus_ = ad_utility::CacheStatus::computed;
   }
 
   if (_executionContext) {
@@ -445,17 +416,4 @@ const vector<ColumnIndex>& Operation::getResultSortedOn() const {
     _resultSortedColumns = resultSortedOn();
   }
   return _resultSortedColumns.value();
-}
-
-// ___________________________________________________________________________
-size_t Operation::getTotalExecutionTimeDuringQueryPlanning() const {
-  size_t totalTime = 0;
-  forAllDescendants([&totalTime](const QueryExecutionTree* tree) {
-    const auto& rti = tree->getRootOperation()->_runtimeInfo;
-    if (rti.status_ ==
-        RuntimeInformation::Status::completedDuringQueryPlanning) {
-      totalTime += rti.getOperationTime();
-    }
-  });
-  return totalTime;
 }

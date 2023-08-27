@@ -216,7 +216,8 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     _type = OPTIONAL_JOIN;
   } else if constexpr (std::is_same_v<Op, MultiColumnJoin>) {
     _type = MULTICOLUMN_JOIN;
-  } else if constexpr (std::is_same_v<Op, ValuesForTesting>) {
+  } else if constexpr (std::is_same_v<Op, ValuesForTesting> ||
+                       std::is_same_v<Op, ValuesForTestingNoKnownEmptyResult>) {
     _type = DUMMY;
   } else {
     static_assert(ad_utility::alwaysFalse<Op>,
@@ -251,6 +252,8 @@ template void QueryExecutionTree::setOperation(
     std::shared_ptr<MultiColumnJoin>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<ValuesForTesting>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<ValuesForTestingNoKnownEmptyResult>);
 
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
@@ -270,8 +273,26 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
 }
 
+// _____________________________________________________________________________
+std::vector<std::array<ColumnIndex, 2>> QueryExecutionTree::getJoinColumns(
+    const QueryExecutionTree& qetA, const QueryExecutionTree& qetB) {
+  std::vector<std::array<ColumnIndex, 2>> jcs;
+  const auto& aVarCols = qetA.getVariableColumns();
+  const auto& bVarCols = qetB.getVariableColumns();
+  for (const auto& aVarCol : aVarCols) {
+    auto it = bVarCols.find(aVarCol.first);
+    if (it != bVarCols.end()) {
+      jcs.push_back(std::array<ColumnIndex, 2>{
+          {aVarCol.second.columnIndex_, it->second.columnIndex_}});
+    }
+  }
+
+  std::ranges::sort(jcs, std::ranges::lexicographical_compare);
+  return jcs;
+}
+
 // ____________________________________________________________________________
-std::array<std::shared_ptr<QueryExecutionTree>, 2>
+std::pair<std::shared_ptr<QueryExecutionTree>, shared_ptr<QueryExecutionTree>>
 QueryExecutionTree::createSortedTrees(
     std::shared_ptr<QueryExecutionTree> qetA,
     std::shared_ptr<QueryExecutionTree> qetB,
@@ -284,6 +305,18 @@ QueryExecutionTree::createSortedTrees(
 
   return {createSortedTree(std::move(qetA), sortColumnsA),
           createSortedTree(std::move(qetB), sortColumnsB)};
+}
+
+// ____________________________________________________________________________
+auto QueryExecutionTree::getSortedSubtreesAndJoinColumns(
+    std::shared_ptr<QueryExecutionTree> qetA,
+    std::shared_ptr<QueryExecutionTree> qetB) -> SortedTreesAndJoinColumns {
+  AD_CORRECTNESS_CHECK(qetA && qetB);
+  auto joinCols = getJoinColumns(*qetA, *qetB);
+  AD_CONTRACT_CHECK(!joinCols.empty());
+  auto [leftSorted, rightSorted] =
+      createSortedTrees(std::move(qetA), std::move(qetB), joinCols);
+  return {std::move(leftSorted), std::move(rightSorted), std::move(joinCols)};
 }
 
 // _____________________________________________________________________________

@@ -715,11 +715,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
       seeds.push_back(std::move(plan));
     };
 
-    auto addIndexScan = [&](IndexScan::ScanType type) {
-      pushPlan(makeSubtreePlan<IndexScan>(_qec, type, node._triple));
+    auto addIndexScan = [&](Permutation::Enum permutation) {
+      pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, node._triple));
     };
 
-    using enum IndexScan::ScanType;
+    using enum Permutation::Enum;
 
     if (node._cvar.has_value()) {
       seeds.push_back(getTextLeafPlan(node));
@@ -768,8 +768,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         Variable filterVar = generateUniqueVarName();
         auto scanTriple = node._triple;
         scanTriple._o = filterVar;
-        auto scanTree =
-            makeExecutionTree<IndexScan>(_qec, PSO_FREE_S, scanTriple);
+        auto scanTree = makeExecutionTree<IndexScan>(_qec, PSO, scanTriple);
         // The simplest way to set up the filtering expression is to use the
         // parser.
         std::string filterString =
@@ -782,35 +781,35 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                                             std::move(filter.expression_));
         pushPlan(std::move(plan));
       } else if (isVariable(node._triple._s)) {
-        addIndexScan(POS_BOUND_O);
+        addIndexScan(POS);
       } else if (isVariable(node._triple._o)) {
-        addIndexScan(PSO_BOUND_S);
+        addIndexScan(PSO);
       } else {
         AD_CONTRACT_CHECK(isVariable(node._triple._p));
-        addIndexScan(SOP_BOUND_O);
+        addIndexScan(SOP);
       }
     } else if (node._variables.size() == 2) {
       // Add plans for both possible scan directions.
       if (!isVariable(node._triple._p._iri)) {
-        addIndexScan(PSO_FREE_S);
-        addIndexScan(POS_FREE_O);
+        addIndexScan(PSO);
+        addIndexScan(POS);
       } else if (!isVariable(node._triple._s)) {
-        addIndexScan(SPO_FREE_P);
-        addIndexScan(SOP_FREE_O);
+        addIndexScan(SPO);
+        addIndexScan(SOP);
       } else if (!isVariable(node._triple._o)) {
-        addIndexScan(OSP_FREE_S);
-        addIndexScan(OPS_FREE_P);
+        addIndexScan(OSP);
+        addIndexScan(OPS);
       }
     } else {
       // The current triple contains three distinct variables.
       if (!_qec || _qec->getIndex().hasAllPermutations()) {
         // Add plans for all six permutations.
-        addIndexScan(FULL_INDEX_SCAN_OPS);
-        addIndexScan(FULL_INDEX_SCAN_OSP);
-        addIndexScan(FULL_INDEX_SCAN_PSO);
-        addIndexScan(FULL_INDEX_SCAN_POS);
-        addIndexScan(FULL_INDEX_SCAN_SPO);
-        addIndexScan(FULL_INDEX_SCAN_SOP);
+        addIndexScan(OPS);
+        addIndexScan(OSP);
+        addIndexScan(PSO);
+        addIndexScan(POS);
+        addIndexScan(SPO);
+        addIndexScan(SOP);
       } else {
         AD_THROW(
             "With only 2 permutations registered (no -a option), "
@@ -1231,50 +1230,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
 }
 
 // _____________________________________________________________________________
-QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
-    const SubtreePlan& a, const SubtreePlan& b) const {
-  // The second tree must be the OPTIONAL tree, OPTIONAL joins are not
-  // symmetric.
-  AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL &&
-                    b.type == SubtreePlan::OPTIONAL);
-  return makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet,
-                                       getJoinColumns(a, b));
-}
-
-// _____________________________________________________________________________
-QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
-                                              const SubtreePlan& b) const {
-  AD_CONTRACT_CHECK(a.type != SubtreePlan::MINUS &&
-                    b.type == SubtreePlan::MINUS);
-  std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
-
-  // TODO: We could probably also accept permutations of the join columns
-  // as the order of a here and then permute the join columns to match the
-  // sorted columns of a or b (whichever is larger).
-  auto [qetA, qetB] =
-      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
-  return makeSubtreePlan<Minus>(_qec, qetA, qetB, jcs);
-}
-
-// _____________________________________________________________________________
-QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
-    const SubtreePlan& a, const SubtreePlan& b) const {
-  if (Join::isFullScanDummy(a._qet) || Join::isFullScanDummy(b._qet)) {
-    throw std::runtime_error(
-        "Trying a JOIN between two full scan dummys, this"
-        "will be handled by the calling code automatically");
-  }
-
-  // TODO: We could probably also accept permutations of the join columns
-  // as the order of a here and then permute the join columns to match the
-  // sorted columns of a or b (whichever is larger).
-  std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
-  auto [qetA, qetB] =
-      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
-  return makeSubtreePlan<MultiColumnJoin>(_qec, qetA, qetB, jcs);
-}
-
-// _____________________________________________________________________________
 string QueryPlanner::TripleGraph::asString() const {
   std::ostringstream os;
   for (size_t i = 0; i < _adjLists.size(); ++i) {
@@ -1350,17 +1305,8 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
 std::vector<std::array<ColumnIndex, 2>> QueryPlanner::getJoinColumns(
     const QueryPlanner::SubtreePlan& a,
     const QueryPlanner::SubtreePlan& b) const {
-  std::vector<std::array<ColumnIndex, 2>> jcs;
-  const auto& aVarCols = a._qet->getVariableColumns();
-  const auto& bVarCols = b._qet->getVariableColumns();
-  for (const auto& aVarCol : aVarCols) {
-    auto itt = bVarCols.find(aVarCol.first);
-    if (itt != bVarCols.end()) {
-      jcs.push_back(std::array<ColumnIndex, 2>{
-          {aVarCol.second.columnIndex_, itt->second.columnIndex_}});
-    }
-  }
-  return jcs;
+  AD_CORRECTNESS_CHECK(a._qet && b._qet);
+  return QueryExecutionTree::getJoinColumns(*a._qet, *b._qet);
 }
 
 // _____________________________________________________________________________
@@ -1706,7 +1652,7 @@ string stripAndLowercaseLiteral(std::string_view lit) {
                        lit.ends_with('"'));
   lit.remove_prefix(1);
   lit.remove_suffix(1);
-  return ad_utility::getLowercaseUtf8(lit);
+  return ad_utility::utf8ToLower(lit);
 }
 }  // namespace
 
@@ -1962,21 +1908,21 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     // is made non optional earlier. If a minus occurs after an optional
     // further into the query that optional should be resolved by now.
     AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL);
-    return std::vector{minus(a, b)};
+    return {makeSubtreePlan<Minus>(_qec, a._qet, b._qet)};
   }
 
   // OPTIONAL JOINS are not symmetric!
   AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL);
   if (b.type == SubtreePlan::OPTIONAL) {
     // Join the two optional columns using an optional join
-    return std::vector{optionalJoin(a, b)};
+    return {makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet)};
   }
 
   if (jcs.size() >= 2) {
     // If there are two or more join columns and we are not using the
     // TwoColumnJoin (the if part before this comment), use a multiColumnJoin.
     try {
-      SubtreePlan plan = multiColumnJoin(a, b);
+      SubtreePlan plan = makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet);
       mergeSubtreePlanIds(plan, a, b);
       return {plan};
     } catch (const std::exception& e) {

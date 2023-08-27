@@ -182,7 +182,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     for (const auto& alias : selectClause().getAliases()) {
       if (ad_utility::contains(selectClause().getVisibleVariables(),
                                alias._target)) {
-        throw InvalidQueryException(absl::StrCat(
+        throw InvalidSparqlQueryException(absl::StrCat(
             "The target ", alias._target.name(),
             " of an AS clause was already used in the query body."));
       }
@@ -190,7 +190,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       // The variable was already added to the selected variables while
       // parsing the alias, thus it should appear exactly once
       if (variable_counts[alias._target] > 1) {
-        throw InvalidQueryException(absl::StrCat(
+        throw InvalidSparqlQueryException(absl::StrCat(
             "The target ", alias._target.name(),
             " of an AS clause was already used before in the SELECT clause."));
       }
@@ -217,7 +217,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       }
 
       if (selectClause().isAsterisk()) {
-        throw InvalidQueryException(
+        throw InvalidSparqlQueryException(
             "GROUP BY is not allowed when all variables are selected via "
             "SELECT *");
       }
@@ -238,7 +238,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           } else {
             auto unaggregatedVars =
                 alias._expression.getUnaggregatedVariables(groupVariables);
-            throw InvalidQueryException(absl::StrCat(
+            throw InvalidSparqlQueryException(absl::StrCat(
                 "The expression \"", alias._expression.getDescriptor(),
                 "\" does not aggregate ",
                 absl::StrJoin(unaggregatedVars, ", ", Variable::AbslFormatter),
@@ -246,7 +246,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           }
         }
         if (!ad_utility::contains(_groupByVariables, var)) {
-          throw InvalidQueryException(absl::StrCat(
+          throw InvalidSparqlQueryException(absl::StrCat(
               "Variable ", var.name(), " is selected but not aggregated.",
               noteForGroupByError));
         }
@@ -278,9 +278,9 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
 
     for (const auto& variable : constructClause().containedVariables()) {
       if (!ad_utility::contains(_groupByVariables, variable)) {
-        throw InvalidQueryException("Variable " + variable.name() +
-                                    " is used but not aggregated." +
-                                    noteForGroupByError);
+        throw InvalidSparqlQueryException("Variable " + variable.name() +
+                                          " is used but not aggregated." +
+                                          noteForGroupByError);
       }
     }
   }
@@ -479,7 +479,7 @@ void ParsedQuery::checkVariableIsVisible(
     std::string_view otherPossibleLocationDescription) const {
   if (!ad_utility::contains(getVisibleVariables(), variable) &&
       !additionalVisibleVariables.contains(variable)) {
-    throw InvalidQueryException(absl::StrCat(
+    throw InvalidSparqlQueryException(absl::StrCat(
         "Variable ", variable.name(), " was used by " + locationDescription,
         ", but is not defined in the query body",
         otherPossibleLocationDescription, "."));
@@ -542,7 +542,7 @@ void ParsedQuery::addGroupByClause(std::vector<GroupKey> groupKeys) {
 void ParsedQuery::addHavingClause(std::vector<SparqlFilter> havingClauses,
                                   bool isGroupBy) {
   if (!isGroupBy && !havingClauses.empty()) {
-    throw InvalidQueryException(
+    throw InvalidSparqlQueryException(
         "A HAVING clause is only supported in queries with GROUP BY");
   }
 
@@ -591,7 +591,7 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
     if (isGroupBy &&
         !ad_utility::contains(_groupByVariables, orderKey.variable_) &&
         (!variablesFromAliases.contains(orderKey.variable_))) {
-      throw InvalidQueryException(
+      throw InvalidSparqlQueryException(
           "Variable " + orderKey.variable_.name() +
           " was used in an ORDER BY clause, but is neither grouped nor "
           "created as an alias in the SELECT clause." +

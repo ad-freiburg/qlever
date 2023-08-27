@@ -14,7 +14,7 @@
 size_t Bind::getResultWidth() const { return _subtree->getResultWidth() + 1; }
 
 // BIND doesn't change the number of result rows
-size_t Bind::getSizeEstimateBeforeLimit() {
+uint64_t Bind::getSizeEstimateBeforeLimit() {
   return _subtree->getSizeEstimate();
 }
 
@@ -149,6 +149,7 @@ void Bind::computeExpressionBind(
                      T&& singleResult) mutable {
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
+
     if constexpr (isVariable) {
       auto column =
           getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;

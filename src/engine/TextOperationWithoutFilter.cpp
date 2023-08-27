@@ -105,7 +105,7 @@ void TextOperationWithoutFilter::computeResultMultVars(IdTable* idTable) const {
 }
 
 // _____________________________________________________________________________
-size_t TextOperationWithoutFilter::getSizeEstimateBeforeLimit() {
+uint64_t TextOperationWithoutFilter::getSizeEstimateBeforeLimit() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
     double nofEntitiesSingleVar;
     if (_executionContext) {

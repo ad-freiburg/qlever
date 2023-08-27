@@ -31,8 +31,8 @@ auto makeTestScanWidthOne = [](const IndexImpl& index) {
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
-    IdTable result(1, makeAllocator());
-    index.scan(c0, c1, &result, permutation);
+    TripleComponent c1Tc{c1};
+    IdTable result = index.scan(c0, std::cref(c1Tc), permutation);
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
 };
@@ -47,8 +47,7 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index) {
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
-    IdTable wol(2, makeAllocator());
-    index.scan(c0, &wol, permutation);
+    IdTable wol = index.scan(c0, std::nullopt, permutation);
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
@@ -325,6 +324,22 @@ TEST(IndexTest, scanTest) {
   testWithAndWithoutPrefixCompression(false);
 };
 
+// ______________________________________________________________
+TEST(IndexTest, emptyIndex) {
+  const IndexImpl& emptyIndexWithCompression =
+      getQec("", true, true, true)->getIndex().getImpl();
+  const IndexImpl& emptyIndexWithoutCompression =
+      getQec("", true, true, false)->getIndex().getImpl();
+
+  EXPECT_EQ(emptyIndexWithCompression.numTriples().normal_, 0u);
+  EXPECT_EQ(emptyIndexWithoutCompression.numTriples().normal_, 0u);
+  EXPECT_EQ(emptyIndexWithCompression.numTriples().internal_, 0u);
+  EXPECT_EQ(emptyIndexWithoutCompression.numTriples().internal_, 0u);
+  auto test = makeTestScanWidthTwo(emptyIndexWithCompression);
+  // Test that scanning an empty index works, but yields an empty permutation.
+  test("<x>", Permutation::PSO, {});
+}
+
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
 // `PossiblyExternalizedIriOrLiteral` that matches the string `content` and the
 // bool `isExternal`.
@@ -338,7 +353,7 @@ MATCHER_P2(IsPossiblyExternalString, content, isExternal, "") {
 
 TEST(IndexTest, TripleToInternalRepresentation) {
   {
-    IndexImpl index;
+    IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{"<subject>", "<predicate>", lit("\"literal\"")};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
@@ -348,7 +363,7 @@ TEST(IndexTest, TripleToInternalRepresentation) {
     EXPECT_THAT(res._triple[2], IsPossiblyExternalString("\"literal\"", false));
   }
   {
-    IndexImpl index;
+    IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.getNonConstVocabForTesting().initializeExternalizePrefixes(
         std::vector{"<subj"s});
     TurtleTriple turtleTriple{"<subject>", "<predicate>",
@@ -363,7 +378,7 @@ TEST(IndexTest, TripleToInternalRepresentation) {
                 IsPossiblyExternalString("\"literal\"@fr", true));
   }
   {
-    IndexImpl index;
+    IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{"<subject>", "<predicate>", 42.0};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));

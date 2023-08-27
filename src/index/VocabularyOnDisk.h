@@ -111,14 +111,14 @@ class VocabularyOnDisk {
     return iteratorToWordAndIndex(it);
   }
 
-  // The offset of a word in `_file`, its size in number of bytes and its ID
+  // The offset of a word in `file_`, its size in number of bytes and its ID
   struct OffsetSizeId {
     uint64_t _offset;
     uint64_t _size;
     uint64_t _id;
   };
 
-  // The offset of a word in `_file` and its size in number of bytes.
+  // The offset of a word in `file_` and its size in number of bytes.
   struct OffsetAndSize {
     uint64_t _offset;
     uint64_t _size;

@@ -134,8 +134,8 @@ class QueryExecutionContext {
     webSocketManager_.releaseQuery(owningQueryId_.toQueryId());
   }
 
-  const bool _pinSubtrees;
-  const bool _pinResult;
+  bool _pinSubtrees;
+  bool _pinResult;
 
  private:
   const Index& _index;
