@@ -1,15 +1,18 @@
-//
-// Created by johannes on 27.04.20.
-//
+// Copyright 2020, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach (April of 2020,
+// kalmbach@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_ALLOCATORWITHLIMIT_H
-#define QLEVER_ALLOCATORWITHLIMIT_H
+#pragma once
+
+#include <absl/strings/str_cat.h>
 
 #include <atomic>
 #include <functional>
 #include <memory>
 
 #include "Synchronized.h"
+#include "util/MemorySize/MemorySize.h"
 
 namespace ad_utility {
 
@@ -19,12 +22,12 @@ namespace detail {
 // specified as a limit
 class AllocationExceedsLimitException : public std::exception {
  public:
-  AllocationExceedsLimitException(size_t requestedBytes, size_t freeBytes)
-      : _message{"Tried to allocate " + std::to_string(requestedBytes >> 20) +
-                 "MB, but only " + std::to_string(freeBytes >> 20) +
-                 "MB were available. " +
-                 "Clear the cache or allow more memory for QLever during "
-                 "startup"} {};
+  AllocationExceedsLimitException(MemorySize requestedMemory,
+                                  MemorySize freeMemory)
+      : _message{absl::StrCat("Tried to allocate ", requestedMemory.asString(),
+                              ", but only ", freeMemory.asString(),
+                              " were available. Clear the cache or allow more "
+                              "memory for QLever during startup")} {};
 
   const char* what() const noexcept override { return _message.c_str(); }
 
@@ -56,7 +59,8 @@ class AllocationMemoryLeft {
   // Called before memory is allocated.
   void decrease_if_enough_left_or_throw(size_t n) {
     if (!decrease_if_enough_left_or_return_false(n)) {
-      throw AllocationExceedsLimitException{n, free_};
+      throw AllocationExceedsLimitException{MemorySize::bytes(n),
+                                            MemorySize::bytes(free_)};
     }
   }
 
@@ -229,5 +233,3 @@ AllocatorWithLimit<T> makeUnlimitedAllocator() {
 }
 
 }  // namespace ad_utility
-
-#endif  // QLEVER_ALLOCATORWITHLIMIT_H

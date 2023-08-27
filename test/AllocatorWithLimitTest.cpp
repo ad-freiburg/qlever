@@ -14,18 +14,18 @@ using ad_utility::makeAllocationMemoryLeftThreadsafeObject;
 using V = std::vector<int, AllocatorWithLimit<int>>;
 TEST(AllocatorWithLimit, initial) {
   AllocatorWithLimit<int> all{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(2ul << 20)};
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(2'000'000)};
   static_assert(sizeof(int) == 4);
   [[maybe_unused]] auto ptr = all.allocate(250'000);
-  ASSERT_EQ(all.numFreeBytes(), (2ul << 20) - 1'000'000);
-  ASSERT_EQ(std::as_const(all).numFreeBytes(), (2ul << 20) - 1'000'000);
+  ASSERT_EQ(all.numFreeBytes(), 1'000'000);
+  ASSERT_EQ(std::as_const(all).numFreeBytes(), 1'000'000);
   try {
-    all.allocate(600'000);
+    all.allocate(500'000);
     FAIL() << "Should have thrown";
   } catch (const ad_utility::detail::AllocationExceedsLimitException& e) {
     ASSERT_THAT(e.what(),
                 ::testing::StartsWith(
-                    "Tried to allocate 2MB, but only 1MB were available."));
+                    "Tried to allocate 2 MB, but only 1 MB were available."));
   }
   all.deallocate(ptr, 250'000);
 }
