@@ -52,8 +52,7 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
               // A normal `ConfigOption` can be directly added. For a
               // `ConfigManager` we have to recursively collect the options.
               if constexpr (isSimilar<T, ConfigOption>) {
-                collectedOptions.push_back(
-                    std::make_pair(pathToCurrentEntry, &var));
+                collectedOptions.emplace_back(pathToCurrentEntry, &var);
               } else {
                 AD_CORRECTNESS_CHECK((isSimilar<T, ConfigManager>));
                 ad_utility::appendVector(
