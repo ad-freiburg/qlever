@@ -34,7 +34,7 @@ class TestHttpServer {
 
   // Indicator whether the server has been shut down. We need this because
   // `HttpServer::shutDown` must only be called once.
-  bool hasBeenShutDown_ = false;
+  std::atomic<bool> hasBeenShutDown_ = false;
   ad_utility::websocket::WebSocketManager webSocketManager_{};
 
  public:
