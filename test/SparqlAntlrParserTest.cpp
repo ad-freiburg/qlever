@@ -1226,7 +1226,7 @@ auto matchNaryWithChildrenMatchers(auto makeFunction,
     return std::type_index{typeid(*ptr)};
   };
 
-  auto makeDummyChild = [](auto&&) -> SparqlExpression::Ptr {
+  [[maybe_unused]] auto makeDummyChild = [](auto&&) -> SparqlExpression::Ptr {
     return std::make_unique<VariableExpression>(Variable{"?x"});
   };
   auto expectedTypeIndex =

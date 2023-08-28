@@ -80,7 +80,8 @@ SparqlExpression::Ptr makeCoalesceExpression(
 // Construct a `CoalesceExpression` from a constant number of arguments. Used
 // for testing.
 inline auto makeCoalesceExpressionVariadic =
-    [](std::same_as<SparqlExpression::Ptr> auto... children) {
+    []<std::derived_from<SparqlExpression>... Exps>(
+        std::unique_ptr<Exps>... children) {
       std::vector<SparqlExpression::Ptr> vec;
       (..., (vec.push_back(std::move(children))));
       return makeCoalesceExpression(std::move(vec));

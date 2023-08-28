@@ -109,7 +109,15 @@ auto testNaryExpression = [](auto&& makeExpression,
     }
     return 1;
   };
-  auto resultSize = std::max({getResultSize(operands)...});
+
+  const auto resultSize = [&operands..., &getResultSize]() {
+    if constexpr (sizeof...(operands) == 0) {
+      (void)getResultSize;
+      return 0ul;
+    } else {
+      return std::max({getResultSize(operands)...});
+    }
+  }();
 
   sparqlExpression::EvaluationContext context{*ad_utility::testing::getQec(),
                                               map, table, alloc, localVocab};
@@ -726,4 +734,10 @@ TEST(SparqlExpression, ifAndCoalesce) {
                 // UNDEF and the empty string are considered to be `false`.
                 std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.0)}, U,
                            IdOrString{"eins"}, Ids{U, U, U, U, U, D(5.0)}});
+
+  checkCoalesce(IdOrStrings{}, std::tuple{});
+  auto coalesceExpr =
+      makeCoalesceExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
+                                     std::make_unique<IriExpression>("<bam>"));
+  ASSERT_EQ(coalesceExpr->getCacheKey({}), "COALESCE(<bim>, <bam>)");
 }
