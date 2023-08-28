@@ -35,11 +35,13 @@
 
 namespace ad_utility {
 // ____________________________________________________________________________
-template <typename ReturnPointer>
-std::vector<std::pair<std::string, ReturnPointer>>
+template <typename ReturnReference>
+requires std::same_as<ReturnReference, ConfigOption&> ||
+         std::same_as<ReturnReference, const ConfigOption&>
+std::vector<std::pair<std::string, ReturnReference>>
 ConfigManager::configurationOptionsImpl(auto& configurationOptions,
                                         std::string_view pathPrefix) {
-  std::vector<std::pair<std::string, ReturnPointer>> collectedOptions;
+  std::vector<std::pair<std::string, ReturnReference>> collectedOptions;
 
   /*
   Takes one entry of an instance of `configurationOptions`, checks, that the
@@ -78,13 +80,16 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
           // A normal `ConfigOption` can be directly added. For a
           // `ConfigManager` we have to recursively collect the options.
           if constexpr (isSimilar<T, ConfigOption>) {
-            collectedOptions.emplace_back(pathToCurrentEntry, &var);
+            collectedOptions.emplace_back(pathToCurrentEntry, var);
           } else {
             static_assert(isSimilar<T, ConfigManager>);
-            ad_utility::appendVector(
-                collectedOptions,
-                configurationOptionsImpl<ReturnPointer>(
-                    var.configurationOptions_, pathToCurrentEntry));
+
+            // Move the recursive results.
+            auto recursiveResults = configurationOptionsImpl<ReturnReference>(
+                var.configurationOptions_, pathToCurrentEntry);
+            collectedOptions.reserve(recursiveResults.size());
+            std::ranges::move(recursiveResults,
+                              std::back_inserter(collectedOptions));
           }
         },
         std::get<1>(pair));
@@ -98,16 +103,16 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
 }
 
 // ____________________________________________________________________________
-std::vector<std::pair<std::string, ConfigOption*>>
+std::vector<std::pair<std::string, ConfigOption&>>
 ConfigManager::configurationOptions(std::string_view pathPrefix) {
-  return configurationOptionsImpl<ConfigOption*>(configurationOptions_,
+  return configurationOptionsImpl<ConfigOption&>(configurationOptions_,
                                                  pathPrefix);
 }
 
 // ____________________________________________________________________________
-std::vector<std::pair<std::string, const ConfigOption*>>
+std::vector<std::pair<std::string, const ConfigOption&>>
 ConfigManager::configurationOptions(std::string_view pathPrefix) const {
-  return configurationOptionsImpl<const ConfigOption*>(configurationOptions_,
+  return configurationOptionsImpl<const ConfigOption&>(configurationOptions_,
                                                        pathPrefix);
 }
 
@@ -289,10 +294,16 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
 
   // All the configuration options together with their paths.
   const auto allConfigOptions{[this]() {
-    std::vector<std::pair<std::string, ConfigOption*>> allConfigOption =
+    std::vector<std::pair<std::string, ConfigOption&>> allConfigOption =
         configurationOptions("");
+
+    // You can't put references into hash maps. Instead, we use pointer.
+    auto pointerVersion = std::views::transform(
+        allConfigOption, [](const std::pair<std::string, ConfigOption&>& p) {
+          return std::make_pair(p.first, &p.second);
+        });
     return ad_utility::HashMap<std::string, ConfigOption*>(
-        allConfigOption.begin(), allConfigOption.end());
+        pointerVersion.begin(), pointerVersion.end());
   }()};
 
   /*
@@ -376,14 +387,11 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
 std::string ConfigManager::printConfigurationDoc(
     bool printCurrentJsonConfiguration) const {
   // All the configuration options together with their paths.
-  const std::vector<std::pair<std::string, const ConfigOption*>>
-      allConfigOption = configurationOptions("");
-  auto allConfigOptionDereferencedView = std::views::transform(
-      allConfigOption,
-      [](auto& pair) { return std::tie(pair.first, *pair.second); });
+  const std::vector<std::pair<std::string, const ConfigOption&>>
+      allConfigOptions = configurationOptions("");
 
   // Handeling, for when there are no configuration options.
-  if (allConfigOptionDereferencedView.empty()) {
+  if (allConfigOptions.empty()) {
     return "No configuration options were defined.";
   }
 
@@ -399,7 +407,7 @@ std::string ConfigManager::printConfigurationDoc(
   - The default value of the configuration option.
   - An example value, of the correct type.
   */
-  for (const auto& [path, option] : allConfigOptionDereferencedView) {
+  for (const auto& [path, option] : allConfigOptions) {
     // Pointer to the position of this option in
     // `configuratioOptionsVisualization`.
     const nlohmann::json::json_pointer jsonOptionPointer{path};
@@ -422,13 +430,13 @@ std::string ConfigManager::printConfigurationDoc(
 
   // List the configuration options themselves.
   const std::string& listOfConfigurationOptions = ad_utility::lazyStrJoin(
-      std::views::transform(allConfigOptionDereferencedView,
+      std::views::transform(allConfigOptions,
                             [](const auto& pair) {
                               // Add the location of the option and the option
                               // itself.
                               return absl::StrCat(
-                                  "Location : ", std::get<0>(pair), "\n",
-                                  static_cast<std::string>(std::get<1>(pair)));
+                                  "Location : ", pair.first, "\n",
+                                  static_cast<std::string>(pair.second));
                             }),
       "\n\n");
 
@@ -461,15 +469,11 @@ std::string
 ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
     const {
   // All the configuration options together with their paths.
-  const std::vector<std::pair<std::string, const ConfigOption*>>
-      allConfigOption = configurationOptions("");
-  auto allConfigOptionDereferencedView = std::views::transform(
-      allConfigOption,
-      [](auto& pair) { return std::tie(pair.first, *pair.second); });
+  const std::vector<std::pair<std::string, const ConfigOption&>>
+      allConfigOptions = configurationOptions("");
 
   // For only looking at the configuration options in our map.
-  auto onlyConfigurationOptionsView =
-      std::views::values(allConfigOptionDereferencedView);
+  auto onlyConfigurationOptionsView = std::views::values(allConfigOptions);
 
   // Returns true, if the `ConfigOption` has a default value and wasn't set at
   // runtime.
@@ -525,7 +529,10 @@ void ConfigManager::verifyWithValidators() const {
 // ____________________________________________________________________________
 bool ConfigManager::containsOption(const ConfigOption& opt) const {
   const auto allOptions = configurationOptions();
-  const auto allOptionsValues = std::views::values(allOptions);
-  return std::ranges::find(allOptionsValues, &opt) != allOptionsValues.end();
+  const auto allOptionsPointerToValues =
+      std::views::values(allOptions) |
+      std::views::transform([](const ConfigOption& option) { return &option; });
+  return std::ranges::find(allOptionsPointerToValues, &opt) !=
+         allOptionsPointerToValues.end();
 }
 }  // namespace ad_utility

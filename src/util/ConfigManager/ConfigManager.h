@@ -377,22 +377,24 @@ class ConfigManager {
   @param pathPrefix This prefix will be added to all configuration option json
   paths, that will be returned.
   */
-  std::vector<std::pair<std::string, ConfigOption*>> configurationOptions(
+  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions(
       std::string_view pathPrefix = "");
-  std::vector<std::pair<std::string, const ConfigOption*>> configurationOptions(
+  std::vector<std::pair<std::string, const ConfigOption&>> configurationOptions(
       std::string_view pathPrefix = "") const;
 
   /*
   @brief The implementation for `configurationOptions`.
 
-  @tparam ReturnPointe Should be either `ConfigOption*`, or `const
-  ConfigOption*`.
+  @tparam ReturnReference Should be either `ConfigOption&`, or `const
+  ConfigOption&`.
 
   @param pathPrefix This prefix will be added to all configuration option json
   paths, that will be returned.
   */
-  template <typename ReturnPointer>
-  static std::vector<std::pair<std::string, ReturnPointer>>
+  template <typename ReturnReference>
+  requires std::same_as<ReturnReference, ConfigOption&> ||
+           std::same_as<ReturnReference, const ConfigOption&>
+  static std::vector<std::pair<std::string, ReturnReference>>
   configurationOptionsImpl(auto& configurationOptions,
                            std::string_view pathPrefix = "");
 
