@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -23,6 +21,7 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -30,6 +29,7 @@
 #include "util/ConfigManager/generated/ConfigShorthandParser.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
+#include "util/TypeTraits.h"
 #include "util/antlr/ANTLRErrorHandling.h"
 #include "util/json.h"
 
@@ -51,12 +51,11 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
             [&collectedOptions, &pathToCurrentEntry]<typename T>(T& var) {
               // A normal `ConfigOption` can be directly added. For a
               // `ConfigManager` we have to recursively collect the options.
-              if constexpr (std::is_same_v<std::decay_t<T>, ConfigOption>) {
+              if constexpr (isSimilar<T, ConfigOption>) {
                 collectedOptions.push_back(
                     std::make_pair(pathToCurrentEntry, &var));
               } else {
-                AD_CORRECTNESS_CHECK(
-                    (std::is_same_v<std::decay_t<T>, ConfigManager>));
+                AD_CORRECTNESS_CHECK((isSimilar<T, ConfigManager>));
                 ad_utility::appendVector(
                     collectedOptions,
                     configurationOptionsImpl<ReturnPointer>(
@@ -490,7 +489,7 @@ void ConfigManager::verifyWithValidators() const {
         std::visit(
             []<typename T>(T& var) {
               // Nothing to do, if we are not looking at a config manager.
-              if constexpr (std::is_same_v<std::decay_t<T>, ConfigManager>) {
+              if constexpr (isSimilar<T, ConfigManager>) {
                 var.verifyWithValidators();
               }
             },
