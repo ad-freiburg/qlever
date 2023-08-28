@@ -34,21 +34,22 @@ class CoalesceExpression : public SparqlExpression {
       : children_{std::move(children)} {};
 
   // _____________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context) const override {
+  ExpressionResult evaluate(EvaluationContext* ctx) const override {
     // Set up one vector with the indices of the elements that are still unbound
     // so far and one for the indices that remain unbound after applying one of
     // the children.
     std::vector<uint64_t> unboundIndices;
     std::vector<uint64_t> nextUnboundIndices;
-    unboundIndices.reserve(context->size());
-    nextUnboundIndices.reserve(context->size());
+    unboundIndices.reserve(ctx->size());
+    nextUnboundIndices.reserve(ctx->size());
 
     // Initially all result are unbound.
-    for (size_t i = 0; i < context->size(); ++i) {
+    for (size_t i = 0; i < ctx->size(); ++i) {
+      // TODO<C++23> use `std::ranges::to<vector>(std::views::iota...)`.
       unboundIndices.push_back(i);
     }
-    VectorWithMemoryLimit<IdOrString> result{context->_allocator};
-    std::fill_n(std::back_inserter(result), context->size(),
+    VectorWithMemoryLimit<IdOrString> result{ctx->_allocator};
+    std::fill_n(std::back_inserter(result), ctx->size(),
                 IdOrString{Id::makeUndefined()});
 
     auto isUnbound = [](const IdOrString& x) {
@@ -56,8 +57,9 @@ class CoalesceExpression : public SparqlExpression {
               std::get<Id>(x) == Id::makeUndefined());
     };
 
-    auto visitConstantExpressionResult = [&]<SingleExpressionResult T>(
-        T && childResult) requires isConstantResult<T> {
+    auto visitConstantExpressionResult = [
+      &nextUnboundIndices, &unboundIndices, &isUnbound, &result
+    ]<SingleExpressionResult T>(T && childResult) requires isConstantResult<T> {
       IdOrString constantResult{AD_FWD(childResult)};
       if (isUnbound(constantResult)) {
         nextUnboundIndices = std::move(unboundIndices);
@@ -71,29 +73,22 @@ class CoalesceExpression : public SparqlExpression {
     // For a single child result, write the result at the indices where the
     // result so far is unbound, and the child result is bound. While doing so,
     // set up the `nextUnboundIndices` vector  for the next step.
-    auto visitExpressionResult = [&]<SingleExpressionResult T>(T && childResult)
-        requires std::is_rvalue_reference_v<T&&> {
-      // If the previous expression result is a constant, we can skip the loop.
-      if constexpr (isConstantResult<T>) {
-        visitConstantExpressionResult(AD_FWD(childResult));
-        return;
-      }
-      auto gen =
-          detail::makeGenerator(AD_FWD(childResult), context->size(), context);
+    auto visitVectorExpressionResult =
+        [&result, &unboundIndices, &nextUnboundIndices, &ctx, &
+         isUnbound ]<SingleExpressionResult T>(T && childResult)
+            requires std::is_rvalue_reference_v<T&&> {
+      static_assert(!isConstantResult<T>);
+      auto gen = detail::makeGenerator(AD_FWD(childResult), ctx->size(), ctx);
       // Index of the current row.
       size_t i = 0;
       // Iterator to the next index where the result so far is unbound.
       auto unboundIdxIt = unboundIndices.begin();
-      if (unboundIdxIt == unboundIndices.end()) {
-        return;
-      }
-
+      AD_CORRECTNESS_CHECK(unboundIdxIt != unboundIndices.end());
       for (auto& el : gen) {
         // Skip all the indices where the result is already bound from a
         // previous child.
         if (i == *unboundIdxIt) {
-          IdOrString val{std::move(el)};
-          if (isUnbound(val)) {
+          if (IdOrString val{std::move(el)}; isUnbound(val)) {
             nextUnboundIndices.push_back(i);
           } else {
             result.at(*unboundIdxIt) = std::move(val);
@@ -106,11 +101,23 @@ class CoalesceExpression : public SparqlExpression {
         ++i;
       }
     };
+    auto visitExpressionResult =
+        [
+          &visitConstantExpressionResult, &visitVectorExpressionResult
+        ]<SingleExpressionResult T>(T && childResult)
+            requires std::is_rvalue_reference_v<T&&> {
+      // If the previous expression result is a constant, we can skip the loop.
+      if constexpr (isConstantResult<T>) {
+        visitConstantExpressionResult(AD_FWD(childResult));
+      } else {
+        visitVectorExpressionResult(AD_FWD(childResult));
+      }
+    };
 
     // Evaluate the children one by one, stopping as soon as all result are
     // bound.
     for (const auto& child : children_) {
-      std::visit(visitExpressionResult, child->evaluate(context));
+      std::visit(visitExpressionResult, child->evaluate(ctx));
       unboundIndices = std::move(nextUnboundIndices);
       nextUnboundIndices.clear();
       // Early stopping if no more unbound result remain.
