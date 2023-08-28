@@ -288,10 +288,12 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   const auto& jFlattend = j.flatten();
 
   // All the configuration options together with their paths.
-  std::vector<std::pair<std::string, ConfigOption*>> allConfigOption =
-      configurationOptions("");
-  ad_utility::HashMap<std::string, ConfigOption*> allConfigOptionHashMap(
-      allConfigOption.begin(), allConfigOption.end());
+  const auto allConfigOptions{[this]() {
+    std::vector<std::pair<std::string, ConfigOption*>> allConfigOption =
+        configurationOptions("");
+    return ad_utility::HashMap<std::string, ConfigOption*>(
+        allConfigOption.begin(), allConfigOption.end());
+  }()};
 
   /*
   We can skip the following check, if `j` is empty. Note: Even if the JSON
@@ -311,8 +313,8 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
       // Only returns true, if the given pointer is the path to a
       // configuration option.
       auto isPointerToConfigurationOption =
-          [&allConfigOptionHashMap](const nlohmann::json::json_pointer& ptr) {
-            return allConfigOptionHashMap.contains(ptr.to_string());
+          [&allConfigOptions](const nlohmann::json::json_pointer& ptr) {
+            return allConfigOptions.contains(ptr.to_string());
           };
 
       /*
@@ -345,7 +347,7 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   or if it HAD to be set, but wasn't.
   */
   for (auto&& [key, option] : std::views::transform(
-           allConfigOption,
+           allConfigOptions,
            [](auto& pair) { return std::tie(pair.first, *pair.second); })) {
     // Set the option, if possible, with the pointer to the position of the
     // current configuration in json.
