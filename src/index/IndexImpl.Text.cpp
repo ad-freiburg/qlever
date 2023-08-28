@@ -888,18 +888,18 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
         k++;
       } else {
         if (i == useElFromTerm) {
-          newWidVec[j] = resultWep.wids_.back();
+          newWidVec[j] = std::move(resultWep.wids_.back());
           j++;
         } else if (i > useElFromTerm) {
-          newWidVec[j] = resultWep.wids_[i - 1];
+          newWidVec[j] = std::move(resultWep.wids_[i - 1]);
           j++;
         } else {
-          newWidVec[j] = resultWep.wids_[i];
+          newWidVec[j] = std::move(resultWep.wids_[i]);
           j++;
         }
       }
     }
-    resultWep.wids_ = newWidVec;
+    resultWep.wids_ = std::move(newWidVec);
   } else {
     // Special case: Just one word to deal with.
     resultWep = getEntityPostingsForTerm(terms[0]);

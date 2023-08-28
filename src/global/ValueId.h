@@ -29,9 +29,9 @@ enum struct Datatype {
   VocabIndex,
   LocalVocabIndex,
   TextRecordIndex,
-  WordVocabIndex,
   Date,
-  MaxValue = Date
+  WordVocabIndex,
+  MaxValue = WordVocabIndex
   // Note: Unfortunately we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
   // alias must always be equal to the last member,
