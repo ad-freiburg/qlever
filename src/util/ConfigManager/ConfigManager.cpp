@@ -54,7 +54,7 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
               if constexpr (isSimilar<T, ConfigOption>) {
                 collectedOptions.emplace_back(pathToCurrentEntry, &var);
               } else {
-                AD_CORRECTNESS_CHECK((isSimilar<T, ConfigManager>));
+                static_assert(isSimilar<T, ConfigManager>);
                 ad_utility::appendVector(
                     collectedOptions,
                     configurationOptionsImpl<ReturnPointer>(
