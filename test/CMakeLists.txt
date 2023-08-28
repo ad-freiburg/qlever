@@ -276,7 +276,7 @@ addLinkAndDiscoverTestSerial(ValuesTest engine)
 
 addLinkAndDiscoverTestSerial(ServiceTest engine)
 
-addLinkAndDiscoverTest(HttpTest Boost::iostreams http websocket)
+addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
 
 addLinkAndDiscoverTest(CallFixedSizeTest)
 

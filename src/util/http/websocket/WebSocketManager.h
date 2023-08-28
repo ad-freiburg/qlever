@@ -9,8 +9,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "Common.h"
 #include "util/http/beast.h"
-#include "util/websocket/Common.h"
 
 namespace ad_utility::websocket {
 namespace net = boost::asio;

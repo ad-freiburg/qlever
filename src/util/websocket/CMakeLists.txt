@@ -1,2 +1,0 @@
-add_library(websocket WebSocketManager.cpp)
-qlever_target_link_libraries(websocket mediaTypes util)

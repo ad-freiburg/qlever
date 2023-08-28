@@ -22,8 +22,8 @@
 #include "util/ConcurrentCache.h"
 #include "util/Log.h"
 #include "util/Synchronized.h"
-#include "util/websocket/Common.h"
-#include "util/websocket/WebSocketManager.h"
+#include "util/http/websocket/Common.h"
+#include "util/http/websocket/WebSocketManager.h"
 
 using std::shared_ptr;
 using std::string;

@@ -4,13 +4,12 @@
 
 #include "WebSocketManager.h"
 
-#include <ctre/ctre.h>
-
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <optional>
 
+#include "Common.h"
+#include "ctre/ctre.h"
 #include "util/http/HttpUtils.h"
-#include "util/websocket/Common.h"
 
 namespace ad_utility::websocket {
 using namespace boost::asio::experimental::awaitable_operators;
