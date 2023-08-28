@@ -57,7 +57,7 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
             std::get_if<ConfigManager>(pair.second.get());
         ptr != nullptr && ptr->configurationOptions_.empty()) {
       throw std::runtime_error(
-          absl::StrCat("The sub manager at '", pathPrefix, std::get<0>(pair),
+          absl::StrCat("The sub manager at '", pathPrefix, pair.first,
                        "' is empty. Either fill it, or delete it."));
     }
 
@@ -529,10 +529,10 @@ void ConfigManager::verifyWithValidators() const {
 // ____________________________________________________________________________
 bool ConfigManager::containsOption(const ConfigOption& opt) const {
   const auto allOptions = configurationOptions();
-  const auto allOptionsPointerToValues =
+  return ad_utility::contains(
       std::views::values(allOptions) |
-      std::views::transform([](const ConfigOption& option) { return &option; });
-  return std::ranges::find(allOptionsPointerToValues, &opt) !=
-         allOptionsPointerToValues.end();
+          std::views::transform(
+              [](const ConfigOption& option) { return &option; }),
+      &opt);
 }
 }  // namespace ad_utility
