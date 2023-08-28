@@ -8,10 +8,11 @@
 namespace sparqlExpression {
 namespace detail::conditional_expressions {
 using namespace sparqlExpression::detail;
-[[maybe_unused]] auto ifImpl = []<typename T, typename U>(
-    EffectiveBooleanValueGetter::Result condition, T&& i, U&& e) -> IdOrString
-    requires std::is_rvalue_reference_v<T&&> && std::is_rvalue_reference_v<U&&>
-{
+[[maybe_unused]] auto ifImpl =
+    []<SingleExpressionResult T, SingleExpressionResult U>(
+        EffectiveBooleanValueGetter::Result condition, T&& i,
+        U&& e) -> IdOrString requires std::is_rvalue_reference_v<T&&> &&
+                                      std::is_rvalue_reference_v<U&&> {
   if (condition == EffectiveBooleanValueGetter::Result::True) {
     return AD_FWD(i);
   } else {
