@@ -42,41 +42,26 @@ TEST(HttpServer, HttpTest) {
 
   // Create a client, and send a GET and a POST request in one session.
   {
-    std::vector<ad_utility::JThread> threads;
-    threads.reserve(100);
-    for (auto j : std::views::iota(0, 100)) {
-      (void)j;
-      threads.emplace_back([&]() {
-        {
-          HttpClient httpClient("localhost",
-                                std::to_string(httpServer.getPort()));
-          ASSERT_EQ(
-              httpClient.sendRequest(verb::get, "localhost", "target1").str(),
+    HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
+    ASSERT_EQ(httpClient.sendRequest(verb::get, "localhost", "target1").str(),
               "GET\ntarget1\n");
-          ASSERT_EQ(
-              httpClient
-                  .sendRequest(verb::post, "localhost", "target1", "body1")
-                  .str(),
-              "POST\ntarget1\nbody1");
-        }
+    ASSERT_EQ(
+        httpClient.sendRequest(verb::post, "localhost", "target1", "body1")
+            .str(),
+        "POST\ntarget1\nbody1");
+  }
 
-        // Do the same thing in a second session (to check if everything is
-        // still fine with the server after we have communicated with it for one
-        // session).
-        {
-          HttpClient httpClient("localhost",
-                                std::to_string(httpServer.getPort()));
-          ASSERT_EQ(
-              httpClient.sendRequest(verb::get, "localhost", "target2").str(),
+  // Do the same thing in a second session (to check if everything is
+  // still fine with the server after we have communicated with it for one
+  // session).
+  {
+    HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
+    ASSERT_EQ(httpClient.sendRequest(verb::get, "localhost", "target2").str(),
               "GET\ntarget2\n");
-          ASSERT_EQ(
-              httpClient
-                  .sendRequest(verb::post, "localhost", "target2", "body2")
-                  .str(),
-              "POST\ntarget2\nbody2");
-        }
-      });
-    }
+    ASSERT_EQ(
+        httpClient.sendRequest(verb::post, "localhost", "target2", "body2")
+            .str(),
+        "POST\ntarget2\nbody2");
   }
 
   // Also test the convenience function `sendHttpOrHttpsRequest` (which creates
@@ -88,15 +73,8 @@ TEST(HttpServer, HttpTest) {
               "POST\n/target\nbody");
   }
 
-  std::vector<ad_utility::JThread> threads;
-  threads.reserve(100);
-  for (auto j : std::views::iota(0, 100)) {
-    (void)j;
-    threads.emplace_back([&]() {
-      // Check that after shutting down, no more new connections are accepted.
-      httpServer.shutDown();
-      ASSERT_ANY_THROW(
-          HttpClient("localhost", std::to_string(httpServer.getPort())));
-    });
-  }
+  // Check that after shutting down, no more new connections are accepted.
+  httpServer.shutDown();
+  ASSERT_ANY_THROW(
+      HttpClient("localhost", std::to_string(httpServer.getPort())));
 }

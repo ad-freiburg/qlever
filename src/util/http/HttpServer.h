@@ -161,17 +161,16 @@ class HttpServer {
       try {
         // Wait for a request (the code only continues after we have received
         // and accepted a request).
-        /*
+        // Note: Although a single session is conceptually single-threaded, we
+        // still have to manually schedule it on the `coroExecutor` to make the
+        // thread sanitizer happy. The reason is, that the thread of execution
+        // specified by the coroutine might change threads as the coroutine is
+        // suspended and then resumed.
         auto coroExecutor = co_await net::this_coro::executor;
         auto socket = co_await acceptor_.async_accept(
             coroExecutor, boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
         net::co_spawn(coroExecutor, session(std::move(socket)), net::detached);
-         */
-        auto socket =
-            co_await acceptor_.async_accept(boost::asio::use_awaitable);
-        // Schedule the session such that it may run in parallel to this loop.
-        net::co_spawn(ioContext_, session(std::move(socket)), net::detached);
       } catch (const boost::system::system_error& b) {
         logBeastError(b.code(), "Error in the accept loop");
       }
