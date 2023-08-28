@@ -35,66 +35,71 @@ class CoalesceExpression : public SparqlExpression {
 
   // _____________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override {
-    // TODO<joka921> There are several optimizations that we can implement in
-    // the future. We deliberately don't implement them just yet, as we probably
-    // want to do this in a generic way for all the expressions at once.
-    // 1. Only evaluate the children in chunks (can even be done in parallel).
-    // 2. Early stopping if all results are already bound (gets more relevant
-    // once 1. is implemented, as we can also do
-    //    this on a per chunk basis.
-
-    // First evaluate all the children's result.
-    std::vector<ExpressionResult> childResults;
-    std::ranges::for_each(children_, [&](const auto& child) {
-      childResults.push_back(child->evaluate(context));
-    });
-
     // Set up one vector with the indices of the elements that are still unbound
     // so far and one for the indices that remain unbound after applying one of
     // the children.
-    std::vector<uint64_t> unboundResults;
-    std::vector<uint64_t> nextUnboundResults;
-    unboundResults.reserve(context->size());
-    nextUnboundResults.reserve(context->size());
+    std::vector<uint64_t> unboundIndices;
+    std::vector<uint64_t> nextUnboundIndices;
+    unboundIndices.reserve(context->size());
+    nextUnboundIndices.reserve(context->size());
 
-    // Initially all results are unbound
+    // Initially all result are unbound.
     for (size_t i = 0; i < context->size(); ++i) {
-      unboundResults.push_back(i);
+      unboundIndices.push_back(i);
     }
-    VectorWithMemoryLimit<IdOrString> results{context->_allocator};
-    std::fill_n(std::back_inserter(results), context->size(),
+    VectorWithMemoryLimit<IdOrString> result{context->_allocator};
+    std::fill_n(std::back_inserter(result), context->size(),
                 IdOrString{Id::makeUndefined()});
+
+    auto isUnbound = [](const IdOrString& x) {
+      return (std::holds_alternative<Id>(x) &&
+              std::get<Id>(x) == Id::makeUndefined());
+    };
+
+    auto visitConstantExpressionResult = [&]<SingleExpressionResult T>(
+        T && childResult) requires isConstantResult<T> {
+      IdOrString constantResult{AD_FWD(childResult)};
+      if (isUnbound(constantResult)) {
+        nextUnboundIndices = std::move(unboundIndices);
+        return;
+      }
+      for (const auto& idx : unboundIndices) {
+        result[idx] = constantResult;
+      }
+    };
 
     // For a single child result, write the result at the indices where the
     // result so far is unbound, and the child result is bound. While doing so,
-    // set up the `nextUnboundResults` vector  for the next step.
-    auto visitExpressionResult = [&]<SingleExpressionResult T>(T && res)
+    // set up the `nextUnboundIndices` vector  for the next step.
+    auto visitExpressionResult = [&]<SingleExpressionResult T>(T && childResult)
         requires std::is_rvalue_reference_v<T&&> {
-      nextUnboundResults.clear();
-      // TODO<joka921> We can make this more efficient for constant results
-      // (which are either always bound or always unbound).
-      auto gen = detail::makeGenerator(AD_FWD(res), context->size(), context);
+      // If the previous expression result is a constant, we can skip the loop.
+      if constexpr (isConstantResult<T>) {
+        visitConstantExpressionResult(AD_FWD(childResult));
+        return;
+      }
+      auto gen =
+          detail::makeGenerator(AD_FWD(childResult), context->size(), context);
       // Index of the current row.
       size_t i = 0;
       // Iterator to the next index where the result so far is unbound.
-      auto nextUnbound = unboundResults.begin();
-      if (nextUnbound == unboundResults.end()) {
+      auto unboundIdxIt = unboundIndices.begin();
+      if (unboundIdxIt == unboundIndices.end()) {
         return;
       }
 
       for (auto& el : gen) {
         // Skip all the indices where the result is already bound from a
         // previous child.
-        if (i == *nextUnbound) {
+        if (i == *unboundIdxIt) {
           IdOrString val{std::move(el)};
-          if (std::holds_alternative<Id>(val) &&
-              std::get<Id>(val) == Id::makeUndefined()) {
-            nextUnboundResults.push_back(i);
+          if (isUnbound(val)) {
+            nextUnboundIndices.push_back(i);
           } else {
-            results.at(*nextUnbound) = std::move(val);
+            result.at(*unboundIdxIt) = std::move(val);
           }
-          ++nextUnbound;
-          if (nextUnbound == unboundResults.end()) {
+          ++unboundIdxIt;
+          if (unboundIdxIt == unboundIndices.end()) {
             return;
           }
         }
@@ -102,12 +107,18 @@ class CoalesceExpression : public SparqlExpression {
       }
     };
 
-    std::ranges::for_each(std::move(childResults),
-                          [&](ExpressionResult& child) {
-                            std::visit(visitExpressionResult, std::move(child));
-                            unboundResults = std::move(nextUnboundResults);
-                          });
-    return results;
+    // Evaluate the children one by one, stopping as soon as all result are
+    // bound.
+    for (const auto& child : children_) {
+      std::visit(visitExpressionResult, child->evaluate(context));
+      unboundIndices = std::move(nextUnboundIndices);
+      nextUnboundIndices.clear();
+      // Early stopping if no more unbound result remain.
+      if (unboundIndices.empty()) {
+        break;
+      }
+    }
+    return result;
   }
 
   // ___________________________________________________
