@@ -51,9 +51,8 @@ TEST(HttpServer, HttpTest) {
         "POST\ntarget1\nbody1");
   }
 
-  // Do the same thing in a second session (to check if everything is
-  // still fine with the server after we have communicated with it for one
-  // session).
+  // Do the same thing in a second session (to check if everything is still fine
+  // with the server after we have communicated with it for one session).
   {
     HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
     ASSERT_EQ(httpClient.sendRequest(verb::get, "localhost", "target2").str(),
