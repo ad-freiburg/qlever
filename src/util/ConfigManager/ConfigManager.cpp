@@ -41,45 +41,58 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
                                         std::string_view pathPrefix) {
   std::vector<std::pair<std::string, ReturnPointer>> collectedOptions;
 
-  std::ranges::for_each(
-      configurationOptions,
-      [&collectedOptions, &pathPrefix](auto pair) {
-        const std::string& pathToCurrentEntry =
-            absl::StrCat(pathPrefix, std::get<0>(pair));
+  /*
+  Takes one entry of an instance of `configurationOptions`, checks, that the
+  pointer isn't empty, and returns the pair with the pointer dereferenced.
+  */
+  auto checkNonEmptyAndDereference = [&pathPrefix](auto& pair) {
+    // Make sure, that there is no null pointer.
+    AD_CORRECTNESS_CHECK(pair.second != nullptr);
 
-        std::visit(
-            [&collectedOptions, &pathToCurrentEntry]<typename T>(T& var) {
-              // A normal `ConfigOption` can be directly added. For a
-              // `ConfigManager` we have to recursively collect the options.
-              if constexpr (isSimilar<T, ConfigOption>) {
-                collectedOptions.emplace_back(pathToCurrentEntry, &var);
-              } else {
-                static_assert(isSimilar<T, ConfigManager>);
-                ad_utility::appendVector(
-                    collectedOptions,
-                    configurationOptionsImpl<ReturnPointer>(
-                        var.configurationOptions_, pathToCurrentEntry));
-              }
-            },
-            std::get<1>(pair));
-      },
-      [&pathPrefix](auto& pair) {
-        // Make sure, that there is no null pointer.
-        AD_CORRECTNESS_CHECK(pair.second != nullptr);
+    // An empty sub manager tends to point to a logic error on the user
+    // side.
+    if (const ConfigManager* ptr =
+            std::get_if<ConfigManager>(pair.second.get());
+        ptr != nullptr && ptr->configurationOptions_.empty()) {
+      throw std::runtime_error(
+          absl::StrCat("The sub manager at '", pathPrefix, std::get<0>(pair),
+                       "' is empty. Either fill it, or delete it."));
+    }
 
-        // An empty sub manager tends to point to a logic error on the user
-        // side.
-        if (const ConfigManager* ptr =
-                std::get_if<ConfigManager>(pair.second.get());
-            ptr != nullptr && ptr->configurationOptions_.empty()) {
-          throw std::runtime_error(absl::StrCat(
-              "The sub manager at '", pathPrefix, std::get<0>(pair),
-              "' is empty. Either fill it, or delete it."));
-        }
+    // Return a dereferenced reference.
+    return std::tie(pair.first, *pair.second);
+  };
 
-        // Return a dereferenced reference.
-        return std::tie(pair.first, *pair.second);
-      });
+  /*
+  Takes one entry of an instance of `configurationOptions`, that was transformed
+  with `checkNonEmptyAndDereference`, and adds the config options, that can be
+  found inside it, together with the paths to them, to `collectedOptions`.
+  */
+  auto addHashMapEntryToCollectedOptions = [&collectedOptions,
+                                            &pathPrefix](auto pair) {
+    const std::string& pathToCurrentEntry =
+        absl::StrCat(pathPrefix, std::get<0>(pair));
+
+    std::visit(
+        [&collectedOptions, &pathToCurrentEntry]<typename T>(T& var) {
+          // A normal `ConfigOption` can be directly added. For a
+          // `ConfigManager` we have to recursively collect the options.
+          if constexpr (isSimilar<T, ConfigOption>) {
+            collectedOptions.emplace_back(pathToCurrentEntry, &var);
+          } else {
+            static_assert(isSimilar<T, ConfigManager>);
+            ad_utility::appendVector(
+                collectedOptions,
+                configurationOptionsImpl<ReturnPointer>(
+                    var.configurationOptions_, pathToCurrentEntry));
+          }
+        },
+        std::get<1>(pair));
+  };
+
+  // Collect all the options in the given `configurationOptions`.
+  std::ranges::for_each(configurationOptions, addHashMapEntryToCollectedOptions,
+                        checkNonEmptyAndDereference);
 
   return collectedOptions;
 }
