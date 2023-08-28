@@ -15,6 +15,7 @@
 #include <variant>
 
 #include "global/ValueId.h"
+#include "gtest/gtest_prod.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigUtil.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
@@ -248,6 +249,10 @@ class ConfigOption {
   }
 
  private:
+  FRIEND_TEST(ConfigOptionTest, AddValidator);
+  FRIEND_TEST(ConfigOptionTest, AddValidatorExceptions);
+  FRIEND_TEST(ConfigManagerTest, AddValidator);
+
   /*
   @brief Return the string representation/name of the type, of the currently
   held alternative in the given `value`.
