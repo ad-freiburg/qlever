@@ -1,6 +1,7 @@
 add_subdirectory(ConfigManager)
 add_subdirectory(MemorySize)
 add_subdirectory(http)
+add_subdirectory(websocket)
 add_library(util GeoSparqlHelpers.cpp
-        antlr/ANTLRErrorHandling.cpp ParseException.cpp Conversions.cpp Date.cpp antlr/GenerateAntlrExceptionMetadata.cpp websocket/WebSocketManager.cpp)
+        antlr/ANTLRErrorHandling.cpp ParseException.cpp Conversions.cpp Date.cpp antlr/GenerateAntlrExceptionMetadata.cpp)
 qlever_target_link_libraries(util)
