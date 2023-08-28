@@ -249,6 +249,26 @@ using StrBeforeExpression =
     StringExpressionImpl<2, LiftStringFunction<decltype(strBefore)>,
                          StringValueGetter>;
 
+// CONCAT
+class ConcatExpression: public SparqlExpression {
+ private:
+  std::vector<SparqlExpression::Ptr> children_;
+ public:
+  ConcatExpression(std::vector<SparqlExpression::Ptr> children): children_{std::move(children)} {}
+
+  ExpressionResult evaluate(EvaluationContext* ctx) const override{
+    VectorWithMemoryLimit<IdOrString> result(ctx->size(), IdOrString{std::string{}}, ctx->_allocator);
+    auto visitSingleExpressionResult = [&ctx, &result]<SingleExpressionResult T> (S&& s) requires std::is_rvalue_reference_t<S&&> {
+      auto gen = sparqlExpression::detail::get
+    };
+    std::ranges::for_each(children_, [&ctx, &result]{
+
+    });
+    return result;
+
+  }
+};
+
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
 using std::make_unique;
