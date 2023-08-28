@@ -104,16 +104,15 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
 
 // ____________________________________________________________________________
 std::vector<std::pair<std::string, ConfigOption&>>
-ConfigManager::configurationOptions(std::string_view pathPrefix) {
-  return configurationOptionsImpl<ConfigOption&>(configurationOptions_,
-                                                 pathPrefix);
+ConfigManager::configurationOptions() {
+  return configurationOptionsImpl<ConfigOption&>(configurationOptions_, "");
 }
 
 // ____________________________________________________________________________
 std::vector<std::pair<std::string, const ConfigOption&>>
-ConfigManager::configurationOptions(std::string_view pathPrefix) const {
+ConfigManager::configurationOptions() const {
   return configurationOptionsImpl<const ConfigOption&>(configurationOptions_,
-                                                       pathPrefix);
+                                                       "");
 }
 
 // ____________________________________________________________________________
@@ -295,7 +294,7 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   // All the configuration options together with their paths.
   const auto allConfigOptions{[this]() {
     std::vector<std::pair<std::string, ConfigOption&>> allConfigOption =
-        configurationOptions("");
+        configurationOptions();
 
     // You can't put references into hash maps. Instead, we use pointer.
     auto pointerVersion = std::views::transform(
@@ -388,7 +387,7 @@ std::string ConfigManager::printConfigurationDoc(
     bool printCurrentJsonConfiguration) const {
   // All the configuration options together with their paths.
   const std::vector<std::pair<std::string, const ConfigOption&>>
-      allConfigOptions = configurationOptions("");
+      allConfigOptions = configurationOptions();
 
   // Handeling, for when there are no configuration options.
   if (allConfigOptions.empty()) {
@@ -470,7 +469,7 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
     const {
   // All the configuration options together with their paths.
   const std::vector<std::pair<std::string, const ConfigOption&>>
-      allConfigOptions = configurationOptions("");
+      allConfigOptions = configurationOptions();
 
   // For only looking at the configuration options in our map.
   auto onlyConfigurationOptionsView = std::views::values(allConfigOptions);

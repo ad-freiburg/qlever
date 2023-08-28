@@ -373,14 +373,10 @@ class ConfigManager {
   @brief A vector to all the configuratio options, held by this manager,
   represented with their json paths and reference to them. Options held by a sub
   manager, are also included with the path to the sub manager as prefix.
-
-  @param pathPrefix This prefix will be added to all configuration option json
-  paths, that will be returned.
   */
-  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions(
-      std::string_view pathPrefix = "");
-  std::vector<std::pair<std::string, const ConfigOption&>> configurationOptions(
-      std::string_view pathPrefix = "") const;
+  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions();
+  std::vector<std::pair<std::string, const ConfigOption&>>
+  configurationOptions() const;
 
   /*
   @brief The implementation for `configurationOptions`.
