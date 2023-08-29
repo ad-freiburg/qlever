@@ -908,10 +908,11 @@ vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::ExpressionListContext*) {
-  // This rule is only used by the `RelationExpression` and `BuiltInCall` rules
-  // which also are not supported and should already have thrown an exception.
-  AD_FAIL();
+std::vector<ExpressionPtr> Visitor::visit(Parser::ExpressionListContext* ctx) {
+  if (ctx->NIL()) {
+    return {};
+  }
+  return visitVector(ctx->expression());
 }
 
 // ____________________________________________________________________________________
@@ -1614,8 +1615,15 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   auto createBinary = [&argList]<typename Function>(Function function)
       requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
                                      ExpressionPtr> {
-    AD_CONTRACT_CHECK(argList.size() == 2);
+    AD_CORRECTNESS_CHECK(argList.size() == 2);
     return function(std::move(argList[0]), std::move(argList[1]));
+  };
+  auto createTernary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                     ExpressionPtr, ExpressionPtr> {
+    AD_CORRECTNESS_CHECK(argList.size() == 3);
+    return function(std::move(argList[0]), std::move(argList[1]),
+                    std::move(argList[2]));
   };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
@@ -1652,6 +1660,11 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeRoundExpression);
   } else if (functionName == "floor") {
     return createUnary(&makeFloorExpression);
+  } else if (functionName == "if") {
+    return createTernary(&makeIfExpression);
+  } else if (functionName == "coalesce") {
+    AD_CORRECTNESS_CHECK(ctx->expressionList());
+    return makeCoalesceExpression(visit(ctx->expressionList()));
   } else {
     reportError(
         ctx,

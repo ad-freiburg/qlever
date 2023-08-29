@@ -70,4 +70,20 @@ SparqlExpression::Ptr makeStrAfterExpression(SparqlExpression::Ptr child1,
                                              SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
+
+SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
+                                       SparqlExpression::Ptr child2,
+                                       SparqlExpression::Ptr child3);
+SparqlExpression::Ptr makeCoalesceExpression(
+    std::vector<SparqlExpression::Ptr> children);
+
+// Construct a `CoalesceExpression` from a constant number of arguments. Used
+// for testing.
+inline auto makeCoalesceExpressionVariadic =
+    []<std::derived_from<SparqlExpression>... Exps>(
+        std::unique_ptr<Exps>... children) {
+      std::vector<SparqlExpression::Ptr> vec;
+      (..., (vec.push_back(std::move(children))));
+      return makeCoalesceExpression(std::move(vec));
+    };
 }  // namespace sparqlExpression
