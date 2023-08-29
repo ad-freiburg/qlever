@@ -269,9 +269,9 @@ class ConcatExpression : public detail::VariadicExpression {
     // have constant results (in which case, we need to evaluate the whole
     // expression only once).
 
-    // The result. We store either a single string or a vector. If the result is
-    // a string, then all the previously evaluated children were constants (see
-    // above).
+    // We store the (intermediate) result either as single string or a vector.
+    // If the result is a string, then all the previously evaluated children
+    // were constants (see above).
     std::variant<std::string, StringVec> result{std::string{""}};
     auto visitSingleExpressionResult =
         [&ctx, &result ]<SingleExpressionResult T>(T && s)
