@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 
 #include "util/Algorithm.h"
@@ -299,13 +300,10 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
     std::vector<std::pair<std::string, ConfigOption&>> allConfigOption =
         configurationOptions();
 
-    // You can't put references into hash maps. Instead, we use pointer.
-    auto pointerVersion = std::views::transform(
-        allConfigOption, [](const std::pair<std::string, ConfigOption&>& p) {
-          return std::make_pair(p.first, &p.second);
-        });
-    return ad_utility::HashMap<std::string, ConfigOption*>(
-        pointerVersion.begin(), pointerVersion.end());
+    // `absl::flat_hash_map` doesn't allow the values to be l-value references,
+    // but `std::unordered_map` does.
+    return std::unordered_map<std::string, ConfigOption&>(
+        allConfigOption.begin(), allConfigOption.end());
   }()};
 
   /*
@@ -359,9 +357,7 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   an exception, if a configuration option was given a value of the wrong type,
   or if it HAD to be set, but wasn't.
   */
-  for (auto&& [key, option] : std::views::transform(
-           allConfigOptions,
-           [](auto& pair) { return std::tie(pair.first, *pair.second); })) {
+  for (auto&& [key, option] : allConfigOptions) {
     // Set the option, if possible, with the pointer to the position of the
     // current configuration in json.
     if (const nlohmann::json::json_pointer configurationOptionJsonPosition{key};
