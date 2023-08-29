@@ -16,12 +16,14 @@ template <typename T>
 class LiteralExpression : public SparqlExpression {
  private:
   // For string literals, cache the result of the evaluation as it doesn't
-  // change on mutliple calls.
-  mutable std::optional<IdOrString> cachedResult_;
+  // change when `evaluate` is called multiple times. It is a `std::atomic` to
+  // make the `const` evaluate function threadsafe and lock-free.
+  mutable std::atomic<IdOrString*> cachedResult_ = nullptr;
 
  public:
   // _________________________________________________________________________
   explicit LiteralExpression(T _value) : _value{std::move(_value)} {}
+  ~LiteralExpression() { delete cachedResult_; }
 
   // A simple getter for the stored value.
   const T& value() const { return _value; }
@@ -32,17 +34,16 @@ class LiteralExpression : public SparqlExpression {
     // Common code for the `Literal` and `std::string` case.
     auto getIdOrString = [&context,
                           this](const std::string& s) -> ExpressionResult {
-      if (cachedResult_.has_value()) {
-        return cachedResult_.value();
+      if (auto ptr = cachedResult_.load(std::memory_order_relaxed)) {
+        return *ptr;
       }
       Id id;
       bool idWasFound = context->_qec.getIndex().getId(s, &id);
-      if (!idWasFound) {
-        // no vocabulary entry found, just use it as a string constant.
-        cachedResult_.emplace<std::string>(std::string{s});
-        return s;
-      }
-      cachedResult_.emplace<Id>(Id{id});
+      IdOrString result = idWasFound ? IdOrString{id} : IdOrString{s};
+      IdOrString* ptrForCache = new IdOrString{result};
+      auto oldCachePtr = std::atomic_exchange_explicit(
+          &cachedResult_, ptrForCache, std::memory_order_relaxed);
+      delete oldCachePtr;
       return id;
     };
     if constexpr (std::is_same_v<TripleComponent::Literal, T>) {

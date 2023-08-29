@@ -55,26 +55,28 @@ class CoalesceExpression : public VariadicExpression {
               std::get<Id>(x) == Id::makeUndefined());
     };
 
-    auto visitConstantExpressionResult = [
-      &nextUnboundIndices, &unboundIndices, &isUnbound, &result
-    ]<SingleExpressionResult T>(T && childResult) requires isConstantResult<T> {
-      IdOrString constantResult{AD_FWD(childResult)};
-      if (isUnbound(constantResult)) {
-        nextUnboundIndices = std::move(unboundIndices);
-        return;
-      }
-      for (const auto& idx : unboundIndices) {
-        result[idx] = constantResult;
-      }
-    };
+    auto visitConstantExpressionResult =
+        [&nextUnboundIndices, &unboundIndices, &isUnbound,
+         &result]<SingleExpressionResult T>(T&& childResult)
+            requires isConstantResult<T> {
+              IdOrString constantResult{AD_FWD(childResult)};
+              if (isUnbound(constantResult)) {
+                nextUnboundIndices = std::move(unboundIndices);
+                return;
+              }
+              for (const auto& idx : unboundIndices) {
+                result[idx] = constantResult;
+              }
+            };
 
     // For a single child result, write the result at the indices where the
     // result so far is unbound, and the child result is bound. While doing so,
     // set up the `nextUnboundIndices` vector  for the next step.
     auto visitVectorExpressionResult =
-        [&result, &unboundIndices, &nextUnboundIndices, &ctx, &
-         isUnbound ]<SingleExpressionResult T>(T && childResult)
-            requires std::is_rvalue_reference_v<T&&> {
+        [&result, &unboundIndices, &nextUnboundIndices, &ctx,
+         &isUnbound]<SingleExpressionResult T>(T&& childResult)
+            requires std::is_rvalue_reference_v<T&&>
+    {
       static_assert(!isConstantResult<T>);
       auto gen = detail::makeGenerator(AD_FWD(childResult), ctx->size(), ctx);
       // Index of the current row.
@@ -100,17 +102,17 @@ class CoalesceExpression : public VariadicExpression {
       }
     };
     auto visitExpressionResult =
-        [
-          &visitConstantExpressionResult, &visitVectorExpressionResult
-        ]<SingleExpressionResult T>(T && childResult)
-            requires std::is_rvalue_reference_v<T&&> {
-      // If the previous expression result is a constant, we can skip the loop.
-      if constexpr (isConstantResult<T>) {
-        visitConstantExpressionResult(AD_FWD(childResult));
-      } else {
-        visitVectorExpressionResult(AD_FWD(childResult));
-      }
-    };
+        [&visitConstantExpressionResult,
+         &visitVectorExpressionResult]<SingleExpressionResult T>(
+            T&& childResult) requires std::is_rvalue_reference_v<T&&> {
+          // If the previous expression result is a constant, we can skip the
+          // loop.
+          if constexpr (isConstantResult<T>) {
+            visitConstantExpressionResult(AD_FWD(childResult));
+          } else {
+            visitVectorExpressionResult(AD_FWD(childResult));
+          }
+        };
 
     // Evaluate the children one by one, stopping as soon as all result are
     // bound.
@@ -123,9 +125,8 @@ class CoalesceExpression : public VariadicExpression {
         break;
       }
     }
-    if (result.size() == 1) {
-      return result.at(0);
-    }
+    // TODO<joka921> The result is wrong in the case when all children are
+    // constants (see the implementation of `CONCAT`).
     return result;
   }
 };
