@@ -259,45 +259,42 @@ class ConcatExpression : public detail::VariadicExpression {
 
   // _________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
-    std::variant<IdOrString, VectorWithMemoryLimit<IdOrString>> result{IdOrString{""}};
-    /*
-    VectorWithMemoryLimit<IdOrString> result(
-        ctx->size(), IdOrString{std::string{}}, ctx->_allocator);
-        */
+    using StringVec = VectorWithMemoryLimit<std::string>;
+    std::variant<std::string, StringVec> result{std::string{""}};
     auto visitSingleExpressionResult =
         [&ctx, &result ]<SingleExpressionResult T>(T && s)
             requires std::is_rvalue_reference_v<T&&> {
       if constexpr (isConstantResult<T>) {
         std::string strFromConstant = StringValueGetter{}(s, ctx).value_or("");
-        if (std::holds_alternative<IdOrString>(result)) {
-          std::get<std::string>(std::get<IdOrString>(result)).append(strFromConstant);
+        if (std::holds_alternative<std::string>(result)) {
+          std::get<std::string>(result).append(strFromConstant);
         } else {
-          auto& resultAsVector = std::get<VectorWithMemoryLimit<IdOrString>>(result);
-          std::ranges::for_each(
-              resultAsVector | std::views::transform(ad_utility::get<std::string>),
-              [&](std::string& target) { target.append(strFromConstant); });
+          auto& resultAsVector = std::get<StringVec>(result);
+          std::ranges::for_each(resultAsVector, [&](std::string& target) {
+            target.append(strFromConstant);
+          });
         }
       } else {
         auto gen = sparqlExpression::detail::makeGenerator(AD_FWD(s),
                                                            ctx->size(), ctx);
-        // If the result was a constant so far, then we now need to expand it to a vector.
-        if (std::holds_alternative<IdOrString>(result)) {
-          IdOrString constantResultSoFar =
-              std::move(std::get<IdOrString>(result));
-          result.emplace<VectorWithMemoryLimit<IdOrString>>(ctx->_allocator);
-          auto& resultAsVec =
-              std::get<VectorWithMemoryLimit<IdOrString>>(result);
+        // If the result was a constant so far, then we now need to expand it to
+        // a vector.
+        if (std::holds_alternative<std::string>(result)) {
+          std::string constantResultSoFar =
+              std::move(std::get<std::string>(result));
+          result.emplace<StringVec>(ctx->_allocator);
+          auto& resultAsVec = std::get<StringVec>(result);
           resultAsVec.reserve(ctx->size());
-          std::fill_n(std::back_inserter(resultAsVec), ctx->size(), constantResultSoFar);
+          std::fill_n(std::back_inserter(resultAsVec), ctx->size(),
+                      constantResultSoFar);
         }
-          auto& resultAsVec =
-                  std::get<VectorWithMemoryLimit<IdOrString>>(result);
-          // TODO<C++23> Use `std::views::zip` or `enumerate`.
+        auto& resultAsVec = std::get<StringVec>(result);
+        // TODO<C++23> Use `std::views::zip` or `enumerate`.
         size_t i = 0;
         for (auto& el : gen) {
           auto str = StringValueGetter{}(std::move(el), ctx);
           if (str.has_value()) {
-            std::get<std::string>(resultAsVec[i]).append(str.value());
+            resultAsVec[i].append(str.value());
           }
           ++i;
         }
@@ -307,10 +304,14 @@ class ConcatExpression : public detail::VariadicExpression {
         children_, [&ctx, &visitSingleExpressionResult](const auto& child) {
           std::visit(visitSingleExpressionResult, child->evaluate(ctx));
         });
-    if (std::holds_alternative<IdOrString>(result)) {
-      return std::move(std::get<IdOrString>(result));
+    if (std::holds_alternative<std::string>(result)) {
+      return IdOrString{std::move(std::get<std::string>(result))};
     } else {
-      return std::move(std::get<VectorWithMemoryLimit<IdOrString>>(result));
+      auto& stringVec = std::get<StringVec>(result);
+      VectorWithMemoryLimit<IdOrString> resultAsVec{
+          std::make_move_iterator(stringVec.begin()),
+          std::make_move_iterator(stringVec.end()), ctx->_allocator};
+      return resultAsVec;
     }
   }
 };
