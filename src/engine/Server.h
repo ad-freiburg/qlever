@@ -58,7 +58,6 @@ class Server {
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
-  ad_utility::websocket::WebSocketManager webSocketManager_{};
   ad_utility::websocket::common::QueryRegistry queryRegistry_{};
 
   bool enablePatternTrick_;
@@ -81,8 +80,11 @@ class Server {
   /// \param req The HTTP request.
   /// \param send The action that sends a http:response. (see the
   ///             `HttpServer.h` for documentation).
+  /// \param webSocketManager Reference to the object managing WebSocket
+  ///                         connections for this Server.
   Awaitable<void> process(
-      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+      ad_utility::websocket::WebSocketManager& webSocketManager);
 
   /// Handle a http request that asks for the processing of a query.
   /// \param params The key-value-pairs  sent in the HTTP GET request. When this
@@ -93,9 +95,12 @@ class Server {
   /// \param request The HTTP request.
   /// \param send The action that sends a http:response (see the
   ///             `HttpServer.h` for documentation).
+  /// \param webSocketManager Reference to the object managing WebSocket
+  ///                         connections for this Server.
   Awaitable<void> processQuery(
       const ParamValueMap& params, ad_utility::Timer& requestTimer,
-      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+      ad_utility::websocket::WebSocketManager& webSocketManager);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,

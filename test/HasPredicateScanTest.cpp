@@ -248,8 +248,7 @@ TEST(HasPredicateScan, subtreeS) {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   QueryResultCache cache{};
   boost::asio::io_context ioContext{};
-  ad_utility::websocket::WebSocketManager webSocketManager{};
-  webSocketManager.setIoContext(ioContext);
+  ad_utility::websocket::WebSocketManager webSocketManager{ioContext};
   ad_utility::websocket::common::QueryRegistry queryRegistry{};
   QueryExecutionContext ctx(index, &cache, makeAllocator(),
                             SortPerformanceEstimator{}, webSocketManager,

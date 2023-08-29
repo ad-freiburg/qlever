@@ -72,9 +72,8 @@ class WebSocketManager {
   void runAndEraseWakeUpCallsSynchronously(const QueryId& queryId);
 
  public:
-  void setIoContext(net::io_context& ioContext) {
-    registryStrand_ = net::make_strand(ioContext);
-  }
+  WebSocketManager(net::io_context& ioContext)
+      : registryStrand_(net::make_strand(ioContext)) {}
   net::awaitable<void> manageConnection(tcp::socket,
                                         http::request<http::string_body>);
   void addQueryStatusUpdate(const QueryId& queryId, std::string);

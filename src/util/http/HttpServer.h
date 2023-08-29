@@ -58,14 +58,13 @@ class HttpServer {
       net::make_strand(ioContext_);
   tcp::acceptor acceptor_{acceptorStrand_};
   std::atomic<bool> serverIsReady_ = false;
-  ad_utility::websocket::WebSocketManager& webSocketManager_;
+  ad_utility::websocket::WebSocketManager webSocketManager_{ioContext_};
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
   /// as well as the HttpHandler. This constructor only initializes several
   /// member functions
   explicit HttpServer(unsigned short port,
-                      ad_utility::websocket::WebSocketManager& webSocketManager,
                       const std::string& ipAddress = "0.0.0.0",
                       int numServerThreads = 1,
                       HttpHandler handler = HttpHandler{})
@@ -75,8 +74,7 @@ class HttpServer {
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?
         numServerThreads_{std::max(2, numServerThreads)},
-        ioContext_{numServerThreads_},
-        webSocketManager_{webSocketManager} {
+        ioContext_{numServerThreads_} {
     try {
       tcp::endpoint endpoint{ipAddress_, port_};
       // Open the acceptor.
@@ -245,7 +243,7 @@ class HttpServer {
 
           // Handle the http request. Note that `httpHandler_` is also
           // responsible for sending the message via the `sendMessage` lambda.
-          co_await httpHandler_(std::move(req), sendMessage);
+          co_await httpHandler_(std::move(req), sendMessage, webSocketManager_);
         }
 
         // The closing of the stream is done in the exception handler.

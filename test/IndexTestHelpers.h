@@ -131,7 +131,7 @@ inline QueryExecutionContext* getQec(
     std::unique_ptr<boost::asio::io_context> ioContext_ =
         std::make_unique<boost::asio::io_context>();
     std::unique_ptr<websocket::WebSocketManager> webSocketManager_ =
-        std::make_unique<websocket::WebSocketManager>();
+        std::make_unique<websocket::WebSocketManager>(*ioContext_);
     std::unique_ptr<websocket::common::QueryRegistry> queryRegistry_ =
         std::make_unique<websocket::common::QueryRegistry>();
     std::unique_ptr<QueryExecutionContext> qec_ =
@@ -149,22 +149,21 @@ inline QueryExecutionContext* getQec(
   if (!contextMap.contains(key)) {
     std::string testIndexBasename =
         "_staticGlobalTestIndex" + std::to_string(contextMap.size());
-    auto context = Context{
-        TypeErasedCleanup{[testIndexBasename]() {
-          for (const std::string& indexFilename :
-               getAllIndexFilenames(testIndexBasename)) {
-            // Don't log when a file can't be deleted,
-            // because the logging might already be
-            // destroyed.
-            ad_utility::deleteFile(indexFilename, false);
-          }
-        }},
-        std::make_unique<Index>(makeTestIndex(
-            testIndexBasename, turtleInput, loadAllPermutations, usePatterns,
-            usePrefixCompression, blocksizePermutationsInBytes)),
-        std::make_unique<QueryResultCache>()};
-    context.webSocketManager_->setIoContext(*context.ioContext_);
-    contextMap.emplace(key, std::move(context));
+    contextMap.emplace(
+        key, Context{TypeErasedCleanup{[testIndexBasename]() {
+                       for (const std::string& indexFilename :
+                            getAllIndexFilenames(testIndexBasename)) {
+                         // Don't log when a file can't be deleted,
+                         // because the logging might already be
+                         // destroyed.
+                         ad_utility::deleteFile(indexFilename, false);
+                       }
+                     }},
+                     std::make_unique<Index>(makeTestIndex(
+                         testIndexBasename, turtleInput, loadAllPermutations,
+                         usePatterns, usePrefixCompression,
+                         blocksizePermutationsInBytes)),
+                     std::make_unique<QueryResultCache>()});
   }
   return contextMap.at(key).qec_.get();
 }

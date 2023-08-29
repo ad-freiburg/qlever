@@ -90,7 +90,9 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
   // Function that handles a request asynchronously, will be passed as argument
   // to `HttpServer` below.
   auto httpSessionHandler =
-      [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
+      [this](auto request, auto&& send,
+             ad_utility::websocket::WebSocketManager& webSocketManager)
+      -> boost::asio::awaitable<void> {
     // Version of send with maximally permissive CORS header (which allows the
     // client that receives the response to do with it what it wants).
     // NOTE: For POST and GET requests, the "allow origin" header is sufficient,
@@ -122,7 +124,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
     // in the catch block, hence the workaround with the `exceptionErrorMsg`.
     std::optional<std::string> exceptionErrorMsg;
     try {
-      co_await process(request, sendWithAccessControlHeaders);
+      co_await process(request, sendWithAccessControlHeaders, webSocketManager);
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
     }
@@ -136,9 +138,8 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
-  auto httpServer = HttpServer{port_, webSocketManager_, "0.0.0.0", numThreads_,
-                               std::move(httpSessionHandler)};
-  webSocketManager_.setIoContext(httpServer.getIoContext());
+  auto httpServer =
+      HttpServer{port_, "0.0.0.0", numThreads_, std::move(httpSessionHandler)};
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations);
@@ -204,7 +205,8 @@ ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
 
 // _____________________________________________________________________________
 Awaitable<void> Server::process(
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+    ad_utility::websocket::WebSocketManager& webSocketManager) {
   using namespace ad_utility::httpUtils;
 
   // Log some basic information about the request. Start with an empty line so
@@ -364,7 +366,7 @@ Awaitable<void> Server::process(
           "Parameter \"query\" must not have an empty value");
     }
     co_return co_await processQuery(parameters, requestTimer,
-                                    std::move(request), send);
+                                    std::move(request), send, webSocketManager);
   }
 
   // If there was no "query", but any of the URL parameters processed before
@@ -499,7 +501,8 @@ ad_utility::websocket::common::OwningQueryId Server::getQueryId(
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+    ad_utility::websocket::WebSocketManager& webSocketManager) {
   using namespace ad_utility::httpUtils;
   AD_CONTRACT_CHECK(params.contains("query"));
   const auto& query = params.at("query");
@@ -613,7 +616,7 @@ boost::asio::awaitable<void> Server::processQuery(
     // do index scans) and then we get an error message afterwards that a
     // certain media type is not supported.
     QueryExecutionContext qec(index_, &cache_, allocator_,
-                              sortPerformanceEstimator_, webSocketManager_,
+                              sortPerformanceEstimator_, webSocketManager,
                               getQueryId(request), pinSubtrees, pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(enablePatternTrick_);
