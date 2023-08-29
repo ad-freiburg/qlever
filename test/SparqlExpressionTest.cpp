@@ -739,7 +739,9 @@ TEST(SparqlExpression, ifAndCoalesce) {
   auto coalesceExpr =
       makeCoalesceExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
                                      std::make_unique<IriExpression>("<bam>"));
-  ASSERT_EQ(coalesceExpr->getCacheKey({}), "COALESCE(<bim>, <bam>)");
+  ASSERT_THAT(coalesceExpr->getCacheKey({}),
+              testing::AllOf(::testing::ContainsRegex("CoalesceExpression"),
+                             ::testing::ContainsRegex("<bim>, <bam>)")));
 }
 
 // ________________________________________________________________________________________
@@ -762,7 +764,9 @@ TEST(SparqlExpression, concatExpression) {
 
   checkConcat(IdOrStrings{}, std::tuple{});
   auto coalesceExpr =
-      makeCoalesceExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
-                                     std::make_unique<IriExpression>("<bam>"));
-  ASSERT_EQ(coalesceExpr->getCacheKey({}), "COALESCE(<bim>, <bam>)");
+      makeConcatExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
+                                   std::make_unique<IriExpression>("<bam>"));
+  ASSERT_THAT(coalesceExpr->getCacheKey({}),
+              testing::AllOf(::testing::ContainsRegex("ConcatExpression"),
+                             ::testing::ContainsRegex("<bim>, <bam>)")));
 }

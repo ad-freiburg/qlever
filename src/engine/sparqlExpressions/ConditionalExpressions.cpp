@@ -2,8 +2,9 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "NaryExpression.h"
-#include "NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/VariadicExpression.h"
 
 namespace sparqlExpression {
 namespace detail::conditional_expressions {
@@ -26,13 +27,9 @@ NARY_EXPRESSION(IfExpression, 3,
 // The implementation of the COALESCE expression. It (at least currently) has to
 // be done manually as we have no Generic implementation for variadic
 // expressions, as it is the first one.
-class CoalesceExpression : public SparqlExpression {
-  std::vector<SparqlExpression::Ptr> children_;
-
+class CoalesceExpression : public VariadicExpression {
  public:
-  // Construct from the child expressions.
-  explicit CoalesceExpression(std::vector<SparqlExpression::Ptr> children)
-      : children_{std::move(children)} {};
+  using VariadicExpression::VariadicExpression;
 
   // _____________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
@@ -127,22 +124,6 @@ class CoalesceExpression : public SparqlExpression {
       }
     }
     return result;
-  }
-
-  // ___________________________________________________
-  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    auto childKeys = ad_utility::lazyStrJoin(
-        children_ | std::views::transform([&varColMap](const auto& childPtr) {
-          return childPtr->getCacheKey(varColMap);
-        }),
-        ", ");
-    return absl::StrCat("COALESCE(", childKeys, ")");
-  }
-
- private:
-  // ___________________________________________________
-  std::span<SparqlExpression::Ptr> childrenImpl() override {
-    return {children_.data(), children_.size()};
   }
 };
 

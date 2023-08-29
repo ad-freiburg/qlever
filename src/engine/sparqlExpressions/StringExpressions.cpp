@@ -1,7 +1,10 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/VariadicExpression.h"
+
 namespace sparqlExpression {
 namespace detail::string_expressions {
 // String functions.
@@ -250,13 +253,9 @@ using StrBeforeExpression =
                          StringValueGetter>;
 
 // CONCAT
-class ConcatExpression : public SparqlExpression {
- private:
-  std::vector<SparqlExpression::Ptr> children_;
-
+class ConcatExpression : public detail::VariadicExpression {
  public:
-  ConcatExpression(std::vector<SparqlExpression::Ptr> children)
-      : children_{std::move(children)} {}
+  using VariadicExpression::VariadicExpression;
 
   // _________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
@@ -275,13 +274,13 @@ class ConcatExpression : public SparqlExpression {
                                                            ctx->size(), ctx);
         // TODO<C++23> Use `std::views::zip` or `enumerate`.
         size_t i = 0;
-      for (auto& el : gen) {
-        auto str = StringValueGetter{}(std::move(el), ctx);
-        if (str.has_value()) {
-          std::get<std::string>(result[i]).append(str.value());
+        for (auto& el : gen) {
+          auto str = StringValueGetter{}(std::move(el), ctx);
+          if (str.has_value()) {
+            std::get<std::string>(result[i]).append(str.value());
+          }
+          ++i;
         }
-        ++i;
-      }
       }
     };
     std::ranges::for_each(
@@ -289,22 +288,6 @@ class ConcatExpression : public SparqlExpression {
           std::visit(visitSingleExpressionResult, child->evaluate(ctx));
         });
     return result;
-  }
-
-  // ___________________________________________________
-  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    auto childKeys = ad_utility::lazyStrJoin(
-        children_ | std::views::transform([&varColMap](const auto& childPtr) {
-          return childPtr->getCacheKey(varColMap);
-        }),
-        ", ");
-    return absl::StrCat("CONCAT(", childKeys, ")");
-  }
-
- private:
-  // ___________________________________________________
-  std::span<SparqlExpression::Ptr> childrenImpl() override {
-    return {children_.data(), children_.size()};
   }
 };
 
