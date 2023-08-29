@@ -13,7 +13,6 @@
 #include <string>
 #include <type_traits>
 
-#include "util/Cache.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
@@ -170,7 +169,8 @@ constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
   AD_CONTRACT_CHECK(numBytesPerUnit.contains(unitName));
 
   // Max value for `amountOfUnits`.
-  if (static_cast<T>(sizeTDivision(size_t_max, numBytesPerUnit.at(unitName))) <
+  if (static_cast<T>(sizeTDivision(std::numeric_limits<size_t>::max(),
+                                   numBytesPerUnit.at(unitName))) <
       amountOfUnits) {
     throw std::runtime_error(
         absl::StrCat(amountOfUnits, " ", unitName,

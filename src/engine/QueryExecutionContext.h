@@ -23,6 +23,8 @@
 #include <string>
 #include <vector>
 
+#include "global/Id.h"
+
 using std::shared_ptr;
 using std::string;
 using std::vector;
@@ -47,13 +49,20 @@ class CacheValue {
   [[nodiscard]] size_t size() const {
     return _resultTable ? _resultTable->size() * _resultTable->width() : 0;
   }
+
+  // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
+  struct SizeGetter {
+    ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
+      return ad_utility::MemorySize::bytes(cacheValue.size() * sizeof(Id));
+    }
+  };
 };
 
 // Threadsafe LRU cache for (partial) query results, that
 // checks on insertion, if the result is currently being computed
 // by another query.
-using ConcurrentLruCache =
-    ad_utility::ConcurrentCache<ad_utility::LRUCache<string, CacheValue>>;
+using ConcurrentLruCache = ad_utility::ConcurrentCache<
+    ad_utility::LRUCache<string, CacheValue, CacheValue::SizeGetter>>;
 using PinnedSizes =
     ad_utility::Synchronized<ad_utility::HashMap<std::string, size_t>,
                              std::shared_mutex>;
