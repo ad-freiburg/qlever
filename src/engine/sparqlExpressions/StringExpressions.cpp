@@ -265,16 +265,23 @@ class ConcatExpression : public SparqlExpression {
     auto visitSingleExpressionResult =
         [&ctx, &result ]<SingleExpressionResult T>(T && s)
             requires std::is_rvalue_reference_v<T&&> {
-      auto gen =
-          sparqlExpression::detail::makeGenerator(AD_FWD(s), ctx->size(), ctx);
-      // TODO<C++23> Use `std::views::zip` or `enumerate`.
-      size_t i = 0;
+      if constexpr (isConstantResult<T>) {
+        std::string strFromConstant = StringValueGetter{}(s, ctx).value_or("");
+        std::ranges::for_each(
+            result | std::views::transform(ad_utility::get<std::string>),
+            [&](std::string& target) { target.append(strFromConstant); });
+      } else {
+        auto gen = sparqlExpression::detail::makeGenerator(AD_FWD(s),
+                                                           ctx->size(), ctx);
+        // TODO<C++23> Use `std::views::zip` or `enumerate`.
+        size_t i = 0;
       for (auto& el : gen) {
         auto str = StringValueGetter{}(std::move(el), ctx);
         if (str.has_value()) {
           std::get<std::string>(result[i]).append(str.value());
         }
         ++i;
+      }
       }
     };
     std::ranges::for_each(
