@@ -77,8 +77,18 @@ SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeCoalesceExpression(
     std::vector<SparqlExpression::Ptr> children);
 
+inline auto variadicExpressionFactory(auto functionPointer) {
+  return [functionPointer]<std::derived_from<SparqlExpression>... Exps>(
+             std::unique_ptr<Exps>... children) {
+    std::vector<SparqlExpression::Ptr> vec;
+    (..., (vec.push_back(std::move(children))));
+    return std::invoke(functionPointer, std::move(vec));
+  };
+}
+
 // Construct a `CoalesceExpression` from a constant number of arguments. Used
 // for testing.
+/*
 inline auto makeCoalesceExpressionVariadic =
     []<std::derived_from<SparqlExpression>... Exps>(
         std::unique_ptr<Exps>... children) {
@@ -86,5 +96,11 @@ inline auto makeCoalesceExpressionVariadic =
       (..., (vec.push_back(std::move(children))));
       return makeCoalesceExpression(std::move(vec));
     };
-SparqlExpression::Ptr makeConcatExpression(std::vector<SparqlExpression::Ptr> children);
+    */
+inline auto makeCoalesceExpressionVariadic =
+    variadicExpressionFactory(&makeCoalesceExpression);
+SparqlExpression::Ptr makeConcatExpression(
+    std::vector<SparqlExpression::Ptr> children);
+inline auto makeConcatExpressionVariadic =
+    variadicExpressionFactory(&makeConcatExpression);
 }  // namespace sparqlExpression

@@ -741,3 +741,30 @@ TEST(SparqlExpression, ifAndCoalesce) {
                                      std::make_unique<IriExpression>("<bam>"));
   ASSERT_EQ(coalesceExpr->getCacheKey({}), "COALESCE(<bim>, <bam>)");
 }
+
+// ________________________________________________________________________________________
+TEST(SparqlExpression, concatExpression) {
+  auto checkConcat =
+      std::bind_front(testNaryExpressionVec, makeConcatExpressionVariadic);
+
+  const auto T = Id::makeFromBool(true);
+  const auto F = Id::makeFromBool(false);
+
+  checkConcat(IdOrStrings{"0null", "eins", "2zwei", "3drei", "", "5.35.2"},
+              // UNDEF and the empty string are considered to be `false`.
+              std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.3)},
+                         IdOrStrings{"null", "eins", "zwei", "drei", U, U},
+                         Ids{U, U, U, U, U, D(5.2)}});
+  // Example for COALESCE where we have a constant input and evaluating the last
+  // input is not necessary.
+  checkConcat(IdOrStrings{I(0), "eins", I(2), I(3), "eins", D(5.0)},
+              // UNDEF and the empty string are considered to be `false`.
+              std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.0)}, U,
+                         IdOrString{"eins"}, Ids{U, U, U, U, U, D(5.0)}});
+
+  checkConcat(IdOrStrings{}, std::tuple{});
+  auto coalesceExpr =
+      makeCoalesceExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
+                                     std::make_unique<IriExpression>("<bam>"));
+  ASSERT_EQ(coalesceExpr->getCacheKey({}), "COALESCE(<bim>, <bam>)");
+}

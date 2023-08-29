@@ -250,22 +250,54 @@ using StrBeforeExpression =
                          StringValueGetter>;
 
 // CONCAT
-class ConcatExpression: public SparqlExpression {
+class ConcatExpression : public SparqlExpression {
  private:
   std::vector<SparqlExpression::Ptr> children_;
+
  public:
-  ConcatExpression(std::vector<SparqlExpression::Ptr> children): children_{std::move(children)} {}
+  ConcatExpression(std::vector<SparqlExpression::Ptr> children)
+      : children_{std::move(children)} {}
 
-  ExpressionResult evaluate(EvaluationContext* ctx) const override{
-    VectorWithMemoryLimit<IdOrString> result(ctx->size(), IdOrString{std::string{}}, ctx->_allocator);
-    auto visitSingleExpressionResult = [&ctx, &result]<SingleExpressionResult T> (S&& s) requires std::is_rvalue_reference_t<S&&> {
-      auto gen = sparqlExpression::detail::get
+  // _________________________________________________________________
+  ExpressionResult evaluate(EvaluationContext* ctx) const override {
+    VectorWithMemoryLimit<IdOrString> result(
+        ctx->size(), IdOrString{std::string{}}, ctx->_allocator);
+    auto visitSingleExpressionResult =
+        [&ctx, &result ]<SingleExpressionResult T>(T && s)
+            requires std::is_rvalue_reference_v<T&&> {
+      auto gen =
+          sparqlExpression::detail::makeGenerator(AD_FWD(s), ctx->size(), ctx);
+      // TODO<C++23> Use `std::views::zip` or `enumerate`.
+      size_t i = 0;
+      for (auto& el : gen) {
+        auto str = StringValueGetter{}(std::move(el), ctx);
+        if (str.has_value()) {
+          std::get<std::string>(result[i]).append(str.value());
+        }
+        ++i;
+      }
     };
-    std::ranges::for_each(children_, [&ctx, &result]{
-
-    });
+    std::ranges::for_each(
+        children_, [&ctx, &visitSingleExpressionResult](const auto& child) {
+          std::visit(visitSingleExpressionResult, child->evaluate(ctx));
+        });
     return result;
+  }
 
+  // ___________________________________________________
+  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
+    auto childKeys = ad_utility::lazyStrJoin(
+        children_ | std::views::transform([&varColMap](const auto& childPtr) {
+          return childPtr->getCacheKey(varColMap);
+        }),
+        ", ");
+    return absl::StrCat("CONCAT(", childKeys, ")");
+  }
+
+ private:
+  // ___________________________________________________
+  std::span<SparqlExpression::Ptr> childrenImpl() override {
+    return {children_.data(), children_.size()};
   }
 };
 
@@ -309,5 +341,8 @@ Expr makeStrBeforeExpression(Expr child1, Expr child2) {
 }
 Expr makeContainsExpression(Expr child1, Expr child2) {
   return make<ContainsExpression>(child1, child2);
+}
+Expr makeConcatExpression(std::vector<Expr> children) {
+  return std::make_unique<ConcatExpression>(std::move(children));
 }
 }  // namespace sparqlExpression
