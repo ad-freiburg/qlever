@@ -14,6 +14,11 @@ namespace detail {
 /// the "leaves" in the expression tree.
 template <typename T>
 class LiteralExpression : public SparqlExpression {
+ private:
+  // For string literals, cache the result of the evaluation as it doesn't
+  // change on mutliple calls.
+  mutable std::optional<IdOrString> cachedResult_;
+
  public:
   // _________________________________________________________________________
   explicit LiteralExpression(T _value) : _value{std::move(_value)} {}
@@ -25,13 +30,19 @@ class LiteralExpression : public SparqlExpression {
   ExpressionResult evaluate(
       [[maybe_unused]] EvaluationContext* context) const override {
     // Common code for the `Literal` and `std::string` case.
-    auto getIdOrString = [&context](const std::string& s) -> ExpressionResult {
+    auto getIdOrString = [&context,
+                          this](const std::string& s) -> ExpressionResult {
+      if (cachedResult_.has_value()) {
+        return cachedResult_.value();
+      }
       Id id;
       bool idWasFound = context->_qec.getIndex().getId(s, &id);
       if (!idWasFound) {
         // no vocabulary entry found, just use it as a string constant.
+        cachedResult_.emplace<std::string>(std::string{s});
         return s;
       }
+      cachedResult_.emplace<Id>(Id{id});
       return id;
     };
     if constexpr (std::is_same_v<TripleComponent::Literal, T>) {

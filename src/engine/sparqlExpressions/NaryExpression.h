@@ -77,6 +77,11 @@ SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeCoalesceExpression(
     std::vector<SparqlExpression::Ptr> children);
 
+// For a `functionPointer` that takes a vector of `SparqlExpression::Ptr` create
+// a lambda that takes the `Ptr`s directly as arguments (as a variadic
+// template). This makes the interface more similar to the `make...` functions
+// for nary expressions with a fixed number of children and thus makes testing
+// easier.
 inline auto variadicExpressionFactory(auto functionPointer) {
   return [functionPointer]<std::derived_from<SparqlExpression>... Exps>(
              std::unique_ptr<Exps>... children) {
@@ -88,15 +93,6 @@ inline auto variadicExpressionFactory(auto functionPointer) {
 
 // Construct a `CoalesceExpression` from a constant number of arguments. Used
 // for testing.
-/*
-inline auto makeCoalesceExpressionVariadic =
-    []<std::derived_from<SparqlExpression>... Exps>(
-        std::unique_ptr<Exps>... children) {
-      std::vector<SparqlExpression::Ptr> vec;
-      (..., (vec.push_back(std::move(children))));
-      return makeCoalesceExpression(std::move(vec));
-    };
-    */
 inline auto makeCoalesceExpressionVariadic =
     variadicExpressionFactory(&makeCoalesceExpression);
 SparqlExpression::Ptr makeConcatExpression(

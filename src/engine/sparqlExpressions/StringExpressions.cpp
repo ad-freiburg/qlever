@@ -260,6 +260,8 @@ class ConcatExpression : public detail::VariadicExpression {
   // _________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
     using StringVec = VectorWithMemoryLimit<std::string>;
+    // The result, either a string or a vector of strings, depending on the
+    // inputs.
     std::variant<std::string, StringVec> result{std::string{""}};
     auto visitSingleExpressionResult =
         [&ctx, &result ]<SingleExpressionResult T>(T && s)
@@ -304,6 +306,9 @@ class ConcatExpression : public detail::VariadicExpression {
         children_, [&ctx, &visitSingleExpressionResult](const auto& child) {
           std::visit(visitSingleExpressionResult, child->evaluate(ctx));
         });
+
+    // Lift the result from `string` to `IdOrString` which is needed for the
+    // expression module.
     if (std::holds_alternative<std::string>(result)) {
       return IdOrString{std::move(std::get<std::string>(result))};
     } else {
