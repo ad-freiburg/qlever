@@ -259,25 +259,45 @@ class ConcatExpression : public detail::VariadicExpression {
 
   // _________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
+    std::variant<IdOrString, VectorWithMemoryLimit<IdOrString>> result{IdOrString{""}};
+    /*
     VectorWithMemoryLimit<IdOrString> result(
         ctx->size(), IdOrString{std::string{}}, ctx->_allocator);
+        */
     auto visitSingleExpressionResult =
         [&ctx, &result ]<SingleExpressionResult T>(T && s)
             requires std::is_rvalue_reference_v<T&&> {
       if constexpr (isConstantResult<T>) {
         std::string strFromConstant = StringValueGetter{}(s, ctx).value_or("");
-        std::ranges::for_each(
-            result | std::views::transform(ad_utility::get<std::string>),
-            [&](std::string& target) { target.append(strFromConstant); });
+        if (std::holds_alternative<IdOrString>(result)) {
+          std::get<std::string>(std::get<IdOrString>(result)).append(strFromConstant);
+        } else {
+          auto& resultAsVector = std::get<VectorWithMemoryLimit<IdOrString>>(result);
+          std::ranges::for_each(
+              resultAsVector | std::views::transform(ad_utility::get<std::string>),
+              [&](std::string& target) { target.append(strFromConstant); });
+        }
       } else {
         auto gen = sparqlExpression::detail::makeGenerator(AD_FWD(s),
                                                            ctx->size(), ctx);
-        // TODO<C++23> Use `std::views::zip` or `enumerate`.
+        // If the result was a constant so far, then we now need to expand it to a vector.
+        if (std::holds_alternative<IdOrString>(result)) {
+          IdOrString constantResultSoFar =
+              std::move(std::get<IdOrString>(result));
+          result.emplace<VectorWithMemoryLimit<IdOrString>>(ctx->_allocator);
+          auto& resultAsVec =
+              std::get<VectorWithMemoryLimit<IdOrString>>(result);
+          resultAsVec.reserve(ctx->size());
+          std::fill_n(std::back_inserter(resultAsVec), ctx->size(), constantResultSoFar);
+        }
+          auto& resultAsVec =
+                  std::get<VectorWithMemoryLimit<IdOrString>>(result);
+          // TODO<C++23> Use `std::views::zip` or `enumerate`.
         size_t i = 0;
         for (auto& el : gen) {
           auto str = StringValueGetter{}(std::move(el), ctx);
           if (str.has_value()) {
-            std::get<std::string>(result[i]).append(str.value());
+            std::get<std::string>(resultAsVec[i]).append(str.value());
           }
           ++i;
         }
@@ -287,10 +307,11 @@ class ConcatExpression : public detail::VariadicExpression {
         children_, [&ctx, &visitSingleExpressionResult](const auto& child) {
           std::visit(visitSingleExpressionResult, child->evaluate(ctx));
         });
-    if (result.size() == 1) {
-      return result.at(0);
+    if (std::holds_alternative<IdOrString>(result)) {
+      return std::move(std::get<IdOrString>(result));
+    } else {
+      return std::move(std::get<VectorWithMemoryLimit<IdOrString>>(result));
     }
-    return result;
   }
 };
 

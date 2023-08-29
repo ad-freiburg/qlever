@@ -201,8 +201,8 @@ auto testBinaryExpressionVec =
 // via `std::vector`, not as a `VectorWithMemoryLimit`. This makes the usage
 // simpler.
 auto testNaryExpressionVec =
-    []<SingleExpressionResult Exp, VectorOrExpressionResult... Ops>(
-        auto makeExpression, std::vector<Exp> expected, std::tuple<Ops...> ops,
+    []<VectorOrExpressionResult Exp, VectorOrExpressionResult... Ops>(
+        auto makeExpression, Exp expected, std::tuple<Ops...> ops,
         source_location l = source_location::current()) {
       auto t = generateLocationTrace(l, "testBinaryExpressionVec");
 
@@ -762,7 +762,7 @@ TEST(SparqlExpression, concatExpression) {
               std::tuple{Ids{I(0), U, I(2), I(3), U, D(12.3)}, T,
                          IdOrString{"eins"}, Ids{U, U, U, U, U, D(-2.1)}});
 
-  checkConcat(IdOrStrings{}, std::tuple{});
+  checkConcat(IdOrString{""}, std::tuple{});
   auto coalesceExpr =
       makeConcatExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
                                    std::make_unique<IriExpression>("<bam>"));
