@@ -4,7 +4,6 @@
 
 #include <gtest/gtest.h>
 
-#include <chrono>
 #include <thread>
 
 #include "./HttpTestHelpers.h"
@@ -22,8 +21,8 @@ TEST(HttpServer, HttpTest) {
   // target (might be empty), and a copy of the request body (might be empty).
   TestHttpServer httpServer(
       [](auto request, auto&& send,
-         ad_utility::websocket::WebSocketManager& webSocketManager)
-          -> boost::asio::awaitable<void> {
+         [[maybe_unused]] ad_utility::websocket::WebSocketManager&
+             webSocketManager) -> boost::asio::awaitable<void> {
         std::string methodName;
         switch (request.method()) {
           case boost::beast::http::verb::get:
