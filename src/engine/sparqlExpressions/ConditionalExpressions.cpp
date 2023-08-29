@@ -123,6 +123,9 @@ class CoalesceExpression : public VariadicExpression {
         break;
       }
     }
+    if (result.size() == 1) {
+      return result.at(0);
+    }
     return result;
   }
 };

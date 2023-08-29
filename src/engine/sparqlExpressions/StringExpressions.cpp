@@ -287,6 +287,9 @@ class ConcatExpression : public detail::VariadicExpression {
         children_, [&ctx, &visitSingleExpressionResult](const auto& child) {
           std::visit(visitSingleExpressionResult, child->evaluate(ctx));
         });
+    if (result.size() == 1) {
+      return result.at(0);
+    }
     return result;
   }
 };
