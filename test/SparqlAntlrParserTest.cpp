@@ -1226,7 +1226,7 @@ auto matchNaryWithChildrenMatchers(auto makeFunction,
     return std::type_index{typeid(*ptr)};
   };
 
-  auto makeDummyChild = [](auto&&) -> SparqlExpression::Ptr {
+  [[maybe_unused]] auto makeDummyChild = [](auto&&) -> SparqlExpression::Ptr {
     return std::make_unique<VariableExpression>(Variable{"?x"});
   };
   auto expectedTypeIndex =
@@ -1284,6 +1284,13 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("floor(?x)", matchUnary(&makeFloorExpression));
   expectBuiltInCall("round(?x)", matchUnary(&makeRoundExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
+  expectBuiltInCall("COALESCE(?x)", matchUnary(makeCoalesceExpressionVariadic));
+  expectBuiltInCall("COALESCE()", matchNary(makeCoalesceExpressionVariadic));
+  expectBuiltInCall("COALESCE(?x, ?y, ?z)",
+                    matchNary(makeCoalesceExpressionVariadic, Var{"?x"},
+                              Var{"?y"}, Var{"?z"}));
+  expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
+                                                Var{"?h"}, Var{"?c"}));
 
   // The following three cases delegate to a separate parsing function, so we
   // only perform rather simple checks.

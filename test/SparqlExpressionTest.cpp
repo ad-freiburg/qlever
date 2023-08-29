@@ -109,7 +109,15 @@ auto testNaryExpression = [](auto&& makeExpression,
     }
     return 1;
   };
-  auto resultSize = std::max({getResultSize(operands)...});
+
+  const auto resultSize = [&operands..., &getResultSize]() {
+    if constexpr (sizeof...(operands) == 0) {
+      (void)getResultSize;
+      return 0ul;
+    } else {
+      return std::max({getResultSize(operands)...});
+    }
+  }();
 
   sparqlExpression::EvaluationContext context{*ad_utility::testing::getQec(),
                                               map, table, alloc, localVocab};
@@ -138,6 +146,22 @@ auto testNaryExpression = [](auto&& makeExpression,
   std::visit(checkResultsEqual, ExpressionResult{clone(expected)}, result);
   // ASSERT_EQ(result, ExpressionResult{clone(expected)});
 };
+
+template <typename T>
+concept VectorOrExpressionResult =
+    SingleExpressionResult<T> ||
+    (ad_utility::isVector<T> && isConstantResult<typename T::value_type>);
+
+template <VectorOrExpressionResult T>
+auto liftVector(T vec) {
+  if constexpr (SingleExpressionResult<T>) {
+    return vec;
+  } else {
+    return VectorWithMemoryLimit<typename T::value_type>{
+        std::make_move_iterator(vec.begin()),
+        std::make_move_iterator(vec.end()), alloc};
+  }
+}
 
 // Assert that the given commutative binary expression has the `expected` result
 // in both orders of the operands `op1` and `op2`.
@@ -172,6 +196,22 @@ auto testBinaryExpressionVec =
 
       testNaryExpression(makeExpression, liftVector(expected), liftVector(op1),
                          liftVector(op2));
+    };
+// Test an NARY expression, but the operands and expected result are passed in
+// via `std::vector`, not as a `VectorWithMemoryLimit`. This makes the usage
+// simpler.
+auto testNaryExpressionVec =
+    []<SingleExpressionResult Exp, VectorOrExpressionResult... Ops>(
+        auto makeExpression, std::vector<Exp> expected, std::tuple<Ops...> ops,
+        source_location l = source_location::current()) {
+      auto t = generateLocationTrace(l, "testBinaryExpressionVec");
+
+      std::apply(
+          [&](auto&... args) {
+            testNaryExpression(makeExpression, liftVector(expected),
+                               liftVector(args)...);
+          },
+          ops);
     };
 
 auto testOr =
@@ -345,12 +385,6 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(times13, mixed, D(1.0 / 1.3));
 }
 
-// Helper function to lift a `vector<T>` to `vectorWithMemoryLimit<T>`
-template <typename T>
-VectorWithMemoryLimit<T> liftVector(std::vector<T> vec) {
-  return VectorWithMemoryLimit<T>{std::make_move_iterator(vec.begin()),
-                                  std::make_move_iterator(vec.end()), alloc};
-}
 //
 // TODO: The tests above could also be simplified (and made much more readable)
 // in this vein.
@@ -672,4 +706,38 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkDist(U, IdOrString{I(12)}, IdOrString{"POINT(24.3 26.8)"});
   checkDist(U, IdOrString{"POINT(24.3 26.8)"s}, IdOrString{"NotAPoint"});
   checkDist(U, IdOrString{"NotAPoint"}, IdOrString{"POINT(24.3 26.8)"});
+}
+
+// ________________________________________________________________________________________
+TEST(SparqlExpression, ifAndCoalesce) {
+  auto checkIf = std::bind_front(testNaryExpressionVec, &makeIfExpression);
+  auto checkCoalesce =
+      std::bind_front(testNaryExpressionVec, makeCoalesceExpressionVariadic);
+
+  const auto T = Id::makeFromBool(true);
+  const auto F = Id::makeFromBool(false);
+
+  checkIf(
+      IdOrStrings{I(0), "eins", I(2), I(3), "vier", "fünf"},
+      // UNDEF and the empty string are considered to be `false`.
+      std::tuple{IdOrStrings{T, F, T, "true", U, ""},
+                 Ids{I(0), I(1), I(2), I(3), I(4), I(5)},
+                 IdOrStrings{"null", "eins", "zwei", "drei", "vier", "fünf"}});
+  checkCoalesce(IdOrStrings{I(0), "eins", I(2), I(3), U, D(5.0)},
+                // UNDEF and the empty string are considered to be `false`.
+                std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.0)},
+                           IdOrStrings{"null", "eins", "zwei", "drei", U, U},
+                           Ids{U, U, U, U, U, D(5.0)}});
+  // Example for COALESCE where we have a constant input and evaluating the last
+  // input is not necessary.
+  checkCoalesce(IdOrStrings{I(0), "eins", I(2), I(3), "eins", D(5.0)},
+                // UNDEF and the empty string are considered to be `false`.
+                std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.0)}, U,
+                           IdOrString{"eins"}, Ids{U, U, U, U, U, D(5.0)}});
+
+  checkCoalesce(IdOrStrings{}, std::tuple{});
+  auto coalesceExpr =
+      makeCoalesceExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
+                                     std::make_unique<IriExpression>("<bam>"));
+  ASSERT_EQ(coalesceExpr->getCacheKey({}), "COALESCE(<bim>, <bam>)");
 }
