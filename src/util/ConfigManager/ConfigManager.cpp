@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -23,6 +21,7 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -48,22 +47,24 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
   Takes one entry of an instance of `configurationOptions`, checks, that the
   pointer isn't empty, and returns the pair with the pointer dereferenced.
   */
-  auto checkNonEmptyAndDereference = [&pathPrefix](auto& pair) {
+  auto checkNonEmptyAndDereference = [&pathPrefix](const auto& pair) {
+    const auto& [jsonPath, pointerToVariant] = pair;
+
     // Make sure, that there is no null pointer.
-    AD_CORRECTNESS_CHECK(pair.second != nullptr);
+    AD_CORRECTNESS_CHECK(pointerToVariant != nullptr);
 
     // An empty sub manager tends to point to a logic error on the user
     // side.
     if (const ConfigManager* ptr =
-            std::get_if<ConfigManager>(pair.second.get());
+            std::get_if<ConfigManager>(pointerToVariant.get());
         ptr != nullptr && ptr->configurationOptions_.empty()) {
       throw std::runtime_error(
-          absl::StrCat("The sub manager at '", pathPrefix, pair.first,
+          absl::StrCat("The sub manager at '", pathPrefix, jsonPath,
                        "' is empty. Either fill it, or delete it."));
     }
 
     // Return a dereferenced reference.
-    return std::tie(pair.first, *pair.second);
+    return std::tie(jsonPath, *pointerToVariant);
   };
 
   /*
@@ -72,9 +73,10 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
   found inside it, together with the paths to them, to `collectedOptions`.
   */
   auto addHashMapEntryToCollectedOptions = [&collectedOptions,
-                                            &pathPrefix](auto pair) {
-    const std::string& pathToCurrentEntry =
-        absl::StrCat(pathPrefix, std::get<0>(pair));
+                                            &pathPrefix](const auto pair) {
+    const auto& [jsonPath, variantObject] = pair;
+
+    const std::string& pathToCurrentEntry = absl::StrCat(pathPrefix, jsonPath);
 
     std::visit(
         [&collectedOptions, &pathToCurrentEntry]<typename T>(T& var) {
@@ -93,7 +95,7 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
                               std::back_inserter(collectedOptions));
           }
         },
-        std::get<1>(pair));
+        variantObject);
   };
 
   // Collect all the options in the given `configurationOptions`.
@@ -504,6 +506,8 @@ void ConfigManager::verifyWithValidators() const {
   std::ranges::for_each(
       configurationOptions_,
       [](auto pair) {
+        const auto& [jsonPath, variantObject] = pair;
+
         std::visit(
             []<typename T>(T& var) {
               // Nothing to do, if we are not looking at a config manager.
@@ -511,14 +515,16 @@ void ConfigManager::verifyWithValidators() const {
                 var.verifyWithValidators();
               }
             },
-            std::get<1>(pair));
+            variantObject);
       },
-      [](auto& pair) {
+      [](const auto& pair) {
+        const auto& [jsonPath, pointerToVariant] = pair;
+
         // Make sure, that there is no null pointer.
-        AD_CORRECTNESS_CHECK(pair.second != nullptr);
+        AD_CORRECTNESS_CHECK(pointerToVariant != nullptr);
 
         // Return a dereferenced reference.
-        return std::tie(pair.first, *pair.second);
+        return std::tie(jsonPath, *pointerToVariant);
       });
 
   // Check all validators, that were directly registered.
