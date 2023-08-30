@@ -25,7 +25,9 @@ class LiteralExpression : public SparqlExpression {
  public:
   // _________________________________________________________________________
   explicit LiteralExpression(T _value) : _value{std::move(_value)} {}
-  ~LiteralExpression() { delete cachedResult_.load(std::memory_order_relaxed); }
+  ~LiteralExpression() override {
+    delete cachedResult_.load(std::memory_order_relaxed);
+  }
   // Disallow copying and moving. We currently don't need it, and we would have
   // to take care of the cache for proper implementations.
   LiteralExpression(const LiteralExpression&) = delete;
