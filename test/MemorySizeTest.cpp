@@ -332,4 +332,10 @@ TEST(MemorySize, ConstEval) {
                 (1_TB + 1_TB + 10_TB + 8000_GB).getBytes());
   static_assert((20_TB += 5_TB).getBytes() ==
                 (2_TB + 5_TB + 10_TB + 8000_GB).getBytes());
+
+  // Subtraction.
+  static_assert((20_TB).getBytes() ==
+                (40_TB - 1_TB - 10_TB - 9000_GB).getBytes());
+  static_assert((20_TB -= 5_TB).getBytes() ==
+                (40_TB - 5_TB - 10_TB - 10000_GB).getBytes());
 }
