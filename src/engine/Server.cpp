@@ -478,7 +478,7 @@ nlohmann::json Server::composeCacheStatsJson() const {
 
 class QueryAlreadyInUseError : public std::runtime_error {
  public:
-  QueryAlreadyInUseError(std::string_view proposedQueryId)
+  explicit QueryAlreadyInUseError(std::string_view proposedQueryId)
       : std::runtime_error{"Query id '" + proposedQueryId +
                            "' is already in use!"} {}
 };
@@ -618,9 +618,9 @@ boost::asio::awaitable<void> Server::processQuery(
     // certain media type is not supported.
     ad_utility::websocket::WebSocketNotifier webSocketNotifier{
         getQueryId(request), webSocketManager};
-    QueryExecutionContext qec(index_, &cache_, allocator_,
-                              sortPerformanceEstimator_, webSocketNotifier,
-                              pinSubtrees, pinResult);
+    QueryExecutionContext qec(
+        index_, &cache_, allocator_, sortPerformanceEstimator_,
+        webSocketNotifier.toFunction(), pinSubtrees, pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(enablePatternTrick_);
     queryExecutionTree = qp.createExecutionTree(pq);

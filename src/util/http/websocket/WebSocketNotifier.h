@@ -19,9 +19,9 @@ class WebSocketNotifier {
       : owningQueryId_{std::move(owningQueryId)},
         webSocketManager_{webSocketManager} {}
 
-  void operator()(std::string json) const;
+  void operator()(std::string) const;
 
-  operator std::function<void(std::string)>();
+  std::function<void(std::string)> toFunction() const;
 
   ~WebSocketNotifier();
 };

@@ -68,9 +68,9 @@ class QueryRegistry {
       return true;
     });
     if (success) {
-      return OwningQueryId{std::move(queryId), [this](const QueryId& id) {
-                             AD_CORRECTNESS_CHECK(!id.empty());
-                             registry_.wlock()->erase(id);
+      return OwningQueryId{std::move(queryId), [this](const QueryId& qid) {
+                             AD_CORRECTNESS_CHECK(!qid.empty());
+                             registry_.wlock()->erase(qid);
                            }};
     }
     return std::nullopt;

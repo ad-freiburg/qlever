@@ -72,7 +72,7 @@ class WebSocketManager {
   void runAndEraseWakeUpCallsSynchronously(const QueryId& queryId);
 
  public:
-  WebSocketManager(net::io_context& ioContext)
+  explicit WebSocketManager(net::io_context& ioContext)
       : registryStrand_(net::make_strand(ioContext)) {}
   net::awaitable<void> manageConnection(tcp::socket,
                                         http::request<http::string_body>);

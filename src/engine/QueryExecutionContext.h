@@ -94,7 +94,8 @@ class QueryExecutionContext {
       const Index& index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
-      std::function<void(std::string)> updateCallback = [](std::string) {},
+      std::function<void(std::string)> updateCallback =
+          [](std::string) { /* No-op by default for testing */ },
       const bool pinSubtrees = false, const bool pinResult = false)
       : _pinSubtrees(pinSubtrees),
         _pinResult(pinResult),
@@ -122,7 +123,7 @@ class QueryExecutionContext {
 
   ad_utility::AllocatorWithLimit<Id> getAllocator() { return _allocator; }
 
-  void signalQueryUpdate(const RuntimeInformation& runtimeInformation) {
+  void signalQueryUpdate(const RuntimeInformation& runtimeInformation) const {
     updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
   }
 

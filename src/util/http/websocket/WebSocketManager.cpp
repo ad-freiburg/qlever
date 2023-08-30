@@ -19,7 +19,7 @@ void WebSocketManager::addQueryStatusUpdate(const QueryId& queryId,
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
   net::post(
       registryStrand_.value(),
-      [this, sharedPayload = std::move(sharedPayload), &queryId]() {
+      [this, sharedPayload = std::move(sharedPayload), &queryId]() mutable {
         if (informationQueues_.contains(queryId)) {
           informationQueues_.at(queryId)->push_back(std::move(sharedPayload));
         } else {
@@ -35,8 +35,8 @@ void WebSocketManager::addQueryStatusUpdate(const QueryId& queryId,
 
 void WebSocketManager::runAndEraseWakeUpCallsSynchronously(
     const QueryId& queryId) {
-  auto range = wakeupCalls_.equal_range(queryId);
-  for (auto it = range.first; it != range.second; ++it) {
+  auto [start, stop] = wakeupCalls_.equal_range(queryId);
+  for (auto it = start; it != stop; ++it) {
     it->second();
   }
   wakeupCalls_.erase(queryId);
