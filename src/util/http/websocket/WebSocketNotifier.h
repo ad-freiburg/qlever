@@ -9,6 +9,10 @@
 #include "util/http/websocket/WebSocketManager.h"
 
 namespace ad_utility::websocket {
+
+/// This class wraps bundles an OwningQueryId and a reference to a
+/// WebSocketManager together. On Destruction this automatically notifies
+/// the WebSocketManager that the query was completed.
 class WebSocketNotifier {
   common::OwningQueryId owningQueryId_;
   WebSocketManager& webSocketManager_;
@@ -19,8 +23,10 @@ class WebSocketNotifier {
       : owningQueryId_{std::move(owningQueryId)},
         webSocketManager_{webSocketManager} {}
 
+  /// Broadcast the string to all listeners of this query.
   void operator()(std::string) const;
 
+  /// Notifies all listeners the query was completed.
   ~WebSocketNotifier();
 };
 

@@ -476,6 +476,11 @@ nlohmann::json Server::composeCacheStatsJson() const {
 
 // _____________________________________________
 
+/// Special type of std::runtime_error used to indicate that there has been
+/// a collision of query ids. This will happen when a HTTP client chooses an
+/// explicit id that is currently already in use. In this case the server
+/// will respond with HTTP status 409 Conflict and the client is encouraged
+/// to re-submit their request with a different query id.
 class QueryAlreadyInUseError : public std::runtime_error {
  public:
   explicit QueryAlreadyInUseError(std::string_view proposedQueryId)
@@ -608,6 +613,11 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
+    ad_utility::websocket::WebSocketNotifier webSocketNotifier{
+        getQueryId(request), webSocketManager};
+    auto notifierFunction = [&webSocketNotifier](std::string json) {
+      webSocketNotifier(std::move(json));
+    };
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query. Start the shared `timeoutTimer` here
     // to also include the query planning.
@@ -616,11 +626,6 @@ boost::asio::awaitable<void> Server::processQuery(
     // might happen that the query planner runs for a while (recall that it many
     // do index scans) and then we get an error message afterwards that a
     // certain media type is not supported.
-    ad_utility::websocket::WebSocketNotifier webSocketNotifier{
-        getQueryId(request), webSocketManager};
-    auto notifierFunction = [&webSocketNotifier](std::string json) {
-      webSocketNotifier(std::move(json));
-    };
     QueryExecutionContext qec(
         index_, &cache_, allocator_, sortPerformanceEstimator_,
         std::move(notifierFunction), pinSubtrees, pinResult);

@@ -123,6 +123,11 @@ class QueryExecutionContext {
 
   ad_utility::AllocatorWithLimit<Id> getAllocator() { return _allocator; }
 
+  /// Function that serializes the given RuntimeInformation to JSON and
+  /// calls the updateCallback with this JSON string.
+  /// This is used to broadcast updates of any query to a third-party
+  /// while it's still running.
+  /// \param runtimeInformation The RuntimeInformation to serialize
   void signalQueryUpdate(const RuntimeInformation& runtimeInformation) const {
     updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
   }

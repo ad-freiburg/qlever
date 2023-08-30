@@ -222,6 +222,8 @@ class HttpServer {
         co_await http::async_read(stream, buffer, req,
                                   boost::asio::use_awaitable);
 
+        // Let request be handled by the webSocketManager if the HTTP
+        // request is a WebSocket handshake
         if (beast::websocket::is_upgrade(req)) {
           auto errorResponse =
               ad_utility::websocket::getErrorResponseIfPathIsValid(req);

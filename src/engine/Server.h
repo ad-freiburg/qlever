@@ -118,6 +118,17 @@ class Server {
   template <typename Function, typename T = std::invoke_result_t<Function>>
   Awaitable<T> computeInNewThread(Function function) const;
 
+  /// This method extracts a client-defined query id from the passed HTTP
+  /// request if it is present. If it is not present or empty, a new
+  /// pseudo-random id will be chosen by the server. Note that this id is not
+  /// communicated to the client in any way. It ensures that every query has a
+  /// unique id and therefore that the code doesn't need to check for an empty
+  /// case.
+  ///
+  /// \param request The HTTP request to extract the id from.
+  ///
+  /// \return An OwningQueryId object. It removes itself from the registry
+  ///         on destruction.
   ad_utility::websocket::common::OwningQueryId getQueryId(
       const ad_utility::httpUtils::HttpRequest auto& request);
 };
