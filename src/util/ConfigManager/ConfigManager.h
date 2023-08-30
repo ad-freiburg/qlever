@@ -51,7 +51,8 @@ Manages a bunch of `ConfigOption`s.
 */
 class ConfigManager {
   /*
-  The added configuration options.
+  The added configuration options. Configuration managers are used by the user
+  to describe a json object literal more explicitly.
 
   A configuration option tends to be placed like a key value pair in a json
   object. For example: `{"object 1" : [{"object 2" : { "The configuration option
@@ -60,8 +61,9 @@ class ConfigManager {
   The string key describes their location in the json object literal, by
   representing a json pointer in string form.
   */
-  ad_utility::HashMap<std::string, std::unique_ptr<ConfigOption>>
-      configurationOptions_;
+  using HashMapEntry =
+      std::unique_ptr<std::variant<ConfigOption, ConfigManager>>;
+  ad_utility::HashMap<std::string, HashMapEntry> configurationOptions_;
 
   /*
   List of the added validators. Whenever the values of the options are set,
@@ -174,12 +176,25 @@ class ConfigManager {
   }
 
   /*
+  @brief Creates and adds a new configuration manager with a prefix path for
+  it's internally held configuration options and managers.
+
+  @param pathToOption Describes a path in json, which will be a prefix to all
+  the other paths held in the newly created ConfigManager.
+
+  @return A reference to the newly created configuration manager. This reference
+  will stay valid, even after adding more options.
+  */
+  ConfigManager& addSubManager(const std::vector<std::string>& path);
+
+  /*
   @brief Sets the configuration options based on the given json.
 
   @param j There will be an exception thrown, if:
   - `j` doesn't contain values for all configuration options, that must be set
   at runtime.
-  - Same, if there are values for configuration options, that do not exist.
+  - Same, if there are values for configuration options, that do not exist, or
+  are not contained in this manager, or its sub mangangers.
   - `j` is anything but a json object literal.
   - Any of the added validators return false.
   */
@@ -272,6 +287,7 @@ class ConfigManager {
   FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
   FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
   FRIEND_TEST(ConfigManagerTest, ContainsOption);
+  FRIEND_TEST(ConfigManagerTest, CheckForBrokenPaths);
 
   /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
@@ -281,8 +297,8 @@ class ConfigManager {
       const std::vector<std::string>& keys);
 
   /*
-  @brief Verifies, that the given path is a valid path for an option. If not,
-  throws exceptions.
+  @brief Verifies, that the given path is a valid path for an option, or sub
+  manager. If not, throws exceptions.
 
   @param pathToOption Describes a path in json.
   */
@@ -354,11 +370,29 @@ class ConfigManager {
   }
 
   /*
-  @brief Provide a range of tuples, that hold references to the key value pairs
-  in `configurationOptions_`, but with the pointer dereferenced.
+  @brief A vector to all the configuratio options, held by this manager,
+  represented with their json paths and reference to them. Options held by a sub
+  manager, are also included with the path to the sub manager as prefix.
   */
-  auto configurationOptions();
-  auto configurationOptions() const;
+  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions();
+  std::vector<std::pair<std::string, const ConfigOption&>>
+  configurationOptions() const;
+
+  /*
+  @brief The implementation for `configurationOptions`.
+
+  @tparam ReturnReference Should be either `ConfigOption&`, or `const
+  ConfigOption&`.
+
+  @param pathPrefix This prefix will be added to all configuration option json
+  paths, that will be returned.
+  */
+  template <typename ReturnReference>
+  requires std::same_as<ReturnReference, ConfigOption&> ||
+           std::same_as<ReturnReference, const ConfigOption&>
+  static std::vector<std::pair<std::string, ReturnReference>>
+  configurationOptionsImpl(auto& configurationOptions,
+                           std::string_view pathPrefix = "");
 
   /*
   @brief Call all the validators to check, if the current value is valid.
