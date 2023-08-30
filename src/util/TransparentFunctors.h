@@ -98,7 +98,7 @@ static constexpr detail::HoldsAlternativeImpl<T> holdsAlternative;
 /// Transparent functor for `std::get`. Currently only works for `std::variant`
 /// and not for `std::array` or `std::tuple`.
 template <typename T>
-static constexpr detail::HoldsAlternativeImpl<T> get;
+static constexpr detail::GetImpl<T> get;
 
 /// Transparent functor for `std::get_if`. As an extension to `std::get_if`,
 /// `ad_utility::getIf` may also be called with a `variant` object or reference,
