@@ -277,6 +277,9 @@ TEST(MemorySize, Parse) {
                                                      {42_TB, "42 T"},
                                                      {42_TB, "42 t"}},
       doTest);
+
+  // We only take memory units up to `TB`. Not further.
+  std::ranges::for_each(std::vector{"42 P", "42 PB"}, doExceptionTest);
 }
 
 // Checks, if all the constexpr functions can actually be evaluated at compile
