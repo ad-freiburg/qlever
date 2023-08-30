@@ -113,6 +113,12 @@ class MemorySize {
   template <Arithmetic T>
   constexpr MemorySize& operator*=(const T c);
 
+  template <Arithmetic T>
+  constexpr MemorySize operator/(const T c) const;
+
+  template <Arithmetic T>
+  constexpr MemorySize& operator/=(const T c);
+
  private:
   // Constructor for the factory functions.
   explicit constexpr MemorySize(size_t amountOfMemoryInBytes)
@@ -322,6 +328,29 @@ constexpr MemorySize MemorySize::operator*(const T c) const {
 template <Arithmetic T>
 constexpr MemorySize& MemorySize::operator*=(const T c) {
   *this = *this * c;
+  return *this;
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize MemorySize::operator/(const T c) const {
+  // A negative amount of memory wouldn't make much sense.
+  AD_CONTRACT_CHECK(c >= static_cast<T>(0));
+
+  if constexpr (std::is_floating_point_v<T>) {
+    return MemorySize::bytes(
+        detail::floatingPointToSizeT(static_cast<T>(memoryInBytes_) / c));
+  } else {
+    static_assert(std::is_integral_v<T>);
+    return MemorySize::bytes(detail::floatingPointToSizeT(
+        detail::sizeTDivision(memoryInBytes_, static_cast<size_t>(c))));
+  }
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize& MemorySize::operator/=(const T c) {
+  *this = *this / c;
   return *this;
 }
 
