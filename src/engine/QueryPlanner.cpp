@@ -1183,11 +1183,13 @@ std::array<vector<QueryPlanner::SubtreePlan>, 2> QueryPlanner::merge(
   // esp. with an entire relation but also with something like is-a Person
   // If that is the case look at the size estimate for the other side,
   // if that is rather small, replace the join and scan by a combination.
+  std::vector<char> joinableInA(a.size(), char{0});
   std::vector<char> joinableInB(b.size(), char{0});
   ad_utility::HashMap<string, vector<SubtreePlan>> candidates;
   // Find all pairs between a and b that are connected by an edge.
   LOG(TRACE) << "Considering joins that merge " << a.size() << " and "
              << b.size() << " plans...\n";
+  size_t idxA = 0;
   for (const auto& ai : a) {
     size_t idx = 0;
     for (const auto& bj : b) {
@@ -1198,9 +1200,11 @@ std::array<vector<QueryPlanner::SubtreePlan>, 2> QueryPlanner::merge(
         candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
             .emplace_back(std::move(plan));
       }
-      joinableInB[idx] = static_cast<char>(!v.empty());
+      joinableInB[idx] |= static_cast<char>(!v.empty());
+      joinableInA[idxA] |= static_cast<char>(!v.empty());
       ++idx;
     }
+    ++idxA;
   }
 
   // Duplicates are removed if the same triples are touched,
@@ -1235,6 +1239,9 @@ std::array<vector<QueryPlanner::SubtreePlan>, 2> QueryPlanner::merge(
   if (returnUnjoinableFromB) {
     for (size_t i = 0; i < joinableInB.size(); ++i) {
       if (!static_cast<bool>(joinableInB[i])) {
+        if (&a == &b && joinableInA[i]) {
+          continue;
+        }
         unjoinable.push_back(b[i]);
       }
     }
