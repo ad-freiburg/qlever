@@ -43,14 +43,17 @@ class Index {
   // one place.
   // Every vector is either empty or has the same size as the others.
   struct WordEntityPostings {
-    vector<TextRecordIndex>
-        cids_;  // Stores the index of the TextRecord of each result.
-    vector<WordIndex>
-        wids_;  // For prefix-queries stores for each result the index of the
-                // Word the prefixed-word was completed to.
-    vector<Id> eids_;       // Stores the index of the entity of each result.
-    vector<Score> scores_;  // Stores for each result how often an entity
-                            // appears in its associated TextRecord.
+    // Stores the index of the TextRecord of each result.
+    vector<TextRecordIndex> cids_;
+    // For every instance should wids_.size() never be < 1.
+    // For prefix-queries stores for each term and result the index of
+    // the Word the prefixed-word was completed to.
+    vector<vector<WordIndex>> wids_ = {{}};
+    // Stores the index of the entity of each result.
+    vector<Id> eids_;
+    // Stores for each result how often an entity
+    // appears in its associated TextRecord.
+    vector<Score> scores_;
   };
 
   /// Forbid copy and assignment.
@@ -122,6 +125,8 @@ class Index {
   // probably not be in the index class.
   [[nodiscard]] std::optional<std::string> idToOptionalString(
       VocabIndex id) const;
+  [[nodiscard]] std::optional<std::string> idToOptionalString(
+      WordVocabIndex id) const;
 
   bool getId(const std::string& element, Id* id) const;
 
@@ -179,23 +184,6 @@ class Index {
 
   WordEntityPostings getContextEntityScoreListsForWords(
       const std::string& words) const;
-
-  template <size_t I>
-  void getECListForWordsAndSingleSub(const std::string& words,
-                                     const vector<std::array<Id, I>>& subres,
-                                     size_t subResMainCol, size_t limit,
-                                     vector<std::array<Id, 3 + I>>& res) const;
-
-  void getECListForWordsAndTwoW1Subs(const std::string& words,
-                                     const vector<std::array<Id, 1>> subres1,
-                                     const vector<std::array<Id, 1>> subres2,
-                                     size_t limit,
-                                     vector<std::array<Id, 5>>& res) const;
-
-  void getECListForWordsAndSubtrees(
-      const std::string& words,
-      const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
-      size_t limit, vector<vector<Id>>& res) const;
 
   WordEntityPostings getWordPostingsForTerm(const std::string& term) const;
 

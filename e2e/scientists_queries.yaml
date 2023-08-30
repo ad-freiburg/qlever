@@ -13,7 +13,7 @@ queries:
       ORDER BY DESC(?ql_textscore_t)
     checks:
       - num_cols: 3
-      - num_rows: 4265
+      - num_rows: 4285
       - selected: [ "?x", "?t", "?ql_textscore_t"]
       - contains_row:
           - "<Albert_Einstein>"
@@ -48,6 +48,42 @@ queries:
           he published a paper on general relativity."
           - null
 
+  - query: relat-star-Physikalische-real-star-scientists-from-ulm
+    type: text
+    sparql: |
+      SELECT * WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Place_of_birth> <Ulm> .
+          ?t ql:contains-entity ?x .
+          ?t ql:contains-word "relat* Physikalische rela*"
+      }
+    checks:
+      - num_cols: 5
+      - selected: [ "?x", "?ql_textscore_t", "?t", "?ql_matchingword_t_relat", "?ql_matchingword_t_rela" ]
+      - contains_row:
+          - "<Albert_Einstein>"
+          - null
+          - null
+          - "relationship"
+          - "relationship"
+      - contains_row:
+          - "<Albert_Einstein>"
+          - null
+          - null
+          - "relationship"
+          - "relativity"
+      - contains_row:
+          - "<Albert_Einstein>"
+          - null
+          - null
+          - "relativity"
+          - "relationship"
+      - contains_row:
+          - "<Albert_Einstein>"
+          - null
+          - null
+          - "relativity"
+          - "relativity"
 
   - query: algo-star-female-scientists
     type: text
@@ -71,7 +107,7 @@ queries:
     type: text
     sparql: |
       PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-      SELECT ?x ?date ?t ?ql_textscore_t WHERE {
+      SELECT ?x ?date ?t ?ql_textscore_t ?ql_matchingword_t_algor WHERE {
         ?x <is-a> <Scientist> .
         ?x <Date_of_birth> ?date .
         ?x <Gender> <Female> .
@@ -81,18 +117,20 @@ queries:
       }
       ORDER BY DESC(?ql_textscore_t)
     checks:
-      - num_cols: 4
+      - num_cols: 5
       - num_rows: 4
       - contains_row:
         - "<Grete_Hermann>"
         - "1901-03-02"
         - "Hermann's algorithm for primary decomposition is still in use now."
         - null
+        - "algorithm"
       - contains_row:
         - "<Ada_Lovelace>"
         - "1815-12-10"
         - "Her notes on the engine include what is recognised as the first algorithm intended to be carried out by a machine."
         - null
+        - "algorithm"
       - order_numeric: {"dir": "DESC", "var" : "?ql_textscore_t"}
 
   - query: people-born-in-1901
@@ -1155,20 +1193,20 @@ queries:
       - contains_row: ['<Noreena_Hertz>', '<Judaism>']
 
 
-  - query: select_asterisk_algo-star-female-scientists
+  - query: select_asterisk_algo-star-herm-star-primary-female-scientists
     type: text
     sparql: |
       SELECT * WHERE {
           ?x <is-a> <Scientist> .
           ?x <Gender> <Female> .
           ?t ql:contains-entity ?x .
-          ?t ql:contains-word "algo*"
+          ?t ql:contains-word "algo* herm* primary"
       } TEXTLIMIT 1
     checks:
-      - num_cols: 3
-      - num_rows: 11
-      - selected: [ "?x", "?ql_textscore_t", "?t" ]
-      - contains_row: [ "<Grete_Hermann>",null,"Hermann's algorithm for primary decomposition is still in use now." ]
+      - num_cols: 5
+      - num_rows: 1
+      - selected: [ "?x", "?ql_textscore_t", "?t", "?ql_matchingword_t_algo", "?ql_matchingword_t_herm" ]
+      - contains_row: [ "<Grete_Hermann>",null,"Hermann's algorithm for primary decomposition is still in use now.","algorithm","hermann" ]
 
 
   - query : select_asterisk_regex-lastname-stein
