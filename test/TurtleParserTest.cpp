@@ -640,6 +640,7 @@ TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
 // _______________________________________________________________________
 TEST(TurtleParserTest, emptyInput) {
   std::string filename{"turtleParserEmptyInput.dat"};
+  FILE_BUFFER_SIZE() = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              std::string_view input = "") {
     {
