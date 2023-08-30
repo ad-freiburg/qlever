@@ -300,6 +300,26 @@ TEST(MemorySize, ArithmeticOperators) {
   ASSERT_EQ((33_MB).getBytes(), memSubtraction.getBytes());
   memSubtraction -= 11000_kB;
   ASSERT_EQ((22_MB).getBytes(), memSubtraction.getBytes());
+
+  // Whole number multiplication.
+  ASSERT_EQ((2_GB).getBytes(), (1_GB * 2).getBytes());
+  ASSERT_EQ((20_TB).getBytes(), (1_TB * 2 * 10).getBytes());
+  ad_utility::MemorySize memWholeMultiplication{40_MB};
+  memWholeMultiplication *= 5;
+  ASSERT_EQ((200_MB).getBytes(), memWholeMultiplication.getBytes());
+  memWholeMultiplication *= 3;
+  ASSERT_EQ((600_MB).getBytes(), memWholeMultiplication.getBytes());
+  ASSERT_ANY_THROW(1_GB * -2);
+
+  // Floating point multiplication.
+  ASSERT_EQ((5_GB).getBytes(), (2_GB * 2.5).getBytes());
+  ASSERT_EQ((375_TB).getBytes(), (400_TB * 0.25 * 3.75).getBytes());
+  ad_utility::MemorySize memFloatingPointMultiplication{40_MB};
+  memFloatingPointMultiplication *= 1.5;
+  ASSERT_EQ((60_MB).getBytes(), memFloatingPointMultiplication.getBytes());
+  memFloatingPointMultiplication *= 0.2;
+  ASSERT_EQ((12_MB).getBytes(), memFloatingPointMultiplication.getBytes());
+  ASSERT_ANY_THROW(1_GB * -2.48);
 }
 
 // Checks, if all the constexpr functions can actually be evaluated at compile
@@ -338,4 +358,12 @@ TEST(MemorySize, ConstEval) {
                 (40_TB - 1_TB - 10_TB - 9000_GB).getBytes());
   static_assert((20_TB -= 5_TB).getBytes() ==
                 (40_TB - 5_TB - 10_TB - 10000_GB).getBytes());
+
+  // Whole number multiplication.
+  static_assert((20_TB).getBytes() == (1_TB * 2 * 10).getBytes());
+  static_assert((20_TB *= 5).getBytes() == (5_TB * 4 * 5).getBytes());
+
+  // Floating point multiplication.
+  static_assert((5_GB).getBytes() == (2_GB * 2.5).getBytes());
+  static_assert((30_TB *= 1.15).getBytes() == (100_TB * 0.15 * 2.3).getBytes());
 }

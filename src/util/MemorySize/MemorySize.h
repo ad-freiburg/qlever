@@ -25,6 +25,10 @@ namespace ad_utility {
 ##############
 */
 
+// A concept, for when a type should be an integral, or a floating point.
+template <typename T>
+concept Arithmetic = std::integral<T> || std::floating_point<T>;
+
 /*
 An abstract class, that represents an amount of memory.
 Note:
@@ -103,6 +107,12 @@ class MemorySize {
   constexpr MemorySize operator-(const MemorySize& m) const;
   constexpr MemorySize& operator-=(const MemorySize& m);
 
+  template <Arithmetic T>
+  constexpr MemorySize operator*(const T c) const;
+
+  template <Arithmetic T>
+  constexpr MemorySize& operator*=(const T c);
+
  private:
   // Constructor for the factory functions.
   explicit constexpr MemorySize(size_t amountOfMemoryInBytes)
@@ -155,6 +165,15 @@ constexpr static double sizeTDivision(const size_t dividend,
          static_cast<double>(dividend % divisor) / static_cast<double>(divisor);
 }
 
+// Converts a floating point to `size_t`. Rounds up, if needed.
+template <std::floating_point T>
+constexpr size_t floatingPointToSizeT(const T d) {
+  // TODO<c++23> As of `c++23`, `std::ceil` is constexpr and can be used.
+  const auto unrounded = static_cast<size_t>(d);
+  // We (maybe) have to round up.
+  return d > static_cast<T>(unrounded) ? unrounded + 1 : unrounded;
+}
+
 /*
 @brief Calculate the amount of bytes for a given amount of units.
 
@@ -162,8 +181,7 @@ constexpr static double sizeTDivision(const size_t dividend,
 
 @return The amount of bytes. Rounded up, if needed.
 */
-template <typename T>
-requires std::integral<T> || std::floating_point<T>
+template <Arithmetic T>
 constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
                                            std::string_view unitName) {
   // Negativ values makes no sense.
@@ -182,14 +200,8 @@ constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
   }
 
   if constexpr (std::is_floating_point_v<T>) {
-    // TODO<c++23> As of `c++23`, `std::ceil` is constexpr and can be used.
-    const double doubleResult =
-        amountOfUnits * static_cast<double>(numBytesPerUnit.at(unitName));
-    const auto unroundedResult = static_cast<size_t>(doubleResult);
-    // We (maybe) have to round up.
-    return doubleResult > static_cast<double>(unroundedResult)
-               ? unroundedResult + 1
-               : unroundedResult;
+    return floatingPointToSizeT(amountOfUnits *
+                                static_cast<T>(numBytesPerUnit.at(unitName)));
   } else {
     static_assert(std::is_integral_v<T>);
     return amountOfUnits * numBytesPerUnit.at(unitName);
@@ -288,6 +300,28 @@ constexpr MemorySize MemorySize::operator-(const MemorySize& m) const {
 // _____________________________________________________________________________
 constexpr MemorySize& MemorySize::operator-=(const MemorySize& m) {
   memoryInBytes_ -= m.memoryInBytes_;
+  return *this;
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize MemorySize::operator*(const T c) const {
+  // A negative amount of memory wouldn't make much sense.
+  AD_CONTRACT_CHECK(c >= static_cast<T>(0));
+
+  if constexpr (std::is_floating_point_v<T>) {
+    return MemorySize::bytes(
+        detail::floatingPointToSizeT(static_cast<T>(memoryInBytes_) * c));
+  } else {
+    static_assert(std::is_integral_v<T>);
+    return MemorySize::bytes(memoryInBytes_ * c);
+  }
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize& MemorySize::operator*=(const T c) {
+  *this = *this * c;
   return *this;
 }
 
