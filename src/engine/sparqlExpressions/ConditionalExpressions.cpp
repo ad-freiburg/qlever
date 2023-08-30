@@ -115,7 +115,7 @@ class CoalesceExpression : public VariadicExpression {
 
     // Evaluate the children one by one, stopping as soon as all result are
     // bound.
-    for (const auto& child : children_) {
+    for (const auto& child : childrenVec()) {
       std::visit(visitExpressionResult, child->evaluate(ctx));
       unboundIndices = std::move(nextUnboundIndices);
       nextUnboundIndices.clear();

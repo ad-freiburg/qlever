@@ -313,8 +313,8 @@ class ConcatExpression : public detail::VariadicExpression {
         // TODO<C++23> Use `std::views::zip` or `enumerate`.
         size_t i = 0;
         for (auto& el : gen) {
-          auto str = StringValueGetter{}(std::move(el), ctx);
-          if (str.has_value()) {
+          if (auto str = StringValueGetter{}(std::move(el), ctx);
+              str.has_value()) {
             resultAsVec[i].append(str.value());
           }
           ++i;
@@ -322,7 +322,7 @@ class ConcatExpression : public detail::VariadicExpression {
       }
     };
     std::ranges::for_each(
-        children_, [&ctx, &visitSingleExpressionResult](const auto& child) {
+        childrenVec(), [&ctx, &visitSingleExpressionResult](const auto& child) {
           std::visit(visitSingleExpressionResult, child->evaluate(ctx));
         });
 

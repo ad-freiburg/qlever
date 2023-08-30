@@ -762,6 +762,12 @@ TEST(SparqlExpression, concatExpression) {
               std::tuple{Ids{I(0), U, I(2), I(3), U, D(12.3)}, T,
                          IdOrString{"eins"}, Ids{U, U, U, U, U, D(-2.1)}});
 
+  // Only constants
+  checkConcat(IdOrString{"trueMe1"}, std::tuple{T, IdOrString{"Me"}, I(1)});
+  // Constants at the beginning.
+  checkConcat(IdOrStrings{"trueMe1", "trueMe2"},
+              std::tuple{T, IdOrString{"Me"}, Ids{I(1), I(2)}});
+
   checkConcat(IdOrString{""}, std::tuple{});
   auto coalesceExpr =
       makeConcatExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
@@ -769,4 +775,25 @@ TEST(SparqlExpression, concatExpression) {
   ASSERT_THAT(coalesceExpr->getCacheKey({}),
               testing::AllOf(::testing::ContainsRegex("ConcatExpression"),
                              ::testing::ContainsRegex("<bim>, <bam>)")));
+}
+
+TEST(SparqlExpression, literalExpression) {
+  TestContext ctx;
+  StringLiteralExpression expr{TripleComponent::Literal{
+      RdfEscaping::normalizeRDFLiteral("\"notInTheVocabulary\"")}};
+  // Evaluate multiple times to test the caching behavior.
+  for (size_t i = 0; i < 15; ++i) {
+    ASSERT_EQ((ExpressionResult{IdOrString{"\"notInTheVocabulary\""}}),
+              expr.evaluate(&ctx.context));
+  }
+  // A similar test with a constant entry that is part of the vocabulary and can
+  // therefore be converted to an ID.
+  IriExpression iriExpr{"<x>"};
+  Id idOfX;
+  bool result = ctx.qec->getIndex().getId("<x>", &idOfX);
+  AD_CORRECTNESS_CHECK(result);
+  for (size_t i = 0; i < 15; ++i) {
+    ASSERT_EQ((ExpressionResult{IdOrString{idOfX}}),
+              iriExpr.evaluate(&ctx.context));
+  }
 }

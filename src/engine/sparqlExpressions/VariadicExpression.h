@@ -9,17 +9,22 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 namespace sparqlExpression::detail {
-using namespace sparqlExpression;
 // A base class for variadic expressions, i.e. expressions for which the number
 // of child expressions is only known at runtime. This class implements every
 // function except for `evaluate`. In particular, it manages the child
 // expressions.
 class VariadicExpression : public SparqlExpression {
- protected:
+ private:
   std::vector<SparqlExpression::Ptr> children_;
 
+ protected:
+  // We cannot call it `children` because it would shadown an inherited member
+  // function.
+  auto& childrenVec() { return children_; }
+  const auto& childrenVec() const { return children_; }
+
  public:
-  VariadicExpression(std::vector<SparqlExpression::Ptr> children)
+  explicit VariadicExpression(std::vector<SparqlExpression::Ptr> children)
       : children_{std::move(children)} {}
 
   // _________________________________________________________________

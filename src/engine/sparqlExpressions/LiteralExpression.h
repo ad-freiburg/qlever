@@ -18,12 +18,18 @@ class LiteralExpression : public SparqlExpression {
   // For string literals, cache the result of the evaluation as it doesn't
   // change when `evaluate` is called multiple times. It is a `std::atomic` to
   // make the `const` evaluate function threadsafe and lock-free.
+  // TODO<joka921> Make this unnecessary by completing multiple small groups at
+  // once during the GROUP BY.
   mutable std::atomic<IdOrString*> cachedResult_ = nullptr;
 
  public:
   // _________________________________________________________________________
   explicit LiteralExpression(T _value) : _value{std::move(_value)} {}
-  ~LiteralExpression() { delete cachedResult_; }
+  ~LiteralExpression() { delete cachedResult_.load(std::memory_order_relaxed); }
+  // Disallow copying and moving. We currently don't need it, and we would have
+  // to take care of the cache for proper implementations.
+  LiteralExpression(const LiteralExpression&) = delete;
+  LiteralExpression& operator=(const LiteralExpression&) = delete;
 
   // A simple getter for the stored value.
   const T& value() const { return _value; }
@@ -40,11 +46,10 @@ class LiteralExpression : public SparqlExpression {
       Id id;
       bool idWasFound = context->_qec.getIndex().getId(s, &id);
       IdOrString result = idWasFound ? IdOrString{id} : IdOrString{s};
-      IdOrString* ptrForCache = new IdOrString{result};
-      auto oldCachePtr = std::atomic_exchange_explicit(
-          &cachedResult_, ptrForCache, std::memory_order_relaxed);
-      delete oldCachePtr;
-      return id;
+      auto ptrForCache = std::make_unique<IdOrString>(result);
+      ptrForCache.reset(std::atomic_exchange_explicit(
+          &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));
+      return result;
     };
     if constexpr (std::is_same_v<TripleComponent::Literal, T>) {
       return getIdOrString(_value.rawContent());
