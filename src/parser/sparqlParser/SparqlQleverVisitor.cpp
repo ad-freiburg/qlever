@@ -7,6 +7,8 @@
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
+#include <absl/strings/str_split.h>
+
 #include <string>
 #include <vector>
 
@@ -1029,12 +1031,33 @@ vector<TripleWithPropertyPath> Visitor::visit(
   // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
   // <entity>` is contained in the query, then the variable `?ql_textscore_var`
   // is implicitly created and visible in the query body.
-  auto setTextscoreVisibleIfPresent = [this](VarOrTerm& subject,
-                                             VarOrPath& predicate) {
+  // Similarly if a triple `?var ql:contains-word "words"` is contained in the
+  // query, then the variable `ql_matchingword_var` is implicitly created and
+  // visible in the query body.
+  auto setMatchingWordAndTextscoreVisibleIfPresent = [this, ctx](
+                                                         VarOrTerm& subject,
+                                                         VarOrPath& predicate,
+                                                         VarOrTerm& object) {
     if (auto* var = std::get_if<Variable>(&subject)) {
       if (auto* propertyPath = std::get_if<PropertyPath>(&predicate)) {
-        if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE ||
-            propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+        if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+          addVisibleVariable(var->getTextScoreVariable());
+          string name = object.toSparql();
+          if (!((name.starts_with('"') && name.ends_with('"')) ||
+                (name.starts_with('\'') && name.ends_with('\'')))) {
+            reportError(
+                ctx,
+                "ql:contains-word has to be followed by a string in quotes");
+          }
+          for (std::string_view s : std::vector<std::string>(
+                   absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
+            if (!s.ends_with('*')) {
+              continue;
+            }
+            addVisibleVariable(
+                var->getMatchingWordVariable(s.substr(0, s.size() - 1)));
+          }
+        } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
           addVisibleVariable(var->getTextScoreVariable());
         }
       }
@@ -1046,7 +1069,7 @@ vector<TripleWithPropertyPath> Visitor::visit(
     auto subject = visit(ctx->varOrTerm());
     auto tuples = visit(ctx->propertyListPathNotEmpty());
     for (auto& [predicate, object] : tuples) {
-      setTextscoreVisibleIfPresent(subject, predicate);
+      setMatchingWordAndTextscoreVisibleIfPresent(subject, predicate, object);
       triples.emplace_back(subject, std::move(predicate), std::move(object));
     }
     return triples;
