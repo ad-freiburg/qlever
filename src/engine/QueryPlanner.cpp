@@ -1173,21 +1173,23 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
 }
 
 // _____________________________________________________________________________
-vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
+std::array<vector<QueryPlanner::SubtreePlan>, 2> QueryPlanner::merge(
     const vector<QueryPlanner::SubtreePlan>& a,
     const vector<QueryPlanner::SubtreePlan>& b,
-    const QueryPlanner::TripleGraph& tg) const {
+    const QueryPlanner::TripleGraph& tg, bool returnUnjoinableFromB) const {
   // TODO: Add the following features:
   // If a join is supposed to happen, always check if it happens between
   // a scan with a relatively large result size
   // esp. with an entire relation but also with something like is-a Person
   // If that is the case look at the size estimate for the other side,
   // if that is rather small, replace the join and scan by a combination.
+  std::vector<char> joinableInB(b.size(), char{0});
   ad_utility::HashMap<string, vector<SubtreePlan>> candidates;
   // Find all pairs between a and b that are connected by an edge.
   LOG(TRACE) << "Considering joins that merge " << a.size() << " and "
              << b.size() << " plans...\n";
   for (const auto& ai : a) {
+    size_t idx = 0;
     for (const auto& bj : b) {
       LOG(TRACE) << "Creating join candidates for " << ai._qet->asString()
                  << "\n and " << bj._qet->asString() << '\n';
@@ -1196,6 +1198,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
             .emplace_back(std::move(plan));
       }
+      joinableInB[idx] = static_cast<char>(!v.empty());
+      ++idx;
     }
   }
 
@@ -1227,7 +1231,15 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
   }
 
   LOG(TRACE) << "Got " << prunedPlans.size() << " pruned plans from \n";
-  return prunedPlans;
+  std::vector<SubtreePlan> unjoinable;
+  if (returnUnjoinableFromB) {
+    for (size_t i = 0; i < joinableInB.size(); ++i) {
+      if (!static_cast<bool>(joinableInB[i])) {
+        unjoinable.push_back(b[i]);
+      }
+    }
+  }
+  return {std::move(prunedPlans), std::move(unjoinable)};
 }
 
 // _____________________________________________________________________________
@@ -1409,12 +1421,15 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   dpTab.emplace_back(seedWithScansAndText(tg, children));
   applyFiltersIfPossible(dpTab.back(), filters, numSeeds == 1);
 
+  vector<SubtreePlan> unjoinable;
   for (size_t k = 2; k <= numSeeds; ++k) {
     LOG(TRACE) << "Producing plans that unite " << k << " triples."
                << std::endl;
     dpTab.emplace_back(vector<SubtreePlan>());
     for (size_t i = 1; i * 2 <= k; ++i) {
-      auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
+      auto [newPlans, newUnjoinable] =
+          merge(dpTab[i - 1], dpTab[k - i - 1], tg, i == 1);
+      std::ranges::move(newUnjoinable, std::back_inserter(unjoinable));
       if (newPlans.size() == 0) {
         continue;
       }
@@ -1423,9 +1438,8 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     }
     if (dpTab[k - 1].size() == 0) {
       std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
-      std::ranges::copy(
-          dpTab[k - 2] | std::views::transform(&SubtreePlan::_qet),
-          std::back_inserter(subtrees));
+      std::ranges::copy(unjoinable | std::views::transform(&SubtreePlan::_qet),
+                        std::back_inserter(subtrees));
       dpTab[k - 1].push_back(
           makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
       applyFiltersIfPossible(dpTab.back(), filters, numSeeds == k);

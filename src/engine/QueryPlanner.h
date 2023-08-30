@@ -248,9 +248,9 @@ class QueryPlanner {
    * @return A new row for the dp table that contains plans created by joining
    * the result of a plan in a and a plan in b.
    */
-  [[nodiscard]] vector<SubtreePlan> merge(const vector<SubtreePlan>& a,
-                                          const vector<SubtreePlan>& b,
-                                          const TripleGraph& tg) const;
+  [[nodiscard]] std::array<vector<SubtreePlan>, 2> merge(
+      const vector<SubtreePlan>& a, const vector<SubtreePlan>& b,
+      const TripleGraph& tg, bool returnUnjoinable) const;
 
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> createJoinCandidates(
       const SubtreePlan& a, const SubtreePlan& b,
