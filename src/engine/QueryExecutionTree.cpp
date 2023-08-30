@@ -99,7 +99,8 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     const SelectClause& selectClause, bool includeQuestionMark) const {
   ColumnIndicesAndTypes exportColumns;
 
-  for (const auto& var : selectClause.getSelectedVariables()) {
+  auto variables = selectClause.getSelectedVariables();
+  for (const auto& var : variables) {
     std::string varString = var.name();
     if (getVariableColumns().contains(var)) {
       auto columnIndex = getVariableColumns().at(var).columnIndex_;

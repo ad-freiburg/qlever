@@ -3,6 +3,8 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <absl/strings/str_split.h>
+
 #include <cstdio>
 #include <set>
 #include <utility>
@@ -70,6 +72,8 @@ class TextOperationWithFilter : public Operation {
     // -1 because _variables includes the cvar
     return _variables.size() - 1;
   }
+
+  size_t getNofPrefixedTerms() const;
 
   const SetOfVariables& getVars() const { return _variables; }
 

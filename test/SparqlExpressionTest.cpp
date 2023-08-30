@@ -201,8 +201,8 @@ auto testBinaryExpressionVec =
 // via `std::vector`, not as a `VectorWithMemoryLimit`. This makes the usage
 // simpler.
 auto testNaryExpressionVec =
-    []<SingleExpressionResult Exp, VectorOrExpressionResult... Ops>(
-        auto makeExpression, std::vector<Exp> expected, std::tuple<Ops...> ops,
+    []<VectorOrExpressionResult Exp, VectorOrExpressionResult... Ops>(
+        auto makeExpression, Exp expected, std::tuple<Ops...> ops,
         source_location l = source_location::current()) {
       auto t = generateLocationTrace(l, "testBinaryExpressionVec");
 
@@ -739,5 +739,61 @@ TEST(SparqlExpression, ifAndCoalesce) {
   auto coalesceExpr =
       makeCoalesceExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
                                      std::make_unique<IriExpression>("<bam>"));
-  ASSERT_EQ(coalesceExpr->getCacheKey({}), "COALESCE(<bim>, <bam>)");
+  ASSERT_THAT(coalesceExpr->getCacheKey({}),
+              testing::AllOf(::testing::ContainsRegex("CoalesceExpression"),
+                             ::testing::ContainsRegex("<bim>, <bam>)")));
+}
+
+// ________________________________________________________________________________________
+TEST(SparqlExpression, concatExpression) {
+  auto checkConcat =
+      std::bind_front(testNaryExpressionVec, makeConcatExpressionVariadic);
+
+  const auto T = Id::makeFromBool(true);
+  checkConcat(IdOrStrings{"0null", "eins", "2zwei", "3drei", "", "5.35.2"},
+              // UNDEF evaluates to an empty string..
+              std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.3)},
+                         IdOrStrings{"null", "eins", "zwei", "drei", U, U},
+                         Ids{U, U, U, U, U, D(5.2)}});
+  // Example with some constants in the middle.
+  checkConcat(IdOrStrings{"0trueeins", "trueeins", "2trueeins", "3trueeins",
+                          "trueeins", "12.3trueeins-2.1"},
+              // UNDEF and the empty string are considered to be `false`.
+              std::tuple{Ids{I(0), U, I(2), I(3), U, D(12.3)}, T,
+                         IdOrString{"eins"}, Ids{U, U, U, U, U, D(-2.1)}});
+
+  // Only constants
+  checkConcat(IdOrString{"trueMe1"}, std::tuple{T, IdOrString{"Me"}, I(1)});
+  // Constants at the beginning.
+  checkConcat(IdOrStrings{"trueMe1", "trueMe2"},
+              std::tuple{T, IdOrString{"Me"}, Ids{I(1), I(2)}});
+
+  checkConcat(IdOrString{""}, std::tuple{});
+  auto coalesceExpr =
+      makeConcatExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
+                                   std::make_unique<IriExpression>("<bam>"));
+  ASSERT_THAT(coalesceExpr->getCacheKey({}),
+              testing::AllOf(::testing::ContainsRegex("ConcatExpression"),
+                             ::testing::ContainsRegex("<bim>, <bam>)")));
+}
+
+TEST(SparqlExpression, literalExpression) {
+  TestContext ctx;
+  StringLiteralExpression expr{TripleComponent::Literal{
+      RdfEscaping::normalizeRDFLiteral("\"notInTheVocabulary\"")}};
+  // Evaluate multiple times to test the caching behavior.
+  for (size_t i = 0; i < 15; ++i) {
+    ASSERT_EQ((ExpressionResult{IdOrString{"\"notInTheVocabulary\""}}),
+              expr.evaluate(&ctx.context));
+  }
+  // A similar test with a constant entry that is part of the vocabulary and can
+  // therefore be converted to an ID.
+  IriExpression iriExpr{"<x>"};
+  Id idOfX;
+  bool result = ctx.qec->getIndex().getId("<x>", &idOfX);
+  AD_CORRECTNESS_CHECK(result);
+  for (size_t i = 0; i < 15; ++i) {
+    ASSERT_EQ((ExpressionResult{IdOrString{idOfX}}),
+              iriExpr.evaluate(&ctx.context));
+  }
 }

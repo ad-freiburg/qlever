@@ -27,6 +27,7 @@ NumericValue NumericValueGetter::operator()(
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
     case Datatype::Date:
       return NotNumeric{};
   }
@@ -65,6 +66,7 @@ auto EffectiveBooleanValueGetter::operator()(
                  ? False
                  : True;
     }
+    case Datatype::WordVocabIndex:
     case Datatype::TextRecordIndex:
     case Datatype::Date:
       return True;
