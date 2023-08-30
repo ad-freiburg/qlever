@@ -5,6 +5,7 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include <engine/Bind.h>
+#include <engine/CartesianProductJoin.h>
 #include <engine/CheckUsePatternTrick.h>
 #include <engine/CountAvailablePredicates.h>
 #include <engine/Distinct.h>
@@ -1421,10 +1422,21 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
       applyFiltersIfPossible(dpTab.back(), filters, numSeeds == k);
     }
     if (dpTab[k - 1].size() == 0) {
+      std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+      std::ranges::copy(
+          dpTab[k - 2] | std::views::transform(&SubtreePlan::_qet),
+          std::back_inserter(subtrees));
+      dpTab[k - 1].push_back(
+          makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
+      applyFiltersIfPossible(dpTab.back(), filters, numSeeds == k);
+      // TODO<joka921> Should we assert that all filters were applied ?
+      break;
+      /*
       AD_THROW(
           "Could not find a suitable execution tree. "
           "Likely cause: Queries that require joins of the full "
           "index with itself are not supported at the moment.");
+          */
     }
   }
 

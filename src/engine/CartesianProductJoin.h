@@ -77,6 +77,8 @@ class CartesianProductJoin : public Operation {
     return std::accumulate(view.begin(), view.end(), 1ul, std::multiplies{});
   }
 
+  VariableToColumnMap computeVariableToColumnMap() const override;
+
  public:
   float getMultiplicity([[maybe_unused]] size_t col) override {
     // Deliberately a dummy as we always perform this operation last.
