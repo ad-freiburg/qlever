@@ -276,12 +276,27 @@ TEST(IdTable, push_back_and_assign) {
                     make(i * NUM_COLS + 3), make(i * NUM_COLS + 4)});
     }
 
+    IdTable t2{NUM_COLS, makeAllocator()};
+    // Test the push_back function for spans
+    for (size_t i = 0; i < NUM_ROWS; i++) {
+      std::vector<ValueId> row;
+      row.push_back(Id::makeFromInt(i * NUM_COLS + 1));
+      row.push_back(Id::makeFromInt(i * NUM_COLS + 2));
+      row.push_back(Id::makeFromInt(i * NUM_COLS + 3));
+      row.push_back(Id::makeFromInt(i * NUM_COLS + 4));
+      t2.push_back(row);
+    }
+
     ASSERT_EQ(NUM_ROWS, t1.size());
     ASSERT_EQ(NUM_ROWS, t1.numRows());
     ASSERT_EQ(NUM_COLS, t1.numColumns());
+    ASSERT_EQ(NUM_ROWS, t2.size());
+    ASSERT_EQ(NUM_ROWS, t2.numRows());
+    ASSERT_EQ(NUM_COLS, t2.numColumns());
     // Check the entries
     for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
       ASSERT_EQ(make(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+      ASSERT_EQ(Id::makeFromInt(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
     }
 
     // Assign new values to the entries

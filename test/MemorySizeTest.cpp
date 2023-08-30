@@ -236,7 +236,7 @@ TEST(MemorySize, Parse) {
                                               testCase.stringRepresentation_);
                         });
 
-  // byte sizes can only be set with `B`.
+  // Byte sizes can only be set with `B`.
   std::ranges::for_each(std::vector{"42 BYTE", "42 BYTe", "42 BYtE", "42 BYte",
                                     "42 ByTE", "42 ByTe", "42 BytE", "42 Byte",
                                     "42 bYTE", "42 bYTe", "42 bYtE", "42 bYte",
@@ -264,6 +264,22 @@ TEST(MemorySize, Parse) {
                                                      {42_TB, "42 tB"},
                                                      {42_TB, "42 tb"}},
       doTest);
+
+  // Does our short hand (memory unit without the `B` at the end) work? And is
+  // it case insensitive?
+  std::ranges::for_each(
+      std::vector<MemorySizeAndStringRepresentation>{{42_kB, "42 K"},
+                                                     {42_kB, "42 k"},
+                                                     {42_MB, "42 M"},
+                                                     {42_MB, "42 m"},
+                                                     {42_GB, "42 G"},
+                                                     {42_GB, "42 g"},
+                                                     {42_TB, "42 T"},
+                                                     {42_TB, "42 t"}},
+      doTest);
+
+  // We only take memory units up to `TB`. Not further.
+  std::ranges::for_each(std::vector{"42 P", "42 PB"}, doExceptionTest);
 }
 
 // Checks, if all the constexpr functions can actually be evaluated at compile

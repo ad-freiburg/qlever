@@ -25,4 +25,8 @@ inline auto LocalVocabId = [](const auto& v) {
 inline auto TextRecordId = [](const auto& t) {
   return Id::makeFromTextRecordIndex(TextRecordIndex ::make(t));
 };
+
+inline auto WordVocabId = [](const auto& t) {
+  return Id::makeFromWordVocabIndex(WordVocabIndex ::make(t));
+};
 }  // namespace ad_utility::testing
