@@ -1661,3 +1661,35 @@ queries:
       - contains_row: [ "<Zelda_Rubinstein>", true, false, true, "Rubinstein", "Z"]
       - contains_row: [ "<Zhang_Peili>", false, true, false, "Peili", "Zhang_P" ]
       - contains_row: [ "<Zlata_Bartl>", false, false, true, "Bartl", "" ]
+
+  - query: CONCAT
+    type: no-text
+    sparql: |
+      SELECT ?x (CONCAT("Name: ", ?x, " ", "Year: ", YEAR(?date)) as ?f) WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Gender> <Female>  .
+          ?x <Date_of_birth> ?date
+          FILTER (?x > <Yzz>) .
+      }
+    checks:
+      - num_cols: 2
+      - selected: [ "?x", "?f" ]
+      - contains_row: [ "<Zelda_Rubinstein>", "Name: Zelda_Rubinstein Year: 1933" ]
+      - contains_row: [ "<Zhang_Peili>", "Name: Zhang_Peili Year: 1941"]
+      - contains_row: [ "<Zlata_Bartl>", "Name: Zlata_Bartl Year: 1920"]
+  - query: CONCAT_WITH_GROUP_BY
+    type: no-text
+    sparql: |
+      SELECT ?x (CONCAT("Name: ", ?x, " ", "Year: ", SAMPLE(YEAR(?date))) as ?f) WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Gender> <Female>  .
+          ?x <Date_of_birth> ?date
+          FILTER (?x > <Yzz>) .
+      }
+      GROUP BY ?x
+    checks:
+      - num_cols: 2
+      - selected: [ "?x", "?f" ]
+      - contains_row: [ "<Zelda_Rubinstein>", "Name: Zelda_Rubinstein Year: 1933" ]
+      - contains_row: [ "<Zhang_Peili>", "Name: Zhang_Peili Year: 1941"]
+      - contains_row: [ "<Zlata_Bartl>", "Name: Zlata_Bartl Year: 1920"]
