@@ -130,8 +130,7 @@ inline QueryExecutionContext* getQec(
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
-            *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{},
-            [](std::string) {});
+            *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{});
   };
 
   using Key = std::tuple<std::optional<string>, bool, bool, bool, size_t>;

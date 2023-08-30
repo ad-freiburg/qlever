@@ -20,9 +20,8 @@ TEST(HttpServer, HttpTest) {
   // lines: the request method (GET, POST, or OTHER), a copy of the request
   // target (might be empty), and a copy of the request body (might be empty).
   TestHttpServer httpServer(
-      [](auto request, auto&& send,
-         [[maybe_unused]] ad_utility::websocket::WebSocketManager&
-             webSocketManager) -> boost::asio::awaitable<void> {
+      [](auto request, auto&& send, ad_utility::websocket::WebSocketManager&)
+          -> boost::asio::awaitable<void> {
         std::string methodName;
         switch (request.method()) {
           case boost::beast::http::verb::get:

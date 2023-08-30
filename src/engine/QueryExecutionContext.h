@@ -90,12 +90,12 @@ class QueryResultCache : public ConcurrentLruCache {
 // Holds references to index and engine, implements caching.
 class QueryExecutionContext {
  public:
-  QueryExecutionContext(const Index& index, QueryResultCache* const cache,
-                        ad_utility::AllocatorWithLimit<Id> allocator,
-                        SortPerformanceEstimator sortPerformanceEstimator,
-                        std::function<void(std::string)> updateCallback,
-                        const bool pinSubtrees = false,
-                        const bool pinResult = false)
+  QueryExecutionContext(
+      const Index& index, QueryResultCache* const cache,
+      ad_utility::AllocatorWithLimit<Id> allocator,
+      SortPerformanceEstimator sortPerformanceEstimator,
+      std::function<void(std::string)> updateCallback = [](std::string) {},
+      const bool pinSubtrees = false, const bool pinResult = false)
       : _pinSubtrees(pinSubtrees),
         _pinResult(pinResult),
         _index(index),
