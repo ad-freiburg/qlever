@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <ranges>
 #include <vector>
 
 #include "engine/LocalVocab.h"
@@ -142,6 +143,26 @@ class ResultTable {
   // (from the previous separate local vocabularies to the new merged one).
   static SharedLocalVocabWrapper getSharedLocalVocabFromNonEmptyOf(
       const ResultTable& resultTable1, const ResultTable& resultTable2);
+  template <std::ranges::forward_range R>
+  static SharedLocalVocabWrapper getSharedLocalVocabFromNonEmptyOf(R&& range) {
+    AD_CORRECTNESS_CHECK(!std::ranges::empty(range));
+    auto hasNonEmptyVocab = [](const ResultTable& tbl) {
+      return !tbl.localVocab_->empty();
+    };
+    auto numNonEmptyVocabs = std::ranges::count_if(range, hasNonEmptyVocab);
+    if (numNonEmptyVocabs > 1) {
+      throw std::runtime_error(
+          "Merging of more than one non-empty local vocabularies is currently "
+          "not "
+          "supported, please contact the developers");
+    }
+    if (numNonEmptyVocabs == 0) {
+      return SharedLocalVocabWrapper{(*range.begin()).localVocab_};
+    } else {
+      return SharedLocalVocabWrapper{
+          (*std::ranges::find_if(range, hasNonEmptyVocab)).localVocab_};
+    }
+  }
 
   // Get a (deep) copy of the local vocabulary from the given result. Use this
   // when you want to (potentially) add further words to the local vocabulary
