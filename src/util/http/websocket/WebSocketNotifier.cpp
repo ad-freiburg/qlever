@@ -10,10 +10,6 @@ void WebSocketNotifier::operator()(std::string json) const {
                                          std::move(json));
 }
 
-std::function<void(std::string)> WebSocketNotifier::toFunction() const {
-  return [this](std::string json) { (*this)(std::move(json)); };
-}
-
 WebSocketNotifier::~WebSocketNotifier() {
   webSocketManager_.releaseQuery(owningQueryId_.toQueryId());
 }

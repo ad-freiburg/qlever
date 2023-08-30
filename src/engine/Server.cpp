@@ -618,9 +618,12 @@ boost::asio::awaitable<void> Server::processQuery(
     // certain media type is not supported.
     ad_utility::websocket::WebSocketNotifier webSocketNotifier{
         getQueryId(request), webSocketManager};
+    auto notifierFunction = [&webSocketNotifier](std::string json) {
+      webSocketNotifier(std::move(json));
+    };
     QueryExecutionContext qec(
         index_, &cache_, allocator_, sortPerformanceEstimator_,
-        webSocketNotifier.toFunction(), pinSubtrees, pinResult);
+        std::move(notifierFunction), pinSubtrees, pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(enablePatternTrick_);
     queryExecutionTree = qp.createExecutionTree(pq);

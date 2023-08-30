@@ -21,8 +21,6 @@ class WebSocketNotifier {
 
   void operator()(std::string) const;
 
-  std::function<void(std::string)> toFunction() const;
-
   ~WebSocketNotifier();
 };
 
