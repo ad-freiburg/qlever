@@ -4,9 +4,10 @@ ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 ENV LC_CTYPE C.UTF-8
 ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y software-properties-common && add-apt-repository -y ppa:mhier/libboost-latest
 
 FROM base as builder
-RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.74-dev libboost-program-options1.74-dev libboost-iostreams1.74-dev
+RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.81-dev libboost-program-options1.81-dev libboost-iostreams1.81-dev
 
 COPY . /app/
 
@@ -20,7 +21,7 @@ RUN make test
 FROM base as runtime
 WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc-dev libzstd-dev libssl-dev libboost1.74-dev libboost-program-options1.74-dev libboost-iostreams1.74-dev
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc-dev libzstd-dev libssl-dev libboost1.81-dev libboost-program-options1.81-dev libboost-iostreams1.81-dev
 
 ARG UID=1000
 RUN groupadd -r qlever && useradd --no-log-init -r -u $UID -g qlever qlever && chown qlever:qlever /app

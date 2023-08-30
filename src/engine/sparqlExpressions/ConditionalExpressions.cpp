@@ -2,8 +2,9 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "NaryExpression.h"
-#include "NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/VariadicExpression.h"
 
 namespace sparqlExpression {
 namespace detail::conditional_expressions {
@@ -26,13 +27,9 @@ NARY_EXPRESSION(IfExpression, 3,
 // The implementation of the COALESCE expression. It (at least currently) has to
 // be done manually as we have no Generic implementation for variadic
 // expressions, as it is the first one.
-class CoalesceExpression : public SparqlExpression {
-  std::vector<SparqlExpression::Ptr> children_;
-
+class CoalesceExpression : public VariadicExpression {
  public:
-  // Construct from the child expressions.
-  explicit CoalesceExpression(std::vector<SparqlExpression::Ptr> children)
-      : children_{std::move(children)} {};
+  using VariadicExpression::VariadicExpression;
 
   // _____________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
@@ -107,7 +104,8 @@ class CoalesceExpression : public SparqlExpression {
           &visitConstantExpressionResult, &visitVectorExpressionResult
         ]<SingleExpressionResult T>(T && childResult)
             requires std::is_rvalue_reference_v<T&&> {
-      // If the previous expression result is a constant, we can skip the loop.
+      // If the previous expression result is a constant, we can skip the
+      // loop.
       if constexpr (isConstantResult<T>) {
         visitConstantExpressionResult(AD_FWD(childResult));
       } else {
@@ -117,7 +115,7 @@ class CoalesceExpression : public SparqlExpression {
 
     // Evaluate the children one by one, stopping as soon as all result are
     // bound.
-    for (const auto& child : children_) {
+    for (const auto& child : childrenVec()) {
       std::visit(visitExpressionResult, child->evaluate(ctx));
       unboundIndices = std::move(nextUnboundIndices);
       nextUnboundIndices.clear();
@@ -126,23 +124,9 @@ class CoalesceExpression : public SparqlExpression {
         break;
       }
     }
+    // TODO<joka921> The result is wrong in the case when all children are
+    // constants (see the implementation of `CONCAT`).
     return result;
-  }
-
-  // ___________________________________________________
-  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    auto childKeys = ad_utility::lazyStrJoin(
-        children_ | std::views::transform([&varColMap](const auto& childPtr) {
-          return childPtr->getCacheKey(varColMap);
-        }),
-        ", ");
-    return absl::StrCat("COALESCE(", childKeys, ")");
-  }
-
- private:
-  // ___________________________________________________
-  std::span<SparqlExpression::Ptr> childrenImpl() override {
-    return {children_.data(), children_.size()};
   }
 };
 

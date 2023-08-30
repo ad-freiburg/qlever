@@ -1289,6 +1289,11 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("COALESCE(?x, ?y, ?z)",
                     matchNary(makeCoalesceExpressionVariadic, Var{"?x"},
                               Var{"?y"}, Var{"?z"}));
+  expectBuiltInCall("CONCAT(?x)", matchUnary(makeConcatExpressionVariadic));
+  expectBuiltInCall("concaT()", matchNary(makeConcatExpressionVariadic));
+  expectBuiltInCall(
+      "concat(?x, ?y, ?z)",
+      matchNary(makeConcatExpressionVariadic, Var{"?x"}, Var{"?y"}, Var{"?z"}));
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
 
