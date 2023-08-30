@@ -8,6 +8,7 @@
 #include <random>
 #include <type_traits>
 
+#include "util/CleanupDeleter.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Synchronized.h"
@@ -34,31 +35,23 @@ class QueryId {
 };
 
 class OwningQueryId {
+  using unregister_type = std::function<void(const QueryId&)>;
+  using deleter = cleanup_deleter::CleanupDeleter<unregister_type>;
   QueryId id_;
-  std::function<void(const QueryId&)> unregister_;
+  std::unique_ptr<unregister_type, deleter> unregister_;
 
   friend class QueryRegistry;
 
-  OwningQueryId(QueryId id, std::function<void(const QueryId&)> unregister)
-      : id_{std::move(id)}, unregister_{std::move(unregister)} {
+  OwningQueryId(QueryId id, unregister_type unregister)
+      : id_{std::move(id)},
+        unregister_{deleter::cleanUpAfterUse(
+            std::move(unregister),
+            [this](unregister_type& function) { function(id_); })} {
     AD_CORRECTNESS_CHECK(!id_.empty());
   }
 
  public:
-  // Prevent copies to prevent preemptive cleanup
-  OwningQueryId(const OwningQueryId&) = delete;
-  OwningQueryId& operator=(const OwningQueryId&) = delete;
-
-  OwningQueryId(OwningQueryId&&) = default;
-  OwningQueryId& operator=(OwningQueryId&&) = default;
-
   [[nodiscard]] const QueryId& toQueryId() const noexcept { return id_; }
-
-  ~OwningQueryId() {
-    if (unregister_) {
-      unregister_(id_);
-    }
-  }
 };
 
 static_assert(!std::is_copy_constructible_v<OwningQueryId>);
