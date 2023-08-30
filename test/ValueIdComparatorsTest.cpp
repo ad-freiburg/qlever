@@ -20,7 +20,8 @@ TEST(ValueIdComparators, GetRangeForDatatype) {
                                   Datatype::VocabIndex,
                                   Datatype::Undefined,
                                   Datatype::LocalVocabIndex,
-                                  Datatype::TextRecordIndex};
+                                  Datatype::TextRecordIndex,
+                                  Datatype::WordVocabIndex};
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);
   for (auto datatype : datatypes) {
@@ -209,7 +210,8 @@ auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
 }
 
 // Test that `getRangesFromId` works correctly for `ValueId`s of the unsigned
-// index types (`VocabIndex`, `TextRecordIndex`, `LocalVocabIndex`).
+// index types (`VocabIndex`, `TextRecordIndex`, `LocalVocabIndex`,
+// `WordVocabIndex`).
 TEST(ValueIdComparators, IndexTypes) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);
@@ -249,6 +251,7 @@ TEST(ValueIdComparators, IndexTypes) {
   testImpl.operator()<Datatype::VocabIndex>(&getVocabIndex);
   testImpl.operator()<Datatype::TextRecordIndex>(&getTextRecordIndex);
   testImpl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
+  testImpl.operator()<Datatype::WordVocabIndex>(&getWordVocabIndex);
 }
 
 // _______________________________________________________________________

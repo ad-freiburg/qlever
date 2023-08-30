@@ -30,7 +30,8 @@ enum struct Datatype {
   LocalVocabIndex,
   TextRecordIndex,
   Date,
-  MaxValue = Date
+  WordVocabIndex,
+  MaxValue = WordVocabIndex
   // Note: Unfortunately we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
   // alias must always be equal to the last member,
@@ -54,6 +55,8 @@ constexpr std::string_view toString(Datatype type) {
       return "LocalVocabIndex";
     case Datatype::TextRecordIndex:
       return "TextRecordIndex";
+    case Datatype::WordVocabIndex:
+      return "WordVocabIndex";
     case Datatype::Date:
       return "Date";
   }
@@ -207,6 +210,9 @@ class ValueId {
   static ValueId makeFromLocalVocabIndex(LocalVocabIndex index) {
     return makeFromIndex(index.get(), Datatype::LocalVocabIndex);
   }
+  static ValueId makeFromWordVocabIndex(WordVocabIndex index) {
+    return makeFromIndex(index.get(), Datatype::WordVocabIndex);
+  }
 
   /// Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()
   /// != [VocabIndex|TextRecordIndex|LocalVocabIndex]` then the result is
@@ -219,6 +225,9 @@ class ValueId {
   }
   [[nodiscard]] constexpr LocalVocabIndex getLocalVocabIndex() const noexcept {
     return LocalVocabIndex::make(removeDatatypeBits(_bits));
+  }
+  [[nodiscard]] constexpr WordVocabIndex getWordVocabIndex() const noexcept {
+    return WordVocabIndex::make(removeDatatypeBits(_bits));
   }
 
   // Store or load a `Date` object.
@@ -278,6 +287,8 @@ class ValueId {
         return std::invoke(visitor, getLocalVocabIndex());
       case Datatype::TextRecordIndex:
         return std::invoke(visitor, getTextRecordIndex());
+      case Datatype::WordVocabIndex:
+        return std::invoke(visitor, getWordVocabIndex());
       case Datatype::Date:
         return std::invoke(visitor, getDate());
     }

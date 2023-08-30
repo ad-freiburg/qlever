@@ -12,7 +12,21 @@ using std::string;
 
 // _____________________________________________________________________________
 size_t TextOperationWithFilter::getResultWidth() const {
-  return 1 + getNofVars() + _filterResult->getResultWidth();
+  return 1 + getNofPrefixedTerms() + getNofVars() +
+         _filterResult->getResultWidth();
+}
+
+// _____________________________________________________________________________
+size_t TextOperationWithFilter::getNofPrefixedTerms() const {
+  // Returns the number of words in _words that end with '*'
+  // TODO<C++23>: This is a one-liner using `std::ranges::fold`.
+  size_t nPrefixedTerms = 0;
+  for (std::string_view s : absl::StrSplit(_words, ' ')) {
+    if (s.ends_with('*')) {
+      nPrefixedTerms++;
+    }
+  }
+  return nPrefixedTerms;
 }
 
 // _____________________________________________________________________________
@@ -60,6 +74,15 @@ VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
     vcmap[varcol.first] =
         ColumnIndexAndTypeInfo{ColumnIndex{colN + varcol.second.columnIndex_},
                                varcol.second.mightContainUndef_};
+  }
+  for (std::string s : std::vector<std::string>(absl::StrSplit(_words, ' '))) {
+    if (!s.ends_with('*')) {
+      continue;
+    }
+    s.pop_back();
+    vcmap[_cvar.getMatchingWordVariable(s)] = makeAlwaysDefinedColumn(
+        ColumnIndex{colN + _filterResult->getResultWidth()});
+    colN++;
   }
   return vcmap;
 }
