@@ -128,16 +128,10 @@ inline QueryExecutionContext* getQec(
     TypeErasedCleanup cleanup_;
     std::unique_ptr<Index> index_;
     std::unique_ptr<QueryResultCache> cache_;
-    std::unique_ptr<boost::asio::io_context> ioContext_ =
-        std::make_unique<boost::asio::io_context>();
-    std::unique_ptr<websocket::WebSocketManager> webSocketManager_ =
-        std::make_unique<websocket::WebSocketManager>(*ioContext_);
-    std::unique_ptr<websocket::common::QueryRegistry> queryRegistry_ =
-        std::make_unique<websocket::common::QueryRegistry>();
     std::unique_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{},
-            *webSocketManager_, queryRegistry_->uniqueId());
+            [](std::string) {});
   };
 
   using Key = std::tuple<std::optional<string>, bool, bool, bool, size_t>;

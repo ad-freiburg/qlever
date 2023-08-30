@@ -138,8 +138,6 @@ class HttpServer {
     future.wait();
   }
 
-  [[nodiscard]] net::io_context& getIoContext() { return ioContext_; }
-
  private:
   // Format a boost/beast error and log it to console
   void logBeastError(beast::error_code ec, std::string_view message) {

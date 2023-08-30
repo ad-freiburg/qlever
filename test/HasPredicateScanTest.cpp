@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <cstdio>
 
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTestHelpers.h"
@@ -247,12 +246,8 @@ TEST(HasPredicateScan, subtreeS) {
 
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   QueryResultCache cache{};
-  boost::asio::io_context ioContext{};
-  ad_utility::websocket::WebSocketManager webSocketManager{ioContext};
-  ad_utility::websocket::common::QueryRegistry queryRegistry{};
   QueryExecutionContext ctx(index, &cache, makeAllocator(),
-                            SortPerformanceEstimator{}, webSocketManager,
-                            queryRegistry.uniqueId());
+                            SortPerformanceEstimator{}, [](std::string) {});
 
   // create the subtree operation
   std::shared_ptr<QueryExecutionTree> subtree =

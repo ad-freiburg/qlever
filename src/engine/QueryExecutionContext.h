@@ -90,13 +90,12 @@ class QueryResultCache : public ConcurrentLruCache {
 // Holds references to index and engine, implements caching.
 class QueryExecutionContext {
  public:
-  QueryExecutionContext(
-      const Index& index, QueryResultCache* const cache,
-      ad_utility::AllocatorWithLimit<Id> allocator,
-      SortPerformanceEstimator sortPerformanceEstimator,
-      ad_utility::websocket::WebSocketManager& webSocketManager,
-      ad_utility::websocket::common::OwningQueryId queryId,
-      const bool pinSubtrees = false, const bool pinResult = false)
+  QueryExecutionContext(const Index& index, QueryResultCache* const cache,
+                        ad_utility::AllocatorWithLimit<Id> allocator,
+                        SortPerformanceEstimator sortPerformanceEstimator,
+                        std::function<void(std::string)> updateCallback,
+                        const bool pinSubtrees = false,
+                        const bool pinResult = false)
       : _pinSubtrees(pinSubtrees),
         _pinResult(pinResult),
         _index(index),
@@ -104,8 +103,7 @@ class QueryExecutionContext {
         _allocator(std::move(allocator)),
         _costFactors(),
         _sortPerformanceEstimator(sortPerformanceEstimator),
-        owningQueryId_(std::move(queryId)),
-        webSocketManager_(webSocketManager) {}
+        updateCallback_(std::move(updateCallback)) {}
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -125,13 +123,7 @@ class QueryExecutionContext {
   ad_utility::AllocatorWithLimit<Id> getAllocator() { return _allocator; }
 
   void signalQueryUpdate(const RuntimeInformation& runtimeInformation) {
-    webSocketManager_.addQueryStatusUpdate(
-        owningQueryId_.toQueryId(),
-        nlohmann::ordered_json(runtimeInformation).dump());
-  }
-
-  ~QueryExecutionContext() {
-    webSocketManager_.releaseQuery(owningQueryId_.toQueryId());
+    updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
   }
 
   bool _pinSubtrees;
@@ -144,6 +136,5 @@ class QueryExecutionContext {
   ad_utility::AllocatorWithLimit<Id> _allocator;
   QueryPlanningCostFactors _costFactors;
   SortPerformanceEstimator _sortPerformanceEstimator;
-  ad_utility::websocket::common::OwningQueryId owningQueryId_;
-  ad_utility::websocket::WebSocketManager& webSocketManager_;
+  std::function<void(std::string)> updateCallback_;
 };

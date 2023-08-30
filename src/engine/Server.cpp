@@ -15,6 +15,7 @@
 #include "engine/QueryPlanner.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/http/websocket/WebSocketNotifier.h"
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
@@ -615,9 +616,11 @@ boost::asio::awaitable<void> Server::processQuery(
     // might happen that the query planner runs for a while (recall that it many
     // do index scans) and then we get an error message afterwards that a
     // certain media type is not supported.
+    ad_utility::websocket::WebSocketNotifier webSocketNotifier{
+        getQueryId(request), webSocketManager};
     QueryExecutionContext qec(index_, &cache_, allocator_,
-                              sortPerformanceEstimator_, webSocketManager,
-                              getQueryId(request), pinSubtrees, pinResult);
+                              sortPerformanceEstimator_, webSocketNotifier,
+                              pinSubtrees, pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(enablePatternTrick_);
     queryExecutionTree = qp.createExecutionTree(pq);
