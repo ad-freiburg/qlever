@@ -402,3 +402,10 @@ const vector<ColumnIndex>& Operation::getResultSortedOn() const {
   }
   return _resultSortedColumns.value();
 }
+
+// ___________________________________________________________________________
+void Operation::setTextLimit(size_t limit) {
+  std::ranges::for_each(getChildren(), [limit](auto* child) {
+    child->getRootOperation()->setTextLimit(limit);
+  });
+}
