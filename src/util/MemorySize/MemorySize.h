@@ -97,6 +97,10 @@ class MemorySize {
   */
   static MemorySize parse(std::string_view str);
 
+  // Arithmetic operators and arithmetic assignment operators.
+  constexpr MemorySize operator+(const MemorySize& m) const;
+  constexpr MemorySize& operator+=(const MemorySize& m);
+
  private:
   // Constructor for the factory functions.
   explicit constexpr MemorySize(size_t amountOfMemoryInBytes)
@@ -261,6 +265,17 @@ constexpr double MemorySize::getGigabytes() const {
 constexpr double MemorySize::getTerabytes() const {
   return detail::sizeTDivision(memoryInBytes_,
                                detail::numBytesPerUnit.at("TB"));
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::operator+(const MemorySize& m) const {
+  return MemorySize::bytes(memoryInBytes_ + m.memoryInBytes_);
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize& MemorySize::operator+=(const MemorySize& m) {
+  memoryInBytes_ += m.memoryInBytes_;
+  return *this;
 }
 
 namespace memory_literals {

@@ -266,6 +266,17 @@ TEST(MemorySize, Parse) {
       doTest);
 }
 
+TEST(MemorySize, ArithmeticOperators) {
+  // Addition.
+  ASSERT_EQ((2_GB).getBytes(), (1_GB + 1_GB).getBytes());
+  ASSERT_EQ((20_TB).getBytes(), (1_TB + 1_TB + 10_TB + 8000_GB).getBytes());
+  ad_utility::MemorySize memAddition{4_MB};
+  memAddition += 7_MB;
+  ASSERT_EQ((11_MB).getBytes(), memAddition.getBytes());
+  memAddition += 11000_kB;
+  ASSERT_EQ((22_MB).getBytes(), memAddition.getBytes());
+}
+
 // Checks, if all the constexpr functions can actually be evaluated at compile
 // time.
 TEST(MemorySize, ConstEval) {
@@ -290,4 +301,10 @@ TEST(MemorySize, ConstEval) {
   static_assert(ad_utility::MemorySize::gigabytes(4.2).getGigabytes() == 4.2);
   static_assert(ad_utility::MemorySize::terabytes(42uL).getTerabytes() == 42);
   static_assert(ad_utility::MemorySize::terabytes(4.2).getTerabytes() == 4.2);
+
+  // Addition.
+  static_assert((20_TB).getBytes() ==
+                (1_TB + 1_TB + 10_TB + 8000_GB).getBytes());
+  static_assert((20_TB += 5_TB).getBytes() ==
+                (2_TB + 5_TB + 10_TB + 8000_GB).getBytes());
 }
