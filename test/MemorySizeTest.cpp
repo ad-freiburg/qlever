@@ -291,6 +291,15 @@ TEST(MemorySize, ArithmeticOperators) {
   ASSERT_EQ((11_MB).getBytes(), memAddition.getBytes());
   memAddition += 11000_kB;
   ASSERT_EQ((22_MB).getBytes(), memAddition.getBytes());
+
+  // Subtraction.
+  ASSERT_EQ((2_GB).getBytes(), (3_GB - 1_GB).getBytes());
+  ASSERT_EQ((12_TB).getBytes(), (31_TB - 1_TB - 10_TB - 8000_GB).getBytes());
+  ad_utility::MemorySize memSubtraction{40_MB};
+  memSubtraction -= 7_MB;
+  ASSERT_EQ((33_MB).getBytes(), memSubtraction.getBytes());
+  memSubtraction -= 11000_kB;
+  ASSERT_EQ((22_MB).getBytes(), memSubtraction.getBytes());
 }
 
 // Checks, if all the constexpr functions can actually be evaluated at compile

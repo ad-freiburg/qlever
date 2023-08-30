@@ -100,6 +100,8 @@ class MemorySize {
   // Arithmetic operators and arithmetic assignment operators.
   constexpr MemorySize operator+(const MemorySize& m) const;
   constexpr MemorySize& operator+=(const MemorySize& m);
+  constexpr MemorySize operator-(const MemorySize& m) const;
+  constexpr MemorySize& operator-=(const MemorySize& m);
 
  private:
   // Constructor for the factory functions.
@@ -275,6 +277,17 @@ constexpr MemorySize MemorySize::operator+(const MemorySize& m) const {
 // _____________________________________________________________________________
 constexpr MemorySize& MemorySize::operator+=(const MemorySize& m) {
   memoryInBytes_ += m.memoryInBytes_;
+  return *this;
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::operator-(const MemorySize& m) const {
+  return MemorySize::bytes(memoryInBytes_ - m.memoryInBytes_);
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize& MemorySize::operator-=(const MemorySize& m) {
+  memoryInBytes_ -= m.memoryInBytes_;
   return *this;
 }
 
