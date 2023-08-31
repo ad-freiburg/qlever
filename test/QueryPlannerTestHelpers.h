@@ -5,6 +5,7 @@
 #pragma once
 
 #include "./util/GTestHelpers.h"
+#include "engine/CartesianProductJoin.h"
 #include "engine/IndexScan.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/QueryExecutionTree.h"
@@ -49,11 +50,11 @@ QetMatcher IndexScan(
                                 ? ::testing::A<Permutation::Enum>()
                                 : AnyOfArray(allowedPermutations);
   return RootOperation<::IndexScan>(
-      AllOf(Property(&IndexScan::permutation, permutationMatcher),
-            Property(&IndexScan::getResultWidth, Eq(numVariables)),
-            Property(&IndexScan::getSubject, Eq(subject)),
-            Property(&IndexScan::getPredicate, Eq(predicate)),
-            Property(&IndexScan::getObject, Eq(object))));
+      AllOf(AD_PROPERTY(IndexScan, permutation, permutationMatcher),
+            AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
+            AD_PROPERTY(IndexScan, getSubject, Eq(subject)),
+            AD_PROPERTY(IndexScan, getPredicate, Eq(predicate)),
+            AD_PROPERTY(IndexScan, getObject, Eq(object))));
 }
 
 // Return a matcher that test whether a given `QueryExecutionTree` contains a
@@ -66,6 +67,16 @@ QetMatcher MultiColumnJoin(const QetMatcher& childMatcher1,
   return RootOperation<::MultiColumnJoin>(AllOf(Property(
       &Operation::getChildren,
       UnorderedElementsAre(Pointee(childMatcher1), Pointee(childMatcher2)))));
+}
+
+// Return a matcher that test whether a given `QueryExecutionTree` contains a
+// `CartesianProductJoin` operation the children of which match the
+// `childMatchers`. Note that the child matchers are not ordered.
+QetMatcher CartesianProductJoin(
+    const std::same_as<QetMatcher> auto&... childMatchers) {
+  return RootOperation<::CartesianProductJoin>(
+      AllOf(Property("getChildren", &Operation::getChildren,
+                     UnorderedElementsAre(Pointee(childMatchers)...))));
 }
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
