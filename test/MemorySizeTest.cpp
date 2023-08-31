@@ -330,6 +330,7 @@ TEST(MemorySize, ArithmeticOperators) {
   memWholeDivision /= 5;
   ASSERT_EQ((40_MB).getBytes(), memWholeDivision.getBytes());
   ASSERT_ANY_THROW(1_GB / -2);
+  ASSERT_ANY_THROW(1_GB / 0);
 
   // Floating point division.
   ASSERT_EQ((2_GB).getBytes(), (5_GB / 2.5).getBytes());
@@ -340,6 +341,7 @@ TEST(MemorySize, ArithmeticOperators) {
   memFloatingPointDivision /= 0.2;
   ASSERT_EQ((40_MB).getBytes(), memFloatingPointDivision.getBytes());
   ASSERT_ANY_THROW(1_GB / -2.48);
+  ASSERT_ANY_THROW(1_GB / 0.);
 }
 
 // Checks, if all the constexpr functions can actually be evaluated at compile

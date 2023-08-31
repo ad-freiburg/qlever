@@ -373,7 +373,7 @@ constexpr MemorySize& MemorySize::operator*=(const T c) {
 template <Arithmetic T>
 constexpr MemorySize MemorySize::operator/(const T c) const {
   // A negative amount of memory wouldn't make much sense.
-  AD_CONTRACT_CHECK(c >= static_cast<T>(0));
+  AD_CONTRACT_CHECK(c > static_cast<T>(0));
 
   /*
   The default division for `size_t` doesn't always round up, which is the
