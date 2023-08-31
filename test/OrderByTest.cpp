@@ -18,7 +18,7 @@ using ad_utility::source_location;
 namespace {
 // Create an `OrderBy` operation that sorts the `input` by the `sortColumns`.
 OrderBy makeOrderBy(IdTable input, const OrderBy::SortIndices& sortColumns) {
-  std::vector<Variable> vars;
+  std::vector<std::optional<Variable>> vars;
   auto qec = ad_utility::testing::getQec();
   for (size_t i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));

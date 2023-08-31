@@ -13,6 +13,7 @@ class CartesianProductJoin : public Operation {
 
  private:
   Children children_;
+
   auto childView() {
     return std::views::transform(children_, [](auto& child) -> Operation& {
       return *child->getRootOperation();
@@ -68,8 +69,10 @@ class CartesianProductJoin : public Operation {
   }
 
   size_t getCostEstimate() override {
-    return getSizeEstimate();
-    // TODO<joka921> Add the costs of the children.
+    auto childSizes =
+        childView() | std::views::transform(&Operation::getCostEstimate);
+    return getSizeEstimate() +
+           std::accumulate(childSizes.begin(), childSizes.end(), 0ul);
   }
 
  private:

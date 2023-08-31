@@ -18,12 +18,10 @@ using ad_utility::source_location;
 CartesianProductJoin makeJoin(std::vector<VectorTable> inputs,
                               bool useLimitInSuboperations = false) {
   auto qec = ad_utility::testing::getQec();
-  // joka921 TODO shouldn't be necessary...
-  qec->getQueryTreeCache().clearAll();
   std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
   auto v = [i = 0]() mutable { return Variable{"?" + std::to_string(i++)}; };
   for (const auto& input : inputs) {
-    std::vector<Variable> vars;
+    std::vector<std::optional<Variable>> vars;
     std::generate_n(std::back_inserter(vars),
                     input.empty() ? 0 : input.at(0).size(), v);
     subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -40,15 +38,16 @@ void testCartesianProductImpl(VectorTable expected,
                               bool useLimitInSuboperations = false,
                               source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  auto join = makeJoin(std::move(inputs), useLimitInSuboperations);
-  EXPECT_EQ(makeIdTableFromVector(expected),
-            join.computeResultOnlyForTesting().idTable());
+  {
+    auto join = makeJoin(inputs, useLimitInSuboperations);
+    EXPECT_EQ(makeIdTableFromVector(expected),
+              join.computeResultOnlyForTesting().idTable());
+  }
 
   for (size_t limit = 0; limit < expected.size(); ++limit) {
-    for (size_t i = 0; i < expected.size(); ++i) {
-      LimitOffsetClause limitClause{limit, 0, i};
-      // joka921 TODO shouldn't be necessary...
-      getQec()->getQueryTreeCache().clearAll();
+    for (size_t offset = 0; offset < expected.size(); ++offset) {
+      LimitOffsetClause limitClause{limit, 0, offset};
+      auto join = makeJoin(inputs, useLimitInSuboperations);
       join.setLimit(limitClause);
       VectorTable partialResult;
       std::copy(expected.begin() + limitClause.actualOffset(expected.size()),
@@ -56,15 +55,15 @@ void testCartesianProductImpl(VectorTable expected,
                 std::back_inserter(partialResult));
       EXPECT_EQ(makeIdTableFromVector(partialResult),
                 join.computeResultOnlyForTesting().idTable())
-          << "failed at offset " << i << " and limit " << limit;
+          << "failed at offset " << offset << " and limit " << limit;
     }
   }
 }
 void testCartesianProduct(VectorTable expected, std::vector<VectorTable> inputs,
                           source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  // testCartesianProductImpl(expected, inputs, true);
-  testCartesianProductImpl(expected, inputs, false);
+  testCartesianProductImpl(expected, inputs, true);
+  // testCartesianProductImpl(expected, inputs, false);
 }
 
 TEST(CartesianProductJoin, computeResult) {
@@ -101,6 +100,43 @@ TEST(CartesianProductJoin, computeResult) {
 }
 
 TEST(CartesianProductJoin, basicMemberFunctions) {
-  auto join = makeJoin({{{3}}});
-  ASSERT_EQ(join.getDescriptor(), "Cartesian Product Join");
+  auto join = makeJoin({{{3, 5}, {7, 9}}, {{4}, {5}, {2}}});
+  EXPECT_EQ(join.getDescriptor(), "Cartesian Product Join");
+  EXPECT_FALSE(join.knownEmptyResult());
+  EXPECT_EQ(join.getSizeEstimate(), 6);
+  EXPECT_EQ(join.getResultWidth(), 3);
+  EXPECT_EQ(join.getCostEstimate(), 11);
+  EXPECT_EQ(join.getMultiplicity(1023), 1.0f);
+  EXPECT_EQ(join.getMultiplicity(0), 1.0f);
+
+  auto children = join.getChildren();
+  EXPECT_THAT(join.asString(),
+              ::testing::ContainsRegex("CARTESIAN PRODUCT JOIN"));
+  EXPECT_THAT(join.asString(),
+              ::testing::ContainsRegex("Values for testing with 2 columns"));
+  EXPECT_THAT(join.asString(),
+              ::testing::ContainsRegex("Values for testing with 1 col"));
+  EXPECT_EQ(children.size(), 2u);
+  EXPECT_NE(children.at(0), join.getChildren().at(1));
+}
+
+TEST(CartesianProductJoin, variableColumnMap) {
+  auto qec = getQec();
+  std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+  using Vars = std::vector<std::optional<Variable>>;
+  subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{3, 4}, {4, 7}}),
+      Vars{Variable{"?x"}, std::nullopt}));
+  subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{3, 4, 3, Id::makeUndefined()}}),
+      Vars{std::nullopt, Variable{"?y"}, std::nullopt, Variable{"?z"}}));
+  CartesianProductJoin join{qec, std::move(subtrees)};
+
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  VariableToColumnMap expectedVariables{
+      {Variable{"?x"}, {0, AlwaysDefined}},
+      {Variable{"?y"}, {3, AlwaysDefined}},
+      {Variable{"?z"}, {5, PossiblyUndefined}}};
+  EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
 }

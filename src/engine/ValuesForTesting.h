@@ -16,15 +16,22 @@
 class ValuesForTesting : public Operation {
  private:
   IdTable table_;
-  std::vector<Variable> variables_;
+  std::vector<std::optional<Variable>> variables_;
   bool supportsLimit_;
+
+  std::vector<std::optional<Variable>> convertVars(
+      const std::vector<Variable>& input) {
+    std::vector<std::optional<Variable>> result;
+    std::ranges::copy(input, std::back_inserter(result));
+    return result;
+  }
 
  public:
   // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number
   // of columns in the table.
   explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
-                            std::vector<Variable> variables,
+                            std::vector<std::optional<Variable>> variables,
                             bool supportsLimit = false)
       : Operation{ctx},
         table_{std::move(table)},
@@ -32,6 +39,17 @@ class ValuesForTesting : public Operation {
         supportsLimit_{supportsLimit} {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
+  /*
+  explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
+                            const std::vector<Variable>& variables,
+                            bool supportsLimit = false)
+      : Operation{ctx},
+        table_{std::move(table)},
+        variables_{convertVars(variables)},
+        supportsLimit_{supportsLimit} {
+    AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
+  }
+   */
 
   // ___________________________________________________________________________
   ResultTable computeResult() override {
@@ -95,10 +113,13 @@ class ValuesForTesting : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override {
     VariableToColumnMap m;
     for (auto i = ColumnIndex{0}; i < variables_.size(); ++i) {
+      if (!variables_.at(i).has_value()) {
+        continue;
+      }
       bool containsUndef =
           ad_utility::contains(table_.getColumn(i), Id::makeUndefined());
       using enum ColumnIndexAndTypeInfo::UndefStatus;
-      m[variables_.at(i)] = ColumnIndexAndTypeInfo{
+      m[variables_.at(i).value()] = ColumnIndexAndTypeInfo{
           i, containsUndef ? PossiblyUndefined : AlwaysDefined};
     }
     return m;

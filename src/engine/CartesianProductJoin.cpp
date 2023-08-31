@@ -26,8 +26,7 @@ ResultTable CartesianProductJoin::computeResult() {
   // TODO<joka921> revisit this once we have implemented lazy results or results
   // that don't need to copy when being dynamically resized.
 
-  // TODO<joka921> We can perform early stopping as soon as one child is empty.
-  std::ranges::for_each(children_, [&subResults, &limitIfPresent](auto& child) {
+  for (auto& child : children_) {
     if (limitIfPresent.has_value() &&
         child->getRootOperation()->supportsLimit()) {
       child->getRootOperation()->setLimit(limitIfPresent.value());
@@ -39,7 +38,11 @@ ResultTable CartesianProductJoin::computeResult() {
               std::max(subResults.back()->size(), 1ul) +
           1;
     }
-  });
+    // Early stopping: If one of the results is empty, we can stop early.
+    if (subResults.back()->size() == 0) {
+      break;
+    }
+  };
 
   auto sizesView = std::views::transform(
       subResults, [](const auto& child) { return child->size(); });
@@ -48,10 +51,6 @@ ResultTable CartesianProductJoin::computeResult() {
 
   size_t totalSizeIncludingLimit = getLimit().actualSize(totalSize);
   size_t offset = getLimit().actualOffset(totalSize);
-
-  if (offset != 0) {
-    LOG(INFO) << "blim" << std::endl;
-  }
 
   idTable.resize(totalSizeIncludingLimit);
 
