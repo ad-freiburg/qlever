@@ -30,7 +30,9 @@ class CartesianProductJoin : public Operation {
   explicit CartesianProductJoin(QueryExecutionContext* executionContext,
                                 Children children)
       : Operation{executionContext}, children_{std::move(children)} {
-    // TODO<joka921> Check that the children are non-null
+    AD_CONTRACT_CHECK(!children_.empty());
+    AD_CONTRACT_CHECK(std::ranges::all_of(
+        children_, [](auto& child) { return child != nullptr; }));
   }
 
   /// get non-owning pointers to all the held subtrees to actually use the

@@ -145,7 +145,6 @@ class ResultTable {
       const ResultTable& resultTable1, const ResultTable& resultTable2);
   template <std::ranges::forward_range R>
   static SharedLocalVocabWrapper getSharedLocalVocabFromNonEmptyOf(R&& range) {
-    AD_CORRECTNESS_CHECK(!std::ranges::empty(range));
     auto hasNonEmptyVocab = [](const ResultTable& tbl) {
       return !tbl.localVocab_->empty();
     };

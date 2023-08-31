@@ -17,23 +17,34 @@ class ValuesForTesting : public Operation {
  private:
   IdTable table_;
   std::vector<Variable> variables_;
+  bool supportsLimit_;
 
  public:
   // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number
   // of columns in the table.
-  ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
-                   std::vector<Variable> variables)
+  explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
+                            std::vector<Variable> variables,
+                            bool supportsLimit = false)
       : Operation{ctx},
         table_{std::move(table)},
-        variables_{std::move(variables)} {
+        variables_{std::move(variables)},
+        supportsLimit_{supportsLimit} {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
 
   // ___________________________________________________________________________
   ResultTable computeResult() override {
-    return {table_.clone(), resultSortedOn(), LocalVocab{}};
+    auto table = table_.clone();
+    if (supportsLimit_) {
+      table.erase(table.begin() + getLimit().upperBound(table.size()),
+                  table.end());
+      table.erase(table.begin(),
+                  table.begin() + getLimit().actualOffset(table.size()));
+    }
+    return {std::move(table), resultSortedOn(), LocalVocab{}};
   }
+  bool supportsLimit() const override { return supportsLimit_; }
 
  private:
   // ___________________________________________________________________________
@@ -46,6 +57,7 @@ class ValuesForTesting : public Operation {
         str << entry << ' ';
       }
     }
+    str << "Supports limit: " << supportsLimit_;
     return std::move(str).str();
   }
 
