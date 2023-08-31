@@ -282,6 +282,68 @@ TEST(MemorySize, Parse) {
   std::ranges::for_each(std::vector{"42 P", "42 PB"}, doExceptionTest);
 }
 
+TEST(MemorySize, ArithmeticOperators) {
+  // Addition.
+  ASSERT_EQ((2_GB).getBytes(), (1_GB + 1_GB).getBytes());
+  ASSERT_EQ((20_TB).getBytes(), (1_TB + 1_TB + 10_TB + 8000_GB).getBytes());
+  ad_utility::MemorySize memAddition{4_MB};
+  memAddition += 7_MB;
+  ASSERT_EQ((11_MB).getBytes(), memAddition.getBytes());
+  memAddition += 11000_kB;
+  ASSERT_EQ((22_MB).getBytes(), memAddition.getBytes());
+
+  // Subtraction.
+  ASSERT_EQ((2_GB).getBytes(), (3_GB - 1_GB).getBytes());
+  ASSERT_EQ((12_TB).getBytes(), (31_TB - 1_TB - 10_TB - 8000_GB).getBytes());
+  ad_utility::MemorySize memSubtraction{40_MB};
+  memSubtraction -= 7_MB;
+  ASSERT_EQ((33_MB).getBytes(), memSubtraction.getBytes());
+  memSubtraction -= 11000_kB;
+  ASSERT_EQ((22_MB).getBytes(), memSubtraction.getBytes());
+
+  // Whole number multiplication.
+  ASSERT_EQ((2_GB).getBytes(), (1_GB * 2).getBytes());
+  ASSERT_EQ((20_TB).getBytes(), (2 * 1_TB * 10).getBytes());
+  ad_utility::MemorySize memWholeMultiplication{40_MB};
+  memWholeMultiplication *= 5;
+  ASSERT_EQ((200_MB).getBytes(), memWholeMultiplication.getBytes());
+  memWholeMultiplication *= 3;
+  ASSERT_EQ((600_MB).getBytes(), memWholeMultiplication.getBytes());
+  ASSERT_ANY_THROW(1_GB * -2);
+
+  // Floating point multiplication.
+  ASSERT_EQ((5_GB).getBytes(), (2_GB * 2.5).getBytes());
+  ASSERT_EQ((375_TB).getBytes(), (0.25 * 400_TB * 3.75).getBytes());
+  ad_utility::MemorySize memFloatingPointMultiplication{40_MB};
+  memFloatingPointMultiplication *= 1.5;
+  ASSERT_EQ((60_MB).getBytes(), memFloatingPointMultiplication.getBytes());
+  memFloatingPointMultiplication *= 0.2;
+  ASSERT_EQ((12_MB).getBytes(), memFloatingPointMultiplication.getBytes());
+  ASSERT_ANY_THROW(1_GB * -2.48);
+
+  // Whole number division.
+  ASSERT_EQ((2_GB).getBytes(), (4_GB / 2).getBytes());
+  ASSERT_EQ((20_TB).getBytes(), (400_TB / 2 / 10).getBytes());
+  ad_utility::MemorySize memWholeDivision{600_MB};
+  memWholeDivision /= 3;
+  ASSERT_EQ((200_MB).getBytes(), memWholeDivision.getBytes());
+  memWholeDivision /= 5;
+  ASSERT_EQ((40_MB).getBytes(), memWholeDivision.getBytes());
+  ASSERT_ANY_THROW(1_GB / -2);
+  ASSERT_ANY_THROW(1_GB / 0);
+
+  // Floating point division.
+  ASSERT_EQ((2_GB).getBytes(), (5_GB / 2.5).getBytes());
+  ASSERT_EQ((400_TB).getBytes(), (375_TB / 0.25 / 3.75).getBytes());
+  ad_utility::MemorySize memFloatingPointDivision{12_MB};
+  memFloatingPointDivision /= 1.5;
+  ASSERT_EQ((8_MB).getBytes(), memFloatingPointDivision.getBytes());
+  memFloatingPointDivision /= 0.2;
+  ASSERT_EQ((40_MB).getBytes(), memFloatingPointDivision.getBytes());
+  ASSERT_ANY_THROW(1_GB / -2.48);
+  ASSERT_ANY_THROW(1_GB / 0.);
+}
+
 // Checks, if all the constexpr functions can actually be evaluated at compile
 // time.
 TEST(MemorySize, ConstEval) {
@@ -306,4 +368,34 @@ TEST(MemorySize, ConstEval) {
   static_assert(ad_utility::MemorySize::gigabytes(4.2).getGigabytes() == 4.2);
   static_assert(ad_utility::MemorySize::terabytes(42uL).getTerabytes() == 42);
   static_assert(ad_utility::MemorySize::terabytes(4.2).getTerabytes() == 4.2);
+
+  // Addition.
+  static_assert((20_TB).getBytes() ==
+                (1_TB + 1_TB + 10_TB + 8000_GB).getBytes());
+  static_assert((20_TB += 5_TB).getBytes() ==
+                (2_TB + 5_TB + 10_TB + 8000_GB).getBytes());
+
+  // Subtraction.
+  static_assert((20_TB).getBytes() ==
+                (40_TB - 1_TB - 10_TB - 9000_GB).getBytes());
+  static_assert((20_TB -= 5_TB).getBytes() ==
+                (40_TB - 5_TB - 10_TB - 10000_GB).getBytes());
+
+  // Whole number multiplication.
+  static_assert((20_TB).getBytes() == (2 * 1_TB * 10).getBytes());
+  static_assert((20_TB *= 5).getBytes() == (4 * 5_TB * 5).getBytes());
+
+  // Floating point multiplication.
+  static_assert((5_GB).getBytes() == (2_GB * 2.5).getBytes());
+  static_assert((30_TB *= 1.15).getBytes() == (0.15 * 100_TB * 2.3).getBytes());
+
+  // Whole number division.
+  static_assert((1_TB).getBytes() == (20_TB / 2 / 10).getBytes());
+  static_assert((25_TB /= 5).getBytes() == (100_TB / 4 / 5).getBytes());
+
+  // Floating point division.
+  static_assert((2_GB).getBytes() == (5_GB / 2.5).getBytes());
+  static_assert((30_TB *= 1.15).getBytes() == (100_TB * 0.15 * 2.3).getBytes());
+  static_assert((115_TB /= 1.15).getBytes() ==
+                (34.5_TB / 0.15 / 2.3).getBytes());
 }
