@@ -111,6 +111,9 @@ class MemorySize {
   constexpr MemorySize operator*(const T c) const;
 
   template <Arithmetic T>
+  friend constexpr MemorySize operator*(const T c, const MemorySize m);
+
+  template <Arithmetic T>
   constexpr MemorySize& operator*=(const T c);
 
   template <Arithmetic T>
@@ -322,6 +325,12 @@ constexpr MemorySize MemorySize::operator*(const T c) const {
     static_assert(std::is_integral_v<T>);
     return MemorySize::bytes(memoryInBytes_ * c);
   }
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize operator*(const T c, const MemorySize m) {
+  return m * c;
 }
 
 // _____________________________________________________________________________
