@@ -5,6 +5,7 @@ add_library(sparqlExpressions
         SparqlExpressionPimpl.cpp
         SampleExpression.cpp
         RelationalExpressions.cpp AggregateExpression.cpp RegexExpression.cpp
-        LangExpression.cpp NumericUnaryExpressions.cpp NumericBinaryExpressions.cpp DateExpressions.cpp StringExpressions.cpp)
+        LangExpression.cpp NumericUnaryExpressions.cpp NumericBinaryExpressions.cpp DateExpressions.cpp StringExpressions.cpp
+        ConditionalExpressions.cpp)
 
 qlever_target_link_libraries(sparqlExpressions index)

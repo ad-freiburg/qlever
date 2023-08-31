@@ -44,14 +44,6 @@ if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
     endif ()
 endif ()
 
-if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU") AND
-   (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "12") AND
-   (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13"))
-    message(STATUS "Adding -Wno-error for g++12.0 because of the many false positive warnings from stdlib headers")
-    add_compile_options(-Wno-error)
-    else()
-endif ()
-
 ###############################################################################
 ##### Essential settings #####
 ###############################################################################
