@@ -183,9 +183,7 @@ class FlexibleCache {
       return {};
     }
     Score s = _scoreCalculator(*valPtr);
-    // TODO Use the normal arithmetical operators, once they are implemented.
-    _totalSizeNonPinned = MemorySize::bytes(
-        _totalSizeNonPinned.getBytes() + _valueSizeGetter(*valPtr).getBytes());
+    _totalSizeNonPinned += _valueSizeGetter(*valPtr);
     auto handle = _entries.insert(std::move(s), Entry(key, std::move(valPtr)));
     _accessMap[key] = handle;
     // The first value is the value part of the key-value pair in the priority
@@ -215,9 +213,7 @@ class FlexibleCache {
     // Make room for the new entry.
     makeRoomIfFits(sizeOfNewEntry);
     _pinnedMap[key] = valPtr;
-    // TODO Use the normal arithmetical operators, once they are implemented.
-    _totalSizePinned = MemorySize::bytes(_totalSizePinned.getBytes() +
-                                         _valueSizeGetter(*valPtr).getBytes());
+    _totalSizePinned += _valueSizeGetter(*valPtr);
     return valPtr;
   }
 
@@ -266,9 +262,7 @@ class FlexibleCache {
 
     // adapt the sizes of the pinned and non-pinned part of the cache
     auto sz = _valueSizeGetter(*valuePtr);
-    // TODO Use the normal arithmetical operators, once they are implemented.
-    _totalSizeNonPinned =
-        MemorySize::bytes(_totalSizeNonPinned.getBytes() - sz.getBytes());
+    _totalSizeNonPinned -= sz;
     _totalSizePinned =
         MemorySize::bytes(_totalSizePinned.getBytes() + sz.getBytes());
     // Move the entry to the _pinnedMap and remove it from the non-pinned data
@@ -284,10 +278,7 @@ class FlexibleCache {
   void erase(const Key& key) {
     const auto pinnedIt = _pinnedMap.find(key);
     if (pinnedIt != _pinnedMap.end()) {
-      // TODO Use the normal arithmetical operators, once they are implemented.
-      _totalSizePinned =
-          MemorySize::bytes(_totalSizePinned.getBytes() -
-                            _valueSizeGetter(*pinnedIt->second).getBytes());
+      _totalSizePinned -= _valueSizeGetter(*pinnedIt->second);
       _pinnedMap.erase(pinnedIt);
       return;
     }
@@ -329,25 +320,23 @@ class FlexibleCache {
 
   /// Return the total size of the pinned entries
   [[nodiscard]] MemorySize pinnedSize() const {
-    // TODO Use the normal arithmetical operators, once they are implemented.
-    return MemorySize::bytes(std::accumulate(
-        _pinnedMap.begin(), _pinnedMap.end(), 0UL,
-        [this](const size_t& x, const auto& el) {
+    return std::accumulate(
+        _pinnedMap.begin(), _pinnedMap.end(), MemorySize::bytes(0),
+        [this](const MemorySize& x, const auto& el) {
           // entries of the pinned Map are shared_ptrs
-          return x +
-                 (el.second ? _valueSizeGetter(*el.second).getBytes() : 0UL);
-        }));
+          return x + (el.second ? _valueSizeGetter(*el.second)
+                                : MemorySize::bytes(0));
+        });
   }
 
   /// Return the total size of the non-pinned cache entries
   [[nodiscard]] MemorySize nonPinnedSize() const {
-    // TODO Use the normal arithmetical operators, once they are implemented.
-    return MemorySize::bytes(std::accumulate(
-        _accessMap.begin(), _accessMap.end(), 0UL,
-        [this](const size_t& x, const auto& el) {
+    return std::accumulate(
+        _accessMap.begin(), _accessMap.end(), MemorySize::bytes(0),
+        [this](const MemorySize& x, const auto& el) {
           // entries of the accessMap are shared_ptrs
-          return x + _valueSizeGetter(*el.second.value().value()).getBytes();
-        }));
+          return x + _valueSizeGetter(*el.second.value().value());
+        });
   }
 
   /// Return the number of non-pinned cache entries
@@ -365,9 +354,7 @@ class FlexibleCache {
   // Returns: true iff if the procedure succeeded. It may fail if
   // `sizeToMakeRoomFor` is larger than the _maxSize - _totalSizePinned;
   bool makeRoomIfFits(MemorySize sizeToMakeRoomFor) {
-    // TODO Use the normal arithmetical operators, once they are implemented.
-    if (MemorySize::bytes(_maxSize.getBytes() - _totalSizePinned.getBytes()) <
-        sizeToMakeRoomFor) {
+    if (_maxSize - _totalSizePinned < sizeToMakeRoomFor) {
       return false;
     }
 
@@ -375,13 +362,11 @@ class FlexibleCache {
     const size_t needToAddNewElement =
         sizeToMakeRoomFor.getBytes() != 0 ? 1 : 0;
 
-    // TODO Use the normal arithmetical operators, once they are implemented.
     while (!_entries.empty() &&
            (_entries.size() + _pinnedMap.size() + needToAddNewElement >
                 _maxNumEntries ||
-            MemorySize::bytes(_totalSizeNonPinned.getBytes() +
-                              _totalSizePinned.getBytes() +
-                              sizeToMakeRoomFor.getBytes()) > _maxSize)) {
+            _totalSizeNonPinned + _totalSizePinned + sizeToMakeRoomFor >
+                _maxSize)) {
       // Remove entries from the back until we meet the capacity and size
       // requirements
       removeOneEntry();
@@ -402,9 +387,7 @@ class FlexibleCache {
       clearUnpinnedOnly();
       return false;
     }
-    // TODO Use the normal arithmetical operators, once they are implemented.
-    MemorySize targetSize = MemorySize::bytes(_totalSizeNonPinned.getBytes() -
-                                              sizeToMakeRoomFor.getBytes());
+    MemorySize targetSize = _totalSizeNonPinned - sizeToMakeRoomFor;
     while (!_entries.empty() && _totalSizeNonPinned > targetSize) {
       removeOneEntry();
     }
@@ -417,10 +400,8 @@ class FlexibleCache {
   void removeOneEntry() {
     AD_CONTRACT_CHECK(!_entries.empty());
     auto handle = _entries.pop();
-    // TODO Use the normal arithmetical operators, once they are implemented.
     _totalSizeNonPinned =
-        MemorySize::bytes(_totalSizeNonPinned.getBytes() -
-                          _valueSizeGetter(*handle.value().value()).getBytes());
+        _totalSizeNonPinned - _valueSizeGetter(*handle.value().value());
     _accessMap.erase(handle.value().key());
   }
   size_t _maxNumEntries;
