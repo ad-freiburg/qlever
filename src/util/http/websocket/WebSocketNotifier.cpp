@@ -10,6 +10,6 @@ void WebSocketNotifier::operator()(std::string json) const {
 }
 
 WebSocketNotifier::~WebSocketNotifier() {
-  webSocketManager_.releaseQuery(owningQueryId_.toQueryId());
+  webSocketTracker_.releaseQuery(owningQueryId_.toQueryId());
 }
 }  // namespace ad_utility::websocket

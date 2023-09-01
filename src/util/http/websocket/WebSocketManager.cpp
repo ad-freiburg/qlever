@@ -10,99 +10,11 @@
 #include "Common.h"
 #include "ctre/ctre.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/websocket/UpdateFetcher.h"
+#include "util/http/websocket/WebSocketTracker.h"
 
 namespace ad_utility::websocket {
 using namespace boost::asio::experimental::awaitable_operators;
-
-std::shared_ptr<QueryToSocketDistributor> WebSocketManager::createDistributor(
-    const QueryId& queryId) {
-  auto future = net::post(
-      registryStrand_.value(),
-      std::packaged_task<std::shared_ptr<QueryToSocketDistributor>()>(
-          [this, queryId]() {
-            AD_CORRECTNESS_CHECK(!socketDistributors_.contains(queryId));
-            auto distributor =
-                std::make_shared<QueryToSocketDistributor>(queryId, ioContext_);
-            socketDistributors_.emplace(queryId, distributor);
-            waitingList_.signalQueryUpdate(queryId);
-            return distributor;
-          }));
-  return future.get();
-}
-
-void WebSocketManager::invokeOnQueryStart(
-    const QueryId& queryId,
-    std::function<void(std::shared_ptr<QueryToSocketDistributor>)> callback) {
-  net::post(registryStrand_.value(),
-            [this, queryId, callback = std::move(callback)]() mutable {
-              if (socketDistributors_.contains(queryId)) {
-                callback(socketDistributors_.at(queryId));
-              } else {
-                waitingList_.callOnQueryUpdate(
-                    queryId, [this, queryId, callback = std::move(callback)]() {
-                      callback(socketDistributors_.at(queryId));
-                    });
-              }
-            });
-}
-
-void WebSocketManager::releaseQuery(QueryId queryId) {
-  net::post(registryStrand_.value(), [this, queryId = std::move(queryId)]() {
-    auto distributor = socketDistributors_.at(queryId);
-    socketDistributors_.erase(queryId);
-    distributor->signalEnd();
-    distributor->wakeUpWebSocketsForQuery();
-  });
-}
-
-UpdateFetcher::payload_type UpdateFetcher::optionalFetchAndAdvance() {
-  // FIXME access to data is not synchronized
-  return nextIndex_ < distributor_->getData().size()
-             ? distributor_->getData().at(nextIndex_++)
-             : nullptr;
-}
-
-// Based on https://stackoverflow.com/a/69285751
-template <typename CompletionToken>
-auto UpdateFetcher::waitForEvent(CompletionToken&& token) {
-  auto initiate = [this]<typename Handler>(Handler&& self) mutable {
-    auto sharedSelf = std::make_shared<Handler>(std::forward<Handler>(self));
-
-    net::post(
-        socketStrand_, [this, sharedSelf = std::move(sharedSelf)]() mutable {
-          auto waitingHook = [this, sharedSelf = std::move(sharedSelf)]() {
-            AD_CORRECTNESS_CHECK(distributor_);
-            if (auto data = optionalFetchAndAdvance()) {
-              (*sharedSelf)(std::move(data));
-            } else if (distributor_->isFinished()) {
-              (*sharedSelf)(nullptr);
-            } else {
-              distributor_->callOnUpdate(
-                  [this, sharedSelf = std::move(sharedSelf)]() {
-                    if (auto data = optionalFetchAndAdvance()) {
-                      (*sharedSelf)(std::move(data));
-                    } else if (distributor_->isFinished()) {
-                      (*sharedSelf)(nullptr);
-                    }
-                  });
-            }
-          };
-          if (distributor_) {
-            waitingHook();
-          } else {
-            // TODO this should return a cancel callback
-            webSocketManager_.invokeOnQueryStart(
-                queryId_, [this, waitingHook = std::move(waitingHook)](
-                              auto distributor) mutable {
-                  distributor_ = std::move(distributor);
-                  waitingHook();
-                });
-          }
-        });
-  };
-  return net::async_initiate<CompletionToken, void(payload_type)>(
-      initiate, std::forward<CompletionToken>(token));
-}
 
 net::awaitable<void> WebSocketManager::handleClientCommands(websocket& ws) {
   beast::flat_buffer buffer;
@@ -118,7 +30,7 @@ net::awaitable<void> WebSocketManager::handleClientCommands(websocket& ws) {
 
 net::awaitable<void> WebSocketManager::waitForServerEvents(
     websocket& ws, const QueryId& queryId) {
-  UpdateFetcher updateFetcher{queryId, *this, registryStrand_.value()};
+  UpdateFetcher updateFetcher{queryId, webSocketTracker_, socketStrand_};
   while (ws.is_open()) {
     auto json = co_await updateFetcher.waitForEvent(net::use_awaitable);
     if (json == nullptr) {
@@ -185,6 +97,10 @@ net::awaitable<void> WebSocketManager::manageConnection(
   return net::co_spawn(
       executor, connectionLifecycle(std::move(socket), std::move(request)),
       net::use_awaitable);
+}
+
+WebSocketTracker& WebSocketManager::getWebSocketTracker() {
+  return webSocketTracker_;
 }
 
 // TODO<C++23> use std::expected<void, ErrorResponse>

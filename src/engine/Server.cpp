@@ -613,8 +613,9 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
+    // TODO only the tracker needs to be passed to here, not the manager
     ad_utility::websocket::WebSocketNotifier webSocketNotifier{
-        getQueryId(request), webSocketManager};
+        getQueryId(request), webSocketManager.getWebSocketTracker()};
     auto notifierFunction = [&webSocketNotifier](std::string json) {
       webSocketNotifier(std::move(json));
     };
