@@ -5,8 +5,10 @@
 #ifndef QLEVER_QUERYTOSOCKETDISTRIBUTOR_H
 #define QLEVER_QUERYTOSOCKETDISTRIBUTOR_H
 
+#include <boost/asio/awaitable.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/strand.hpp>
+#include <functional>
 
 #include "util/http/websocket/Common.h"
 
@@ -25,6 +27,21 @@ class QueryToSocketDistributor {
   /// updates and resume execution.
   void runAndEraseWakeUpCallsSynchronously();
 
+  template <typename CompletionToken>
+  auto waitForUpdate(CompletionToken&& token) {
+    auto initiate = [this]<typename Handler>(Handler&& self) mutable {
+      // TODO avoid shared_ptr
+      auto sharedSelf = std::make_shared<Handler>(std::forward<Handler>(self));
+
+      net::post(strand_, [this, sharedSelf = std::move(sharedSelf)]() mutable {
+        wakeupCalls_.emplace_back(
+            [sharedSelf = std::move(sharedSelf)]() { (*sharedSelf)(); });
+      });
+    };
+    return net::async_initiate<CompletionToken, void()>(
+        initiate, std::forward<CompletionToken>(token));
+  }
+
  public:
   QueryToSocketDistributor(QueryId queryId, net::io_context& ioContext)
       : queryId_{std::move(queryId)}, strand_{net::make_strand(ioContext)} {}
@@ -32,15 +49,12 @@ class QueryToSocketDistributor {
   /// Calls runAndEraseWakeUpCallsSynchronously asynchronously and thread-safe.
   void wakeUpWebSocketsForQuery();
 
-  void callOnUpdate(std::function<void()>);
-
   void addQueryStatusUpdate(std::string payload);
 
   void signalEnd();
 
-  bool isFinished() const;
-
-  const std::vector<std::shared_ptr<const std::string>>& getData();
+  net::awaitable<std::shared_ptr<const std::string>> waitForNextDataPiece(
+      size_t index);
 };
 }  // namespace ad_utility::websocket
 

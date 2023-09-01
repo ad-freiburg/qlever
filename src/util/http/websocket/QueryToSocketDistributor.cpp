@@ -4,6 +4,8 @@
 
 #include "QueryToSocketDistributor.h"
 
+#include <boost/asio/use_awaitable.hpp>
+
 namespace ad_utility::websocket {
 void QueryToSocketDistributor::runAndEraseWakeUpCallsSynchronously() {
   for (auto& wakeupCall : wakeupCalls_) {
@@ -14,12 +16,6 @@ void QueryToSocketDistributor::runAndEraseWakeUpCallsSynchronously() {
 
 void QueryToSocketDistributor::wakeUpWebSocketsForQuery() {
   net::post(strand_, [this]() { runAndEraseWakeUpCallsSynchronously(); });
-}
-
-void QueryToSocketDistributor::callOnUpdate(std::function<void()> callback) {
-  net::post(strand_, [this, callback = std::move(callback)]() mutable {
-    wakeupCalls_.emplace_back(std::move(callback));
-  });
 }
 
 void QueryToSocketDistributor::addQueryStatusUpdate(std::string payload) {
@@ -33,10 +29,23 @@ void QueryToSocketDistributor::addQueryStatusUpdate(std::string payload) {
 
 void QueryToSocketDistributor::signalEnd() { finished_ = true; }
 
-bool QueryToSocketDistributor::isFinished() const { return finished_; }
+net::awaitable<std::shared_ptr<const std::string>>
+QueryToSocketDistributor::waitForNextDataPiece(size_t index) {
+  co_await net::post(strand_, net::use_awaitable);
 
-const std::vector<std::shared_ptr<const std::string>>&
-QueryToSocketDistributor::getData() {
-  return data_;
+  if (index < data_.size()) {
+    co_return data_.at(index);
+  }
+
+  co_await waitForUpdate(net::use_awaitable);
+
+  if (index < data_.size()) {
+    co_return data_.at(index);
+  } else {
+    if (!finished_) {
+      LOG(WARN) << "No new data after waking up" << std::endl;
+    }
+    co_return nullptr;
+  }
 }
 }  // namespace ad_utility::websocket

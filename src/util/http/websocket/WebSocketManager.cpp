@@ -32,7 +32,7 @@ net::awaitable<void> WebSocketManager::waitForServerEvents(
     websocket& ws, const QueryId& queryId) {
   UpdateFetcher updateFetcher{queryId, webSocketTracker_, socketStrand_};
   while (ws.is_open()) {
-    auto json = co_await updateFetcher.waitForEvent(net::use_awaitable);
+    auto json = co_await updateFetcher.waitForEvent();
     if (json == nullptr) {
       if (ws.is_open()) {
         co_await ws.async_close(beast::websocket::close_code::normal,

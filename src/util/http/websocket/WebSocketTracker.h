@@ -27,9 +27,30 @@ class WebSocketTracker {
   void releaseQuery(QueryId queryId);
 
   std::shared_ptr<QueryToSocketDistributor> createDistributor(const QueryId&);
-  void invokeOnQueryStart(
-      const QueryId&,
-      std::function<void(std::shared_ptr<QueryToSocketDistributor>)>);
+
+  template <typename CompletionToken>
+  net::awaitable<std::shared_ptr<QueryToSocketDistributor>> waitForDistributor(
+      QueryId queryId, CompletionToken&& token) {
+    auto initiate = [this, &queryId]<typename Handler>(Handler&& self) mutable {
+      // TODO convert to coroutine
+      auto sharedSelf = std::make_shared<Handler>(std::forward<Handler>(self));
+
+      net::post(socketStrand_, [this, &queryId,
+                                sharedSelf = std::move(sharedSelf)]() mutable {
+        if (socketDistributors_.contains(queryId)) {
+          (*sharedSelf)(socketDistributors_.at(queryId));
+        } else {
+          waitingList_.callOnQueryUpdate(
+              queryId, [this, queryId, sharedSelf = std::move(sharedSelf)]() {
+                (*sharedSelf)(socketDistributors_.at(queryId));
+              });
+        }
+      });
+    };
+    return net::async_initiate<CompletionToken,
+                               void(std::shared_ptr<QueryToSocketDistributor>)>(
+        initiate, std::forward<CompletionToken>(token));
+  }
 };
 }  // namespace ad_utility::websocket
 

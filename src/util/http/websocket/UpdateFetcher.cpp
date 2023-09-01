@@ -6,10 +6,20 @@
 
 namespace ad_utility::websocket {
 
-UpdateFetcher::payload_type UpdateFetcher::optionalFetchAndAdvance() {
-  // FIXME access to data is not synchronized
-  return nextIndex_ < distributor_->getData().size()
-             ? distributor_->getData().at(nextIndex_++)
-             : nullptr;
+net::awaitable<UpdateFetcher::payload_type> UpdateFetcher::waitForEvent() {
+  co_await net::post(socketStrand_, net::use_awaitable);
+  if (!distributor_) {
+    auto distributor = co_await webSocketTracker_.waitForDistributor(
+        queryId_, net::use_awaitable);
+    co_await net::post(socketStrand_, net::use_awaitable);
+    distributor_ = std::move(distributor);
+  }
+
+  auto data = co_await distributor_->waitForNextDataPiece(nextIndex_);
+  co_await net::post(socketStrand_, net::use_awaitable);
+  if (data) {
+    nextIndex_++;
+  }
+  co_return data;
 }
 }  // namespace ad_utility::websocket

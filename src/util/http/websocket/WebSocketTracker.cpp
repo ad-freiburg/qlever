@@ -7,6 +7,7 @@
 namespace ad_utility::websocket {
 std::shared_ptr<QueryToSocketDistributor> WebSocketTracker::createDistributor(
     const QueryId& queryId) {
+  // TODO make awaitable
   auto future = net::post(
       socketStrand_,
       std::packaged_task<std::shared_ptr<QueryToSocketDistributor>()>(
@@ -19,22 +20,6 @@ std::shared_ptr<QueryToSocketDistributor> WebSocketTracker::createDistributor(
             return distributor;
           }));
   return future.get();
-}
-
-void WebSocketTracker::invokeOnQueryStart(
-    const QueryId& queryId,
-    std::function<void(std::shared_ptr<QueryToSocketDistributor>)> callback) {
-  net::post(socketStrand_,
-            [this, queryId, callback = std::move(callback)]() mutable {
-              if (socketDistributors_.contains(queryId)) {
-                callback(socketDistributors_.at(queryId));
-              } else {
-                waitingList_.callOnQueryUpdate(
-                    queryId, [this, queryId, callback = std::move(callback)]() {
-                      callback(socketDistributors_.at(queryId));
-                    });
-              }
-            });
 }
 
 void WebSocketTracker::releaseQuery(QueryId queryId) {
