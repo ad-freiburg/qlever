@@ -6,6 +6,7 @@
 #define QLEVER_CARTESIANPRODUCTJOIN_H
 
 #include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
 
 class CartesianProductJoin : public Operation {
  public:
@@ -25,6 +26,7 @@ class CartesianProductJoin : public Operation {
                                    return *child->getRootOperation();
                                  });
   }
+  // TODO<joka921> Move more stuff into the cpp file.
 
  public:
   // Constructor

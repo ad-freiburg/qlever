@@ -1092,11 +1092,9 @@ TEST(QueryPlannerTest, CartesianProductJoin) {
       h::CartesianProductJoin(h::IndexScan("<s>", "<p>", Var{"?o"}),
                               h::IndexScan(Var{"?a"}, "<b>", "<c>")));
   // This currently fails because of a bug, we have to fix the bug...
-  /*
   h::expect(
       "SELECT ?x ?p ?o WHERE {"
       "<s> ?p ?o . ?a ?b ?c }",
       h::CartesianProductJoin(h::IndexScan("<s>", Var{"?p"}, Var{"?o"}),
-                         h::IndexScan(Var{"?a"}, Var{"?b"}, Var{"?c"})));
-                         */
+                              h::IndexScan(Var{"?a"}, Var{"?b"}, Var{"?c"})));
 }

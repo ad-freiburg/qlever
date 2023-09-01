@@ -1235,6 +1235,9 @@ std::array<vector<QueryPlanner::SubtreePlan>, 2> QueryPlanner::merge(
   }
 
   LOG(TRACE) << "Got " << prunedPlans.size() << " pruned plans from \n";
+  // TODO<joka921> We should refactor the QueryPlanner in the following way:
+  // First find the connected components of the query (via a Graph), and then
+  // run the planning on those components and THEN create a
   std::vector<SubtreePlan> unjoinable;
   if (returnUnjoinableFromB) {
     for (size_t i = 0; i < joinableInB.size(); ++i) {
@@ -1424,45 +1427,81 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   }
   LOG(TRACE) << "Fill DP table... (there are " << numSeeds
              << " operations to join)" << std::endl;
-  vector<vector<SubtreePlan>> dpTab;
-  dpTab.emplace_back(seedWithScansAndText(tg, children));
-  applyFiltersIfPossible(dpTab.back(), filters, numSeeds == 1);
-
-  vector<SubtreePlan> unjoinable;
-  for (size_t k = 2; k <= numSeeds; ++k) {
-    LOG(TRACE) << "Producing plans that unite " << k << " triples."
-               << std::endl;
-    dpTab.emplace_back(vector<SubtreePlan>());
-    for (size_t i = 1; i * 2 <= k; ++i) {
-      auto [newPlans, newUnjoinable] =
-          merge(dpTab[i - 1], dpTab[k - i - 1], tg, i == 1);
-      std::ranges::move(newUnjoinable, std::back_inserter(unjoinable));
-      if (newPlans.size() == 0) {
-        continue;
-      }
-      dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
-      applyFiltersIfPossible(dpTab.back(), filters, numSeeds == k);
-    }
-    if (dpTab[k - 1].size() == 0) {
-      std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
-      std::ranges::copy(unjoinable | std::views::transform(&SubtreePlan::_qet),
-                        std::back_inserter(subtrees));
-      dpTab[k - 1].push_back(
-          makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
-      applyFiltersIfPossible(dpTab.back(), filters, numSeeds == k);
-      // TODO<joka921> Should we assert that all filters were applied ?
-      break;
-      /*
-      AD_THROW(
-          "Could not find a suitable execution tree. "
-          "Likely cause: Queries that require joins of the full "
-          "index with itself are not supported at the moment.");
-          */
-    }
+  auto initialPlans = seedWithScansAndText(tg, children);
+  SubtreeGraph graph;
+  auto componentIndices = graph.getComponentIndices(initialPlans);
+  ad_utility::HashMap<size_t, std::vector<SubtreePlan>> components;
+  for (size_t i = 0; i < componentIndices.size(); ++i) {
+    components[componentIndices.at(i)].push_back(std::move(initialPlans.at(i)));
   }
+  vector<vector<SubtreePlan>> lastDpRowFromComponents;
+  for (auto& component : components | std::views::values) {
+    vector<vector<SubtreePlan>> dpTab;
+    // dpTab.emplace_back(seedWithScansAndText(tg, children));
+    dpTab.push_back(std::move(component));
+    applyFiltersIfPossible(dpTab.back(), filters, false);
 
-  LOG(TRACE) << "Fill DP table done." << std::endl;
-  return dpTab;
+    vector<SubtreePlan> unjoinable;
+    for (size_t k = 2; k <= numSeeds; ++k) {
+      LOG(TRACE) << "Producing plans that unite " << k << " triples."
+                 << std::endl;
+      dpTab.emplace_back(vector<SubtreePlan>());
+      for (size_t i = 1; i * 2 <= k; ++i) {
+        auto [newPlans, newUnjoinable] =
+            merge(dpTab[i - 1], dpTab[k - i - 1], tg, i == 1);
+        std::ranges::move(newUnjoinable, std::back_inserter(unjoinable));
+        if (newPlans.size() == 0) {
+          continue;
+        }
+        dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(),
+                            newPlans.end());
+        applyFiltersIfPossible(dpTab.back(), filters, false);
+      }
+      if (dpTab[k - 1].size() == 0) {
+        // TODO<joka921> Again include the correct sanity checks for the
+        // required number of rounds and determine it in advance. Maybe we need
+        // to do the graph building one level before.
+        AD_CORRECTNESS_CHECK(k >= 2 && !dpTab.at(k - 2).empty());
+        dpTab.resize(k - 1);
+        break;
+        /*
+        std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+        std::ranges::copy(
+            unjoinable | std::views::transform(&SubtreePlan::_qet),
+            std::back_inserter(subtrees));
+        dpTab[k - 1].push_back(
+            makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
+        applyFiltersIfPossible(dpTab.back(), filters, numSeeds == k);
+        // TODO<joka921> Should we assert that all filters were applied ?
+        break;
+         */
+        AD_THROW(
+            "Could not find a suitable execution tree for a connected "
+            "component of the query. This should not happen, please report it "
+            "to the developers");
+      }
+    }
+    lastDpRowFromComponents.push_back(std::move(dpTab.back()));
+  }
+  if (lastDpRowFromComponents.size() == 1) {
+    applyFiltersIfPossible(lastDpRowFromComponents.back(), filters, true);
+    return lastDpRowFromComponents;
+  } else {
+    std::vector<std::vector<SubtreePlan>> result;
+    result.emplace_back();
+    std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+    std::ranges::move(
+        lastDpRowFromComponents |
+            std::views::transform([this](auto& vec) -> decltype(auto) {
+              return vec.at(findCheapestExecutionTree(vec));
+            }) |
+            std::views::transform(&SubtreePlan::_qet),
+        std::back_inserter(subtrees));
+    result.at(0).push_back(
+        makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
+    applyFiltersIfPossible(result.at(0), filters, true);
+    return result;
+  }
 }
 
 // _____________________________________________________________________________

@@ -165,6 +165,76 @@ class QueryPlanner {
     void addAllNodes(uint64_t otherNodes);
   };
 
+  class SubtreeGraph {
+    class Node {
+     public:
+      const SubtreePlan* plan_;
+      ad_utility::HashSet<Node*> neighbors_{};
+      bool discovered_ = false;
+      int64_t componentIndex_ = -1;
+      explicit Node(const SubtreePlan* plan) : plan_{plan} {}
+    };
+    std::vector<std::shared_ptr<Node>> nodes_;
+
+   public:
+    std::vector<size_t> getComponentIndices(
+        const std::vector<SubtreePlan>& nodes) {
+      for (const auto& node : nodes) {
+        nodes_.push_back(std::make_shared<Node>(&node));
+      }
+      ad_utility::HashMap<Variable, std::vector<Node*>> varToNode;
+      for (auto& node : nodes_) {
+        for (const auto& var :
+             node->plan_->_qet->getVariableColumns() | std::views::keys) {
+          varToNode[var].push_back(node.get());
+        }
+      }
+      ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> neighbors;
+      for (auto& neighborList : varToNode | std::views::values) {
+        for (auto* n1 : neighborList) {
+          for (auto* n2 : neighborList) {
+            if (n1 != n2) {
+              neighbors[n1].insert(n2);
+              neighbors[n2].insert(n1);
+            }
+          }
+        }
+      }
+      for (auto& node : nodes_) {
+        if (neighbors.contains(node.get())) {
+          node->neighbors_ = std::move(neighbors.at(node.get()));
+        }
+      }
+      return getComponentIndices();
+    }
+
+    void dfs(Node* start, size_t componentIndex) {
+      if (start->discovered_) {
+        return;
+      }
+      start->componentIndex_ = componentIndex;
+      start->discovered_ = true;
+      for (auto* neighbor : start->neighbors_) {
+        dfs(neighbor, componentIndex);
+      }
+    }
+
+    std::vector<size_t> getComponentIndices() {
+      std::vector<size_t> result;
+      size_t nextIndex = 0;
+      for (auto& node : nodes_) {
+        if (node->discovered_) {
+          result.push_back(node->componentIndex_);
+        } else {
+          dfs(node.get(), nextIndex);
+          result.push_back(node->componentIndex_);
+          ++nextIndex;
+        }
+      }
+      return result;
+    }
+  };
+
   [[nodiscard]] TripleGraph createTripleGraph(
       const parsedQuery::BasicGraphPattern* pattern) const;
 
