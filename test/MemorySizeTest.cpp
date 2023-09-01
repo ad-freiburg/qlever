@@ -301,6 +301,11 @@ TEST(MemorySize, ArithmeticOperators) {
   memSubtraction -= 11000_kB;
   ASSERT_EQ((22_MB).getBytes(), memSubtraction.getBytes());
 
+  // Subtraction, so that the resulting `MemorySize` is smaller than `0` should
+  // be impossible. Instead, we stop at `0`.
+  ASSERT_EQ((0_GB).getBytes(), (3_GB - 10_GB).getBytes());
+  ASSERT_EQ((0_GB).getBytes(), (3_GB -= 10_GB).getBytes());
+
   // Whole number multiplication.
   ASSERT_EQ((2_GB).getBytes(), (1_GB * 2).getBytes());
   ASSERT_EQ((20_TB).getBytes(), (2 * 1_TB * 10).getBytes());

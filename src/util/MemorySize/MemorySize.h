@@ -338,12 +338,16 @@ constexpr MemorySize& MemorySize::operator+=(const MemorySize& m) {
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::operator-(const MemorySize& m) const {
-  return MemorySize::bytes(memoryInBytes_ - m.memoryInBytes_);
+  // Subtracting a bigger `MemorySize` from a smaller one, could end in
+  // underflow.
+  return MemorySize::bytes(memoryInBytes_ >= m.memoryInBytes_
+                               ? memoryInBytes_ - m.memoryInBytes_
+                               : 0UL);
 }
 
 // _____________________________________________________________________________
 constexpr MemorySize& MemorySize::operator-=(const MemorySize& m) {
-  memoryInBytes_ -= m.memoryInBytes_;
+  *this = *this - m;
   return *this;
 }
 
