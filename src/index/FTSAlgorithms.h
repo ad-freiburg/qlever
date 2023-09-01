@@ -20,219 +20,121 @@ using std::vector;
 using ad_utility::HashSet;
 
 class FTSAlgorithms {
+  using WordEntityPostings = Index::WordEntityPostings;
+
  public:
-  typedef vector<array<Id, 1>> WidthOneList;
-  typedef vector<array<Id, 2>> WidthTwoList;
-  typedef vector<array<Id, 3>> WidthThreeList;
-  typedef vector<array<Id, 4>> WidthFourList;
-  typedef vector<array<Id, 5>> WidthFiveList;
-  typedef vector<vector<Id>> VarWidthList;
-
-  static Index::WordEntityPostings filterByRange(
+  // Filters all wep entries out where the wid does not lay inside the
+  // idRange.
+  static WordEntityPostings filterByRange(
       const IdRange<WordVocabIndex>& idRange,
-      const Index::WordEntityPostings& wepPreFilter);
+      const WordEntityPostings& wepPreFilter);
 
-  static Index::WordEntityPostings intersect(
-      const Index::WordEntityPostings& matchingContextsWep,
-      const Index::WordEntityPostings& eBlockWep);
+  // Intersects matchingContextsWep and eBlockWep on the cids_ attribute. If
+  // there are multiple matches for the same cid then we calculate every
+  // possible combination of eids and wids.
+  //
+  // Example:
+  // matchingContextsWep.cids_        : 1 4 5 5 7
+  // matchingContextsWep.wids_.at(0)  : 3 4 3 4 3
+  // --------------------------------------------
+  // eBlockWep.cids_                  : 4 5 5 8
+  // eBlockWep.eids_                  : 2 1 2 1
+  // ============================================
+  // resultWep.cids_                  : 4 5 5 5 5
+  // resultWep.eids_                  : 2 1 2 2 1
+  // resultWep.wids_.at(0)            : 4 3 4 3 4
+  static WordEntityPostings crossIntersect(
+      const WordEntityPostings& matchingContextsWep,
+      const WordEntityPostings& eBlockWep);
 
-  static void intersectTwoPostingLists(const vector<TextRecordIndex>& cids1,
-                                       const vector<Score>& scores1,
-                                       const vector<TextRecordIndex>& cids2,
-                                       const vector<Score>& scores2,
-                                       vector<TextRecordIndex>& resultCids,
-                                       vector<Score>& resultScores);
+  // Intersects a list of weps on the cids_ attribute.
+  // If there are multiple matches for the same cid the we calculate every
+  // possible combination of eids and wids.
+  //
+  // Example:
+  // wepVecs[0].cids_ :    0  1  2 10
+  // wepVecs[0].scores:    1  1  1  1
+  // wepVecs[0].wids_[0]:  3  2  5  3
+  // --------------------------------------------
+  // wepVecs[1].cids_ :    0  0  0 10
+  // wepVecs[1].scores:    1  1  1  1
+  // wepVecs[1].wids_[0]:  8  7  6  9
+  // --------------------------------------------
+  // wepVecs[2].cids_ :    0  6  8 10
+  // wepVecs[2].scores:    1  1  1  3
+  // wepVecs[2].wids_[0]: 23 22 25 23
+  // --------------------------------------------
+  // wepVecs[3].cids_ :    0  0  3  4 10 10 11
+  // wepVecs[3].scores:    1  4  1  4  1  4  1
+  // wepVecs[3].wids_[0]: 33 29 45 76 42 31 30
+  // --------------------------------------------
+  // eids:                 1  4  1  4  1  2  3
+  // ============================================
+  // wepResult.eids_:      1  4  1  4  1  4  1  2
+  // wepResult.cids_:      0  0  0  0  0  0 10 10
+  // wepResult.scores:     4  7  4  7  4  7  6  9
+  // wepResult.wids_[0]:   3  3  3  3  3  3  3  3
+  // wepResult.wids_[1]:   8  8  7  7  6  6  9  9
+  // wepResult.wids_[2]:  23 23 23 23 23 23 23 23
+  // wepResult.wids_[3]:  33 29 33 29 33 29 42 31
 
-  static void aggScoresAndTakeTopKContexts(const Index::WordEntityPostings& wep,
+  static WordEntityPostings crossIntersectKWay(
+      const vector<WordEntityPostings>& wepVecs, vector<Id>* lastListEids);
+
+  // Writes the wep entries to an IdTable but at most k contexts per entity. The
+  // rest gets discarded. Note that the contexts with the highest score get
+  // selected.
+  template <int WIDTH>
+  static void aggScoresAndTakeTopKContexts(const WordEntityPostings& wep,
                                            size_t k, IdTable* dynResult);
-
-  template <int WIDTH>
-  static void multVarsAggScoresAndTakeTopKContexts(
-      const vector<TextRecordIndex>& cids, const vector<Id>& eids,
-      const vector<Score>& scores, size_t nofVars, size_t kLimit,
-      IdTable* dynResult);
-
-  // Special case with only top-1 context(s).
-  template <int WIDTH>
-  static void multVarsAggScoresAndTakeTopContext(
-      const vector<TextRecordIndex>& cids, const vector<Id>& eids,
-      const vector<Score>& scores, size_t nofVars, IdTable* dynResult);
-
-  template <typename Row>
-  static void aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes, size_t k,
-                                           vector<Row>& res);
 
   // Special case where k == 1.
   template <int WIDTH>
-  static void aggScoresAndTakeTopContext(const Index::WordEntityPostings& wep,
+  static void aggScoresAndTakeTopContext(const WordEntityPostings& wep,
                                          IdTable* dynResult);
 
-  // K-way intersect whereas there may be word ids / entity ids
-  // parallel to the last list in the vectors.
-  // That list (param: eids) can be given or null.
-  // If it is null, resEids is left untouched, otherwise resEids
-  // will contain word/entity for the matching contexts.
-  static Index::WordEntityPostings intersectKWay(
-      const vector<Index::WordEntityPostings>& wepVecs,
-      vector<Id>* lastListEids);
+  // Writes the wep entries to an IdTable but at most k contexts per entity. The
+  // rest gets discarded. Note that the contexts with the highest score get
+  // selected. Also calculates the right combinations of the multiple entities.
+  template <int WIDTH>
+  static void multVarsAggScoresAndTakeTopKContexts(
+      const WordEntityPostings& wep, size_t nofVars, size_t kLimit,
+      IdTable* dynResult);
 
-  // Constructs the cross-product between entity postings of this
-  // context and matching subtree result tuples.
-  template <size_t I>
-  static inline void appendCrossProduct(
-      const Index::WordEntityPostings& wep, size_t from, size_t toExclusive,
-      const ad_utility::HashMap<Id, vector<array<Id, I>>>& subRes,
-      vector<array<Id, 3 + I>>& res) {
-    LOG(TRACE) << "Append cross-product called for a context with "
-               << toExclusive - from << " postings.\n";
-    vector<array<Id, I>> contextSubRes;
-    for (size_t i = from; i < toExclusive; ++i) {
-      auto it = subRes.find(wep.eids_[i]);
-      if (it != subRes.end()) {
-        for (auto& tup : it->second) {
-          contextSubRes.push_back(tup);
-        }
-      }
-    }
-    for (size_t i = from; i < toExclusive; ++i) {
-      for (auto& tup : contextSubRes) {
-        res.emplace_back(concatTupleOld(
-            wep.eids_[i], Id::makeFromInt(wep.scores_[i]),
-            Id::makeFromTextRecordIndex(wep.cids_[i]), tup, GenSeq<I>()));
-      }
-    }
-  }
+  // Special case where k == 1.
+  template <int WIDTH>
+  static void multVarsAggScoresAndTakeTopContext(const WordEntityPostings& wep,
+                                                 size_t nofVars,
+                                                 IdTable* dynResult);
 
-  template <size_t... I>
-  static inline array<Id, 3 + sizeof...(I)> concatTuple(
-      const array<Id, 2>& l, Id cid, const array<Id, sizeof...(I)>& r,
-      IndexSequence<I...>) {
-    return array<Id, 3 + sizeof...(I)>{{l[0], l[1], cid, r[I]...}};
-  }
-
-  template <size_t... I>
-  static inline array<Id, 3 + sizeof...(I)> concatTupleOld(
-      Id eid, Id score, Id cid, const array<Id, sizeof...(I)>& r,
-      IndexSequence<I...>) {
-    return array<Id, 3 + sizeof...(I)>{{eid, score, cid, r[I]...}};
-  }
-
-  template <typename InTup, size_t I>
-  static inline void fillTuple(Id cid, Id score, const InTup& in,
-                               array<Id, I>& out) {
-    out[0] = cid;
-    out[1] = score;
-    size_t n = 2;
-    for (auto e : in) {
-      out[n++] = e;
-    }
-  }
-
-  template <typename InTup>
-  static inline void fillTuple(Id cid, Id score, const InTup& in,
-                               vector<Id>& out) {
-    out.reserve(in.size() + 2);
-    out.push_back(cid);
-    out.push_back(score);
-    out.insert(std::end(out), std::begin(in), std::end(in));
-  }
-
-  template <size_t I>
-  static inline void fillThreeTuple(Id cid, Id score, Id eid,
-                                    array<Id, I>& out) {
-    out[0] = cid;
-    out[1] = score;
-    out[2] = eid;
-  }
-
-  static inline void fillThreeTuple(Id cid, Id score, Id eid, vector<Id>& out) {
-    out.resize(3);
-    out[0] = cid;
-    out[1] = score;
-    out[2] = eid;
-  }
-
-  template <typename Iter1, typename Iter2, size_t I>
-  static inline void fillTuple(Id cid, Id score, Iter1 keyBegin, Iter1 keyEnd,
-                               Iter2 fBegin, Iter2 fEnd, array<Id, I>& out) {
-    out[0] = cid;
-    out[1] = score;
-    size_t n = 2;
-    while (keyBegin != keyEnd) {
-      out[n++] = *keyBegin;
-      ++keyBegin;
-    }
-    while (fBegin != fEnd) {
-      out[n++] = *fBegin;
-      ++fBegin;
-    }
-    assert(n == I);
-  }
-
-  template <typename Iter, size_t I>
-  static inline void fillTuple(Id cid, Id score, Iter keyBegin, Iter keyEnd,
-                               Id eid, array<Id, I>& out) {
-    out[0] = cid;
-    out[1] = score;
-    size_t n = 2;
-    while (keyBegin != keyEnd) {
-      out[n++] = *keyBegin;
-      ++keyBegin;
-    }
-    out[n++] = eid;
-    assert(n == I);
-  }
-
-  template <typename Iter>
-  static inline void fillTuple(Id cid, Id score, Iter keyBegin, Iter keyEnd,
-                               Id eid, vector<Id>& out) {
-    out.push_back(cid);
-    out.push_back(score);
-    while (keyBegin != keyEnd) {
-      out.push_back(*keyBegin);
-      ++keyBegin;
-    }
-    out.push_back(eid);
-  }
-
-  template <typename Iter1, typename Iter2>
-  static inline void fillTuple(Id cid, Id score, Iter1 keyBegin, Iter1 keyEnd,
-                               Iter2 fBegin, Iter2 fEnd, vector<Id>& out) {
-    out.push_back(cid);
-    out.push_back(score);
-    out.insert(out.end(), keyBegin, keyEnd);
-    out.insert(out.end(), fBegin, fEnd);
-  }
-
-  static void appendCrossProduct(const Index::WordEntityPostings& wep,
-                                 size_t from, size_t toExclusive,
-                                 const ad_utility::HashSet<Id>& subRes1,
-                                 const ad_utility::HashSet<Id>& subRes2,
-                                 vector<array<Id, 5>>& res);
-
-  static void appendCrossProduct(
-      const Index::WordEntityPostings& wep, size_t from, size_t toExclusive,
-      const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>&,
-      vector<vector<Id>>& res);
-
-  template <int WIDTH>  // TODO: rewrite so word id is considered
+  // Writes the wep entries to an IdTable but at most k contexts per entity. The
+  // rest gets discarded. Note that the contexts with the highest score get
+  // selected. Also filters out entries whose entity is not in the HashMap.
+  template <int WIDTH>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
-      const Index::WordEntityPostings& wep,
+      const WordEntityPostings& wep,
       const ad_utility::HashMap<Id, IdTable>& fMap, size_t k,
       IdTable* dynResult);
 
+  // Same but for a HashSet instead of a HashMap
+  template <int WIDTH>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
-      const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+      const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
       IdTable* dynResult);
 
-  template <int WIDTH>  // TODO: rewrite so word id is considered
+  // Writes the wep entries to an IdTable but at most k contexts per entity. The
+  // rest gets discarded. Note that the contexts with the highest score get
+  // selected. Also calculates the right combinations of the multiple entities
+  // and filters out entries whose entity is not in the HashMap.
+  template <int WIDTH>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
-      const Index::WordEntityPostings& wep,
+      const WordEntityPostings& wep,
       const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars,
       size_t kLimit, IdTable* dynResult);
 
+  // Same but for a HashSet instead of a HashMap
   template <int WIDTH>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
-      const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
-      size_t nofVars, size_t kLimit, IdTable* dynResult);
+      const WordEntityPostings& wep, const HashSet<Id>& fSet, size_t nofVars,
+      size_t kLimit, IdTable* dynResult);
 };

@@ -407,6 +407,14 @@ class IdTable {
     }
   }
 
+  void push_back(std::span<const T> newRow) requires(!isView) {
+    AD_CONTRACT_CHECK(newRow.size() == numColumns());
+    ++numRows_;
+    for (size_t i = 0; i < numColumns(); ++i) {
+      data()[i].push_back(*(newRow.begin() + i));
+    }
+  }
+
   // Overload of `push_back` for `std:array`. If this IdTable is static
   // (`NumColumns != 0`), then this is a safe interface, as the correct size of
   // `newRow` can be statically checked.

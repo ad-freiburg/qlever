@@ -7,6 +7,8 @@
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
+#include <absl/strings/str_split.h>
+
 #include <string>
 #include <vector>
 
@@ -908,10 +910,11 @@ vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::ExpressionListContext*) {
-  // This rule is only used by the `RelationExpression` and `BuiltInCall` rules
-  // which also are not supported and should already have thrown an exception.
-  AD_FAIL();
+std::vector<ExpressionPtr> Visitor::visit(Parser::ExpressionListContext* ctx) {
+  if (ctx->NIL()) {
+    return {};
+  }
+  return visitVector(ctx->expression());
 }
 
 // ____________________________________________________________________________________
@@ -1028,12 +1031,33 @@ vector<TripleWithPropertyPath> Visitor::visit(
   // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
   // <entity>` is contained in the query, then the variable `?ql_textscore_var`
   // is implicitly created and visible in the query body.
-  auto setTextscoreVisibleIfPresent = [this](VarOrTerm& subject,
-                                             VarOrPath& predicate) {
+  // Similarly if a triple `?var ql:contains-word "words"` is contained in the
+  // query, then the variable `ql_matchingword_var` is implicitly created and
+  // visible in the query body.
+  auto setMatchingWordAndTextscoreVisibleIfPresent = [this, ctx](
+                                                         VarOrTerm& subject,
+                                                         VarOrPath& predicate,
+                                                         VarOrTerm& object) {
     if (auto* var = std::get_if<Variable>(&subject)) {
       if (auto* propertyPath = std::get_if<PropertyPath>(&predicate)) {
-        if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE ||
-            propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+        if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+          addVisibleVariable(var->getTextScoreVariable());
+          string name = object.toSparql();
+          if (!((name.starts_with('"') && name.ends_with('"')) ||
+                (name.starts_with('\'') && name.ends_with('\'')))) {
+            reportError(
+                ctx,
+                "ql:contains-word has to be followed by a string in quotes");
+          }
+          for (std::string_view s : std::vector<std::string>(
+                   absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
+            if (!s.ends_with('*')) {
+              continue;
+            }
+            addVisibleVariable(
+                var->getMatchingWordVariable(s.substr(0, s.size() - 1)));
+          }
+        } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
           addVisibleVariable(var->getTextScoreVariable());
         }
       }
@@ -1045,7 +1069,7 @@ vector<TripleWithPropertyPath> Visitor::visit(
     auto subject = visit(ctx->varOrTerm());
     auto tuples = visit(ctx->propertyListPathNotEmpty());
     for (auto& [predicate, object] : tuples) {
-      setTextscoreVisibleIfPresent(subject, predicate);
+      setMatchingWordAndTextscoreVisibleIfPresent(subject, predicate, object);
       triples.emplace_back(subject, std::move(predicate), std::move(object));
     }
     return triples;
@@ -1614,8 +1638,15 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   auto createBinary = [&argList]<typename Function>(Function function)
       requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
                                      ExpressionPtr> {
-    AD_CONTRACT_CHECK(argList.size() == 2);
+    AD_CORRECTNESS_CHECK(argList.size() == 2);
     return function(std::move(argList[0]), std::move(argList[1]));
+  };
+  auto createTernary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                     ExpressionPtr, ExpressionPtr> {
+    AD_CORRECTNESS_CHECK(argList.size() == 3);
+    return function(std::move(argList[0]), std::move(argList[1]),
+                    std::move(argList[2]));
   };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
@@ -1652,6 +1683,14 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeRoundExpression);
   } else if (functionName == "floor") {
     return createUnary(&makeFloorExpression);
+  } else if (functionName == "if") {
+    return createTernary(&makeIfExpression);
+  } else if (functionName == "coalesce") {
+    AD_CORRECTNESS_CHECK(ctx->expressionList());
+    return makeCoalesceExpression(visit(ctx->expressionList()));
+  } else if (functionName == "concat") {
+    AD_CORRECTNESS_CHECK(ctx->expressionList());
+    return makeConcatExpression(visit(ctx->expressionList()));
   } else {
     reportError(
         ctx,

@@ -145,8 +145,9 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
       auto res = makeValueId(x, context);
       if constexpr (ad_utility::isSimilar<decltype(res), Id>) {
         // We need the same return type on all cases when visiting a variant, so
-        // we need to return a pair here.
-        return std::pair{res, res};
+        // we need to return a pair here. As the second element is an upper
+        // bound, we have to increment it by one.
+        return std::pair{res, ValueId::fromBits(res.getBits() + 1)};
       } else {
         return res;
       }

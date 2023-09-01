@@ -1258,6 +1258,10 @@ std::optional<string> IndexImpl::idToOptionalString(VocabIndex id) const {
   return vocab_.indexToOptionalString(id);
 }
 
+std::optional<string> IndexImpl::idToOptionalString(WordVocabIndex id) const {
+  return textVocab_.indexToOptionalString(id);
+}
+
 // ___________________________________________________________________________
 bool IndexImpl::getId(const string& element, Id* id) const {
   // TODO<joka921> we should parse doubles correctly in the SparqlParser and
