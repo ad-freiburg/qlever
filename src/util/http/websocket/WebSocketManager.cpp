@@ -14,50 +14,51 @@
 namespace ad_utility::websocket {
 using namespace boost::asio::experimental::awaitable_operators;
 
-void WebSocketManager::addQueryStatusUpdate(const QueryId& queryId,
-                                            std::string payload) {
-  auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
-  net::post(
-      registryStrand_.value(),
-      [this, sharedPayload = std::move(sharedPayload), &queryId]() mutable {
-        if (informationQueues_.contains(queryId)) {
-          informationQueues_.at(queryId)->push_back(std::move(sharedPayload));
-        } else {
-          using ptr_type = std::shared_ptr<const std::string>;
-          informationQueues_.emplace(
-              queryId,
-              std::make_shared<std::vector<ptr_type>>(
-                  std::initializer_list<ptr_type>{std::move(sharedPayload)}));
-        }
-        wakeUpWebSocketsForQuery(queryId);
-      });
-}
-
-void WebSocketManager::runAndEraseWakeUpCallsSynchronously(
+std::shared_ptr<QueryToSocketDistributor> WebSocketManager::createDistributor(
     const QueryId& queryId) {
-  auto [start, stop] = wakeupCalls_.equal_range(queryId);
-  for (auto it = start; it != stop; ++it) {
-    it->second();
-  }
-  wakeupCalls_.erase(queryId);
+  auto future = net::post(
+      registryStrand_.value(),
+      std::packaged_task<std::shared_ptr<QueryToSocketDistributor>()>(
+          [this, queryId]() {
+            AD_CORRECTNESS_CHECK(!socketDistributors_.contains(queryId));
+            auto distributor =
+                std::make_shared<QueryToSocketDistributor>(queryId, ioContext_);
+            socketDistributors_.emplace(queryId, distributor);
+            waitingList_.signalQueryUpdate(queryId);
+            return distributor;
+          }));
+  return future.get();
 }
 
-void WebSocketManager::wakeUpWebSocketsForQuery(const QueryId& queryId) {
-  net::post(registryStrand_.value(), [this, &queryId]() {
-    runAndEraseWakeUpCallsSynchronously(queryId);
-  });
+void WebSocketManager::invokeOnQueryStart(
+    const QueryId& queryId,
+    std::function<void(std::shared_ptr<QueryToSocketDistributor>)> callback) {
+  net::post(registryStrand_.value(),
+            [this, queryId, callback = std::move(callback)]() mutable {
+              if (socketDistributors_.contains(queryId)) {
+                callback(socketDistributors_.at(queryId));
+              } else {
+                waitingList_.callOnQueryUpdate(
+                    queryId, [this, queryId, callback = std::move(callback)]() {
+                      callback(socketDistributors_.at(queryId));
+                    });
+              }
+            });
 }
 
 void WebSocketManager::releaseQuery(QueryId queryId) {
   net::post(registryStrand_.value(), [this, queryId = std::move(queryId)]() {
-    informationQueues_.erase(queryId);
-    runAndEraseWakeUpCallsSynchronously(queryId);
+    auto distributor = socketDistributors_.at(queryId);
+    socketDistributors_.erase(queryId);
+    distributor->signalEnd();
+    distributor->wakeUpWebSocketsForQuery();
   });
 }
 
 UpdateFetcher::payload_type UpdateFetcher::optionalFetchAndAdvance() {
-  return nextIndex_ < queryEventQueue_->size()
-             ? queryEventQueue_->at(nextIndex_++)
+  // FIXME access to data is not synchronized
+  return nextIndex_ < distributor_->getData().size()
+             ? distributor_->getData().at(nextIndex_++)
              : nullptr;
 }
 
@@ -67,28 +68,40 @@ auto UpdateFetcher::waitForEvent(CompletionToken&& token) {
   auto initiate = [this]<typename Handler>(Handler&& self) mutable {
     auto sharedSelf = std::make_shared<Handler>(std::forward<Handler>(self));
 
-    if (queryEventQueue_) {
-      (*sharedSelf)(optionalFetchAndAdvance());
-    } else {
-      net::post(registryStrand_, [this, sharedSelf]() {
-        wakeupCalls_.insert({queryId_, [this, sharedSelf]() {
-                               if (!queryEventQueue_) {
-                                 if (!informationQueues_.contains(queryId_)) {
-                                   // Note this can only happen if a query is
-                                   // closed without any updates happening to it
-                                   (*sharedSelf)(nullptr);
-                                   return;
-                                 }
-                                 queryEventQueue_ =
-                                     informationQueues_.at(queryId_);
-                               }
-                               (*sharedSelf)(optionalFetchAndAdvance());
-                             }});
-      });
-    }
+    net::post(
+        socketStrand_, [this, sharedSelf = std::move(sharedSelf)]() mutable {
+          auto waitingHook = [this, sharedSelf = std::move(sharedSelf)]() {
+            AD_CORRECTNESS_CHECK(distributor_);
+            if (auto data = optionalFetchAndAdvance()) {
+              (*sharedSelf)(std::move(data));
+            } else if (distributor_->isFinished()) {
+              (*sharedSelf)(nullptr);
+            } else {
+              distributor_->callOnUpdate(
+                  [this, sharedSelf = std::move(sharedSelf)]() {
+                    if (auto data = optionalFetchAndAdvance()) {
+                      (*sharedSelf)(std::move(data));
+                    } else if (distributor_->isFinished()) {
+                      (*sharedSelf)(nullptr);
+                    }
+                  });
+            }
+          };
+          if (distributor_) {
+            waitingHook();
+          } else {
+            // TODO this should return a cancel callback
+            webSocketManager_.invokeOnQueryStart(
+                queryId_, [this, waitingHook = std::move(waitingHook)](
+                              auto distributor) mutable {
+                  distributor_ = std::move(distributor);
+                  waitingHook();
+                });
+          }
+        });
   };
-  return net::async_initiate<CompletionToken, void(payload_type)>(initiate,
-                                                                  token);
+  return net::async_initiate<CompletionToken, void(payload_type)>(
+      initiate, std::forward<CompletionToken>(token));
 }
 
 net::awaitable<void> WebSocketManager::handleClientCommands(websocket& ws) {
@@ -105,8 +118,7 @@ net::awaitable<void> WebSocketManager::handleClientCommands(websocket& ws) {
 
 net::awaitable<void> WebSocketManager::waitForServerEvents(
     websocket& ws, const QueryId& queryId) {
-  UpdateFetcher updateFetcher{informationQueues_, wakeupCalls_, queryId,
-                              registryStrand_.value()};
+  UpdateFetcher updateFetcher{queryId, *this, registryStrand_.value()};
   while (ws.is_open()) {
     auto json = co_await updateFetcher.waitForEvent(net::use_awaitable);
     if (json == nullptr) {

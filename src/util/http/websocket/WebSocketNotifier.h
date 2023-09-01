@@ -16,12 +16,15 @@ namespace ad_utility::websocket {
 class WebSocketNotifier {
   common::OwningQueryId owningQueryId_;
   WebSocketManager& webSocketManager_;
+  std::shared_ptr<QueryToSocketDistributor> distributor_;
 
  public:
   WebSocketNotifier(common::OwningQueryId owningQueryId,
                     WebSocketManager& webSocketManager)
       : owningQueryId_{std::move(owningQueryId)},
-        webSocketManager_{webSocketManager} {}
+        webSocketManager_{webSocketManager},
+        distributor_{
+            webSocketManager.createDistributor(owningQueryId_.toQueryId())} {}
 
   /// Broadcast the string to all listeners of this query.
   void operator()(std::string) const;

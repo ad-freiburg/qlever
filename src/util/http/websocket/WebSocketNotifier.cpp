@@ -6,8 +6,7 @@
 
 namespace ad_utility::websocket {
 void WebSocketNotifier::operator()(std::string json) const {
-  webSocketManager_.addQueryStatusUpdate(owningQueryId_.toQueryId(),
-                                         std::move(json));
+  distributor_->addQueryStatusUpdate(std::move(json));
 }
 
 WebSocketNotifier::~WebSocketNotifier() {
