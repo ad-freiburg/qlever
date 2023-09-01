@@ -15,6 +15,12 @@
 using namespace ad_utility::testing;
 using ad_utility::source_location;
 
+// Create a `CartesianProductJoin` the children of which are `ValuesForTesting`
+// with results create from the `inputs`. The children will have disjoint sets
+// of variabled as required by the `CartesianProductJoin`. If
+// `useLimitInSuboperations` is true, then the `ValuesForTesting` support the
+// LIMIT operation directly (This makes a difference in the `computeResult`
+// method of `CartesianProductJoin`).
 CartesianProductJoin makeJoin(const std::vector<VectorTable>& inputs,
                               bool useLimitInSuboperations = false) {
   auto qec = ad_utility::testing::getQec();
@@ -40,7 +46,8 @@ CartesianProductJoin makeJoin(const std::vector<VectorTable>& inputs,
 }
 
 // Test that a cartesian product between the `inputs` yields the `expected`
-// result.
+// result. For the meaning of the `useLimitInSuboperations` see `makeJoin`
+// above.
 void testCartesianProductImpl(VectorTable expected,
                               std::vector<VectorTable> inputs,
                               bool useLimitInSuboperations = false,
@@ -67,6 +74,9 @@ void testCartesianProductImpl(VectorTable expected,
     }
   }
 }
+// Test that a cartesian product between the `inputs` yields the `expected`
+// result. Perform the test for children that directly support the LIMIT
+// operation as well for children that don't (see `makeJoin` above for details).
 void testCartesianProduct(VectorTable expected, std::vector<VectorTable> inputs,
                           source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
@@ -74,6 +84,7 @@ void testCartesianProduct(VectorTable expected, std::vector<VectorTable> inputs,
   testCartesianProductImpl(expected, inputs, false);
 }
 
+// ______________________________________________________________
 TEST(CartesianProductJoin, computeResult) {
   // Simple base cases.
   VectorTable v{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
@@ -107,6 +118,7 @@ TEST(CartesianProductJoin, computeResult) {
       {{{0}, {1}}, {{2}}, {{4}, {5}, {6}}});
 }
 
+// ______________________________________________________________
 TEST(CartesianProductJoin, basicMemberFunctions) {
   auto join = makeJoin({{{3, 5}, {7, 9}}, {{4}, {5}, {2}}});
   EXPECT_EQ(join.getDescriptor(), "Cartesian Product Join");
@@ -128,6 +140,9 @@ TEST(CartesianProductJoin, basicMemberFunctions) {
   EXPECT_NE(children.at(0), join.getChildren().at(1));
 }
 
+// Test that the `variableToColumnMap` is also correct if the sub results have
+// columns that are not connected to a Variable (can happen when subqueries are
+// present).
 TEST(CartesianProductJoin, variableColumnMap) {
   auto qec = getQec();
   std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;

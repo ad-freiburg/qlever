@@ -1428,9 +1428,6 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
       dpTab.emplace_back(vector<SubtreePlan>());
       for (size_t i = 1; i * 2 <= k; ++i) {
         auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
-        if (newPlans.size() == 0) {
-          continue;
-        }
         dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(),
                             newPlans.end());
         applyFiltersIfPossible(dpTab.back(), filters, false);

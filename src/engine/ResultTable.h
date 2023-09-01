@@ -133,10 +133,10 @@ class ResultTable {
     return SharedLocalVocabWrapper{localVocab_};
   }
 
-  // Like `getSharedLocalVocabFrom`, but takes *two* results and assumes that
-  // one of the local vocabularies is empty and gets the shared local vocab from
-  // the non-empty one (if both are empty, arbitrarily share with the first
-  // one).
+  // Like `getSharedLocalVocabFrom`, but takes more than one result and assumes
+  // that exactly one of the local vocabularies is empty and gets the shared
+  // local vocab from the non-empty one (if all are empty, arbitrarily share
+  // with the first one).
   //
   // TODO: Eventually, we want to be able to merge two non-empty local
   // vocabularies, but that requires more work since we have to rewrite IDs then
@@ -144,22 +144,33 @@ class ResultTable {
   static SharedLocalVocabWrapper getSharedLocalVocabFromNonEmptyOf(
       const ResultTable& resultTable1, const ResultTable& resultTable2);
   template <std::ranges::forward_range R>
-  static SharedLocalVocabWrapper getSharedLocalVocabFromNonEmptyOf(R&& range) {
+  requires std::convertible_to<std::ranges::range_value_t<R>,
+                               const ResultTable&>
+  static SharedLocalVocabWrapper getSharedLocalVocabFromNonEmptyOf(
+      R&& subResults) {
+    AD_CONTRACT_CHECK(!std::ranges::empty(subResults));
     auto hasNonEmptyVocab = [](const ResultTable& tbl) {
       return !tbl.localVocab_->empty();
     };
-    auto numNonEmptyVocabs = std::ranges::count_if(range, hasNonEmptyVocab);
+    auto numNonEmptyVocabs =
+        std::ranges::count_if(subResults, hasNonEmptyVocab);
     if (numNonEmptyVocabs > 1) {
       throw std::runtime_error(
           "Merging of more than one non-empty local vocabularies is currently "
           "not "
           "supported, please contact the developers");
     }
+    // The static casts in the following are needed to make this code work for
+    // types that are implicitly convertible to `const ResultTable&`, in
+    // particular `std::reference_wrapper<const ResultTable>`.
+    using C = const ResultTable&;
     if (numNonEmptyVocabs == 0) {
-      return SharedLocalVocabWrapper{(*range.begin()).localVocab_};
+      return SharedLocalVocabWrapper{
+          static_cast<C>(*subResults.begin()).localVocab_};
     } else {
       return SharedLocalVocabWrapper{
-          (*std::ranges::find_if(range, hasNonEmptyVocab)).localVocab_};
+          static_cast<C>(*std::ranges::find_if(subResults, hasNonEmptyVocab))
+              .localVocab_};
     }
   }
 

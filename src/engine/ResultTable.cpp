@@ -26,6 +26,8 @@ string ResultTable::asDebugString() const {
 auto ResultTable::getSharedLocalVocabFromNonEmptyOf(
     const ResultTable& resultTable1, const ResultTable& resultTable2)
     -> SharedLocalVocabWrapper {
+  return getSharedLocalVocabFromNonEmptyOf(
+      std::array{std::cref(resultTable1), std::cref(resultTable2)});
   const auto& localVocab1 = resultTable1.localVocab_;
   const auto& localVocab2 = resultTable2.localVocab_;
   if (!localVocab1->empty() && !localVocab2->empty()) {

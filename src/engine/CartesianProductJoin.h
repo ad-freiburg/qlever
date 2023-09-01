@@ -70,6 +70,11 @@ class CartesianProductJoin : public Operation {
   [[nodiscard]] bool supportsLimit() const override { return true; }
 
  protected:
+  // Don't promise any sorting of the result.
+  // TODO<joka921> Depending on the implementation we could propagate sorted
+  // columsn from either the first or the last input, but it is questionable if
+  // there would be any real benefit from this and it would only increase the
+  // complexity of the query planning and required testing.
   vector<ColumnIndex> resultSortedOn() const override { return {}; }
 
  private:
