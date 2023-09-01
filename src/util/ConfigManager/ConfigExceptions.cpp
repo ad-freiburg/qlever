@@ -2,12 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (June of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "util/ConfigManager/ConfigExceptions.h"
+
 #include <absl/strings/str_cat.h>
 
 #include <exception>
 #include <string>
-
-#include "util/ConfigManager/ConfigExceptions.h"
 
 namespace ad_utility {
 //_____________________________________________________________________________
