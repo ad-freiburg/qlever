@@ -9,7 +9,7 @@
 #include "engine/QueryExecutionTree.h"
 
 // An operation that takes a set of subresults that pairwise-disjoint sets of
-// bound variables and materializes the full cartesian product of these
+// bound variables and materializes the full Cartesian product of these
 // operations.
 class CartesianProductJoin : public Operation {
  public:
@@ -66,7 +66,7 @@ class CartesianProductJoin : public Operation {
 
   bool knownEmptyResult() override;
 
-  // The cartesian product join can efficiently evaluate a limited result.
+  // The Cartesian product join can efficiently evaluate a limited result.
   [[nodiscard]] bool supportsLimit() const override { return true; }
 
  protected:

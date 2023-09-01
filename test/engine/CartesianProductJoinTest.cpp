@@ -75,7 +75,7 @@ void testCartesianProductImpl(VectorTable expected,
     }
   }
 }
-// Test that a cartesian product between the `inputs` yields the `expected`
+// Test that a Cartesian product between the `inputs` yields the `expected`
 // result. Perform the test for children that directly support the LIMIT
 // operation as well for children that don't (see `makeJoin` above for details).
 void testCartesianProduct(VectorTable expected, std::vector<VectorTable> inputs,

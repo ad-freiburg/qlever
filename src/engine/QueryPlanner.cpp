@@ -1456,11 +1456,11 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     return lastDpRowFromComponents;
   }
   if (numConnectedComponents == 1) {
-    // A cartesian product is not needed if there is only one component.
+    // A Cartesian product is not needed if there is only one component.
     applyFiltersIfPossible(lastDpRowFromComponents.back(), filters, true);
     return lastDpRowFromComponents;
   }
-  // More than one connected component, set up a cartesian product.
+  // More than one connected component, set up a Cartesian product.
   std::vector<std::vector<SubtreePlan>> result;
   result.emplace_back();
   std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;

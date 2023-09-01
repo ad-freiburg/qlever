@@ -206,10 +206,10 @@ class QueryPlanner {
 
     // Run a single DFS startint at the `startNode`. All nodes that are
     // connected to this node (including the node itself) will have
-    // `visited_==true` and  `componentIndex_=componentIndex` after the call.
-    // Only works if `dfs` hasn't been called before on the `startNode` or any
-    // node connected to it. (Exceptions to this rule are the recursive calls
-    // from `dfs` itself).
+    // `visited_ == true` and  `componentIndex_ == componentIndex` after the
+    // call. Only works if `dfs` hasn't been called before on the `startNode` or
+    // any node connected to it. (Exceptions to this rule are the recursive
+    // calls from `dfs` itself).
     void dfs(Node* startNode, size_t componentIndex);
 
     // Run `dfs` repeatedly on nodes that were so far undiscovered until all
