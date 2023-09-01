@@ -49,13 +49,13 @@ class HttpServer {
   HttpHandler httpHandler_;
   int numServerThreads_;
   net::io_context ioContext_;
-  tcp::acceptor acceptor_;
   // All code that uses the `acceptor_` must run within this strand.
   // Note that the `acceptor_` might be concurrently accessed by the `listener`
   // and the `shutdown` function, the latter of which is currently only used in
   // unit tests.
   net::strand<net::io_context::executor_type> acceptorStrand_ =
       net::make_strand(ioContext_);
+  tcp::acceptor acceptor_{acceptorStrand_};
   std::atomic<bool> serverIsReady_ = false;
 
  public:
@@ -72,8 +72,7 @@ class HttpServer {
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?
         numServerThreads_{std::max(2, numServerThreads)},
-        ioContext_{numServerThreads_},
-        acceptor_{ioContext_} {
+        ioContext_{numServerThreads_} {
     try {
       tcp::endpoint endpoint{ipAddress_, port_};
       // Open the acceptor.
@@ -162,10 +161,16 @@ class HttpServer {
       try {
         // Wait for a request (the code only continues after we have received
         // and accepted a request).
-        auto socket =
-            co_await acceptor_.async_accept(boost::asio::use_awaitable);
+        // Note: Although a single session is conceptually single-threaded, we
+        // still have to manually schedule it on the `coroExecutor` to make the
+        // thread sanitizer happy. The reason is, that the thread of execution
+        // specified by the coroutine might change threads as the coroutine is
+        // suspended and then resumed.
+        auto coroExecutor = co_await net::this_coro::executor;
+        auto socket = co_await acceptor_.async_accept(
+            coroExecutor, boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
-        net::co_spawn(ioContext_, session(std::move(socket)), net::detached);
+        net::co_spawn(coroExecutor, session(std::move(socket)), net::detached);
       } catch (const boost::system::system_error& b) {
         logBeastError(b.code(), "Error in the accept loop");
       }

@@ -44,6 +44,9 @@ inline ValueId makeLocalVocabId(uint64_t value) {
 inline ValueId makeTextRecordId(uint64_t value) {
   return ValueId::makeFromTextRecordIndex(TextRecordIndex::make(value));
 }
+inline ValueId makeWordVocabId(uint64_t value) {
+  return ValueId::makeFromWordVocabIndex(WordVocabIndex::make(value));
+}
 
 inline uint64_t getVocabIndex(ValueId id) { return id.getVocabIndex().get(); }
 inline uint64_t getLocalVocabIndex(ValueId id) {
@@ -51,6 +54,9 @@ inline uint64_t getLocalVocabIndex(ValueId id) {
 }
 inline uint64_t getTextRecordIndex(ValueId id) {
   return id.getTextRecordIndex().get();
+}
+inline uint64_t getWordVocabIndex(ValueId id) {
+  return id.getWordVocabIndex().get();
 }
 
 inline auto addIdsFromGenerator = [](auto& generator, auto makeIds,
@@ -94,6 +100,7 @@ inline auto makeRandomIds = []() {
   addIdsFromGenerator(indexGenerator, &makeVocabId, ids);
   addIdsFromGenerator(indexGenerator, &makeLocalVocabId, ids);
   addIdsFromGenerator(indexGenerator, &makeTextRecordId, ids);
+  addIdsFromGenerator(indexGenerator, &makeWordVocabId, ids);
   addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
   addIdsFromGenerator(overflowingNBitGenerator, &ValueId::makeFromInt, ids);
   addIdsFromGenerator(underflowingNBitGenerator, &ValueId::makeFromInt, ids);

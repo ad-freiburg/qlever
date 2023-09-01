@@ -95,22 +95,6 @@ class NotValidShortHandNameException : public ExceptionWithMessage {
 };
 
 /*
-@brief A custom exception, for when somebody tries to add a `ConfigOption` to a
-`ConfigManager`, but the given path is already in use.
-*/
-class ConfigManagerOptionPathAlreadyinUseException
-    : public ExceptionWithMessage {
- public:
-  /*
-  @param pathToOption The path to the option.
-  @param allPathsCurrentlyInUse A string representation of all the paths, that
-  are already in use.
-  */
-  explicit ConfigManagerOptionPathAlreadyinUseException(
-      std::string_view pathToOption, std::string_view allPathsCurrentlyInUse);
-};
-
-/*
 @brief A custom exception, for when somebody tries to set a `ConfigOption` with
 a json value, that represents the wrong type.
 */

@@ -56,3 +56,9 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
 Variable Variable::getTextScoreVariable() const {
   return Variable{absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, name().substr(1))};
 }
+
+// _____________________________________________________________________________
+Variable Variable::getMatchingWordVariable(std::string_view term) const {
+  return Variable{
+      absl::StrCat(MATCHINGWORD_VARIABLE_PREFIX, name().substr(1), "_", term)};
+}

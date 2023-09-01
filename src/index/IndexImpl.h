@@ -263,6 +263,8 @@ class IndexImpl {
   // probably not be in the index class.
   std::optional<string> idToOptionalString(VocabIndex id) const;
 
+  std::optional<string> idToOptionalString(WordVocabIndex id) const;
+
   // ___________________________________________________________________________
   bool getId(const string& element, Id* id) const;
 
@@ -297,6 +299,10 @@ class IndexImpl {
 
   size_t getSizeEstimate(const string& words) const;
 
+  void callFixedGetContextListForWords(const string& words,
+                                       IdTable* result) const;
+
+  template <int WIDTH>
   void getContextListForWords(const string& words, IdTable* result) const;
 
   void getECListForWordsOneVar(const string& words, size_t limit,
@@ -320,23 +326,6 @@ class IndexImpl {
 
   Index::WordEntityPostings getContextEntityScoreListsForWords(
       const string& words) const;
-
-  template <size_t I>
-  void getECListForWordsAndSingleSub(const string& words,
-                                     const vector<array<Id, I>>& subres,
-                                     size_t subResMainCol, size_t limit,
-                                     vector<array<Id, 3 + I>>& res) const;
-
-  void getECListForWordsAndTwoW1Subs(const string& words,
-                                     const vector<array<Id, 1>> subres1,
-                                     const vector<array<Id, 1>> subres2,
-                                     size_t limit,
-                                     vector<array<Id, 5>>& res) const;
-
-  void getECListForWordsAndSubtrees(
-      const string& words,
-      const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
-      size_t limit, vector<vector<Id>>& res) const;
 
   Index::WordEntityPostings getWordPostingsForTerm(const string& term) const;
 
@@ -600,8 +589,6 @@ class IndexImpl {
 
   template <class T>
   void writeAsciiListFile(const string& filename, const T& ids) const;
-
-  void getRhsForSingleLhs(const IdTable& in, Id lhsId, IdTable* result) const;
 
   bool isLiteral(const string& object) const;
 

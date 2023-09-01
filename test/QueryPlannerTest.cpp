@@ -810,8 +810,14 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
       "\"friend*\" and 2 variables with textLimit = 1 filtered by\n"
       "  {\n    SCAN POS with P = \"<is-a>\", O = \"<Politician>"
       "\"\n    qet-width: 1 \n  }\n   filtered on column 0\n "
-      " qet-width: 4 \n}",
+      " qet-width: 5 \n}",
       qet.asString());
+  auto c = Variable{"?c"};
+  ASSERT_EQ(0u, qet.getVariableColumn(c));
+  ASSERT_EQ(1u, qet.getVariableColumn(c.getTextScoreVariable()));
+  ASSERT_EQ(2u, qet.getVariableColumn(Variable{"?y"}));
+  ASSERT_EQ(3u, qet.getVariableColumn(Variable{"?x"}));
+  ASSERT_EQ(4u, qet.getVariableColumn(c.getMatchingWordVariable("friend")));
 }
 
 TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
@@ -834,11 +840,11 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
       "TEXT OPERATION WITH FILTER: co-occurrence with words: \"friend*\" and 2 "
       "variables with textLimit = 1 filtered by\n        {\n          SCAN POS "
       "with P = \"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n    "
-      "    }\n         filtered on column 0\n        qet-width: 4 \n      }\n  "
-      "    qet-width: 4 \n    } join-column: [2]\n    |X|\n    {\n      SCAN "
+      "    }\n         filtered on column 0\n        qet-width: 5 \n      }\n  "
+      "    qet-width: 5 \n    } join-column: [2]\n    |X|\n    {\n      SCAN "
       "POS with P = \"<is-a>\", O = \"<Scientist>\"\n      qet-width: 1 \n    "
-      "} join-column: [0]\n    qet-width: 4 \n  }\n   filtered on column 2\n  "
-      "qet-width: 6 \n}",
+      "} join-column: [0]\n    qet-width: 5 \n  }\n   filtered on column 2\n  "
+      "qet-width: 7 \n}",
       qet.asString());
 }
 

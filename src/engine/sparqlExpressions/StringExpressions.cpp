@@ -1,7 +1,10 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/VariadicExpression.h"
+
 namespace sparqlExpression {
 namespace detail::string_expressions {
 // String functions.
@@ -249,6 +252,94 @@ using StrBeforeExpression =
     StringExpressionImpl<2, LiftStringFunction<decltype(strBefore)>,
                          StringValueGetter>;
 
+// CONCAT
+class ConcatExpression : public detail::VariadicExpression {
+ public:
+  using VariadicExpression::VariadicExpression;
+
+  // _________________________________________________________________
+  ExpressionResult evaluate(EvaluationContext* ctx) const override {
+    using StringVec = VectorWithMemoryLimit<std::string>;
+    // We evaluate one child after the other and append the strings from child i
+    // to the strings already constructed for children 0, …, i - 1. The
+    // seemingly more natural row-by-row approach has two problems. First, the
+    // distinction between children with constant results and vector results
+    // would not be cache-efficient. Second, when the evaluation is part of
+    // GROUP BY, we don't have the information in advance whether all children
+    // have constant results (in which case, we need to evaluate the whole
+    // expression only once).
+
+    // We store the (intermediate) result either as single string or a vector.
+    // If the result is a string, then all the previously evaluated children
+    // were constants (see above).
+    std::variant<std::string, StringVec> result{std::string{""}};
+    auto visitSingleExpressionResult =
+        [&ctx, &result ]<SingleExpressionResult T>(T && s)
+            requires std::is_rvalue_reference_v<T&&> {
+      if constexpr (isConstantResult<T>) {
+        std::string strFromConstant = StringValueGetter{}(s, ctx).value_or("");
+        if (std::holds_alternative<std::string>(result)) {
+          // All previous children were constants, and the current child also is
+          // a constant.
+          std::get<std::string>(result).append(strFromConstant);
+        } else {
+          // One of the previous children was not a constant, so we already
+          // store a vector.
+          auto& resultAsVector = std::get<StringVec>(result);
+          std::ranges::for_each(resultAsVector, [&](std::string& target) {
+            target.append(strFromConstant);
+          });
+        }
+      } else {
+        auto gen = sparqlExpression::detail::makeGenerator(AD_FWD(s),
+                                                           ctx->size(), ctx);
+
+        if (std::holds_alternative<std::string>(result)) {
+          // All previous children were constants, but now we have a
+          // non-constant child, so we have to expand the `result` from a single
+          // string to a vector.
+          std::string constantResultSoFar =
+              std::move(std::get<std::string>(result));
+          result.emplace<StringVec>(ctx->_allocator);
+          auto& resultAsVec = std::get<StringVec>(result);
+          resultAsVec.reserve(ctx->size());
+          std::fill_n(std::back_inserter(resultAsVec), ctx->size(),
+                      constantResultSoFar);
+        }
+
+        // The `result` already is a vector, and the current child also returns
+        // multiple results, so we do the `natural` way.
+        auto& resultAsVec = std::get<StringVec>(result);
+        // TODO<C++23> Use `std::views::zip` or `enumerate`.
+        size_t i = 0;
+        for (auto& el : gen) {
+          if (auto str = StringValueGetter{}(std::move(el), ctx);
+              str.has_value()) {
+            resultAsVec[i].append(str.value());
+          }
+          ++i;
+        }
+      }
+    };
+    std::ranges::for_each(
+        childrenVec(), [&ctx, &visitSingleExpressionResult](const auto& child) {
+          std::visit(visitSingleExpressionResult, child->evaluate(ctx));
+        });
+
+    // Lift the result from `string` to `IdOrString` which is needed for the
+    // expression module.
+    if (std::holds_alternative<std::string>(result)) {
+      return IdOrString{std::move(std::get<std::string>(result))};
+    } else {
+      auto& stringVec = std::get<StringVec>(result);
+      VectorWithMemoryLimit<IdOrString> resultAsVec{
+          std::make_move_iterator(stringVec.begin()),
+          std::make_move_iterator(stringVec.end()), ctx->_allocator};
+      return resultAsVec;
+    }
+  }
+};
+
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
 using std::make_unique;
@@ -289,5 +380,8 @@ Expr makeStrBeforeExpression(Expr child1, Expr child2) {
 }
 Expr makeContainsExpression(Expr child1, Expr child2) {
   return make<ContainsExpression>(child1, child2);
+}
+Expr makeConcatExpression(std::vector<Expr> children) {
+  return std::make_unique<ConcatExpression>(std::move(children));
 }
 }  // namespace sparqlExpression
