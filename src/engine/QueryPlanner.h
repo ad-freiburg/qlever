@@ -165,74 +165,57 @@ class QueryPlanner {
     void addAllNodes(uint64_t otherNodes);
   };
 
+  // A helper class to find connected componenents of an RDF query using DFS
   class SubtreeGraph {
+   private:
+    // A simple class to represent a graph node as well as some data for a DFS.
     class Node {
      public:
       const SubtreePlan* plan_;
       ad_utility::HashSet<Node*> neighbors_{};
+      // Was this node already discovered during DFS.
       bool discovered_ = false;
+      // Index of the connected component of this node (will be set to a value
+      // >= 0 by the DFS.
       int64_t componentIndex_ = -1;
+      // Construct from a non-owning pointer.
       explicit Node(const SubtreePlan* plan) : plan_{plan} {}
     };
+    // Storage for all the `Node`s that a graph contains.
     std::vector<std::shared_ptr<Node>> nodes_;
 
+    // Default constructor
+    SubtreeGraph() = default;
+
    public:
-    std::vector<size_t> getComponentIndices(
+    // Return the indices of the connected component for each of the `node`s.
+    // The return value will have exactly the same size as `node`s and
+    // `result[i]` will be the index of the connected component of `nodes[i]`.
+    // The connected components will be contiguous and start at 0.
+    static std::vector<size_t> getComponentIndices(
         const std::vector<SubtreePlan>& nodes) {
-      for (const auto& node : nodes) {
-        nodes_.push_back(std::make_shared<Node>(&node));
-      }
-      ad_utility::HashMap<Variable, std::vector<Node*>> varToNode;
-      for (auto& node : nodes_) {
-        for (const auto& var :
-             node->plan_->_qet->getVariableColumns() | std::views::keys) {
-          varToNode[var].push_back(node.get());
-        }
-      }
-      ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> neighbors;
-      for (auto& neighborList : varToNode | std::views::values) {
-        for (auto* n1 : neighborList) {
-          for (auto* n2 : neighborList) {
-            if (n1 != n2) {
-              neighbors[n1].insert(n2);
-              neighbors[n2].insert(n1);
-            }
-          }
-        }
-      }
-      for (auto& node : nodes_) {
-        if (neighbors.contains(node.get())) {
-          node->neighbors_ = std::move(neighbors.at(node.get()));
-        }
-      }
-      return getComponentIndices();
+      SubtreeGraph graph;
+      return graph.getComponentIndicesImpl(nodes);
     }
 
-    void dfs(Node* start, size_t componentIndex) {
-      if (start->discovered_) {
-        return;
-      }
-      start->componentIndex_ = componentIndex;
-      start->discovered_ = true;
-      for (auto* neighbor : start->neighbors_) {
-        dfs(neighbor, componentIndex);
-      }
-    }
+   private:
+    // The actual implementation of `getComponentIndicesImpl`. First build a
+    // graph from the `subtrees` and then run DFS and return the result.
+    std::vector<size_t> getComponentIndicesImpl(
+        const std::vector<SubtreePlan>& subtrees);
 
-    std::vector<size_t> getComponentIndices() {
-      std::vector<size_t> result;
-      size_t nextIndex = 0;
-      for (auto& node : nodes_) {
-        if (node->discovered_) {
-          result.push_back(node->componentIndex_);
-        } else {
-          dfs(node.get(), nextIndex);
-          result.push_back(node->componentIndex_);
-          ++nextIndex;
-        }
-      }
-      return result;
-    }
+    // Run a single DFS startint at the `startNode`. All nodes that are
+    // connected to this node (including the node itself) will have
+    // `discovered_==true` and  `componentIndex_=componentIndex` after the call.
+    // Only works if `dfs` hasn't been called before on the `startNode` or any
+    // node connected to it. (Exceptions to this rule are the recursive calls
+    // from `dfs` itself).
+    void dfs(Node* startNode, size_t componentIndex);
+
+    // Run `dfs` repeatedly on nodes that were so far undiscovered until all
+    // nodes are discovered, which means that all connected components have been
+    // identified. Then return the indices of the connected components.
+    std::vector<size_t> dfsForAllNodes();
   };
 
   [[nodiscard]] TripleGraph createTripleGraph(
@@ -245,7 +228,7 @@ class QueryPlanner {
   // that set. When the query has no `ORDER BY` clause, the set contains one
   // optimal execution tree for each possible ordering (by one column) of the
   // result. This is relevant for subqueries, which are currently optimized
-  // independently from the rest of the query, but where it depends on the rest
+  // independently of the rest of the query, but where it depends on the rest
   // of the query, which ordering of the result is best.
   [[nodiscard]] std::vector<SubtreePlan> createExecutionTrees(ParsedQuery& pq);
 
@@ -446,6 +429,10 @@ class QueryPlanner {
   [[nodiscard]] vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
       const vector<vector<SubtreePlan>>& children);
+  std::vector<QueryPlanner::SubtreePlan>
+  runDynamicProgrammingOnConnectedComponent(
+      std::vector<SubtreePlan> connectedComponent,
+      const vector<SparqlFilter>& filters, const TripleGraph& tg);
 
   [[nodiscard]] SubtreePlan getTextLeafPlan(
       const TripleGraph::Node& node) const;

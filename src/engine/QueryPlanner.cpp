@@ -1395,6 +1395,42 @@ void QueryPlanner::applyFiltersIfPossible(
 }
 
 // _____________________________________________________________________________
+std::vector<QueryPlanner::SubtreePlan>
+QueryPlanner::runDynamicProgrammingOnConnectedComponent(
+    std::vector<SubtreePlan> connectedComponent,
+    const vector<SparqlFilter>& filters, const TripleGraph& tg) {
+  vector<vector<QueryPlanner::SubtreePlan>> dpTab;
+  // find the unique number of nodes in the current connected component
+  // (there might be duplicates because we already have multiple candidates
+  // for each index scan with different permutations.
+  dpTab.push_back(std::move(connectedComponent));
+  applyFiltersIfPossible(dpTab.back(), filters, false);
+  ad_utility::HashSet<uint64_t> uniqueNodeIds;
+  std::ranges::copy(
+      dpTab.back() | std::views::transform(&SubtreePlan::_idsOfIncludedNodes),
+      std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
+  size_t numSeeds = uniqueNodeIds.size();
+
+  for (size_t k = 2; k <= numSeeds; ++k) {
+    LOG(TRACE) << "Producing plans that unite " << k << " triples."
+               << std::endl;
+    dpTab.emplace_back(vector<SubtreePlan>());
+    for (size_t i = 1; i * 2 <= k; ++i) {
+      auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
+      dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
+      applyFiltersIfPossible(dpTab.back(), filters, false);
+    }
+    if (dpTab[k - 1].size() == 0) {
+      AD_THROW(
+          "Could not find a suitable execution tree for a connected "
+          "component of the query. This should not happen, please report it "
+          "to the developers");
+    }
+  }
+  return std::move(dpTab.back());
+}
+
+// _____________________________________________________________________________
 vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, const vector<SparqlFilter>& filters,
     const vector<vector<QueryPlanner::SubtreePlan>>& children) {
@@ -1402,44 +1438,15 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     AD_THROW("At most 64 filters allowed at the moment.");
   }
   auto initialPlans = seedWithScansAndText(tg, children);
-  SubtreeGraph graph;
-  auto componentIndices = graph.getComponentIndices(initialPlans);
+  auto componentIndices = SubtreeGraph::getComponentIndices(initialPlans);
   ad_utility::HashMap<size_t, std::vector<SubtreePlan>> components;
   for (size_t i = 0; i < componentIndices.size(); ++i) {
     components[componentIndices.at(i)].push_back(std::move(initialPlans.at(i)));
   }
   vector<vector<SubtreePlan>> lastDpRowFromComponents;
   for (auto& component : components | std::views::values) {
-    vector<vector<SubtreePlan>> dpTab;
-    // find the unique number of nodes in the current connected component
-    // (there might be duplicates because we already have multiple candidates
-    // for each index scan with different permutations.
-    dpTab.push_back(std::move(component));
-    applyFiltersIfPossible(dpTab.back(), filters, false);
-    ad_utility::HashSet<uint64_t> uniqueNodeIds;
-    std::ranges::copy(
-        dpTab.back() | std::views::transform(&SubtreePlan::_idsOfIncludedNodes),
-        std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
-    size_t numSeeds = uniqueNodeIds.size();
-
-    for (size_t k = 2; k <= numSeeds; ++k) {
-      LOG(TRACE) << "Producing plans that unite " << k << " triples."
-                 << std::endl;
-      dpTab.emplace_back(vector<SubtreePlan>());
-      for (size_t i = 1; i * 2 <= k; ++i) {
-        auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
-        dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(),
-                            newPlans.end());
-        applyFiltersIfPossible(dpTab.back(), filters, false);
-      }
-      if (dpTab[k - 1].size() == 0) {
-        AD_THROW(
-            "Could not find a suitable execution tree for a connected "
-            "component of the query. This should not happen, please report it "
-            "to the developers");
-      }
-    }
-    lastDpRowFromComponents.push_back(std::move(dpTab.back()));
+    lastDpRowFromComponents.push_back(
+        runDynamicProgrammingOnConnectedComponent(component, filters, tg));
   }
   if (lastDpRowFromComponents.size() == 0) {
     // This happens for example if there is a BIND right at the beginning of the
@@ -2113,4 +2120,84 @@ auto QueryPlanner::createJoinAsTextFilter(
       filterTree, otherPlanJc);
   mergeSubtreePlanIds(plan, a, b);
   return plan;
+}
+
+// _____________________________________________________________________
+std::vector<size_t> QueryPlanner::SubtreeGraph::getComponentIndicesImpl(
+    const std::vector<SubtreePlan>& subtrees) {
+  // Prepare the `nodes_` vector for the graph. We will have one node per
+  // subtree with initially no neighbors.
+  for (const auto& subtree : subtrees) {
+    nodes_.push_back(std::make_shared<Node>(&subtree));
+  }
+
+  // Set up a hash map from variables to nodes that contain this variable.
+  const ad_utility::HashMap<Variable, std::vector<Node*>> varToNode = [this]() {
+    ad_utility::HashMap<Variable, std::vector<Node*>> result;
+    for (auto& node : nodes_) {
+      for (const auto& var :
+           node->plan_->_qet->getVariableColumns() | std::views::keys) {
+        result[var].push_back(node.get());
+      }
+    }
+    return result;
+  }();
+  // Set up a hash map from nodes to their neighbors. Two nodes are neighbors if
+  // they share a variable. The neighbors are stored as hash sets so we don't
+  // need to worry about duplicates.
+  const ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> neighbors =
+      [&varToNode]() {
+        ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> result;
+        for (auto& neighborList : varToNode | std::views::values) {
+          for (auto* n1 : neighborList) {
+            for (auto* n2 : neighborList) {
+              if (n1 != n2) {
+                result[n1].insert(n2);
+                result[n2].insert(n1);
+              }
+            }
+          }
+        }
+        return result;
+      }();
+  // For each node move the set of neighbors from the global hash map to the
+  // node itself.
+  for (auto& node : nodes_) {
+    if (neighbors.contains(node.get())) {
+      node->neighbors_ = std::move(neighbors.at(node.get()));
+    }
+  }
+  // We have fully set up the graph, so we can just run the DFS and return its
+  // result.
+  return dfsForAllNodes();
+}
+
+// _______________________________________________________________
+void QueryPlanner::SubtreeGraph::dfs(Node* startNode, size_t componentIndex) {
+  // Simple recursive DFS.
+  if (startNode->discovered_) {
+    return;
+  }
+  startNode->componentIndex_ = componentIndex;
+  startNode->discovered_ = true;
+  for (auto* neighbor : startNode->neighbors_) {
+    dfs(neighbor, componentIndex);
+  }
+}
+// _______________________________________________________________
+std::vector<size_t> QueryPlanner::SubtreeGraph::dfsForAllNodes() {
+  std::vector<size_t> result;
+  size_t nextIndex = 0;
+  for (auto& node : nodes_) {
+    if (node->discovered_) {
+      // The node is part of a connected component that was already found.
+      result.push_back(node->componentIndex_);
+    } else {
+      // The node is part of a yet unknown component, run a DFS.
+      dfs(node.get(), nextIndex);
+      result.push_back(node->componentIndex_);
+      ++nextIndex;
+    }
+  }
+  return result;
 }
