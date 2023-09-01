@@ -50,8 +50,7 @@ class AllocationMemoryLeft {
   // Called before memory is allocated.
   bool decrease_if_enough_left_or_return_false(MemorySize n) noexcept {
     if (n <= free_) {
-      // TODO Shorten, once `MemorySize` gets subtraction support.
-      free_ = MemorySize::bytes(free_.getBytes() - n.getBytes());
+      free_ -= n;
       return true;
     } else {
       return false;
@@ -66,10 +65,7 @@ class AllocationMemoryLeft {
   }
 
   // Called after memory is deallocated.
-  void increase(MemorySize n) {
-    // TODO Shorten, once `MemorySize` gets addition support.
-    free_ = MemorySize::bytes(free_.getBytes() + n.getBytes());
-  }
+  void increase(MemorySize n) { free_ += n; }
   [[nodiscard]] MemorySize amountMemoryLeft() const { return free_; }
 };
 
