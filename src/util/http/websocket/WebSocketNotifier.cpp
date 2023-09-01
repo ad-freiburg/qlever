@@ -25,8 +25,4 @@ net::awaitable<WebSocketNotifier> WebSocketNotifier::create(
 void WebSocketNotifier::operator()(std::string json) const {
   distributor_->addQueryStatusUpdate(std::move(json));
 }
-
-WebSocketNotifier::~WebSocketNotifier() {
-  webSocketTracker_.releaseQuery(owningQueryId_.toQueryId());
-}
 }  // namespace ad_utility::websocket

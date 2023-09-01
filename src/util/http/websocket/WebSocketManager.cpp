@@ -29,8 +29,8 @@ net::awaitable<void> WebSocketManager::handleClientCommands(websocket& ws) {
 }
 
 net::awaitable<void> WebSocketManager::waitForServerEvents(
-    websocket& ws, const QueryId& queryId) {
-  UpdateFetcher updateFetcher{queryId, webSocketTracker_, socketStrand_};
+    websocket& ws, const QueryId& queryId, StrandType& socketStrand) {
+  UpdateFetcher updateFetcher{queryId, webSocketTracker_, socketStrand};
   while (ws.is_open()) {
     auto json = co_await updateFetcher.waitForEvent();
     if (json == nullptr) {
@@ -72,7 +72,7 @@ net::awaitable<void> WebSocketManager::connectionLifecycle(
 
     // experimental operators
     co_await (
-        net::co_spawn(strand, waitForServerEvents(ws, queryId),
+        net::co_spawn(strand, waitForServerEvents(ws, queryId, strand),
                       net::use_awaitable) &&
         net::co_spawn(strand, handleClientCommands(ws), net::use_awaitable));
 

@@ -21,12 +21,13 @@ namespace http = beast::http;
 using boost::asio::ip::tcp;
 using websocket::common::QueryId;
 using websocket = beast::websocket::stream<tcp::socket>;
+using StrandType = net::strand<net::any_io_executor>;
 
 /// Central class to keep track of all currently connected websockets
 /// to provide them with status updates.
 class WebSocketManager {
   net::io_context& ioContext_;
-  net::strand<net::io_context::executor_type> socketStrand_;
+  StrandType globalStrand_;
   WebSocketTracker webSocketTracker_;
 
   /// Loop that waits for input from the client
@@ -34,7 +35,8 @@ class WebSocketManager {
 
   /// Loop that waits for an update of the given query to occur and send it
   /// to the client once it happens
-  net::awaitable<void> waitForServerEvents(websocket&, const QueryId&);
+  net::awaitable<void> waitForServerEvents(websocket&, const QueryId&,
+                                           StrandType&);
 
   /// Accepts the websocket connection and "blocks" for the lifetime of the
   /// websocket connection
@@ -47,8 +49,8 @@ class WebSocketManager {
   /// Any instance needs to be destructed before the io context.
   explicit WebSocketManager(net::io_context& ioContext)
       : ioContext_{ioContext},
-        socketStrand_(net::make_strand(ioContext)),
-        webSocketTracker_{ioContext_, socketStrand_} {}
+        globalStrand_{net::make_strand(ioContext)},
+        webSocketTracker_{ioContext_, globalStrand_} {}
 
   /// The main interface for this class. The HTTP server is supposed to check
   /// if an HTTP request is a websocket upgrade request and delegate further

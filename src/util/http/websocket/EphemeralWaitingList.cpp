@@ -4,32 +4,48 @@
 
 #include "util/http/websocket/EphemeralWaitingList.h"
 
-namespace ad_utility::websocket {
+#include <boost/asio/experimental/awaitable_operators.hpp>
 
-void EphemeralWaitingList::signalQueryUpdate(const QueryId& queryId) {
+namespace ad_utility::websocket {
+using namespace boost::asio::experimental::awaitable_operators;
+
+void EphemeralWaitingList::signalQueryStart(const QueryId& queryId) {
   auto [start, stop] = waitingCallbacks_.equal_range(queryId);
   for (auto it = start; it != stop; ++it) {
     auto& [func, id] = it->second;
-    functionIdToQueryId_.erase(id);
     func();
   }
   waitingCallbacks_.erase(queryId);
 }
 
-FunctionId EphemeralWaitingList::callOnQueryUpdate(
-    const QueryId& queryId, std::function<void()> callback) {
-  FunctionId functionId{idCounter_++};
-  waitingCallbacks_.emplace(
-      queryId, IdentifiableFunction{std::move(callback), functionId});
-  functionIdToQueryId_.emplace(functionId, queryId);
-  return functionId;
+template <typename CompletionToken>
+net::awaitable<void> EphemeralWaitingList::registerCallbackAndWait(
+    const QueryId& queryId, const FunctionId& functionId,
+    CompletionToken&& token) {
+  auto initiate = [this, &queryId,
+                   &functionId]<typename Handler>(Handler&& self) mutable {
+    auto callback = [selfPtr = std::make_shared<Handler>(
+                         std::forward<Handler>(self))]() { (*selfPtr)(); };
+    waitingCallbacks_.emplace(
+        queryId, IdentifiableFunction{std::move(callback), functionId});
+  };
+  return net::async_initiate<CompletionToken, void()>(
+      initiate, std::forward<CompletionToken>(token));
 }
 
-void EphemeralWaitingList::removeCallback(const FunctionId& functionId) {
-  if (!functionIdToQueryId_.contains(functionId)) {
-    return;
-  }
-  const QueryId& queryId = functionIdToQueryId_.at(functionId);
+net::awaitable<void> EphemeralWaitingList::waitForQueryStart(
+    const QueryId& queryId) {
+  using namespace boost::asio::experimental::awaitable_operators;
+  FunctionId functionId{idCounter_++};
+  absl::Cleanup cleanup{
+      [this, &queryId, &functionId]() { removeCallback(queryId, functionId); }};
+
+  co_await registerCallbackAndWait(queryId, functionId, net::use_awaitable);
+  std::move(cleanup).Cancel();
+}
+
+void EphemeralWaitingList::removeCallback(const QueryId& queryId,
+                                          const FunctionId& functionId) {
   auto [start, stop] = waitingCallbacks_.equal_range(queryId);
   for (auto it = start; it != stop; ++it) {
     if (it->second.id_ == functionId) {
@@ -37,7 +53,6 @@ void EphemeralWaitingList::removeCallback(const FunctionId& functionId) {
       break;
     }
   }
-  functionIdToQueryId_.erase(functionId);
 }
 
 }  // namespace ad_utility::websocket

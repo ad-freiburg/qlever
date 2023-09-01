@@ -10,17 +10,17 @@
 #include "util/http/websocket/QueryToSocketDistributor.h"
 
 namespace ad_utility::websocket {
+using StrandType = net::strand<net::any_io_executor>;
 class WebSocketTracker {
   net::io_context& ioContext_;
-  net::strand<net::io_context::executor_type>& socketStrand_;
+  StrandType& globalStrand_;
   absl::flat_hash_map<QueryId, std::shared_ptr<QueryToSocketDistributor>>
       socketDistributors_{};
   EphemeralWaitingList waitingList_{};
 
  public:
-  explicit WebSocketTracker(net::io_context& ioContext,
-                            net::strand<net::io_context::executor_type>& strand)
-      : ioContext_{ioContext}, socketStrand_{strand} {}
+  explicit WebSocketTracker(net::io_context& ioContext, StrandType& strand)
+      : ioContext_{ioContext}, globalStrand_{strand} {}
 
   /// Notifies this class that the given query will no longer receive any
   /// updates, so all waiting connections will be closed.
@@ -29,29 +29,8 @@ class WebSocketTracker {
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>> createDistributor(
       const QueryId&);
 
-  template <typename CompletionToken>
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>> waitForDistributor(
-      QueryId queryId, CompletionToken&& token) {
-    auto initiate = [this, &queryId]<typename Handler>(Handler&& self) mutable {
-      // TODO convert to coroutine
-      auto sharedSelf = std::make_shared<Handler>(std::forward<Handler>(self));
-
-      net::post(socketStrand_, [this, &queryId,
-                                sharedSelf = std::move(sharedSelf)]() mutable {
-        if (socketDistributors_.contains(queryId)) {
-          (*sharedSelf)(socketDistributors_.at(queryId));
-        } else {
-          waitingList_.callOnQueryUpdate(
-              queryId, [this, queryId, sharedSelf = std::move(sharedSelf)]() {
-                (*sharedSelf)(socketDistributors_.at(queryId));
-              });
-        }
-      });
-    };
-    return net::async_initiate<CompletionToken,
-                               void(std::shared_ptr<QueryToSocketDistributor>)>(
-        initiate, std::forward<CompletionToken>(token));
-  }
+      QueryId);
 };
 }  // namespace ad_utility::websocket
 

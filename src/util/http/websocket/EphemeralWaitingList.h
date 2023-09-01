@@ -7,12 +7,14 @@
 
 #include <absl/container/flat_hash_map.h>
 
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <unordered_map>
 
 #include "util/http/websocket/Common.h"
 
 namespace ad_utility::websocket {
-
+namespace net = boost::asio;
 using websocket::common::QueryId;
 class FunctionId {
   friend class EphemeralWaitingList;
@@ -39,12 +41,17 @@ class EphemeralWaitingList {
 
   std::unordered_multimap<QueryId, IdentifiableFunction, absl::Hash<QueryId>>
       waitingCallbacks_{};
-  absl::flat_hash_map<FunctionId, QueryId> functionIdToQueryId_{};
+
+  void removeCallback(const QueryId& queryId, const FunctionId& functionId);
+
+  template <typename CompletionToken>
+  net::awaitable<void> registerCallbackAndWait(const QueryId& queryId,
+                                               const FunctionId& functionId,
+                                               CompletionToken&& token);
 
  public:
-  void signalQueryUpdate(const QueryId& queryId);
-  FunctionId callOnQueryUpdate(const QueryId& queryId, std::function<void()>);
-  void removeCallback(const FunctionId&);
+  void signalQueryStart(const QueryId& queryId);
+  net::awaitable<void> waitForQueryStart(const QueryId& queryId);
 };
 
 }  // namespace ad_utility::websocket

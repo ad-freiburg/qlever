@@ -42,18 +42,18 @@ class QueryId {
 /// Therefore it is not copyable and removes itself from said registry
 /// on destruction.
 class OwningQueryId {
-  using deleter = cleanup_deleter::CleanupDeleter<QueryId>;
-  std::unique_ptr<QueryId, deleter> id_;
+  cleanup_deleter::CleanupDeleter<QueryId> id_;
 
   friend class QueryRegistry;
 
   OwningQueryId(QueryId id, std::function<void(const QueryId&)> unregister)
-      : id_{deleter::cleanUpAfterUse(std::move(id), std::move(unregister))} {
+      : id_(std::move(id), std::move(unregister)) {
     AD_CORRECTNESS_CHECK(!id_->empty());
   }
 
  public:
-  [[nodiscard]] const QueryId& toQueryId() const noexcept { return *id_; }
+  [[nodiscard]] const QueryId& toQueryId() const& noexcept { return *id_; }
+  [[nodiscard]] QueryId&& toQueryId() && noexcept { return std::move(*id_); }
 };
 
 // Ensure promised copy semantics
