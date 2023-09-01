@@ -26,7 +26,8 @@ class WebSocketTracker {
   /// updates, so all waiting connections will be closed.
   void releaseQuery(QueryId queryId);
 
-  std::shared_ptr<QueryToSocketDistributor> createDistributor(const QueryId&);
+  net::awaitable<std::shared_ptr<QueryToSocketDistributor>> createDistributor(
+      const QueryId&);
 
   template <typename CompletionToken>
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>> waitForDistributor(

@@ -7,6 +7,21 @@
 #include <boost/asio/use_awaitable.hpp>
 
 namespace ad_utility::websocket {
+
+template <typename CompletionToken>
+auto QueryToSocketDistributor::waitForUpdate(CompletionToken&& token) {
+  auto initiate = [this]<typename Handler>(Handler&& self) mutable {
+    auto callback = [selfPtr = std::make_shared<Handler>(
+                         std::forward<Handler>(self))]() { (*selfPtr)(); };
+
+    net::post(strand_, [this, callback = std::move(callback)]() mutable {
+      wakeupCalls_.emplace_back(std::move(callback));
+    });
+  };
+  return net::async_initiate<CompletionToken, void()>(
+      initiate, std::forward<CompletionToken>(token));
+}
+
 void QueryToSocketDistributor::runAndEraseWakeUpCallsSynchronously() {
   for (auto& wakeupCall : wakeupCalls_) {
     wakeupCall();

@@ -18,13 +18,18 @@ class WebSocketNotifier {
   WebSocketTracker& webSocketTracker_;
   std::shared_ptr<QueryToSocketDistributor> distributor_;
 
- public:
   WebSocketNotifier(common::OwningQueryId owningQueryId,
-                    WebSocketTracker& webSocketTracker)
+                    WebSocketTracker& webSocketTracker,
+                    std::shared_ptr<QueryToSocketDistributor> distributor)
       : owningQueryId_{std::move(owningQueryId)},
         webSocketTracker_{webSocketTracker},
-        distributor_{
-            webSocketTracker_.createDistributor(owningQueryId_.toQueryId())} {}
+        distributor_{std::move(distributor)} {}
+
+ public:
+  WebSocketNotifier(WebSocketNotifier&&) noexcept = default;
+
+  static net::awaitable<WebSocketNotifier> create(
+      common::OwningQueryId owningQueryId, WebSocketTracker& webSocketTracker);
 
   /// Broadcast the string to all listeners of this query.
   void operator()(std::string) const;

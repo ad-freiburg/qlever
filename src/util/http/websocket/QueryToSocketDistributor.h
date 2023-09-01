@@ -28,19 +28,7 @@ class QueryToSocketDistributor {
   void runAndEraseWakeUpCallsSynchronously();
 
   template <typename CompletionToken>
-  auto waitForUpdate(CompletionToken&& token) {
-    auto initiate = [this]<typename Handler>(Handler&& self) mutable {
-      // TODO avoid shared_ptr
-      auto sharedSelf = std::make_shared<Handler>(std::forward<Handler>(self));
-
-      net::post(strand_, [this, sharedSelf = std::move(sharedSelf)]() mutable {
-        wakeupCalls_.emplace_back(
-            [sharedSelf = std::move(sharedSelf)]() { (*sharedSelf)(); });
-      });
-    };
-    return net::async_initiate<CompletionToken, void()>(
-        initiate, std::forward<CompletionToken>(token));
-  }
+  auto waitForUpdate(CompletionToken&& token);
 
  public:
   QueryToSocketDistributor(QueryId queryId, net::io_context& ioContext)

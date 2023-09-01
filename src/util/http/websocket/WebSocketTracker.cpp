@@ -5,21 +5,15 @@
 #include "WebSocketTracker.h"
 
 namespace ad_utility::websocket {
-std::shared_ptr<QueryToSocketDistributor> WebSocketTracker::createDistributor(
-    const QueryId& queryId) {
-  // TODO make awaitable
-  auto future = net::post(
-      socketStrand_,
-      std::packaged_task<std::shared_ptr<QueryToSocketDistributor>()>(
-          [this, queryId]() {
-            AD_CORRECTNESS_CHECK(!socketDistributors_.contains(queryId));
-            auto distributor =
-                std::make_shared<QueryToSocketDistributor>(queryId, ioContext_);
-            socketDistributors_.emplace(queryId, distributor);
-            waitingList_.signalQueryUpdate(queryId);
-            return distributor;
-          }));
-  return future.get();
+net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+WebSocketTracker::createDistributor(const QueryId& queryId) {
+  co_await net::post(socketStrand_, net::use_awaitable);
+  AD_CORRECTNESS_CHECK(!socketDistributors_.contains(queryId));
+  auto distributor =
+      std::make_shared<QueryToSocketDistributor>(queryId, ioContext_);
+  socketDistributors_.emplace(queryId, distributor);
+  waitingList_.signalQueryUpdate(queryId);
+  co_return distributor;
 }
 
 void WebSocketTracker::releaseQuery(QueryId queryId) {
