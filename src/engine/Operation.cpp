@@ -216,7 +216,7 @@ void Operation::updateRuntimeInformationOnSuccess(
   _runtimeInfo.numRows_ = resultTable.size();
   _runtimeInfo.cacheStatus_ = cacheStatus;
 
-  _runtimeInfo.status_ = RuntimeInformation::Status::completed;
+  _runtimeInfo.status_ = RuntimeInformation::Status::fullyMaterialized;
 
   bool wasCached = cacheStatus != ad_utility::CacheStatus::computed;
   // If the result was read from the cache, then we need the additional
@@ -257,8 +257,9 @@ void Operation::updateRuntimeInformationOnSuccess(
 
 // _____________________________________________________________________________
 void Operation::updateRuntimeInformationWhenOptimizedOut(
-    std::vector<RuntimeInformation> children) {
-  _runtimeInfo.status_ = RuntimeInformation::Status::optimizedOut;
+    std::vector<RuntimeInformation> children,
+    RuntimeInformation::Status status) {
+  _runtimeInfo.status_ = status;
   _runtimeInfo.children_ = std::move(children);
   // This operation was optimized out, so its operation time is zero.
   // The operation time is computed as
@@ -271,9 +272,11 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
 }
 
 // _____________________________________________________________________________
-void Operation::updateRuntimeInformationWhenOptimizedOut() {
-  auto setStatus = [](RuntimeInformation& rti, const auto& self) -> void {
-    rti.status_ = RuntimeInformation::Status::optimizedOut;
+void Operation::updateRuntimeInformationWhenOptimizedOut(
+    RuntimeInformation::Status status) {
+  auto setStatus = [&status](RuntimeInformation& rti,
+                             const auto& self) -> void {
+    rti.status_ = status;
     rti.totalTime_ = 0;
     for (auto& child : rti.children_) {
       self(child, self);

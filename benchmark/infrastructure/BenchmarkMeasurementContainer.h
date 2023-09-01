@@ -88,6 +88,8 @@ class ResultEntry : public BenchmarkMetadataGetter {
 
   // User defined conversion to `std::string`.
   explicit operator std::string() const;
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const ResultEntry& resultEntry);
 
   // JSON serialization.
   friend void to_json(nlohmann::json& j, const ResultEntry& resultEntry);
@@ -174,6 +176,8 @@ class ResultTable : public BenchmarkMetadataGetter {
 
   // User defined conversion to `std::string`.
   explicit operator std::string() const;
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const ResultTable& resultTable);
 
   /*
   @brief Adds a new empty row at the bottom of the table.
@@ -259,6 +263,8 @@ class ResultGroup : public BenchmarkMetadataGetter {
 
   // User defined conversion to `std::string`.
   explicit operator std::string() const;
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const ResultGroup& resultGroup);
 
   // JSON serialization.
   friend void to_json(nlohmann::json& j, const ResultGroup& resultGroup);

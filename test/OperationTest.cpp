@@ -41,7 +41,8 @@ TEST(OperationTest, getResultOnlyCached) {
   NeutralElementOperation n2{qec};
   auto result = n2.getResult();
   EXPECT_NE(result, nullptr);
-  EXPECT_EQ(n2.getRuntimeInfo().status_, RuntimeInformation::Status::completed);
+  EXPECT_EQ(n2.getRuntimeInfo().status_,
+            RuntimeInformation::Status::fullyMaterialized);
   EXPECT_EQ(n2.getRuntimeInfo().cacheStatus_,
             ad_utility::CacheStatus::computed);
   EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 1);

@@ -199,7 +199,7 @@ void GroupBy::processGroup(
       resultEntry = singleResult;
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          singleResult, *localVocab);
+          AD_FWD(singleResult), *localVocab);
     } else {
       // This should never happen since aggregates always return constants.
       AD_FAIL();
@@ -252,6 +252,9 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   evaluationContext._variableToColumnMapPreviousResults =
       getInternallyVisibleVariableColumns();
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
+
+  // Let the evaluation know that we are part of a GROUP BY.
+  evaluationContext._isPartOfGroupBy = true;
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
     result.emplace_back();

@@ -407,6 +407,14 @@ class IdTable {
     }
   }
 
+  void push_back(std::span<const T> newRow) requires(!isView) {
+    AD_CONTRACT_CHECK(newRow.size() == numColumns());
+    ++numRows_;
+    for (size_t i = 0; i < numColumns(); ++i) {
+      data()[i].push_back(*(newRow.begin() + i));
+    }
+  }
+
   // Overload of `push_back` for `std:array`. If this IdTable is static
   // (`NumColumns != 0`), then this is a safe interface, as the correct size of
   // `newRow` can be statically checked.
@@ -599,12 +607,14 @@ class IdTable {
   // TODO<joka921> We should probably change the names of all those
   // typedefs (`iterator` as well as `row_type` etc.) to `PascalCase` for
   // consistency.
-  using iterator = ad_utility::IteratorForAccessOperator<
-      IdTable, IteratorHelper<row_reference_restricted>,
-      ad_utility::IsConst::False, row_type, row_reference>;
   using const_iterator = ad_utility::IteratorForAccessOperator<
       IdTable, IteratorHelper<const_row_reference_restricted>,
       ad_utility::IsConst::True, row_type, const_row_reference>;
+  using iterator = std::conditional_t<
+      isView, const_iterator,
+      ad_utility::IteratorForAccessOperator<
+          IdTable, IteratorHelper<row_reference_restricted>,
+          ad_utility::IsConst::False, row_type, row_reference>>;
 
   // The usual overloads of `begin()` and `end()` for const and mutable
   // `IdTable`s.

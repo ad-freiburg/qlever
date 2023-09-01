@@ -9,6 +9,14 @@
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <ranges>
+
+#include "absl/cleanup/cleanup.h"
+#include "util/Exception.h"
+#include "util/ExceptionHandling.h"
+#include "util/Generator.h"
+#include "util/Log.h"
+#include "util/jthread.h"
 
 namespace ad_utility::data_structures {
 
@@ -24,6 +32,7 @@ class ThreadSafeQueue {
   size_t maxSize_;
 
  public:
+  using value_type = T;
   explicit ThreadSafeQueue(size_t maxSize) : maxSize_{maxSize} {}
 
   // We can neither copy nor move this class
@@ -54,6 +63,12 @@ class ThreadSafeQueue {
   // will return `false`.
   void pushException(std::exception_ptr exception) {
     std::unique_lock lock{mutex_};
+    // It is important that we only push the first exception we encounter,
+    // otherwise there might be race conditions between rethrowing and resetting
+    // the exception.
+    if (pushedException_ != nullptr) {
+      return;
+    }
     pushedException_ = std::move(exception);
     finish_ = true;
     lock.unlock();
@@ -68,12 +83,22 @@ class ThreadSafeQueue {
   // function can be called from the producing/pushing threads to signal that
   // all elements have been pushed, or from the consumers to signal that they
   // will not pop further elements from the queue.
-  void finish() {
-    std::unique_lock lock{mutex_};
-    finish_ = true;
-    lock.unlock();
-    pushNotification_.notify_all();
-    popNotification_.notify_all();
+  void finish() noexcept {
+    // It is crucial that this function never throws, so that we can safely call
+    // it unconditionally in destructors to prevent deadlocks. In theory,
+    // locking a mutex can throw an exception, but these are `system_errors`
+    // from the underlying operating system that should never appear in practice
+    // and are almost impossible to recover from, so we terminate the program in
+    // the unlikely case.
+    ad_utility::terminateIfThrows(
+        [this] {
+          std::unique_lock lock{mutex_};
+          finish_ = true;
+          lock.unlock();
+          pushNotification_.notify_all();
+          popNotification_.notify_all();
+        },
+        "Locking or unlocking a mutex in a threadsafe queue failed.");
   }
 
   /// Always call `finish` on destruction. This makes sure that worker
@@ -94,7 +119,7 @@ class ThreadSafeQueue {
       std::rethrow_exception(pushedException_);
     }
     if (finish_ && queue_.empty()) {
-      return {};
+      return std::nullopt;
     }
     std::optional<T> value = std::move(queue_.front());
     queue_.pop();
@@ -123,6 +148,7 @@ class OrderedThreadSafeQueue {
   bool finish_ = false;
 
  public:
+  using value_type = T;
   // Construct from the maximal queue size (see `ThreadSafeQueue` for details).
   explicit OrderedThreadSafeQueue(size_t maxSize) : queue_{maxSize} {}
 
@@ -150,22 +176,35 @@ class OrderedThreadSafeQueue {
     return result;
   }
 
-  // See `ThreadSafeQueue` for details.
-  void pushException(std::exception_ptr exception) {
-    std::unique_lock l{mutex_};
-    queue_.pushException(std::move(exception));
-    finish_ = true;
-    l.unlock();
-    cv_.notify_all();
+  // Same as the function above, but the two arguments are passed in as a
+  // `std::pair`.
+  bool push(std::pair<size_t, T> indexAndValue) {
+    return push(indexAndValue.first, std::move(indexAndValue.second));
   }
 
   // See `ThreadSafeQueue` for details.
-  void finish() {
-    queue_.finish();
+  void pushException(std::exception_ptr exception) {
+    queue_.pushException(std::move(exception));
     std::unique_lock lock{mutex_};
     finish_ = true;
     lock.unlock();
     cv_.notify_all();
+  }
+
+  // See `ThreadSafeQueue` for details.
+  void finish() noexcept {
+    // It is crucial that this function never throws, so that we can safely call
+    // it unconditionally in destructors to prevent deadlocks. Should the
+    // implementation ever change, make sure that it is still `noexcept`.
+    ad_utility::terminateIfThrows(
+        [this] {
+          queue_.finish();
+          std::unique_lock lock{mutex_};
+          finish_ = true;
+          lock.unlock();
+          cv_.notify_all();
+        },
+        "Locking or unlocking a mutex in an OrderedThreadsafeQueue failed.");
   }
 
   // See `ThreadSafeQueue` for details.
@@ -175,5 +214,74 @@ class OrderedThreadSafeQueue {
   // ascending consecutive order wrt the index with which they were pushed.
   std::optional<T> pop() { return queue_.pop(); }
 };
+
+// A concept for one of the thread-safe queue types above
+template <typename T>
+concept IsThreadsafeQueue =
+    ad_utility::similarToInstantiation<T, ThreadSafeQueue> ||
+    ad_utility::similarToInstantiation<T, OrderedThreadSafeQueue>;
+
+namespace detail {
+// A helper function for setting up a producer for one of the threadsafe
+// queues above. Takes a reference to a queue and a `producer`. The producer
+// must return `std::optional<somethingThatCanBePushedToTheQueue>`. The producer
+// is called repeatedly, and the resulting values are pushed to the queue. If
+// the producer returns `nullopt`, `numThreads` is decremented, and the queue is
+// finished if `numThreads <= 0`. All exceptions that happen during the
+// execution of `producer` are propagated to the queue.
+template <IsThreadsafeQueue Queue, std::invocable Producer>
+auto makeQueueTask(Queue& queue, Producer producer,
+                   std::atomic<int64_t>& numThreads) {
+  return [&queue, producer = std::move(producer), &numThreads] {
+    try {
+      while (auto opt = producer()) {
+        if (!queue.push(std::move(opt.value()))) {
+          break;
+        }
+      }
+    } catch (...) {
+      try {
+        queue.pushException(std::current_exception());
+      } catch (...) {
+        queue.finish();
+      }
+    }
+    --numThreads;
+    if (numThreads <= 0) {
+      queue.finish();
+    }
+  };
+}
+}  // namespace detail
+
+// This helper function makes the usage of the (Ordered)ThreadSafeQueue above
+// much easier. It takes the size of the queue, the number of producer threads,
+// and a `producer` (a callable that produces values). The `producer` is called
+// repeatedly in `numThreads` many concurrent threads. It needs to return
+// `std::optional<SomethingThatCanBePushedToTheQueue>` and has the following
+// semantics: If `nullopt` is returned, then the thread is finished. The queue
+// is finished, when all the producer threads have finished by yielding
+// `nullopt`, or if any call to `producer` in any thread throws an
+// exception. In that case the exception is propagated to the resulting
+// generator. The resulting generator yields all the values that have been
+// pushed to the queue.
+template <typename Queue>
+cppcoro::generator<typename Queue::value_type> queueManager(size_t queueSize,
+                                                            size_t numThreads,
+                                                            auto producer) {
+  Queue queue{queueSize};
+  AD_CONTRACT_CHECK(numThreads > 0u);
+  std::vector<ad_utility::JThread> threads;
+  std::atomic<int64_t> numUnfinishedThreads{static_cast<int64_t>(numThreads)};
+  absl::Cleanup queueFinisher{[&queue] { queue.finish(); }};
+  for ([[maybe_unused]] auto i : std::views::iota(0u, numThreads)) {
+    threads.emplace_back(
+        detail::makeQueueTask(queue, producer, numUnfinishedThreads));
+  }
+
+  while (auto opt = queue.pop()) {
+    co_yield (opt.value());
+  }
+}
 
 }  // namespace ad_utility::data_structures

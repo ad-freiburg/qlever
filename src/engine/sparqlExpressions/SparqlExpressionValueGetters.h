@@ -1,9 +1,6 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
-
-//
-// Created by johannes on 23.09.21.
-//
+//  Copyright 2021, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H
 #define QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H
@@ -17,22 +14,48 @@
 
 namespace sparqlExpression::detail {
 
-/// Returns a numeric value.
-struct NumericValueGetter {
-  // Simply preserve the input from numeric values
-  double operator()(double v, EvaluationContext*) const { return v; }
-  int64_t operator()(int64_t v, EvaluationContext*) const { return v; }
-  // Bools promote to integers
-  int64_t operator()(Bool v, EvaluationContext*) const { return v._value; }
+// An empty struct to represent a non-numeric value in a context where only
+// numeric values make sense.
+struct NotNumeric {};
+// The input to an expression that expects a numeric value.
+using NumericValue = std::variant<NotNumeric, double, int64_t>;
+using IntOrDouble = std::variant<double, int64_t>;
 
-  // This is the current error-signalling mechanism
-  double operator()(const string&, EvaluationContext*) const {
-    return std::numeric_limits<double>::quiet_NaN();
+// Convert a numeric value (either a plain number, or the `NumericValue` variant
+// from above) into an `ID`. When `NanToUndef` is `true` then floating point NaN
+// values will become `Id::makeUndefined()`.
+template <bool NanToUndef = false, typename T>
+requires std::integral<T> || std::floating_point<T> ||
+         ad_utility::isTypeAnyOf<T, Id, NotNumeric, NumericValue>
+Id makeNumericId(T t) {
+  if constexpr (std::integral<T>) {
+    return Id::makeFromInt(t);
+  } else if constexpr (std::floating_point<T> && NanToUndef) {
+    return std::isnan(t) ? Id::makeUndefined() : Id::makeFromDouble(t);
+  } else if constexpr (std::floating_point<T> && !NanToUndef) {
+    return Id::makeFromDouble(t);
+  } else if constexpr (std::same_as<NotNumeric, T>) {
+    return Id::makeUndefined();
+  } else if constexpr (std::same_as<NumericValue, T>) {
+    return std::visit([](const auto& x) { return makeNumericId(x); }, t);
+  } else {
+    static_assert(std::same_as<Id, T>);
+    return t;
+  }
+}
+
+// Return `NumericValue` which is then used as the input to numeric expressions.
+struct NumericValueGetter {
+  NumericValue operator()(const string&, const EvaluationContext*) const {
+    return NotNumeric{};
   }
 
-  // Convert an id from a result table to a double value.
-  // TODO<joka921> Also convert to integer types.
-  double operator()(ValueId id, EvaluationContext*) const;
+  NumericValue operator()(ValueId id, const EvaluationContext*) const;
+
+  NumericValue operator()(IdOrString s, const EvaluationContext* ctx) const {
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
+  }
 };
 
 /// Return the type exactly as it was passed in.
@@ -40,7 +63,7 @@ struct NumericValueGetter {
 struct ActualValueGetter {
   // Simply preserve the input from numeric values
   template <typename T>
-  T operator()(T v, EvaluationContext*) const {
+  T operator()(T v, const EvaluationContext*) const {
     return v;
   }
 };
@@ -48,63 +71,61 @@ struct ActualValueGetter {
 /// Returns true iff the valid is not a NULL/UNDEF value (from optional) and
 /// not a nan (signalling an error in a previous calculation).
 struct IsValidValueGetter {
-  // Numeric constants are true iff they are non-zero and not nan.
-  bool operator()(double v, EvaluationContext*) const { return !std::isnan(v); }
-  bool operator()(int64_t, EvaluationContext*) const { return true; }
-  bool operator()(Bool, EvaluationContext*) const { return true; }
-
   // check for NULL/UNDEF values.
-  bool operator()(ValueId id, EvaluationContext*) const;
+  bool operator()(ValueId id, const EvaluationContext*) const;
 
-  bool operator()(const string&, EvaluationContext*) const { return true; }
+  bool operator()(const string&, const EvaluationContext*) const {
+    return true;
+  }
+  bool operator()(IdOrString s, const EvaluationContext* ctx) const {
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
+  }
 };
 
 /// Return a boolean value that is used for AND, OR and NOT expressions.
 /// See section 17.2.2 of the Sparql Standard
 struct EffectiveBooleanValueGetter {
-  // Numeric constants are true iff they are non-zero and not nan.
-  bool operator()(double v, EvaluationContext*) const {
-    return v && !std::isnan(v);
-  }
-  bool operator()(int64_t v, EvaluationContext*) const { return v != 0; }
-  bool operator()(Bool v, EvaluationContext*) const { return v._value; }
-
+  enum struct Result { False, True, Undef };
   // _________________________________________________________________________
-  bool operator()(ValueId id, EvaluationContext*) const;
+  Result operator()(ValueId id, const EvaluationContext*) const;
 
   // Nonempty strings are true.
-  bool operator()(const string& s, EvaluationContext*) { return !s.empty(); }
+  Result operator()(const std::string& s, const EvaluationContext*) const {
+    return s.empty() ? Result::False : Result::True;
+  }
+
+  Result operator()(const IdOrString& s, const EvaluationContext* ctx) const {
+    return std::visit(
+        [this, ctx](const auto& el) { return operator()(el, ctx); }, s);
+  }
 };
 
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a string value.
 struct StringValueGetter {
-  template <typename T>
-  requires(std::is_arithmetic_v<T>)
-  string operator()(T v, EvaluationContext*) const {
-    return std::to_string(v);
+  std::optional<string> operator()(ValueId, const EvaluationContext*) const;
+
+  std::optional<string> operator()(string s, const EvaluationContext*) const {
+    // Strip quotes
+    // TODO<joka921> Use stronger types to encode literals/ IRIs/ ETC
+    if (s.size() >= 2 && s.starts_with('"') && s.ends_with('"')) {
+      return s.substr(1, s.size() - 2);
+    }
+    return s;
   }
 
-  string operator()(Bool b, EvaluationContext*) const {
-    return std::to_string(b._value);
+  std::optional<string> operator()(IdOrString s,
+                                   const EvaluationContext* ctx) const {
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
   }
-
-  string operator()(ValueId, EvaluationContext*) const;
-
-  string operator()(string s, EvaluationContext*) const { return s; }
 };
 
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a `std::optional<DateOrLargeYear>`.
 struct DateValueGetter {
   using Opt = std::optional<DateOrLargeYear>;
-  template <typename T>
-  requires(std::is_arithmetic_v<T>)
-  Opt operator()(T, const EvaluationContext*) const {
-    return std::nullopt;
-  }
-
-  Opt operator()(Bool, const EvaluationContext*) const { return std::nullopt; }
 
   Opt operator()(ValueId id, const EvaluationContext*) const {
     if (id.getDatatype() == Datatype::Date) {
@@ -117,6 +138,10 @@ struct DateValueGetter {
   Opt operator()(const std::string&, const EvaluationContext*) const {
     return std::nullopt;
   }
+  Opt operator()(IdOrString s, const EvaluationContext* ctx) const {
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
+  }
 };
 
 // If the `id` points to a literal, return the contents of that literal (without
@@ -126,6 +151,21 @@ struct DateValueGetter {
 struct LiteralFromIdGetter {
   std::optional<string> operator()(ValueId id,
                                    const EvaluationContext* context) const;
+  std::optional<string> operator()(std::string s,
+                                   const EvaluationContext*) const {
+    // Strip quotes
+    // TODO<joka921> Use stronger types to encode literals/ IRIs/ ETC
+    if (s.size() >= 2 && s.starts_with('"') && s.ends_with('"')) {
+      return s.substr(1, s.size() - 2);
+    }
+    return s;
+  }
+
+  std::optional<string> operator()(IdOrString s,
+                                   const EvaluationContext* ctx) const {
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
+  }
 };
 
 }  // namespace sparqlExpression::detail

@@ -22,13 +22,6 @@ class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
 
-/**
- * Used as a template argument to the `createFromFile` method, when we do not
- * yet know which tokenizer specialization of the `TurtleParser` we are going
- * to use.
- */
-class TurtleParserAuto {};
-
 class Index {
  private:
   // Pimpl to reduce compile times.
@@ -40,8 +33,8 @@ class Index {
   // statistics (number of triples, distinct number of subjects, etc.) for which
   // the value differs when you also consider the added triples.
   struct NumNormalAndInternal {
-    size_t normal_;
-    size_t internal_;
+    size_t normal_{};
+    size_t internal_{};
     size_t normalAndInternal_() const { return normal_ + internal_; }
     bool operator==(const NumNormalAndInternal&) const = default;
   };
@@ -50,14 +43,17 @@ class Index {
   // one place.
   // Every vector is either empty or has the same size as the others.
   struct WordEntityPostings {
-    vector<TextRecordIndex>
-        cids_;  // Stores the index of the TextRecord of each result.
-    vector<WordIndex>
-        wids_;  // For prefix-queries stores for each result the index of the
-                // Word the prefixed-word was completed to.
-    vector<Id> eids_;       // Stores the index of the entity of each result.
-    vector<Score> scores_;  // Stores for each result how often an entity
-                            // appears in its associated TextRecord.
+    // Stores the index of the TextRecord of each result.
+    vector<TextRecordIndex> cids_;
+    // For every instance should wids_.size() never be < 1.
+    // For prefix-queries stores for each term and result the index of
+    // the Word the prefixed-word was completed to.
+    vector<vector<WordIndex>> wids_ = {{}};
+    // Stores the index of the entity of each result.
+    vector<Id> eids_;
+    // Stores for each result how often an entity
+    // appears in its associated TextRecord.
+    vector<Score> scores_;
   };
 
   /// Forbid copy and assignment.
@@ -76,8 +72,6 @@ class Index {
   // Create an index from a file. Will write vocabulary and on-disk index data.
   // NOTE: The index can not directly be used after this call, but has to be
   // setup by `createFromOnDiskIndex` after this call.
-  // TODO<joka921> Make the parser options also a plain enum!
-  template <class Parser>
   void createFromFile(const std::string& filename);
 
   void addPatternsToExistingIndex();
@@ -131,6 +125,8 @@ class Index {
   // probably not be in the index class.
   [[nodiscard]] std::optional<std::string> idToOptionalString(
       VocabIndex id) const;
+  [[nodiscard]] std::optional<std::string> idToOptionalString(
+      WordVocabIndex id) const;
 
   bool getId(const std::string& element, Id* id) const;
 
@@ -189,23 +185,6 @@ class Index {
   WordEntityPostings getContextEntityScoreListsForWords(
       const std::string& words) const;
 
-  template <size_t I>
-  void getECListForWordsAndSingleSub(const std::string& words,
-                                     const vector<std::array<Id, I>>& subres,
-                                     size_t subResMainCol, size_t limit,
-                                     vector<std::array<Id, 3 + I>>& res) const;
-
-  void getECListForWordsAndTwoW1Subs(const std::string& words,
-                                     const vector<std::array<Id, 1>> subres1,
-                                     const vector<std::array<Id, 1>> subres2,
-                                     size_t limit,
-                                     vector<std::array<Id, 5>>& res) const;
-
-  void getECListForWordsAndSubtrees(
-      const std::string& words,
-      const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
-      size_t limit, vector<vector<Id>>& res) const;
-
   WordEntityPostings getWordPostingsForTerm(const std::string& term) const;
 
   WordEntityPostings getEntityPostingsForTerm(const std::string& term) const;
@@ -233,6 +212,8 @@ class Index {
 
   uint64_t& stxxlMemoryInBytes();
   const uint64_t& stxxlMemoryInBytes() const;
+
+  uint64_t& blocksizePermutationsInBytes();
 
   void setOnDiskBase(const std::string& onDiskBase);
 
@@ -266,35 +247,9 @@ class Index {
   vector<float> getMultiplicities(Permutation::Enum p) const;
 
   /**
-   * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
-   * permutation for a specific key value of X
-   * @tparam Permutation The permutations Index::POS()... have different types
-   * @param key The key (in Id space) for which to search, e.g. fixed value for
-   * O in OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of Index class).
-   */
-  void scan(Id key, IdTable* result, Permutation::Enum p,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
-  /**
-   * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
-   * permutation for a specific key value of X
-   * @tparam Permutation The permutations Index::POS()... have different types
-   * @param key The key (as a raw string that is yet to be transformed to index
-   * space) for which to search, e.g. fixed value for O in OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of Index class).
-   */
-  void scan(const TripleComponent& key, IdTable* result,
-            const Permutation::Enum& p,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
-  /**
-   * @brief Perform a scan for two keys i.e. retrieve all Z from the XYZ
-   * permutation for specific key values of X and Y.
+   * @brief Perform a scan for one or two keys i.e. retrieve all YZ from the XYZ
+   * permutation for specific key values of X if `col1String` is `nullopt`, and
+   * all Z for the given XY if `col1String` is specified.
    * @tparam Permutation The permutations Index::POS()... have different types
    * @param col0String The first key (as a raw string that is yet to be
    * transformed to index space) for which to search, e.g. fixed value for O in
@@ -306,11 +261,15 @@ class Index {
    * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
    * members of Index class).
    */
-  // _____________________________________________________________________________
-  void scan(const TripleComponent& col0String,
-            const TripleComponent& col1String, IdTable* result,
-            Permutation::Enum p,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+  IdTable scan(
+      const TripleComponent& col0String,
+      std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+      Permutation::Enum p,
+      ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+  // Similar to the overload of `scan` above, but the keys are specified as IDs.
+  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+               ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of
   // the scan result.

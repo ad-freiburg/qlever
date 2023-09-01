@@ -138,6 +138,10 @@ class SparqlExpression {
   // implementation returns `false`.
   virtual bool isConstantExpression() const { return false; }
 
+  // Returns true iff this expression is a STR(...) expression.  Default
+  // implementation returns `false`.
+  virtual bool isStrExpression() const { return false; }
+
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;
 
@@ -154,13 +158,17 @@ class SparqlExpression {
             std::make_move_iterator(span.end())};
   }
 
- private:
   // Get the direct child expressions.
-  virtual std::span<SparqlExpression::Ptr> children() = 0;
+  virtual std::span<SparqlExpression::Ptr> children() final {
+    return childrenImpl();
+  }
   virtual std::span<const SparqlExpression::Ptr> children() const final {
     auto children = const_cast<SparqlExpression&>(*this).children();
     return {children.data(), children.size()};
   }
+
+ private:
+  virtual std::span<SparqlExpression::Ptr> childrenImpl() = 0;
 
   // Helper function for strings(). Get all variables, iris, and string literals
   // that are included in this expression directly, ignoring possible child

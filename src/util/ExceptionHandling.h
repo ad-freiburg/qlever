@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <type_traits>
 
+#include "absl/strings/str_cat.h"
 #include "util/Forward.h"
 #include "util/Log.h"
 #include "util/SourceLocation.h"
@@ -48,7 +49,7 @@ void ignoreExceptionIfThrows(F&& f,
 // exception, and the location of the call. This can be used to make destructors
 // `noexcept()` that have to perform some non-trivial logic (e.g. writing a
 // trailer to a file), when such a failure should never occur in practice and
-// also is not easily recovarable. For an example usage see `PatternCreator.h`.
+// also is not easily recoverable. For an example usage see `PatternCreator.h`.
 // The actual termination call can be configured for testing purposes. Note that
 // this function must never throw an exception.
 template <typename F,
@@ -59,23 +60,33 @@ void terminateIfThrows(F&& f, std::string_view message,
                        TerminateAction terminateAction = {},
                        ad_utility::source_location l =
                            ad_utility::source_location::current()) noexcept {
+  auto getErrorMessage =
+      [&message, &l](const auto&... additionalMessages) -> std::string {
+    return absl::StrCat(
+        "A function that should never throw has thrown an exception",
+        additionalMessages..., ". The function was called in file ",
+        l.file_name(), " on line ", l.line(),
+        ". Additional information: ", message,
+        ". Please report this. Terminating");
+  };
+
+  auto logAndTerminate = [&terminateAction](std::string_view msg) {
+    try {
+      LOG(ERROR) << msg << std::endl;
+      std::cerr << msg << std::endl;
+    } catch (...) {
+      std::cerr << msg << std::endl;
+    }
+    terminateAction();
+  };
   try {
     std::invoke(AD_FWD(f));
   } catch (const std::exception& e) {
-    std::cerr << "A function that should never throw has thrown an exception "
-                 "with message \""
-              << e.what() << "\". The function was called in file "
-              << l.file_name() << " on line " << l.line()
-              << ". Additional information: " << message
-              << ". Please report this. Terminating" << std::endl;
-    terminateAction();
+    auto msg = getErrorMessage(" with message \"", e.what(), "\"");
+    logAndTerminate(msg);
   } catch (...) {
-    std::cerr << "A function that should never throw has thrown an exception. "
-                 "The function was called in file "
-              << l.file_name() << " on line " << l.line()
-              << ". Additional information: " << message
-              << ". Please report this. Terminating" << std::endl;
-    terminateAction();
+    auto msg = getErrorMessage();
+    logAndTerminate(msg);
   }
 }
 }  // namespace ad_utility

@@ -42,7 +42,8 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
     auto& [literal, type] = optionalStringAndType.value();
     const char* i = XSD_INT_TYPE;
     const char* d = XSD_DECIMAL_TYPE;
-    if (type == nullptr || type == i || type == d) {
+    const char* b = XSD_BOOLEAN_TYPE;
+    if (type == nullptr || type == i || type == d || type == b) {
       return std::move(literal);
     } else {
       return absl::StrCat("\"", literal, "\"^^<", type, ">");
@@ -54,4 +55,10 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
 // _____________________________________________________________________________
 Variable Variable::getTextScoreVariable() const {
   return Variable{absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, name().substr(1))};
+}
+
+// _____________________________________________________________________________
+Variable Variable::getMatchingWordVariable(std::string_view term) const {
+  return Variable{
+      absl::StrCat(MATCHINGWORD_VARIABLE_PREFIX, name().substr(1), "_", term)};
 }

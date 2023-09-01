@@ -44,14 +44,6 @@ if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
     endif ()
 endif ()
 
-if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU") AND
-   (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "12") AND
-   (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12.2"))
-    message(STATUS "Adding -Wno-error for g++12.0 because of the many false positive warnings from stdlib headers")
-    add_compile_options(-Wno-error)
-    else()
-endif ()
-
 ###############################################################################
 ##### Essential settings #####
 ###############################################################################
@@ -344,3 +336,6 @@ qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT
 
 add_executable(PermutationExporterMain src/index/PermutationExporterMain.cpp)
 qlever_target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
+qlever_target_link_libraries(PrintIndexVersionMain util)

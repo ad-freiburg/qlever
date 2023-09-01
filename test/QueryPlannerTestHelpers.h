@@ -6,6 +6,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "engine/IndexScan.h"
+#include "engine/MultiColumnJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "gmock/gmock-matchers.h"
@@ -17,11 +18,15 @@ using ad_utility::source_location;
 namespace queryPlannerTestHelpers {
 using namespace ::testing;
 
+// Most of the following matchers work on `QueryExecutionTree`s, so we introduce
+// an alias.
+using QetMatcher = Matcher<const QueryExecutionTree&>;
+
 /// Returns a matcher that checks that a given `QueryExecutionTree`'s
 /// `rootOperation` can by dynamically cast to `OperationType`, and that
 /// `matcher` matches the result of this cast.
 template <typename OperationType>
-auto RootOperation(auto matcher) -> Matcher<const QueryExecutionTree&> {
+QetMatcher RootOperation(auto matcher) {
   auto getRootOperation =
       [](const QueryExecutionTree& tree) -> const ::Operation& {
     return *tree.getRootOperation().get();
@@ -34,10 +39,12 @@ auto RootOperation(auto matcher) -> Matcher<const QueryExecutionTree&> {
 /// single `IndexScan` with the given `subject`, `predicate`, and `object`, and
 /// that the `ScanType` of this `IndexScan` is any of the given
 /// `allowedPermutations`.
-auto IndexScan(TripleComponent subject, TripleComponent predicate,
-               TripleComponent object, size_t numVariables,
-               const std::vector<Permutation::Enum>& allowedPermutations = {})
-    -> Matcher<const QueryExecutionTree&> {
+QetMatcher IndexScan(
+    TripleComponent subject, TripleComponent predicate, TripleComponent object,
+    const std::vector<Permutation::Enum>& allowedPermutations = {}) {
+  size_t numVariables = static_cast<size_t>(subject.isVariable()) +
+                        static_cast<size_t>(predicate.isVariable()) +
+                        static_cast<size_t>(object.isVariable());
   auto permutationMatcher = allowedPermutations.empty()
                                 ? ::testing::A<Permutation::Enum>()
                                 : AnyOfArray(allowedPermutations);
@@ -49,6 +56,18 @@ auto IndexScan(TripleComponent subject, TripleComponent predicate,
             Property(&IndexScan::getObject, Eq(object))));
 }
 
+// Return a matcher that test whether a given `QueryExecutionTree` contains a
+// `MultiColumnJoin` operation the two children of which match the
+// `childMatcher`s. Note that the child matchers are not ordered, so
+// `childMatcher1` might refer to the left or right child of the
+// `MultiColumnJoin`, and `childMatcher2` always refers to the other child.
+QetMatcher MultiColumnJoin(const QetMatcher& childMatcher1,
+                           const QetMatcher& childMatcher2) {
+  return RootOperation<::MultiColumnJoin>(AllOf(Property(
+      &Operation::getChildren,
+      UnorderedElementsAre(Pointee(childMatcher1), Pointee(childMatcher2)))));
+}
+
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`
 QueryExecutionTree parseAndPlan(std::string query) {
@@ -58,7 +77,6 @@ QueryExecutionTree parseAndPlan(std::string query) {
   return QueryPlanner{nullptr}.createExecutionTree(pq);
 }
 
-// TODO<joka921> use `source_location` as soon as qup42's PR is integrated...
 // Check that the `QueryExecutionTree` that is obtained by parsing and planning
 // the `query` matches the `matcher`.
 void expect(std::string query, auto matcher,

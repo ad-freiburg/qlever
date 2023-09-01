@@ -109,11 +109,13 @@ class IndexImpl {
   string onDiskBase_;
   string settingsFileName_;
   bool onlyAsciiTurtlePrefixes_ = false;
+  bool useParallelParser_ = true;
   TurtleParserIntegerOverflowBehavior turtleParserIntegerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
   bool keepTempFiles_ = false;
   uint64_t stxxlMemoryInBytes_ = DEFAULT_STXXL_MEMORY_IN_BYTES;
+  uint64_t blocksizePermutationInBytes_ = BLOCKSIZE_COMPRESSED_METADATA;
   json configurationJson_;
   Index::Vocab vocab_;
   size_t totalVocabularySize_ = 0;
@@ -203,7 +205,6 @@ class IndexImpl {
   // Will write vocabulary and on-disk index data.
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
-  template <class Parser>
   void createFromFile(const string& filename);
 
   void addPatternsToExistingIndex();
@@ -260,6 +261,8 @@ class IndexImpl {
   // probably not be in the index class.
   std::optional<string> idToOptionalString(VocabIndex id) const;
 
+  std::optional<string> idToOptionalString(WordVocabIndex id) const;
+
   // ___________________________________________________________________________
   bool getId(const string& element, Id* id) const;
 
@@ -294,6 +297,10 @@ class IndexImpl {
 
   size_t getSizeEstimate(const string& words) const;
 
+  void callFixedGetContextListForWords(const string& words,
+                                       IdTable* result) const;
+
+  template <int WIDTH>
   void getContextListForWords(const string& words, IdTable* result) const;
 
   void getECListForWordsOneVar(const string& words, size_t limit,
@@ -317,23 +324,6 @@ class IndexImpl {
 
   Index::WordEntityPostings getContextEntityScoreListsForWords(
       const string& words) const;
-
-  template <size_t I>
-  void getECListForWordsAndSingleSub(const string& words,
-                                     const vector<array<Id, I>>& subres,
-                                     size_t subResMainCol, size_t limit,
-                                     vector<array<Id, 3 + I>>& res) const;
-
-  void getECListForWordsAndTwoW1Subs(const string& words,
-                                     const vector<array<Id, 1>> subres1,
-                                     const vector<array<Id, 1>> subres2,
-                                     size_t limit,
-                                     vector<array<Id, 5>>& res) const;
-
-  void getECListForWordsAndSubtrees(
-      const string& words,
-      const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
-      size_t limit, vector<vector<Id>>& res) const;
 
   Index::WordEntityPostings getWordPostingsForTerm(const string& term) const;
 
@@ -368,6 +358,10 @@ class IndexImpl {
   uint64_t& stxxlMemoryInBytes() { return stxxlMemoryInBytes_; }
   const uint64_t& stxxlMemoryInBytes() const { return stxxlMemoryInBytes_; }
 
+  uint64_t& blocksizePermutationInBytes() {
+    return blocksizePermutationInBytes_;
+  }
+
   void setOnDiskBase(const std::string& onDiskBase);
 
   void setSettingsFile(const std::string& filename);
@@ -397,53 +391,16 @@ class IndexImpl {
   // ___________________________________________________________________
   vector<float> getMultiplicities(Permutation::Enum permutation) const;
 
-  /**
-   * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
-   * permutation for a specific key value of X
-   * @tparam Permutation The permutations IndexImpl::POS()... have different
-   * types
-   * @param key The key (in Id space) for which to search, e.g. fixed value for
-   * O in OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of IndexImpl class).
-   */
-  void scan(Id key, IdTable* result, const Permutation::Enum& p,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
-  /**
-   * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
-   * permutation for a specific key value of X
-   * @tparam Permutation The permutations IndexImpl::POS()... have different
-   * types
-   * @param key The key (as a raw string that is yet to be transformed to index
-   * space) for which to search, e.g. fixed value for O in OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of IndexImpl class).
-   */
-  void scan(const TripleComponent& key, IdTable* result,
-            Permutation::Enum permutation,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
-  /**
-   * @brief Perform a scan for two keys i.e. retrieve all Z from the XYZ
-   * permutation for specific key values of X and Y.
-   * @param col0String The first key (as a raw string that is yet to be
-   * transformed to index space) for which to search, e.g. fixed value for O in
-   * OSP permutation.
-   * @param col1String The second key (as a raw string that is yet to be
-   * transformed to index space) for which to search, e.g. fixed value for S in
-   * OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of IndexImpl class).
-   */
   // _____________________________________________________________________________
-  void scan(const TripleComponent& col0String,
-            const TripleComponent& col1String, IdTable* result,
-            const Permutation::Enum& permutation,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+  IdTable scan(
+      const TripleComponent& col0String,
+      std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+      const Permutation::Enum& permutation,
+      ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+  // _____________________________________________________________________________
+  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+               ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(const TripleComponent& col0,
@@ -458,13 +415,12 @@ class IndexImpl {
   // permutations. Member vocab_ will be empty after this because it is not
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
-  template <class Parser>
-  IndexBuilderDataAsPsoSorter createIdTriplesAndVocab(const string& ntFile);
+  IndexBuilderDataAsPsoSorter createIdTriplesAndVocab(
+      std::shared_ptr<TurtleParserBase> parser);
 
   // ___________________________________________________________________
-  template <class Parser>
-  IndexBuilderDataAsStxxlVector passFileForVocabulary(const string& ntFile,
-                                                      size_t linesPerPartial);
+  IndexBuilderDataAsStxxlVector passFileForVocabulary(
+      std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial);
 
   /**
    * @brief Everything that has to be done when we have seen all the triples
@@ -630,8 +586,6 @@ class IndexImpl {
   template <class T>
   void writeAsciiListFile(const string& filename, const T& ids) const;
 
-  void getRhsForSingleLhs(const IdTable& in, Id lhsId, IdTable* result) const;
-
   bool isLiteral(const string& object) const;
 
  public:
@@ -649,7 +603,6 @@ class IndexImpl {
   void readConfiguration();
 
   // initialize the index-build-time settings for the vocabulary
-  template <class Parser>
   void readIndexBuilderSettingsFromFile();
 
   /**

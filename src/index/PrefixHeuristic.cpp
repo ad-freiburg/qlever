@@ -215,7 +215,7 @@ std::vector<string> calculatePrefixes(const string& filename,
   res.reserve(numPrefixes);
   for (size_t i = 0; i < numPrefixes; ++i) {
     auto p = t.getAndDeleteMaximum(actualCodeLength);
-    if (p.second == "") {
+    if (p.second.empty()) {
       break;
     }
     totalSavings += p.first;
@@ -226,10 +226,12 @@ std::vector<string> calculatePrefixes(const string& filename,
   // if we always add an encoding we have calculated with a codelength of 0 so
   // far, so the actual encoding length has to be added here
   if (alwaysAddCode) {
-    totalSavings -= codelength * numWords;
+    totalSavings -= static_cast<int64_t>(codelength) * numWords;
   }
-  int reductionInPercent =
-      static_cast<size_t>(0.5 + 100.0 * totalSavings / totalChars);
+  int64_t reductionInPercent =
+      totalChars > 0 ? std::lround(100.0 * static_cast<double>(totalSavings) /
+                                   static_cast<double>(totalChars))
+                     : 0;
   LOG(DEBUG) << "Total number of bytes : " << totalChars << std::endl;
   LOG(DEBUG) << "Total chars compressed : " << totalSavings << '\n';
   LOG(INFO) << "Reduction of size of internal vocabulary: "

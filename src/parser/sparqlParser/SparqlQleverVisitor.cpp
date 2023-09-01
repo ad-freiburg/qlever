@@ -7,6 +7,8 @@
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
+#include <absl/strings/str_split.h>
+
 #include <string>
 #include <vector>
 
@@ -21,6 +23,7 @@
 #include "parser/data/Variable.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/StringUtils.h"
+#include "util/antlr/GenerateAntlrExceptionMetadata.h"
 
 using namespace ad_utility::sparql_types;
 using namespace sparqlExpression;
@@ -53,41 +56,71 @@ std::string Visitor::getOriginalInputForContext(
 // ___________________________________________________________________________
 ExpressionPtr Visitor::processIriFunctionCall(
     const std::string& iri, std::vector<ExpressionPtr> argList,
-    antlr4::ParserRuleContext* ctx) {
-  // Lambda that checks the number of arguments and throws an error if it's
-  // not right.
-  auto checkNumArgs = [&argList, &ctx](const std::string_view prefix,
-                                       const std::string_view functionName,
-                                       size_t numArgs) {
+    const antlr4::ParserRuleContext* ctx) {
+  std::string_view functionName = iri;
+  std::string_view prefixName;
+  // Helper lambda that checks if `functionName` starts with the given prefix.
+  // If yes, remove the prefix and the final `>` from `functionName` and set
+  // `prefixName` to the short name of the prefix; see `global/Constants.h`.
+  auto checkPrefix = [&functionName, &prefixName](
+                         std::pair<std::string_view, std::string_view> prefix) {
+    if (functionName.starts_with(prefix.second)) {
+      prefixName = prefix.first;
+      functionName.remove_prefix(prefix.second.size());
+      AD_CONTRACT_CHECK(functionName.ends_with('>'));
+      functionName.remove_suffix(1);
+      return true;
+    } else {
+      return false;
+    }
+  };
+  // Helper lambda that checks the number of arguments and throws an error
+  // if it's not right. The `functionName` and `prefixName` are used for the
+  // error message.
+  auto checkNumArgs = [&argList, &ctx, &functionName,
+                       &prefixName](size_t numArgs) {
     static std::array<std::string, 6> wordForNumArgs = {
         "no", "one", "two", "three", "four", "five"};
     if (argList.size() != numArgs) {
       reportError(ctx,
-                  absl::StrCat("Function ", prefix, functionName, " takes ",
+                  absl::StrCat("Function ", prefixName, functionName, " takes ",
                                numArgs < 5 ? wordForNumArgs[numArgs]
                                            : std::to_string(numArgs),
                                numArgs == 1 ? " argument" : " arguments"));
     }
   };
-
-  constexpr static std::string_view geofPrefix =
-      "<http://www.opengis.net/def/function/geosparql/";
-  if (std::string_view iriView = iri; iriView.starts_with(geofPrefix)) {
-    iriView.remove_prefix(geofPrefix.size());
-    AD_CONTRACT_CHECK(iriView.ends_with('>'));
-    iriView.remove_suffix(1);
-    if (iriView == "distance") {
-      checkNumArgs("geof:", iriView, 2);
-      return createExpression<sparqlExpression::DistExpression>(
-          std::move(argList[0]), std::move(argList[1]));
-    } else if (iriView == "longitude") {
-      checkNumArgs("geof:", iriView, 1);
-      return createExpression<sparqlExpression::LongitudeExpression>(
-          std::move(argList[0]));
-    } else if (iriView == "latitude") {
-      checkNumArgs("geof:", iriView, 1);
-      return createExpression<sparqlExpression::LatitudeExpression>(
-          std::move(argList[0]));
+  // Geo functions.
+  if (checkPrefix(GEOF_PREFIX)) {
+    if (functionName == "distance") {
+      checkNumArgs(2);
+      return sparqlExpression::makeDistExpression(std::move(argList[0]),
+                                                  std::move(argList[1]));
+    } else if (functionName == "longitude") {
+      checkNumArgs(1);
+      return sparqlExpression::makeLongitudeExpression(std::move(argList[0]));
+    } else if (functionName == "latitude") {
+      checkNumArgs(1);
+      return sparqlExpression::makeLatitudeExpression(std::move(argList[0]));
+    }
+  } else if (checkPrefix(MATH_PREFIX)) {
+    if (functionName == "log") {
+      checkNumArgs(1);
+      return sparqlExpression::makeLogExpression(std::move(argList[0]));
+    } else if (functionName == "exp") {
+      checkNumArgs(1);
+      return sparqlExpression::makeExpExpression(std::move(argList[0]));
+    } else if (functionName == "sqrt") {
+      checkNumArgs(1);
+      return sparqlExpression::makeSqrtExpression(std::move(argList[0]));
+    } else if (functionName == "sin") {
+      checkNumArgs(1);
+      return sparqlExpression::makeSinExpression(std::move(argList[0]));
+    } else if (functionName == "cos") {
+      checkNumArgs(1);
+      return sparqlExpression::makeCosExpression(std::move(argList[0]));
+    } else if (functionName == "tan") {
+      checkNumArgs(1);
+      return sparqlExpression::makeTanExpression(std::move(argList[0]));
     }
   }
   reportNotSupported(ctx, "Function \"" + iri + "\" is");
@@ -186,17 +219,17 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
+ParsedQuery Visitor::visit(const Parser::DescribeQueryContext* ctx) {
   reportNotSupported(ctx, "DESCRIBE queries are");
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
+ParsedQuery Visitor::visit(const Parser::AskQueryContext* ctx) {
   reportNotSupported(ctx, "ASK queries are");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::DatasetClauseContext* ctx) {
+void Visitor::visit(const Parser::DatasetClauseContext* ctx) {
   reportNotSupported(ctx, "FROM clauses are");
 }
 
@@ -490,7 +523,7 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
 
 // ____________________________________________________________________________
 parsedQuery::GraphPatternOperation Visitor::visit(
-    Parser::GraphGraphPatternContext* ctx) {
+    const Parser::GraphGraphPatternContext* ctx) {
   reportNotSupported(ctx, "Named Graphs (FROM, GRAPH) are");
 }
 
@@ -647,7 +680,7 @@ void Visitor::visit(Parser::PrologueContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::BaseDeclContext* ctx) {
+void Visitor::visit(const Parser::BaseDeclContext* ctx) {
   reportNotSupported(ctx, "BASE declarations are");
 }
 
@@ -799,9 +832,8 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   } else if (ctx->UNDEF()) {
     return TripleComponent::UNDEF{};
   } else {
-    // TODO implement.
     AD_CORRECTNESS_CHECK(ctx->booleanLiteral());
-    reportNotSupported(ctx, "Boolean literals in a VALUES clause are ");
+    return TripleComponent{visit(ctx->booleanLiteral())};
   }
 }
 
@@ -878,10 +910,11 @@ vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::ExpressionListContext*) {
-  // This rule is only used by the `RelationExpression` and `BuiltInCall` rules
-  // which also are not supported and should already have thrown an exception.
-  AD_FAIL();
+std::vector<ExpressionPtr> Visitor::visit(Parser::ExpressionListContext* ctx) {
+  if (ctx->NIL()) {
+    return {};
+  }
+  return visitVector(ctx->expression());
 }
 
 // ____________________________________________________________________________________
@@ -998,12 +1031,33 @@ vector<TripleWithPropertyPath> Visitor::visit(
   // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
   // <entity>` is contained in the query, then the variable `?ql_textscore_var`
   // is implicitly created and visible in the query body.
-  auto setTextscoreVisibleIfPresent = [this](VarOrTerm& subject,
-                                             VarOrPath& predicate) {
+  // Similarly if a triple `?var ql:contains-word "words"` is contained in the
+  // query, then the variable `ql_matchingword_var` is implicitly created and
+  // visible in the query body.
+  auto setMatchingWordAndTextscoreVisibleIfPresent = [this, ctx](
+                                                         VarOrTerm& subject,
+                                                         VarOrPath& predicate,
+                                                         VarOrTerm& object) {
     if (auto* var = std::get_if<Variable>(&subject)) {
       if (auto* propertyPath = std::get_if<PropertyPath>(&predicate)) {
-        if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE ||
-            propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+        if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+          addVisibleVariable(var->getTextScoreVariable());
+          string name = object.toSparql();
+          if (!((name.starts_with('"') && name.ends_with('"')) ||
+                (name.starts_with('\'') && name.ends_with('\'')))) {
+            reportError(
+                ctx,
+                "ql:contains-word has to be followed by a string in quotes");
+          }
+          for (std::string_view s : std::vector<std::string>(
+                   absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
+            if (!s.ends_with('*')) {
+              continue;
+            }
+            addVisibleVariable(
+                var->getMatchingWordVariable(s.substr(0, s.size() - 1)));
+          }
+        } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
           addVisibleVariable(var->getTextScoreVariable());
         }
       }
@@ -1015,7 +1069,7 @@ vector<TripleWithPropertyPath> Visitor::visit(
     auto subject = visit(ctx->varOrTerm());
     auto tuples = visit(ctx->propertyListPathNotEmpty());
     for (auto& [predicate, object] : tuples) {
-      setTextscoreVisibleIfPresent(subject, predicate);
+      setMatchingWordAndTextscoreVisibleIfPresent(subject, predicate, object);
       triples.emplace_back(subject, std::move(predicate), std::move(object));
     }
     return triples;
@@ -1158,7 +1212,7 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
+PropertyPath Visitor::visit(const Parser::PathNegatedPropertySetContext* ctx) {
   reportNotSupported(ctx, "\"!\" inside a property path is ");
 }
 
@@ -1304,11 +1358,10 @@ ExpressionPtr Visitor::visit(Parser::ConditionalOrExpressionContext* ctx) {
   auto children = visitVector(ctx->conditionalAndExpression());
   AD_CONTRACT_CHECK(!children.empty());
   auto result = std::move(children.front());
-  using C = sparqlExpression::OrExpression::Children;
   std::for_each(children.begin() + 1, children.end(),
                 [&result](ExpressionPtr& ptr) {
-                  result = std::make_unique<sparqlExpression::OrExpression>(
-                      C{std::move(result), std::move(ptr)});
+                  result = sparqlExpression::makeOrExpression(std::move(result),
+                                                              std::move(ptr));
                 });
   result->descriptor() = ctx->getText();
   return result;
@@ -1319,11 +1372,10 @@ ExpressionPtr Visitor::visit(Parser::ConditionalAndExpressionContext* ctx) {
   auto children = visitVector(ctx->valueLogical());
   AD_CONTRACT_CHECK(!children.empty());
   auto result = std::move(children.front());
-  using C = sparqlExpression::AndExpression::Children;
   std::for_each(children.begin() + 1, children.end(),
                 [&result](ExpressionPtr& ptr) {
-                  result = std::make_unique<sparqlExpression::AndExpression>(
-                      C{std::move(result), std::move(ptr)});
+                  result = sparqlExpression::makeAndExpression(
+                      std::move(result), std::move(ptr));
                 });
   result->descriptor() = ctx->getText();
   return result;
@@ -1380,11 +1432,11 @@ ExpressionPtr Visitor::visit(Parser::AdditiveExpressionContext* ctx) {
        visitVector(ctx->multiplicativeExpressionWithSign())) {
     switch (signAndExpression.operator_) {
       case Operator::Plus:
-        result = createExpression<sparqlExpression::AddExpression>(
+        result = sparqlExpression::makeAddExpression(
             std::move(result), std::move(signAndExpression.expression_));
         break;
       case Operator::Minus:
-        result = createExpression<sparqlExpression::SubtractExpression>(
+        result = sparqlExpression::makeSubtractExpression(
             std::move(result), std::move(signAndExpression.expression_));
         break;
       default:
@@ -1428,12 +1480,12 @@ Visitor::OperatorAndExpression Visitor::visit(
 
   // Create the initial expression from a double literal
   auto createFromDouble = [&](double d) -> ExpressionPtr {
-    return std::make_unique<sparqlExpression::DoubleExpression>(
-        invertIfNecessary(d));
+    return std::make_unique<sparqlExpression::IdExpression>(
+        Id::makeFromDouble(invertIfNecessary(d)));
   };
   auto createFromInt = [&](int64_t i) -> ExpressionPtr {
-    return std::make_unique<sparqlExpression::IntExpression>(
-        invertIfNecessary(i));
+    return std::make_unique<sparqlExpression::IdExpression>(
+        Id::makeFromInt(invertIfNecessary(i)));
   };
 
   auto literalAsVariant = visitAlternative<IntOrDouble>(
@@ -1447,11 +1499,11 @@ Visitor::OperatorAndExpression Visitor::visit(
        visitVector(ctx->multiplyOrDivideExpression())) {
     switch (opAndExp.operator_) {
       case Operator::Multiply:
-        expression = createExpression<sparqlExpression::MultiplyExpression>(
+        expression = sparqlExpression::makeMultiplyExpression(
             std::move(expression), std::move(opAndExp.expression_));
         break;
       case Operator::Divide:
-        expression = createExpression<sparqlExpression::DivideExpression>(
+        expression = sparqlExpression::makeDivideExpression(
             std::move(expression), std::move(opAndExp.expression_));
         break;
       default:
@@ -1469,11 +1521,11 @@ ExpressionPtr Visitor::visit(Parser::MultiplicativeExpressionContext* ctx) {
        visitVector(ctx->multiplyOrDivideExpression())) {
     switch (opAndExp.operator_) {
       case Operator::Multiply:
-        result = createExpression<sparqlExpression::MultiplyExpression>(
+        result = sparqlExpression::makeMultiplyExpression(
             std::move(result), std::move(opAndExp.expression_));
         break;
       case Operator::Divide:
-        result = createExpression<sparqlExpression::DivideExpression>(
+        result = sparqlExpression::makeDivideExpression(
             std::move(result), std::move(opAndExp.expression_));
         break;
       default:
@@ -1506,11 +1558,9 @@ Visitor::OperatorAndExpression Visitor::visit(
 ExpressionPtr Visitor::visit(Parser::UnaryExpressionContext* ctx) {
   auto child = visit(ctx->primaryExpression());
   if (ctx->children[0]->getText() == "-") {
-    return createExpression<sparqlExpression::UnaryMinusExpression>(
-        std::move(child));
+    return sparqlExpression::makeUnaryMinusExpression(std::move(child));
   } else if (ctx->children[0]->getText() == "!") {
-    return createExpression<sparqlExpression::UnaryNegateExpression>(
-        std::move(child));
+    return sparqlExpression::makeUnaryNegateExpression(std::move(child));
   } else {
     // no sign or an explicit '+'
     return child;
@@ -1535,16 +1585,17 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
     }
   } else if (ctx->numericLiteral()) {
     auto integralWrapper = [](int64_t x) {
-      return ExpressionPtr{make_unique<IntExpression>(x)};
+      return ExpressionPtr{make_unique<IdExpression>(Id::makeFromInt(x))};
     };
     auto doubleWrapper = [](double x) {
-      return ExpressionPtr{make_unique<DoubleExpression>(x)};
+      return ExpressionPtr{make_unique<IdExpression>(Id::makeFromDouble(x))};
     };
     return std::visit(
         ad_utility::OverloadCallOperator{integralWrapper, doubleWrapper},
         visit(ctx->numericLiteral()));
   } else if (ctx->booleanLiteral()) {
-    return make_unique<BoolExpression>(visit(ctx->booleanLiteral()));
+    return make_unique<IdExpression>(
+        Id::makeFromBool(visit(ctx->booleanLiteral())));
   } else if (ctx->var()) {
     return make_unique<VariableExpression>(visit(ctx->var()));
   } else {
@@ -1566,6 +1617,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return visit(ctx->regexExpression());
   } else if (ctx->langExpression()) {
     return visit(ctx->langExpression());
+  } else if (ctx->substringExpression()) {
+    return visit(ctx->substringExpression());
   }
   // Get the function name and the arguments. Note that we do not have to check
   // the number of arguments like for `processIriFunctionCall`, since the number
@@ -1575,24 +1628,69 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   auto functionName = ad_utility::getLowercase(ctx->children[0]->getText());
   auto argList = visitVector(ctx->expression());
   using namespace sparqlExpression;
-  // Create the expression using the matching lambda from `NaryExpression.h`.
-  auto createUnaryExpression = [this, &argList]<typename Expression>() {
-    AD_CONTRACT_CHECK(argList.size() == 1);
-    return createExpression<Expression>(std::move(argList[0]));
+  // Create the expression using the matching factory function from
+  // `NaryExpression.h`.
+  auto createUnary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
+    AD_CORRECTNESS_CHECK(argList.size() == 1);
+    return function(std::move(argList[0]));
+  };
+  auto createBinary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                     ExpressionPtr> {
+    AD_CORRECTNESS_CHECK(argList.size() == 2);
+    return function(std::move(argList[0]), std::move(argList[1]));
+  };
+  auto createTernary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                     ExpressionPtr, ExpressionPtr> {
+    AD_CORRECTNESS_CHECK(argList.size() == 3);
+    return function(std::move(argList[0]), std::move(argList[1]),
+                    std::move(argList[2]));
   };
   if (functionName == "str") {
-    return createUnaryExpression.template operator()<StrExpression>();
+    return createUnary(&makeStrExpression);
   } else if (functionName == "strlen") {
-    return createUnaryExpression.template operator()<StrlenExpression>();
+    return createUnary(&makeStrlenExpression);
+  } else if (functionName == "strbefore") {
+    return createBinary(&makeStrBeforeExpression);
+  } else if (functionName == "strafter") {
+    return createBinary(&makeStrAfterExpression);
+  } else if (functionName == "contains") {
+    return createBinary(&makeContainsExpression);
+  } else if (functionName == "strends") {
+    return createBinary(&makeStrEndsExpression);
+  } else if (functionName == "strstarts") {
+    return createBinary(&makeStrStartsExpression);
+  } else if (functionName == "ucase") {
+    return createUnary(&makeUppercaseExpression);
+  } else if (functionName == "lcase") {
+    return createUnary(&makeLowercaseExpression);
   } else if (functionName == "year") {
-    return createUnaryExpression.template operator()<YearExpression>();
+    return createUnary(&makeYearExpression);
   } else if (functionName == "month") {
-    return createUnaryExpression.template operator()<MonthExpression>();
+    return createUnary(&makeMonthExpression);
   } else if (functionName == "day") {
-    return createUnaryExpression.template operator()<DayExpression>();
+    return createUnary(&makeDayExpression);
   } else if (functionName == "rand") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<RandomExpression>();
+  } else if (functionName == "ceil") {
+    return createUnary(&makeCeilExpression);
+  } else if (functionName == "abs") {
+    return createUnary(&makeAbsExpression);
+  } else if (functionName == "round") {
+    return createUnary(&makeRoundExpression);
+  } else if (functionName == "floor") {
+    return createUnary(&makeFloorExpression);
+  } else if (functionName == "if") {
+    return createTernary(&makeIfExpression);
+  } else if (functionName == "coalesce") {
+    AD_CORRECTNESS_CHECK(ctx->expressionList());
+    return makeCoalesceExpression(visit(ctx->expressionList()));
+  } else if (functionName == "concat") {
+    AD_CORRECTNESS_CHECK(ctx->expressionList());
+    return makeConcatExpression(visit(ctx->expressionList()));
   } else {
     reportError(
         ctx,
@@ -1631,22 +1729,31 @@ ExpressionPtr Visitor::visit(Parser::LangExpressionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::SubstringExpressionContext* ctx) {
-  reportNotSupported(ctx, "The SUBSTR function is");
+SparqlExpression::Ptr Visitor::visit(Parser::SubstringExpressionContext* ctx) {
+  auto children = visitVector(ctx->expression());
+  AD_CORRECTNESS_CHECK(children.size() == 2 || children.size() == 3);
+  if (children.size() == 2) {
+    children.push_back(
+        std::make_unique<IdExpression>(Id::makeFromInt(Id::maxInt)));
+  }
+  AD_CONTRACT_CHECK(children.size() == 3);
+  return sparqlExpression::makeSubstrExpression(std::move(children.at(0)),
+                                                std::move(children.at(1)),
+                                                std::move(children.at(2)));
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
+void Visitor::visit(const Parser::StrReplaceExpressionContext* ctx) {
   reportNotSupported(ctx, "The REPLACE function is");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::ExistsFuncContext* ctx) {
+void Visitor::visit(const Parser::ExistsFuncContext* ctx) {
   reportNotSupported(ctx, "The EXISTS function is");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::NotExistsFuncContext* ctx) {
+void Visitor::visit(const Parser::NotExistsFuncContext* ctx) {
   reportNotSupported(ctx, "The NOT EXISTS function is");
 }
 
@@ -1859,39 +1966,41 @@ void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
 }
 
 // _____________________________________________________________________________
-void Visitor::reportError(antlr4::ParserRuleContext* ctx,
+void Visitor::reportError(const antlr4::ParserRuleContext* ctx,
                           const std::string& msg) {
-  throw InvalidQueryException{msg, generateMetadata(ctx)};
+  throw InvalidSparqlQueryException{
+      msg, ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
 }
 
 // _____________________________________________________________________________
-void Visitor::reportNotSupported(antlr4::ParserRuleContext* ctx,
+void Visitor::reportNotSupported(const antlr4::ParserRuleContext* ctx,
                                  const std::string& feature) {
-  throw NotSupportedException{feature + " currently not supported by QLever.",
-                              generateMetadata(ctx)};
+  throw NotSupportedException{
+      feature + " currently not supported by QLever.",
+      ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
 }
 
 // _____________________________________________________________________________
 void Visitor::checkUnsupportedLangOperation(
-    antlr4::ParserRuleContext* ctx,
+    const antlr4::ParserRuleContext* ctx,
     const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
   if (expression.containsLangExpression()) {
     throw NotSupportedException{
         "The LANG function is currently only supported in the construct "
         "FILTER(LANG(?variable) = \"langtag\" by QLever",
-        generateMetadata(ctx)};
+        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
   }
 }
 
 // _____________________________________________________________________________
 void Visitor::checkUnsupportedLangOperationAllowFilters(
-    antlr4::ParserRuleContext* ctx,
+    const antlr4::ParserRuleContext* ctx,
     const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
   if (expression.containsLangExpression() &&
       !expression.getLanguageFilterExpression()) {
     throw NotSupportedException(
         "The LANG() function is only supported by QLever in the construct "
         "FILTER(LANG(?variable) = \"langtag\"",
-        generateMetadata(ctx));
+        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx));
   }
 }

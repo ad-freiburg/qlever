@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "../benchmark/infrastructure/Benchmark.h"
-#include "nlohmann/json.hpp"
+#include "util/json.h"
 
 namespace ad_benchmark {
 // ___________________________________________________________________________

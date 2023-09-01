@@ -47,11 +47,17 @@ static const char INTERNAL_TEXT_MATCH_PREDICATE[] =
     "<QLever-internal-function/text>";
 static const char HAS_PREDICATE_PREDICATE[] =
     "<QLever-internal-function/has-predicate>";
+static constexpr std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
+    "geof:", "<http://www.opengis.net/def/function/geosparql/"};
+static constexpr std::pair<std::string_view, std::string_view> MATH_PREFIX = {
+    "math:", "<http://www.w3.org/2005/xpath-functions/math#"};
 
 static const std::string INTERNAL_VARIABLE_PREFIX =
     "?_QLever_internal_variable_";
 
 static constexpr std::string_view TEXTSCORE_VARIABLE_PREFIX = "?ql_textscore_";
+static constexpr std::string_view MATCHINGWORD_VARIABLE_PREFIX =
+    "?ql_matchingword_";
 
 // For anonymous nodes in Turtle.
 static const std::string ANON_NODE_PREFIX = "QLever-Anon-Node";
@@ -98,7 +104,7 @@ static const char XSD_UNSIGNED_BYTE_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#unsignedByte";
 static const char XSD_POSITIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#positiveInteger";
-static const char XSD_BOOLEAN_TYPE[] =
+constexpr inline char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
 static const char RDF_PREFIX[] = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 static const char VALUE_DATE_TIME_SEPARATOR[] = "T";
@@ -125,6 +131,12 @@ static const std::string WARNING_ASCII_ONLY_PREFIXES =
 // "literals, and the regex \". *\\n\" only matches at the end of a triple. "
 // "Most Turtle files fulfill these properties (e.g. that from Wikidata), "
 // "but not all";
+
+static const std::string WARNING_PARALLEL_PARSING =
+    "You specified \"parallel-parsing = true\", which enables faster parsing "
+    "for TTL files that don't include multiline literals with unescaped "
+    "newline characters and that have newline characters after the end of "
+    "triples.";
 static const std::string LOCALE_DEFAULT_LANG = "en";
 static const std::string LOCALE_DEFAULT_COUNTRY = "US";
 static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;
@@ -179,8 +191,12 @@ inline auto& RuntimeParameters() {
       // factor than the remaining time, then the sort is canceled with a
       // timeout exception.
       Double<"sort-estimate-cancellation-factor">{3.0},
-      SizeT<"cache-max-num-entries">{1000}, SizeT<"cache-max-size-gb">{30},
-      SizeT<"cache-max-size-gb-single-entry">{5}};
+      SizeT<"cache-max-num-entries">{1000},
+      SizeT<"cache-max-size-gb">{30},
+      SizeT<"cache-max-size-gb-single-entry">{5},
+      SizeT<"lazy-index-scan-queue-size">{20},
+      SizeT<"lazy-index-scan-num-threads">{10},
+      SizeT<"lazy-index-scan-max-size-materialization">{1'000'000}};
   return params;
 }
 
