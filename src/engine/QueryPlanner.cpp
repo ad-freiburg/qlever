@@ -1438,7 +1438,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     AD_THROW("At most 64 filters allowed at the moment.");
   }
   auto initialPlans = seedWithScansAndText(tg, children);
-  auto componentIndices = SubtreeGraph::getComponentIndices(initialPlans);
+  auto componentIndices = QueryGraph::computeConnectedComponents(initialPlans);
   ad_utility::HashMap<size_t, std::vector<SubtreePlan>> components;
   for (size_t i = 0; i < componentIndices.size(); ++i) {
     components[componentIndices.at(i)].push_back(std::move(initialPlans.at(i)));
@@ -1448,30 +1448,33 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     lastDpRowFromComponents.push_back(
         runDynamicProgrammingOnConnectedComponent(component, filters, tg));
   }
-  if (lastDpRowFromComponents.size() == 0) {
+  size_t numConnectedComponents = lastDpRowFromComponents.size();
+  if (numConnectedComponents == 0) {
     // This happens for example if there is a BIND right at the beginning of the
     // query
     lastDpRowFromComponents.emplace_back();
     return lastDpRowFromComponents;
-  } else if (lastDpRowFromComponents.size() == 1) {
+  }
+  if (numConnectedComponents == 1) {
+    // A cartesian product is not needed if there is only one component.
     applyFiltersIfPossible(lastDpRowFromComponents.back(), filters, true);
     return lastDpRowFromComponents;
-  } else {
-    std::vector<std::vector<SubtreePlan>> result;
-    result.emplace_back();
-    std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
-    std::ranges::move(
-        lastDpRowFromComponents |
-            std::views::transform([this](auto& vec) -> decltype(auto) {
-              return vec.at(findCheapestExecutionTree(vec));
-            }) |
-            std::views::transform(&SubtreePlan::_qet),
-        std::back_inserter(subtrees));
-    result.at(0).push_back(
-        makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
-    applyFiltersIfPossible(result.at(0), filters, true);
-    return result;
   }
+  // More than one connected component, set up a cartesian product.
+  std::vector<std::vector<SubtreePlan>> result;
+  result.emplace_back();
+  std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+  std::ranges::move(
+      lastDpRowFromComponents |
+          std::views::transform([this](auto& vec) -> decltype(auto) {
+            return vec.at(findCheapestExecutionTree(vec));
+          }) |
+          std::views::transform(&SubtreePlan::_qet),
+      std::back_inserter(subtrees));
+  result.at(0).push_back(
+      makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
+  applyFiltersIfPossible(result.at(0), filters, true);
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -2123,12 +2126,12 @@ auto QueryPlanner::createJoinAsTextFilter(
 }
 
 // _____________________________________________________________________
-std::vector<size_t> QueryPlanner::SubtreeGraph::getComponentIndicesImpl(
-    const std::vector<SubtreePlan>& subtrees) {
-  // Prepare the `nodes_` vector for the graph. We will have one node per
-  // subtree with initially no neighbors.
-  for (const auto& subtree : subtrees) {
-    nodes_.push_back(std::make_shared<Node>(&subtree));
+void QueryPlanner::QueryGraph::setupGraph(
+    const std::vector<SubtreePlan>& leafOperations) {
+  // Prepare the `nodes_` vector for the graph. We have one node for each leaf
+  // of what later becomes the `QueryExecutionTree`.
+  for (const auto& leafOperation : leafOperations) {
+    nodes_.push_back(std::make_shared<Node>(&leafOperation));
   }
 
   // Set up a hash map from variables to nodes that contain this variable.
@@ -2142,15 +2145,15 @@ std::vector<size_t> QueryPlanner::SubtreeGraph::getComponentIndicesImpl(
     }
     return result;
   }();
-  // Set up a hash map from nodes to their neighbors. Two nodes are neighbors if
-  // they share a variable. The neighbors are stored as hash sets so we don't
-  // need to worry about duplicates.
-  const ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> neighbors =
+  // Set up a hash map from nodes to their adjacentNodes. Two nodes are adjacent
+  // if they share a variable. The adjacentNodes are stored as hash sets so we
+  // don't need to worry about duplicates.
+  const ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> adjacentNodes =
       [&varToNode]() {
         ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> result;
-        for (auto& neighborList : varToNode | std::views::values) {
-          for (auto* n1 : neighborList) {
-            for (auto* n2 : neighborList) {
+        for (auto& nodesThatContainSameVar : varToNode | std::views::values) {
+          for (auto* n1 : nodesThatContainSameVar) {
+            for (auto* n2 : nodesThatContainSameVar) {
               if (n1 != n2) {
                 result[n1].insert(n2);
                 result[n2].insert(n1);
@@ -2160,36 +2163,33 @@ std::vector<size_t> QueryPlanner::SubtreeGraph::getComponentIndicesImpl(
         }
         return result;
       }();
-  // For each node move the set of neighbors from the global hash map to the
+  // For each node move the set of adjacentNodes from the global hash map to the
   // node itself.
   for (auto& node : nodes_) {
-    if (neighbors.contains(node.get())) {
-      node->neighbors_ = std::move(neighbors.at(node.get()));
+    if (adjacentNodes.contains(node.get())) {
+      node->adjacentNodes = std::move(adjacentNodes.at(node.get()));
     }
   }
-  // We have fully set up the graph, so we can just run the DFS and return its
-  // result.
-  return dfsForAllNodes();
 }
 
 // _______________________________________________________________
-void QueryPlanner::SubtreeGraph::dfs(Node* startNode, size_t componentIndex) {
+void QueryPlanner::QueryGraph::dfs(Node* startNode, size_t componentIndex) {
   // Simple recursive DFS.
-  if (startNode->discovered_) {
+  if (startNode->visited_) {
     return;
   }
   startNode->componentIndex_ = componentIndex;
-  startNode->discovered_ = true;
-  for (auto* neighbor : startNode->neighbors_) {
-    dfs(neighbor, componentIndex);
+  startNode->visited_ = true;
+  for (auto* adjacentNode : startNode->adjacentNodes) {
+    dfs(adjacentNode, componentIndex);
   }
 }
 // _______________________________________________________________
-std::vector<size_t> QueryPlanner::SubtreeGraph::dfsForAllNodes() {
+std::vector<size_t> QueryPlanner::QueryGraph::dfsForAllNodes() {
   std::vector<size_t> result;
   size_t nextIndex = 0;
   for (auto& node : nodes_) {
-    if (node->discovered_) {
+    if (node->visited_) {
       // The node is part of a connected component that was already found.
       result.push_back(node->componentIndex_);
     } else {

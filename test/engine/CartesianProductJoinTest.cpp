@@ -19,33 +19,34 @@ using ad_utility::source_location;
 // with results create from the `inputs`. The children will have disjoint sets
 // of variabled as required by the `CartesianProductJoin`. If
 // `useLimitInSuboperations` is true, then the `ValuesForTesting` support the
-// LIMIT operation directly (This makes a difference in the `computeResult`
+// LIMIT operation directly (this makes a difference in the `computeResult`
 // method of `CartesianProductJoin`).
 CartesianProductJoin makeJoin(const std::vector<VectorTable>& inputs,
                               bool useLimitInSuboperations = false) {
   auto qec = ad_utility::testing::getQec();
-  std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+  std::vector<std::shared_ptr<QueryExecutionTree>> valueOperations;
   size_t i = 0;
   auto v = [&i]() mutable { return Variable{"?" + std::to_string(i++)}; };
   for (const auto& input : inputs) {
     std::vector<std::optional<Variable>> vars;
     std::generate_n(std::back_inserter(vars),
                     input.empty() ? 0 : input.at(0).size(), std::ref(v));
-    subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+    valueOperations.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector(input), std::move(vars),
         useLimitInSuboperations));
   }
   // Test that passing the same subtree in twice is illegal because it leads to
   // non-disjoint variable sets.
-  if (!subtrees.empty() && i > 0) {
-    auto subtrees2 = subtrees;
-    subtrees2.insert(subtrees2.end(), subtrees.begin(), subtrees.end());
+  if (!valueOperations.empty() && i > 0) {
+    auto subtrees2 = valueOperations;
+    subtrees2.insert(subtrees2.end(), valueOperations.begin(),
+                     valueOperations.end());
     EXPECT_ANY_THROW(CartesianProductJoin(qec, std::move(subtrees2)));
   }
-  return CartesianProductJoin{qec, std::move(subtrees)};
+  return CartesianProductJoin{qec, std::move(valueOperations)};
 }
 
-// Test that a cartesian product between the `inputs` yields the `expected`
+// Test that a Cartesian product between the `inputs` yields the `expected`
 // result. For the meaning of the `useLimitInSuboperations` see `makeJoin`
 // above.
 void testCartesianProductImpl(VectorTable expected,
@@ -98,11 +99,11 @@ TEST(CartesianProductJoin, computeResult) {
   // Fails because of the nullptrs.
   EXPECT_ANY_THROW(CartesianProductJoin(getQec(), {nullptr, nullptr}));
 
-  // Join with a single result
+  // Join with a single result.
   VectorTable v2{{1, 2, 3, 7}, {4, 5, 6, 7}, {7, 8, 9, 7}};
   testCartesianProduct(v2, {v, {{7}}});
 
-  // A classic pattern
+  // A classic pattern.
   testCartesianProduct({{0, 2, 4},
                         {1, 2, 4},
                         {0, 3, 4},
@@ -112,6 +113,7 @@ TEST(CartesianProductJoin, computeResult) {
                         {0, 3, 5},
                         {1, 3, 5}},
                        {{{0}, {1}}, {{2}, {3}}, {{4}, {5}}});
+
   // Heterogenous sizes.
   testCartesianProduct(
       {{0, 2, 4}, {1, 2, 4}, {0, 2, 5}, {1, 2, 5}, {0, 2, 6}, {1, 2, 6}},
@@ -141,7 +143,7 @@ TEST(CartesianProductJoin, basicMemberFunctions) {
 }
 
 // Test that the `variableToColumnMap` is also correct if the sub results have
-// columns that are not connected to a Variable (can happen when subqueries are
+// columns that are not connected to a variable (can happen when subqueries are
 // present).
 TEST(CartesianProductJoin, variableColumnMap) {
   auto qec = getQec();

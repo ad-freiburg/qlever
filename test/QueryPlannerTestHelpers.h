@@ -99,8 +99,7 @@ inline auto IndexScanFromStrings =
                    allowedPermutations);
 };
 
-// The following Join algorithms are all symmetric wrt their children, so the
-// order is not important.
+// For the following Join algorithms the order of the children is not important.
 inline auto MultiColumnJoin = MatchTypeAndUnorderedChildren<::MultiColumnJoin>;
 inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
 inline auto CartesianProductJoin =

@@ -32,17 +32,6 @@ class ValuesForTesting : public Operation {
         supportsLimit_{supportsLimit} {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
-  /*
-  explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
-                            const std::vector<Variable>& variables,
-                            bool supportsLimit = false)
-      : Operation{ctx},
-        table_{std::move(table)},
-        variables_{convertVars(variables)},
-        supportsLimit_{supportsLimit} {
-    AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
-  }
-   */
 
   // ___________________________________________________________________________
   ResultTable computeResult() override {

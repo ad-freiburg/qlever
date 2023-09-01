@@ -165,16 +165,16 @@ class QueryPlanner {
     void addAllNodes(uint64_t otherNodes);
   };
 
-  // A helper class to find connected componenents of an RDF query using DFS
-  class SubtreeGraph {
+  // A helper class to find connected componenents of an RDF query using DFS.
+  class QueryGraph {
    private:
     // A simple class to represent a graph node as well as some data for a DFS.
     class Node {
      public:
       const SubtreePlan* plan_;
-      ad_utility::HashSet<Node*> neighbors_{};
-      // Was this node already discovered during DFS.
-      bool discovered_ = false;
+      ad_utility::HashSet<Node*> adjacentNodes{};
+      // Was this node already visited during DFS.
+      bool visited_ = false;
       // Index of the connected component of this node (will be set to a value
       // >= 0 by the DFS.
       int64_t componentIndex_ = -1;
@@ -185,28 +185,28 @@ class QueryPlanner {
     std::vector<std::shared_ptr<Node>> nodes_;
 
     // Default constructor
-    SubtreeGraph() = default;
+    QueryGraph() = default;
 
    public:
     // Return the indices of the connected component for each of the `node`s.
     // The return value will have exactly the same size as `node`s and
     // `result[i]` will be the index of the connected component of `nodes[i]`.
     // The connected components will be contiguous and start at 0.
-    static std::vector<size_t> getComponentIndices(
+    static std::vector<size_t> computeConnectedComponents(
         const std::vector<SubtreePlan>& nodes) {
-      SubtreeGraph graph;
-      return graph.getComponentIndicesImpl(nodes);
+      QueryGraph graph;
+      graph.setupGraph(nodes);
+      return graph.dfsForAllNodes();
     }
 
    private:
-    // The actual implementation of `getComponentIndicesImpl`. First build a
-    // graph from the `subtrees` and then run DFS and return the result.
-    std::vector<size_t> getComponentIndicesImpl(
-        const std::vector<SubtreePlan>& subtrees);
+    // The actual implementation of `setupGraph`. First build a
+    // graph from the `leafOperations` and then run DFS and return the result.
+    void setupGraph(const std::vector<SubtreePlan>& leafOperations);
 
     // Run a single DFS startint at the `startNode`. All nodes that are
     // connected to this node (including the node itself) will have
-    // `discovered_==true` and  `componentIndex_=componentIndex` after the call.
+    // `visited_==true` and  `componentIndex_=componentIndex` after the call.
     // Only works if `dfs` hasn't been called before on the `startNode` or any
     // node connected to it. (Exceptions to this rule are the recursive calls
     // from `dfs` itself).
@@ -430,6 +430,10 @@ class QueryPlanner {
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
       const vector<vector<SubtreePlan>>& children);
   std::vector<QueryPlanner::SubtreePlan>
+
+  // Internal subroutine of `fillDpTab` that  only works on a single connected
+  // component of the input. Throws if the subtrees in the `connectedComponent`
+  // are not in fact connected (via their variables).
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
       const vector<SparqlFilter>& filters, const TripleGraph& tg);

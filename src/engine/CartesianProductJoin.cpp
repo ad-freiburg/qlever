@@ -59,8 +59,9 @@ size_t CartesianProductJoin::getResultWidth() const {
 size_t CartesianProductJoin::getCostEstimate() {
   auto childSizes =
       childView() | std::views::transform(&Operation::getCostEstimate);
-  return getSizeEstimate() +
-         std::accumulate(childSizes.begin(), childSizes.end(), 0ul);
+  return getSizeEstimate() + std::accumulate(childSizes.begin(),
+                                             childSizes.end(), 0ul,
+                                             std::plus{});
 }
 
 // ____________________________________________________________________________
@@ -82,26 +83,26 @@ bool CartesianProductJoin::knownEmptyResult() {
   return std::ranges::any_of(childView(), &Operation::knownEmptyResult);
 }
 
-// Copy each element from the `inputColumn` `stride` times to the
+// Copy each element from the `inputColumn` `groupSize` times to the
 // `targetColumn`. Repeat until the `targetColumn` is copletely filled. Skip the
 // first `offset` write operations to the `targetColumn`. Call `checkForTimeout`
 // after each write.
 static void writeResultColumn(std::span<Id> targetColumn,
-                              std::span<const Id> inputColumn, size_t stride,
+                              std::span<const Id> inputColumn, size_t groupSize,
                               size_t offset, auto& checkForTimeout) {
-  // Copy each element from the input `stride` times, repeat until the
-  // result is completely filled.
+  // Copy each element from the `inputColumn` `groupSize` times to
+  // the `targetColumn`, repeat until the `targetColumn` is completely filled.
   size_t numRowsWritten = 0;
   const size_t inputSize = inputColumn.size();
   const size_t targetSize = targetColumn.size();
   // If we have a nonzero offset then we have to compute at which element
   // from the input we have to start the copying and how many repetitions of
   // this element have already happened "before" the offset.
-  size_t firstInputElementIdx = offset % (inputSize * stride) / stride;
-  size_t inputElementInGroupStartIdx = offset % stride;
+  size_t firstInputElementIdx = offset % (inputSize * groupSize) / groupSize;
+  size_t groupStartIdx = offset % groupSize;
   while (true) {
     for (size_t i = firstInputElementIdx; i < inputSize; ++i) {
-      for (size_t u = inputElementInGroupStartIdx; u < stride; ++u) {
+      for (size_t u = groupStartIdx; u < groupSize; ++u) {
         if (numRowsWritten == targetSize) {
           return;
         }
@@ -111,7 +112,7 @@ static void writeResultColumn(std::span<Id> targetColumn,
       }
       // only the first round might be incomplete because of the offset, all
       // subsequent rounds start at 0.
-      inputElementInGroupStartIdx = 0;
+      groupStartIdx = 0;
     }
     // only the first round might be incomplete because of the offset, all
     // subsequent rounds start at 0.
@@ -134,12 +135,7 @@ ResultTable CartesianProductJoin::computeResult() {
     limitIfPresent = std::nullopt;
   }
 
-  // We currently materialize all child results in advance. We could also
-  // materialize them lazily, but then we wouldn't know the total result size in
-  // advance.
-  // TODO<joka921> revisit this once we have implemented lazy results or results
-  // that don't need to copy when being dynamically resized.
-
+  // Get all child results (possibly with limit, see above).
   for (auto& child : childView()) {
     if (limitIfPresent.has_value() && child.supportsLimit()) {
       child.setLimit(limitIfPresent.value());
@@ -171,9 +167,9 @@ ResultTable CartesianProductJoin::computeResult() {
 
   auto checkForTimeout = checkTimeoutAfterNCallsFactory(1'000'000);
   if (totalSizeIncludingLimit != 0) {
-    // A `stride` of N means that each row of the current result is copied N
+    // A `groupSize` of N means that each row of the current result is copied N
     // times adjacent to each other.
-    size_t stride = 1;
+    size_t groupSize = 1;
     // The index of the next column in the output that hasn't been written so
     // far.
     size_t resultColIdx = 0;
@@ -181,10 +177,11 @@ ResultTable CartesianProductJoin::computeResult() {
       const auto& input = subResultPtr->idTable();
       for (const auto& inputCol : input.getColumns()) {
         decltype(auto) resultCol = result.getColumn(resultColIdx);
-        writeResultColumn(resultCol, inputCol, stride, offset, checkForTimeout);
+        writeResultColumn(resultCol, inputCol, groupSize, offset,
+                          checkForTimeout);
         ++resultColIdx;
       }
-      stride *= input.numRows();
+      groupSize *= input.numRows();
     }
   }
 

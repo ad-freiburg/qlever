@@ -143,6 +143,8 @@ class ResultTable {
   // (from the previous separate local vocabularies to the new merged one).
   static SharedLocalVocabWrapper getSharedLocalVocabFromNonEmptyOf(
       const ResultTable& resultTable1, const ResultTable& resultTable2);
+
+  // Overload for more than two `ResultTables`
   template <std::ranges::forward_range R>
   requires std::convertible_to<std::ranges::range_value_t<R>,
                                const ResultTable&>
@@ -157,19 +159,18 @@ class ResultTable {
     if (numNonEmptyVocabs > 1) {
       throw std::runtime_error(
           "Merging of more than one non-empty local vocabularies is currently "
-          "not "
-          "supported, please contact the developers");
+          "not supported, please contact the developers");
     }
     // The static casts in the following are needed to make this code work for
     // types that are implicitly convertible to `const ResultTable&`, in
     // particular `std::reference_wrapper<const ResultTable>`.
-    using C = const ResultTable&;
     if (numNonEmptyVocabs == 0) {
       return SharedLocalVocabWrapper{
-          static_cast<C>(*subResults.begin()).localVocab_};
+          static_cast<const ResultTable&>(*subResults.begin()).localVocab_};
     } else {
       return SharedLocalVocabWrapper{
-          static_cast<C>(*std::ranges::find_if(subResults, hasNonEmptyVocab))
+          static_cast<const ResultTable&>(
+              *std::ranges::find_if(subResults, hasNonEmptyVocab))
               .localVocab_};
     }
   }
