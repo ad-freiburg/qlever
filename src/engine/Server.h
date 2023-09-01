@@ -20,6 +20,7 @@
 #include "util/Timer.h"
 #include "util/http/HttpServer.h"
 #include "util/http/streamable_body.h"
+#include "util/http/websocket/WebSocketTracker.h"
 #include "util/json.h"
 
 using nlohmann::json;
@@ -62,6 +63,8 @@ class Server {
 
   bool enablePatternTrick_;
 
+  ad_utility::websocket::WebSocketTracker* webSocketTracker_ = nullptr;
+
   // Semaphore for the number of queries that can be processed at once.
   mutable std::counting_semaphore<std::numeric_limits<int>::max()>
       queryProcessingSemaphore_;
@@ -80,11 +83,8 @@ class Server {
   /// \param req The HTTP request.
   /// \param send The action that sends a http:response. (see the
   ///             `HttpServer.h` for documentation).
-  /// \param webSocketManager Reference to the object managing WebSocket
-  ///                         connections for this Server.
   Awaitable<void> process(
-      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-      ad_utility::websocket::WebSocketManager& webSocketManager);
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
   /// Handle a http request that asks for the processing of a query.
   /// \param params The key-value-pairs  sent in the HTTP GET request. When this
@@ -95,12 +95,9 @@ class Server {
   /// \param request The HTTP request.
   /// \param send The action that sends a http:response (see the
   ///             `HttpServer.h` for documentation).
-  /// \param webSocketManager Reference to the object managing WebSocket
-  ///                         connections for this Server.
   Awaitable<void> processQuery(
       const ParamValueMap& params, ad_utility::Timer& requestTimer,
-      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-      ad_utility::websocket::WebSocketManager& webSocketManager);
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
@@ -123,7 +120,8 @@ class Server {
   /// pseudo-random id will be chosen by the server. Note that this id is not
   /// communicated to the client in any way. It ensures that every query has a
   /// unique id and therefore that the code doesn't need to check for an empty
-  /// case.
+  /// case. In the case of conflict when using a manual id, a
+  /// `QueryAlreadyInUseError` exception is thrown.
   ///
   /// \param request The HTTP request to extract the id from.
   ///

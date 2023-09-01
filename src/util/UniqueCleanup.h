@@ -11,17 +11,26 @@
 
 namespace ad_utility::unique_cleanup {
 
-/// Special type of deleter class that allows to call a function
+/// Wrapper class that allows to call a function
 /// just before the wrapper value T is destroyed.
 template <std::move_constructible T>
 class UniqueCleanup {
   using type = std::remove_reference_t<T>;
 
+  /// Boolean indicating if object was not moved out of
   bool active_ = true;
+  /// Wrapped value
   type value_;
+  /// Cleanup function. Only run once
   std::function<void(type&&)> function_;
 
  public:
+  /// Accepts a value and a function that is called just before destruction.
+  /// \param value Value to wrap.
+  /// \param function The function to run just before destruction.
+  ///                 Note: Make sure the function doesn't capture the this
+  ///                 pointer as this may lead to segfaults because the pointer
+  ///                 will point to the old object after moving.
   UniqueCleanup(type&& value, std::function<void(type&&)> function)
       : value_{std::forward<type>(value)}, function_{std::move(function)} {}
 
@@ -37,6 +46,7 @@ class UniqueCleanup {
   UniqueCleanup(UniqueCleanup&& cleanupDeleter) noexcept
       : value_{std::move(cleanupDeleter.value_)},
         function_{std::move(cleanupDeleter.function_)} {
+    // Make sure active is false after moving from another object
     cleanupDeleter.active_ = false;
   }
 

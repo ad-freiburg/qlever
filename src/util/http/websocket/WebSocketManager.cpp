@@ -71,7 +71,9 @@ net::awaitable<void> WebSocketManager::connectionLifecycle(
 
     auto strand = net::make_strand(ws.get_executor());
 
-    // experimental operators
+    // Experimental operators, see
+    // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html
+    // for more information
     co_await (
         net::co_spawn(strand, waitForServerEvents(ws, queryId, strand),
                       net::use_awaitable) &&
@@ -105,7 +107,8 @@ WebSocketTracker& WebSocketManager::getWebSocketTracker() {
 }
 
 // TODO<C++23> use std::expected<void, ErrorResponse>
-std::optional<http::response<http::string_body>> getErrorResponseIfPathIsValid(
+std::optional<http::response<http::string_body>>
+WebSocketManager::getErrorResponseIfPathIsInvalid(
     const http::request<http::string_body>& request) {
   auto path = request.target();
 

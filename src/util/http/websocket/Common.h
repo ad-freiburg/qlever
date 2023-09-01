@@ -26,7 +26,10 @@ class QueryId {
   /// Construct this object with the passed string
   /// Note that this does *not* ensure uniqueness.
   static QueryId idFromString(std::string id) { return QueryId{std::move(id)}; }
-  bool empty() const noexcept { return id_.empty(); }
+
+  /// Checks if the id is empty. Because empty ids are not allowed,
+  /// this is usually a good indicator if the object has been moved out of
+  [[nodiscard]] bool empty() const noexcept { return id_.empty(); }
 
   template <typename H>
   friend H AbslHashValue(H h, const QueryId& c) {
@@ -47,7 +50,7 @@ class OwningQueryId {
   friend class QueryRegistry;
 
   OwningQueryId(QueryId id, std::function<void(const QueryId&)> unregister)
-      : id_(std::move(id), std::move(unregister)) {
+      : id_{std::move(id), std::move(unregister)} {
     AD_CORRECTNESS_CHECK(!id_->empty());
   }
 
@@ -74,13 +77,7 @@ class QueryRegistry {
   ///         std::optional if the id already existed before.
   std::optional<OwningQueryId> uniqueIdFromString(std::string id) {
     auto queryId = QueryId::idFromString(std::move(id));
-    bool success = registry_.withWriteLock([&queryId](auto& registry) {
-      if (registry.count(queryId)) {
-        return false;
-      }
-      registry.insert(queryId);
-      return true;
-    });
+    bool success = registry_.wlock()->insert(queryId).second;
     if (success) {
       return OwningQueryId{std::move(queryId), [this](const QueryId& qid) {
                              AD_CORRECTNESS_CHECK(!qid.empty());

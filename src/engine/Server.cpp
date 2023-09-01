@@ -91,9 +91,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
   // Function that handles a request asynchronously, will be passed as argument
   // to `HttpServer` below.
   auto httpSessionHandler =
-      [this](auto request, auto&& send,
-             ad_utility::websocket::WebSocketManager& webSocketManager)
-      -> boost::asio::awaitable<void> {
+      [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
     // Version of send with maximally permissive CORS header (which allows the
     // client that receives the response to do with it what it wants).
     // NOTE: For POST and GET requests, the "allow origin" header is sufficient,
@@ -125,7 +123,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
     // in the catch block, hence the workaround with the `exceptionErrorMsg`.
     std::optional<std::string> exceptionErrorMsg;
     try {
-      co_await process(request, sendWithAccessControlHeaders, webSocketManager);
+      co_await process(request, sendWithAccessControlHeaders);
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
     }
@@ -141,12 +139,17 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
   // the "socket already in use" error appears quickly.
   auto httpServer =
       HttpServer{port_, "0.0.0.0", numThreads_, std::move(httpSessionHandler)};
+  webSocketTracker_ = &httpServer.getWebSocketTracker();
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations);
 
   // Start listening for connections on the server.
   httpServer.run();
+
+  // This will probably never be executed, but to ensure there will never
+  // be any dangling pointers, set it to zero after use.
+  webSocketTracker_ = nullptr;
 }
 
 // _____________________________________________________________________________
@@ -206,8 +209,7 @@ ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
 
 // _____________________________________________________________________________
 Awaitable<void> Server::process(
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-    ad_utility::websocket::WebSocketManager& webSocketManager) {
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
   using namespace ad_utility::httpUtils;
 
   // Log some basic information about the request. Start with an empty line so
@@ -367,7 +369,7 @@ Awaitable<void> Server::process(
           "Parameter \"query\" must not have an empty value");
     }
     co_return co_await processQuery(parameters, requestTimer,
-                                    std::move(request), send, webSocketManager);
+                                    std::move(request), send);
   }
 
   // If there was no "query", but any of the URL parameters processed before
@@ -507,20 +509,21 @@ ad_utility::websocket::common::OwningQueryId Server::getQueryId(
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-    ad_utility::websocket::WebSocketManager& webSocketManager) {
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
   using namespace ad_utility::httpUtils;
   AD_CONTRACT_CHECK(params.contains("query"));
   const auto& query = params.at("query");
   AD_CONTRACT_CHECK(!query.empty());
 
-  http::status responseStatus = http::status::ok;
-
-  auto sendJson = [&request, &send, &responseStatus](
-                      const json& jsonString) -> boost::asio::awaitable<void> {
+  auto sendJson =
+      [&request, &send](
+          const json& jsonString,
+          http::status responseStatus) -> boost::asio::awaitable<void> {
     auto response = createJsonResponse(jsonString, request, responseStatus);
     co_return co_await send(std::move(response));
   };
+
+  http::status responseStatus = http::status::ok;
 
   // Put the whole query processing in a try-catch block. If any exception
   // occurs, log the error message and send a JSON response with all the details
@@ -613,13 +616,10 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
-    // TODO only the tracker needs to be passed to here, not the manager
+    AD_CORRECTNESS_CHECK(webSocketTracker_ != nullptr);
     auto webSocketNotifier =
         co_await ad_utility::websocket::WebSocketNotifier::create(
-            getQueryId(request), webSocketManager.getWebSocketTracker());
-    auto notifierFunction = [&webSocketNotifier](std::string json) {
-      webSocketNotifier(std::move(json));
-    };
+            getQueryId(request), *webSocketTracker_);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query. Start the shared `timeoutTimer` here
     // to also include the query planning.
@@ -630,7 +630,7 @@ boost::asio::awaitable<void> Server::processQuery(
     // certain media type is not supported.
     QueryExecutionContext qec(
         index_, &cache_, allocator_, sortPerformanceEstimator_,
-        std::move(notifierFunction), pinSubtrees, pinResult);
+        std::ref(webSocketNotifier), pinSubtrees, pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(enablePatternTrick_);
     queryExecutionTree = qp.createExecutionTree(pq);
@@ -691,7 +691,7 @@ boost::asio::awaitable<void> Server::processQuery(
           return ExportQueryExecutionTrees::computeResultAsJSON(
               pq, qet, requestTimer, maxSend, mediaType.value());
         });
-        co_await sendJson(std::move(responseString));
+        co_await sendJson(std::move(responseString), responseStatus);
       } break;
       default:
         // This should never happen, because we have carefully restricted the
@@ -751,7 +751,7 @@ boost::asio::awaitable<void> Server::processQuery(
       errorResponseJson["runtimeInformation"] = nlohmann::ordered_json(
           queryExecutionTree->getRootOperation()->getRuntimeInfo());
     }
-    co_return co_await sendJson(errorResponseJson);
+    co_return co_await sendJson(errorResponseJson, responseStatus);
   }
 }
 

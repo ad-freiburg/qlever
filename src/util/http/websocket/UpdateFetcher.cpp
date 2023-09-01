@@ -6,7 +6,7 @@
 
 namespace ad_utility::websocket {
 
-net::awaitable<UpdateFetcher::payload_type> UpdateFetcher::waitForEvent() {
+net::awaitable<UpdateFetcher::PayloadType> UpdateFetcher::waitForEvent() {
   co_await net::post(socketStrand_, net::use_awaitable);
   if (!distributor_) {
     auto distributor = co_await webSocketTracker_.waitForDistributor(queryId_);

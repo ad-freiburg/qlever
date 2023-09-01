@@ -15,8 +15,9 @@ using StrandType = net::strand<net::any_io_executor>;
 
 /// Class that provides an interface for boost::asio, so a websocket connection
 /// can "asynchronously wait" for an update of a specified query to occur.
+/// There is one instance of this class for every connected websocket.
 class UpdateFetcher {
-  using payload_type = std::shared_ptr<const std::string>;
+  using PayloadType = std::shared_ptr<const std::string>;
 
   WebSocketTracker& webSocketTracker_;
   const QueryId& queryId_;
@@ -35,7 +36,7 @@ class UpdateFetcher {
   /// If an update occurred for the given query since the last time this was
   /// called this resumes immediately. Otherwise it will wait
   /// (in the boost::asio world) for an update to occur and resume then.
-  net::awaitable<payload_type> waitForEvent();
+  net::awaitable<PayloadType> waitForEvent();
 };
 
 }  // namespace ad_utility::websocket

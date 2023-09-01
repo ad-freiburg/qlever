@@ -57,10 +57,10 @@ class WebSocketManager {
                                         http::request<http::string_body>);
 
   WebSocketTracker& getWebSocketTracker();
-};
 
-/// Helper function to provide a proper error response if the provided URL
-/// path is not accepted by the server.
-std::optional<http::response<http::string_body>> getErrorResponseIfPathIsValid(
-    const http::request<http::string_body>&);
+  /// Helper function to provide a proper error response if the provided URL
+  /// path is not accepted by the server.
+  static std::optional<http::response<http::string_body>>
+  getErrorResponseIfPathIsInvalid(const http::request<http::string_body>&);
+};
 };  // namespace ad_utility::websocket

@@ -89,6 +89,10 @@ class HttpServer {
     }
   }
 
+  ad_utility::websocket::WebSocketTracker& getWebSocketTracker() noexcept {
+    return webSocketManager_.getWebSocketTracker();
+  }
+
   /// Run the server using the specified number of threads. Note that this
   /// function never returns, unless the Server crashes. The second argument
   /// limits the number of connections/sessions that may be handled concurrently
@@ -225,8 +229,8 @@ class HttpServer {
         // Let request be handled by the webSocketManager if the HTTP
         // request is a WebSocket handshake
         if (beast::websocket::is_upgrade(req)) {
-          auto errorResponse =
-              ad_utility::websocket::getErrorResponseIfPathIsValid(req);
+          auto errorResponse = ad_utility::websocket::WebSocketManager::
+              getErrorResponseIfPathIsInvalid(req);
           if (errorResponse) {
             co_await sendMessage(*errorResponse);
           } else {
@@ -243,7 +247,7 @@ class HttpServer {
 
           // Handle the http request. Note that `httpHandler_` is also
           // responsible for sending the message via the `sendMessage` lambda.
-          co_await httpHandler_(std::move(req), sendMessage, webSocketManager_);
+          co_await httpHandler_(std::move(req), sendMessage);
         }
 
         // The closing of the stream is done in the exception handler.
