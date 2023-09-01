@@ -5,18 +5,18 @@
 #ifndef QLEVER_WEBSOCKETNOTIFIER_H
 #define QLEVER_WEBSOCKETNOTIFIER_H
 
-#include "util/CleanupDeleter.h"
+#include "util/UniqueCleanup.h"
 #include "util/http/websocket/Common.h"
 #include "util/http/websocket/WebSocketManager.h"
 
 namespace ad_utility::websocket {
-using cleanup_deleter::CleanupDeleter;
+using unique_cleanup::UniqueCleanup;
 
 /// This class wraps bundles an OwningQueryId and a reference to a
 /// WebSocketManager together. On Destruction this automatically notifies
 /// the WebSocketManager that the query was completed.
 class WebSocketNotifier {
-  CleanupDeleter<common::OwningQueryId> owningQueryId_;
+  UniqueCleanup<common::OwningQueryId> owningQueryId_;
   std::shared_ptr<QueryToSocketDistributor> distributor_;
 
   WebSocketNotifier(common::OwningQueryId owningQueryId,

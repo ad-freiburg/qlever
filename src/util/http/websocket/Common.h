@@ -8,10 +8,10 @@
 #include <random>
 #include <type_traits>
 
-#include "util/CleanupDeleter.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Synchronized.h"
+#include "util/UniqueCleanup.h"
 
 // Provides types required by all the other *.cpp files in this directory
 // and a select few other places
@@ -42,7 +42,7 @@ class QueryId {
 /// Therefore it is not copyable and removes itself from said registry
 /// on destruction.
 class OwningQueryId {
-  cleanup_deleter::CleanupDeleter<QueryId> id_;
+  unique_cleanup::UniqueCleanup<QueryId> id_;
 
   friend class QueryRegistry;
 
