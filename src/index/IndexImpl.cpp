@@ -4,8 +4,6 @@
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./IndexImpl.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -13,6 +11,7 @@
 #include <optional>
 #include <unordered_map>
 
+#include "./IndexImpl.h"
 #include "CompilationInfo.h"
 #include "absl/strings/str_join.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -807,17 +806,18 @@ void IndexImpl::readConfiguration() {
   std::vector<std::string> prefixesExternal;
   config.addOption("prefixes-external", "", &prefixesExternal, {});
 
+  decltype(auto) localeManager = config.addSubManager({"locale"s});
   // TODO Write a description.
   std::string lang;
-  config.addOption({"locale"s, "language"s}, "", &lang);
+  localeManager.addOption("language", "", &lang);
 
   // TODO Write a description.
   std::string country;
-  config.addOption({"locale"s, "country"s}, "", &country);
+  localeManager.addOption("country", "", &country);
 
   // TODO Write a description.
   bool ignorePunctuation;
-  config.addOption({"locale"s, "ignore-punctuation"s}, "", &ignorePunctuation);
+  localeManager.addOption("ignore-punctuation", "", &ignorePunctuation);
 
   // TODO Write a description.
   std::vector<std::string> languagesInternal;
@@ -829,17 +829,22 @@ void IndexImpl::readConfiguration() {
   config.addOption("num-objects-normal", "", &numObjectsNormal_);
   config.addOption("num-triples-normal", "", &numTriplesNormal_);
 
-  // TODO Make this cleaner, than just catching all the fields of the object.
+  /*
+  We check those options manually below, but add the options anyway for
+  documentation and parsing purpose. (A config manager doesn't allow any
+  options to be passed, that are not registered within him.)
+  */
+  decltype(auto) indexFormatVersionManager =
+      config.addSubManager({"index-format-version"s});
   size_t indexFormatVersionPullRequestNumber;
-  config.addOption(
-      {"index-format-version"s, "pull-request-number"s},
-      "The number of the pull request that changed the index format most "
-      "recently.",
-      &indexFormatVersionPullRequestNumber);
+  indexFormatVersionManager.addOption("pull-request-number",
+                                      "The number of the pull request that "
+                                      "changed the index format most recently.",
+                                      &indexFormatVersionPullRequestNumber);
   std::string indexFormatVersionDate;
-  config.addOption({"index-format-version"s, "date"s},
-                   "The date of the last breaking change of the index format.",
-                   &indexFormatVersionDate);
+  indexFormatVersionManager.addOption(
+      "date", "The date of the last breaking change of the index format.",
+      &indexFormatVersionDate);
 
   configurationJson_ = fileToJson(onDiskBase_ + CONFIGURATION_FILE);
 
@@ -975,25 +980,26 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   std::vector<std::string> languagesInternal;
   config.addOption("languages-internal", "", &languagesInternal, {"en"});
 
+  decltype(auto) localeManager = config.addSubManager({"locale"s});
   // TODO Write a description.
   std::string lang;
-  decltype(auto) langOption = config.addOption({"locale"s, "language"s}, "",
-                                               &lang, LOCALE_DEFAULT_LANG);
+  decltype(auto) langOption =
+      localeManager.addOption("language", "", &lang, LOCALE_DEFAULT_LANG);
 
   // TODO Write a description.
   std::string country;
-  decltype(auto) countryOption = config.addOption(
-      {"locale"s, "country"s}, "", &country, LOCALE_DEFAULT_COUNTRY);
+  decltype(auto) countryOption =
+      localeManager.addOption("country", "", &country, LOCALE_DEFAULT_COUNTRY);
 
   // TODO Write a description.
   bool ignorePunctuation;
   decltype(auto) ignorePunctuationOption =
-      config.addOption({"locale"s, "ignore-punctuation"s}, "",
-                       &ignorePunctuation, LOCALE_DEFAULT_IGNORE_PUNCTUATION);
+      localeManager.addOption("ignore-punctuation", "", &ignorePunctuation,
+                              LOCALE_DEFAULT_IGNORE_PUNCTUATION);
 
   // Validator for the entries under `locale`. Either they all must use the
   // default value, or all must be set at runtime.
-  config.addOptionValidator(
+  localeManager.addOptionValidator(
       [](const ad_utility::ConfigOption& langOpt,
          const ad_utility::ConfigOption& countryOpt,
          const ad_utility::ConfigOption& ignorePunctuationOpt) {
