@@ -19,13 +19,6 @@ class ValuesForTesting : public Operation {
   std::vector<std::optional<Variable>> variables_;
   bool supportsLimit_;
 
-  std::vector<std::optional<Variable>> convertVars(
-      const std::vector<Variable>& input) {
-    std::vector<std::optional<Variable>> result;
-    std::ranges::copy(input, std::back_inserter(result));
-    return result;
-  }
-
  public:
   // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number

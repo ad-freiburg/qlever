@@ -1173,25 +1173,21 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
 }
 
 // _____________________________________________________________________________
-std::array<vector<QueryPlanner::SubtreePlan>, 2> QueryPlanner::merge(
+vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
     const vector<QueryPlanner::SubtreePlan>& a,
     const vector<QueryPlanner::SubtreePlan>& b,
-    const QueryPlanner::TripleGraph& tg, bool returnUnjoinableFromB) const {
+    const QueryPlanner::TripleGraph& tg) const {
   // TODO: Add the following features:
   // If a join is supposed to happen, always check if it happens between
   // a scan with a relatively large result size
   // esp. with an entire relation but also with something like is-a Person
   // If that is the case look at the size estimate for the other side,
   // if that is rather small, replace the join and scan by a combination.
-  std::vector<char> joinableInA(a.size(), char{0});
-  std::vector<char> joinableInB(b.size(), char{0});
   ad_utility::HashMap<string, vector<SubtreePlan>> candidates;
   // Find all pairs between a and b that are connected by an edge.
   LOG(TRACE) << "Considering joins that merge " << a.size() << " and "
              << b.size() << " plans...\n";
-  size_t idxA = 0;
   for (const auto& ai : a) {
-    size_t idx = 0;
     for (const auto& bj : b) {
       LOG(TRACE) << "Creating join candidates for " << ai._qet->asString()
                  << "\n and " << bj._qet->asString() << '\n';
@@ -1200,11 +1196,7 @@ std::array<vector<QueryPlanner::SubtreePlan>, 2> QueryPlanner::merge(
         candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
             .emplace_back(std::move(plan));
       }
-      joinableInB[idx] |= static_cast<char>(!v.empty());
-      joinableInA[idxA] |= static_cast<char>(!v.empty());
-      ++idx;
     }
-    ++idxA;
   }
 
   // Duplicates are removed if the same triples are touched,
@@ -1235,21 +1227,7 @@ std::array<vector<QueryPlanner::SubtreePlan>, 2> QueryPlanner::merge(
   }
 
   LOG(TRACE) << "Got " << prunedPlans.size() << " pruned plans from \n";
-  // TODO<joka921> We should refactor the QueryPlanner in the following way:
-  // First find the connected components of the query (via a Graph), and then
-  // run the planning on those components and THEN create a
-  std::vector<SubtreePlan> unjoinable;
-  if (returnUnjoinableFromB) {
-    for (size_t i = 0; i < joinableInB.size(); ++i) {
-      if (!static_cast<bool>(joinableInB[i])) {
-        if (&a == &b && joinableInA[i]) {
-          continue;
-        }
-        unjoinable.push_back(b[i]);
-      }
-    }
-  }
-  return {std::move(prunedPlans), std::move(unjoinable)};
+  return prunedPlans;
 }
 
 // _____________________________________________________________________________
@@ -1420,13 +1398,9 @@ void QueryPlanner::applyFiltersIfPossible(
 vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, const vector<SparqlFilter>& filters,
     const vector<vector<QueryPlanner::SubtreePlan>>& children) {
-  size_t numSeeds = tg._nodeMap.size() + children.size();
-
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
   }
-  LOG(TRACE) << "Fill DP table... (there are " << numSeeds
-             << " operations to join)" << std::endl;
   auto initialPlans = seedWithScansAndText(tg, children);
   SubtreeGraph graph;
   auto componentIndices = graph.getComponentIndices(initialPlans);
@@ -1437,19 +1411,23 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   vector<vector<SubtreePlan>> lastDpRowFromComponents;
   for (auto& component : components | std::views::values) {
     vector<vector<SubtreePlan>> dpTab;
-    // dpTab.emplace_back(seedWithScansAndText(tg, children));
+    // find the unique number of nodes in the current connected component
+    // (there might be duplicates because we already have multiple candidates
+    // for each index scan with different permutations.
     dpTab.push_back(std::move(component));
     applyFiltersIfPossible(dpTab.back(), filters, false);
+    ad_utility::HashSet<uint64_t> uniqueNodeIds;
+    std::ranges::copy(
+        dpTab.back() | std::views::transform(&SubtreePlan::_idsOfIncludedNodes),
+        std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
+    size_t numSeeds = uniqueNodeIds.size();
 
-    vector<SubtreePlan> unjoinable;
     for (size_t k = 2; k <= numSeeds; ++k) {
       LOG(TRACE) << "Producing plans that unite " << k << " triples."
                  << std::endl;
       dpTab.emplace_back(vector<SubtreePlan>());
       for (size_t i = 1; i * 2 <= k; ++i) {
-        auto [newPlans, newUnjoinable] =
-            merge(dpTab[i - 1], dpTab[k - i - 1], tg, i == 1);
-        std::ranges::move(newUnjoinable, std::back_inserter(unjoinable));
+        auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
         if (newPlans.size() == 0) {
           continue;
         }
@@ -1458,23 +1436,6 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
         applyFiltersIfPossible(dpTab.back(), filters, false);
       }
       if (dpTab[k - 1].size() == 0) {
-        // TODO<joka921> Again include the correct sanity checks for the
-        // required number of rounds and determine it in advance. Maybe we need
-        // to do the graph building one level before.
-        AD_CORRECTNESS_CHECK(k >= 2 && !dpTab.at(k - 2).empty());
-        dpTab.resize(k - 1);
-        break;
-        /*
-        std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
-        std::ranges::copy(
-            unjoinable | std::views::transform(&SubtreePlan::_qet),
-            std::back_inserter(subtrees));
-        dpTab[k - 1].push_back(
-            makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
-        applyFiltersIfPossible(dpTab.back(), filters, numSeeds == k);
-        // TODO<joka921> Should we assert that all filters were applied ?
-        break;
-         */
         AD_THROW(
             "Could not find a suitable execution tree for a connected "
             "component of the query. This should not happen, please report it "
@@ -1483,7 +1444,12 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     }
     lastDpRowFromComponents.push_back(std::move(dpTab.back()));
   }
-  if (lastDpRowFromComponents.size() == 1) {
+  if (lastDpRowFromComponents.size() == 0) {
+    // This happens for example if there is a BIND right at the beginning of the
+    // query
+    lastDpRowFromComponents.emplace_back();
+    return lastDpRowFromComponents;
+  } else if (lastDpRowFromComponents.size() == 1) {
     applyFiltersIfPossible(lastDpRowFromComponents.back(), filters, true);
     return lastDpRowFromComponents;
   } else {

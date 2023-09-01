@@ -2,7 +2,83 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "CartesianProductJoin.h"
+#include "engine/CartesianProductJoin.h"
+
+// ____________________________________________________________________________
+CartesianProductJoin::CartesianProductJoin(
+    QueryExecutionContext* executionContext, Children children)
+    : Operation{executionContext}, children_{std::move(children)} {
+  AD_CONTRACT_CHECK(!children_.empty());
+  AD_CONTRACT_CHECK(std::ranges::all_of(
+      children_, [](auto& child) { return child != nullptr; }));
+
+  // Check that the variables of the passed in operations are in fact
+  // disjoint.
+  auto variablesAreDisjoint = [this]() {
+    ad_utility::HashSet<Variable> vars;
+    auto checkVarsForOp = [&vars](const Operation& op) {
+      return std::ranges::all_of(
+          op.getExternallyVisibleVariableColumns() | std::views::keys,
+          [&vars](const Variable& variable) {
+            return vars.insert(variable).second;
+          });
+    };
+    return std::ranges::all_of(childView(), checkVarsForOp);
+  }();
+  AD_CONTRACT_CHECK(variablesAreDisjoint);
+}
+
+// ____________________________________________________________________________
+std::vector<QueryExecutionTree*> CartesianProductJoin::getChildren() {
+  std::vector<QueryExecutionTree*> result;
+  std::ranges::copy(
+      children_ | std::views::transform([](auto& ptr) { return ptr.get(); }),
+      std::back_inserter(result));
+  return result;
+}
+
+// ____________________________________________________________________________
+string CartesianProductJoin::asStringImpl(size_t indent) const {
+  return "CARTESIAN PRODUCT JOIN " +
+         ad_utility::lazyStrJoin(
+             std::views::transform(
+                 childView(),
+                 [indent](auto& child) { return child.asString(indent); }),
+             " ");
+}
+
+// ____________________________________________________________________________
+size_t CartesianProductJoin::getResultWidth() const {
+  auto view = childView() | std::views::transform(&Operation::getResultWidth);
+  return std::accumulate(view.begin(), view.end(), 0ul, std::plus{});
+}
+
+// ____________________________________________________________________________
+size_t CartesianProductJoin::getCostEstimate() {
+  auto childSizes =
+      childView() | std::views::transform(&Operation::getCostEstimate);
+  return getSizeEstimate() +
+         std::accumulate(childSizes.begin(), childSizes.end(), 0ul);
+}
+
+// ____________________________________________________________________________
+uint64_t CartesianProductJoin::getSizeEstimateBeforeLimit() {
+  auto view = childView() | std::views::transform(&Operation::getSizeEstimate);
+  return std::accumulate(view.begin(), view.end(), 1ul, std::multiplies{});
+}
+
+// ____________________________________________________________________________
+float CartesianProductJoin::getMultiplicity([[maybe_unused]] size_t col) {
+  // Deliberately a dummy as we always perform this operation last.
+  return 1;
+}
+
+// ____________________________________________________________________________
+bool CartesianProductJoin::knownEmptyResult() {
+  return std::ranges::any_of(children_, [](auto& child) {
+    return child->getRootOperation()->knownEmptyResult();
+  });
+}
 
 // ____________________________________________________________________________
 ResultTable CartesianProductJoin::computeResult() {

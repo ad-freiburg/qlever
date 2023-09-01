@@ -7,6 +7,7 @@
 #include "./util/GTestHelpers.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/IndexScan.h"
+#include "engine/Join.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
@@ -36,13 +37,36 @@ QetMatcher RootOperation(auto matcher) {
                   WhenDynamicCastTo<const OperationType&>(matcher));
 }
 
+// Return a matcher that test whether a given `QueryExecutionTree` contains a
+// `OperationType` operation the children of which match the
+// `childMatcher`s. Note that the child matchers are not ordered.
+template <typename OperationType>
+inline auto MatchTypeAndUnorderedChildren =
+    [](const std::same_as<QetMatcher> auto&... childMatchers) {
+      return RootOperation<OperationType>(
+          AllOf(Property("getChildren", &Operation::getChildren,
+                         UnorderedElementsAre(Pointee(childMatchers)...))));
+    };
+
+// Similar to `MatchTypeAndUnorderedChildren`, but here the children have to
+// appear in exact the correct order.
+template <typename OperationType>
+inline auto MatchTypeAndOrderedChildren =
+    [](const std::same_as<QetMatcher> auto&... childMatchers) {
+      return RootOperation<OperationType>(
+          AllOf(Property("getChildren", &Operation::getChildren,
+                         ElementsAre(Pointee(childMatchers)...))));
+    };
+
 /// Return a matcher that checks that a given `QueryExecutionTree` consists of a
 /// single `IndexScan` with the given `subject`, `predicate`, and `object`, and
 /// that the `ScanType` of this `IndexScan` is any of the given
 /// `allowedPermutations`.
-QetMatcher IndexScan(
-    TripleComponent subject, TripleComponent predicate, TripleComponent object,
-    const std::vector<Permutation::Enum>& allowedPermutations = {}) {
+inline auto IndexScan =
+    [](TripleComponent subject, TripleComponent predicate,
+       TripleComponent object,
+       const std::vector<Permutation::Enum>& allowedPermutations = {})
+    -> QetMatcher {
   size_t numVariables = static_cast<size_t>(subject.isVariable()) +
                         static_cast<size_t>(predicate.isVariable()) +
                         static_cast<size_t>(object.isVariable());
@@ -55,29 +79,32 @@ QetMatcher IndexScan(
             AD_PROPERTY(IndexScan, getSubject, Eq(subject)),
             AD_PROPERTY(IndexScan, getPredicate, Eq(predicate)),
             AD_PROPERTY(IndexScan, getObject, Eq(object))));
-}
+};
 
-// Return a matcher that test whether a given `QueryExecutionTree` contains a
-// `MultiColumnJoin` operation the two children of which match the
-// `childMatcher`s. Note that the child matchers are not ordered, so
-// `childMatcher1` might refer to the left or right child of the
-// `MultiColumnJoin`, and `childMatcher2` always refers to the other child.
-QetMatcher MultiColumnJoin(const QetMatcher& childMatcher1,
-                           const QetMatcher& childMatcher2) {
-  return RootOperation<::MultiColumnJoin>(AllOf(Property(
-      &Operation::getChildren,
-      UnorderedElementsAre(Pointee(childMatcher1), Pointee(childMatcher2)))));
-}
+// Same as above, but the subject, predicate, and object are passed in as
+// strings. The strings are automatically converted a matching
+// `TripleComponent`.
+inline auto IndexScanFromStrings =
+    [](std::string_view subject, std::string_view predicate,
+       std::string_view object,
+       const std::vector<Permutation::Enum>& allowedPermutations = {})
+    -> QetMatcher {
+  auto strToComp = [](std::string_view s) -> TripleComponent {
+    if (s.starts_with("?")) {
+      return ::Variable{std::string{s}};
+    }
+    return s;
+  };
+  return IndexScan(strToComp(subject), strToComp(predicate), strToComp(object),
+                   allowedPermutations);
+};
 
-// Return a matcher that test whether a given `QueryExecutionTree` contains a
-// `CartesianProductJoin` operation the children of which match the
-// `childMatchers`. Note that the child matchers are not ordered.
-QetMatcher CartesianProductJoin(
-    const std::same_as<QetMatcher> auto&... childMatchers) {
-  return RootOperation<::CartesianProductJoin>(
-      AllOf(Property("getChildren", &Operation::getChildren,
-                     UnorderedElementsAre(Pointee(childMatchers)...))));
-}
+// The following Join algorithms are all symmetric wrt their children, so the
+// order is not important.
+inline auto MultiColumnJoin = MatchTypeAndUnorderedChildren<::MultiColumnJoin>;
+inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
+inline auto CartesianProductJoin =
+    MatchTypeAndUnorderedChildren<::CartesianProductJoin>;
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`

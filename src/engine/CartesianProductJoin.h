@@ -8,6 +8,9 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+// An operation that takes a set of subresults that pairwise-disjoint sets of
+// bound variables and materializes the full cartesian product of these
+// operations.
 class CartesianProductJoin : public Operation {
  public:
   using Children = std::vector<std::shared_ptr<QueryExecutionTree>>;
@@ -15,6 +18,9 @@ class CartesianProductJoin : public Operation {
  private:
   Children children_;
 
+  // Access to the actual operations of the children.
+  // TODO<joka921> We can move this whole children management into a base class
+  // and clean up the implementation of several other children.
   auto childView() {
     return std::views::transform(children_, [](auto& child) -> Operation& {
       return *child->getRootOperation();
@@ -26,77 +32,41 @@ class CartesianProductJoin : public Operation {
                                    return *child->getRootOperation();
                                  });
   }
-  // TODO<joka921> Move more stuff into the cpp file.
 
  public:
-  // Constructor
+  // Constructor. `children` must not be empty and the variables of all the
+  // children must be disjoint, else an `AD_CONTRACT_CHECK` fails.
   explicit CartesianProductJoin(QueryExecutionContext* executionContext,
-                                Children children)
-      : Operation{executionContext}, children_{std::move(children)} {
-    AD_CONTRACT_CHECK(!children_.empty());
-    AD_CONTRACT_CHECK(std::ranges::all_of(
-        children_, [](auto& child) { return child != nullptr; }));
-  }
+                                Children children);
 
   /// get non-owning pointers to all the held subtrees to actually use the
   /// Execution Trees as trees
-  std::vector<QueryExecutionTree*> getChildren() override {
-    std::vector<QueryExecutionTree*> result;
-    result.reserve(children_.size());
-    for (auto& child : children_) {
-      result.push_back(child.get());
-    }
-    return result;
-  }
+  std::vector<QueryExecutionTree*> getChildren() override;
 
  private:
   // The individual implementation of `asString` (see above) that has to be
   // customized by every child class.
-  string asStringImpl(size_t indent) const override {
-    return "CARTESIAN PRODUCT JOIN " +
-           ad_utility::lazyStrJoin(
-               std::views::transform(
-                   childView(),
-                   [indent](auto& child) { return child.asString(indent); }),
-               " ");
-  }
+  string asStringImpl(size_t indent) const override;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for
   // this Operation.  This string is used in the RuntimeInformation
   string getDescriptor() const override { return "Cartesian Product Join"; }
-  size_t getResultWidth() const override {
-    auto view = childView() | std::views::transform(&Operation::getResultWidth);
-    return std::accumulate(view.begin(), view.end(), 0ul, std::plus{});
-  }
+  size_t getResultWidth() const override;
 
-  size_t getCostEstimate() override {
-    auto childSizes =
-        childView() | std::views::transform(&Operation::getCostEstimate);
-    return getSizeEstimate() +
-           std::accumulate(childSizes.begin(), childSizes.end(), 0ul);
-  }
+  size_t getCostEstimate() override;
 
  private:
-  uint64_t getSizeEstimateBeforeLimit() override {
-    auto view =
-        childView() | std::views::transform(&Operation::getSizeEstimate);
-    return std::accumulate(view.begin(), view.end(), 1ul, std::multiplies{});
-  }
+  uint64_t getSizeEstimateBeforeLimit() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  public:
-  float getMultiplicity([[maybe_unused]] size_t col) override {
-    // Deliberately a dummy as we always perform this operation last.
-    return 1;
-  }
-  bool knownEmptyResult() override {
-    return std::ranges::any_of(children_, [](auto& child) {
-      return child->getRootOperation()->knownEmptyResult();
-    });
-  }
+  float getMultiplicity([[maybe_unused]] size_t col) override;
 
+  bool knownEmptyResult() override;
+
+  // The cartesian product join can efficiently evaluate a limited result.
   [[nodiscard]] bool supportsLimit() const override { return true; }
 
  protected:

@@ -15,18 +15,26 @@
 using namespace ad_utility::testing;
 using ad_utility::source_location;
 
-CartesianProductJoin makeJoin(std::vector<VectorTable> inputs,
+CartesianProductJoin makeJoin(const std::vector<VectorTable>& inputs,
                               bool useLimitInSuboperations = false) {
   auto qec = ad_utility::testing::getQec();
   std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
-  auto v = [i = 0]() mutable { return Variable{"?" + std::to_string(i++)}; };
+  size_t i = 0;
+  auto v = [&i]() mutable { return Variable{"?" + std::to_string(i++)}; };
   for (const auto& input : inputs) {
     std::vector<std::optional<Variable>> vars;
     std::generate_n(std::back_inserter(vars),
-                    input.empty() ? 0 : input.at(0).size(), v);
+                    input.empty() ? 0 : input.at(0).size(), std::ref(v));
     subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector(input), std::move(vars),
         useLimitInSuboperations));
+  }
+  // Test that passing the same subtree in twice is illegal because it leads to
+  // non-disjoint variable sets.
+  if (!subtrees.empty() && i > 0) {
+    auto subtrees2 = subtrees;
+    subtrees2.insert(subtrees2.end(), subtrees.begin(), subtrees.end());
+    EXPECT_ANY_THROW(CartesianProductJoin(qec, std::move(subtrees2)));
   }
   return CartesianProductJoin{qec, std::move(subtrees)};
 }
@@ -63,7 +71,7 @@ void testCartesianProduct(VectorTable expected, std::vector<VectorTable> inputs,
                           source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   testCartesianProductImpl(expected, inputs, true);
-  // testCartesianProductImpl(expected, inputs, false);
+  testCartesianProductImpl(expected, inputs, false);
 }
 
 TEST(CartesianProductJoin, computeResult) {
