@@ -198,9 +198,46 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
                            printConfigurationDoc(true), "\n"));
         }
 
+        /*
+        Returns true, iff `prefix` describes a json pointer, that is a prefix
+        of the json pointer described with `jsonPointerString` and not equal
+        to `jsonPointerString`.
+        */
+        auto isTrueJsonPointerPrefix = [](std::string_view jsonPointerString,
+                                          std::string_view prefix) {
+          /*
+          We don't want a prefix in string terms, but in json pointer terms.
+
+          The general json pointer syntax is `/x1/x2/x3/.../xN`, with all `x`
+          valid strings, or natural numbers, in json and `N` a natural number.
+          We define a true prefix as `/y1/y2/y3/.../yU`, with `U` a natural
+          number, `U <= N` and `x1 = y1, x2 = y2, ..., xU = yU`. (The grammar of
+          json pointer is a bit more complicated in reality, but this is enough
+          to understand the problem.)
+
+          Now, this IS different from a normal string prefix, because it
+          requires `xi = yi`, for `all i in [0, U]`, to be EQUAL. A string
+          prefix has weaker requirements, because it only requires `xi = yi`,
+          for `all i in [0, U - 1]`, and for `yU` to be a string prefix of `xU`.
+          Example: The json pointer `some/option` is not a prefix of
+          `some/options/optionA` in json pointer terms, but in string terms,
+          because `"option"` is a prefix of `"options"`.
+
+          This can be fixed, by adding the seperator `/` at the end of both
+          string representation. Because the symbol `/` is not allowed in `xi`,
+          for `any i in [0, N]`, but must be between them, it forces all the
+          `xi` and `yi` to be equal.
+
+          Now, we already covered the equality case, so we only need to add the
+          `/` to the (maybe) prefix, for it to work right.
+          */
+          return jsonPointerString.starts_with(absl::StrCat(prefix, "/"));
+        };
+
         // Is the new path a prefix of the path of an already
         // existing path?
-        if (alreadyAddedPath.starts_with(pathAsJsonPointerString)) {
+        if (isTrueJsonPointerPrefix(alreadyAddedPath,
+                                    pathAsJsonPointerString)) {
           throw std::runtime_error(absl::StrCat(
               "Key error: The given path '", vectorOfKeysForJsonToString(path),
               "' is a prefix of a path, '", alreadyAddedPath,
@@ -209,7 +246,8 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
         }
 
         // Is the already existing path a prefix of the new path?
-        if (pathAsJsonPointerString.starts_with(alreadyAddedPath)) {
+        if (isTrueJsonPointerPrefix(pathAsJsonPointerString,
+                                    alreadyAddedPath)) {
           throw std::runtime_error(absl::StrCat(
               "Key error: The given path '", vectorOfKeysForJsonToString(path),
               "' has an already in use path '", alreadyAddedPath,
