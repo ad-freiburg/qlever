@@ -2,7 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "WebSocketNotifier.h"
+#include "util/http/websocket/WebSocketNotifier.h"
 
 #include <boost/asio/post.hpp>
 #include <boost/asio/this_coro.hpp>
@@ -11,6 +11,7 @@ namespace ad_utility::websocket {
 
 net::awaitable<WebSocketNotifier> WebSocketNotifier::create(
     common::OwningQueryId owningQueryId, WebSocketTracker& webSocketTracker) {
+  // TODO check if this is actually safe to do
   auto initialExecutor = co_await net::this_coro::executor;
 
   auto distributor =

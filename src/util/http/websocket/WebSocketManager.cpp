@@ -4,12 +4,13 @@
 
 #include "WebSocketManager.h"
 
+#include <ctre/ctre.h>
+
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <optional>
 
-#include "Common.h"
-#include "ctre/ctre.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/websocket/Common.h"
 #include "util/http/websocket/UpdateFetcher.h"
 #include "util/http/websocket/WebSocketTracker.h"
 

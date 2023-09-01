@@ -5,8 +5,6 @@
 #ifndef QLEVER_EPHEMERALWAITINGLIST_H
 #define QLEVER_EPHEMERALWAITINGLIST_H
 
-#include <absl/container/flat_hash_map.h>
-
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <unordered_map>
@@ -16,23 +14,24 @@
 namespace ad_utility::websocket {
 namespace net = boost::asio;
 using websocket::common::QueryId;
-class FunctionId {
-  friend class EphemeralWaitingList;
-
-  uint64_t id_;
-  explicit FunctionId(uint64_t id) : id_{id} {}
-
- public:
-  template <typename H>
-  friend H AbslHashValue(H h, const FunctionId& fid) {
-    return H::combine(std::move(h), fid.id_);
-  }
-  // Starting with gcc 12 and clang 15 this can be constexpr
-  bool operator==(const FunctionId&) const noexcept = default;
-};
 
 class EphemeralWaitingList {
   std::atomic_uint64_t idCounter_{0};
+
+  class FunctionId {
+    friend EphemeralWaitingList;
+
+    uint64_t id_;
+    explicit FunctionId(uint64_t id) : id_{id} {}
+
+   public:
+    template <typename H>
+    friend H AbslHashValue(H h, const FunctionId& fid) {
+      return H::combine(std::move(h), fid.id_);
+    }
+    // Starting with gcc 12 and clang 15 this can be constexpr
+    bool operator==(const FunctionId&) const noexcept = default;
+  };
 
   struct IdentifiableFunction {
     std::function<void()> func_;

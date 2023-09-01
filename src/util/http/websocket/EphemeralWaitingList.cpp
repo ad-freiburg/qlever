@@ -4,10 +4,7 @@
 
 #include "util/http/websocket/EphemeralWaitingList.h"
 
-#include <boost/asio/experimental/awaitable_operators.hpp>
-
 namespace ad_utility::websocket {
-using namespace boost::asio::experimental::awaitable_operators;
 
 void EphemeralWaitingList::signalQueryStart(const QueryId& queryId) {
   auto [start, stop] = waitingCallbacks_.equal_range(queryId);
@@ -35,7 +32,6 @@ net::awaitable<void> EphemeralWaitingList::registerCallbackAndWait(
 
 net::awaitable<void> EphemeralWaitingList::waitForQueryStart(
     const QueryId& queryId) {
-  using namespace boost::asio::experimental::awaitable_operators;
   FunctionId functionId{idCounter_++};
   absl::Cleanup cleanup{
       [this, &queryId, &functionId]() { removeCallback(queryId, functionId); }};

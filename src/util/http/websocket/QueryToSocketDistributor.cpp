@@ -2,7 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "QueryToSocketDistributor.h"
+#include "util/http/websocket/QueryToSocketDistributor.h"
 
 #include <boost/asio/use_awaitable.hpp>
 

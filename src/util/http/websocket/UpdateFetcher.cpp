@@ -2,7 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "UpdateFetcher.h"
+#include "util/http/websocket/UpdateFetcher.h"
 
 namespace ad_utility::websocket {
 

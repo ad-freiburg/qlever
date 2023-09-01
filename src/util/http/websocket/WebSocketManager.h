@@ -3,10 +3,8 @@
 //  Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
 #pragma once
-#include <absl/container/flat_hash_map.h>
 
 #include <boost/beast/websocket.hpp>
-#include <vector>
 
 #include "util/http/beast.h"
 #include "util/http/websocket/Common.h"

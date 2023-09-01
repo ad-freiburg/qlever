@@ -17,7 +17,7 @@ using websocket::common::QueryId;
 namespace net = boost::asio;
 class QueryToSocketDistributor {
   QueryId queryId_;
-  net::strand<net::io_context::executor_type> strand_;
+  net::strand<net::any_io_executor> strand_;
   std::vector<std::function<void()>> wakeupCalls_{};
   std::vector<std::shared_ptr<const std::string>> data_{};
   std::atomic_bool finished_ = false;
