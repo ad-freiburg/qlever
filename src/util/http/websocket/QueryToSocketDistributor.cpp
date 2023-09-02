@@ -29,17 +29,17 @@ void QueryToSocketDistributor::runAndEraseWakeUpCallsSynchronously() {
   wakeupCalls_.clear();
 }
 
-void QueryToSocketDistributor::wakeUpWebSocketsForQuery() {
-  net::post(strand_, [this]() { runAndEraseWakeUpCallsSynchronously(); });
+net::awaitable<void> QueryToSocketDistributor::wakeUpWebSocketsForQuery() {
+  co_await net::post(strand_, net::use_awaitable);
+  runAndEraseWakeUpCallsSynchronously();
 }
 
-void QueryToSocketDistributor::addQueryStatusUpdate(std::string payload) {
+net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
+    std::string payload) {
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
-  net::post(strand_,
-            [this, sharedPayload = std::move(sharedPayload)]() mutable {
-              data_.push_back(std::move(sharedPayload));
-              runAndEraseWakeUpCallsSynchronously();
-            });
+  co_await net::post(strand_, net::use_awaitable);
+  data_.push_back(std::move(sharedPayload));
+  runAndEraseWakeUpCallsSynchronously();
 }
 
 void QueryToSocketDistributor::signalEnd() { finished_ = true; }

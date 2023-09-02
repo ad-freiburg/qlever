@@ -27,7 +27,7 @@ class WebSocketTracker {
 
   /// Notifies this class that the given query will no longer receive any
   /// updates, so all waiting connections will be closed.
-  void releaseQuery(QueryId queryId);
+  net::awaitable<void> releaseQuery(QueryId queryId);
 
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>> createDistributor(
       const QueryId&);

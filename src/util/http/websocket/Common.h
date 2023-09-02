@@ -65,7 +65,12 @@ static_assert(!std::is_copy_assignable_v<OwningQueryId>);
 
 /// A factory class to create unique query ids within each individual instance.
 class QueryRegistry {
-  ad_utility::Synchronized<ad_utility::HashSet<QueryId>> registry_{};
+  using SynchronizedType =
+      ad_utility::Synchronized<ad_utility::HashSet<QueryId>>;
+  // Technically no shared pointer is required because the registry lives
+  // for the entire lifetime of the application, but since the
+  std::shared_ptr<SynchronizedType> registry_{
+      std::make_shared<SynchronizedType>()};
 
  public:
   QueryRegistry() = default;
@@ -77,12 +82,20 @@ class QueryRegistry {
   ///         std::optional if the id already existed before.
   std::optional<OwningQueryId> uniqueIdFromString(std::string id) {
     auto queryId = QueryId::idFromString(std::move(id));
-    bool success = registry_.wlock()->insert(queryId).second;
+    bool success = registry_->wlock()->insert(queryId).second;
     if (success) {
-      return OwningQueryId{std::move(queryId), [this](const QueryId& qid) {
-                             AD_CORRECTNESS_CHECK(!qid.empty());
-                             registry_.wlock()->erase(qid);
-                           }};
+      // If the registry is destructed, make sure any remaining OwningQueryId
+      // objects prevent the container from destruction
+      std::weak_ptr<SynchronizedType> weakRegistry = registry_;
+      return OwningQueryId{
+          std::move(queryId),
+          [weakRegistry = std::move(weakRegistry)](const QueryId& qid) {
+            AD_CORRECTNESS_CHECK(!qid.empty());
+            // Registry might be
+            if (auto registry = weakRegistry.lock()) {
+              registry->wlock()->erase(qid);
+            }
+          }};
     }
     return std::nullopt;
   }

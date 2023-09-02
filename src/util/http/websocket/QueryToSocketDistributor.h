@@ -35,9 +35,9 @@ class QueryToSocketDistributor {
       : queryId_{std::move(queryId)}, strand_{net::make_strand(ioContext)} {}
 
   /// Calls runAndEraseWakeUpCallsSynchronously asynchronously and thread-safe.
-  void wakeUpWebSocketsForQuery();
+  net::awaitable<void> wakeUpWebSocketsForQuery();
 
-  void addQueryStatusUpdate(std::string payload);
+  net::awaitable<void> addQueryStatusUpdate(std::string payload);
 
   void signalEnd();
 

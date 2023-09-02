@@ -11,7 +11,7 @@ namespace ad_utility::websocket {
 
 net::awaitable<WebSocketNotifier> WebSocketNotifier::create(
     common::OwningQueryId owningQueryId, WebSocketTracker& webSocketTracker) {
-  // TODO check if this is actually safe to do
+  // TODO check if this is actually right to do
   auto initialExecutor = co_await net::this_coro::executor;
 
   auto distributor =
@@ -20,10 +20,17 @@ net::awaitable<WebSocketNotifier> WebSocketNotifier::create(
   co_await net::post(initialExecutor, net::use_awaitable);
 
   co_return WebSocketNotifier{std::move(owningQueryId), webSocketTracker,
-                              std::move(distributor)};
+                              std::move(distributor),
+                              std::move(initialExecutor)};
 }
 
 void WebSocketNotifier::operator()(std::string json) const {
-  distributor_->addQueryStatusUpdate(std::move(json));
+  net::co_spawn(
+      executor_,
+      [distributor = distributor_,
+       json = std::move(json)]() mutable -> net::awaitable<void> {
+        co_await distributor->addQueryStatusUpdate(std::move(json));
+      },
+      net::detached);
 }
 }  // namespace ad_utility::websocket

@@ -18,16 +18,21 @@ using unique_cleanup::UniqueCleanup;
 class WebSocketNotifier {
   UniqueCleanup<common::OwningQueryId> owningQueryId_;
   std::shared_ptr<QueryToSocketDistributor> distributor_;
+  net::any_io_executor executor_;
 
   WebSocketNotifier(common::OwningQueryId owningQueryId,
                     WebSocketTracker& webSocketTracker,
-                    std::shared_ptr<QueryToSocketDistributor> distributor)
+                    std::shared_ptr<QueryToSocketDistributor> distributor,
+                    net::any_io_executor executor)
       : owningQueryId_{std::move(owningQueryId),
-                       [&webSocketTracker](auto&& owningQueryId) {
-                         webSocketTracker.releaseQuery(
-                             std::move(owningQueryId.toQueryId()));
+                       [&webSocketTracker, executor](auto&& owningQueryId) {
+                         net::co_spawn(executor,
+                                       webSocketTracker.releaseQuery(std::move(
+                                           owningQueryId.toQueryId())),
+                                       net::detached);
                        }},
-        distributor_{std::move(distributor)} {}
+        distributor_{std::move(distributor)},
+        executor_{std::move(executor)} {}
 
  public:
   WebSocketNotifier(WebSocketNotifier&&) noexcept = default;

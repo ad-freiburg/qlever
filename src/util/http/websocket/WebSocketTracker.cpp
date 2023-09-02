@@ -29,12 +29,11 @@ WebSocketTracker::waitForDistributor(QueryId queryId) {
   }
 }
 
-void WebSocketTracker::releaseQuery(QueryId queryId) {
-  net::post(globalStrand_, [this, queryId = std::move(queryId)]() {
-    auto distributor = socketDistributors_.at(queryId);
-    socketDistributors_.erase(queryId);
-    distributor->signalEnd();
-    distributor->wakeUpWebSocketsForQuery();
-  });
+net::awaitable<void> WebSocketTracker::releaseQuery(QueryId queryId) {
+  co_await net::post(globalStrand_, net::use_awaitable);
+  auto distributor = socketDistributors_.at(queryId);
+  socketDistributors_.erase(queryId);
+  distributor->signalEnd();
+  co_await distributor->wakeUpWebSocketsForQuery();
 }
 }  // namespace ad_utility::websocket
