@@ -236,7 +236,7 @@ class HttpServer {
           } else {
             // prevent cleanup after socket has been moved from
             releaseConnection.cancel();
-            co_await webSocketManager_.manageConnection(
+            co_await webSocketManager_.connectionLifecycle(
                 std::move(stream.socket()), std::move(req));
             co_return;
           }

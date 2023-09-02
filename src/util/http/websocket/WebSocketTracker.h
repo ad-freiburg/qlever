@@ -16,14 +16,14 @@ namespace ad_utility::websocket {
 using StrandType = net::strand<net::any_io_executor>;
 class WebSocketTracker {
   net::io_context& ioContext_;
-  StrandType& globalStrand_;
+  StrandType globalStrand_;
   absl::flat_hash_map<QueryId, std::shared_ptr<QueryToSocketDistributor>>
       socketDistributors_{};
   EphemeralWaitingList waitingList_{};
 
  public:
-  explicit WebSocketTracker(net::io_context& ioContext, StrandType& strand)
-      : ioContext_{ioContext}, globalStrand_{strand} {}
+  explicit WebSocketTracker(net::io_context& ioContext)
+      : ioContext_{ioContext}, globalStrand_{net::make_strand(ioContext)} {}
 
   /// Notifies this class that the given query will no longer receive any
   /// updates, so all waiting connections will be closed.

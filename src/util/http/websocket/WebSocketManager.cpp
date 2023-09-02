@@ -71,13 +71,13 @@ net::awaitable<void> WebSocketManager::connectionLifecycle(
 
     auto strand = net::make_strand(ws.get_executor());
 
+    co_await net::post(strand, net::use_awaitable);
+
     // Experimental operators, see
     // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html
     // for more information
-    co_await (
-        net::co_spawn(strand, waitForServerEvents(ws, queryId, strand),
-                      net::use_awaitable) &&
-        net::co_spawn(strand, handleClientCommands(ws), net::use_awaitable));
+    co_await (waitForServerEvents(ws, queryId, strand) &&
+              handleClientCommands(ws));
 
   } catch (boost::system::system_error& error) {
     if (error.code() == beast::websocket::error::closed) {
@@ -92,14 +92,6 @@ net::awaitable<void> WebSocketManager::connectionLifecycle(
     co_await ws.async_close(beast::websocket::close_code::internal_error,
                             net::use_awaitable);
   }
-}
-
-net::awaitable<void> WebSocketManager::manageConnection(
-    tcp::socket socket, http::request<http::string_body> request) {
-  auto executor = socket.get_executor();
-  return net::co_spawn(
-      executor, connectionLifecycle(std::move(socket), std::move(request)),
-      net::use_awaitable);
 }
 
 WebSocketTracker& WebSocketManager::getWebSocketTracker() {
