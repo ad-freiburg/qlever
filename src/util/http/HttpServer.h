@@ -260,8 +260,10 @@ class HttpServer {
           beast::error_code ec;
           stream.socket().shutdown(tcp::socket::shutdown_send, ec);
         } else {
-          // This is the error "The socket was closed due to a timeout".
-          if (error.code() == beast::error::timeout) {
+          // This is the error "The socket was closed due to a timeout" or
+          // indicates a socket has been closed mid-operation
+          if (error.code() == beast::error::timeout ||
+              error.code() == boost::asio::error::operation_aborted) {
             LOG(TRACE) << error.what() << " (code " << error.code() << ")"
                        << std::endl;
           } else {

@@ -11,7 +11,6 @@ namespace ad_utility::websocket {
 
 net::awaitable<WebSocketNotifier> WebSocketNotifier::create(
     common::OwningQueryId owningQueryId, WebSocketTracker& webSocketTracker) {
-  // TODO check if this is actually right to do
   auto initialExecutor = co_await net::this_coro::executor;
 
   auto distributor =

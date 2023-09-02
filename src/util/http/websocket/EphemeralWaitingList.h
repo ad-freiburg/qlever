@@ -15,6 +15,9 @@ namespace ad_utility::websocket {
 namespace net = boost::asio;
 using websocket::common::QueryId;
 
+/// Class that allows websockets to wait for a query to start, but also
+/// cleans itself up if the websocket closes the connection before anything
+/// happens
 class EphemeralWaitingList {
   std::atomic_uint64_t idCounter_{0};
 
@@ -41,11 +44,11 @@ class EphemeralWaitingList {
   std::unordered_multimap<QueryId, IdentifiableFunction, absl::Hash<QueryId>>
       waitingCallbacks_{};
 
-  void removeCallback(const QueryId& queryId, const FunctionId& functionId);
+  void removeCallback(const QueryId& queryId,
+                      const FunctionId& functionId) noexcept;
 
   template <typename CompletionToken>
   net::awaitable<void> registerCallbackAndWait(const QueryId& queryId,
-                                               const FunctionId& functionId,
                                                CompletionToken&& token);
 
  public:

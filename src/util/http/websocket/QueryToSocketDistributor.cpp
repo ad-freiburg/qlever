@@ -4,6 +4,7 @@
 
 #include "util/http/websocket/QueryToSocketDistributor.h"
 
+#include <boost/asio/associated_cancellation_slot.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 namespace ad_utility::websocket {
@@ -11,12 +12,20 @@ namespace ad_utility::websocket {
 template <typename CompletionToken>
 auto QueryToSocketDistributor::waitForUpdate(CompletionToken&& token) {
   auto initiate = [this]<typename Handler>(Handler&& self) mutable {
-    auto callback = [selfPtr = std::make_shared<Handler>(
-                         std::forward<Handler>(self))]() { (*selfPtr)(); };
+    auto sharedSelf = std::make_shared<Handler>(std::forward<Handler>(self));
+    auto cancellationSlot = net::get_associated_cancellation_slot(
+        *sharedSelf, net::cancellation_slot());
 
-    net::post(strand_, [this, callback = std::move(callback)]() mutable {
-      wakeupCalls_.emplace_back(std::move(callback));
+    net::dispatch(strand_, [this, sharedSelf]() mutable {
+      wakeupCalls_.emplace_back(
+          [sharedSelf = std::move(sharedSelf)]() { (*sharedSelf)(); });
     });
+
+    if (cancellationSlot.is_connected()) {
+      cancellationSlot.assign([this](net::cancellation_type) {
+        net::dispatch(strand_, [this]() { wakeupCalls_.clear(); });
+      });
+    }
   };
   return net::async_initiate<CompletionToken, void()>(
       initiate, std::forward<CompletionToken>(token));
