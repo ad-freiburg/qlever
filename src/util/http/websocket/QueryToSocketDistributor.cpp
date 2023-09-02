@@ -39,14 +39,14 @@ void QueryToSocketDistributor::runAndEraseWakeUpCallsSynchronously() {
 }
 
 net::awaitable<void> QueryToSocketDistributor::wakeUpWebSocketsForQuery() {
-  co_await net::post(strand_, net::use_awaitable);
+  co_await net::dispatch(strand_, net::use_awaitable);
   runAndEraseWakeUpCallsSynchronously();
 }
 
 net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
     std::string payload) {
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
-  co_await net::post(strand_, net::use_awaitable);
+  co_await net::dispatch(strand_, net::use_awaitable);
   data_.push_back(std::move(sharedPayload));
   runAndEraseWakeUpCallsSynchronously();
 }
@@ -55,7 +55,7 @@ void QueryToSocketDistributor::signalEnd() { finished_ = true; }
 
 net::awaitable<std::shared_ptr<const std::string>>
 QueryToSocketDistributor::waitForNextDataPiece(size_t index) {
-  co_await net::post(strand_, net::use_awaitable);
+  co_await net::dispatch(strand_, net::use_awaitable);
 
   if (index < data_.size()) {
     co_return data_.at(index);

@@ -71,7 +71,7 @@ net::awaitable<void> WebSocketManager::connectionLifecycle(
 
     auto strand = net::make_strand(ws.get_executor());
 
-    co_await net::post(strand, net::use_awaitable);
+    co_await net::dispatch(strand, net::use_awaitable);
 
     // Experimental operators, see
     // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html

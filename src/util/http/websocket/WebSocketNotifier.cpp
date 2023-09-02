@@ -16,7 +16,7 @@ net::awaitable<WebSocketNotifier> WebSocketNotifier::create(
   auto distributor =
       co_await webSocketTracker.createDistributor(owningQueryId.toQueryId());
 
-  co_await net::post(initialExecutor, net::use_awaitable);
+  co_await net::dispatch(initialExecutor, net::use_awaitable);
 
   co_return WebSocketNotifier{std::move(owningQueryId), webSocketTracker,
                               std::move(distributor),
