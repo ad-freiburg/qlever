@@ -47,6 +47,7 @@ class WebSocketManager {
   net::awaitable<void> connectionLifecycle(tcp::socket,
                                            http::request<http::string_body>);
 
+  /// Get a reference to the wrapped `WebSocketTracker`.
   WebSocketTracker& getWebSocketTracker();
 
   /// Helper function to provide a proper error response if the provided URL

@@ -14,6 +14,11 @@
 
 namespace ad_utility::websocket {
 using StrandType = net::strand<net::any_io_executor>;
+
+/// Class that provides the functionality to create, acquire and remove
+/// a `QueryToSocketDistributor`. All operations are synchronized on a strand
+/// unique for this class, so in the common case of this class being used
+/// globally the provided thread-safety comes at a cost.
 class WebSocketTracker {
   net::io_context& ioContext_;
   StrandType globalStrand_;
@@ -25,15 +30,19 @@ class WebSocketTracker {
   explicit WebSocketTracker(net::io_context& ioContext)
       : ioContext_{ioContext}, globalStrand_{net::make_strand(ioContext)} {}
 
-  /// Notifies this class that the given query will no longer receive any
-  /// updates, so all waiting connections will be closed.
-  net::awaitable<void> releaseQuery(QueryId queryId);
-
+  /// Creates a new `QueryToSocketDistributor` and registers it.
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>> createDistributor(
       const QueryId&);
 
+  /// Waits until `QueryToSocketDistributor` is registered and returns it.
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>> waitForDistributor(
       QueryId);
+
+  /// Notifies this class that the given query will no longer receive any
+  /// updates, so the distributor will be unregistered (it will continue to
+  /// exists for all objects still holding a shared pointer to the instance) and
+  /// signaled that all updates have ended.
+  net::awaitable<void> releaseDistributor(QueryId queryId);
 };
 }  // namespace ad_utility::websocket
 

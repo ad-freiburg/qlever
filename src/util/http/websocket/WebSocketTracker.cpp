@@ -9,8 +9,7 @@ net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 WebSocketTracker::createDistributor(const QueryId& queryId) {
   co_await net::dispatch(globalStrand_, net::use_awaitable);
   AD_CORRECTNESS_CHECK(!socketDistributors_.contains(queryId));
-  auto distributor =
-      std::make_shared<QueryToSocketDistributor>(queryId, ioContext_);
+  auto distributor = std::make_shared<QueryToSocketDistributor>(ioContext_);
   socketDistributors_.emplace(queryId, distributor);
   waitingList_.signalQueryStart(queryId);
   co_return distributor;
@@ -29,11 +28,10 @@ WebSocketTracker::waitForDistributor(QueryId queryId) {
   }
 }
 
-net::awaitable<void> WebSocketTracker::releaseQuery(QueryId queryId) {
+net::awaitable<void> WebSocketTracker::releaseDistributor(QueryId queryId) {
   co_await net::dispatch(globalStrand_, net::use_awaitable);
   auto distributor = socketDistributors_.at(queryId);
   socketDistributors_.erase(queryId);
-  distributor->signalEnd();
-  co_await distributor->wakeUpWebSocketsForQuery();
+  co_await distributor->signalEnd();
 }
 }  // namespace ad_utility::websocket

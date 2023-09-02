@@ -37,6 +37,8 @@ net::awaitable<void> EphemeralWaitingList::registerCallbackAndWait(
       cancellationSlot.assign(
           [this, &queryId, &functionId,
            executor = std::move(executor)](net::cancellation_type) {
+            // Make sure to remove the entry on the same executor
+            // which was used to initiate this
             net::dispatch(executor, [this, &queryId, &functionId]() {
               removeCallback(queryId, functionId);
             });

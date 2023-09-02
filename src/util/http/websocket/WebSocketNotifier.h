@@ -26,10 +26,11 @@ class WebSocketNotifier {
                     net::any_io_executor executor)
       : owningQueryId_{std::move(owningQueryId),
                        [&webSocketTracker, executor](auto&& owningQueryId) {
-                         net::co_spawn(executor,
-                                       webSocketTracker.releaseQuery(std::move(
-                                           owningQueryId.toQueryId())),
-                                       net::detached);
+                         net::co_spawn(
+                             executor,
+                             webSocketTracker.releaseDistributor(
+                                 std::move(owningQueryId.toQueryId())),
+                             net::detached);
                        }},
         distributor_{std::move(distributor)},
         executor_{std::move(executor)} {}
@@ -37,10 +38,13 @@ class WebSocketNotifier {
  public:
   WebSocketNotifier(WebSocketNotifier&&) noexcept = default;
 
+  /// Asynchronously creates an instance of this class. This is because because
+  /// creating a distributor for this class needs to be done in a synchronized
+  /// way.
   static net::awaitable<WebSocketNotifier> create(
       common::OwningQueryId owningQueryId, WebSocketTracker& webSocketTracker);
 
-  /// Broadcast the string to all listeners of this query.
+  /// Broadcast the string to all listeners of this query asynchronously.
   void operator()(std::string) const;
 };
 

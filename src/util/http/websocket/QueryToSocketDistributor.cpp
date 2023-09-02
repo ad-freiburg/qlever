@@ -23,6 +23,7 @@ auto QueryToSocketDistributor::waitForUpdate(CompletionToken&& token) {
 
     if (cancellationSlot.is_connected()) {
       cancellationSlot.assign([this](net::cancellation_type) {
+        // Make sure wakeupCalls_ is accessed safely.
         net::dispatch(strand_, [this]() { wakeupCalls_.clear(); });
       });
     }
@@ -38,11 +39,6 @@ void QueryToSocketDistributor::runAndEraseWakeUpCallsSynchronously() {
   wakeupCalls_.clear();
 }
 
-net::awaitable<void> QueryToSocketDistributor::wakeUpWebSocketsForQuery() {
-  co_await net::dispatch(strand_, net::use_awaitable);
-  runAndEraseWakeUpCallsSynchronously();
-}
-
 net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
     std::string payload) {
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
@@ -51,7 +47,11 @@ net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
   runAndEraseWakeUpCallsSynchronously();
 }
 
-void QueryToSocketDistributor::signalEnd() { finished_ = true; }
+net::awaitable<void> QueryToSocketDistributor::signalEnd() {
+  co_await net::dispatch(strand_, net::use_awaitable);
+  finished_ = true;
+  runAndEraseWakeUpCallsSynchronously();
+}
 
 net::awaitable<std::shared_ptr<const std::string>>
 QueryToSocketDistributor::waitForNextDataPiece(size_t index) {
@@ -59,6 +59,8 @@ QueryToSocketDistributor::waitForNextDataPiece(size_t index) {
 
   if (index < data_.size()) {
     co_return data_.at(index);
+  } else if (finished_) {
+    co_return nullptr;
   }
 
   co_await waitForUpdate(net::use_awaitable);
