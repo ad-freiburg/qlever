@@ -27,4 +27,4 @@ endfunction()
 # Add benchmarks after here.
 addAndLinkBenchmark(BenchmarkExamples)
 
-addAndLinkBenchmark(JoinAlgorithmBenchmark engine)
+addAndLinkBenchmark(JoinAlgorithmBenchmark testUtil)

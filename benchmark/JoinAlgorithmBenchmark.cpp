@@ -1,4 +1,4 @@
-// Copyright 2015, University of Freiburg,
+// Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (January of 2023, schlegea@informatik.uni-freiburg.de)
 // Author of the file this file is based on: Björn Buchhold
@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <ctime>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -23,7 +24,6 @@
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "../benchmark/util/BenchmarkTableCommonCalculations.h"
-#include "../benchmark/util/IdTableHelperFunction.h"
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/JoinHelpers.h"
 #include "engine/Engine.h"
@@ -32,9 +32,11 @@
 #include "engine/ResultTable.h"
 #include "engine/idTable/IdTable.h"
 #include "util/Algorithm.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
 #include "util/TypeTraits.h"
 
@@ -134,13 +136,15 @@ static void addMeasurementsToRowOfBenchmarkTable(
   // save them together with the information, where their join column is.
   IdTableAndJoinColumn smallerTable{
       createRandomlyFilledIdTable(
-          smallerTableAmountRows, smallerTableAmountColumns, 0,
-          smallerTableJoinColumnLowerBound, smallerTableJoinColumnUpperBound),
+          smallerTableAmountRows, smallerTableAmountColumns,
+          JoinColumnAndBounds{0, smallerTableJoinColumnLowerBound,
+                              smallerTableJoinColumnUpperBound}),
       0};
   IdTableAndJoinColumn biggerTable{
       createRandomlyFilledIdTable(
-          smallerTableAmountRows * ratioRows, biggerTableAmountColumns, 0,
-          biggerTableJoinColumnLowerBound, biggerTableJoinColumnUpperBound),
+          smallerTableAmountRows * ratioRows, biggerTableAmountColumns,
+          JoinColumnAndBounds{0, biggerTableJoinColumnLowerBound,
+                              biggerTableJoinColumnUpperBound}),
       0};
 
   // Creating overlap, if wanted.
@@ -616,14 +620,24 @@ size_t approximateMemoryNeededByIdTable(const size_t& amountRows,
 Partly implements the interface `BenchmarkInterface`, by:
 
 - Providing the member variables, that most of the benchmark classes here set
-using the `BenchmarkConfiguration`.
-
-- A default configuration parser, that sets tthe provded member variables.
+using the `ConfigManager`.
 
 - A default `getMetadata`, that adds the date and time, where the benchmark
 measurements were taken.
 */
 class GeneralInterfaceImplementation : public BenchmarkInterface {
+  // TODO Can we get rid of the getter? I mean, it's just an implicit converter.
+  /*
+  The max time for a single measurement and the max memory, that a single
+  `IdTable` is allowed to take up.
+  Both are set via `ConfigManager` and the user at runtime, but because their
+  pure form contains coded information, mainly that `0` stands for `infinite`,
+  access is regulated via getter, which also transform them into easier to
+  understand forms.
+  */
+  float maxTimeSingleMeasurement_;
+  size_t maxMemoryInMB_;
+
  protected:
   /*
   The benchmark classes after this point always make tables, where one
@@ -634,239 +648,264 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   exponents. The variables, that define such boundaries, always begin with
   `max`.
 
-  The name of a variable in the configuration is just the variable name.
-  Should that configuration option not be set, it will be set to a default
-  value.
+  For an explanation, what a member variables does, see the created
+  `ConfigOption`s.
   */
 
-  // Amount of rows for the smaller `IdTable`, if we always use the same amount.
   size_t smallerTableAmountRows_;
-
-  // The minimum amount of rows, that the bigger `IdTable` should have.
   size_t minBiggerTableRows_;
-  // The maximum amount of rows, that the bigger `IdTable` should have.
   size_t maxBiggerTableRows_;
-
-  // Amount of columns for the `IdTable`s
   size_t smallerTableAmountColumns_;
   size_t biggerTableAmountColumns_;
-
-  /*
-  Chance for an entry in the join column of the smaller `IdTable` to be the
-  same value as an entry in the join column of the bigger `IdTable`.
-  Must be in the range $(0,100]$.
-  */
   float overlapChance_;
-
-  /*
-  The row ratio between the smaller and the bigger `IdTable`. That is
-  the value of the amount of rows in the bigger `IdTable` divided through the
-  amount of rows in the smaller `IdTable`.
-  */
   size_t ratioRows_;
-
-  // The minimum row ratio between the smaller and the bigger `IdTable`.
   size_t minRatioRows_;
-  // The maximal row ratio between the smaller and the bigger `IdTable`.
   size_t maxRatioRows_;
 
-  /*
-  The maximal amount of time, any function measurement is allowed to take. Will
-  only have a value, if the configuration option was set.
-  */
-  std::optional<float> maxTimeSingleMeasurement_;
-
-  /*
-  The maximal amount of memory, a `IdTable` is allowed to take up in memory. If
-  there is no limit, it holds no value.
-  */
-  std::optional<size_t> maxMemoryInByte_;
-
  public:
-  void parseConfiguration(const BenchmarkConfiguration& config) final {
-    /*
-    @brief Assigns the value in the configuration option to the variable. If the
-    option wasn't set, assigns a default value.
+  // The default constructor, which sets up the `ConfigManager`.
+  GeneralInterfaceImplementation() {
+    ad_utility::ConfigManager& config = getConfigManager();
 
-    @tparam VariableType The type of the variable. This is also what the
-    configuration option will be interpreted as.
-
-    @param key The key for the configuration option.
-    @param variable The variable, that will be set.
-    @param defaultValue The default value, that the variable will be set to, if
-    the configuration option wasn't set.
-    */
-    auto setToValueInConfigurationOrDefault =
-        [&config]<typename VariableType>(VariableType& variable,
-                                         const std::string& key,
-                                         const VariableType& defaultValue) {
-          variable = config.getValueByNestedKeys<VariableType>(key).value_or(
-              defaultValue);
-        };
-
-    setToValueInConfigurationOrDefault(smallerTableAmountRows_,
-                                       "smallerTableAmountRows",
-                                       static_cast<size_t>(1000));
+    decltype(auto) smallerTableAmountRows = config.addOption(
+        "smallerTableAmountRows",
+        "Amount of rows for the smaller `IdTable`, if we always "
+        "use the same amount.",
+        &smallerTableAmountRows_, 1000UL);
 
     constexpr size_t minBiggerTableRowsDefault = 100000;
-    setToValueInConfigurationOrDefault(
-        minBiggerTableRows_, "minBiggerTableRows", minBiggerTableRowsDefault);
-    setToValueInConfigurationOrDefault(maxBiggerTableRows_,
-                                       "maxBiggerTableRows",
-                                       static_cast<size_t>(10000000));
+    decltype(auto) minBiggerTableRows = config.addOption(
+        "minBiggerTableRows",
+        "The minimum amount of rows, that the bigger `IdTable` should have.",
+        &minBiggerTableRows_, minBiggerTableRowsDefault);
+    decltype(auto) maxBiggerTableRows = config.addOption(
+        "maxBiggerTableRows",
+        "The maximum amount of rows, that the bigger `IdTable` should have.",
+        &maxBiggerTableRows_, 10000000UL);
 
-    setToValueInConfigurationOrDefault(smallerTableAmountColumns_,
-                                       "smallerTableAmountColumns",
-                                       static_cast<size_t>(20));
-    setToValueInConfigurationOrDefault(biggerTableAmountColumns_,
-                                       "biggerTableAmountColumns",
-                                       static_cast<size_t>(20));
+    decltype(auto) smallerTableAmountColumns =
+        config.addOption("smallerTableAmountColumns",
+                         "The amount of columns in the smaller IdTable.",
+                         &smallerTableAmountColumns_, 20UL);
+    decltype(auto) biggerTableAmountColumns =
+        config.addOption("biggerTableAmountColumns",
+                         "The amount of columns in the bigger IdTable.",
+                         &biggerTableAmountColumns_, 20UL);
 
-    setToValueInConfigurationOrDefault(overlapChance_, "overlapChance",
-                                       static_cast<float>(42.0));
+    decltype(auto) overlapChance = config.addOption(
+        "overlapChance",
+        "Chance for an entry in the join column of the smaller `IdTable` to be "
+        "the same value as an entry in the join column of the bigger "
+        "`IdTable`. Must be in the range $(0,100]$.",
+        &overlapChance_, 42.f);
 
-    setToValueInConfigurationOrDefault(ratioRows_, "ratioRows",
-                                       static_cast<size_t>(10));
+    decltype(auto) ratioRows = config.addOption(
+        "ratioRows",
+        "The row ratio between the smaller and the bigger `IdTable`. That is "
+        "the value of the amount of rows in the bigger `IdTable` divided "
+        "through the amount of rows in the smaller `IdTable`.",
+        &ratioRows_, 10UL);
 
-    setToValueInConfigurationOrDefault(minRatioRows_, "minRatioRows",
-                                       static_cast<size_t>(10));
-    setToValueInConfigurationOrDefault(maxRatioRows_, "maxRatioRows",
-                                       static_cast<size_t>(1000));
+    decltype(auto) minRatioRows = config.addOption(
+        "minRatioRows",
+        "The minimum row ratio between the smaller and the bigger `IdTable`.",
+        &minRatioRows_, 10UL);
+    decltype(auto) maxRatioRows = config.addOption(
+        "maxRatioRows",
+        "The maximum row ratio between the smaller and the bigger `IdTable`.",
+        &maxRatioRows_, 1000UL);
+
+    decltype(auto) maxMemoryInMB = config.addOption(
+        "maxMemoryInMB",
+        "Max amount of memory, in MB, that a `IdTable` is allowed "
+        "to take up. `0` for unlimited memory.",
+        &maxMemoryInMB_, 0UL);
+
+    decltype(auto) maxTimeSingleMeasurement = config.addOption(
+        "maxTimeSingleMeasurement",
+        "The maximal amount of time, in seconds, any function "
+        "measurement is allowed to take. `0` for unlimited time.",
+        &maxTimeSingleMeasurement_, 0.f);
+
+    // Helper function for generating lambdas for validators.
 
     /*
-    `maxMemoryInMB` is the max amount, that a `IdTable` is allowed to
-    take up in memory.    */
-    maxMemoryInByte_ = config.getValueByNestedKeys<size_t>("maxMemoryInMB");
-    if (maxMemoryInByte_.has_value()) {
-      // Convert to bytes.
-      maxMemoryInByte_ = maxMemoryInByte_.value() * 1000000;
-    }
+    @brief The generated lambda returns true, iff if it is called with a value,
+    that is bigger than the given minimum value
 
-    maxTimeSingleMeasurement_ =
-        config.getValueByNestedKeys<float>("maxTimeSingleMeasurement");
-
-    // Checking, if all the given values are valid.
-
-    // Default way of checking, if a value is bigger than a constant.
-    auto checkAtLeast = []<typename T>(std::string_view valueToCheckName,
-                                       const T& valueToCheck,
-                                       const T& minimumValue, bool canBeEqual) {
-      if ((!canBeEqual && valueToCheck <= minimumValue) ||
-          valueToCheck < minimumValue) {
-        throw ad_utility::Exception(absl::StrCat(
-            "Configuration option '", valueToCheckName, "', set to ",
-            valueToCheck, ", needs to be",
-            (canBeEqual) ? " at least " : " bigger ", minimumValue, "."));
-      }
+    @param canBeEqual If true, the generated lamba also returns true, if the
+    values are equal.
+    */
+    auto generateBiggerEqualLambda = []<typename T>(const T& minimumValue,
+                                                    bool canBeEqual) {
+      return [minimumValue, canBeEqual](const T& valueToCheck) {
+        return valueToCheck > minimumValue ||
+               (canBeEqual && valueToCheck == minimumValue);
+      };
     };
 
-    // Default way of checking, if a value is smaller than a different value.
-    auto checkSmallerThan =
-        []<typename T>(std::string_view smallerValueName, const T& smallerValue,
-                       std::string_view biggerValueName, const T& biggerValue,
-                       bool canBeEqual) {
-          if ((!canBeEqual && biggerValue <= smallerValue) ||
-              biggerValue < smallerValue) {
-            throw ad_utility::Exception(absl::StrCat(
-                "Configuration option '", smallerValueName, "', set to ",
-                smallerValue, " , must be smaller than",
-                (canBeEqual) ? ", or equal to," : "", " '", biggerValueName,
-                "', set to ", biggerValue, "."));
-          }
-        };
+    // Object with a `operator()` for the `<=` operator.
+    auto lessEqualLambda = std::less_equal<size_t>{};
+
+    // Adding the validators.
 
     /*
-    Is `maxMemoryInByte_` big enough, to even allow for one row of the smaller
+    Is `maxMemoryInMB` big enough, to even allow for one row of the smaller
     table, bigger table, or the table resulting from joining the smaller and
     bigger table?`
     */
-    if (maxMemoryInByte_.has_value()) {
-      // Throw the error message.
-      auto throwMessage = [](std::string_view tableName,
-                             const size_t& tableAmountColumens) {
-        const size_t memoryForOneRow =
-            approximateMemoryNeededByIdTable(1, tableAmountColumens);
-        throw ad_utility::Exception(absl::StrCat(
-            "The configuration option 'maxMemoryInMB' is set too small. A "
-            "single row of ",
-            tableName, " requires at least ", memoryForOneRow,
-            " Byte (Rounded up, ",
-            static_cast<size_t>(std::ceil(memoryForOneRow / 1000000.0)),
-            " MB)."));
-      };
+    auto checkIfMaxMemoryBigEnoughForOneRow =
+        [](const ad_utility::MemorySize maxMemory,
+           const size_t amountOfColumns) {
+          // Remember: `0` is for unlimited memory.
+          // TODO Use the normal comparison operator, once it got implemented
+          // for `MemorySize`.
+          if (maxMemory.getBytes() ==
+              ad_utility::MemorySize::bytes(0).getBytes()) {
+            return true;
+          }
 
-      if (maxMemoryInByte_.value() <
-          approximateMemoryNeededByIdTable(1, smallerTableAmountColumns_)) {
-        throwMessage("the smaller table", smallerTableAmountColumns_);
-      } else if (maxMemoryInByte_.value() < approximateMemoryNeededByIdTable(
-                                                1, biggerTableAmountColumns_)) {
-        throwMessage("the bigger table", biggerTableAmountColumns_);
-      } else if (maxMemoryInByte_.value() <
-                 approximateMemoryNeededByIdTable(
-                     1, smallerTableAmountColumns_ + biggerTableAmountColumns_ -
-                            1)) {
-        throwMessage(
-            "the table, resulting from joining the smaller and bigger table,",
-            smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1);
-      }
-    }
+          return approximateMemoryNeededByIdTable(1, amountOfColumns) >=
+                 maxMemory.getBytes();
+        };
+    config.addValidator(
+        [checkIfMaxMemoryBigEnoughForOneRow](const size_t maxMemoryInMB,
+                                             size_t smallerTableAmountColumns) {
+          return checkIfMaxMemoryBigEnoughForOneRow(
+              ad_utility::MemorySize::megabytes(maxMemoryInMB),
+              smallerTableAmountColumns);
+        },
+        "'maxMemoryInMB' must be big enough, for at least one row in the the "
+        "smaller table.",
+        maxMemoryInMB, smallerTableAmountColumns);
+    config.addValidator(
+        [checkIfMaxMemoryBigEnoughForOneRow](const size_t maxMemoryInMB,
+                                             size_t biggerTableAmountColumns) {
+          return checkIfMaxMemoryBigEnoughForOneRow(
+              ad_utility::MemorySize::megabytes(maxMemoryInMB),
+              biggerTableAmountColumns);
+        },
+        "'maxMemoryInMB' must be big enough, for at least one row in the the "
+        "bigger table.",
+        maxMemoryInMB, biggerTableAmountColumns);
+    config.addValidator(
+        [checkIfMaxMemoryBigEnoughForOneRow](const size_t maxMemoryInMB,
+                                             size_t smallerTableAmountColumns,
+                                             size_t biggerTableAmountColumns) {
+          return checkIfMaxMemoryBigEnoughForOneRow(
+              ad_utility::MemorySize::megabytes(maxMemoryInMB),
+              smallerTableAmountColumns + biggerTableAmountColumns - 1);
+        },
+        "'maxMemoryInMB' must be big enough, for at least one row in the the "
+        "result of joining the smaller and bigger table.",
+        maxMemoryInMB, smallerTableAmountColumns, biggerTableAmountColumns);
 
-    // Is `smallerTableAmountRows_` a valid value?
-    checkAtLeast("smallerTableAmountRows_", smallerTableAmountRows_,
-                 static_cast<size_t>(1), true);
+    // Is `smallerTableAmountRows` a valid value?
+    config.addValidator(generateBiggerEqualLambda(1UL, true),
+                        "'smallerTableAmountRows' must be at least 1.",
+                        smallerTableAmountRows);
 
-    // Is `smallerTableAmountRows_` smaller than `minBiggerTableRows_`?
-    checkSmallerThan("smallerTableAmountRows", smallerTableAmountRows_,
-                     "minBiggerTableRows", minBiggerTableRows_, true);
+    // Is `smallerTableAmountRows` smaller than `minBiggerTableRows`?
+    config.addValidator(
+        lessEqualLambda,
+        "'smallerTableAmountRows' must be smaller than, or equal to, "
+        "'minBiggerTableRows'.",
+        smallerTableAmountRows, minBiggerTableRows);
 
-    // Is `minBiggerTableRows_` big enough, to deliver interesting measurements?
-    if (minBiggerTableRows_ < minBiggerTableRowsDefault) {
-      throw ad_utility::Exception(absl::StrCat(
-          "The configuration option '`minBiggerTableRows_`' with ",
-          minBiggerTableRows_,
-          " rows, is to small. Interessting measurement values only start to "
-          "turn up at ",
-          minBiggerTableRowsDefault, " rows, or more."));
-    }
+    // Is `minBiggerTableRows` big enough, to deliver interesting measurements?
+    config.addValidator(
+        generateBiggerEqualLambda(
+            minBiggerTableRows.getConfigOption().getDefaultValue<size_t>(),
+            false),
+        absl::StrCat(
+            "'minBiggerTableRows' is to small. Interessting measurement values "
+            "only start to turn up at ",
+            minBiggerTableRows.getConfigOption().getDefaultValueAsString(),
+            " rows, or more."),
+        minBiggerTableRows);
 
-    // Is `minBiggerTableRows_` smaller, or equal, to `maxBiggerTableRows_`?
-    checkSmallerThan("minBiggerTableRows", minBiggerTableRows_,
-                     "maxBiggerTableRows", maxBiggerTableRows_, true);
+    // Is `minBiggerTableRows` smaller, or equal, to `maxBiggerTableRows`?
+    config.addValidator(
+        lessEqualLambda,
+        "'minBiggerTableRows' must be smaller than, or equal to, "
+        "'maxBiggerTableRows'.",
+        minBiggerTableRows, maxBiggerTableRows);
 
     // Do we have at least 1 column?
-    checkAtLeast("smallerTableAmountColumns", smallerTableAmountColumns_,
-                 static_cast<size_t>(1), true);
-    checkAtLeast("biggerTableAmountColumns", biggerTableAmountColumns_,
-                 static_cast<size_t>(1), true);
+    config.addValidator(generateBiggerEqualLambda(1UL, true),
+                        "'smallerTableAmountColumns' must be at least 1.",
+                        smallerTableAmountColumns);
+    config.addValidator(generateBiggerEqualLambda(1UL, true),
+                        "'biggerTableAmountColumns' must be at least 1.",
+                        biggerTableAmountColumns);
 
     // Is `overlapChance_` bigger than 0?
-    checkAtLeast("overlapChance", overlapChance_, static_cast<float>(0), false);
+    config.addValidator(generateBiggerEqualLambda(0UL, false),
+                        "'overlapChance' must be bigger than 0.",
+                        overlapChance);
+
+    // Is `maxTimeSingleMeasurement` a positive number?
+    config.addValidator(
+        generateBiggerEqualLambda(0UL, true),
+        "'maxTimeSingleMeasurement' must be bigger to, or equal to, 0.",
+        maxTimeSingleMeasurement);
 
     // Is the ratio of rows at least 10?
-    checkAtLeast("ratioRows", ratioRows_, static_cast<size_t>(10), true);
-    checkAtLeast("minRatioRows", minRatioRows_, static_cast<size_t>(10), true);
+    config.addValidator(generateBiggerEqualLambda(10UL, true),
+                        "'ratioRows' must be at least 10 .", ratioRows);
+    config.addValidator(generateBiggerEqualLambda(10UL, true),
+                        "'minRatioRows' must be at least 10 .", minRatioRows);
 
     // Is `minRatioRows` smaller than `maxRatioRows`?
-    checkSmallerThan("minRatioRows", minRatioRows_, "maxRatioRows",
-                     maxRatioRows_, true);
+    config.addValidator(lessEqualLambda,
+                        "'minRatioRows' must be smaller than, or equal to, "
+                        "'maxRatioRows'.",
+                        minRatioRows, maxRatioRows);
   }
 
   /*
   @brief Add metadata information, that is always interessting, if it has been
   set from outside:
   - "maxTimeSingleMeasurement"
-  - Max. number of Rows in the bigger table, if it was set by giving an amount
-    of space in memory.
+  - "maxMemoryInByte"
   */
   void addExternallySetConfiguration(BenchmarkMetadata* meta) const {
-    if (maxTimeSingleMeasurement_.has_value()) {
-      meta->addKeyValuePair("maxTimeSingleMeasurement",
-                            maxTimeSingleMeasurement_.value());
-    }
+    auto addInfiniteWhen0 = [&meta](const std::string& name,
+                                    const auto& value) {
+      if (value != 0) {
+        meta->addKeyValuePair(name, value);
+      } else {
+        meta->addKeyValuePair(name, "infinite");
+      }
+    };
 
-    if (maxMemoryInByte_.has_value()) {
-      meta->addKeyValuePair("maxMemoryInMB",
-                            maxMemoryInByte_.value() / 1000000);
+    addInfiniteWhen0("maxTimeSingleMeasurement", maxTimeSingleMeasurement_);
+    addInfiniteWhen0(
+        "maxMemoryInMB",
+        ad_utility::MemorySize::megabytes(maxMemoryInMB_).getBytes());
+  }
+
+  /*
+  Get the value of the corresponding configuration option. Empty optional stands
+  for `infinite` time.
+  */
+  std::optional<float> maxTimeSingleMeasurement() const {
+    if (maxTimeSingleMeasurement_ != 0) {
+      return {maxTimeSingleMeasurement_};
+    } else {
+      return {std::nullopt};
+    }
+  }
+
+  /*
+  Get the value of the `maxMemoryInMB_` configuration option interpreted as a
+  `MemorySize`. Empty optional stands for `infinite` time.
+  */
+  std::optional<ad_utility::MemorySize> maxMemory() const {
+    if (maxMemoryInMB_ != 0) {
+      return {ad_utility::MemorySize::megabytes(maxMemoryInMB_)};
+    } else {
+      return {std::nullopt};
     }
   }
 };
@@ -981,8 +1020,8 @@ class BmOnlyBiggerTableSizeChanges final
         table.
         */
         ResultTable* table;
-        if (!maxTimeSingleMeasurement_.has_value() &&
-            !maxMemoryInByte_.has_value()) {
+        if (!maxTimeSingleMeasurement().has_value() &&
+            !maxMemory().has_value()) {
           /*
           We got the fixed amount of rows for the smaller table and the variable
           amount of rows for the bigger table. Those can be used to calculate
@@ -1007,7 +1046,10 @@ class BmOnlyBiggerTableSizeChanges final
           table = &makeGrowingBenchmarkTable(
               &results, tableName,
               createDefaultStoppingLambda(
-                  maxTimeSingleMeasurement_, maxMemoryInByte_,
+                  maxTimeSingleMeasurement(),
+                  maxMemory().has_value()
+                      ? std::optional{maxMemory().value().getBytes()}
+                      : std::optional<size_t>{},
                   [this](const size_t&) {
                     return approximateMemoryNeededByIdTable(
                         smallerTableAmountRows_, smallerTableAmountColumns_);
@@ -1080,8 +1122,8 @@ class BmOnlySmallerTableSizeChanges final
           single table.
           */
           ResultTable* table;
-          if (!maxTimeSingleMeasurement_.has_value() &&
-              !maxMemoryInByte_.has_value()) {
+          if (!maxTimeSingleMeasurement().has_value() &&
+              !maxMemory().has_value()) {
             /*
             We got the fixed ratio and the variable amount of rows for the
             bigger table. Those can be used to calculate the number of rows in
@@ -1109,7 +1151,10 @@ class BmOnlySmallerTableSizeChanges final
             table = &makeGrowingBenchmarkTable(
                 &results, tableName,
                 createDefaultStoppingLambda(
-                    maxTimeSingleMeasurement_, maxMemoryInByte_,
+                    maxTimeSingleMeasurement(),
+                    maxMemory().has_value()
+                        ? std::optional{maxMemory().value().getBytes()}
+                        : std::optional<size_t>{},
                     [this, &growthFunction](const size_t& row) {
                       return approximateMemoryNeededByIdTable(
                           growthFunction(row), smallerTableAmountColumns_);
@@ -1179,8 +1224,8 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
         table.
         */
         ResultTable* table;
-        if (!maxTimeSingleMeasurement_.has_value() &&
-            !maxMemoryInByte_.has_value()) {
+        if (!maxTimeSingleMeasurement().has_value() &&
+            !maxMemory().has_value()) {
           // Easier reading.
           const std::vector<size_t> smallerTableAmountRows{
               createExponentVectorUntilSize(10, minBiggerTableRows_,
@@ -1199,7 +1244,10 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
           table = &makeGrowingBenchmarkTable(
               &results, tableName,
               createDefaultStoppingLambda(
-                  maxTimeSingleMeasurement_, maxMemoryInByte_,
+                  maxTimeSingleMeasurement(),
+                  maxMemory().has_value()
+                      ? std::optional{maxMemory().value().getBytes()}
+                      : std::optional<size_t>{},
                   [this, &growthFunction](const size_t& row) {
                     return approximateMemoryNeededByIdTable(
                         growthFunction(row), smallerTableAmountColumns_);
