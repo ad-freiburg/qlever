@@ -4,6 +4,8 @@
 
 #include "engine/CartesianProductJoin.h"
 
+#include "engine/CallFixedSize.h"
+
 // ____________________________________________________________________________
 CartesianProductJoin::CartesianProductJoin(
     QueryExecutionContext* executionContext, Children children)
@@ -52,7 +54,7 @@ string CartesianProductJoin::asStringImpl(size_t indent) const {
 // ____________________________________________________________________________
 size_t CartesianProductJoin::getResultWidth() const {
   auto view = childView() | std::views::transform(&Operation::getResultWidth);
-  return std::accumulate(view.begin(), view.end(), 0ul, std::plus{});
+  return std::accumulate(view.begin(), view.end(), 0UL, std::plus{});
 }
 
 // ____________________________________________________________________________
@@ -60,14 +62,14 @@ size_t CartesianProductJoin::getCostEstimate() {
   auto childSizes =
       childView() | std::views::transform(&Operation::getCostEstimate);
   return getSizeEstimate() + std::accumulate(childSizes.begin(),
-                                             childSizes.end(), 0ul,
+                                             childSizes.end(), 0UL,
                                              std::plus{});
 }
 
 // ____________________________________________________________________________
 uint64_t CartesianProductJoin::getSizeEstimateBeforeLimit() {
   auto view = childView() | std::views::transform(&Operation::getSizeEstimate);
-  return std::accumulate(view.begin(), view.end(), 1ul, std::multiplies{});
+  return std::accumulate(view.begin(), view.end(), 1UL, std::multiplies{});
 }
 
 // ____________________________________________________________________________
@@ -86,10 +88,16 @@ bool CartesianProductJoin::knownEmptyResult() {
 // Copy each element from the `inputColumn` `groupSize` times to the
 // `targetColumn`. Repeat until the `targetColumn` is copletely filled. Skip the
 // first `offset` write operations to the `targetColumn`. Call `checkForTimeout`
-// after each write.
+// after each write. If `StaticGroupSize != 0`, then the group size is known at
+// compile time which allows for more efficient loop processing for very small
+// group sizes.
+template <size_t StaticGroupSize = 0>
 static void writeResultColumn(std::span<Id> targetColumn,
                               std::span<const Id> inputColumn, size_t groupSize,
                               size_t offset, auto& checkForTimeout) {
+  if (StaticGroupSize != 0) {
+    AD_CORRECTNESS_CHECK(StaticGroupSize == groupSize);
+  }
   // Copy each element from the `inputColumn` `groupSize` times to
   // the `targetColumn`, repeat until the `targetColumn` is completely filled.
   size_t numRowsWritten = 0;
@@ -102,13 +110,23 @@ static void writeResultColumn(std::span<Id> targetColumn,
   size_t groupStartIdx = offset % groupSize;
   while (true) {
     for (size_t i = firstInputElementIdx; i < inputSize; ++i) {
-      for (size_t u = groupStartIdx; u < groupSize; ++u) {
-        if (numRowsWritten == targetSize) {
-          return;
+      auto writeGroup = [&](size_t actualGroupSize) {
+        for (size_t u = groupStartIdx; u < actualGroupSize; ++u) {
+          if (numRowsWritten == targetSize) {
+            return;
+          }
+          targetColumn[numRowsWritten] = inputColumn[i];
+          ++numRowsWritten;
+          checkForTimeout();
         }
-        targetColumn[numRowsWritten] = inputColumn[i];
-        ++numRowsWritten;
-        checkForTimeout();
+      };
+      if constexpr (StaticGroupSize == 0) {
+        writeGroup(groupSize);
+      } else {
+        writeGroup(StaticGroupSize);
+      }
+      if (numRowsWritten == targetSize) {
+        return;
       }
       // only the first round might be incomplete because of the offset, all
       // subsequent rounds start at 0.
@@ -153,12 +171,12 @@ ResultTable CartesianProductJoin::computeResult() {
       limitIfPresent.value()._limit =
           limitIfPresent.value()._limit.value() / subResults.back()->size() + 1;
     }
-  };
+  }
 
   auto sizesView = std::views::transform(
       subResults, [](const auto& child) { return child->size(); });
   auto totalResultSize = std::accumulate(sizesView.begin(), sizesView.end(),
-                                         1ul, std::multiplies{});
+                                         1UL, std::multiplies{});
 
   size_t totalSizeIncludingLimit = getLimit().actualSize(totalResultSize);
   size_t offset = getLimit().actualOffset(totalResultSize);
@@ -177,8 +195,10 @@ ResultTable CartesianProductJoin::computeResult() {
       const auto& input = subResultPtr->idTable();
       for (const auto& inputCol : input.getColumns()) {
         decltype(auto) resultCol = result.getColumn(resultColIdx);
-        writeResultColumn(resultCol, inputCol, groupSize, offset,
-                          checkForTimeout);
+        ad_utility::callFixedSize(groupSize, [&]<size_t I>() {
+          writeResultColumn<I>(resultCol, inputCol, groupSize, offset,
+                               checkForTimeout);
+        });
         ++resultColIdx;
       }
       groupSize *= input.numRows();

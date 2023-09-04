@@ -1398,7 +1398,7 @@ void QueryPlanner::applyFiltersIfPossible(
 std::vector<QueryPlanner::SubtreePlan>
 QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
-    const vector<SparqlFilter>& filters, const TripleGraph& tg) {
+    const vector<SparqlFilter>& filters, const TripleGraph& tg) const {
   vector<vector<QueryPlanner::SubtreePlan>> dpTab;
   // find the unique number of nodes in the current connected component
   // (there might be duplicates because we already have multiple candidates
@@ -1420,12 +1420,9 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
       applyFiltersIfPossible(dpTab.back(), filters, false);
     }
-    if (dpTab[k - 1].size() == 0) {
-      AD_THROW(
-          "Could not find a suitable execution tree for a connected "
-          "component of the query. This should not happen, please report it "
-          "to the developers");
-    }
+    // As we only passed in connected components, we expect the result to always
+    // be nonempty.
+    AD_CORRECTNESS_CHECK(!dpTab[k - 1].empty());
   }
   return std::move(dpTab.back());
 }
@@ -1445,8 +1442,8 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   }
   vector<vector<SubtreePlan>> lastDpRowFromComponents;
   for (auto& component : components | std::views::values) {
-    lastDpRowFromComponents.push_back(
-        runDynamicProgrammingOnConnectedComponent(component, filters, tg));
+    lastDpRowFromComponents.push_back(runDynamicProgrammingOnConnectedComponent(
+        std::move(component), filters, tg));
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();
   if (numConnectedComponents == 0) {
@@ -2137,7 +2134,7 @@ void QueryPlanner::QueryGraph::setupGraph(
   // Set up a hash map from variables to nodes that contain this variable.
   const ad_utility::HashMap<Variable, std::vector<Node*>> varToNode = [this]() {
     ad_utility::HashMap<Variable, std::vector<Node*>> result;
-    for (auto& node : nodes_) {
+    for (const auto& node : nodes_) {
       for (const auto& var :
            node->plan_->_qet->getVariableColumns() | std::views::keys) {
         result[var].push_back(node.get());
@@ -2145,13 +2142,14 @@ void QueryPlanner::QueryGraph::setupGraph(
     }
     return result;
   }();
-  // Set up a hash map from nodes to their adjacentNodes. Two nodes are adjacent
-  // if they share a variable. The adjacentNodes are stored as hash sets so we
-  // don't need to worry about duplicates.
-  const ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> adjacentNodes =
+  // Set up a hash map from nodes to their adjacentNodes_. Two nodes are
+  // adjacent if they share a variable. The adjacentNodes_ are stored as hash
+  // sets so we don't need to worry about duplicates.
+  ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> adjacentNodes =
       [&varToNode]() {
         ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> result;
         for (auto& nodesThatContainSameVar : varToNode | std::views::values) {
+          // TODO<C++23> Use std::views::cartesian_product
           for (auto* n1 : nodesThatContainSameVar) {
             for (auto* n2 : nodesThatContainSameVar) {
               if (n1 != n2) {
@@ -2163,11 +2161,11 @@ void QueryPlanner::QueryGraph::setupGraph(
         }
         return result;
       }();
-  // For each node move the set of adjacentNodes from the global hash map to the
-  // node itself.
-  for (auto& node : nodes_) {
+  // For each node move the set of adjacentNodes_ from the global hash map to
+  // the node itself.
+  for (const auto& node : nodes_) {
     if (adjacentNodes.contains(node.get())) {
-      node->adjacentNodes = std::move(adjacentNodes.at(node.get()));
+      node->adjacentNodes_ = std::move(adjacentNodes.at(node.get()));
     }
   }
 }
@@ -2180,7 +2178,7 @@ void QueryPlanner::QueryGraph::dfs(Node* startNode, size_t componentIndex) {
   }
   startNode->componentIndex_ = componentIndex;
   startNode->visited_ = true;
-  for (auto* adjacentNode : startNode->adjacentNodes) {
+  for (auto* adjacentNode : startNode->adjacentNodes_) {
     dfs(adjacentNode, componentIndex);
   }
 }
@@ -2188,7 +2186,7 @@ void QueryPlanner::QueryGraph::dfs(Node* startNode, size_t componentIndex) {
 std::vector<size_t> QueryPlanner::QueryGraph::dfsForAllNodes() {
   std::vector<size_t> result;
   size_t nextIndex = 0;
-  for (auto& node : nodes_) {
+  for (const auto& node : nodes_) {
     if (node->visited_) {
       // The node is part of a connected component that was already found.
       result.push_back(node->componentIndex_);

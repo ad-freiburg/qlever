@@ -5,10 +5,12 @@
 #pragma once
 
 #include "./util/GTestHelpers.h"
+#include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/MultiColumnJoin.h"
+#include "engine/NeutralElementOperation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "gmock/gmock-matchers.h"
@@ -79,6 +81,24 @@ inline auto IndexScan =
             AD_PROPERTY(IndexScan, getSubject, Eq(subject)),
             AD_PROPERTY(IndexScan, getPredicate, Eq(predicate)),
             AD_PROPERTY(IndexScan, getObject, Eq(object))));
+};
+
+inline auto Bind = [](const QetMatcher& childMatcher,
+                      std::string_view expression,
+                      Variable target) -> QetMatcher {
+  auto innerMatcher =
+      AllOf(AD_FIELD(parsedQuery::Bind, _target, Eq(target)),
+            AD_FIELD(parsedQuery::Bind, _expression,
+                     AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl,
+                                 getDescriptor, Eq(expression))));
+  return RootOperation<::Bind>(AllOf(
+      AD_PROPERTY(::Bind, bind, AllOf(innerMatcher)),
+      AD_PROPERTY(Operation, getChildren, ElementsAre(Pointee(childMatcher)))));
+};
+
+inline auto NeutralElementOperation = []() {
+  return RootOperation<::NeutralElementOperation>(
+      An<const ::NeutralElementOperation&>());
 };
 
 // Same as above, but the subject, predicate, and object are passed in as

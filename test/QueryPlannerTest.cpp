@@ -1104,3 +1104,11 @@ TEST(QueryPlannerTest, CartesianProductJoin) {
           h::Join(scan("?s", "<p>", "<o>"), scan("?s", "<p2>", "?o2")),
           scan("?x", "<b>", "?c")));
 }
+
+// __________________________________________________________________________
+TEST(QueryPlanner, BindAtBeginningOfQuery) {
+  h::expect(
+      "SELECT * WHERE {"
+      " BIND (3 + 5 AS ?x) }",
+      h::Bind(h::NeutralElementOperation(), "3 + 5", Variable{"?x"}));
+}

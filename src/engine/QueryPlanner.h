@@ -172,7 +172,7 @@ class QueryPlanner {
     class Node {
      public:
       const SubtreePlan* plan_;
-      ad_utility::HashSet<Node*> adjacentNodes{};
+      ad_utility::HashSet<Node*> adjacentNodes_{};
       // Was this node already visited during DFS.
       bool visited_ = false;
       // Index of the connected component of this node (will be set to a value
@@ -436,7 +436,7 @@ class QueryPlanner {
   // are not in fact connected (via their variables).
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
-      const vector<SparqlFilter>& filters, const TripleGraph& tg);
+      const vector<SparqlFilter>& filters, const TripleGraph& tg) const;
 
   [[nodiscard]] SubtreePlan getTextLeafPlan(
       const TripleGraph::Node& node) const;
