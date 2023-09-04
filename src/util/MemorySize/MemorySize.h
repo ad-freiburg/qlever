@@ -345,12 +345,18 @@ constexpr MemorySize& MemorySize::operator+=(const MemorySize& m) {
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::operator-(const MemorySize& m) const {
+  // Check for underflow.
+  if (memoryInBytes_ < m.memoryInBytes_) {
+    throw std::underflow_error(
+        "Underflow error: Subtraction of the two given 'MemorySize' not "
+        "possible. Would result in size_t underflow.");
+  }
   return MemorySize::bytes(memoryInBytes_ - m.memoryInBytes_);
 }
 
 // _____________________________________________________________________________
 constexpr MemorySize& MemorySize::operator-=(const MemorySize& m) {
-  memoryInBytes_ -= m.memoryInBytes_;
+  *this = *this - m;
   return *this;
 }
 
