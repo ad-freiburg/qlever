@@ -396,6 +396,23 @@ constexpr MemorySize MemorySize::operator/(const T c) const {
   AD_CONTRACT_CHECK(c > static_cast<T>(0));
 
   /*
+  Check for overflow. Underflow isn't possible, because neither `MemorySize`,
+  nor `c`, can be negative.
+
+  Furthermore, overflow is only possible, if `T` is a floating point. Because
+  the quoutient, of the division between two natural numbers, is always smaller
+  than the dividend. Which is not always true, if the divisor is a floating
+  point number.
+  For example: 1/(1/2) = 2
+  */
+  if (std::floating_point<T> && static_cast<double>(memoryInBytes_) >
+                                    static_cast<double>(size_t_max) * c) {
+    throw std::overflow_error(
+        "Overflow error: Division of the given 'MemorySize' with the given "
+        "constant is not possible. Would result in size_t overflow.");
+  }
+
+  /*
   The default division for `size_t` doesn't always round up, which is the
   wanted behavior for the calculation of memory sizes. Instead, we calculate
   the division with as much precision as possible and leave the rounding to
