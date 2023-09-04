@@ -46,6 +46,25 @@ concept Validator =
     std::regular_invocable<Func, const ParameterTypes&...> &&
     std::same_as<std::invoke_result_t<Func, const ParameterTypes&...>, bool>;
 
+// Simple struct, that holds an error message. For use as the return type of
+// invocable object, that fullfill `ExceptionValidator`.
+struct ErrorMessage {
+  const std::string message;
+};
+
+/*
+An exception validator function is any invocable object, who takes the given
+parameter types, in the same order and transformed to `const type&`, and returns
+an instance of `std::optional<ErrorMessage>`.
+
+This concept is used for `ConfigManager::addValidator`.
+*/
+template <typename Func, typename... ParameterTypes>
+concept ExceptionValidator =
+    std::regular_invocable<Func, const ParameterTypes&...> &&
+    std::same_as<std::invoke_result_t<Func, const ParameterTypes&...>,
+                 std::optional<ErrorMessage>>;
+
 /*
 Manages a bunch of `ConfigOption`s.
 */
