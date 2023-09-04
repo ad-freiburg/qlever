@@ -11,6 +11,7 @@
 #include <concepts>
 #include <cstddef>
 #include <functional>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 
@@ -211,7 +212,7 @@ constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
     throw std::runtime_error(
         absl::StrCat(amountOfUnits, " ", unitName,
                      " is larger than the maximum amount of memory that can be "
-                     "addressed using 64 bits"));
+                     "addressed using 64 bits."));
   }
 
   if constexpr (std::is_floating_point_v<T>) {
@@ -327,12 +328,18 @@ constexpr double MemorySize::getTerabytes() const {
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::operator+(const MemorySize& m) const {
+  // Check for overflow.
+  if (memoryInBytes_ > size_t_max - m.memoryInBytes_) {
+    throw std::overflow_error(
+        "Overflow error: Addition of the two given 'MemorySize' not possible. "
+        "Would result in size_t overflow.");
+  }
   return MemorySize::bytes(memoryInBytes_ + m.memoryInBytes_);
 }
 
 // _____________________________________________________________________________
 constexpr MemorySize& MemorySize::operator+=(const MemorySize& m) {
-  memoryInBytes_ += m.memoryInBytes_;
+  *this = *this + m;
   return *this;
 }
 
