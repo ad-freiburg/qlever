@@ -32,7 +32,7 @@ class UniqueCleanup {
   ///                 pointer as this may lead to segfaults because the pointer
   ///                 will point to the old object after moving.
   UniqueCleanup(type&& value, std::function<void(type&&)> function)
-      : value_{std::forward<type>(value)}, function_{std::move(function)} {}
+      : value_{std::move(value)}, function_{std::move(function)} {}
 
   type& operator*() noexcept { return value_; }
   const type& operator*() const noexcept { return value_; }

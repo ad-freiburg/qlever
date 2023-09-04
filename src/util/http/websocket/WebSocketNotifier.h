@@ -13,8 +13,8 @@ namespace ad_utility::websocket {
 using unique_cleanup::UniqueCleanup;
 
 /// This class wraps bundles an OwningQueryId and a reference to a
-/// WebSocketManager together. On Destruction this automatically notifies
-/// the WebSocketManager that the query was completed.
+/// WebSocketTracker together. On Destruction this automatically notifies
+/// the WebSocketTracker that the query was completed.
 class WebSocketNotifier {
   UniqueCleanup<common::OwningQueryId> owningQueryId_;
   std::shared_ptr<QueryToSocketDistributor> distributor_;

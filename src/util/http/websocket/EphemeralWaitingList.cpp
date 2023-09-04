@@ -19,7 +19,7 @@ void EphemeralWaitingList::signalQueryStart(const QueryId& queryId) {
 }
 
 template <typename CompletionToken>
-net::awaitable<void> EphemeralWaitingList::registerCallbackAndWait(
+auto EphemeralWaitingList::registerCallbackAndWait(
     const QueryId& queryId, CompletionToken&& token) {
   auto initiate = [this, &queryId]<typename Handler>(Handler&& self) mutable {
     auto sharedSelf = std::make_shared<Handler>(std::forward<Handler>(self));

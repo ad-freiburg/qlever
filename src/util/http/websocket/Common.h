@@ -85,7 +85,7 @@ class QueryRegistry {
     bool success = registry_->wlock()->insert(queryId).second;
     if (success) {
       // If the registry is destructed, make sure any remaining OwningQueryId
-      // objects prevent the container from destruction
+      // objects do not prevent the container from destruction
       std::weak_ptr<SynchronizedType> weakRegistry = registry_;
       return OwningQueryId{
           std::move(queryId),

@@ -54,8 +54,7 @@ class EphemeralWaitingList {
   /// The main logic that makes the awaitable "block" until signalQueryStart
   /// is called.
   template <typename CompletionToken>
-  net::awaitable<void> registerCallbackAndWait(const QueryId& queryId,
-                                               CompletionToken&& token);
+  auto registerCallbackAndWait(const QueryId& queryId, CompletionToken&& token);
 
  public:
   /// Signals the query has started and resumes execution of all awaitables
