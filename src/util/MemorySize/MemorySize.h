@@ -366,6 +366,13 @@ constexpr MemorySize MemorySize::operator*(const T c) const {
   // A negative amount of memory wouldn't make much sense.
   AD_CONTRACT_CHECK(c >= static_cast<T>(0));
 
+  // Check for overflow.
+  if (static_cast<double>(c) >
+      detail::sizeTDivision(size_t_max, memoryInBytes_)) {
+    throw std::overflow_error(
+        "Overflow error: Multiplicaton of the given 'MemorySize' with the "
+        "given constant not possible. Would result in size_t overflow.");
+  }
   return detail::magicImplForDivAndMul(*this, c, std::multiplies{});
 }
 

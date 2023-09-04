@@ -399,7 +399,6 @@ TEST(MemorySize, ArithmeticOperatorsOverAndUnderFlow) {
       static_cast<float>(ad_utility::size_t_max) / 4.73);
   ASSERT_NO_THROW(memFloatingPointMultiplication *= 4.73);
 
-  // TODO
   // Floating point division. We are checking for overflow via divisor, that
   // results in a quotient bigger than the dividend. For example: 1/(1/2) = 2
   ASSERT_THROW(100_GB / (1. / static_cast<float>(ad_utility::size_t_max)),
