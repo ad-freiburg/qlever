@@ -270,7 +270,9 @@ class ConfigManager {
         []<typename T>(ConstConfigOptionProxy<T> opt) {
           return opt.getConfigOption().template getValue<std::decay_t<T>>();
         },
-        validatorFunction, errorMessage, configOptionsToBeChecked...);
+        transformValidatorIntoExceptionValidator<ValidatorParameterTypes...>(
+            validatorFunction, errorMessage),
+        configOptionsToBeChecked...);
   }
 
   /*
@@ -298,7 +300,10 @@ class ConfigManager {
         []<typename T>(ConstConfigOptionProxy<T> opt) {
           return opt.getConfigOption();
         },
-        validatorFunction, errorMessage, configOptionsToBeChecked...);
+        transformValidatorIntoExceptionValidator<
+            decltype(configOptionsToBeChecked.getConfigOption())...>(
+            validatorFunction, errorMessage),
+        configOptionsToBeChecked...);
   }
 
  private:
@@ -425,35 +430,62 @@ class ConfigManager {
   bool containsOption(const ConfigOption& opt) const;
 
   /*
-  @brief The implementation of `addValidator` and `addOptionValidator`.
+  @brief Transform a validator function into an exception validator function.
+  That is, instead of returning `bool`, it now returns
+  `std::optional<ErrorMessage>`.
+
+  @param errorMessage Content for `ErrorMessage`.
+  */
+  template <typename... ValidatorParameterTypes>
+  auto transformValidatorIntoExceptionValidator(
+      Validator<ValidatorParameterTypes...> auto validatorFunction,
+      std::string_view errorMessage) {
+    // The whole 'transformation' is simply a wrapper.
+    return [validatorFunction,
+            errorMessage = std::string(std::move(errorMessage))](
+               const ValidatorParameterTypes&... args)
+               -> std::optional<ErrorMessage> {
+      if (std::invoke(validatorFunction, args...)) {
+        return std::nullopt;
+      } else {
+        return ErrorMessage{errorMessage};
+      }
+    };
+  }
+
+  /*
+  @brief The implementation of `addValidator` and `addOptionValidator`. Note:
+  Normal validator functions must first be transformed in to an exception
+  validator function via `transformValidatorIntoExceptionValidator`.
 
   @param addValidatorFunctionName The name of the function, that is calling this
   implementation. So that people can easier identify them.
   @param translationFunction Transforms the given `ConstConfigOptionProxy` in
-  the value form for the validator function.
-  @param validatorFunction Should return true, if the transformed
-  `ConstConfigOptionProxy` represent valid values. For example: There
-  configuration options were all set at run time, or contain numbers bigger
-  than 10.
-  @param errorMessage A `std::runtime_error` with this as an error message will
-  get thrown, if the `validatorFunction` returns false.
+  the value form for the exception validator function.
+  @param exceptionValidatorFunction Should return an empty
+  `std::optional<ErrorMessage>`, if the transformed `ConstConfigOptionProxy`
+  represent valid values. Otherwise, it should return an error message.
+  For example: There configuration options were all set at run time, or contain
+  numbers bigger than 10.
   @param configOptionsToBeChecked Proxies for the configuration options, who
-  will be passed to the validator function as function arguments, after being
-  transformed. Will keep the same order.
+  will be passed to the exception validator function as function arguments,
+  after being transformed. Will keep the same order.
   */
-  template <typename TranslationFunction, typename ValidatorFunction,
-            isInstantiation<ConstConfigOptionProxy>... ValidatorParameter>
-  requires(std::invocable<TranslationFunction, const ValidatorParameter> &&
+  template <
+      typename TranslationFunction, typename ExceptionValidatorFunction,
+      isInstantiation<ConstConfigOptionProxy>... ExceptionValidatorParameter>
+  requires(std::invocable<TranslationFunction,
+                          const ExceptionValidatorParameter> &&
            ...) &&
-          Validator<ValidatorFunction,
-                    std::invoke_result_t<TranslationFunction,
-                                         ValidatorParameter>...> &&
-          (sizeof...(ValidatorParameter) > 0)
-  void addValidatorImpl(std::string_view addValidatorFunctionName,
-                        TranslationFunction translationFunction,
-                        ValidatorFunction validatorFunction,
-                        std::string_view errorMessage,
-                        const ValidatorParameter... configOptionsToBeChecked) {
+          ExceptionValidator<
+              ExceptionValidatorFunction,
+              std::invoke_result_t<TranslationFunction,
+                                   ExceptionValidatorParameter>...> &&
+          (sizeof...(ExceptionValidatorParameter) > 0) void addValidatorImpl(
+      std::string_view addValidatorFunctionName,
+      TranslationFunction translationFunction,
+      ExceptionValidatorFunction exceptionValidatorFunction,
+      const ExceptionValidatorParameter... configOptionsToBeChecked) {
     // Check, if we contain all the configuration options, that were given us.
     auto checkIfContainOption = [this, &addValidatorFunctionName]<typename T>(
                                     ConstConfigOptionProxy<T> opt) {
@@ -468,26 +500,28 @@ class ConfigManager {
     };
     (checkIfContainOption(configOptionsToBeChecked), ...);
 
-    // Create the expanded error message.
+    // Create the error message prefix for inside the function.
     const std::array optionNames{absl::StrCat(
         "'", configOptionsToBeChecked.getConfigOption().getIdentifier(),
         "'")...};
-    std::string expandedErrorMessage =
+    std::string errorMessagePrefix =
         absl::StrCat("Validity check of configuration options ",
-                     lazyStrJoin(optionNames, ", "), " failed: ", errorMessage);
+                     lazyStrJoin(optionNames, ", "), " failed: ");
 
     /*
     Add a function wrapper to our list of validators, that calls the
-    `validatorFunction` with the config options and throws an exception, if the
-    `validatorFunction` returns false.
+    `exceptionValidatorFunction` with the config options and throws an
+    exception, if the `exceptionValidatorFunction` returns a `ErrorMessage`.
     */
-    validators_.emplace_back([translationFunction, validatorFunction,
-                              errorMessage = std::move(expandedErrorMessage),
+    validators_.emplace_back([translationFunction, exceptionValidatorFunction,
+                              errorMessagePre = std::move(errorMessagePrefix),
                               configOptionsToBeChecked...]() {
-      if (!std::invoke(
-              validatorFunction,
-              std::invoke(translationFunction, configOptionsToBeChecked)...)) {
-        throw std::runtime_error(errorMessage);
+      if (const auto errorMessage = std::invoke(
+              exceptionValidatorFunction,
+              std::invoke(translationFunction, configOptionsToBeChecked)...);
+          errorMessage.has_value()) {
+        throw std::runtime_error(
+            absl::StrCat(errorMessagePre, errorMessage.value().message));
       }
     });
   }
