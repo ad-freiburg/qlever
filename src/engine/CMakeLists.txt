@@ -9,5 +9,6 @@ add_library(engine
         OptionalJoin.cpp CountAvailablePredicates.cpp GroupBy.cpp HasPredicateScan.cpp
         Union.cpp MultiColumnJoin.cpp TransitivePath.cpp Service.cpp
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
-        VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp )
+        VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
+        CartesianProductJoin.cpp)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams)
