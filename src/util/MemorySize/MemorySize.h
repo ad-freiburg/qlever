@@ -331,8 +331,9 @@ constexpr MemorySize MemorySize::operator+(const MemorySize& m) const {
   // Check for overflow.
   if (memoryInBytes_ > size_t_max - m.memoryInBytes_) {
     throw std::overflow_error(
-        "Overflow error: Addition of the two given 'MemorySize' not possible. "
-        "Would result in size_t overflow.");
+        "Overflow error: Addition of the two given 'MemorySize's is not "
+        "possible. "
+        "It would result in a size_t overflow.");
   }
   return MemorySize::bytes(memoryInBytes_ + m.memoryInBytes_);
 }
@@ -348,8 +349,8 @@ constexpr MemorySize MemorySize::operator-(const MemorySize& m) const {
   // Check for underflow.
   if (memoryInBytes_ < m.memoryInBytes_) {
     throw std::underflow_error(
-        "Underflow error: Subtraction of the two given 'MemorySize' not "
-        "possible. Would result in size_t underflow.");
+        "Underflow error: Subtraction of the two given 'MemorySize's is not "
+        "possible. It would result in a size_t underflow.");
   }
   return MemorySize::bytes(memoryInBytes_ - m.memoryInBytes_);
 }
@@ -371,7 +372,8 @@ constexpr MemorySize MemorySize::operator*(const T c) const {
       detail::sizeTDivision(size_t_max, memoryInBytes_)) {
     throw std::overflow_error(
         "Overflow error: Multiplicaton of the given 'MemorySize' with the "
-        "given constant not possible. Would result in size_t overflow.");
+        "given constant is not possible. It would result in a size_t "
+        "overflow.");
   }
   return detail::magicImplForDivAndMul(*this, c, std::multiplies{});
 }
@@ -409,7 +411,7 @@ constexpr MemorySize MemorySize::operator/(const T c) const {
                                     static_cast<double>(size_t_max) * c) {
     throw std::overflow_error(
         "Overflow error: Division of the given 'MemorySize' with the given "
-        "constant is not possible. Would result in size_t overflow.");
+        "constant is not possible. It would result in a size_t overflow.");
   }
 
   /*
