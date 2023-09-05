@@ -47,53 +47,58 @@ inline std::span<const ValueId> getIdsFromVariable(
 
 /// Generators that yield `numItems` items for the various
 /// `SingleExpressionResult`s.
-template <SingleExpressionResult T>
-requires isConstantResult<T>
-cppcoro::generator<T> resultGenerator(T constant, size_t numItems) {
+template <SingleExpressionResult T, typename Transformation = std::identity>
+requires isConstantResult<T> && std::invocable<Transformation, T>
+cppcoro::generator<std::decay_t<std::invoke_result_t<Transformation, T>>> resultGenerator(T constant, size_t numItems, Transformation transformation = {}) {
+  auto transformed = transformation(constant);
   for (size_t i = 0; i < numItems; ++i) {
-    co_yield constant;
+    co_yield transformed;
   }
 }
 
-template <typename T>
-requires isVectorResult<T> auto resultGenerator(T vector, size_t numItems)
-    -> cppcoro::generator<std::remove_reference_t<decltype(vector[0])>> {
+template <typename T, typename Transformation = std::identity>
+requires std::ranges::input_range<T> auto resultGenerator(T vector, size_t numItems, Transformation transformation = {})
+    -> cppcoro::generator<std::decay_t<std::invoke_result_t<Transformation, std::remove_reference_t<decltype(*vector.begin())>>>> {
   AD_CONTRACT_CHECK(numItems == vector.size());
   for (auto& element : vector) {
-    auto cpy = std::move(element);
+    auto cpy = transformation(std::move(element));
     co_yield cpy;
   }
 }
 
-inline cppcoro::generator<Id> resultGenerator(ad_utility::SetOfIntervals set,
-                                              size_t targetSize) {
+template <typename Transformation = std::identity>
+inline cppcoro::generator<std::decay_t<std::invoke_result_t<Transformation, Id>>> resultGenerator(ad_utility::SetOfIntervals set,
+                                              size_t targetSize, Transformation transformation = {}) {
   size_t i = 0;
   for (const auto& [begin, end] : set._intervals) {
     while (i < begin) {
-      co_yield Id::makeFromBool(false);
+      auto x =  transformation(Id::makeFromBool(false));
+      co_yield x;
       ++i;
     }
     while (i < end) {
-      co_yield Id::makeFromBool(true);
+        auto x =  transformation(Id::makeFromBool(true));
+        co_yield x;
       ++i;
     }
   }
   while (i++ < targetSize) {
-    co_yield Id::makeFromBool(false);
+    auto x = transformation(Id::makeFromBool(false));
+    co_yield x;
   }
 }
 
 /// Return a generator that yields `numItems` many items for the various
 /// `SingleExpressionResult`
-template <SingleExpressionResult Input>
+template <SingleExpressionResult Input, typename Transformation = std::identity>
 auto makeGenerator(Input&& input, size_t numItems,
-                   const EvaluationContext* context) {
+                   const EvaluationContext* context,Transformation transformation = {} ) {
   if constexpr (ad_utility::isSimilar<::Variable, Input>) {
     std::span<const ValueId> inputWithVariableResolved{
         getIdsFromVariable(std::forward<Input>(input), context)};
-    return resultGenerator(inputWithVariableResolved, numItems);
+    return resultGenerator(inputWithVariableResolved, numItems, transformation);
   } else {
-    return resultGenerator(std::forward<Input>(input), numItems);
+    return resultGenerator(std::forward<Input>(input), numItems, transformation);
   }
 }
 
@@ -103,14 +108,17 @@ inline auto valueGetterGenerator =
     []<typename ValueGetter, SingleExpressionResult Input>(
         size_t numElements, EvaluationContext* context, Input&& input,
         ValueGetter&& valueGetter)
+    /*
+    // TODO<joka921> This only works if the value_getters allways return the same type (which they should).
+    // TODO<joka921> Make a better concept here.
     -> cppcoro::generator<std::invoke_result_t<
-        ValueGetter,
-        typename decltype(makeGenerator(AD_FWD(input), 0, nullptr))::value_type,
-        EvaluationContext*>> {
-  for (auto singleInput :
-       makeGenerator(std::forward<Input>(input), numElements, context)) {
-    co_yield valueGetter(std::move(singleInput), context);
-  }
+        ValueGetter, Id,
+        EvaluationContext*>> */{
+
+  auto transformation = [context, valueGetter](auto&& input) requires requires{ valueGetter(AD_FWD(input), context);} {
+    return valueGetter(AD_FWD(input), context);
+  };
+  return makeGenerator(std::forward<Input>(input), numElements, context, transformation);
 };
 
 /// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n
