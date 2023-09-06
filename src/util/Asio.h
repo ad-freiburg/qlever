@@ -14,9 +14,9 @@ namespace net = boost::asio;
 /// Helper function that ensures that co_await resumes on the same
 /// executor it started with.
 template <typename T>
-inline net::awaitable<T> sameExecutor(net::awaitable<T>&& awaitable) {
+inline net::awaitable<T> sameExecutor(net::awaitable<T> awaitable) {
   auto initialExecutor = co_await net::this_coro::executor;
-  auto result = co_await std::forward<net::awaitable<T>>(awaitable);
+  auto result = co_await std::move(awaitable);
   co_await net::dispatch(initialExecutor, net::use_awaitable);
   co_return result;
 }
