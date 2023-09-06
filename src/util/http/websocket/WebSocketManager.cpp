@@ -17,40 +17,6 @@
 namespace ad_utility::websocket {
 using namespace boost::asio::experimental::awaitable_operators;
 
-net::awaitable<void> WebSocketManager::handleClientCommands(websocket& ws) {
-  beast::flat_buffer buffer;
-
-  while (ws.is_open()) {
-    co_await ws.async_read(buffer, net::use_awaitable);
-    // TODO<RobinTF> replace with cancellation process
-    ws.text(ws.got_text());
-    co_await ws.async_write(buffer.data(), net::use_awaitable);
-    buffer.clear();
-  }
-}
-
-// _____________________________________________________________________________
-
-net::awaitable<void> WebSocketManager::waitForServerEvents(
-    websocket& ws, const QueryId& queryId) {
-  UpdateFetcher updateFetcher{queryId, queryHub_};
-  while (ws.is_open()) {
-    auto json = co_await updateFetcher.waitForEvent();
-    if (json == nullptr) {
-      if (ws.is_open()) {
-        co_await ws.async_close(beast::websocket::close_code::normal,
-                                net::use_awaitable);
-      }
-      break;
-    }
-    ws.text(true);
-    co_await ws.async_write(net::buffer(json->data(), json->length()),
-                            net::use_awaitable);
-  }
-}
-
-// _____________________________________________________________________________
-
 // Extracts the query id from a URL path. Returns the empty string when invalid.
 std::string extractQueryId(std::string_view path) {
   auto match = ctre::match<"/watch/([^/?]+)">(path);
@@ -62,27 +28,62 @@ std::string extractQueryId(std::string_view path) {
 
 // _____________________________________________________________________________
 
-net::awaitable<void> WebSocketManager::connectionLifecycle(
-    tcp::socket socket, http::request<http::string_body> request) {
+QueryId WebSocketManager::extractFromRequest(
+    http::request<http::string_body>& request) {
   auto queryIdString = extractQueryId(request.target());
   AD_CORRECTNESS_CHECK(!queryIdString.empty());
-  QueryId queryId = QueryId::idFromString(queryIdString);
-  websocket ws{std::move(socket)};
+  return QueryId::idFromString(queryIdString);
+}
 
+// _____________________________________________________________________________
+
+net::awaitable<void> WebSocketManager::handleClientCommands() {
+  beast::flat_buffer buffer;
+
+  while (ws_.is_open()) {
+    co_await ws_.async_read(buffer, net::use_awaitable);
+    // TODO<RobinTF> replace with cancellation process
+    ws_.text(ws_.got_text());
+    co_await ws_.async_write(buffer.data(), net::use_awaitable);
+    buffer.clear();
+  }
+}
+
+// _____________________________________________________________________________
+
+net::awaitable<void> WebSocketManager::waitForServerEvents() {
+  while (ws_.is_open()) {
+    auto json = co_await updateFetcher_.waitForEvent();
+    if (json == nullptr) {
+      if (ws_.is_open()) {
+        co_await ws_.async_close(beast::websocket::close_code::normal,
+                                 net::use_awaitable);
+      }
+      break;
+    }
+    ws_.text(true);
+    co_await ws_.async_write(net::buffer(json->data(), json->length()),
+                             net::use_awaitable);
+  }
+}
+
+// _____________________________________________________________________________
+
+net::awaitable<void> WebSocketManager::connectionLifecycle() {
   try {
-    ws.set_option(beast::websocket::stream_base::timeout::suggested(
+    ws_.set_option(beast::websocket::stream_base::timeout::suggested(
         beast::role_type::server));
 
-    co_await ws.async_accept(request, boost::asio::use_awaitable);
+    co_await ws_.async_accept(request_, boost::asio::use_awaitable);
 
-    auto strand = net::make_strand(ws.get_executor());
+    auto strand = net::make_strand(ws_.get_executor());
 
     co_await net::dispatch(strand, net::use_awaitable);
 
     // Experimental operators, see
     // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html
     // for more information
-    co_await (waitForServerEvents(ws, queryId) && handleClientCommands(ws));
+    co_await (waitForServerEvents() && handleClientCommands());
 
   } catch (boost::system::system_error& error) {
     if (error.code() == beast::websocket::error::closed) {
@@ -93,15 +94,11 @@ net::awaitable<void> WebSocketManager::connectionLifecycle(
   }
 
   // In case an unexpected exception is thrown, close the connection gracefully.
-  if (ws.is_open()) {
-    co_await ws.async_close(beast::websocket::close_code::internal_error,
-                            net::use_awaitable);
+  if (ws_.is_open()) {
+    co_await ws_.async_close(beast::websocket::close_code::internal_error,
+                             net::use_awaitable);
   }
 }
-
-// _____________________________________________________________________________
-
-QueryHub& WebSocketManager::getQueryHub() { return queryHub_; }
 
 // _____________________________________________________________________________
 

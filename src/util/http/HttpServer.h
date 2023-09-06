@@ -58,7 +58,7 @@ class HttpServer {
       net::make_strand(ioContext_);
   tcp::acceptor acceptor_{acceptorStrand_};
   std::atomic<bool> serverIsReady_ = false;
-  ad_utility::websocket::WebSocketManager webSocketManager_{ioContext_};
+  ad_utility::websocket::QueryHub queryHub_{ioContext_};
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
@@ -89,9 +89,7 @@ class HttpServer {
     }
   }
 
-  ad_utility::websocket::QueryHub& getQueryHub() noexcept {
-    return webSocketManager_.getQueryHub();
-  }
+  ad_utility::websocket::QueryHub& getQueryHub() noexcept { return queryHub_; }
 
   /// Run the server using the specified number of threads. Note that this
   /// function never returns, unless the Server crashes. The second argument
@@ -236,8 +234,9 @@ class HttpServer {
           } else {
             // prevent cleanup after socket has been moved from
             releaseConnection.cancel();
-            co_await webSocketManager_.connectionLifecycle(
-                std::move(stream.socket()), std::move(req));
+            ad_utility::websocket::WebSocketManager wsManager{
+                queryHub_, std::move(req), std::move(stream.socket())};
+            co_await wsManager.connectionLifecycle();
             co_return;
           }
         } else {

@@ -7,6 +7,8 @@
 #include <boost/asio/associated_cancellation_slot.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include "util/Log.h"
+
 namespace ad_utility::websocket {
 
 template <typename CompletionToken>

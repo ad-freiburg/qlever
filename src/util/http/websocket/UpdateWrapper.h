@@ -5,9 +5,12 @@
 #ifndef QLEVER_UPDATEWRAPPER_H
 #define QLEVER_UPDATEWRAPPER_H
 
+#include <boost/asio/co_spawn.hpp>
+
 #include "util/UniqueCleanup.h"
 #include "util/http/websocket/Common.h"
-#include "util/http/websocket/WebSocketManager.h"
+#include "util/http/websocket/QueryHub.h"
+#include "util/http/websocket/QueryToSocketDistributor.h"
 
 namespace ad_utility::websocket {
 using unique_cleanup::UniqueCleanup;

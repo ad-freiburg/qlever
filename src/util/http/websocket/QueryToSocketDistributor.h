@@ -9,12 +9,12 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/strand.hpp>
 #include <functional>
+#include <memory>
+#include <vector>
 
 #include "util/UniqueCleanup.h"
-#include "util/http/websocket/Common.h"
 
 namespace ad_utility::websocket {
-using websocket::common::QueryId;
 namespace net = boost::asio;
 
 /// Class that temporarily holds live information of a single query to allow
@@ -24,6 +24,9 @@ namespace net = boost::asio;
 /// will end up on a different executor when awaiting it, so make sure
 /// to use a wrapper like `sameExecutor()` to stay on your executor!
 class QueryToSocketDistributor {
+  // Counter to generate unique ids
+  uint64_t counter = 0;
+  // Helper struct to bundle a function with a unique id
   struct IdentifiableFunction {
     std::function<void()> function_;
     uint64_t id_;
@@ -39,9 +42,9 @@ class QueryToSocketDistributor {
   /// Flag to indicate if a query ended and won't receive any more updates.
   bool finished_ = false;
 
+  /// Function to remove this distributor from the registry when it is
+  /// destructed.
   unique_cleanup::UniqueCleanup<std::function<void()>> cleanupCall_;
-
-  uint64_t counter = 0;
 
   /// Wakes up all websockets that are currently "blocked" and waiting for an
   /// update of the given query. After being woken up they will check for

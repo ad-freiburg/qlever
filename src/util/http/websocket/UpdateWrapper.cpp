@@ -4,8 +4,6 @@
 
 #include "util/http/websocket/UpdateWrapper.h"
 
-#include <boost/asio/co_spawn.hpp>
-
 namespace ad_utility::websocket {
 
 net::awaitable<UpdateWrapper> UpdateWrapper::create(common::QueryId queryId,

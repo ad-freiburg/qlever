@@ -12,6 +12,7 @@
 #include "util/http/websocket/QueryToSocketDistributor.h"
 
 namespace ad_utility::websocket {
+using common::QueryId;
 using StrandType = net::strand<net::any_io_executor>;
 
 /// Class that provides the functionality to create and/or acquire a
@@ -21,7 +22,9 @@ using StrandType = net::strand<net::any_io_executor>;
 /// used once and from then onwards only the `QueryToSocketDistributor` instance
 /// is used.
 class QueryHub {
+  // Counter to generate unique ids
   uint64_t counter = 0;
+  // Helper struct to bundle a weak pointer with a unique id
   struct IdentifiablePointer {
     std::weak_ptr<QueryToSocketDistributor> pointer_;
     uint64_t id_;

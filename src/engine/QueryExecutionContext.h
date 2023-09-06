@@ -23,7 +23,6 @@
 #include "util/Log.h"
 #include "util/Synchronized.h"
 #include "util/http/websocket/Common.h"
-#include "util/http/websocket/WebSocketManager.h"
 
 using std::shared_ptr;
 using std::string;
