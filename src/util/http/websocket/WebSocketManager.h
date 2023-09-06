@@ -18,7 +18,6 @@ namespace http = beast::http;
 using boost::asio::ip::tcp;
 using websocket::common::QueryId;
 using websocket = beast::websocket::stream<tcp::socket>;
-using StrandType = net::strand<net::any_io_executor>;
 
 /// Central class to keep track of all currently connected websockets
 /// to provide them with status updates.
@@ -30,8 +29,7 @@ class WebSocketManager {
 
   /// Loop that waits for an update of the given query to occur and send it
   /// to the client once it happens
-  net::awaitable<void> waitForServerEvents(websocket&, const QueryId&,
-                                           StrandType&);
+  net::awaitable<void> waitForServerEvents(websocket&, const QueryId&);
 
  public:
   /// Constructs an instance of this class using the provided io context

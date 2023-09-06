@@ -9,20 +9,20 @@
 #include <functional>
 #include <memory>
 
+#include "util/ResetWhenMoved.h"
+
 namespace ad_utility::unique_cleanup {
 
 /// Wrapper class that allows to call a function
 /// just before the wrapper value T is destroyed.
 template <std::move_constructible T>
 class UniqueCleanup {
-  using type = std::remove_reference_t<T>;
-
   /// Boolean indicating if object was not moved out of
-  bool active_ = true;
+  ResetWhenMoved<bool, false> active_ = true;
   /// Wrapped value
-  type value_;
+  T value_;
   /// Cleanup function. Only run once
-  std::function<void(type&&)> function_;
+  std::function<void(T&&)> function_;
 
  public:
   /// Accepts a value and a function that is called just before destruction.
@@ -31,36 +31,25 @@ class UniqueCleanup {
   ///                 Note: Make sure the function doesn't capture the this
   ///                 pointer as this may lead to segfaults because the pointer
   ///                 will point to the old object after moving.
-  UniqueCleanup(type&& value, std::function<void(type&&)> function)
+  UniqueCleanup(T&& value, std::function<void(T&&)> function)
       : value_{std::move(value)}, function_{std::move(function)} {}
 
-  type& operator*() noexcept { return value_; }
-  const type& operator*() const noexcept { return value_; }
+  T& operator*() noexcept { return value_; }
+  const T& operator*() const noexcept { return value_; }
 
-  type* operator->() noexcept { return &value_; }
-  const type* operator->() const noexcept { return &value_; }
+  T* operator->() noexcept { return &value_; }
+  const T* operator->() const noexcept { return &value_; }
 
   UniqueCleanup(const UniqueCleanup&) noexcept = delete;
   UniqueCleanup& operator=(const UniqueCleanup&) noexcept = delete;
 
-  UniqueCleanup(UniqueCleanup&& cleanupDeleter) noexcept
-      : value_{std::move(cleanupDeleter.value_)},
-        function_{std::move(cleanupDeleter.function_)} {
-    // Make sure active is false after moving from another object
-    cleanupDeleter.active_ = false;
-  }
+  UniqueCleanup(UniqueCleanup&& cleanupDeleter) noexcept = default;
 
-  UniqueCleanup& operator=(UniqueCleanup&& cleanupDeleter) noexcept {
-    value_ = std::move(cleanupDeleter.value_);
-    function_ = std::move(cleanupDeleter.function_);
-    active_ = cleanupDeleter.active_;
-    cleanupDeleter.active_ = false;
-    return *this;
-  }
+  UniqueCleanup& operator=(UniqueCleanup&& cleanupDeleter) noexcept = default;
 
   ~UniqueCleanup() {
     if (active_) {
-      function_(std::move(value_));
+      std::invoke(function_, std::move(value_));
     }
   }
 };

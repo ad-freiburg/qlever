@@ -13,7 +13,7 @@
 #include "util/Synchronized.h"
 #include "util/UniqueCleanup.h"
 
-// Provides types required by all the other *.cpp files in this directory
+// Provides types required by most of the other files in this directory
 // and a select few other places
 namespace ad_utility::websocket::common {
 
@@ -68,7 +68,9 @@ class QueryRegistry {
   using SynchronizedType =
       ad_utility::Synchronized<ad_utility::HashSet<QueryId>>;
   // Technically no shared pointer is required because the registry lives
-  // for the entire lifetime of the application, but since the
+  // for the entire lifetime of the application, but since the instances of
+  // `OwningQueryId` need to deregister themselves again they need some
+  // sort of reference, which is safe when a shared ptr is used.
   std::shared_ptr<SynchronizedType> registry_{
       std::make_shared<SynchronizedType>()};
 
@@ -84,14 +86,14 @@ class QueryRegistry {
     auto queryId = QueryId::idFromString(std::move(id));
     bool success = registry_->wlock()->insert(queryId).second;
     if (success) {
-      // If the registry is destructed, make sure any remaining OwningQueryId
-      // objects do not prevent the container from destruction
+      // Avoid undefined behavior when the registry is no longer alive at the
+      // time the `OwningQueryId` is destroyed.
       std::weak_ptr<SynchronizedType> weakRegistry = registry_;
       return OwningQueryId{
           std::move(queryId),
           [weakRegistry = std::move(weakRegistry)](const QueryId& qid) {
             AD_CORRECTNESS_CHECK(!qid.empty());
-            // Registry might be
+            // Registry might be destroyed already, do nothing in this case.
             if (auto registry = weakRegistry.lock()) {
               registry->wlock()->erase(qid);
             }

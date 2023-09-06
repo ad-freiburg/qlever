@@ -41,12 +41,16 @@ auto QueryToSocketDistributor::waitForUpdate(CompletionToken&& token) {
       initiate, std::forward<CompletionToken>(token));
 }
 
+// _____________________________________________________________________________
+
 void QueryToSocketDistributor::runAndEraseWakeUpCallsSynchronously() {
   for (auto& wakeupCall : *wakeupCalls_) {
     std::invoke(wakeupCall.function_);
   }
   wakeupCalls_->clear();
 }
+
+// _____________________________________________________________________________
 
 net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
     std::string payload) {
@@ -63,11 +67,15 @@ net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
   runAndEraseWakeUpCallsSynchronously();
 }
 
+// _____________________________________________________________________________
+
 net::awaitable<void> QueryToSocketDistributor::signalEnd() {
   co_await net::dispatch(strand_, net::use_awaitable);
   finished_ = true;
   runAndEraseWakeUpCallsSynchronously();
 }
+
+// _____________________________________________________________________________
 
 net::awaitable<std::shared_ptr<const std::string>>
 QueryToSocketDistributor::waitForNextDataPiece(size_t index) {

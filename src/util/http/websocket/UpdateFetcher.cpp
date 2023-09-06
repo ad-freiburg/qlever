@@ -4,17 +4,18 @@
 
 #include "util/http/websocket/UpdateFetcher.h"
 
+#include "util/Asio.h"
+
 namespace ad_utility::websocket {
 
 net::awaitable<UpdateFetcher::PayloadType> UpdateFetcher::waitForEvent() {
-  co_await net::dispatch(socketStrand_, net::use_awaitable);
   if (!distributor_) {
     distributor_ =
         co_await webSocketTracker_.createOrAcquireDistributor(queryId_);
   }
 
-  auto data = co_await distributor_->waitForNextDataPiece(nextIndex_);
-  co_await net::dispatch(socketStrand_, net::use_awaitable);
+  auto data =
+      co_await sameExecutor(distributor_->waitForNextDataPiece(nextIndex_));
   if (data) {
     nextIndex_++;
   }

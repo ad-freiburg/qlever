@@ -20,7 +20,9 @@ namespace net = boost::asio;
 /// Class that temporarily holds live information of a single query to allow
 /// the individual websockets to query it, and await status updates.
 /// It also provides its own strand so operations on this class do not need
-/// to be synchronized globally. The public API is thread-safe!
+/// to be synchronized globally. The public API is thread-safe, but you
+/// will end up on a different executor when awaiting it, so make sure
+/// to use a wrapper like `sameExecutor()` to stay on your executor!
 class QueryToSocketDistributor {
   struct IdentifiableFunction {
     std::function<void()> function_;

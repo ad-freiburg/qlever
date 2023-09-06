@@ -4,10 +4,11 @@
 
 #include "util/http/websocket/WebSocketTracker.h"
 
+#include "util/Asio.h"
+
 namespace ad_utility::websocket {
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
-WebSocketTracker::createOrAcquireDistributor(QueryId queryId) {
-  auto initialExecutor = co_await net::this_coro::executor;
+WebSocketTracker::createOrAcquireDistributorInternal(QueryId queryId) {
   co_await net::dispatch(globalStrand_, net::use_awaitable);
   if (socketDistributors_.contains(queryId)) {
     if (auto ptr = socketDistributors_.at(queryId).pointer_.lock()) {
@@ -19,8 +20,6 @@ WebSocketTracker::createOrAcquireDistributor(QueryId queryId) {
     // equality before removal.
     socketDistributors_.erase(queryId);
   }
-
-  static std::atomic_uint64_t counter = 0;
 
   auto id = counter++;
   auto coroutine = [](auto strand, auto& distributors, auto queryId,
@@ -42,7 +41,13 @@ WebSocketTracker::createOrAcquireDistributor(QueryId queryId) {
       });
   socketDistributors_.emplace(
       queryId, IdentifiablePointer{.pointer_ = distributor, .id_ = id});
-  co_await net::dispatch(initialExecutor, net::use_awaitable);
   co_return distributor;
+}
+
+// _____________________________________________________________________________
+
+net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+WebSocketTracker::createOrAcquireDistributor(QueryId queryId) {
+  return sameExecutor(createOrAcquireDistributorInternal(std::move(queryId)));
 }
 }  // namespace ad_utility::websocket

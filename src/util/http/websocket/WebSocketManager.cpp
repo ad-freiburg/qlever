@@ -29,9 +29,11 @@ net::awaitable<void> WebSocketManager::handleClientCommands(websocket& ws) {
   }
 }
 
+// _____________________________________________________________________________
+
 net::awaitable<void> WebSocketManager::waitForServerEvents(
-    websocket& ws, const QueryId& queryId, StrandType& socketStrand) {
-  UpdateFetcher updateFetcher{queryId, webSocketTracker_, socketStrand};
+    websocket& ws, const QueryId& queryId) {
+  UpdateFetcher updateFetcher{queryId, webSocketTracker_};
   while (ws.is_open()) {
     auto json = co_await updateFetcher.waitForEvent();
     if (json == nullptr) {
@@ -47,6 +49,8 @@ net::awaitable<void> WebSocketManager::waitForServerEvents(
   }
 }
 
+// _____________________________________________________________________________
+
 // Extracts the query id from a URL path. Returns the empty string when invalid.
 std::string extractQueryId(std::string_view path) {
   auto match = ctre::match<"/watch/([^/?]+)">(path);
@@ -55,6 +59,8 @@ std::string extractQueryId(std::string_view path) {
   }
   return "";
 }
+
+// _____________________________________________________________________________
 
 net::awaitable<void> WebSocketManager::connectionLifecycle(
     tcp::socket socket, http::request<http::string_body> request) {
@@ -76,8 +82,7 @@ net::awaitable<void> WebSocketManager::connectionLifecycle(
     // Experimental operators, see
     // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html
     // for more information
-    co_await (waitForServerEvents(ws, queryId, strand) &&
-              handleClientCommands(ws));
+    co_await (waitForServerEvents(ws, queryId) && handleClientCommands(ws));
 
   } catch (boost::system::system_error& error) {
     if (error.code() == beast::websocket::error::closed) {
@@ -94,9 +99,13 @@ net::awaitable<void> WebSocketManager::connectionLifecycle(
   }
 }
 
+// _____________________________________________________________________________
+
 WebSocketTracker& WebSocketManager::getWebSocketTracker() {
   return webSocketTracker_;
 }
+
+// _____________________________________________________________________________
 
 // TODO<C++23> use std::expected<void, ErrorResponse>
 std::optional<http::response<http::string_body>>
