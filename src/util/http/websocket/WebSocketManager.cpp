@@ -11,8 +11,8 @@
 
 #include "util/http/HttpUtils.h"
 #include "util/http/websocket/Common.h"
+#include "util/http/websocket/QueryHub.h"
 #include "util/http/websocket/UpdateFetcher.h"
-#include "util/http/websocket/WebSocketTracker.h"
 
 namespace ad_utility::websocket {
 using namespace boost::asio::experimental::awaitable_operators;
@@ -33,7 +33,7 @@ net::awaitable<void> WebSocketManager::handleClientCommands(websocket& ws) {
 
 net::awaitable<void> WebSocketManager::waitForServerEvents(
     websocket& ws, const QueryId& queryId) {
-  UpdateFetcher updateFetcher{queryId, webSocketTracker_};
+  UpdateFetcher updateFetcher{queryId, queryHub_};
   while (ws.is_open()) {
     auto json = co_await updateFetcher.waitForEvent();
     if (json == nullptr) {
@@ -101,9 +101,7 @@ net::awaitable<void> WebSocketManager::connectionLifecycle(
 
 // _____________________________________________________________________________
 
-WebSocketTracker& WebSocketManager::getWebSocketTracker() {
-  return webSocketTracker_;
-}
+QueryHub& WebSocketManager::getQueryHub() { return queryHub_; }
 
 // _____________________________________________________________________________
 

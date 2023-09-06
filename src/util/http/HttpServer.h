@@ -89,8 +89,8 @@ class HttpServer {
     }
   }
 
-  ad_utility::websocket::WebSocketTracker& getWebSocketTracker() noexcept {
-    return webSocketManager_.getWebSocketTracker();
+  ad_utility::websocket::QueryHub& getQueryHub() noexcept {
+    return webSocketManager_.getQueryHub();
   }
 
   /// Run the server using the specified number of threads. Note that this

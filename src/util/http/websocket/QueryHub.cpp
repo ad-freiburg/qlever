@@ -2,20 +2,20 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "util/http/websocket/WebSocketTracker.h"
+#include "util/http/websocket/QueryHub.h"
 
 #include "util/Asio.h"
 
 namespace ad_utility::websocket {
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
-WebSocketTracker::createOrAcquireDistributorInternal(QueryId queryId) {
+QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
   co_await net::dispatch(globalStrand_, net::use_awaitable);
   if (socketDistributors_.contains(queryId)) {
     if (auto ptr = socketDistributors_.at(queryId).pointer_.lock()) {
       co_return ptr;
     }
-    // There's a case where the object has already been destructed, but not yet
-    // Removed from the list. In this case remove this here and proceed
+    // There's a scenario where the object has already been destructed, but not
+    // yet removed from the list. In this case remove this here and proceed
     // to build a new instance. This is safe because the id is checked for
     // equality before removal.
     socketDistributors_.erase(queryId);
@@ -47,7 +47,7 @@ WebSocketTracker::createOrAcquireDistributorInternal(QueryId queryId) {
 // _____________________________________________________________________________
 
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
-WebSocketTracker::createOrAcquireDistributor(QueryId queryId) {
+QueryHub::createOrAcquireDistributor(QueryId queryId) {
   return sameExecutor(createOrAcquireDistributorInternal(std::move(queryId)));
 }
 }  // namespace ad_utility::websocket

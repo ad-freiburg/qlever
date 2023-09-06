@@ -15,7 +15,7 @@
 #include "engine/QueryPlanner.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
-#include "util/http/websocket/WebSocketNotifier.h"
+#include "util/http/websocket/UpdateWrapper.h"
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
@@ -139,7 +139,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
   // the "socket already in use" error appears quickly.
   auto httpServer =
       HttpServer{port_, "0.0.0.0", numThreads_, std::move(httpSessionHandler)};
-  webSocketTracker_ = &httpServer.getWebSocketTracker();
+  queryHub_ = &httpServer.getQueryHub();
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations);
@@ -149,7 +149,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
   // This will probably never be executed, but to ensure there will never
   // be any dangling pointers, set it to zero after use.
-  webSocketTracker_ = nullptr;
+  queryHub_ = nullptr;
 }
 
 // _____________________________________________________________________________
@@ -616,11 +616,10 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
-    AD_CORRECTNESS_CHECK(webSocketTracker_ != nullptr);
+    AD_CORRECTNESS_CHECK(queryHub_ != nullptr);
     auto owningQueryId = getQueryId(request);
-    auto webSocketNotifier =
-        co_await ad_utility::websocket::WebSocketNotifier::create(
-            owningQueryId.toQueryId(), *webSocketTracker_);
+    auto updateWrapper = co_await ad_utility::websocket::UpdateWrapper::create(
+        owningQueryId.toQueryId(), *queryHub_);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query. Start the shared `timeoutTimer` here
     // to also include the query planning.
@@ -629,9 +628,9 @@ boost::asio::awaitable<void> Server::processQuery(
     // might happen that the query planner runs for a while (recall that it many
     // do index scans) and then we get an error message afterwards that a
     // certain media type is not supported.
-    QueryExecutionContext qec(
-        index_, &cache_, allocator_, sortPerformanceEstimator_,
-        std::ref(webSocketNotifier), pinSubtrees, pinResult);
+    QueryExecutionContext qec(index_, &cache_, allocator_,
+                              sortPerformanceEstimator_,
+                              std::ref(updateWrapper), pinSubtrees, pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(enablePatternTrick_);
     queryExecutionTree = qp.createExecutionTree(pq);

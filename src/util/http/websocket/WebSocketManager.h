@@ -8,8 +8,8 @@
 
 #include "util/http/beast.h"
 #include "util/http/websocket/Common.h"
+#include "util/http/websocket/QueryHub.h"
 #include "util/http/websocket/QueryToSocketDistributor.h"
-#include "util/http/websocket/WebSocketTracker.h"
 
 namespace ad_utility::websocket {
 namespace net = boost::asio;
@@ -22,7 +22,7 @@ using websocket = beast::websocket::stream<tcp::socket>;
 /// Central class to keep track of all currently connected websockets
 /// to provide them with status updates.
 class WebSocketManager {
-  WebSocketTracker webSocketTracker_;
+  QueryHub queryHub_;
 
   /// Loop that waits for input from the client
   net::awaitable<void> handleClientCommands(websocket&);
@@ -33,9 +33,9 @@ class WebSocketManager {
 
  public:
   /// Constructs an instance of this class using the provided io context
-  /// reference to pass it to the wrapped `WebSocketTracker`
+  /// reference to pass it to the wrapped `QueryHub`
   explicit WebSocketManager(net::io_context& ioContext)
-      : webSocketTracker_{ioContext} {}
+      : queryHub_{ioContext} {}
 
   /// The main interface for this class. The HTTP server is supposed to check
   /// if an HTTP request is a websocket upgrade request and delegate further
@@ -44,8 +44,8 @@ class WebSocketManager {
   net::awaitable<void> connectionLifecycle(tcp::socket,
                                            http::request<http::string_body>);
 
-  /// Get a reference to the wrapped `WebSocketTracker`.
-  WebSocketTracker& getWebSocketTracker();
+  /// Get a reference to the wrapped `QueryHub`.
+  QueryHub& getQueryHub();
 
   /// Helper function to provide a proper error response if the provided URL
   /// path is not accepted by the server.

@@ -2,20 +2,20 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "util/http/websocket/WebSocketNotifier.h"
+#include "util/http/websocket/UpdateWrapper.h"
 
 #include <boost/asio/co_spawn.hpp>
 
 namespace ad_utility::websocket {
 
-net::awaitable<WebSocketNotifier> WebSocketNotifier::create(
-    common::QueryId queryId, WebSocketTracker& webSocketTracker) {
-  co_return WebSocketNotifier{
-      co_await webSocketTracker.createOrAcquireDistributor(std::move(queryId)),
+net::awaitable<UpdateWrapper> UpdateWrapper::create(common::QueryId queryId,
+                                                    QueryHub& queryHub) {
+  co_return UpdateWrapper{
+      co_await queryHub.createOrAcquireDistributor(std::move(queryId)),
       co_await net::this_coro::executor};
 }
 
-void WebSocketNotifier::operator()(std::string json) const {
+void UpdateWrapper::operator()(std::string json) const {
   auto lambda = [](auto distributor, auto json) -> net::awaitable<void> {
     co_await distributor->addQueryStatusUpdate(std::move(json));
   };

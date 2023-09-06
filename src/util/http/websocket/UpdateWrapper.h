@@ -2,8 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef QLEVER_WEBSOCKETNOTIFIER_H
-#define QLEVER_WEBSOCKETNOTIFIER_H
+#ifndef QLEVER_UPDATEWRAPPER_H
+#define QLEVER_UPDATEWRAPPER_H
 
 #include "util/UniqueCleanup.h"
 #include "util/http/websocket/Common.h"
@@ -13,15 +13,15 @@ namespace ad_utility::websocket {
 using unique_cleanup::UniqueCleanup;
 
 /// This class provides a convenient wrapper that extracts the proper
-/// `QueryToSocketDistributor` of the passed `WebSocketTracker` reference
+/// `QueryToSocketDistributor` of the passed `QueryHub` reference
 /// and provides a generic operator() interface to call addQueryStatusUpdate()
 /// from the non-asio world.
-class WebSocketNotifier {
+class UpdateWrapper {
   UniqueCleanup<std::shared_ptr<QueryToSocketDistributor>> distributor_;
   net::any_io_executor executor_;
 
-  WebSocketNotifier(std::shared_ptr<QueryToSocketDistributor> distributor,
-                    net::any_io_executor executor)
+  UpdateWrapper(std::shared_ptr<QueryToSocketDistributor> distributor,
+                net::any_io_executor executor)
       : distributor_{std::move(distributor),
                      [executor](auto&& distributor) {
                        auto coroutine =
@@ -37,13 +37,13 @@ class WebSocketNotifier {
         executor_{std::move(executor)} {}
 
  public:
-  WebSocketNotifier(WebSocketNotifier&&) noexcept = default;
+  UpdateWrapper(UpdateWrapper&&) noexcept = default;
 
   /// Asynchronously creates an instance of this class. This is because because
   /// creating a distributor for this class needs to be done in a synchronized
   /// way.
-  static net::awaitable<WebSocketNotifier> create(
-      common::QueryId queryId, WebSocketTracker& webSocketTracker);
+  static net::awaitable<UpdateWrapper> create(common::QueryId queryId,
+                                              QueryHub& queryHub);
 
   /// Broadcast the string to all listeners of this query asynchronously.
   void operator()(std::string) const;
@@ -51,4 +51,4 @@ class WebSocketNotifier {
 
 }  // namespace ad_utility::websocket
 
-#endif  // QLEVER_WEBSOCKETNOTIFIER_H
+#endif  // QLEVER_UPDATEWRAPPER_H
