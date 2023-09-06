@@ -20,12 +20,11 @@ inline std::span<const ValueId> getIdsFromVariable(const ::Variable& variable,
                                                    size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
 
-  if (!context->_variableToColumnMap.contains(variable)) {
-    throw std::runtime_error("Variable " + variable.name() +
-                             " could not be mapped to context column of expression evaluation");
-  }
+  const auto& varToColMap = context->_variableToColumnMap;
+  auto it = varToColMap.find(variable);
+  AD_CONTRACT_CHECK(it != varToColMap.end());
 
-  const size_t columnIndex = context->_variableToColumnMap.at(variable).columnIndex_;
+  const size_t columnIndex = it->second.columnIndex_;
 
   std::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
 
@@ -102,20 +101,12 @@ auto makeGenerator(Input&& input, size_t numItems, const EvaluationContext* cont
 
 /// Generate `numItems` many values from the `input` and apply the
 /// `valueGetter` to each of the values.
-inline auto valueGetterGenerator =
-    []<typename ValueGetter, SingleExpressionResult Input>(
-        size_t numElements, EvaluationContext* context, Input&& input, ValueGetter&& valueGetter)
-/*
-// TODO<joka921> This only works if the value_getters allways return the same type (which they
-should).
-// TODO<joka921> Make a better concept here.
--> cppcoro::generator<std::invoke_result_t<
-    ValueGetter, Id,
-    EvaluationContext*>> */
-{
-  auto transformation = [ context, valueGetter ](auto&& input)
-      requires requires { valueGetter(AD_FWD(input), context); } {
-    return valueGetter(AD_FWD(input), context);
+inline auto valueGetterGenerator = []<typename ValueGetter, SingleExpressionResult Input>(
+                                       size_t numElements, EvaluationContext* context,
+                                       Input&& input, ValueGetter&& valueGetter) {
+  auto transformation = [ context, valueGetter ]<typename I>(I && i)
+      requires std::invocable<ValueGetter, I&&, EvaluationContext*> {
+    return valueGetter(AD_FWD(i), context);
   };
   return makeGenerator(std::forward<Input>(input), numElements, context, transformation);
 };
@@ -125,8 +116,7 @@ should).
 /// generator.
 inline auto applyFunction = []<typename Function, typename... Generators>(
                                 Function&& function, size_t numItems, Generators... generators)
-    -> cppcoro::generator<
-        std::invoke_result_t<std::decay_t<Function>, typename Generators::value_type...>> {
+    -> cppcoro::generator<std::invoke_result_t<Function, typename Generators::value_type...>> {
   // A tuple holding one iterator to each of the generators.
   std::tuple iterators{generators.begin()...};
 

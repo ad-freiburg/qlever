@@ -170,10 +170,13 @@ struct LiteralFromIdGetter {
   }
 };
 
+// Convert the input into a `unique_ptr<RE2>`. Return nullptr if the input is
+// not convertible to a string.
 struct RegexValueGetter {
-  std::unique_ptr<re2::RE2> operator()(SingleExpressionResult auto&& input,
-                                       const EvaluationContext* context) const
-      requires requires { StringValueGetter{}(AD_FWD(input), context); } {
+  template <SingleExpressionResult S>
+  requires std::invocable<StringValueGetter, S&&, const EvaluationContext*>
+  std::unique_ptr<re2::RE2> operator()(S&& input,
+                                       const EvaluationContext* context) const {
     auto str = StringValueGetter{}(AD_FWD(input), context);
     if (!str.has_value()) {
       return nullptr;

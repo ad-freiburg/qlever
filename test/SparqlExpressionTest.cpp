@@ -803,7 +803,10 @@ TEST(SparqlExpression, ReplaceExpression) {
   checkReplace(IdOrStrings{U, U, U, U, U, U},
                std::tuple{IdOrStrings{"null", "Xs", "zwei", "drei", U, U},
                           IdOrString{"e.[a-z"}, IdOrString{"X"}});
-
+  // Undefined regex
+  checkReplace(IdOrStrings{U, U, U, U, U, U},
+               std::tuple{IdOrStrings{"null", "Xs", "zwei", "drei", U, U}, U,
+                          IdOrString{"X"}});
   // Illegal replacement.
   checkReplace(IdOrStrings{U, U, U, U, U, U},
                std::tuple{IdOrStrings{"null", "Xs", "zwei", "drei", U, U},
