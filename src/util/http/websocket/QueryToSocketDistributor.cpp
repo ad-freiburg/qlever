@@ -49,6 +49,13 @@ net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
     std::string payload) {
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
   co_await net::dispatch(strand_, net::use_awaitable);
+  if (finished_) {
+    // This warning indicates that something is wrong with your code
+    LOG(WARN) << "Added query status after being finished. Doing nothing"
+                 "in order to prevent surprising behaviour!"
+              << std::endl;
+    co_return;
+  }
   data_.push_back(std::move(sharedPayload));
   runAndEraseWakeUpCallsSynchronously();
 }

@@ -19,10 +19,14 @@ using StrandType = net::strand<net::any_io_executor>;
 /// unique for this class, so in the common case of this class being used
 /// globally the provided thread-safety comes at a cost.
 class WebSocketTracker {
+  struct IdentifiablePointer {
+    std::weak_ptr<QueryToSocketDistributor> pointer_;
+    uint64_t id_;
+  };
+
   net::io_context& ioContext_;
   StrandType globalStrand_;
-  absl::flat_hash_map<QueryId, std::weak_ptr<QueryToSocketDistributor>>
-      socketDistributors_{};
+  absl::flat_hash_map<QueryId, IdentifiablePointer> socketDistributors_{};
 
  public:
   explicit WebSocketTracker(net::io_context& ioContext)

@@ -9,10 +9,8 @@ namespace ad_utility::websocket {
 net::awaitable<UpdateFetcher::PayloadType> UpdateFetcher::waitForEvent() {
   co_await net::dispatch(socketStrand_, net::use_awaitable);
   if (!distributor_) {
-    auto distributor =
+    distributor_ =
         co_await webSocketTracker_.createOrAcquireDistributor(queryId_);
-    co_await net::dispatch(socketStrand_, net::use_awaitable);
-    distributor_ = std::move(distributor);
   }
 
   auto data = co_await distributor_->waitForNextDataPiece(nextIndex_);

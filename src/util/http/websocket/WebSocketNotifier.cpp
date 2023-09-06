@@ -4,22 +4,15 @@
 
 #include "util/http/websocket/WebSocketNotifier.h"
 
-#include <boost/asio/post.hpp>
-#include <boost/asio/this_coro.hpp>
+#include <boost/asio/co_spawn.hpp>
 
 namespace ad_utility::websocket {
 
 net::awaitable<WebSocketNotifier> WebSocketNotifier::create(
-    common::OwningQueryId owningQueryId, WebSocketTracker& webSocketTracker) {
-  auto initialExecutor = co_await net::this_coro::executor;
-
-  auto distributor = co_await webSocketTracker.createOrAcquireDistributor(
-      owningQueryId.toQueryId());
-
-  co_await net::dispatch(initialExecutor, net::use_awaitable);
-
-  co_return WebSocketNotifier{std::move(owningQueryId), std::move(distributor),
-                              std::move(initialExecutor)};
+    common::QueryId queryId, WebSocketTracker& webSocketTracker) {
+  co_return WebSocketNotifier{
+      co_await webSocketTracker.createOrAcquireDistributor(std::move(queryId)),
+      co_await net::this_coro::executor};
 }
 
 void WebSocketNotifier::operator()(std::string json) const {

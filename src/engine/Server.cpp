@@ -617,9 +617,10 @@ boost::asio::awaitable<void> Server::processQuery(
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
     AD_CORRECTNESS_CHECK(webSocketTracker_ != nullptr);
+    auto owningQueryId = getQueryId(request);
     auto webSocketNotifier =
         co_await ad_utility::websocket::WebSocketNotifier::create(
-            getQueryId(request), *webSocketTracker_);
+            owningQueryId.toQueryId(), *webSocketTracker_);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query. Start the shared `timeoutTimer` here
     // to also include the query planning.

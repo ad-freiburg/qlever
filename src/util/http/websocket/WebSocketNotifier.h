@@ -12,29 +12,28 @@
 namespace ad_utility::websocket {
 using unique_cleanup::UniqueCleanup;
 
-/// This class wraps bundles an OwningQueryId and a reference to a
-/// WebSocketTracker together. On Destruction this automatically notifies
-/// the WebSocketTracker that the query was completed.
+/// This class provides a convenient wrapper that extracts the proper
+/// `QueryToSocketDistributor` of the passed `WebSocketTracker` reference
+/// and provides a generic operator() interface to call addQueryStatusUpdate()
+/// from the non-asio world.
 class WebSocketNotifier {
-  common::OwningQueryId owningQueryId_;
   UniqueCleanup<std::shared_ptr<QueryToSocketDistributor>> distributor_;
   net::any_io_executor executor_;
 
-  WebSocketNotifier(common::OwningQueryId owningQueryId,
-                    std::shared_ptr<QueryToSocketDistributor> distributor,
+  WebSocketNotifier(std::shared_ptr<QueryToSocketDistributor> distributor,
                     net::any_io_executor executor)
-      : owningQueryId_{std::move(owningQueryId)},
-        distributor_{
-            std::move(distributor),
-            [executor](auto&& distributor) {
-              auto coroutine = [](auto distributor) -> net::awaitable<void> {
-                co_await distributor->signalEnd();
-              };
-              net::co_spawn(
-                  executor,
-                  coroutine(std::forward<decltype(distributor)>(distributor)),
-                  net::detached);
-            }},
+      : distributor_{std::move(distributor),
+                     [executor](auto&& distributor) {
+                       auto coroutine =
+                           [](auto distributor) -> net::awaitable<void> {
+                         co_await distributor->signalEnd();
+                       };
+                       net::co_spawn(
+                           executor,
+                           coroutine(std::forward<decltype(distributor)>(
+                               distributor)),
+                           net::detached);
+                     }},
         executor_{std::move(executor)} {}
 
  public:
@@ -44,7 +43,7 @@ class WebSocketNotifier {
   /// creating a distributor for this class needs to be done in a synchronized
   /// way.
   static net::awaitable<WebSocketNotifier> create(
-      common::OwningQueryId owningQueryId, WebSocketTracker& webSocketTracker);
+      common::QueryId queryId, WebSocketTracker& webSocketTracker);
 
   /// Broadcast the string to all listeners of this query asynchronously.
   void operator()(std::string) const;

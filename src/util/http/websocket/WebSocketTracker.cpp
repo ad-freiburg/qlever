@@ -7,41 +7,42 @@
 namespace ad_utility::websocket {
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 WebSocketTracker::createOrAcquireDistributor(QueryId queryId) {
+  auto initialExecutor = co_await net::this_coro::executor;
   co_await net::dispatch(globalStrand_, net::use_awaitable);
   if (socketDistributors_.contains(queryId)) {
-    if (auto ptr = socketDistributors_.at(queryId).lock()) {
+    if (auto ptr = socketDistributors_.at(queryId).pointer_.lock()) {
       co_return ptr;
     }
     // There's a case where the object has already been destructed, but not yet
-    // Removed from the list. In this case queue to the end of the strand
-    // until the destructor was executed.
-    size_t sanityCounter = 0;
-    while (socketDistributors_.contains(queryId)) {
-      co_await net::post(globalStrand_, net::use_awaitable);
-      sanityCounter++;
-      // If this loop is run too many times something is really wrong!
-      // This would indicate that the pointer is never scheduled to be removed
-      // from the list.
-      AD_CORRECTNESS_CHECK(sanityCounter < 10);
-    }
+    // Removed from the list. In this case remove this here and proceed
+    // to build a new instance. This is safe because the id is checked for
+    // equality before removal.
+    socketDistributors_.erase(queryId);
   }
+
+  static std::atomic_uint64_t counter = 0;
+
+  auto id = counter++;
+  auto coroutine = [](auto strand, auto& distributors, auto queryId,
+                      auto id) -> net::awaitable<void> {
+    co_await net::dispatch(strand, net::use_awaitable);
+    // Only erase object if we created it, otherwise we have a race condition
+    if (distributors.contains(queryId) && distributors.at(queryId).id_ == id) {
+      distributors.erase(queryId);
+    }
+  };
   auto distributor = std::make_shared<QueryToSocketDistributor>(
-      ioContext_, [this, queryId]() mutable {
-        auto coroutine = [](auto& strand, auto& distributors,
-                            auto queryId) -> net::awaitable<void> {
-          // TODO check if references are safe here?
-          //  also maybe prefer using a QueryToSocketDistributorWrapper?
-          //  which does the cleanup, but also can be access like a regular
-          //  shared ptr
-          co_await net::dispatch(strand, net::use_awaitable);
-          distributors.erase(queryId);
-        };
-        net::co_spawn(
-            globalStrand_,
-            coroutine(globalStrand_, socketDistributors_, std::move(queryId)),
-            net::detached);
+      ioContext_,
+      [this, queryId, coroutine = std::move(coroutine), id]() mutable {
+        net::co_spawn(globalStrand_,
+                      // TODO check if references are safe here?
+                      coroutine(globalStrand_, socketDistributors_,
+                                std::move(queryId), id),
+                      net::detached);
       });
-  socketDistributors_.emplace(queryId, distributor);
+  socketDistributors_.emplace(
+      queryId, IdentifiablePointer{.pointer_ = distributor, .id_ = id});
+  co_await net::dispatch(initialExecutor, net::use_awaitable);
   co_return distributor;
 }
 }  // namespace ad_utility::websocket
