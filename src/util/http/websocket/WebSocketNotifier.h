@@ -16,23 +16,25 @@ using unique_cleanup::UniqueCleanup;
 /// WebSocketTracker together. On Destruction this automatically notifies
 /// the WebSocketTracker that the query was completed.
 class WebSocketNotifier {
-  UniqueCleanup<common::OwningQueryId> owningQueryId_;
-  std::shared_ptr<QueryToSocketDistributor> distributor_;
+  common::OwningQueryId owningQueryId_;
+  UniqueCleanup<std::shared_ptr<QueryToSocketDistributor>> distributor_;
   net::any_io_executor executor_;
 
   WebSocketNotifier(common::OwningQueryId owningQueryId,
-                    WebSocketTracker& webSocketTracker,
                     std::shared_ptr<QueryToSocketDistributor> distributor,
                     net::any_io_executor executor)
-      : owningQueryId_{std::move(owningQueryId),
-                       [&webSocketTracker, executor](auto&& owningQueryId) {
-                         net::co_spawn(
-                             executor,
-                             webSocketTracker.releaseDistributor(
-                                 std::move(owningQueryId.toQueryId())),
-                             net::detached);
-                       }},
-        distributor_{std::move(distributor)},
+      : owningQueryId_{std::move(owningQueryId)},
+        distributor_{
+            std::move(distributor),
+            [executor](auto&& distributor) {
+              auto coroutine = [](auto distributor) -> net::awaitable<void> {
+                co_await distributor->signalEnd();
+              };
+              net::co_spawn(
+                  executor,
+                  coroutine(std::forward<decltype(distributor)>(distributor)),
+                  net::detached);
+            }},
         executor_{std::move(executor)} {}
 
  public:

@@ -6,7 +6,6 @@ add_library(http HttpServer.h HttpClient.h HttpClient.cpp HttpUtils.h HttpUtils.
         websocket/WebSocketManager.cpp websocket/WebSocketManager.h
         websocket/WebSocketNotifier.cpp websocket/WebSocketNotifier.h
         websocket/QueryToSocketDistributor.cpp websocket/QueryToSocketDistributor.h
-        websocket/EphemeralWaitingList.cpp websocket/EphemeralWaitingList.h
         websocket/WebSocketTracker.cpp websocket/WebSocketTracker.h
         websocket/UpdateFetcher.cpp websocket/UpdateFetcher.h)
 

@@ -8,7 +8,6 @@
 
 #include "util/http/beast.h"
 #include "util/http/websocket/Common.h"
-#include "util/http/websocket/EphemeralWaitingList.h"
 #include "util/http/websocket/QueryToSocketDistributor.h"
 #include "util/http/websocket/WebSocketTracker.h"
 

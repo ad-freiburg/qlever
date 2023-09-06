@@ -10,6 +10,7 @@
 #include <boost/asio/strand.hpp>
 #include <functional>
 
+#include "util/UniqueCleanup.h"
 #include "util/http/websocket/Common.h"
 
 namespace ad_utility::websocket {
@@ -32,6 +33,8 @@ class QueryToSocketDistributor {
   /// Flag to indicate if a query ended and won't receive any more updates.
   bool finished_ = false;
 
+  unique_cleanup::UniqueCleanup<std::function<void()>> cleanupCall_;
+
   /// Wakes up all websockets that are currently "blocked" and waiting for an
   /// update of the given query. After being woken up they will check for
   /// updates and resume execution.
@@ -44,8 +47,11 @@ class QueryToSocketDistributor {
 
  public:
   /// Constructor that builds a new strand from the provided io context.
-  explicit QueryToSocketDistributor(net::io_context& ioContext)
-      : strand_{net::make_strand(ioContext)} {}
+  explicit QueryToSocketDistributor(net::io_context& ioContext,
+                                    std::function<void()> cleanupCall)
+      : strand_{net::make_strand(ioContext)},
+        cleanupCall_{std::move(cleanupCall),
+                     [](auto&& cleanupCall) { std::invoke(cleanupCall); }} {}
 
   /// Appends specified data to the vector and signals all waiting websockets
   /// that new data is available

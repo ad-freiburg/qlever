@@ -9,7 +9,6 @@
 
 #include "util/http/beast.h"
 #include "util/http/websocket/Common.h"
-#include "util/http/websocket/EphemeralWaitingList.h"
 #include "util/http/websocket/QueryToSocketDistributor.h"
 
 namespace ad_utility::websocket {
@@ -22,27 +21,17 @@ using StrandType = net::strand<net::any_io_executor>;
 class WebSocketTracker {
   net::io_context& ioContext_;
   StrandType globalStrand_;
-  absl::flat_hash_map<QueryId, std::shared_ptr<QueryToSocketDistributor>>
+  absl::flat_hash_map<QueryId, std::weak_ptr<QueryToSocketDistributor>>
       socketDistributors_{};
-  EphemeralWaitingList waitingList_{};
 
  public:
   explicit WebSocketTracker(net::io_context& ioContext)
       : ioContext_{ioContext}, globalStrand_{net::make_strand(ioContext)} {}
 
-  /// Creates a new `QueryToSocketDistributor` and registers it.
-  net::awaitable<std::shared_ptr<QueryToSocketDistributor>> createDistributor(
-      const QueryId&);
-
-  /// Waits until `QueryToSocketDistributor` is registered and returns it.
-  net::awaitable<std::shared_ptr<QueryToSocketDistributor>> waitForDistributor(
-      QueryId);
-
-  /// Notifies this class that the given query will no longer receive any
-  /// updates, so the distributor will be unregistered (it will continue to
-  /// exists for all objects still holding a shared pointer to the instance) and
-  /// signaled that all updates have ended.
-  net::awaitable<void> releaseDistributor(QueryId queryId);
+  /// Creates a new `QueryToSocketDistributor` or returns the pre-existing
+  /// for the provided query id if there already is one.
+  net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+      createOrAcquireDistributor(QueryId);
 };
 }  // namespace ad_utility::websocket
 
