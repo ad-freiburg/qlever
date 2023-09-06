@@ -1,1 +1,2 @@
 addLinkAndDiscoverTest(IndexScanTest engine)
+addLinkAndDiscoverTest(CartesianProductJoinTest engine)
