@@ -1693,3 +1693,19 @@ queries:
       - contains_row: [ "<Zelda_Rubinstein>", "Name: Zelda_Rubinstein Year: 1933" ]
       - contains_row: [ "<Zhang_Peili>", "Name: Zhang_Peili Year: 1941"]
       - contains_row: [ "<Zlata_Bartl>", "Name: Zlata_Bartl Year: 1920"]
+
+  - query: REPLACE
+    type: no-text
+    sparql: |
+      SELECT ?x (REPLACE(STR(?x), "e.", "-") as ?f) (REPLACE(STR(?x), "(?i)r", "") as ?g) WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Gender> <Female>  .
+          ?x <Date_of_birth> ?date
+          FILTER (?x > <Yzz>) .
+      }
+    checks:
+      - num_cols: 3
+      - selected: [ "?x", "?f", "?g" ]
+      - contains_row: [ "<Zelda_Rubinstein>", "Z-da_Rubinst-n", "Zelda_ubinstein" ]
+      - contains_row: [ "<Zhang_Peili>", "Zhang_P-li", "Zhang_Peili"]
+      - contains_row: [ "<Zlata_Bartl>", "Zlata_Bartl", "Zlata_Batl"]
