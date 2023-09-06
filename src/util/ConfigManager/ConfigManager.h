@@ -337,6 +337,34 @@ class ConfigManager {
         configOptionsToBeChecked...);
   }
 
+  /*
+  @brief Add a function to the configuration manager for verifying, that the
+  given configuration options are valid. Will always be called after parsing.
+
+  @param exceptionValidatorFunction Checks, if the given configuration options
+  are valid. Return an empty instance of `std::optional<ErrorMessage>` if valid.
+  Otherwise, the `ErrorMessage` should contain the reason, why the options are
+  none valid.
+  @param configOptionsToBeChecked Proxies for the configuration options, who
+  will be passed to the validator function as function arguments. Will keep the
+  same order.
+  */
+  template <typename ExceptionValidatorT>
+  void addOptionValidator(
+      ExceptionValidatorT exceptionValidatorFunction,
+      isInstantiation<ConstConfigOptionProxy> auto... configOptionsToBeChecked)
+      requires(sizeof...(configOptionsToBeChecked) > 0 &&
+               ExceptionValidator<
+                   ExceptionValidatorT,
+                   decltype(configOptionsToBeChecked.getConfigOption())...>) {
+    addValidatorImpl(
+        "addOptionValidator",
+        []<typename T>(ConstConfigOptionProxy<T> opt) {
+          return opt.getConfigOption();
+        },
+        exceptionValidatorFunction, configOptionsToBeChecked...);
+  }
+
  private:
   FRIEND_TEST(ConfigManagerTest, ParseConfig);
   FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);

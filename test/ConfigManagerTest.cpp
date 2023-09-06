@@ -1061,6 +1061,26 @@ std::string generateValidatorName(size_t id) {
 };
 
 /*
+@brief Transform a validator function into an exception validator function.
+That is, instead of returning `bool`, it now returns
+`std::optional<ErrorMessage>`.
+
+@param errorMessage Content for `ErrorMessage`.
+*/
+template <typename... ValidatorParameterTypes>
+auto transformNonExceptionValidatorIntoExceptionValidator(
+    Validator<ValidatorParameterTypes...> auto validatorFunction, std::string_view errorMessage) {
+  // The whole 'transformation' is simply a wrapper.
+  return [validatorFunction, errorMessage = std::string(std::move(errorMessage))](
+             const ValidatorParameterTypes&... args) -> std::optional<ErrorMessage> {
+    if (std::invoke(validatorFunction, args...)) {
+      return std::nullopt;
+    } else {
+      return ErrorMessage{errorMessage};
+    }
+  };
+}
+/*
 @brief The test for adding a validator to a config manager.
 
 @param addValidatorFunction A function, that adds a validator function to a config manager. The
@@ -1523,15 +1543,8 @@ TEST(ConfigManagerTest, AddExceptionValidator) {
   doValidatorTest([]<typename... Ts>(size_t variant, std::string_view validatorExceptionMessage,
                                      ConfigManager& m, ConstConfigOptionProxy<Ts>... optProxy) {
     m.addValidator(
-        [nonExceptionValidator = generateDummyNonExceptionValidatorFunction<Ts...>(variant),
-         errorMsg = std::string{validatorExceptionMessage}](
-            const Ts&... args) -> std::optional<ErrorMessage> {
-          if (std::invoke(nonExceptionValidator, args...)) {
-            return {std::nullopt};
-          } else {
-            return {ErrorMessage{errorMsg}};
-          }
-        },
+        transformNonExceptionValidatorIntoExceptionValidator<Ts...>(
+            generateDummyNonExceptionValidatorFunction<Ts...>(variant), validatorExceptionMessage),
         optProxy...);
   });
 }
@@ -1627,7 +1640,21 @@ TEST(ConfigManagerTest, AddExceptionValidatorException) {
       });
 }
 
-TEST(ConfigManagerTest, AddOptionNoExceptionValidator) {
+/*
+@brief The test for `addOptionValidator`.
+
+@param addNonExceptionValidatorFunction A function, that adds a non exception validator function to
+a config manager. The function signature should look like this: `void func(Validator
+validatorFunction, std::string_view validatorExceptionMessage, ConfigManager& m,
+ConstConfigOptionProxy...)`.
+@param l For better error messages, when the tests fail.
+*/
+void doAddOptionValidatorTest(
+    auto addNonExceptionValidatorFunction,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{generateLocationTrace(l, "doAddOptionValidatorTest")};
+
   // Generate a lambda, that requires all the given configuration option to have
   // the wanted string as the representation of their value.
   auto generateValueAsStringComparison = [](std::string_view valueStringRepresentation) {
@@ -1644,15 +1671,15 @@ TEST(ConfigManagerTest, AddOptionNoExceptionValidator) {
   ConfigManager managerWithNoSubManager;
   decltype(auto) managerWithNoSubManagerOption1 =
       managerWithNoSubManager.addOption("someOption1", "", &firstVar);
-  managerWithNoSubManager.addOptionValidator(generateValueAsStringComparison("10"), "someOption1",
-                                             managerWithNoSubManagerOption1);
+  addNonExceptionValidatorFunction(generateValueAsStringComparison("10"), "someOption1",
+                                   managerWithNoSubManager, managerWithNoSubManagerOption1);
   checkValidator(managerWithNoSubManager, nlohmann::json::parse(R"--({"someOption1" : 10})--"),
                  nlohmann::json::parse(R"--({"someOption1" : 1})--"), "someOption1");
   decltype(auto) managerWithNoSubManagerOption2 =
       managerWithNoSubManager.addOption("someOption2", "", &secondVar);
-  managerWithNoSubManager.addOptionValidator(generateValueAsStringComparison("10"), "Both options",
-                                             managerWithNoSubManagerOption1,
-                                             managerWithNoSubManagerOption2);
+  addNonExceptionValidatorFunction(generateValueAsStringComparison("10"), "Both options",
+                                   managerWithNoSubManager, managerWithNoSubManagerOption1,
+                                   managerWithNoSubManagerOption2);
   checkValidator(managerWithNoSubManager,
                  nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 10})--"),
                  nlohmann::json::parse(R"--({"someOption1" : 10, "someOption2" : 1})--"),
@@ -1666,17 +1693,17 @@ TEST(ConfigManagerTest, AddOptionNoExceptionValidator) {
       managerWithSubManagerWhoHasNoValidators.addSubManager({"Sub"s, "manager"s});
   decltype(auto) managerWithSubManagerWhoHasNoValidatorsSubManagerOption =
       managerWithSubManagerWhoHasNoValidatorsSubManager.addOption("someOption", "", &secondVar, 4);
-  managerWithSubManagerWhoHasNoValidators.addOptionValidator(
-      generateValueAsStringComparison("10"), "Sub manager option",
-      managerWithSubManagerWhoHasNoValidatorsSubManagerOption);
+  addNonExceptionValidatorFunction(generateValueAsStringComparison("10"), "Sub manager option",
+                                   managerWithSubManagerWhoHasNoValidators,
+                                   managerWithSubManagerWhoHasNoValidatorsSubManagerOption);
   checkValidator(managerWithSubManagerWhoHasNoValidators,
                  nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 10}}})--"),
                  nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 1}}})--"),
                  "Sub manager option");
-  managerWithSubManagerWhoHasNoValidators.addOptionValidator(
-      generateValueAsStringComparison("10"), "Both options",
-      managerWithSubManagerWhoHasNoValidatorsSubManagerOption,
-      managerWithSubManagerWhoHasNoValidatorsOption);
+  addNonExceptionValidatorFunction(generateValueAsStringComparison("10"), "Both options",
+                                   managerWithSubManagerWhoHasNoValidators,
+                                   managerWithSubManagerWhoHasNoValidatorsSubManagerOption,
+                                   managerWithSubManagerWhoHasNoValidatorsOption);
   checkValidator(
       managerWithSubManagerWhoHasNoValidators,
       nlohmann::json::parse(R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 10}}})--"),
@@ -1689,9 +1716,9 @@ TEST(ConfigManagerTest, AddOptionNoExceptionValidator) {
       managerHasNoValidatorsButSubManagerDoes.addSubManager({"Sub"s, "manager"s});
   decltype(auto) managerHasNoValidatorsButSubManagerDoesSubManagerOption =
       managerHasNoValidatorsButSubManagerDoesSubManager.addOption("someOption", "", &firstVar, 4);
-  managerHasNoValidatorsButSubManagerDoesSubManager.addOptionValidator(
-      generateValueAsStringComparison("10"), "Sub manager option",
-      managerHasNoValidatorsButSubManagerDoesSubManagerOption);
+  addNonExceptionValidatorFunction(generateValueAsStringComparison("10"), "Sub manager option",
+                                   managerHasNoValidatorsButSubManagerDoesSubManager,
+                                   managerHasNoValidatorsButSubManagerDoesSubManagerOption);
   checkValidator(managerHasNoValidatorsButSubManagerDoes,
                  nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 10}}})--"),
                  nlohmann::json::parse(R"--({"Sub":{"manager" : {"someOption" : 1}}})--"),
@@ -1705,11 +1732,11 @@ TEST(ConfigManagerTest, AddOptionNoExceptionValidator) {
       bothHaveValidators.addSubManager({"Sub"s, "manager"s});
   decltype(auto) bothHaveValidatorsSubManagerOption =
       bothHaveValidatorsSubManager.addOption("someOption", "", &secondVar, 4);
-  bothHaveValidators.addOptionValidator(generateValueAsStringComparison("10"), "Top manager option",
-                                        bothHaveValidatorsOption);
-  bothHaveValidatorsSubManager.addOptionValidator(generateValueAsStringComparison("20"),
-                                                  "Sub manager option",
-                                                  bothHaveValidatorsSubManagerOption);
+  addNonExceptionValidatorFunction(generateValueAsStringComparison("10"), "Top manager option",
+                                   bothHaveValidators, bothHaveValidatorsOption);
+  addNonExceptionValidatorFunction(generateValueAsStringComparison("20"), "Sub manager option",
+                                   bothHaveValidatorsSubManager,
+                                   bothHaveValidatorsSubManagerOption);
   checkValidator(
       bothHaveValidators,
       nlohmann::json::parse(R"--({"someOption" : 10, "Sub":{"manager" : {"someOption" : 20}}})--"),
@@ -1722,26 +1749,54 @@ TEST(ConfigManagerTest, AddOptionNoExceptionValidator) {
       "Sub manager option");
 }
 
-TEST(ConfigManagerTest, AddOptionNonExceptionValidatorException) {
+TEST(ConfigManagerTest, AddOptionNoExceptionValidator) {
+  doAddOptionValidatorTest(
+      []<typename... Ts>(auto validatorFunction, std::string_view validatorExceptionMessage,
+                         ConfigManager& m, ConstConfigOptionProxy<Ts>... args) {
+        m.addOptionValidator(validatorFunction, validatorExceptionMessage, args...);
+      });
+}
+
+TEST(ConfigManagerTest, AddOptionExceptionValidator) {
+  doAddOptionValidatorTest([]<typename... Ts>(
+                               auto validatorFunction, std::string_view validatorExceptionMessage,
+                               ConfigManager& m, ConstConfigOptionProxy<Ts>... args) {
+    m.addOptionValidator(
+        transformNonExceptionValidatorIntoExceptionValidator<decltype(args.getConfigOption())...>(
+            validatorFunction, validatorExceptionMessage),
+        args...);
+  });
+}
+
+/*
+@brief The test for checking, if `addOptionValidator` throws exceptions as wanted.
+
+@param addAlwaysValidValidatorFunction A function, that adds a validator function, which recognizes
+any input as valid, to a config manager. The function signature should look like this: `void
+func(ConfigManager& m, ConstConfigOptionProxy... validatorArguments)`.
+@param l For better error messages, when the tests fail.
+*/
+void doAddOptionValidatorExceptionTest(
+    auto addAlwaysValidValidatorFunction,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{generateLocationTrace(l, "doValidatorExceptionTest")};
+
   // Variable for the configuration options.
   int var;
-
-  // Dummy validator function.
-  auto validatorDummyFunction = [](const ConfigOption&) { return true; };
-
   /*
   @brief Check, if a call to the `addOptionValidator` function behaves as
   wanted.
   */
-  auto checkAddOptionValidatorBehavior =
-      [&validatorDummyFunction]<typename T>(ConfigManager& m, ConstConfigOptionProxy<T> validOption,
-                                            ConstConfigOptionProxy<T> notValidOption) {
-        ASSERT_NO_THROW(m.addOptionValidator(validatorDummyFunction, "", validOption));
-        AD_EXPECT_THROW_WITH_MESSAGE(
-            m.addOptionValidator(validatorDummyFunction,
-                                 notValidOption.getConfigOption().getIdentifier(), notValidOption),
-            ::testing::ContainsRegex(notValidOption.getConfigOption().getIdentifier()));
-      };
+  auto checkAddOptionValidatorBehavior = [&addAlwaysValidValidatorFunction]<typename T>(
+                                             ConfigManager& m,
+                                             ConstConfigOptionProxy<T> validOption,
+                                             ConstConfigOptionProxy<T> notValidOption) {
+    ASSERT_NO_THROW(addAlwaysValidValidatorFunction(m, validOption));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        addAlwaysValidValidatorFunction(m, notValidOption),
+        ::testing::ContainsRegex(notValidOption.getConfigOption().getIdentifier()));
+  };
 
   // An outside configuration option.
   ConfigOption outsideOption("outside", "", &var);
@@ -1778,6 +1833,25 @@ TEST(ConfigManagerTest, AddOptionNonExceptionValidatorException) {
   checkAddOptionValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, outsideOptionProxy);
   checkAddOptionValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, mWith2SubOption);
   checkAddOptionValidatorBehavior(mWith2SubSub2, mWith2SubSub2Option, mWith2SubSub1Option);
+}
+
+TEST(ConfigManagerTest, AddOptionNoExceptionValidatorException) {
+  doAddOptionValidatorExceptionTest(
+      []<typename... Ts>(ConfigManager& m, ConstConfigOptionProxy<Ts>... args) {
+        m.addOptionValidator([](const decltype(args.getConfigOption())&...) { return true; }, "",
+                             args...);
+      });
+}
+
+TEST(ConfigManagerTest, AddOptionExceptionValidatorException) {
+  doAddOptionValidatorExceptionTest(
+      []<typename... Ts>(ConfigManager& m, ConstConfigOptionProxy<Ts>... args) {
+        m.addOptionValidator(
+            [](const decltype(args.getConfigOption())&...) -> std::optional<ErrorMessage> {
+              return {std::nullopt};
+            },
+            args...);
+      });
 }
 
 TEST(ConfigManagerTest, ContainsOption) {
