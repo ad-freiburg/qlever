@@ -199,6 +199,7 @@ void IndexImpl::createFromFile(const string& filename) {
                             ospSorter.makePushCallback(), pushTripleToPatterns,
                             numSubjectCounter);
       patternCreator.finish();
+      makeIndexFromAdditionalTriples(patternCreator.getHasPatternSortedByPSO());
     } else {
       createPermutationPair(spoSorter.sortedView(), spo_, sop_,
                             ospSorter.makePushCallback(), numSubjectCounter);
@@ -1349,4 +1350,19 @@ void IndexImpl::deleteTemporaryFile(const string& path) {
   if (!keepTempFiles_) {
     ad_utility::deleteFile(path);
   }
+}
+
+void IndexImpl::makeIndexFromAdditionalTriples(auto&& additionalTriples) {
+  // TODO<joka921> The triples are currently already sorted by PSO, this should
+  // be documented.
+  auto onDiskBaseCpy = onDiskBase_;
+  onDiskBase_ += ".additionalTriples";
+  /*
+  StxxlSorter<SortByPSO> psoSorter{stxxlMemoryInBytes() / 5};
+  for (auto& triple : additionalTriples) {
+    psoSorter.push(triple);
+  }
+   */
+  createPermutationPair(AD_FWD(additionalTriples), pso_, pos_);
+  onDiskBase_ = onDiskBaseCpy;
 }

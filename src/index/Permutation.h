@@ -42,7 +42,8 @@ class Permutation {
   // `PSO` is converted to [1, 0, 2].
   static std::array<size_t, 3> toKeyOrder(Enum permutation);
 
-  explicit Permutation(Enum permutation, Allocator allocator);
+  explicit Permutation(Enum permutation, Allocator allocator,
+                       bool isRecursive = true);
 
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase);
@@ -100,10 +101,14 @@ class Permutation {
 
   const MetaData& metaData() const { return meta_; }
   MetaData meta_;
+  ad_utility::HashMap<Id, CompressedRelationMetadata>
+      additionalBuiltinRelationMetadata_;
 
   mutable ad_utility::File file_;
 
   CompressedRelationReader reader_;
 
   bool isLoaded_ = false;
+
+  std::unique_ptr<Permutation> additionalPermutation_;
 };

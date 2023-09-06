@@ -13,6 +13,8 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/Pattern.h"
+#include "index/StxxlSortFunctors.h"
+#include "util/BackgroundStxxlSorter.h"
 #include "util/ExceptionHandling.h"
 #include "util/MmapVector.h"
 #include "util/Serializer/SerializeVector.h"
@@ -93,6 +95,9 @@ class PatternCreator {
       PatternID, ad_utility::serialization::FileWriteSerializer>
       _subjectToPatternSerializer;
 
+  ad_utility::BackgroundStxxlSorter<std::array<Id, 3>, SortByPSO>
+      hasPatternPsoSorter{3'000'000'000};
+
   // The predicates which have already occured in one of the patterns. Needed to
   // count the number of distinct predicates.
   ad_utility::HashSet<Pattern::value_type> _distinctPredicates;
@@ -143,8 +148,11 @@ class PatternCreator {
                                    CompactVectorOfStrings<Id>& patterns,
                                    std::vector<PatternID>& subjectToPattern);
 
+  auto getHasPatternSortedByPSO() { return hasPatternPsoSorter.sortedView(); }
+
  private:
   void finishSubject(VocabIndex subjectIndex, const Pattern& pattern);
+
   void printStatistics(PatternStatistics patternStatistics) const;
 };
 #endif  // QLEVER_PATTERNCREATOR_H

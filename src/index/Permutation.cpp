@@ -8,11 +8,17 @@
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
-Permutation::Permutation(Enum permutation, Allocator allocator)
+Permutation::Permutation(Enum permutation, Allocator allocator,
+                         bool isRecursive)
     : readableName_(toString(permutation)),
       fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
       keyOrder_(toKeyOrder(permutation)),
-      reader_{std::move(allocator)} {}
+      reader_{std::move(allocator)} {
+  if (isRecursive) {
+    additionalPermutation_ =
+        std::make_unique<Permutation>(permutation, allocator, false);
+  }
+}
 
 // _____________________________________________________________________
 void Permutation::loadFromDisk(const std::string& onDiskBase) {
@@ -34,6 +40,9 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
   LOG(INFO) << "Registered " << readableName_
             << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;
+  if (additionalPermutation_) {
+    additionalPermutation_->loadFromDisk(onDiskBase + ".additionalTriples");
+  }
 }
 
 // _____________________________________________________________________
@@ -45,6 +54,9 @@ IdTable Permutation::scan(Id col0Id, std::optional<Id> col1Id,
   }
 
   if (!meta_.col0IdExists(col0Id)) {
+    if (additionalPermutation_) {
+      return additionalPermutation_->scan(col0Id, col1Id, timer);
+    }
     size_t numColumns = col1Id.has_value() ? 1 : 2;
     return IdTable{numColumns, reader_.allocator()};
   }
@@ -61,6 +73,9 @@ IdTable Permutation::scan(Id col0Id, std::optional<Id> col1Id,
 // _____________________________________________________________________
 size_t Permutation::getResultSizeOfScan(Id col0Id, Id col1Id) const {
   if (!meta_.col0IdExists(col0Id)) {
+    if (additionalPermutation_) {
+      return additionalPermutation_->getResultSizeOfScan(col0Id, col1Id);
+    }
     return 0;
   }
   const auto& metaData = meta_.getMetaData(col0Id);
@@ -113,6 +128,9 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     Id col0Id, std::optional<Id> col1Id) const {
   if (!meta_.col0IdExists(col0Id)) {
+    if (additionalPermutation_) {
+      return additionalPermutation_->getMetadataAndBlocks(col0Id, col1Id);
+    }
     return std::nullopt;
   }
 
@@ -133,6 +151,10 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
     const TimeoutTimer& timer) const {
   if (!meta_.col0IdExists(col0Id)) {
+    if (additionalPermutation_) {
+      return additionalPermutation_->lazyScan(col0Id, col1Id, std::move(blocks),
+                                              timer);
+    }
     return {};
   }
   auto relationMetadata = meta_.getMetaData(col0Id);

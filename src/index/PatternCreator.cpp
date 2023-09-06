@@ -55,6 +55,10 @@ void PatternCreator::finishSubject(VocabIndex subjectIndex,
 
   // Write the subjectIndex-pattern mapping for this subjectIndex.
   _subjectToPatternSerializer.push(patternId);
+  // TODO<joka921> create a safe format for this.
+  hasPatternPsoSorter.push(std::array{Id::makeFromVocabIndex(subjectIndex),
+                                      Id::makeFromDouble(42.42),
+                                      Id::makeFromInt(patternId)});
   _nextUnassignedSubjectIndex = _nextUnassignedSubjectIndex.incremented();
 }
 
