@@ -253,8 +253,9 @@ using StrBeforeExpression =
                          StringValueGetter>;
 
 [[maybe_unused]] auto replaceImpl =
-    [](std::optional<std::string> input, std::unique_ptr<re2::RE2> pattern,
-       std::optional<std::string> replacement) -> IdOrString {
+    [](std::optional<std::string> input,
+       const std::unique_ptr<re2::RE2>& pattern,
+       const std::optional<std::string>& replacement) -> IdOrString {
   if (!input.has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
   }
@@ -401,7 +402,7 @@ Expr makeStrBeforeExpression(Expr child1, Expr child2) {
 }
 
 Expr makeReplaceExpression(Expr input, Expr pattern, Expr repl) {
-  //return make<ReplaceExpression>(input, pattern, repl);
+  return make<ReplaceExpression>(input, pattern, repl);
 }
 Expr makeContainsExpression(Expr child1, Expr child2) {
   return make<ContainsExpression>(child1, child2);

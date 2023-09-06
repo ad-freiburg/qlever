@@ -171,8 +171,9 @@ struct LiteralFromIdGetter {
 };
 
 struct RegexValueGetter {
-  std::unique_ptr<re2::RE2> operator()(auto&& input,
-                                       const EvaluationContext* context) const {
+  std::unique_ptr<re2::RE2> operator()(SingleExpressionResult auto&& input,
+                                       const EvaluationContext* context) const
+      requires requires { StringValueGetter{}(AD_FWD(input), context); } {
     auto str = StringValueGetter{}(AD_FWD(input), context);
     if (!str.has_value()) {
       return nullptr;

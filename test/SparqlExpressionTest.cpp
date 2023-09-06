@@ -790,10 +790,9 @@ TEST(SparqlExpression, ReplaceExpression) {
                           IdOrString{"e.[a-z]"}, IdOrString{"X"}});
 
   // Case-insensitive matching using the hack for google regex:
-    checkReplace(IdOrStrings{"null", "xxns", "zwxx", "drxx"},
-                 std::tuple{IdOrStrings{"null", "eIns", "zwEi", "drei"},
-                            IdOrString{"(?i)[ei]"}, IdOrString{"x"}});
-
+  checkReplace(IdOrStrings{"null", "xxns", "zwxx", "drxx"},
+               std::tuple{IdOrStrings{"null", "eIns", "zwEi", "drei"},
+                          IdOrString{"(?i)[ei]"}, IdOrString{"x"}});
 
   // Multiple matches withing the same string
   checkReplace(
@@ -809,7 +808,6 @@ TEST(SparqlExpression, ReplaceExpression) {
   checkReplace(IdOrStrings{U, U, U, U, U, U},
                std::tuple{IdOrStrings{"null", "Xs", "zwei", "drei", U, U},
                           IdOrString{"e"}, Id::makeUndefined()});
-
 }
 
 TEST(SparqlExpression, literalExpression) {

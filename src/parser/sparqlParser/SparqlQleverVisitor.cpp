@@ -1632,28 +1632,24 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary =
-      [&argList]<typename Function>(Function function)
-          requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr>
-  {
+  auto createUnary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
     AD_CORRECTNESS_CHECK(argList.size() == 1);
     return function(std::move(argList[0]));
   };
-  auto createBinary =
-      [&argList]<typename Function>(Function function)
-          requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                         ExpressionPtr> {
-            AD_CORRECTNESS_CHECK(argList.size() == 2);
-            return function(std::move(argList[0]), std::move(argList[1]));
-          };
-  auto createTernary =
-      [&argList]<typename Function>(Function function)
-          requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                         ExpressionPtr, ExpressionPtr> {
-            AD_CORRECTNESS_CHECK(argList.size() == 3);
-            return function(std::move(argList[0]), std::move(argList[1]),
-                            std::move(argList[2]));
-          };
+  auto createBinary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                     ExpressionPtr> {
+    AD_CORRECTNESS_CHECK(argList.size() == 2);
+    return function(std::move(argList[0]), std::move(argList[1]));
+  };
+  auto createTernary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                     ExpressionPtr, ExpressionPtr> {
+    AD_CORRECTNESS_CHECK(argList.size() == 3);
+    return function(std::move(argList[0]), std::move(argList[1]),
+                    std::move(argList[2]));
+  };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
   } else if (functionName == "strlen") {
@@ -1753,15 +1749,17 @@ SparqlExpression::Ptr Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
   auto children = visitVector(ctx->expression());
   AD_CORRECTNESS_CHECK(children.size() == 3 || children.size() == 4);
   if (children.size() == 4) {
-    reportError(ctx,
+    reportError(
+        ctx,
         "REPLACE expressions with four arguments (including regex flags) are "
         "currently not supported by QLever. You can however incorporate flags "
         "directly into a regex by prepending `?(<flags>)` to your regex. For "
         "example `?(i)[ei]` will match the regex `[ei]` in a case-insensitive "
-        "way."
-        );
+        "way.");
   }
-  return sparqlExpression::makeReplaceExpression(std::move(children.at(0)), std::move(children.at(1)), std::move(children.at(2)));
+  return sparqlExpression::makeReplaceExpression(std::move(children.at(0)),
+                                                 std::move(children.at(1)),
+                                                 std::move(children.at(2)));
 }
 
 // ____________________________________________________________________________________

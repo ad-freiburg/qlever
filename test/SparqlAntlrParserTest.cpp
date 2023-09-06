@@ -1298,7 +1298,9 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall(
       "replace(?x, ?y, ?z)",
       matchNary(&makeReplaceExpression, Var{"?x"}, Var{"?y"}, Var{"?z"}));
-  expectFails("replace(?x, ?y, ?z, \"i\")", ::testing::AllOf(::testing::ContainsRegex("regex"), ::testing::ContainsRegex("flags")));
+  expectFails("replace(?x, ?y, ?z, \"i\")",
+              ::testing::AllOf(::testing::ContainsRegex("regex"),
+                               ::testing::ContainsRegex("flags")));
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
 
