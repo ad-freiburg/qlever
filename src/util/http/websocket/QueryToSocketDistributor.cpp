@@ -11,21 +11,27 @@ namespace ad_utility::websocket {
 
 template <typename CompletionToken>
 auto QueryToSocketDistributor::waitForUpdate(CompletionToken&& token) {
-  auto initiate = [this]<typename Handler>(Handler&& self) mutable {
+  auto initiate = [strand = strand_,
+                   wakeupCalls =
+                       wakeupCalls_]<typename Handler>(Handler&& self) mutable {
     auto sharedSelf = std::make_shared<Handler>(std::forward<Handler>(self));
     auto cancellationSlot = net::get_associated_cancellation_slot(
         *sharedSelf, net::cancellation_slot());
 
-    net::dispatch(strand_, [this, sharedSelf]() mutable {
-      wakeupCalls_.emplace_back(
+    net::dispatch(strand, [wakeupCalls, sharedSelf]() mutable {
+      wakeupCalls->emplace_back(
           [sharedSelf = std::move(sharedSelf)]() { (*sharedSelf)(); });
     });
 
     if (cancellationSlot.is_connected()) {
-      cancellationSlot.assign([this](net::cancellation_type) {
-        // Make sure wakeupCalls_ is accessed safely.
-        net::dispatch(strand_, [this]() { wakeupCalls_.clear(); });
-      });
+      cancellationSlot.assign(
+          [strand = std::move(strand), wakeupCalls = std::move(wakeupCalls)](
+              net::cancellation_type) mutable {
+            // Make sure wakeupCalls_ is accessed safely.
+            net::dispatch(strand, [wakeupCalls = std::move(wakeupCalls)]() {
+              wakeupCalls->clear();
+            });
+          });
     }
   };
   return net::async_initiate<CompletionToken, void()>(
@@ -33,10 +39,10 @@ auto QueryToSocketDistributor::waitForUpdate(CompletionToken&& token) {
 }
 
 void QueryToSocketDistributor::runAndEraseWakeUpCallsSynchronously() {
-  for (auto& wakeupCall : wakeupCalls_) {
+  for (auto& wakeupCall : *wakeupCalls_) {
     wakeupCall();
   }
-  wakeupCalls_.clear();
+  wakeupCalls_->clear();
 }
 
 net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(

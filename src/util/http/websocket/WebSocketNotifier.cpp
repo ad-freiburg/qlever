@@ -24,12 +24,10 @@ net::awaitable<WebSocketNotifier> WebSocketNotifier::create(
 }
 
 void WebSocketNotifier::operator()(std::string json) const {
-  net::co_spawn(
-      executor_,
-      [distributor = distributor_,
-       json = std::move(json)]() mutable -> net::awaitable<void> {
-        co_await distributor->addQueryStatusUpdate(std::move(json));
-      },
-      net::detached);
+  auto lambda = [](auto distributor, auto json) -> net::awaitable<void> {
+    co_await distributor->addQueryStatusUpdate(std::move(json));
+  };
+  net::co_spawn(executor_, lambda(distributor_, std::move(json)),
+                net::detached);
 }
 }  // namespace ad_utility::websocket

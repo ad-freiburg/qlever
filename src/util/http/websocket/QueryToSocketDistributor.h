@@ -24,7 +24,8 @@ class QueryToSocketDistributor {
   /// Strand to synchronize all operations on this class
   net::strand<net::any_io_executor> strand_;
   /// Vector to store all callbacks of websockets waiting for an update.
-  std::vector<std::function<void()>> wakeupCalls_{};
+  std::shared_ptr<std::vector<std::function<void()>>> wakeupCalls_ =
+      std::make_unique<std::vector<std::function<void()>>>();
   /// Vector that stores the actual data, so all websockets can read it at
   /// their own pace.
   std::vector<std::shared_ptr<const std::string>> data_{};
@@ -43,7 +44,7 @@ class QueryToSocketDistributor {
 
  public:
   /// Constructor that builds a new strand from the provided io context.
-  QueryToSocketDistributor(net::io_context& ioContext)
+  explicit QueryToSocketDistributor(net::io_context& ioContext)
       : strand_{net::make_strand(ioContext)} {}
 
   /// Appends specified data to the vector and signals all waiting websockets
