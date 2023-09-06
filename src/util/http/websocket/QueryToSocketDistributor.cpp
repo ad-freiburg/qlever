@@ -11,27 +11,30 @@ namespace ad_utility::websocket {
 
 template <typename CompletionToken>
 auto QueryToSocketDistributor::waitForUpdate(CompletionToken&& token) {
-  auto initiate = [strand = strand_,
-                   wakeupCalls =
-                       wakeupCalls_]<typename Handler>(Handler&& self) mutable {
+  auto id = counter++;
+  auto initiate = [strand = strand_, wakeupCalls = wakeupCalls_,
+                   id]<typename Handler>(Handler&& self) mutable {
     auto sharedSelf = std::make_shared<Handler>(std::forward<Handler>(self));
     auto cancellationSlot = net::get_associated_cancellation_slot(
         *sharedSelf, net::cancellation_slot());
 
-    net::dispatch(strand, [wakeupCalls, sharedSelf]() mutable {
-      wakeupCalls->emplace_back(
-          [sharedSelf = std::move(sharedSelf)]() { (*sharedSelf)(); });
+    net::dispatch(strand, [wakeupCalls, sharedSelf, id]() mutable {
+      wakeupCalls->emplace_back(IdentifiableFunction{
+          .function_ = [sharedSelf =
+                            std::move(sharedSelf)]() { (*sharedSelf)(); },
+          .id_ = id});
     });
 
     if (cancellationSlot.is_connected()) {
-      cancellationSlot.assign(
-          [strand = std::move(strand), wakeupCalls = std::move(wakeupCalls)](
-              net::cancellation_type) mutable {
-            // Make sure wakeupCalls_ is accessed safely.
-            net::dispatch(strand, [wakeupCalls = std::move(wakeupCalls)]() {
-              wakeupCalls->clear();
-            });
-          });
+      cancellationSlot.assign([strand = std::move(strand),
+                               wakeupCalls = std::move(wakeupCalls),
+                               id](net::cancellation_type) mutable {
+        // Make sure wakeupCalls_ is accessed safely.
+        net::dispatch(strand, [wakeupCalls = std::move(wakeupCalls), id]() {
+          std::erase_if(*wakeupCalls,
+                        [id](auto idFunc) { return idFunc.id_ == id; });
+        });
+      });
     }
   };
   return net::async_initiate<CompletionToken, void()>(
@@ -40,7 +43,7 @@ auto QueryToSocketDistributor::waitForUpdate(CompletionToken&& token) {
 
 void QueryToSocketDistributor::runAndEraseWakeUpCallsSynchronously() {
   for (auto& wakeupCall : *wakeupCalls_) {
-    wakeupCall();
+    std::invoke(wakeupCall.function_);
   }
   wakeupCalls_->clear();
 }

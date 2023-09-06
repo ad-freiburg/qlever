@@ -22,11 +22,15 @@ namespace net = boost::asio;
 /// It also provides its own strand so operations on this class do not need
 /// to be synchronized globally. The public API is thread-safe!
 class QueryToSocketDistributor {
+  struct IdentifiableFunction {
+    std::function<void()> function_;
+    uint64_t id_;
+  };
   /// Strand to synchronize all operations on this class
   net::strand<net::any_io_executor> strand_;
   /// Vector to store all callbacks of websockets waiting for an update.
-  std::shared_ptr<std::vector<std::function<void()>>> wakeupCalls_ =
-      std::make_unique<std::vector<std::function<void()>>>();
+  std::shared_ptr<std::vector<IdentifiableFunction>> wakeupCalls_ =
+      std::make_unique<std::vector<IdentifiableFunction>>();
   /// Vector that stores the actual data, so all websockets can read it at
   /// their own pace.
   std::vector<std::shared_ptr<const std::string>> data_{};
@@ -34,6 +38,8 @@ class QueryToSocketDistributor {
   bool finished_ = false;
 
   unique_cleanup::UniqueCleanup<std::function<void()>> cleanupCall_;
+
+  uint64_t counter = 0;
 
   /// Wakes up all websockets that are currently "blocked" and waiting for an
   /// update of the given query. After being woken up they will check for
