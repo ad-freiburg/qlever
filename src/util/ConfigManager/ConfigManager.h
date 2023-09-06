@@ -560,12 +560,22 @@ class ConfigManager {
     (checkIfContainOption(configOptionsToBeChecked), ...);
 
     // Create the error message prefix for inside the function.
-    const std::array optionNames{absl::StrCat(
-        "'", configOptionsToBeChecked.getConfigOption().getIdentifier(),
-        "'")...};
+    auto generateConfigOptionIdentifierWithValueString =
+        [](const ConfigOption& c) {
+          // Is there a value, we can show together with the identifier?
+          const bool wasSet = c.wasSet();
+          return absl::StrCat(
+              "'", c.getIdentifier(), "' (With ",
+              wasSet ? absl::StrCat("value '", c.getValueAsString(), "'")
+                     : "no value",
+              ".)");
+        };
+    const std::array optionNamesWithValues{
+        generateConfigOptionIdentifierWithValueString(
+            configOptionsToBeChecked.getConfigOption())...};
     std::string errorMessagePrefix =
         absl::StrCat("Validity check of configuration options ",
-                     lazyStrJoin(optionNames, ", "), " failed: ");
+                     lazyStrJoin(optionNamesWithValues, ", "), " failed: ");
 
     /*
     Add a function wrapper to our list of validators, that calls the
