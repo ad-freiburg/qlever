@@ -248,7 +248,7 @@ class ConfigManager {
   after parsing.
 
   @tparam ValidatorParameterTypes The types of the values in the
-  `validatorParameter`. Can be left up to type deduction.
+  `configOptionsToBeChecked`. Can be left up to type deduction.
 
   @param validatorFunction Checks, if the values of the given configuration
   options are valid. Should return true, if they are valid.
@@ -273,6 +273,37 @@ class ConfigManager {
         transformValidatorIntoExceptionValidator<ValidatorParameterTypes...>(
             validatorFunction, errorMessage),
         configOptionsToBeChecked...);
+  }
+
+  /*
+  @brief Add a function to the configuration manager for verifying, that the
+  values of the given configuration options are valid. Will always be called
+  after parsing.
+
+  @tparam ValidatorParameterTypes The types of the values in the
+  `configOptionsToBeChecked`. Can be left up to type deduction.
+
+  @param exceptionValidatorFunction Checks, if the values of the given
+  configuration options are valid. Return an empty instance of
+  `std::optional<ErrorMessage>` if valid. Otherwise, the `ErrorMessage` should
+  contain the reason, why the values are none valid.
+  @param configOptionsToBeChecked Proxies for the configuration options, whos
+  values will be passed to the exception validator function as function
+  arguments. Will keep the same order.
+  */
+  template <typename... ExceptionValidatorParameterTypes>
+  void addValidator(
+      ExceptionValidator<ExceptionValidatorParameterTypes...> auto
+          exceptionValidatorFunction,
+      ConstConfigOptionProxy<
+          ExceptionValidatorParameterTypes>... configOptionsToBeChecked)
+      requires(sizeof...(configOptionsToBeChecked) > 0) {
+    addValidatorImpl(
+        "addValidator",
+        []<typename T>(ConstConfigOptionProxy<T> opt) {
+          return opt.getConfigOption().template getValue<std::decay_t<T>>();
+        },
+        exceptionValidatorFunction, configOptionsToBeChecked...);
   }
 
   /*
