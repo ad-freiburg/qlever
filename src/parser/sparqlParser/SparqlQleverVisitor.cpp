@@ -1753,8 +1753,8 @@ SparqlExpression::Ptr Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
         ctx,
         "REPLACE expressions with four arguments (including regex flags) are "
         "currently not supported by QLever. You can however incorporate flags "
-        "directly into a regex by prepending `?(<flags>)` to your regex. For "
-        "example `?(i)[ei]` will match the regex `[ei]` in a case-insensitive "
+        "directly into a regex by prepending `(?<flags>)` to your regex. For "
+        "example `(?i)[ei]` will match the regex `[ei]` in a case-insensitive "
         "way.");
   }
   return sparqlExpression::makeReplaceExpression(std::move(children.at(0)),

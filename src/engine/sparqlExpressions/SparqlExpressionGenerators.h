@@ -40,7 +40,9 @@ inline std::span<const ValueId> getIdsFromVariable(const ::Variable& variable,
 }
 
 /// Generators that yield `numItems` items for the various
-/// `SingleExpressionResult`s.
+/// `SingleExpressionResult`s after applying a `Transformation` to them.
+/// Typically, this transformation is one of the value getters from
+/// `SparqlExpressionValueGetters` with an already bound `EvaluationContext`.
 template <SingleExpressionResult T, typename Transformation = std::identity>
 requires isConstantResult<T> && std::invocable<Transformation, T>
 cppcoro::generator<const std::decay_t<std::invoke_result_t<Transformation, T>>> resultGenerator(
@@ -64,24 +66,24 @@ auto resultGenerator(T vector, size_t numItems, Transformation transformation = 
 }
 
 template <typename Transformation = std::identity>
-inline cppcoro::generator<std::decay_t<std::invoke_result_t<Transformation, Id>>> resultGenerator(
-    ad_utility::SetOfIntervals set, size_t targetSize, Transformation transformation = {}) {
+inline cppcoro::generator<const std::decay_t<std::invoke_result_t<Transformation, Id>>>
+resultGenerator(ad_utility::SetOfIntervals set, size_t targetSize,
+                Transformation transformation = {}) {
   size_t i = 0;
+  const auto trueTransformed = transformation(Id::makeFromBool(true));
+  const auto falseTransformed = transformation(Id::makeFromBool(false));
   for (const auto& [begin, end] : set._intervals) {
     while (i < begin) {
-      auto x = transformation(Id::makeFromBool(false));
-      co_yield x;
+      co_yield falseTransformed;
       ++i;
     }
     while (i < end) {
-      auto x = transformation(Id::makeFromBool(true));
-      co_yield x;
+      co_yield trueTransformed;
       ++i;
     }
   }
   while (i++ < targetSize) {
-    auto x = transformation(Id::makeFromBool(false));
-    co_yield x;
+    co_yield falseTransformed;
   }
 }
 
