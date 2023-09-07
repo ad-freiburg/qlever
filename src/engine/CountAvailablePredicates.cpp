@@ -5,6 +5,7 @@
 #include "./CountAvailablePredicates.h"
 
 #include "./CallFixedSize.h"
+#include "index/IndexImpl.h"
 
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
@@ -148,26 +149,20 @@ ResultTable CountAvailablePredicates::computeResult() {
 void CountAvailablePredicates::computePatternTrickAllEntities(
     IdTable* dynResult, const vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
-    const CompactVectorOfStrings<Id>& patterns) {
+    const CompactVectorOfStrings<Id>& patterns) const {
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   LOG(DEBUG) << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
-
-  size_t maxId = std::max(hasPattern.size(), hasPredicate.size());
-  for (size_t i = 0; i < maxId; i++) {
-    if (i < hasPattern.size() && hasPattern[i] != NO_PATTERN) {
-      patternCounts[hasPattern[i]]++;
-    } else if (i < hasPredicate.size()) {
-      auto predicates = hasPredicate[i];
-      for (const auto& predicate : predicates) {
-        auto it = predicateCounts.find(predicate);
-        if (it == predicateCounts.end()) {
-          predicateCounts[predicate] = 1;
-        } else {
-          it->second++;
-        }
-      }
+  auto fullHasPattern =
+      getExecutionContext()
+          ->getIndex()
+          .getImpl()
+          .getPermutation(Permutation::Enum::PSO)
+          .lazyScan(Id::makeFromDouble(42.42), std::nullopt, std::nullopt);
+  for (const auto& idTable : fullHasPattern) {
+    for (const auto& row : idTable) {
+      patternCounts[row[1].getInt()]++;
     }
   }
 
