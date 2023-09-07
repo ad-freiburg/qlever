@@ -25,7 +25,7 @@ namespace net = boost::asio;
 /// to use a wrapper like `sameExecutor()` to stay on your executor!
 class QueryToSocketDistributor {
   // Counter to generate unique ids
-  uint64_t counter = 0;
+  uint64_t counter_ = 0;
   // Helper struct to bundle a function with a unique id
   struct IdentifiableFunction {
     std::function<void()> function_;
@@ -63,8 +63,9 @@ class QueryToSocketDistributor {
   explicit QueryToSocketDistributor(net::io_context& ioContext,
                                     std::function<void()> cleanupCall)
       : strand_{net::make_strand(ioContext)},
-        cleanupCall_{std::move(cleanupCall),
-                     [](auto&& cleanupCall) { std::invoke(cleanupCall); }} {}
+        cleanupCall_{std::move(cleanupCall), [](const auto& cleanupCall) {
+                       std::invoke(cleanupCall);
+                     }} {}
 
   /// Appends specified data to the vector and signals all waiting websockets
   /// that new data is available

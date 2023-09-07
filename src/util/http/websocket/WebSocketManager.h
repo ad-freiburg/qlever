@@ -34,7 +34,7 @@ class WebSocketManager {
   net::awaitable<void> waitForServerEvents();
 
   /// Helper method to create a QueryId based on a given request.
-  static QueryId extractFromRequest(http::request<http::string_body>&);
+  static QueryId extractFromRequest(const http::request<http::string_body>&);
 
  public:
   /// Constructs an instance of this class

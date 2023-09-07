@@ -13,7 +13,8 @@ namespace ad_utility::websocket {
 
 template <typename CompletionToken>
 auto QueryToSocketDistributor::waitForUpdate(CompletionToken&& token) {
-  auto id = counter++;
+  auto id = counter_;
+  counter_++;
   auto initiate = [strand = strand_, wakeupCalls = wakeupCalls_,
                    id]<typename Handler>(Handler&& self) mutable {
     auto sharedSelf = std::make_shared<Handler>(std::forward<Handler>(self));

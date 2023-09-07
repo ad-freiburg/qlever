@@ -29,7 +29,7 @@ std::string extractQueryId(std::string_view path) {
 // _____________________________________________________________________________
 
 QueryId WebSocketManager::extractFromRequest(
-    http::request<http::string_body>& request) {
+    const http::request<http::string_body>& request) {
   auto queryIdString = extractQueryId(request.target());
   AD_CORRECTNESS_CHECK(!queryIdString.empty());
   return QueryId::idFromString(queryIdString);
