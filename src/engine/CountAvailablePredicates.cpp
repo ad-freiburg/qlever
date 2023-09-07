@@ -229,7 +229,7 @@ void CountAvailablePredicates::computePatternTrick(
     reduction(MergeHashmapsSizeT : patternCounts)                              \
     reduction(+ : numEntitiesWithPatterns) reduction(+ : numPatternPredicates) \
     reduction(+ : numListPredicates)                                           \
-    shared(input, subjectColumn, hasPattern, hasPredicate)
+    shared(input, subjectColumn, patternColumn)
     for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
       // Skip over elements with the same subject (don't count them twice)
       Id subjectId = input(inputIdx, subjectColumn);
