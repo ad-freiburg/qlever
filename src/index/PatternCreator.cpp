@@ -2,7 +2,12 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "./PatternCreator.h"
+#include "index/PatternCreator.h"
+
+#include "global/SpecialIds.h"
+
+static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
+static const Id hasPredicateId = qlever::specialIds.at(HAS_PREDICATE_PREDICATE);
 
 // _________________________________________________________________________
 void PatternCreator::processTriple(std::array<Id, 3> triple) {
@@ -20,7 +25,7 @@ void PatternCreator::processTriple(std::array<Id, 3> triple) {
     _currentPattern.push_back(triple[1]);
     hasPatternPsoSorter.push(
         std::array{Id::makeFromVocabIndex(_currentSubjectIndex.value()),
-                   Id::makeFromDouble(43.43), triple[1]});
+                   hasPredicateId, triple[1]});
   }
 }
 
@@ -50,7 +55,7 @@ void PatternCreator::finishSubject(VocabIndex subjectIndex,
 
   // TODO<joka921> create a safe format for this.
   hasPatternPsoSorter.push(std::array{Id::makeFromVocabIndex(subjectIndex),
-                                      Id::makeFromDouble(42.42),
+                                      hasPatternId,
                                       Id::makeFromInt(patternId)});
 }
 

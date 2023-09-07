@@ -14,6 +14,7 @@
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"
 #include "global/Id.h"
+#include "global/SpecialIds.h"
 #include "parser/RdfEscaping.h"
 #include "parser/data/Variable.h"
 #include "util/Date.h"
@@ -230,13 +231,10 @@ class TripleComponent {
       VocabIndex idx;
       const std::string& content =
           isString() ? getString() : getLiteral().rawContent();
-      if (content == "<ql:has-pattern>") {
-        return Id::makeFromDouble(42.42);
-      } else if (content == HAS_PREDICATE_PREDICATE) {
-        return Id::makeFromDouble(43.43);
-      }
       if (vocabulary.getId(content, &idx)) {
         return Id::makeFromVocabIndex(idx);
+      } else if (qlever::specialIds.contains(content)) {
+        return qlever::specialIds.at(content);
       } else {
         return std::nullopt;
       }

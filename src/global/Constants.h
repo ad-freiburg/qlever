@@ -47,6 +47,8 @@ static const char INTERNAL_TEXT_MATCH_PREDICATE[] =
     "<QLever-internal-function/text>";
 static const char HAS_PREDICATE_PREDICATE[] =
     "<QLever-internal-function/has-predicate>";
+static const char HAS_PATTERN_PREDICATE[] =
+    "<QLever-internal-function/has-pattern>";
 static constexpr std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "<http://www.opengis.net/def/function/geosparql/"};
 static constexpr std::pair<std::string_view, std::string_view> MATH_PREFIX = {

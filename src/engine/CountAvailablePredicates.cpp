@@ -152,7 +152,8 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
           ->getIndex()
           .getImpl()
           .getPermutation(Permutation::Enum::PSO)
-          .lazyScan(Id::makeFromDouble(42.42), std::nullopt, std::nullopt);
+          .lazyScan(qlever::specialIds.at(HAS_PATTERN_PREDICATE), std::nullopt,
+                    std::nullopt);
   for (const auto& idTable : fullHasPattern) {
     for (const auto& row : idTable) {
       patternCounts[row[1].getInt()]++;

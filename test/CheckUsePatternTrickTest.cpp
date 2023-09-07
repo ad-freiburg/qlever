@@ -262,23 +262,31 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
       "SELECT ?p WHERE {?x ql:has-predicate ?p} GROUP BY ?p");
   auto patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
   ASSERT_TRUE(patternTrickTuple.has_value());
-  // The pattern trick triple has been removed from the query.
+  // The pattern trick triple2 has been removed from the query.
   const auto& triples = std::get<parsedQuery::BasicGraphPattern>(
                             pq._rootGraphPattern._graphPatterns.at(0))
                             ._triples;
-  ASSERT_TRUE(triples.empty());
+  ASSERT_EQ(triples.size(), 1u);
+  const auto& tr = triples[0];
+  EXPECT_EQ(tr._s.getVariable().name(), "?x");
+  EXPECT_EQ(tr._p.asString(), "<QLever-internal-function/has-pattern>");
+  EXPECT_EQ(tr._o.getVariable().name(), "?p");
 
   pq = SparqlParser::parseQuery(
       "SELECT ?p WHERE {?x ql:has-predicate ?p . ?x <is-a> ?y } GROUP BY ?p");
   patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
   ASSERT_TRUE(patternTrickTuple.has_value());
-  // The pattern trick triple has been removed from the query.,
+  // The pattern trick triple2 has been removed from the query.,
   const auto& triples2 = std::get<parsedQuery::BasicGraphPattern>(
                              pq._rootGraphPattern._graphPatterns.at(0))
                              ._triples;
-  ASSERT_EQ(triples2.size(), 1u);
+  ASSERT_EQ(triples2.size(), 2u);
   const auto& triple = triples2[0];
-  ASSERT_EQ(triple._s.getVariable().name(), "?x");
-  ASSERT_EQ(triple._p.asString(), "<is-a>");
-  ASSERT_EQ(triple._o.getVariable().name(), "?y");
+  EXPECT_EQ(triple._s.getVariable().name(), "?x");
+  EXPECT_EQ(triple._p.asString(), "<QLever-internal-function/has-pattern>");
+  EXPECT_EQ(triple._o.getVariable().name(), "?p");
+  const auto& triple2 = triples2[1];
+  EXPECT_EQ(triple2._s.getVariable().name(), "?x");
+  EXPECT_EQ(triple2._p.asString(), "<is-a>");
+  EXPECT_EQ(triple2._o.getVariable().name(), "?y");
 }

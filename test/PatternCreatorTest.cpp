@@ -55,7 +55,6 @@ void assertPatternContents(const std::string& filename) {
   double averageNumPredicatesPerSubject;
   uint64_t numDistinctSubjectPredicatePairs;
   CompactVectorOfStrings<Id> patterns;
-  std::vector<PatternID> subjectToPattern;
 
   PatternCreator::readPatternsFromFile(
       filename, averageNumSubjectsPerPredicate, averageNumPredicatesPerSubject,
@@ -82,11 +81,7 @@ void assertPatternContents(const std::string& filename) {
   // it has no triples. Subjects 0 and 3 have the first pattern, subject 1 has
   // the second pattern.
 
-  ASSERT_EQ(subjectToPattern.size(), 4);
-  ASSERT_EQ(0, subjectToPattern[0]);
-  ASSERT_EQ(1, subjectToPattern[1]);
-  ASSERT_EQ(NO_PATTERN, subjectToPattern[2]);
-  ASSERT_EQ(0, subjectToPattern[3]);
+  // TODO<joka921> Also check the added triples.
 }
 
 TEST(PatternCreator, writeAndReadWithFinish) {

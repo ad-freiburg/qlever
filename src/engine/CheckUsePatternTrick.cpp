@@ -117,10 +117,8 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(
       auto patternTrickTuple =
           isTripleSuitableForPatternTrick(*it, parsedQuery, countedVariable);
       if (patternTrickTuple.has_value()) {
-        // Remove the triple from the graph. Note that this invalidates the
-        // reference `triple`, so we perform this step at the very end.
-        // triples.erase(it);
-        it->_p._iri = "<ql:has-pattern>";
+        // Replace the predicate by `ql:has-pattern`.
+        it->_p._iri = HAS_PATTERN_PREDICATE;
         return patternTrickTuple;
       }
     }
