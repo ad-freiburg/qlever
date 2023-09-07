@@ -109,6 +109,11 @@ class CountAvailablePredicates : public Operation {
   void computePatternTrickAllEntities(
       IdTable* result, const CompactVectorOfStrings<Id>& patterns) const;
 
+  // Getters for testing.
+  size_t subjectColumnIndex() const { return _subjectColumnIndex; }
+  const Variable& predicateVariable() const { return _predicateVariable; }
+  const Variable& countVariable() const { return _countVariable; }
+
  private:
   ResultTable computeResult() override;
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;

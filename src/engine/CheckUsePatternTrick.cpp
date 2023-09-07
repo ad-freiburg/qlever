@@ -117,6 +117,11 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(
       auto patternTrickTuple =
           isTripleSuitableForPatternTrick(*it, parsedQuery, countedVariable);
       if (patternTrickTuple.has_value()) {
+        // For the three variable triples we have to make the predicate the
+        // object of the `has-pattern` triple.
+        if (it->_p._iri != HAS_PREDICATE_PREDICATE) {
+          it->_o = Variable{it->_p._iri};
+        }
         // Replace the predicate by `ql:has-pattern`.
         it->_p._iri = HAS_PATTERN_PREDICATE;
         return patternTrickTuple;
