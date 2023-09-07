@@ -40,6 +40,8 @@
 #include "util/Random.h"
 #include "util/TypeTraits.h"
 
+using namespace std::string_literals;
+
 namespace ad_benchmark {
 /*
  * @brief Creates an overlap between the join columns of the IdTables, by
@@ -637,7 +639,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   understand forms.
   */
   float maxTimeSingleMeasurement_;
-  size_t maxMemoryInMB_;
+  std::string maxMemory_;
 
  protected:
   /*
@@ -716,11 +718,11 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "The maximum row ratio between the smaller and the bigger `IdTable`.",
         &maxRatioRows_, 1000UL);
 
-    decltype(auto) maxMemoryInMB = config.addOption(
-        "maxMemoryInMB",
-        "Max amount of memory, in MB, that a `IdTable` is allowed "
-        "to take up. `0` for unlimited memory.",
-        &maxMemoryInMB_, 0UL);
+    decltype(auto) maxMemoryInStringFormat = config.addOption(
+        "maxMemory",
+        "Max amount of memory that a `IdTable` is allowed to take up. `0` for "
+        "unlimited memory. Example: 4kB, 8MB, 24 B, etc. ...",
+        &maxMemory_, "0 B"s);
 
     decltype(auto) maxTimeSingleMeasurement = config.addOption(
         "maxTimeSingleMeasurement",
@@ -751,7 +753,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // Adding the validators.
 
     /*
-    Is `maxMemoryInMB` big enough, to even allow for one row of the smaller
+    Is `maxMemory` big enough, to even allow for one row of the smaller
     table, bigger table, or the table resulting from joining the smaller and
     bigger table?`
     */
@@ -769,36 +771,37 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
              maxMemory.getBytes();
     };
     config.addValidator(
-        [checkIfMaxMemoryBigEnoughForOneRow](const size_t maxMemoryInMB,
+        [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
                                              size_t smallerTableAmountColumns) {
           return checkIfMaxMemoryBigEnoughForOneRow(
-              ad_utility::MemorySize::megabytes(maxMemoryInMB),
+              ad_utility::MemorySize::parse(maxMemory),
               smallerTableAmountColumns);
         },
-        "'maxMemoryInMB' must be big enough, for at least one row in the the "
+        "'maxMemory' must be big enough, for at least one row in the the "
         "smaller table.",
-        maxMemoryInMB, smallerTableAmountColumns);
+        maxMemoryInStringFormat, smallerTableAmountColumns);
     config.addValidator(
-        [checkIfMaxMemoryBigEnoughForOneRow](const size_t maxMemoryInMB,
+        [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
                                              size_t biggerTableAmountColumns) {
           return checkIfMaxMemoryBigEnoughForOneRow(
-              ad_utility::MemorySize::megabytes(maxMemoryInMB),
+              ad_utility::MemorySize::parse(maxMemory),
               biggerTableAmountColumns);
         },
-        "'maxMemoryInMB' must be big enough, for at least one row in the the "
+        "'maxMemory' must be big enough, for at least one row in the the "
         "bigger table.",
-        maxMemoryInMB, biggerTableAmountColumns);
+        maxMemoryInStringFormat, biggerTableAmountColumns);
     config.addValidator(
-        [checkIfMaxMemoryBigEnoughForOneRow](const size_t maxMemoryInMB,
+        [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
                                              size_t smallerTableAmountColumns,
                                              size_t biggerTableAmountColumns) {
           return checkIfMaxMemoryBigEnoughForOneRow(
-              ad_utility::MemorySize::megabytes(maxMemoryInMB),
+              ad_utility::MemorySize::parse(maxMemory),
               smallerTableAmountColumns + biggerTableAmountColumns - 1);
         },
-        "'maxMemoryInMB' must be big enough, for at least one row in the the "
+        "'maxMemory' must be big enough, for at least one row in the the "
         "result of joining the smaller and bigger table.",
-        maxMemoryInMB, smallerTableAmountColumns, biggerTableAmountColumns);
+        maxMemoryInStringFormat, smallerTableAmountColumns,
+        biggerTableAmountColumns);
 
     // Is `smallerTableAmountRows` a valid value?
     config.addValidator(generateBiggerEqualLambda(1UL, true),
@@ -867,7 +870,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   @brief Add metadata information, that is always interessting, if it has been
   set from outside:
   - "maxTimeSingleMeasurement"
-  - "maxMemoryInByte"
+  - "maxMemory"
   */
   void addExternallySetConfiguration(BenchmarkMetadata* meta) const {
     auto addInfiniteWhen0 = [&meta](const std::string& name,
@@ -880,9 +883,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     };
 
     addInfiniteWhen0("maxTimeSingleMeasurement", maxTimeSingleMeasurement_);
-    addInfiniteWhen0(
-        "maxMemoryInMB",
-        ad_utility::MemorySize::megabytes(maxMemoryInMB_).getBytes());
+    addInfiniteWhen0("maxMemory",
+                     ad_utility::MemorySize::parse(maxMemory_).getBytes());
   }
 
   /*
@@ -898,12 +900,13 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   }
 
   /*
-  Get the value of the `maxMemoryInMB_` configuration option interpreted as a
+  Get the value of the `maxMemory` configuration option interpreted as a
   `MemorySize`. Empty optional stands for `infinite` time.
   */
   std::optional<ad_utility::MemorySize> maxMemory() const {
-    if (maxMemoryInMB_ != 0) {
-      return {ad_utility::MemorySize::megabytes(maxMemoryInMB_)};
+    ad_utility::MemorySize maxMemory{ad_utility::MemorySize::parse(maxMemory_)};
+    if (maxMemory.getBytes() != 0) {
+      return {std::move(maxMemory)};
     } else {
       return {std::nullopt};
     }
