@@ -53,10 +53,6 @@ struct ErrorMessage {
 
   // Constructor.
   ErrorMessage(std::string message) : message_{std::move(message)} {}
-
-  // Move constructor. A move assignment operator is not possible, because
-  // `message_` is const.
-  ErrorMessage(ErrorMessage&&) = default;
 };
 
 /*
