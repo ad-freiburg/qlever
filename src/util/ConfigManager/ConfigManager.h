@@ -53,6 +53,10 @@ struct ErrorMessage {
 
   // Constructor.
   explicit ErrorMessage(std::string message) : message_{std::move(message)} {}
+
+  // No move schemantics.
+  ErrorMessage(ErrorMessage&&) = delete;
+  ErrorMessage& operator=(ErrorMessage&&) = delete;
 };
 
 /*
