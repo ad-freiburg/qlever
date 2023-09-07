@@ -440,49 +440,49 @@ static ResultTable& makeGrowingBenchmarkTable(
     const T5& biggerTableAmountColumns,
     const T6& smallerTableJoinColumnSampleSizeRatio = 1.0,
     const T7& biggerTableJoinColumnSampleSizeRatio = 1.0) {
-  // Is something a function?
-  constexpr auto isFunction = []<typename T>() {
+  // Is something a growth function?
+  constexpr auto isGrowthFunction = []<typename T>() {
     /*
     We have to cheat a bit, because being a function is not something, that
-    can easily be checked for to my knowledge. Instead, we simply check, if
-    the given type ISN'T a function, of which there are only two possible
-    types for, while inside this function: `float` and `size_t`.
+    can easily be checked for to my knowledge. Instead, we simply check, if it's
+    one of the limited variation of growth function, that we allow.
     */
-    if constexpr (std::is_arithmetic_v<T>) {
-      return false;
-    } else {
+    if constexpr (growthFunction<T, size_t> || growthFunction<T, float>) {
       return true;
+    } else {
+      return false;
     }
   };
 
-  // Returns the first argument, that is a function.
-  auto returnFirstFunction =
-      [&isFunction]<typename... Ts>(Ts&... args) -> auto& {
+  // Returns the first argument, that is a growth function.
+  auto returnFirstGrowthFunction =
+      [&isGrowthFunction]<typename... Ts>(Ts&... args) -> auto& {
     // Put them into a tuple, so that we can easly look them up.
     auto tup = std::tuple<Ts&...>{AD_FWD(args)...};
 
-    // Get the index of the first function.
+    // Get the index of the first growth function.
     constexpr static size_t idx =
-        ad_utility::getIndexOfFirstTypeToPassCheck<isFunction, Ts...>();
+        ad_utility::getIndexOfFirstTypeToPassCheck<isGrowthFunction, Ts...>();
 
     // Do we have a valid index?
     static_assert(idx < sizeof...(Ts),
-                  "There was no function in this parameter pack.");
+                  "There was no growth function in this parameter pack.");
 
     return std::get<idx>(tup);
   };
 
   /*
-  @brief Calls the function with the number of the next row to be created, if
-  it's a function, and returns the result. Otherwise just returns the given
-  `possibleFunction`.
+  @brief Calls the growth function with the number of the next row to be
+  created, if it's a function, and returns the result. Otherwise just returns
+  the given `possibleGrowthFunction`.
   */
-  auto returnOrCall = [&isFunction]<typename T>(const T& possibleFunction,
-                                                const size_t nextRowNumber) {
-    if constexpr (isFunction.template operator()<T>()) {
-      return possibleFunction(nextRowNumber);
+  auto returnOrCall = [&isGrowthFunction]<typename T>(
+                          const T& possibleGrowthFunction,
+                          const size_t nextRowNumber) {
+    if constexpr (isGrowthFunction.template operator()<T>()) {
+      return possibleGrowthFunction(nextRowNumber);
     } else {
-      return possibleFunction;
+      return possibleGrowthFunction;
     }
   };
 
@@ -506,7 +506,7 @@ static ResultTable& makeGrowingBenchmarkTable(
     // Add a new row without content.
     table->addRow();
     table->setEntry(rowNumber, 0,
-                    std::to_string(returnFirstFunction(
+                    std::to_string(returnFirstGrowthFunction(
                         overlap, ratioRows, smallerTableAmountRows,
                         smallerTableAmountColumns, biggerTableAmountColumns,
                         smallerTableJoinColumnSampleSizeRatio,
