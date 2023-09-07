@@ -750,10 +750,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           "necessary also rebuild the index.");
     }
 
+    /*
     if (node._triple._p._iri == HAS_PREDICATE_PREDICATE) {
       pushPlan(makeSubtreePlan<HasPredicateScan>(_qec, node._triple));
       continue;
     }
+     */
 
     if (node._variables.size() == 1) {
       // There is exactly one variable in the triple (may occur twice).

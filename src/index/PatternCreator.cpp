@@ -18,6 +18,9 @@ void PatternCreator::processTriple(std::array<Id, 3> triple) {
   // Don't list predicates twice in the same pattern.
   if (_currentPattern.empty() || _currentPattern.back() != triple[1]) {
     _currentPattern.push_back(triple[1]);
+    hasPatternPsoSorter.push(
+        std::array{Id::makeFromVocabIndex(_currentSubjectIndex.value()),
+                   Id::makeFromDouble(43.43), triple[1]});
   }
 }
 

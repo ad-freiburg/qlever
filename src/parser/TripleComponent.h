@@ -232,6 +232,8 @@ class TripleComponent {
           isString() ? getString() : getLiteral().rawContent();
       if (content == "<ql:has-pattern>") {
         return Id::makeFromDouble(42.42);
+      } else if (content == HAS_PREDICATE_PREDICATE) {
+        return Id::makeFromDouble(43.43);
       }
       if (vocabulary.getId(content, &idx)) {
         return Id::makeFromVocabIndex(idx);
