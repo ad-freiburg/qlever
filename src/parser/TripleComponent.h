@@ -230,6 +230,9 @@ class TripleComponent {
       VocabIndex idx;
       const std::string& content =
           isString() ? getString() : getLiteral().rawContent();
+      if (content == "<ql:has-pattern>") {
+        return Id::makeFromDouble(42.42);
+      }
       if (vocabulary.getId(content, &idx)) {
         return Id::makeFromVocabIndex(idx);
       } else {

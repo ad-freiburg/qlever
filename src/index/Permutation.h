@@ -86,7 +86,8 @@ class Permutation {
 
   /// Similar to the previous `scan` function, but only get the size of the
   /// result
-  size_t getResultSizeOfScan(Id col0Id, Id col1Id) const;
+  size_t getResultSizeOfScan(Id col0Id,
+                             std::optional<Id> col1Id = std::nullopt) const;
 
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }

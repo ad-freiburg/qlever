@@ -136,9 +136,10 @@ ResultTable CountAvailablePredicates::computeResult() {
                << std::endl;
 
     size_t width = subresult->idTable().numColumns();
+    size_t patternColumn = _subtree->getVariableColumn(_predicateVariable);
     CALL_FIXED_SIZE(width, &computePatternTrick, subresult->idTable(), &idTable,
                     hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-                    &runtimeInfo);
+                    patternColumn, &runtimeInfo);
     return {std::move(idTable), resultSortedOn(),
             subresult->getSharedLocalVocab()};
   }
@@ -210,7 +211,7 @@ void CountAvailablePredicates::computePatternTrick(
     const vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns, const size_t subjectColumn,
-    RuntimeInformation* runtimeInfo) {
+    const size_t patternColumn, RuntimeInformation* runtimeInfo) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   LOG(DEBUG) << "For " << input.size() << " entities in column "
@@ -254,30 +255,7 @@ void CountAvailablePredicates::computePatternTrick(
         // patterns.
         continue;
       }
-      auto subject = subjectId.getVocabIndex().get();
-
-      if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
-        // The subject matches a pattern
-        patternCounts[hasPattern[subject]]++;
-        numEntitiesWithPatterns++;
-      } else if (subject < hasPredicate.size()) {
-        // The subject does not match a pattern
-        const auto& pattern = hasPredicate[subject];
-        numListPredicates += pattern.size();
-        if (!pattern.empty()) {
-          for (const auto& predicate : pattern) {
-            predicateCounts[predicate]++;
-          }
-        } else {
-          LOG(TRACE) << "No pattern or has-relation entry found for entity "
-                     << std::to_string(subject) << std::endl;
-        }
-      } else {
-        LOG(TRACE) << "Subject " << subject
-                   << " does not appear to be an entity "
-                      "(its id is to high)."
-                   << std::endl;
-      }
+      patternCounts[input(inputIdx, patternColumn).getInt()]++;
     }
   }
   LOG(DEBUG) << "Using " << patternCounts.size()

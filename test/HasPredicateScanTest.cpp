@@ -334,9 +334,10 @@ TEST(CountAvailablePredicates, patternTrickTest) {
 
   RuntimeInformation runtimeInfo;
   try {
+    // This is wrong, it doesn't work like this anymore.
     CALL_FIXED_SIZE(
         input.numColumns(), CountAvailablePredicates::computePatternTrick,
-        input, &result, hasPattern, hasRelation, patterns, 0, &runtimeInfo);
+        input, &result, hasPattern, hasRelation, patterns, 0, 0, &runtimeInfo);
   } catch (const std::runtime_error& e) {
     // More verbose output in the case of an exception occuring.
     std::cout << e.what() << std::endl;

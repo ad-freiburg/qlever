@@ -1229,11 +1229,9 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(Id id, Permutation::Enum permutation) const {
-  if (const auto& p = getPermutation(permutation);
-      p.metaData().col0IdExists(id)) {
-    return p.metaData().getMetaData(id).getNofElements();
-  }
-  return 0;
+  // TODO<joka921> make `permutation.metaData()` private, because we need to
+  // also incorporate the additional triples in all the logic.
+  return getPermutation(permutation).getResultSizeOfScan(id);
 }
 
 // ___________________________________________________________________________

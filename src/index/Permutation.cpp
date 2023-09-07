@@ -13,10 +13,10 @@ Permutation::Permutation(Enum permutation, Allocator allocator,
     : readableName_(toString(permutation)),
       fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
       keyOrder_(toKeyOrder(permutation)),
-      reader_{std::move(allocator)} {
+      reader_{allocator} {
   if (isRecursive) {
     additionalPermutation_ =
-        std::make_unique<Permutation>(permutation, allocator, false);
+        std::make_unique<Permutation>(permutation, std::move(allocator), false);
   }
 }
 
@@ -71,7 +71,8 @@ IdTable Permutation::scan(Id col0Id, std::optional<Id> col1Id,
 }
 
 // _____________________________________________________________________
-size_t Permutation::getResultSizeOfScan(Id col0Id, Id col1Id) const {
+size_t Permutation::getResultSizeOfScan(Id col0Id,
+                                        std::optional<Id> col1Id) const {
   if (!meta_.col0IdExists(col0Id)) {
     if (additionalPermutation_) {
       return additionalPermutation_->getResultSizeOfScan(col0Id, col1Id);
@@ -80,8 +81,12 @@ size_t Permutation::getResultSizeOfScan(Id col0Id, Id col1Id) const {
   }
   const auto& metaData = meta_.getMetaData(col0Id);
 
-  return reader_.getResultSizeOfScan(metaData, col1Id, meta_.blockData(),
-                                     file_);
+  if (!col1Id.has_value()) {
+    return metaData.getNofElements();
+  }
+
+  return reader_.getResultSizeOfScan(metaData, col1Id.value(),
+                                     meta_.blockData(), file_);
 }
 
 // _____________________________________________________________________
