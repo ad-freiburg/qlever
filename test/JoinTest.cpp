@@ -33,6 +33,8 @@
 using ad_utility::testing::makeAllocator;
 namespace {
 
+using Vars = std::vector<std::optional<Variable>>;
+
 /*
  * A structure containing all information needed for a normal join test. A
  * normal join test is defined as two IdTables being joined, the resulting
@@ -344,7 +346,7 @@ TEST(JoinTest, joinWithColumnAndScanEmptyInput) {
         qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
     auto valuesTree =
         ad_utility::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
-            qec, IdTable{1, qec->getAllocator()}, std::vector{Variable{"?s"}});
+            qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?s"}});
     auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
@@ -375,7 +377,7 @@ TEST(JoinTest, joinWithColumnAndScanUndefValues) {
         qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
     auto U = Id::makeUndefined();
     auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, makeIdTableFromVector({{U}}), std::vector{Variable{"?s"}});
+        qec, makeIdTableFromVector({{U}}), Vars{Variable{"?s"}});
     auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 

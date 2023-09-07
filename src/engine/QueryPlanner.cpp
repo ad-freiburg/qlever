@@ -5,6 +5,7 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include <engine/Bind.h>
+#include <engine/CartesianProductJoin.h>
 #include <engine/CheckUsePatternTrick.h>
 #include <engine/CountAvailablePredicates.h>
 #include <engine/Distinct.h>
@@ -1394,19 +1395,21 @@ void QueryPlanner::applyFiltersIfPossible(
 }
 
 // _____________________________________________________________________________
-vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
-    const QueryPlanner::TripleGraph& tg, const vector<SparqlFilter>& filters,
-    const vector<vector<QueryPlanner::SubtreePlan>>& children) {
-  size_t numSeeds = tg._nodeMap.size() + children.size();
-
-  if (filters.size() > 64) {
-    AD_THROW("At most 64 filters allowed at the moment.");
-  }
-  LOG(TRACE) << "Fill DP table... (there are " << numSeeds
-             << " operations to join)" << std::endl;
-  vector<vector<SubtreePlan>> dpTab;
-  dpTab.emplace_back(seedWithScansAndText(tg, children));
-  applyFiltersIfPossible(dpTab.back(), filters, numSeeds == 1);
+std::vector<QueryPlanner::SubtreePlan>
+QueryPlanner::runDynamicProgrammingOnConnectedComponent(
+    std::vector<SubtreePlan> connectedComponent,
+    const vector<SparqlFilter>& filters, const TripleGraph& tg) const {
+  vector<vector<QueryPlanner::SubtreePlan>> dpTab;
+  // find the unique number of nodes in the current connected component
+  // (there might be duplicates because we already have multiple candidates
+  // for each index scan with different permutations.
+  dpTab.push_back(std::move(connectedComponent));
+  applyFiltersIfPossible(dpTab.back(), filters, false);
+  ad_utility::HashSet<uint64_t> uniqueNodeIds;
+  std::ranges::copy(
+      dpTab.back() | std::views::transform(&SubtreePlan::_idsOfIncludedNodes),
+      std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
+  size_t numSeeds = uniqueNodeIds.size();
 
   for (size_t k = 2; k <= numSeeds; ++k) {
     LOG(TRACE) << "Producing plans that unite " << k << " triples."
@@ -1414,22 +1417,61 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     dpTab.emplace_back(vector<SubtreePlan>());
     for (size_t i = 1; i * 2 <= k; ++i) {
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
-      if (newPlans.size() == 0) {
-        continue;
-      }
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
-      applyFiltersIfPossible(dpTab.back(), filters, numSeeds == k);
+      applyFiltersIfPossible(dpTab.back(), filters, false);
     }
-    if (dpTab[k - 1].size() == 0) {
-      AD_THROW(
-          "Could not find a suitable execution tree. "
-          "Likely cause: Queries that require joins of the full "
-          "index with itself are not supported at the moment.");
-    }
+    // As we only passed in connected components, we expect the result to always
+    // be nonempty.
+    AD_CORRECTNESS_CHECK(!dpTab[k - 1].empty());
   }
+  return std::move(dpTab.back());
+}
 
-  LOG(TRACE) << "Fill DP table done." << std::endl;
-  return dpTab;
+// _____________________________________________________________________________
+vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
+    const QueryPlanner::TripleGraph& tg, const vector<SparqlFilter>& filters,
+    const vector<vector<QueryPlanner::SubtreePlan>>& children) {
+  if (filters.size() > 64) {
+    AD_THROW("At most 64 filters allowed at the moment.");
+  }
+  auto initialPlans = seedWithScansAndText(tg, children);
+  auto componentIndices = QueryGraph::computeConnectedComponents(initialPlans);
+  ad_utility::HashMap<size_t, std::vector<SubtreePlan>> components;
+  for (size_t i = 0; i < componentIndices.size(); ++i) {
+    components[componentIndices.at(i)].push_back(std::move(initialPlans.at(i)));
+  }
+  vector<vector<SubtreePlan>> lastDpRowFromComponents;
+  for (auto& component : components | std::views::values) {
+    lastDpRowFromComponents.push_back(runDynamicProgrammingOnConnectedComponent(
+        std::move(component), filters, tg));
+  }
+  size_t numConnectedComponents = lastDpRowFromComponents.size();
+  if (numConnectedComponents == 0) {
+    // This happens for example if there is a BIND right at the beginning of the
+    // query
+    lastDpRowFromComponents.emplace_back();
+    return lastDpRowFromComponents;
+  }
+  if (numConnectedComponents == 1) {
+    // A Cartesian product is not needed if there is only one component.
+    applyFiltersIfPossible(lastDpRowFromComponents.back(), filters, true);
+    return lastDpRowFromComponents;
+  }
+  // More than one connected component, set up a Cartesian product.
+  std::vector<std::vector<SubtreePlan>> result;
+  result.emplace_back();
+  std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+  std::ranges::move(
+      lastDpRowFromComponents |
+          std::views::transform([this](auto& vec) -> decltype(auto) {
+            return vec.at(findCheapestExecutionTree(vec));
+          }) |
+          std::views::transform(&SubtreePlan::_qet),
+      std::back_inserter(subtrees));
+  result.at(0).push_back(
+      makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
+  applyFiltersIfPossible(result.at(0), filters, true);
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -2078,4 +2120,82 @@ auto QueryPlanner::createJoinAsTextFilter(
       filterTree, otherPlanJc);
   mergeSubtreePlanIds(plan, a, b);
   return plan;
+}
+
+// _____________________________________________________________________
+void QueryPlanner::QueryGraph::setupGraph(
+    const std::vector<SubtreePlan>& leafOperations) {
+  // Prepare the `nodes_` vector for the graph. We have one node for each leaf
+  // of what later becomes the `QueryExecutionTree`.
+  for (const auto& leafOperation : leafOperations) {
+    nodes_.push_back(std::make_shared<Node>(&leafOperation));
+  }
+
+  // Set up a hash map from variables to nodes that contain this variable.
+  const ad_utility::HashMap<Variable, std::vector<Node*>> varToNode = [this]() {
+    ad_utility::HashMap<Variable, std::vector<Node*>> result;
+    for (const auto& node : nodes_) {
+      for (const auto& var :
+           node->plan_->_qet->getVariableColumns() | std::views::keys) {
+        result[var].push_back(node.get());
+      }
+    }
+    return result;
+  }();
+  // Set up a hash map from nodes to their adjacentNodes_. Two nodes are
+  // adjacent if they share a variable. The adjacentNodes_ are stored as hash
+  // sets so we don't need to worry about duplicates.
+  ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> adjacentNodes =
+      [&varToNode]() {
+        ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> result;
+        for (auto& nodesThatContainSameVar : varToNode | std::views::values) {
+          // TODO<C++23> Use std::views::cartesian_product
+          for (auto* n1 : nodesThatContainSameVar) {
+            for (auto* n2 : nodesThatContainSameVar) {
+              if (n1 != n2) {
+                result[n1].insert(n2);
+                result[n2].insert(n1);
+              }
+            }
+          }
+        }
+        return result;
+      }();
+  // For each node move the set of adjacentNodes_ from the global hash map to
+  // the node itself.
+  for (const auto& node : nodes_) {
+    if (adjacentNodes.contains(node.get())) {
+      node->adjacentNodes_ = std::move(adjacentNodes.at(node.get()));
+    }
+  }
+}
+
+// _______________________________________________________________
+void QueryPlanner::QueryGraph::dfs(Node* startNode, size_t componentIndex) {
+  // Simple recursive DFS.
+  if (startNode->visited_) {
+    return;
+  }
+  startNode->componentIndex_ = componentIndex;
+  startNode->visited_ = true;
+  for (auto* adjacentNode : startNode->adjacentNodes_) {
+    dfs(adjacentNode, componentIndex);
+  }
+}
+// _______________________________________________________________
+std::vector<size_t> QueryPlanner::QueryGraph::dfsForAllNodes() {
+  std::vector<size_t> result;
+  size_t nextIndex = 0;
+  for (const auto& node : nodes_) {
+    if (node->visited_) {
+      // The node is part of a connected component that was already found.
+      result.push_back(node->componentIndex_);
+    } else {
+      // The node is part of a yet unknown component, run a DFS.
+      dfs(node.get(), nextIndex);
+      result.push_back(node->componentIndex_);
+      ++nextIndex;
+    }
+  }
+  return result;
 }
