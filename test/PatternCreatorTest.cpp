@@ -59,7 +59,8 @@ void assertPatternContents(const std::string& filename) {
 
   PatternCreator::readPatternsFromFile(
       filename, averageNumSubjectsPerPredicate, averageNumPredicatesPerSubject,
-      numDistinctSubjectPredicatePairs, patterns, subjectToPattern);
+      numDistinctSubjectPredicatePairs, patterns);
+  // TODO<joka921> Also test the created triples.
 
   ASSERT_EQ(numDistinctSubjectPredicatePairs, 7);
   ASSERT_FLOAT_EQ(averageNumPredicatesPerSubject, 7.0 / 3.0);

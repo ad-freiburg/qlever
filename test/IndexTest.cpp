@@ -160,47 +160,48 @@ TEST(IndexTest, createFromTurtleTest) {
 }
 
 TEST(CreatePatterns, createPatterns) {
-  {
-    std::string kb =
-        "<a>  <b>  <c>  .\n"
-        "<a>  <b>  <c2> .\n"
-        "<a>  <b2> <c>  .\n"
-        "<a2> <b2> <c2> .\n"
-        "<a2> <d>  <c2> .";
+  std::string kb =
+      "<a>  <b>  <c>  .\n"
+      "<a>  <b>  <c2> .\n"
+      "<a>  <b2> <c>  .\n"
+      "<a2> <b2> <c2> .\n"
+      "<a2> <d>  <c2> .";
 
-    const IndexImpl& index = getQec(kb)->getIndex().getImpl();
+  /*
+  const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
-    ASSERT_EQ(2u, index.getHasPattern().size());
-    ASSERT_EQ(0u, index.getHasPredicate().size());
-    std::vector<VocabIndex> p0;
-    std::vector<VocabIndex> p1;
-    VocabIndex idx;
-    // Pattern p0 (for subject <a>) consists of <b> and <b2)
-    ASSERT_TRUE(index.getVocab().getId("<b>", &idx));
-    p0.push_back(idx);
-    ASSERT_TRUE(index.getVocab().getId("<b2>", &idx));
-    p0.push_back(idx);
+  // TODO<joka921> reincorporate similar tests with the new behavior.
+  ASSERT_EQ(2u, index.getHasPattern().size());
+  ASSERT_EQ(0u, index.getHasPredicate().size());
+  std::vector<VocabIndex> p0;
+  std::vector<VocabIndex> p1;
+  VocabIndex idx;
+  // Pattern p0 (for subject <a>) consists of <b> and <b2)
+  ASSERT_TRUE(index.getVocab().getId("<b>", &idx));
+  p0.push_back(idx);
+  ASSERT_TRUE(index.getVocab().getId("<b2>", &idx));
+  p0.push_back(idx);
 
-    // Pattern p1 (for subject <as>) consists of <b2> and <d>)
-    p1.push_back(idx);
-    ASSERT_TRUE(index.getVocab().getId("<d>", &idx));
-    p1.push_back(idx);
+  // Pattern p1 (for subject <as>) consists of <b2> and <d>)
+  p1.push_back(idx);
+  ASSERT_TRUE(index.getVocab().getId("<d>", &idx));
+  p1.push_back(idx);
 
-    auto checkPattern = [](const auto& expected, const auto& actual) {
-      for (size_t i = 0; i < actual.size(); i++) {
-        ASSERT_EQ(Id::makeFromVocabIndex(expected[i]), actual[i]);
-      }
-    };
-
-    ASSERT_TRUE(index.getVocab().getId("<a>", &idx));
-    LOG(INFO) << idx << std::endl;
-    for (size_t i = 0; i < index.getHasPattern().size(); ++i) {
-      LOG(INFO) << index.getHasPattern()[i] << std::endl;
+  auto checkPattern = [](const auto& expected, const auto& actual) {
+    for (size_t i = 0; i < actual.size(); i++) {
+      ASSERT_EQ(Id::makeFromVocabIndex(expected[i]), actual[i]);
     }
-    checkPattern(p0, index.getPatterns()[index.getHasPattern()[idx.get()]]);
-    ASSERT_TRUE(index.getVocab().getId("<a2>", &idx));
-    checkPattern(p1, index.getPatterns()[index.getHasPattern()[idx.get()]]);
+  };
+
+  ASSERT_TRUE(index.getVocab().getId("<a>", &idx));
+  LOG(INFO) << idx << std::endl;
+  for (size_t i = 0; i < index.getHasPattern().size(); ++i) {
+    LOG(INFO) << index.getHasPattern()[i] << std::endl;
   }
+  checkPattern(p0, index.getPatterns()[index.getHasPattern()[idx.get()]]);
+  ASSERT_TRUE(index.getVocab().getId("<a2>", &idx));
+  checkPattern(p1, index.getPatterns()[index.getHasPattern()[idx.get()]]);
+*/
 }
 
 TEST(IndexTest, createFromOnDiskIndexTest) {

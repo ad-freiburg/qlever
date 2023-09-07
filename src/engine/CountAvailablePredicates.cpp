@@ -119,17 +119,13 @@ ResultTable CountAvailablePredicates::computeResult() {
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
 
-  const std::vector<PatternID>& hasPattern =
-      _executionContext->getIndex().getHasPattern();
-  const CompactVectorOfStrings<Id>& hasPredicate =
-      _executionContext->getIndex().getHasPredicate();
   const CompactVectorOfStrings<Id>& patterns =
       _executionContext->getIndex().getPatterns();
 
   if (_subtree == nullptr) {
     // Compute the predicates for all entities
-    CountAvailablePredicates::computePatternTrickAllEntities(
-        &idTable, hasPattern, hasPredicate, patterns);
+    CountAvailablePredicates::computePatternTrickAllEntities(&idTable,
+                                                             patterns);
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
@@ -139,17 +135,14 @@ ResultTable CountAvailablePredicates::computeResult() {
     size_t width = subresult->idTable().numColumns();
     size_t patternColumn = _subtree->getVariableColumn(_predicateVariable);
     CALL_FIXED_SIZE(width, &computePatternTrick, subresult->idTable(), &idTable,
-                    hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-                    patternColumn, &runtimeInfo);
+                    patterns, _subjectColumnIndex, patternColumn, &runtimeInfo);
     return {std::move(idTable), resultSortedOn(),
             subresult->getSharedLocalVocab()};
   }
 }
 
 void CountAvailablePredicates::computePatternTrickAllEntities(
-    IdTable* dynResult, const vector<PatternID>& hasPattern,
-    const CompactVectorOfStrings<Id>& hasPredicate,
-    const CompactVectorOfStrings<Id>& patterns) const {
+    IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns) const {
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   LOG(DEBUG) << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
@@ -203,8 +196,6 @@ class MergeableHashMap : public ad_utility::HashMap<T, size_t> {
 template <size_t WIDTH>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
-    const vector<PatternID>& hasPattern,
-    const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns, const size_t subjectColumn,
     const size_t patternColumn, RuntimeInformation* runtimeInfo) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();

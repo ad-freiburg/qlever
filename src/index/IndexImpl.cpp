@@ -663,7 +663,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
     PatternCreator::readPatternsFromFile(
         onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
         avgNumDistinctPredicatesPerSubject_, numDistinctSubjectPredicatePairs_,
-        patterns_, hasPattern_);
+        patterns_);
   }
 }
 
@@ -674,18 +674,6 @@ void IndexImpl::throwExceptionIfNoPatterns() const {
         "The requested feature requires a loaded patterns file ("
         "do not specify the --no-patterns option for this to work)");
   }
-}
-
-// _____________________________________________________________________________
-const vector<PatternID>& IndexImpl::getHasPattern() const {
-  throwExceptionIfNoPatterns();
-  return hasPattern_;
-}
-
-// _____________________________________________________________________________
-const CompactVectorOfStrings<Id>& IndexImpl::getHasPredicate() const {
-  throwExceptionIfNoPatterns();
-  return hasPredicate_;
 }
 
 // _____________________________________________________________________________

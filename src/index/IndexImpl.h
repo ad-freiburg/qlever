@@ -150,15 +150,6 @@ class IndexImpl {
    * @brief Maps pattern ids to sets of predicate ids.
    */
   CompactVectorOfStrings<Id> patterns_;
-  /**
-   * @brief Maps entity ids to pattern ids.
-   */
-  std::vector<PatternID> hasPattern_;
-  /**
-   * @brief Maps entity ids to sets of predicate ids
-   */
-  CompactVectorOfStrings<Id> hasPredicate_;
-
   ad_utility::AllocatorWithLimit<Id> allocator_;
 
   // TODO: make those private and allow only const access
@@ -269,8 +260,6 @@ class IndexImpl {
   // ___________________________________________________________________________
   std::pair<Id, Id> prefix_range(const std::string& prefix) const;
 
-  const vector<PatternID>& getHasPattern() const;
-  const CompactVectorOfStrings<Id>& getHasPredicate() const;
   const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
    * @return The multiplicity of the Entites column (0) of the full has-relation

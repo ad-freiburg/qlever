@@ -48,21 +48,10 @@ void PatternCreator::finishSubject(VocabIndex subjectIndex,
     it->second._count++;
   }
 
-  // The mapping from subjects to patterns is a vector of pattern IDs. We have
-  // to assign the ID NO_PATTERN to all the possible subjects that have no
-  // triple.
-  while (_nextUnassignedSubjectIndex < subjectIndex) {
-    _subjectToPatternSerializer.push(NO_PATTERN);
-    _nextUnassignedSubjectIndex = _nextUnassignedSubjectIndex.incremented();
-  }
-
-  // Write the subjectIndex-pattern mapping for this subjectIndex.
-  _subjectToPatternSerializer.push(patternId);
   // TODO<joka921> create a safe format for this.
   hasPatternPsoSorter.push(std::array{Id::makeFromVocabIndex(subjectIndex),
                                       Id::makeFromDouble(42.42),
                                       Id::makeFromInt(patternId)});
-  _nextUnassignedSubjectIndex = _nextUnassignedSubjectIndex.incremented();
 }
 
 // ____________________________________________________________________________
@@ -77,18 +66,11 @@ void PatternCreator::finish() {
     finishSubject(_currentSubjectIndex.value(), _currentPattern);
   }
 
-  // The mapping from subjects to patterns is already written to disk at this
-  // point.
-  _subjectToPatternSerializer.finish();
-
   // Store all data in the file
-  ad_utility::serialization::FileWriteSerializer patternSerializer{
-      std::move(_subjectToPatternSerializer).serializer()};
-
   PatternStatistics patternStatistics(_numDistinctSubjectPredicatePairs,
                                       _numDistinctSubjects,
                                       _distinctPredicates.size());
-  patternSerializer << patternStatistics;
+  _patternSerializer << patternStatistics;
 
   // Store the actual patterns ordered by their pattern ID. They are currently
   // stored in a hash map, so we first have to sort them.
@@ -100,7 +82,7 @@ void PatternCreator::finish() {
               return a.second._patternId < b.second._patternId;
             });
   CompactVectorOfStrings<Pattern::value_type>::Writer patternWriter{
-      std::move(patternSerializer).file()};
+      std::move(_patternSerializer).file()};
   for (const auto& p : orderedPatterns) {
     patternWriter.push(p.first.data(), p.first.size());
   }
@@ -115,8 +97,7 @@ void PatternCreator::readPatternsFromFile(
     const std::string& filename, double& avgNumSubjectsPerPredicate,
     double& avgNumPredicatesPerSubject,
     uint64_t& numDistinctSubjectPredicatePairs,
-    CompactVectorOfStrings<Id>& patterns,
-    std::vector<PatternID>& subjectToPattern) {
+    CompactVectorOfStrings<Id>& patterns) {
   // Read the pattern info from the patterns file.
   LOG(INFO) << "Reading patterns from file " << filename << " ..." << std::endl;
 
@@ -124,7 +105,6 @@ void PatternCreator::readPatternsFromFile(
   ad_utility::serialization::FileReadSerializer patternReader(filename);
 
   // Read the statistics and the patterns.
-  patternReader >> subjectToPattern;
   PatternStatistics statistics;
   patternReader >> statistics;
   patternReader >> patterns;

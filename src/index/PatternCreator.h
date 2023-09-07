@@ -86,14 +86,7 @@ class PatternCreator {
   // because more triples with the same subject might be pushed.
   Pattern _currentPattern;
 
-  // The lowest subject Id for which we have not yet finished and written the
-  // pattern.
-  VocabIndex _nextUnassignedSubjectIndex = VocabIndex::make(0);
-
-  // Directly serialize the mapping from subjects to patterns to disk.
-  ad_utility::serialization::VectorIncrementalSerializer<
-      PatternID, ad_utility::serialization::FileWriteSerializer>
-      _subjectToPatternSerializer;
+  ad_utility::serialization::FileWriteSerializer _patternSerializer;
 
   ad_utility::BackgroundStxxlSorter<std::array<Id, 3>, SortByPSO>
       hasPatternPsoSorter{3'000'000'000};
@@ -113,7 +106,7 @@ class PatternCreator {
   /// The patterns will be written to `filename` as well as to other filenames
   /// which have `filename` as a prefix.
   explicit PatternCreator(const string& filename)
-      : _filename{filename}, _subjectToPatternSerializer{{filename}} {
+      : _filename{filename}, _patternSerializer{{filename}} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 
@@ -145,8 +138,7 @@ class PatternCreator {
                                    double& avgNumSubjectsPerPredicate,
                                    double& avgNumPredicatesPerSubject,
                                    uint64_t& numDistinctSubjectPredicatePairs,
-                                   CompactVectorOfStrings<Id>& patterns,
-                                   std::vector<PatternID>& subjectToPattern);
+                                   CompactVectorOfStrings<Id>& patterns);
 
   auto getHasPatternSortedByPSO() { return hasPatternPsoSorter.sortedView(); }
 

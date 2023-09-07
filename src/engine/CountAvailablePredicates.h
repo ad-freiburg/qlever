@@ -100,17 +100,13 @@ class CountAvailablePredicates : public Operation {
    *                      relations should be counted.
    */
   template <size_t I>
-  static void computePatternTrick(
-      const IdTable& input, IdTable* result,
-      const vector<PatternID>& hasPattern,
-      const CompactVectorOfStrings<Id>& hasPredicate,
-      const CompactVectorOfStrings<Id>& patterns, size_t subjectColumn,
-      size_t patternColumn, RuntimeInformation* runtimeInfo);
+  static void computePatternTrick(const IdTable& input, IdTable* result,
+                                  const CompactVectorOfStrings<Id>& patterns,
+                                  size_t subjectColumn, size_t patternColumn,
+                                  RuntimeInformation* runtimeInfo);
 
   void computePatternTrickAllEntities(
-      IdTable* result, const vector<PatternID>& hasPattern,
-      const CompactVectorOfStrings<Id>& hasPredicate,
-      const CompactVectorOfStrings<Id>& patterns) const;
+      IdTable* result, const CompactVectorOfStrings<Id>& patterns) const;
 
  private:
   ResultTable computeResult() override;
