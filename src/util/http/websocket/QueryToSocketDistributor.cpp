@@ -73,8 +73,11 @@ net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
 
 net::awaitable<void> QueryToSocketDistributor::signalEnd() {
   co_await net::dispatch(strand_, net::use_awaitable);
+  AD_CORRECTNESS_CHECK(!finished_);
   finished_ = true;
   runAndEraseWakeUpCallsSynchronously();
+  // Invoke cleanup pre-emptively
+  auto cleanupCall = std::move(cleanupCall_);
 }
 
 // _____________________________________________________________________________

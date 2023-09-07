@@ -28,6 +28,8 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
     if (distributors.contains(queryId) && distributors.at(queryId).id_ == id) {
       distributors.erase(queryId);
     }
+    // Make sure this is treated as coroutine
+    co_return;
   };
   auto distributor = std::make_shared<QueryToSocketDistributor>(
       ioContext_,
