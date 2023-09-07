@@ -52,7 +52,7 @@ struct ErrorMessage {
   const std::string message_;
 
   // Constructor.
-  ErrorMessage(std::string message) : message_{std::move(message)} {}
+  explicit ErrorMessage(std::string message) : message_{std::move(message)} {}
 };
 
 /*
