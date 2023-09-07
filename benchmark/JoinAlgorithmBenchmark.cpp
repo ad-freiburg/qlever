@@ -237,13 +237,12 @@ concept exactlyOneVector = (ad_utility::isVector<Ts> + ...) == 1;
  *
  * @param records The BenchmarkRecords, in which you want to create a new
  *  benchmark table.
+ * @param tableDescriptor The name for the to be generated table.
  * @param overlap The height of the probability for any join column entry of
  *  smallerTable to be overwritten by a random join column entry of biggerTable.
  * @param smallerTableSorted, biggerTableSorted Should the bigger/smaller table
  *  be sorted by his join column before being joined? More specificly, some
- *  join algorithm require one, or both, of the IdTables to be sorted. If this
- *  argument is false, the time needed for sorting the required table will
- *  added to the time of the join algorithm.
+ *  join algorithm require one, or both, of the IdTables to be sorted.
  * @param ratioRows How many more rows than the smaller table should the
  *  bigger table have? In more mathematical words: Number of rows of the
  *  bigger table divided by the number of rows of the smaller table is equal
@@ -358,23 +357,28 @@ concept invocableWithReturnType =
     std::invocable<T, Args...> &&
     std::same_as<ReturnType, std::invoke_result_t<T, Args...>>;
 
+// `T` must be an invocable object, which can be invoked with `const size_t&`
+// and returns an instance of `ReturnType`.
+template <typename T, typename ReturnType>
+concept growthFunction = invocableWithReturnType<T, ReturnType, const size_t&>;
+
 // Is `T` of the given type, or a function, that takes `size_t` and return
 // the given type?
 template <typename T, typename Type>
 concept isTypeOrGrowthFunction =
-    std::same_as<T, Type> || invocableWithReturnType<T, Type, const size_t&>;
+    std::same_as<T, Type> || growthFunction<T, Type>;
 
-// There must be exactly one functioon, that takes a `size_t`.
+// There must be exactly one growth function, that either returns a `size_t`, or
+// a `float`.
 template <typename... Ts>
 concept exactlyOneGrowthFunction =
-    (std::invocable<Ts, const size_t&> + ...) == 1;
+    ((growthFunction<Ts, size_t> || growthFunction<Ts, float>)+...) == 1;
 
 /*
-
 @brief Create a benchmark table for join algorithm, with the given
-parameters for the IdTables, which will keep getting more rows, until the stop
-function decides, that there are enough rows. The rows will be the return values
-of the parameter, you gave a function for, and the columns will be:
+parameters for the IdTables, which will keep getting more rows, until the given
+stop function decides, that there are enough rows. The rows will be the return
+values of the parameter, you gave a function for, and the columns will be:
 - Return values of the parameter, you gave a function for.
 - Time needed for sorting `IdTable`s.
 - Time needed for merge/galloping join.
@@ -546,7 +550,7 @@ static bool checkIfFunctionMeasurementOfRowUnderMaxtime(
     return table.getEntry<float>(row, column) <= maxTime;
   };
 
-  // We measure the functions in column 1, 2 and 4.
+  // We measure functions in column 1, 2 and 4.
   return checkTime(1) && checkTime(2) && checkTime(4);
 }
 
