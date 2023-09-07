@@ -52,7 +52,7 @@ struct ErrorMessage {
   const std::string message_;
 
   // Constructor.
-  ErrorMessage(std::string_view message) : message_{message} {}
+  ErrorMessage(std::string message) : message_{std::move(message)} {}
 
   // Move constructor. A move assignment operator is not possible, because
   // `message_` is const.
