@@ -352,9 +352,9 @@ static ResultTable& makeBenchmarkTable(
 // `T` must be a function, that returns something of type `ReturnType`, when
 // called with arguments of types `Args`.
 template <typename T, typename ReturnType, typename... Args>
-concept invocableWithReturnType = requires(T t, Args... args) {
-  { t(args...) } -> std::same_as<ReturnType>;
-};
+concept invocableWithReturnType =
+    std::invocable<T, Args...> &&
+    std::same_as<ReturnType, std::invoke_result_t<T, Args...>>;
 
 // Is `T` of the given type, or a function, that takes `size_t` and return
 // the given type?
