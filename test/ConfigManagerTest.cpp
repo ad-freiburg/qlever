@@ -1188,7 +1188,7 @@ auto transformNonExceptionValidatorIntoExceptionValidator(
         if (std::invoke(validatorFunction, args...)) {
           return std::nullopt;
         } else {
-          return ErrorMessage{errorMessage};
+          return std::make_optional<ErrorMessage>(errorMessage);
         }
       };
 }

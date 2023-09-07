@@ -54,6 +54,9 @@ struct ErrorMessage {
   // Constructor.
   explicit ErrorMessage(std::string message) : message_{std::move(message)} {}
 
+  // Copy constructor
+  ErrorMessage(const ErrorMessage&) = default;
+
   // No move schemantics.
   ErrorMessage(ErrorMessage&&) = delete;
   ErrorMessage& operator=(ErrorMessage&&) = delete;
@@ -513,7 +516,7 @@ class ConfigManager {
       if (std::invoke(validatorFunction, args...)) {
         return std::nullopt;
       } else {
-        return ErrorMessage{errorMessage};
+        return std::make_optional<ErrorMessage>(errorMessage);
       }
     };
   }
