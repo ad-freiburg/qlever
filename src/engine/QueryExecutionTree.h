@@ -57,7 +57,8 @@ class QueryExecutionTree {
     BIND,
     MINUS,
     NEUTRAL_ELEMENT,
-    DUMMY
+    DUMMY,
+    CARTESIAN_PRODUCT_JOIN
   };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
