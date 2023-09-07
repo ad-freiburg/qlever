@@ -2,8 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef QLEVER_ASIO_H
-#define QLEVER_ASIO_H
+#ifndef QLEVER_ASIOHELPERS_H
+#define QLEVER_ASIOHELPERS_H
 
 #include <boost/asio/awaitable.hpp>
 
@@ -22,4 +22,4 @@ inline net::awaitable<T> sameExecutor(net::awaitable<T> awaitable) {
 }
 }  // namespace ad_utility
 
-#endif  // QLEVER_ASIO_H
+#endif  // QLEVER_ASIOHELPERS_H

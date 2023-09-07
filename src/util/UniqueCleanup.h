@@ -15,14 +15,14 @@ namespace ad_utility::unique_cleanup {
 
 /// Wrapper class that allows to call a function
 /// just before the wrapper value T is destroyed.
-template <std::move_constructible T>
+template <std::move_constructible T, typename Func = std::function<void(T&&)>>
 class UniqueCleanup {
   /// Boolean indicating if object was not moved out of
   ResetWhenMoved<bool, false> active_ = true;
   /// Wrapped value
   T value_;
   /// Cleanup function. Only run once
-  std::function<void(T&&)> function_;
+  Func function_;
 
  public:
   /// Accepts a value and a function that is called just before destruction.
@@ -31,7 +31,7 @@ class UniqueCleanup {
   ///                 Note: Make sure the function doesn't capture the this
   ///                 pointer as this may lead to segfaults because the pointer
   ///                 will point to the old object after moving.
-  UniqueCleanup(T&& value, std::function<void(T&&)> function)
+  UniqueCleanup(T&& value, Func function)
       : value_{std::move(value)}, function_{std::move(function)} {}
 
   T& operator*() noexcept { return value_; }

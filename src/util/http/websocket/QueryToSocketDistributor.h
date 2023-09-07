@@ -42,7 +42,7 @@ class QueryToSocketDistributor {
   /// Flag to indicate if a query ended and won't receive any more updates.
   bool finished_ = false;
 
-  /// Function to remove this distributor from the registry when it is
+  /// Function to remove this distributor from the `QueryHub` when it is
   /// destructed.
   unique_cleanup::UniqueCleanup<std::function<void()>> cleanupCall_;
 

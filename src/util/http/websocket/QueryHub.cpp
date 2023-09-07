@@ -4,7 +4,7 @@
 
 #include "util/http/websocket/QueryHub.h"
 
-#include "util/Asio.h"
+#include "util/AsioHelpers.h"
 
 namespace ad_utility::websocket {
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
@@ -22,9 +22,8 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
   }
 
   auto id = counter++;
-  auto coroutine = [](auto strand, auto& distributors, auto queryId,
-                      auto id) -> net::awaitable<void> {
-    co_await net::dispatch(strand, net::use_awaitable);
+  auto cleanupAction = [](auto& distributors, auto queryId,
+                          auto id) -> net::awaitable<void> {
     // Only erase object if we created it, otherwise we have a race condition
     if (distributors.contains(queryId) && distributors.at(queryId).id_ == id) {
       distributors.erase(queryId);
@@ -32,11 +31,9 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
   };
   auto distributor = std::make_shared<QueryToSocketDistributor>(
       ioContext_,
-      [this, queryId, coroutine = std::move(coroutine), id]() mutable {
+      [this, queryId, coroutine = std::move(cleanupAction), id]() mutable {
         net::co_spawn(globalStrand_,
-                      // TODO check if references are safe here?
-                      coroutine(globalStrand_, socketDistributors_,
-                                std::move(queryId), id),
+                      coroutine(socketDistributors_, std::move(queryId), id),
                       net::detached);
       });
   socketDistributors_.emplace(

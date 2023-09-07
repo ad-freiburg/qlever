@@ -31,11 +31,8 @@ class UpdateWrapper {
                            [](auto distributor) -> net::awaitable<void> {
                          co_await distributor->signalEnd();
                        };
-                       net::co_spawn(
-                           executor,
-                           coroutine(std::forward<decltype(distributor)>(
-                               distributor)),
-                           net::detached);
+                       net::co_spawn(executor, coroutine(AD_FWD(distributor)),
+                                     net::detached);
                      }},
         executor_{std::move(executor)} {}
 
