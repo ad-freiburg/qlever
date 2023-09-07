@@ -93,16 +93,17 @@ class CountAvailablePredicates : public Operation {
    * @param input The input table of entity ids
    * @param result A table with two columns, one for predicate ids,
    *               one for counts
-   * @param hasPattern A mapping from entity ids to pattern ids (or NO_PATTERN)
-   * @param hasPredicate A mapping from entity ids to sets of relations
    * @param patterns A mapping from pattern ids to patterns
-   * @param subjectColumn The column containing the entities for which the
+   * @param subjectColumnIdx The column containing the entities for which the
    *                      relations should be counted.
+   * @param patternColumnIdx The column containing the pattern IDs (previously
+   * obtained via a scan of the `ql:has-pattern` predicate.
    */
   template <size_t I>
   static void computePatternTrick(const IdTable& input, IdTable* result,
                                   const CompactVectorOfStrings<Id>& patterns,
-                                  size_t subjectColumn, size_t patternColumn,
+                                  size_t subjectColumnIdx,
+                                  size_t patternColumnIdx,
                                   RuntimeInformation* runtimeInfo);
 
   void computePatternTrickAllEntities(

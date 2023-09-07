@@ -64,7 +64,15 @@ struct PatternStatistics {
 /// be constructed, followed by one call to `processTriple` for each SPO triple.
 /// The final writing to disk can be done explicitly by the `finish()` function,
 /// but is also performed implicitly by the destructor.
+/// The mapping from subjects to pattern indices (has-pattern) and the full
+/// mapping from subjects to predicates (has-predicate) is not written to disk,
+/// but stored in a STXXL sorter which then has to be used to build an index for
+/// these predicates.
 class PatternCreator {
+ public:
+  using PSOSorter =
+      ad_utility::BackgroundStxxlSorter<std::array<Id, 3>, SortByPSO>;
+
  private:
   // The file to which the patterns will be written.
   std::string _filename;
@@ -88,8 +96,9 @@ class PatternCreator {
 
   ad_utility::serialization::FileWriteSerializer _patternSerializer;
 
-  ad_utility::BackgroundStxxlSorter<std::array<Id, 3>, SortByPSO>
-      hasPatternPsoSorter{3'000'000'000};
+  // Store the additional triples that are created by the pattern mechanism for
+  // the `has-pattern` and `has-predicate` predicates.
+  PSOSorter _additionalTriplesPsoSorter;
 
   // The predicates which have already occured in one of the patterns. Needed to
   // count the number of distinct predicates.
@@ -105,8 +114,10 @@ class PatternCreator {
  public:
   /// The patterns will be written to `filename` as well as to other filenames
   /// which have `filename` as a prefix.
-  explicit PatternCreator(const string& filename)
-      : _filename{filename}, _patternSerializer{{filename}} {
+  explicit PatternCreator(const string& filename, size_t memoryForStxxl)
+      : _filename{filename},
+        _patternSerializer{{filename}},
+        _additionalTriplesPsoSorter{memoryForStxxl} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 
@@ -140,7 +151,11 @@ class PatternCreator {
                                    uint64_t& numDistinctSubjectPredicatePairs,
                                    CompactVectorOfStrings<Id>& patterns);
 
-  auto getHasPatternSortedByPSO() { return hasPatternPsoSorter.sortedView(); }
+  // Move the sorted `has-pattern` and `has-predicate` triples out.
+  PSOSorter&& getHasPatternSortedByPSO() && {
+    finish();
+    return std::move(_additionalTriplesPsoSorter);
+  }
 
  private:
   void finishSubject(VocabIndex subjectIndex, const Pattern& pattern);

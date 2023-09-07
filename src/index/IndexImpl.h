@@ -155,12 +155,20 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  Permutation pos_{Permutation::Enum::POS, allocator_};
-  Permutation pso_{Permutation::Enum::PSO, allocator_};
-  Permutation sop_{Permutation::Enum::SOP, allocator_, false};
-  Permutation spo_{Permutation::Enum::SPO, allocator_, false};
-  Permutation ops_{Permutation::Enum::OPS, allocator_, false};
-  Permutation osp_{Permutation::Enum::OSP, allocator_, false};
+  // Currently the additional triples from the `has-pattern` and `has-predicate`
+  // relations are only stored in the POS and PSO permutation.
+  Permutation pos_{Permutation::Enum::POS, allocator_,
+                   Permutation::HasAdditionalTriples::True};
+  Permutation pso_{Permutation::Enum::PSO, allocator_,
+                   Permutation::HasAdditionalTriples::True};
+  Permutation sop_{Permutation::Enum::SOP, allocator_,
+                   Permutation::HasAdditionalTriples::False};
+  Permutation spo_{Permutation::Enum::SPO, allocator_,
+                   Permutation::HasAdditionalTriples::False};
+  Permutation ops_{Permutation::Enum::OPS, allocator_,
+                   Permutation::HasAdditionalTriples::False};
+  Permutation osp_{Permutation::Enum::OSP, allocator_,
+                   Permutation::HasAdditionalTriples::False};
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
@@ -676,5 +684,10 @@ class IndexImpl {
 
     return std::pair{std::move(ignoredRanges), std::move(isTripleIgnored)};
   }
-  void makeIndexFromAdditionalTriples(auto&& additionalTriples);
+
+  // Build an index (PSO and POS permutations only) from the
+  // `additionalTriples`. The created files will be stored at `onDiskBase_ +
+  // ADDITIONAL_TRIPLES_PREFIX`.
+  void makeIndexFromAdditionalTriples(
+      StxxlSorter<SortByPSO>&& additionalTriples);
 };

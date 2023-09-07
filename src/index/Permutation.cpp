@@ -9,14 +9,14 @@
 
 // _____________________________________________________________________
 Permutation::Permutation(Enum permutation, Allocator allocator,
-                         bool isRecursive)
+                         HasAdditionalTriples hasAdditionalTriples)
     : readableName_(toString(permutation)),
       fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
       keyOrder_(toKeyOrder(permutation)),
       reader_{allocator} {
-  if (isRecursive) {
-    additionalPermutation_ =
-        std::make_unique<Permutation>(permutation, std::move(allocator), false);
+  if (hasAdditionalTriples == HasAdditionalTriples::True) {
+    additionalPermutation_ = std::make_unique<Permutation>(
+        permutation, std::move(allocator), HasAdditionalTriples::False);
   }
 }
 
@@ -41,7 +41,8 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
             << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;
   if (additionalPermutation_) {
-    additionalPermutation_->loadFromDisk(onDiskBase + ".additionalTriples");
+    additionalPermutation_->loadFromDisk(onDiskBase +
+                                         ADDITIONAL_TRIPLES_SUFFIX);
   }
 }
 

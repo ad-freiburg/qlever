@@ -2,9 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 
-#include "./CountAvailablePredicates.h"
+#include "engine/CountAvailablePredicates.h"
 
-#include "./CallFixedSize.h"
+#include "engine/CallFixedSize.h"
 #include "index/IndexImpl.h"
 
 // _____________________________________________________________________________
@@ -155,8 +155,8 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
           .lazyScan(qlever::specialIds.at(HAS_PATTERN_PREDICATE), std::nullopt,
                     std::nullopt);
   for (const auto& idTable : fullHasPattern) {
-    for (const auto& row : idTable) {
-      patternCounts[row[1].getInt()]++;
+    for (const auto& patternId : idTable.getColumn(1)) {
+      patternCounts[patternId.getInt()]++;
     }
   }
 
@@ -197,12 +197,12 @@ class MergeableHashMap : public ad_utility::HashMap<T, size_t> {
 template <size_t WIDTH>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
-    const CompactVectorOfStrings<Id>& patterns, const size_t subjectColumn,
-    const size_t patternColumn, RuntimeInformation* runtimeInfo) {
+    const CompactVectorOfStrings<Id>& patterns, const size_t subjectColumnIdx,
+    const size_t patternColumnIdx, RuntimeInformation* runtimeInfo) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   LOG(DEBUG) << "For " << input.size() << " entities in column "
-             << subjectColumn << std::endl;
+             << subjectColumnIdx << std::endl;
 
   MergeableHashMap<Id> predicateCounts;
   MergeableHashMap<size_t> patternCounts;
@@ -222,6 +222,8 @@ void CountAvailablePredicates::computePatternTrick(
   size_t numListPredicates = 0;
 
   if (input.size() > 0) {  // avoid strange OpenMP segfaults on GCC
+    decltype(auto) subjectColumn = input.getColumn(subjectColumnIdx);
+    decltype(auto) patternColumn = input.getColumn(patternColumnIdx);
 #pragma omp parallel
 #pragma omp single
 #pragma omp taskloop grainsize(500000) default(none)                           \
@@ -232,8 +234,8 @@ void CountAvailablePredicates::computePatternTrick(
     shared(input, subjectColumn, patternColumn)
     for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
       // Skip over elements with the same subject (don't count them twice)
-      Id subjectId = input(inputIdx, subjectColumn);
-      if (inputIdx > 0 && subjectId == input(inputIdx - 1, subjectColumn)) {
+      Id subjectId = subjectColumn[inputIdx];
+      if (inputIdx > 0 && subjectId == subjectColumn[inputIdx - 1]) {
         continue;
       }
       if (subjectId.getDatatype() != Datatype::VocabIndex) {
@@ -242,7 +244,7 @@ void CountAvailablePredicates::computePatternTrick(
         // patterns.
         continue;
       }
-      patternCounts[input(inputIdx, patternColumn).getInt()]++;
+      patternCounts[patternColumn[inputIdx].getInt()]++;
     }
   }
   LOG(DEBUG) << "Using " << patternCounts.size()
@@ -319,7 +321,7 @@ void CountAvailablePredicates::computePatternTrick(
   LOG(DEBUG) << "The conceptual cost with patterns was " << costWithPatterns
              << " vs " << costWithoutPatterns << " without patterns"
              << std::endl;
-  // Print the cost improvement using the the pattern trick gave us
+  // Print the cost improvement using the pattern trick gave us
   LOG(DEBUG) << "This gives a ratio  with to without of " << costRatio
              << std::endl;
 

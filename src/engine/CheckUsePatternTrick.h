@@ -19,8 +19,9 @@ struct PatternTrickTuple {
  * @brief Determines if the pattern trick (and in turn the
  * CountAvailablePredicates operation) is applicable to the given
  * parsed query. If a ql:has-predicate triple is found and
- * CountAvailablePredicates can be used for it, the triple will be removed from
- * the parsed query.
+ * CountAvailablePredicates can be used for it, the triple's predicate will be
+ * replaced by `ql:has-pattern`. The mapping from the pattern to the predicates
+ * contained in that pattern will later be done by the pattern trick.
  */
 std::optional<PatternTrickTuple> checkUsePatternTrick(ParsedQuery* parsedQuery);
 

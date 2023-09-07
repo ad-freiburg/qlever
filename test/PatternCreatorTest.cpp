@@ -2,16 +2,31 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "./util/IdTestHelpers.h"
+#include "global/SpecialIds.h"
 #include "index/PatternCreator.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/Serializer.h"
 
 namespace {
 auto V = ad_utility::testing::VocabId;
+auto I = ad_utility::testing::IntId;
+size_t memForStxxl = 10'000'000;
+
+using TripleVec = std::vector<std::array<Id, 3>>;
+
+// Convert a PSOSorter to a vector of triples for easier handling
+TripleVec getVectorFromSorter(PatternCreator::PSOSorter&& sorter) {
+  TripleVec triples;
+  for (auto triple : sorter.sortedView()) {
+    triples.push_back(triple);
+  }
+  return triples;
 }
+}  // namespace
 
 TEST(PatternStatistics, Initialization) {
   PatternStatistics patternStatistics{50, 25, 4};
@@ -50,7 +65,8 @@ void createExamplePatterns(PatternCreator& creator) {
 
 // Assert that the contents of patterns read from `filename` match the triples
 // from the `createExamplePatterns` function.
-void assertPatternContents(const std::string& filename) {
+void assertPatternContents(const std::string& filename,
+                           const TripleVec& addedTriples) {
   double averageNumSubjectsPerPredicate;
   double averageNumPredicatesPerSubject;
   uint64_t numDistinctSubjectPredicatePairs;
@@ -80,43 +96,61 @@ void assertPatternContents(const std::string& filename) {
   // We have 4 subjects 0, 1, 2, 3. Subject 2 has no pattern, because
   // it has no triples. Subjects 0 and 3 have the first pattern, subject 1 has
   // the second pattern.
-
-  // TODO<joka921> Also check the added triples.
+  auto pat = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
+  auto pred = qlever::specialIds.at(HAS_PREDICATE_PREDICATE);
+  TripleVec expectedTriples;
+  expectedTriples.push_back(std::array{V(0), pat, I(0)});
+  expectedTriples.push_back(std::array{V(1), pat, I(1)});
+  expectedTriples.push_back(std::array{V(3), pat, I(0)});
+  expectedTriples.push_back(std::array{V(0), pred, V(10)});
+  expectedTriples.push_back(std::array{V(0), pred, V(11)});
+  expectedTriples.push_back(std::array{V(1), pred, V(10)});
+  expectedTriples.push_back(std::array{V(1), pred, V(12)});
+  expectedTriples.push_back(std::array{V(1), pred, V(13)});
+  expectedTriples.push_back(std::array{V(3), pred, V(10)});
+  expectedTriples.push_back(std::array{V(3), pred, V(11)});
+  std::ranges::sort(expectedTriples, SortByPSO{});
+  EXPECT_THAT(addedTriples, ::testing::ElementsAreArray(expectedTriples));
 }
 
 TEST(PatternCreator, writeAndReadWithFinish) {
   std::string filename = "patternCreator.test.tmp";
-  PatternCreator creator{filename};
+  PatternCreator creator{filename, memForStxxl};
   createExamplePatterns(creator);
   creator.finish();
 
-  assertPatternContents(filename);
+  assertPatternContents(
+      filename,
+      getVectorFromSorter(std::move(creator).getHasPatternSortedByPSO()));
   ad_utility::deleteFile(filename);
 }
 
 TEST(PatternCreator, writeAndReadWithDestructor) {
   std::string filename = "patternCreator.test.tmp";
+  TripleVec triples;
   {
-    PatternCreator creator{filename};
+    PatternCreator creator{filename, memForStxxl};
     createExamplePatterns(creator);
-    // The destructor of  `creator` at the following `} automatically runs
-    // `creator.finish()`
+    // the extraction of the sorter automatically calls `finish`.
+    triples =
+        getVectorFromSorter(std::move(creator).getHasPatternSortedByPSO());
   }
 
-  assertPatternContents(filename);
+  assertPatternContents(filename, triples);
   ad_utility::deleteFile(filename);
 }
 
 TEST(PatternCreator, writeAndReadWithDestructorAndFinish) {
   std::string filename = "patternCreator.test.tmp";
+  TripleVec triples;
   {
-    PatternCreator creator{filename};
+    PatternCreator creator{filename, memForStxxl};
     createExamplePatterns(creator);
     creator.finish();
-    // The destructor of `creator` at the following `}` does not run
-    // `creator.finish()` because it has already been manually called.
+    triples =
+        getVectorFromSorter(std::move(creator).getHasPatternSortedByPSO());
   }
 
-  assertPatternContents(filename);
+  assertPatternContents(filename, triples);
   ad_utility::deleteFile(filename);
 }

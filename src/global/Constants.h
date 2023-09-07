@@ -120,6 +120,7 @@ static const std::string EXTERNAL_VOCAB_SUFFIX = ".vocabulary.external";
 static const std::string MMAP_FILE_SUFFIX = ".meta";
 static const std::string CONFIGURATION_FILE = ".meta-data.json";
 static const std::string PREFIX_FILE = ".prefixes";
+static const std::string ADDITIONAL_TRIPLES_SUFFIX = ".additionalTriples";
 
 static const std::string ERROR_IGNORE_CASE_UNSUPPORTED =
     "Key \"ignore-case\" is no longer supported. Please remove this key from "

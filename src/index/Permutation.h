@@ -30,6 +30,10 @@ class Permutation {
   static constexpr auto OPS = Enum::OPS;
   static constexpr auto OSP = Enum::OSP;
 
+  // Does this permutation store a second set of triples with a disjoint set of
+  // `col0Ids`.
+  enum struct HasAdditionalTriples { True, False };
+
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using TimeoutTimer = ad_utility::SharedConcurrentTimeoutTimer;
@@ -42,8 +46,13 @@ class Permutation {
   // `PSO` is converted to [1, 0, 2].
   static std::array<size_t, 3> toKeyOrder(Enum permutation);
 
+  // If `hasAdditionalTriples` is true, then this `Permutation` also manages an
+  // additional set of relations that are stored at
+  // `<onDiskBase><ADDITIONAL_TRIPLES_PREFIX>.xxx` where `onDiskBase` is the
+  // argument to `loadFromDisk` below, and `ADDITIONAL_TRIPLES_PREFIX` is a
+  // constant from `Constants.h`.
   explicit Permutation(Enum permutation, Allocator allocator,
-                       bool isRecursive = true);
+                       HasAdditionalTriples hasAdditionalTriples);
 
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase);
