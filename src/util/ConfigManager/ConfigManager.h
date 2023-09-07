@@ -49,7 +49,14 @@ concept Validator =
 // Simple struct, that holds an error message. For use as the return type of
 // invocable object, that fullfill `ExceptionValidator`.
 struct ErrorMessage {
-  const std::string message;
+  const std::string message_;
+
+  // Constructor.
+  ErrorMessage(std::string_view message) : message_{message} {}
+
+  // Move constructor. A move assignment operator is not possible, because
+  // `message_` is const.
+  ErrorMessage(ErrorMessage&&) = default;
 };
 
 /*
@@ -500,8 +507,7 @@ class ConfigManager {
       Validator<ValidatorParameterTypes...> auto validatorFunction,
       std::string_view errorMessage) {
     // The whole 'transformation' is simply a wrapper.
-    return [validatorFunction,
-            errorMessage = std::string(std::move(errorMessage))](
+    return [validatorFunction, errorMessage = std::string(errorMessage)](
                const ValidatorParameterTypes&... args)
                -> std::optional<ErrorMessage> {
       if (std::invoke(validatorFunction, args...)) {
@@ -590,7 +596,7 @@ class ConfigManager {
               std::invoke(translationFunction, configOptionsToBeChecked)...);
           errorMessage.has_value()) {
         throw std::runtime_error(
-            absl::StrCat(errorMessagePre, errorMessage.value().message));
+            absl::StrCat(errorMessagePre, errorMessage.value().message_));
       }
     });
   }
