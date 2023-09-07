@@ -929,31 +929,31 @@ auto createDefaultGrowthLambda(const size_t& base,
 - (Can be turned off) None of the generated `IdTable`s are to big.
 
 @tparam SmallerTableMemorySizeFunction, BiggerTableMemorySizeFunction A lambda
-function, that takes a `const size_t&` and return a `size_t`.
+function, that takes a `const size_t&` and return a `MemorySize`.
 
 @param maxTime The maximum amount of time, a single function measurements is
 allowed to take. If no value is given, it will not be tested.
-@param maxMemoryInByte How much memory space a `IdTable` is allowed to have at
+@param maxMemory How much memory space a `IdTable` is allowed to have at
 maximum. If no value is given, it will not be tested.
 @param smallerTableMemorySizeFunction, biggerTableMemorySizeFunction These
 functions should calculate/approximate the amount of memory, the bigger and
-smaller `IdTable` take, in byte. The only parameter given is the row number in
+smaller `IdTable` take. The only parameter given is the row number in
 the benchmark table.
 @param resultTableAmountColumns How many columns the result of joining the
 smaller and bigger `IdTable` has. Used for calculating/approximating the memory
 space, that this result table takes up.
 */
-template <invocableWithReturnType<size_t, const size_t&>
+template <invocableWithReturnType<ad_utility::MemorySize, const size_t&>
               SmallerTableMemorySizeFunction,
-          invocableWithReturnType<size_t, const size_t&>
+          invocableWithReturnType<ad_utility::MemorySize, const size_t&>
               BiggerTableMemorySizeFunction>
 auto createDefaultStoppingLambda(
     const std::optional<float>& maxTime,
-    const std::optional<size_t>& maxMemoryInByte,
+    const std::optional<ad_utility::MemorySize>& maxMemory,
     const SmallerTableMemorySizeFunction& smallerTableMemorySizeFunction,
     const BiggerTableMemorySizeFunction& biggerTableMemorySizeFunction,
     const size_t& resultTableAmountColumns) {
-  return [maxTime, maxMemoryInByte, &smallerTableMemorySizeFunction,
+  return [maxTime, maxMemory, &smallerTableMemorySizeFunction,
           &biggerTableMemorySizeFunction,
           resultTableAmountColumns](const ResultTable& table) -> bool {
     // If the tables has no rows, that's an automatic pass.
@@ -968,27 +968,28 @@ auto createDefaultStoppingLambda(
     // number of the current row in the benchmark table.
     auto checkMemorySizeOfTables =
         [&smallerTableMemorySizeFunction, &biggerTableMemorySizeFunction,
-         &maxMemoryInByte, &resultTableAmountColumns,
+         &maxMemory, &resultTableAmountColumns,
          &table](const size_t& benchmarkTableRowNumber) {
-          return (smallerTableMemorySizeFunction(benchmarkTableRowNumber) <=
-                  maxMemoryInByte.value()) &&
-                 (biggerTableMemorySizeFunction(benchmarkTableRowNumber) <=
-                  maxMemoryInByte.value()) &&
+          // TODO Use normal comparison, once the branch with the `MemorySize`
+          // comparison operator has been merged.
+          return (smallerTableMemorySizeFunction(benchmarkTableRowNumber)
+                      .getBytes() <= maxMemory.value().getBytes()) &&
+                 (biggerTableMemorySizeFunction(benchmarkTableRowNumber)
+                      .getBytes() <= maxMemory.value().getBytes()) &&
                  (approximateMemoryNeededByIdTable(
                       std::stoull(table.getEntry<std::string>(
                           benchmarkTableRowNumber, 5)),
                       resultTableAmountColumns)
-                      .getBytes() <= maxMemoryInByte.value());
+                      .getBytes() <= maxMemory.value().getBytes());
         };
 
     // Did any measurement take to long in the newest row? Or did any table have
     // to many rows?
-    return (!maxTime.has_value() && !maxMemoryInByte.has_value()) ||
+    return (!maxTime.has_value() && !maxMemory.has_value()) ||
            ((maxTime.has_value() ? checkIfFunctionMeasurementOfRowUnderMaxtime(
                                        table, row, maxTime.value())
                                  : true) &&
-            (maxMemoryInByte.has_value() ? checkMemorySizeOfTables(row)
-                                         : true));
+            (maxMemory.has_value() ? checkMemorySizeOfTables(row) : true));
   };
 }
 
@@ -1047,21 +1048,15 @@ class BmOnlyBiggerTableSizeChanges final
           table = &makeGrowingBenchmarkTable(
               &results, tableName,
               createDefaultStoppingLambda(
-                  maxTimeSingleMeasurement(),
-                  maxMemory().has_value()
-                      ? std::optional{maxMemory().value().getBytes()}
-                      : std::optional<size_t>{},
+                  maxTimeSingleMeasurement(), maxMemory(),
                   [this](const size_t&) {
                     return approximateMemoryNeededByIdTable(
-                               smallerTableAmountRows_,
-                               smallerTableAmountColumns_)
-                        .getBytes();
+                        smallerTableAmountRows_, smallerTableAmountColumns_);
                   },
                   [this, &growthFunction](const size_t& row) {
                     return approximateMemoryNeededByIdTable(
-                               smallerTableAmountRows_ * growthFunction(row),
-                               biggerTableAmountColumns_)
-                        .getBytes();
+                        smallerTableAmountRows_ * growthFunction(row),
+                        biggerTableAmountColumns_);
                   },
                   smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1),
               overlapChance_, smallerTableSorted, biggerTableSorted,
@@ -1155,21 +1150,15 @@ class BmOnlySmallerTableSizeChanges final
             table = &makeGrowingBenchmarkTable(
                 &results, tableName,
                 createDefaultStoppingLambda(
-                    maxTimeSingleMeasurement(),
-                    maxMemory().has_value()
-                        ? std::optional{maxMemory().value().getBytes()}
-                        : std::optional<size_t>{},
+                    maxTimeSingleMeasurement(), maxMemory(),
                     [this, &growthFunction](const size_t& row) {
                       return approximateMemoryNeededByIdTable(
-                                 growthFunction(row),
-                                 smallerTableAmountColumns_)
-                          .getBytes();
+                          growthFunction(row), smallerTableAmountColumns_);
                     },
                     [this, &growthFunction, &ratioRows](const size_t& row) {
                       return approximateMemoryNeededByIdTable(
-                                 growthFunction(row) * ratioRows,
-                                 biggerTableAmountColumns_)
-                          .getBytes();
+                          growthFunction(row) * ratioRows,
+                          biggerTableAmountColumns_);
                     },
                     smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1),
                 overlapChance_, smallerTableSorted, biggerTableSorted,
@@ -1251,19 +1240,14 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
           table = &makeGrowingBenchmarkTable(
               &results, tableName,
               createDefaultStoppingLambda(
-                  maxTimeSingleMeasurement(),
-                  maxMemory().has_value()
-                      ? std::optional{maxMemory().value().getBytes()}
-                      : std::optional<size_t>{},
+                  maxTimeSingleMeasurement(), maxMemory(),
                   [this, &growthFunction](const size_t& row) {
                     return approximateMemoryNeededByIdTable(
-                               growthFunction(row), smallerTableAmountColumns_)
-                        .getBytes();
+                        growthFunction(row), smallerTableAmountColumns_);
                   },
                   [this, &growthFunction](const size_t& row) {
                     return approximateMemoryNeededByIdTable(
-                               growthFunction(row), biggerTableAmountColumns_)
-                        .getBytes();
+                        growthFunction(row), biggerTableAmountColumns_);
                   },
                   smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1),
               overlapChance_, smallerTableSorted, biggerTableSorted,
