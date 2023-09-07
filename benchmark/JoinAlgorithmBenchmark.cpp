@@ -605,15 +605,16 @@ static std::vector<size_t> createExponentVectorUntilSize(
 
 @param amountRows, amountColumns How many rows and columns the `IdTable` has.
 */
-size_t approximateMemoryNeededByIdTable(const size_t& amountRows,
-                                        const size_t& amountColumns) {
+ad_utility::MemorySize approximateMemoryNeededByIdTable(
+    const size_t& amountRows, const size_t& amountColumns) {
   /*
   The overhead can be, more or less, ignored. We are just concerned over
   the space needed for the entries.
   */
   constexpr size_t memoryPerIdTableEntryInByte = sizeof(IdTable::value_type);
 
-  return amountRows * amountColumns * memoryPerIdTableEntryInByte;
+  return ad_utility::MemorySize::bytes(amountRows * amountColumns *
+                                       memoryPerIdTableEntryInByte);
 }
 
 /*
@@ -754,20 +755,19 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     table, bigger table, or the table resulting from joining the smaller and
     bigger table?`
     */
-    auto checkIfMaxMemoryBigEnoughForOneRow =
-        [](const ad_utility::MemorySize maxMemory,
-           const size_t amountOfColumns) {
-          // Remember: `0` is for unlimited memory.
-          // TODO Use the normal comparison operator, once it got implemented
-          // for `MemorySize`.
-          if (maxMemory.getBytes() ==
-              ad_utility::MemorySize::bytes(0).getBytes()) {
-            return true;
-          }
+    auto checkIfMaxMemoryBigEnoughForOneRow = [](const ad_utility::MemorySize
+                                                     maxMemory,
+                                                 const size_t amountOfColumns) {
+      // Remember: `0` is for unlimited memory.
+      // TODO Use the normal comparison operator, once it got implemented
+      // for `MemorySize`.
+      if (maxMemory.getBytes() == ad_utility::MemorySize::bytes(0).getBytes()) {
+        return true;
+      }
 
-          return approximateMemoryNeededByIdTable(1, amountOfColumns) >=
-                 maxMemory.getBytes();
-        };
+      return approximateMemoryNeededByIdTable(1, amountOfColumns).getBytes() >=
+             maxMemory.getBytes();
+    };
     config.addValidator(
         [checkIfMaxMemoryBigEnoughForOneRow](const size_t maxMemoryInMB,
                                              size_t smallerTableAmountColumns) {
@@ -977,7 +977,8 @@ auto createDefaultStoppingLambda(
                  (approximateMemoryNeededByIdTable(
                       std::stoull(table.getEntry<std::string>(
                           benchmarkTableRowNumber, 5)),
-                      resultTableAmountColumns) <= maxMemoryInByte.value());
+                      resultTableAmountColumns)
+                      .getBytes() <= maxMemoryInByte.value());
         };
 
     // Did any measurement take to long in the newest row? Or did any table have
@@ -1052,12 +1053,15 @@ class BmOnlyBiggerTableSizeChanges final
                       : std::optional<size_t>{},
                   [this](const size_t&) {
                     return approximateMemoryNeededByIdTable(
-                        smallerTableAmountRows_, smallerTableAmountColumns_);
+                               smallerTableAmountRows_,
+                               smallerTableAmountColumns_)
+                        .getBytes();
                   },
                   [this, &growthFunction](const size_t& row) {
                     return approximateMemoryNeededByIdTable(
-                        smallerTableAmountRows_ * growthFunction(row),
-                        biggerTableAmountColumns_);
+                               smallerTableAmountRows_ * growthFunction(row),
+                               biggerTableAmountColumns_)
+                        .getBytes();
                   },
                   smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1),
               overlapChance_, smallerTableSorted, biggerTableSorted,
@@ -1157,12 +1161,15 @@ class BmOnlySmallerTableSizeChanges final
                         : std::optional<size_t>{},
                     [this, &growthFunction](const size_t& row) {
                       return approximateMemoryNeededByIdTable(
-                          growthFunction(row), smallerTableAmountColumns_);
+                                 growthFunction(row),
+                                 smallerTableAmountColumns_)
+                          .getBytes();
                     },
                     [this, &growthFunction, &ratioRows](const size_t& row) {
                       return approximateMemoryNeededByIdTable(
-                          growthFunction(row) * ratioRows,
-                          biggerTableAmountColumns_);
+                                 growthFunction(row) * ratioRows,
+                                 biggerTableAmountColumns_)
+                          .getBytes();
                     },
                     smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1),
                 overlapChance_, smallerTableSorted, biggerTableSorted,
@@ -1250,11 +1257,13 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
                       : std::optional<size_t>{},
                   [this, &growthFunction](const size_t& row) {
                     return approximateMemoryNeededByIdTable(
-                        growthFunction(row), smallerTableAmountColumns_);
+                               growthFunction(row), smallerTableAmountColumns_)
+                        .getBytes();
                   },
                   [this, &growthFunction](const size_t& row) {
                     return approximateMemoryNeededByIdTable(
-                        growthFunction(row), biggerTableAmountColumns_);
+                               growthFunction(row), biggerTableAmountColumns_)
+                        .getBytes();
                   },
                   smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1),
               overlapChance_, smallerTableSorted, biggerTableSorted,
