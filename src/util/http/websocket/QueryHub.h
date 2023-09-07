@@ -36,7 +36,7 @@ class QueryHub {
 
   /// Implementation of createOrAcquireDistributor
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
-      createOrAcquireDistributorInternal(QueryId);
+      createOrAcquireDistributorInternal(QueryId, bool);
 
  public:
   explicit QueryHub(net::io_context& ioContext)
@@ -45,7 +45,7 @@ class QueryHub {
   /// Creates a new `QueryToSocketDistributor` or returns the pre-existing
   /// for the provided query id if there already is one.
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
-      createOrAcquireDistributor(QueryId);
+      createOrAcquireDistributor(QueryId, bool = false);
 };
 }  // namespace ad_utility::websocket
 

@@ -8,11 +8,14 @@
 
 namespace ad_utility::websocket {
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
-QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
+QueryHub::createOrAcquireDistributorInternal(QueryId queryId,
+                                             bool replaceExisting) {
   co_await net::dispatch(globalStrand_, net::use_awaitable);
   if (socketDistributors_.contains(queryId)) {
     if (auto ptr = socketDistributors_.at(queryId).pointer_.lock()) {
-      co_return ptr;
+      if (!replaceExisting) {
+        co_return ptr;
+      }
     }
     // There's a scenario where the object has already been destructed, but not
     // yet removed from the list. In this case remove this here and proceed
@@ -46,7 +49,8 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
 // _____________________________________________________________________________
 
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
-QueryHub::createOrAcquireDistributor(QueryId queryId) {
-  return sameExecutor(createOrAcquireDistributorInternal(std::move(queryId)));
+QueryHub::createOrAcquireDistributor(QueryId queryId, bool replaceExisting) {
+  return sameExecutor(
+      createOrAcquireDistributorInternal(std::move(queryId), replaceExisting));
 }
 }  // namespace ad_utility::websocket
