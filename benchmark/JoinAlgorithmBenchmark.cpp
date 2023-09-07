@@ -816,7 +816,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     config.addValidator(
         generateBiggerEqualLambda(
             minBiggerTableRows.getConfigOption().getDefaultValue<size_t>(),
-            false),
+            true),
         absl::StrCat(
             "'minBiggerTableRows' is to small. Interessting measurement values "
             "only start to turn up at ",
