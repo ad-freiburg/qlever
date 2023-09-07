@@ -10,7 +10,6 @@
 #include <engine/Distinct.h>
 #include <engine/Filter.h>
 #include <engine/GroupBy.h>
-#include <engine/HasPredicateScan.h>
 #include <engine/IndexScan.h>
 #include <engine/Join.h>
 #include <engine/Minus.h>
@@ -1948,13 +1947,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     // adding this to the candidate plans and not returning.
     candidates.push_back(std::move(opt.value()));
   }
-  // Check if one of the two operations is a HAS_PREDICATE_SCAN.
-  // If the join column corresponds to the has-predicate scan's
-  // subject column we can use a specialized join that avoids
-  // loading the full has-predicate predicate.
-  if (auto opt = createJoinWithHasPredicateScan(a, b, jcs)) {
-    candidates.push_back(std::move(opt.value()));
-  }
 
   // Test if one of `a` or `b` is a transitive path to which we can bind the
   // other one.
@@ -2009,41 +2001,6 @@ auto QueryPlanner::createJoinWithTransitivePath(
           transPathOperation->bindRightSide(otherTree, otherCol));
     }
   }();
-  mergeSubtreePlanIds(plan, a, b);
-  return plan;
-}
-
-// ______________________________________________________________________________________
-auto QueryPlanner::createJoinWithHasPredicateScan(
-    SubtreePlan a, SubtreePlan b,
-    const std::vector<std::array<ColumnIndex, 2>>& jcs)
-    -> std::optional<SubtreePlan> {
-  // Check if one of the two operations is a HAS_PREDICATE_SCAN.
-  // If the join column corresponds to the has-predicate scan's
-  // subject column we can use a specialized join that avoids
-  // loading the full has-predicate predicate.
-  using enum QueryExecutionTree::OperationType;
-  auto isSuitablePredicateScan = [](const auto& tree, size_t joinColumn) {
-    return tree._qet->getType() == HAS_PREDICATE_SCAN && joinColumn == 0 &&
-           static_cast<HasPredicateScan*>(tree._qet->getRootOperation().get())
-                   ->getType() == HasPredicateScan::ScanType::FULL_SCAN;
-  };
-
-  const bool aIsSuitablePredicateScan = isSuitablePredicateScan(a, jcs[0][0]);
-  const bool bIsSuitablePredicateScan = isSuitablePredicateScan(b, jcs[0][1]);
-  if (!(aIsSuitablePredicateScan || bIsSuitablePredicateScan)) {
-    return std::nullopt;
-  }
-  auto hasPredicateScanTree = aIsSuitablePredicateScan ? a._qet : b._qet;
-  auto otherTree = aIsSuitablePredicateScan ? b._qet : a._qet;
-  size_t otherTreeJoinColumn = aIsSuitablePredicateScan ? jcs[0][1] : jcs[0][0];
-  auto qec = otherTree->getRootOperation()->getExecutionContext();
-  // Note that this is a new operation.
-  auto object = static_cast<HasPredicateScan*>(
-                    hasPredicateScanTree->getRootOperation().get())
-                    ->getObject();
-  auto plan = makeSubtreePlan<HasPredicateScan>(
-      qec, std::move(otherTree), otherTreeJoinColumn, std::move(object));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 }

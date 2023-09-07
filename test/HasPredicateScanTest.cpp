@@ -1,3 +1,4 @@
+#if false
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
@@ -413,3 +414,5 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   ASSERT_EQ(Int(3u), result[4][1]);
    */
 }
+
+#endif

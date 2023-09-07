@@ -14,7 +14,6 @@
 #include "engine/Distinct.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
-#include "engine/HasPredicateScan.h"
 #include "engine/Join.h"
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
@@ -298,8 +297,6 @@ TEST(LocalVocab, propagation) {
   checkLocalVocab(transitivePath, std::vector<std::string>{"x", "y1", "y2"});
 
   // PATTERN TRICK operations.
-  HasPredicateScan hasPredicateScan(testQec, qet(values1), 0, "?z");
-  checkLocalVocab(hasPredicateScan, std::vector<std::string>{"x", "y1", "y2"});
   CountAvailablePredicates countAvailablePredictes(
       testQec, qet(values1), 0, Variable{"?x"}, Variable{"?y"});
   checkLocalVocab(countAvailablePredictes,

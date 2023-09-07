@@ -6,7 +6,7 @@ add_library(engine
         IndexScan.cpp Join.cpp Sort.cpp TextOperationWithoutFilter.cpp
         TextOperationWithFilter.cpp Distinct.cpp OrderBy.cpp Filter.cpp
         Server.cpp QueryPlanner.cpp QueryPlanningCostFactors.cpp
-        OptionalJoin.cpp CountAvailablePredicates.cpp GroupBy.cpp HasPredicateScan.cpp
+        OptionalJoin.cpp CountAvailablePredicates.cpp GroupBy.cpp
         Union.cpp MultiColumnJoin.cpp TransitivePath.cpp Service.cpp
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp )

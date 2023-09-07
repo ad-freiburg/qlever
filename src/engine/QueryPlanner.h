@@ -265,16 +265,6 @@ class QueryPlanner {
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
-  // `HasPredicateScan` with a variable as a subject (`?x ql:has-predicate
-  // <VariableOrIri>`) and `a` and `b` can be joined on that subject variable,
-  // then returns a `HasPredicateScan` that takes the other input as a subtree.
-  // Else returns `std::nullopt`.
-  [[nodiscard]] static std::optional<SubtreePlan>
-  createJoinWithHasPredicateScan(
-      SubtreePlan a, SubtreePlan b,
-      const std::vector<std::array<ColumnIndex, 2>>& jcs);
-
-  // Used internally by `createJoinCandidates`. If  `a` or `b` is a
   // `TextOperationWithoutFilter` create a `TextOperationWithFilter` that takes
   // the result of the other input as the filter input. Else return
   // `std::nullopt`.
