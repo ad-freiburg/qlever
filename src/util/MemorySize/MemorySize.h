@@ -11,6 +11,7 @@
 #include <concepts>
 #include <cstddef>
 #include <functional>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 
@@ -211,7 +212,7 @@ constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
     throw std::runtime_error(
         absl::StrCat(amountOfUnits, " ", unitName,
                      " is larger than the maximum amount of memory that can be "
-                     "addressed using 64 bits"));
+                     "addressed using 64 bits."));
   }
 
   if constexpr (std::is_floating_point_v<T>) {
@@ -327,23 +328,36 @@ constexpr double MemorySize::getTerabytes() const {
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::operator+(const MemorySize& m) const {
+  // Check for overflow.
+  if (memoryInBytes_ > size_t_max - m.memoryInBytes_) {
+    throw std::overflow_error(
+        "Overflow error: Addition of the two given 'MemorySize's is not "
+        "possible. "
+        "It would result in a size_t overflow.");
+  }
   return MemorySize::bytes(memoryInBytes_ + m.memoryInBytes_);
 }
 
 // _____________________________________________________________________________
 constexpr MemorySize& MemorySize::operator+=(const MemorySize& m) {
-  memoryInBytes_ += m.memoryInBytes_;
+  *this = *this + m;
   return *this;
 }
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::operator-(const MemorySize& m) const {
+  // Check for underflow.
+  if (memoryInBytes_ < m.memoryInBytes_) {
+    throw std::underflow_error(
+        "Underflow error: Subtraction of the two given 'MemorySize's is not "
+        "possible. It would result in a size_t underflow.");
+  }
   return MemorySize::bytes(memoryInBytes_ - m.memoryInBytes_);
 }
 
 // _____________________________________________________________________________
 constexpr MemorySize& MemorySize::operator-=(const MemorySize& m) {
-  memoryInBytes_ -= m.memoryInBytes_;
+  *this = *this - m;
   return *this;
 }
 
@@ -353,6 +367,14 @@ constexpr MemorySize MemorySize::operator*(const T c) const {
   // A negative amount of memory wouldn't make much sense.
   AD_CONTRACT_CHECK(c >= static_cast<T>(0));
 
+  // Check for overflow.
+  if (static_cast<double>(c) >
+      detail::sizeTDivision(size_t_max, memoryInBytes_)) {
+    throw std::overflow_error(
+        "Overflow error: Multiplicaton of the given 'MemorySize' with the "
+        "given constant is not possible. It would result in a size_t "
+        "overflow.");
+  }
   return detail::magicImplForDivAndMul(*this, c, std::multiplies{});
 }
 
@@ -374,6 +396,23 @@ template <Arithmetic T>
 constexpr MemorySize MemorySize::operator/(const T c) const {
   // A negative amount of memory wouldn't make much sense.
   AD_CONTRACT_CHECK(c > static_cast<T>(0));
+
+  /*
+  Check for overflow. Underflow isn't possible, because neither `MemorySize`,
+  nor `c`, can be negative.
+
+  Furthermore, overflow is only possible, if `T` is a floating point. Because
+  the quoutient, of the division between two natural numbers, is always smaller
+  than the dividend. Which is not always true, if the divisor is a floating
+  point number.
+  For example: 1/(1/2) = 2
+  */
+  if (std::floating_point<T> && static_cast<double>(memoryInBytes_) >
+                                    static_cast<double>(size_t_max) * c) {
+    throw std::overflow_error(
+        "Overflow error: Division of the given 'MemorySize' with the given "
+        "constant is not possible. It would result in a size_t overflow.");
+  }
 
   /*
   The default division for `size_t` doesn't always round up, which is the
