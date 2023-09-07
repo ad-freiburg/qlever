@@ -36,6 +36,6 @@ struct IndexFormatVersion {
 // The actual index version. Change it once the binary format of the index
 // changes.
 inline const IndexFormatVersion& indexFormatVersion{
-    1031, DateOrLargeYear{Date{2023, 7, 20}}};
+    1087, DateOrLargeYear{Date{2023, 9, 7}}};
 
 }  // namespace qlever
