@@ -256,6 +256,9 @@ Can only be a function, if all other template `T` parameter are vectors.
 benchmark table.
 @param tableDescriptor A identifier to the to be created benchmark table, so
 that it can be easier identified later.
+@param parameterName The names of the parameter, you gave a growth function for.
+Will be set as the name of the column, which will show the returned values of
+the growth function.
 @param stopFunction Returns true, if the table benchmark should get a new row.
 False, if there are enough rows and the created table should be returned.
 Decides the final size of the benchmark table.
@@ -290,10 +293,10 @@ template <invocableWithReturnType<bool, const ResultTable&> StopFunction,
 requires exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>
 static ResultTable& makeGrowingBenchmarkTable(
     BenchmarkResults* results, const std::string_view tableDescriptor,
-    StopFunction stopFunction, const T1& overlap, const bool smallerTableSorted,
-    const bool biggerTableSorted, const T2& ratioRows,
-    const T3& smallerTableAmountRows, const T4& smallerTableAmountColumns,
-    const T5& biggerTableAmountColumns,
+    std::string parameterName, StopFunction stopFunction, const T1& overlap,
+    const bool smallerTableSorted, const bool biggerTableSorted,
+    const T2& ratioRows, const T3& smallerTableAmountRows,
+    const T4& smallerTableAmountColumns, const T5& biggerTableAmountColumns,
     const T6& smallerTableJoinColumnSampleSizeRatio = 1.0,
     const T7& biggerTableJoinColumnSampleSizeRatio = 1.0) {
   // Is something a growth function?
@@ -348,7 +351,7 @@ static ResultTable& makeGrowingBenchmarkTable(
   */
   ResultTable* table = &(results->addTable(
       std::string{tableDescriptor}, {},
-      {"Parameter value", "Time for sorting", "Merge/Galloping join",
+      {std::move(parameterName), "Time for sorting", "Merge/Galloping join",
        "Sorting + merge/galloping join", "Hash join",
        "Number of rows in resulting IdTable", "Speedup of hash join"}));
   /*
@@ -921,7 +924,7 @@ class BmOnlyBiggerTableSizeChanges final
             smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1);
 
         ResultTable& table = makeGrowingBenchmarkTable(
-            &results, tableName, stoppingFunction, overlapChance_,
+            &results, tableName, "Row ratio", stoppingFunction, overlapChance_,
             smallerTableSorted, biggerTableSorted, growthFunction,
             smallerTableAmountRows_, smallerTableAmountColumns_,
             biggerTableAmountColumns_);
@@ -997,8 +1000,9 @@ class BmOnlySmallerTableSizeChanges final
               smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1);
 
           ResultTable& table = makeGrowingBenchmarkTable(
-              &results, tableName, stoppingFunction, overlapChance_,
-              smallerTableSorted, biggerTableSorted, ratioRows, growthFunction,
+              &results, tableName, "Amount of rows in the smaller table",
+              stoppingFunction, overlapChance_, smallerTableSorted,
+              biggerTableSorted, ratioRows, growthFunction,
               smallerTableAmountColumns_, biggerTableAmountColumns_);
 
           // Add the metadata, that changes with every call and can't be
@@ -1067,9 +1071,10 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
             smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1);
 
         ResultTable& table = makeGrowingBenchmarkTable(
-            &results, tableName, stoppingFunction, overlapChance_,
-            smallerTableSorted, biggerTableSorted, 1UL, growthFunction,
-            smallerTableAmountColumns_, biggerTableAmountColumns_);
+            &results, tableName, "Amount of rows", stoppingFunction,
+            overlapChance_, smallerTableSorted, biggerTableSorted, 1UL,
+            growthFunction, smallerTableAmountColumns_,
+            biggerTableAmountColumns_);
 
         // Add the metadata, that changes with every call and can't be
         // generalized.
