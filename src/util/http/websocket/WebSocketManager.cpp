@@ -28,15 +28,6 @@ std::string extractQueryId(std::string_view path) {
 
 // _____________________________________________________________________________
 
-QueryId WebSocketManager::extractFromRequest(
-    const http::request<http::string_body>& request) {
-  auto queryIdString = extractQueryId(request.target());
-  AD_CORRECTNESS_CHECK(!queryIdString.empty());
-  return QueryId::idFromString(queryIdString);
-}
-
-// _____________________________________________________________________________
-
 net::awaitable<void> WebSocketManager::handleClientCommands() {
   beast::flat_buffer buffer;
 
@@ -69,7 +60,7 @@ net::awaitable<void> WebSocketManager::waitForServerEvents() {
 
 // _____________________________________________________________________________
 
-net::awaitable<void> WebSocketManager::connectionLifecycle() {
+net::awaitable<void> WebSocketManager::acceptAndWait() {
   try {
     ws_.set_option(beast::websocket::stream_base::timeout::suggested(
         beast::role_type::server));
@@ -100,6 +91,18 @@ net::awaitable<void> WebSocketManager::connectionLifecycle() {
   }
 }
 
+// _____________________________________________________________________________
+
+net::awaitable<void> WebSocketManager::handleSession(
+    QueryHub& queryHub, http::request<http::string_body> request,
+    tcp::socket socket) {
+  auto queryIdString = extractQueryId(request.target());
+  AD_CORRECTNESS_CHECK(!queryIdString.empty());
+  UpdateFetcher fetcher{queryHub, QueryId::idFromString(queryIdString)};
+  WebSocketManager webSocketManager{std::move(fetcher), std::move(request),
+                                    std::move(socket)};
+  co_await webSocketManager.acceptAndWait();
+}
 // _____________________________________________________________________________
 
 // TODO<C++23> use std::expected<void, ErrorResponse>

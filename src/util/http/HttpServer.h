@@ -234,9 +234,8 @@ class HttpServer {
           } else {
             // prevent cleanup after socket has been moved from
             releaseConnection.cancel();
-            ad_utility::websocket::WebSocketManager wsManager{
-                queryHub_, std::move(req), std::move(stream.socket())};
-            co_await wsManager.connectionLifecycle();
+            co_await ad_utility::websocket::WebSocketManager::handleSession(
+                queryHub_, std::move(req), std::move(stream.socket()));
             co_return;
           }
         } else {

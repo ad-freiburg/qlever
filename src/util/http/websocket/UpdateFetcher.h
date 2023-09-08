@@ -19,14 +19,14 @@ class UpdateFetcher {
   using PayloadType = std::shared_ptr<const std::string>;
 
   QueryHub& queryHub_;
-  const QueryId& queryId_;
+  QueryId queryId_;
   std::shared_ptr<QueryToSocketDistributor> distributor_{nullptr};
   // Counter to ensure sequential processing
   size_t nextIndex_ = 0;
 
  public:
-  UpdateFetcher(const QueryId& queryId, QueryHub& queryHub)
-      : queryHub_{queryHub}, queryId_{queryId} {}
+  UpdateFetcher(QueryHub& queryHub, QueryId queryId)
+      : queryHub_{queryHub}, queryId_{std::move(queryId)} {}
 
   /// If an update occurred for the given query since the last time this was
   /// called this resumes immediately. Otherwise it will wait

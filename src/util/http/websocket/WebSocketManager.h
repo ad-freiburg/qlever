@@ -21,7 +21,6 @@ using websocket = beast::websocket::stream<tcp::socket>;
 
 /// Class to manage the lifecycle of a single websocket. Single-use only.
 class WebSocketManager {
-  QueryId queryId_;
   UpdateFetcher updateFetcher_;
   http::request<http::string_body> request_;
   websocket ws_;
@@ -33,25 +32,25 @@ class WebSocketManager {
   /// to the client once it happens
   net::awaitable<void> waitForServerEvents();
 
-  /// Helper method to create a QueryId based on a given request.
-  static QueryId extractFromRequest(const http::request<http::string_body>&);
+  /// Accepts the websocket handshake and delegates further handling to
+  /// `waitForServerEvents` and `handleClientCommands`
+  net::awaitable<void> acceptAndWait();
 
- public:
   /// Constructs an instance of this class
-  explicit WebSocketManager(QueryHub& queryHub,
-                            http::request<http::string_body> request,
-                            tcp::socket socket)
-      : queryId_{extractFromRequest(request)},
-        updateFetcher_{queryId_, queryHub},
+  WebSocketManager(UpdateFetcher updateFetcher,
+                   http::request<http::string_body> request, tcp::socket socket)
+      : updateFetcher_{std::move(updateFetcher)},
         request_(std::move(request)),
         ws_{std::move(socket)} {}
 
+ public:
   /// The main interface for this class. The HTTP server is supposed to check
   /// if an HTTP request is a websocket upgrade request and delegate further
   /// handling to this method if it is the case. It then accepts the websocket
   /// connection and "blocks" for the lifetime of it.
-  net::awaitable<void> connectionLifecycle();
-
+  static net::awaitable<void> handleSession(
+      QueryHub& queryHub, http::request<http::string_body> request,
+      tcp::socket socket);
   /// Helper function to provide a proper error response if the provided URL
   /// path is not accepted by the server.
   static std::optional<http::response<http::string_body>>
