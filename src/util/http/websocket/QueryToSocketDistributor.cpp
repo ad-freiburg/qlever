@@ -103,4 +103,19 @@ QueryToSocketDistributor::waitForNextDataPiece(size_t index) {
     co_return nullptr;
   }
 }
+
+// _____________________________________________________________________________
+
+net::awaitable<void> QueryToSocketDistributor::signalStart() {
+  co_await net::dispatch(strand_, net::use_awaitable);
+  AD_CORRECTNESS_CHECK(!started_);
+  started_ = true;
+}
+
+// _____________________________________________________________________________
+
+net::awaitable<bool> QueryToSocketDistributor::hasStarted() {
+  co_await net::dispatch(strand_, net::use_awaitable);
+  co_return started_;
+}
 }  // namespace ad_utility::websocket

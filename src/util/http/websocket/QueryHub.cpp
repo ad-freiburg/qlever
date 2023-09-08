@@ -16,11 +16,15 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId,
       if (!replaceExisting) {
         co_return ptr;
       }
+      if (!co_await sameExecutor(ptr->hasStarted())) {
+        co_await sameExecutor(ptr->signalStart());
+        co_return ptr;
+      }
     }
-    // There's a scenario where the object has already been destructed, but not
-    // yet removed from the list. In this case remove this here and proceed
-    // to build a new instance. This is safe because the id is checked for
-    // equality before removal.
+    // There's a scenario where the object has already been destructed or about
+    // be, but not yet removed from the list. In this case remove this here and
+    // proceed to build a new instance. This is safe because the id is checked
+    // for "equality" before removal.
     socketDistributors_.erase(queryId);
   }
 
@@ -43,6 +47,9 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId,
       });
   socketDistributors_.emplace(
       queryId, IdentifiablePointer{.pointer_ = distributor, .id_ = id});
+  if (replaceExisting) {
+    co_await sameExecutor(distributor->signalStart());
+  }
   co_return distributor;
 }
 

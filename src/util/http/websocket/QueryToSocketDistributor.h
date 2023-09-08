@@ -39,6 +39,8 @@ class QueryToSocketDistributor {
   /// Vector that stores the actual data, so all websockets can read it at
   /// their own pace.
   std::vector<std::shared_ptr<const std::string>> data_{};
+  /// Flag to indicate if a query has started
+  bool started_ = false;
   /// Flag to indicate if a query ended and won't receive any more updates.
   bool finished_ = false;
 
@@ -74,9 +76,15 @@ class QueryToSocketDistributor {
   net::awaitable<void> signalEnd();
 
   /// Awaitable object to wait for and fetch the next available piece of data
-  /// for the websocket. co_returns a nullptr if no more data is available.
+  /// for the websocket. co_returns a nullptr if no more data is available
   net::awaitable<std::shared_ptr<const std::string>> waitForNextDataPiece(
       size_t index);
+
+  /// Signal that a query will now start sending messages
+  net::awaitable<void> signalStart();
+
+  /// Check if the designated query has started to send messages
+  net::awaitable<bool> hasStarted();
 };
 }  // namespace ad_utility::websocket
 
