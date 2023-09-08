@@ -22,17 +22,11 @@ using StrandType = net::strand<net::any_io_executor>;
 /// used once and from then onwards only the `QueryToSocketDistributor` instance
 /// is used.
 class QueryHub {
-  // Counter to generate unique ids
-  uint64_t counter = 0;
-  // Helper struct to bundle a weak pointer with a unique id
-  struct IdentifiablePointer {
-    std::weak_ptr<QueryToSocketDistributor> pointer_;
-    uint64_t id_;
-  };
+  using PointerType = std::weak_ptr<QueryToSocketDistributor>;
 
   net::io_context& ioContext_;
   StrandType globalStrand_;
-  absl::flat_hash_map<QueryId, IdentifiablePointer> socketDistributors_{};
+  absl::flat_hash_map<QueryId, PointerType> socketDistributors_{};
 
   /// Implementation of createOrAcquireDistributor
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>>

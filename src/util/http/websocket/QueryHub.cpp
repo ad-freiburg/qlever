@@ -7,12 +7,23 @@
 #include "util/AsioHelpers.h"
 
 namespace ad_utility::websocket {
+
+/// Helper function to check if two weak pointers point to the same control
+/// block. This is the case for all weak pointers created from the same shared
+/// pointer or aliases of that shared pointer.
+template <typename T, typename U>
+bool equals(const std::weak_ptr<T>& t, const std::weak_ptr<U>& u) noexcept {
+  return !t.owner_before(u) && !u.owner_before(t);
+}
+
+// _____________________________________________________________________________
+
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorInternal(QueryId queryId,
                                              bool replaceExisting) {
   co_await net::dispatch(globalStrand_, net::use_awaitable);
   if (socketDistributors_.contains(queryId)) {
-    if (auto ptr = socketDistributors_.at(queryId).pointer_.lock()) {
+    if (auto ptr = socketDistributors_.at(queryId).lock()) {
       if (!replaceExisting) {
         co_return ptr;
       }
@@ -21,32 +32,36 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId,
         co_return ptr;
       }
     }
-    // There's a scenario where the object has already been destructed or about
-    // be, but not yet removed from the list. In this case remove this here and
-    // proceed to build a new instance. This is safe because the id is checked
-    // for "equality" before removal.
+    // There's a scenario where the object has is about to be removed from the
+    // list, but wasn't so far because of concurrency. In this case remove it
+    // here and proceed to build a new instance. This is safe because the id is
+    // checked for "equality" before removal.
     socketDistributors_.erase(queryId);
   }
 
-  auto id = counter++;
+  auto pointerHolder =
+      std::make_shared<std::optional<PointerType>>(std::nullopt);
   auto cleanupAction = [](auto& distributors, auto queryId,
-                          auto id) -> net::awaitable<void> {
+                          auto referencePointer) -> net::awaitable<void> {
     // Only erase object if we created it, otherwise we have a race condition
-    if (distributors.contains(queryId) && distributors.at(queryId).id_ == id) {
+    if (distributors.contains(queryId) &&
+        equals(referencePointer, distributors.at(queryId))) {
       distributors.erase(queryId);
     }
     // Make sure this is treated as coroutine
     co_return;
   };
   auto distributor = std::make_shared<QueryToSocketDistributor>(
-      ioContext_,
-      [this, queryId, coroutine = std::move(cleanupAction), id]() mutable {
+      ioContext_, [this, queryId, coroutine = std::move(cleanupAction),
+                   pointerHolder]() mutable {
+        AD_CORRECTNESS_CHECK(pointerHolder->has_value());
         net::co_spawn(globalStrand_,
-                      coroutine(socketDistributors_, std::move(queryId), id),
+                      coroutine(socketDistributors_, std::move(queryId),
+                                std::move(pointerHolder->value())),
                       net::detached);
       });
-  socketDistributors_.emplace(
-      queryId, IdentifiablePointer{.pointer_ = distributor, .id_ = id});
+  *pointerHolder = distributor;
+  socketDistributors_.emplace(queryId, distributor);
   if (replaceExisting) {
     co_await sameExecutor(distributor->signalStart());
   }
