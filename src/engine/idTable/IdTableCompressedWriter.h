@@ -32,14 +32,16 @@ class IdTableCompressedWriter {
 
   void writeIdTable(const IdTable& table) {
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
-    size_t bs = blockSize_ / sizeof(Id);
+    size_t bs = blockSize_.getBytes() / sizeof(Id);
     AD_CONTRACT_CHECK(bs > 0);
     for (auto i :std::views::iota(0u, numColumns())) {
       auto& blockMetadata = blocksPerColumn_.at(i);
       decltype(auto) column = table.getColumn(i);
       for (size_t lower = 0; lower < column.size(); lower += bs) {
         size_t upper = std::min(lower + bs, column.size());
-        file_.write()
+        auto offset = file_.tell();
+        file_.write(column.data() + lower, upper * sizeof(Id));
+        // TODO<joka921> continue here.
       }
 
 
