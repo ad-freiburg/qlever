@@ -69,6 +69,7 @@ class AddCombinedRowToIdTable {
         resultTable_{std::move(output)},
         bufferSize_{bufferSize} {
     checkNumColumns();
+    indexBuffer_.reserve(bufferSize);
   }
   // Similar to the previous constructor, but the inputs are not given.
   // This means that the inputs have to be set to an explicit
@@ -80,7 +81,9 @@ class AddCombinedRowToIdTable {
         numJoinColumns_{numJoinColumns},
         inputs_{std::nullopt},
         resultTable_{std::move(output)},
-        bufferSize_{bufferSize} {}
+        bufferSize_{bufferSize} {
+    indexBuffer_.reserve(bufferSize);
+  }
 
   // Return the number of UNDEF values per column.
   const std::vector<size_t>& numUndefinedPerColumn() {

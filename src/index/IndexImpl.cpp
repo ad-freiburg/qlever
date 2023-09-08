@@ -207,6 +207,8 @@ void IndexImpl::createFromFile(const string& filename) {
     } else {
       createPermutationPair(spoSorter.sortedView(), spo_, sop_,
                             ospSorter.makePushCallback(), numSubjectCounter);
+        makeIndexFromAdditionalTriples(
+                PsoSorter{100'000'000});
     }
     spoSorter.clear();
     configurationJson_["num-subjects-normal"] = numSubjectsNormal;
@@ -220,7 +222,11 @@ void IndexImpl::createFromFile(const string& filename) {
     configurationJson_["num-objects-normal"] = numObjectsNormal;
     configurationJson_["has-all-permutations"] = true;
   } else {
-    if (usePatterns_) {
+    // TODO<joka921> For the case that there is no second permutation, but the patterns are loaded, this is currently
+    // wrong, but we'll get rid of this anyway.
+      makeIndexFromAdditionalTriples(
+              PsoSorter{100'000'000});
+      if (usePatterns_) {
       createPatternsFromSpoTriplesView(spoSorter.sortedView(),
                                        onDiskBase_ + ".index.patterns",
                                        isInternalId, stxxlMemoryInBytes());

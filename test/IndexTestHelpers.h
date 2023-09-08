@@ -118,6 +118,15 @@ inline QueryExecutionContext* getQec(
   struct TypeErasedCleanup {
     std::function<void()> callback_;
     ~TypeErasedCleanup() { callback_(); }
+    TypeErasedCleanup(std::function<void()> callback) : callback_{std::move(callback)} {}
+      TypeErasedCleanup(const TypeErasedCleanup& rhs) =delete;
+      TypeErasedCleanup& operator=(const TypeErasedCleanup&) = delete;
+      TypeErasedCleanup(TypeErasedCleanup&& rhs ) : callback_(std::exchange(rhs.callback_, []{})) {
+      }
+      TypeErasedCleanup& operator=(TypeErasedCleanup&& rhs) {
+        callback_ = std::exchange(rhs.callback_, []{});
+        return *this;
+      }
   };
 
   // A `QueryExecutionContext` together with all data structures that it
