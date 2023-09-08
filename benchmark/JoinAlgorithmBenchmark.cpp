@@ -499,7 +499,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   understand forms.
   */
   float maxTimeSingleMeasurement_;
-  std::string maxMemory_;
+  std::string maxMemoryConfigVariable_;
 
  protected:
   /*
@@ -582,7 +582,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "maxMemory",
         "Max amount of memory that a `IdTable` is allowed to take up. `0` for "
         "unlimited memory. Example: 4kB, 8MB, 24 B, etc. ...",
-        &maxMemory_, "0 B"s);
+        &maxMemoryConfigVariable_, "0 B"s);
 
     decltype(auto) maxTimeSingleMeasurement = config.addOption(
         "maxTimeSingleMeasurement",
@@ -743,8 +743,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     };
 
     addInfiniteWhen0("maxTimeSingleMeasurement", maxTimeSingleMeasurement_);
-    addInfiniteWhen0("maxMemory",
-                     ad_utility::MemorySize::parse(maxMemory_).getBytes());
+    addInfiniteWhen0(
+        "maxMemory",
+        ad_utility::MemorySize::parse(maxMemoryConfigVariable_).getBytes());
   }
 
   /*
@@ -760,16 +761,24 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   }
 
   /*
-  Get the value of the `maxMemory` configuration option interpreted as a
-  `MemorySize`. Empty optional stands for `infinite` time.
+  The maximum amount of memory, any table is allowed to take up.
   */
-  std::optional<ad_utility::MemorySize> maxMemory() const {
-    ad_utility::MemorySize maxMemory{ad_utility::MemorySize::parse(maxMemory_)};
-    if (maxMemory.getBytes() != 0) {
-      return {std::move(maxMemory)};
-    } else {
-      return {std::nullopt};
-    }
+  ad_utility::MemorySize maxMemory() const {
+    /*
+    Returns the value of the `maxMemory` configuration option interpreted as a
+    `MemorySize`, if it wasn't set to `0`. (Which stand for infinite memory.) In
+    the case of `0`, returns the amount of memory, a table with
+    `maxBiggerTableRows_` rows and `biggerTableAmountColumns_` columns would
+    take up.
+    */
+    ad_utility::MemorySize maxMemory{
+        ad_utility::MemorySize::parse(maxMemoryConfigVariable_)};
+    // TODO Use normal comparison, once the branch with the `MemorySize`
+    // comparison operator has been merged.
+    return maxMemory.getBytes() != 0UL
+               ? std::move(maxMemory)
+               : approximateMemoryNeededByIdTable(maxBiggerTableRows_,
+                                                  biggerTableAmountColumns_);
   }
 };
 
@@ -896,19 +905,10 @@ class BmOnlyBiggerTableSizeChanges final
         auto growthFunction = createDefaultGrowthLambda(
             10, minBiggerTableRows_ / smallerTableAmountRows_);
 
-        /*
-        The maximum amount of memory, any table is allowed to take up.
-        If no amount was explicitly given, we convert the maximum amount of
-        rows/columns for a ´IdTable` into their `MemorySize` variant.
-        */
-        const ad_utility::MemorySize maxMemoryForAnyTable{
-            maxMemory().value_or(approximateMemoryNeededByIdTable(
-                maxBiggerTableRows_, biggerTableAmountColumns_))};
-
         // The lambda for signalling the benchmark table creation function, that
         // the table is finished.
         auto stoppingFunction = createDefaultStoppingLambda(
-            maxTimeSingleMeasurement(), maxMemoryForAnyTable,
+            maxTimeSingleMeasurement(), maxMemory(),
             [this](const size_t&) {
               return approximateMemoryNeededByIdTable(
                   smallerTableAmountRows_, smallerTableAmountColumns_);
@@ -982,19 +982,10 @@ class BmOnlySmallerTableSizeChanges final
           auto growthFunction =
               createDefaultGrowthLambda(10, minBiggerTableRows_ / ratioRows);
 
-          /*
-          The maximum amount of memory, any table is allowed to take up.
-          If no amount was explicitly given, we convert the maximum amount of
-          rows/columns for a ´IdTable` into their `MemorySize` variant.
-          */
-          const ad_utility::MemorySize maxMemoryForAnyTable{
-              maxMemory().value_or(approximateMemoryNeededByIdTable(
-                  maxBiggerTableRows_, biggerTableAmountColumns_))};
-
           // The lambda for signalling the benchmark table creation function,
           // that the table is finished.
           auto stoppingFunction = createDefaultStoppingLambda(
-              maxTimeSingleMeasurement(), maxMemoryForAnyTable,
+              maxTimeSingleMeasurement(), maxMemory(),
               [this, &growthFunction](const size_t& row) {
                 return approximateMemoryNeededByIdTable(
                     growthFunction(row), smallerTableAmountColumns_);
@@ -1061,19 +1052,10 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
         auto growthFunction =
             createDefaultGrowthLambda(10, minBiggerTableRows_);
 
-        /*
-        The maximum amount of memory, any table is allowed to take up.
-        If no amount was explicitly given, we convert the maximum amount of
-        rows/columns for a ´IdTable` into their `MemorySize` variant.
-        */
-        const ad_utility::MemorySize maxMemoryForAnyTable{
-            maxMemory().value_or(approximateMemoryNeededByIdTable(
-                maxBiggerTableRows_, biggerTableAmountColumns_))};
-
         // The lambda for signalling the benchmark table creation function,
         // that the table is finished.
         auto stoppingFunction = createDefaultStoppingLambda(
-            maxTimeSingleMeasurement(), maxMemoryForAnyTable,
+            maxTimeSingleMeasurement(), maxMemory(),
             [this, &growthFunction](const size_t& row) {
               return approximateMemoryNeededByIdTable(
                   growthFunction(row), smallerTableAmountColumns_);
