@@ -835,9 +835,22 @@ auto createDefaultStoppingLambda(
          &table](const size_t& benchmarkTableRowNumber) {
           // TODO Use normal comparison, once the branch with the `MemorySize`
           // comparison operator has been merged.
-          return (smallerTableMemorySizeFunction(benchmarkTableRowNumber)
+          /*
+          Remember: We are currently deciding, if the current `ResultTable`
+          should get a new row and we don't want to create `IdTable`s, that are
+          to big.
+          However, unlike the function measurement times, we CAN calculate the
+          memory space taken up by a `IdTable`, without creating it.
+          So, we check, if the smaller and bigger table of the NEXT row would be
+          to big, instead of the smaller and bigger table of this row.
+
+          Unfortunaly, that can't be done with the result of joining the two
+          tables. For that, we would need the amount of rows in it, which we
+          can't have, without having already created it.
+          */
+          return (smallerTableMemorySizeFunction(benchmarkTableRowNumber + 1)
                       .getBytes() <= maxMemory.value().getBytes()) &&
-                 (biggerTableMemorySizeFunction(benchmarkTableRowNumber)
+                 (biggerTableMemorySizeFunction(benchmarkTableRowNumber + 1)
                       .getBytes() <= maxMemory.value().getBytes()) &&
                  (approximateMemoryNeededByIdTable(
                       std::stoull(table.getEntry<std::string>(
