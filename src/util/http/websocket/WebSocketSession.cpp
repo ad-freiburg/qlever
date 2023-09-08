@@ -2,7 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "WebSocketManager.h"
+#include "WebSocketSession.h"
 
 #include <ctre/ctre.h>
 
@@ -28,7 +28,7 @@ std::string extractQueryId(std::string_view path) {
 
 // _____________________________________________________________________________
 
-net::awaitable<void> WebSocketManager::handleClientCommands() {
+net::awaitable<void> WebSocketSession::handleClientCommands() {
   beast::flat_buffer buffer;
 
   while (ws_.is_open()) {
@@ -42,7 +42,7 @@ net::awaitable<void> WebSocketManager::handleClientCommands() {
 
 // _____________________________________________________________________________
 
-net::awaitable<void> WebSocketManager::waitForServerEvents() {
+net::awaitable<void> WebSocketSession::waitForServerEvents() {
   while (ws_.is_open()) {
     auto json = co_await updateFetcher_.waitForEvent();
     if (json == nullptr) {
@@ -60,7 +60,7 @@ net::awaitable<void> WebSocketManager::waitForServerEvents() {
 
 // _____________________________________________________________________________
 
-net::awaitable<void> WebSocketManager::acceptAndWait() {
+net::awaitable<void> WebSocketSession::acceptAndWait() {
   try {
     ws_.set_option(beast::websocket::stream_base::timeout::suggested(
         beast::role_type::server));
@@ -93,21 +93,21 @@ net::awaitable<void> WebSocketManager::acceptAndWait() {
 
 // _____________________________________________________________________________
 
-net::awaitable<void> WebSocketManager::handleSession(
+net::awaitable<void> WebSocketSession::handleSession(
     QueryHub& queryHub, http::request<http::string_body> request,
     tcp::socket socket) {
   auto queryIdString = extractQueryId(request.target());
   AD_CORRECTNESS_CHECK(!queryIdString.empty());
   UpdateFetcher fetcher{queryHub, QueryId::idFromString(queryIdString)};
-  WebSocketManager webSocketManager{std::move(fetcher), std::move(request),
+  WebSocketSession webSocketSession{std::move(fetcher), std::move(request),
                                     std::move(socket)};
-  co_await webSocketManager.acceptAndWait();
+  co_await webSocketSession.acceptAndWait();
 }
 // _____________________________________________________________________________
 
 // TODO<C++23> use std::expected<void, ErrorResponse>
 std::optional<http::response<http::string_body>>
-WebSocketManager::getErrorResponseIfPathIsInvalid(
+WebSocketSession::getErrorResponseIfPathIsInvalid(
     const http::request<http::string_body>& request) {
   auto path = request.target();
 

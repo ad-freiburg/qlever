@@ -13,7 +13,7 @@
 #include "util/Log.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
-#include "util/http/websocket/WebSocketManager.h"
+#include "util/http/websocket/WebSocketSession.h"
 #include "util/jthread.h"
 
 namespace beast = boost::beast;    // from <boost/beast.hpp>
@@ -224,17 +224,17 @@ class HttpServer {
         co_await http::async_read(stream, buffer, req,
                                   boost::asio::use_awaitable);
 
-        // Let request be handled by the webSocketManager if the HTTP
+        // Let request be handled by `WebSocketSession` if the HTTP
         // request is a WebSocket handshake
         if (beast::websocket::is_upgrade(req)) {
-          auto errorResponse = ad_utility::websocket::WebSocketManager::
+          auto errorResponse = ad_utility::websocket::WebSocketSession::
               getErrorResponseIfPathIsInvalid(req);
           if (errorResponse) {
             co_await sendMessage(*errorResponse);
           } else {
             // prevent cleanup after socket has been moved from
             releaseConnection.cancel();
-            co_await ad_utility::websocket::WebSocketManager::handleSession(
+            co_await ad_utility::websocket::WebSocketSession::handleSession(
                 queryHub_, std::move(req), std::move(stream.socket()));
             co_return;
           }

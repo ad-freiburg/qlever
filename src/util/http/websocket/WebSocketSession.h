@@ -20,7 +20,7 @@ using websocket::common::QueryId;
 using websocket = beast::websocket::stream<tcp::socket>;
 
 /// Class to manage the lifecycle of a single websocket. Single-use only.
-class WebSocketManager {
+class WebSocketSession {
   UpdateFetcher updateFetcher_;
   http::request<http::string_body> request_;
   websocket ws_;
@@ -37,7 +37,7 @@ class WebSocketManager {
   net::awaitable<void> acceptAndWait();
 
   /// Constructs an instance of this class
-  WebSocketManager(UpdateFetcher updateFetcher,
+  WebSocketSession(UpdateFetcher updateFetcher,
                    http::request<http::string_body> request, tcp::socket socket)
       : updateFetcher_{std::move(updateFetcher)},
         request_(std::move(request)),
