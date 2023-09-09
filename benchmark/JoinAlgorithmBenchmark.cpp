@@ -372,31 +372,31 @@ static ResultTable& makeGrowingBenchmarkTable(
   Now on to creating the benchmark table. Because we don't know, how many row
   names we will have, we just create a table without row names.
   */
-  ResultTable* table = &(results->addTable(
+  ResultTable& table = results->addTable(
       std::string{tableDescriptor}, {},
       {std::move(parameterName), "Time for sorting", "Merge/Galloping join",
        "Sorting + merge/galloping join", "Hash join",
-       "Number of rows in resulting IdTable", "Speedup of hash join"}));
+       "Number of rows in resulting IdTable", "Speedup of hash join"});
   /*
   Adding measurements to the table, as long as the stop function doesn't say
   anything else.
   */
-  while (stopFunction(*table)) {
+  while (stopFunction(table)) {
     // What's the row number of the next to be added row?
-    const size_t rowNumber = table->numRows();
+    const size_t rowNumber = table.numRows();
 
     // Add a new row without content.
-    table->addRow();
-    table->setEntry(rowNumber, CHANGING_PARAMTER_COLUMN_NUM,
-                    std::to_string(returnFirstGrowthFunction(
-                        overlap, ratioRows, smallerTableAmountRows,
-                        smallerTableAmountColumns, biggerTableAmountColumns,
-                        smallerTableJoinColumnSampleSizeRatio,
-                        biggerTableJoinColumnSampleSizeRatio)(rowNumber)));
+    table.addRow();
+    table.setEntry(rowNumber, CHANGING_PARAMTER_COLUMN_NUM,
+                   std::to_string(returnFirstGrowthFunction(
+                       overlap, ratioRows, smallerTableAmountRows,
+                       smallerTableAmountColumns, biggerTableAmountColumns,
+                       smallerTableJoinColumnSampleSizeRatio,
+                       biggerTableJoinColumnSampleSizeRatio)(rowNumber)));
 
     // Converting all our function parameters to non functions.
     addMeasurementsToRowOfBenchmarkTable(
-        table, rowNumber, returnOrCall(overlap, rowNumber), smallerTableSorted,
+        &table, rowNumber, returnOrCall(overlap, rowNumber), smallerTableSorted,
         biggerTableSorted, returnOrCall(ratioRows, rowNumber),
         returnOrCall(smallerTableAmountRows, rowNumber),
         returnOrCall(smallerTableAmountColumns, rowNumber),
@@ -405,24 +405,20 @@ static ResultTable& makeGrowingBenchmarkTable(
         returnOrCall(biggerTableJoinColumnSampleSizeRatio, rowNumber));
   }
 
-  // If should never to possible for table to be a null pointr, but better
-  // safe than sorry.
-  AD_CONTRACT_CHECK(table != nullptr);
-
   // Adding together the time for sorting the `IdTables` and then joining
   // them using merge/galloping join.
-  sumUpColumns(table, TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM,
+  sumUpColumns(&table, TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM,
                TIME_FOR_SORTING_COLUMN_NUM,
                TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM);
 
   // Calculate, how much of a speedup the hash join algorithm has in comparison
   // to the merge/galloping join algrithm.
-  calculateSpeedupOfColumn(table, TIME_FOR_HASH_JOIN_COLUMN_NUM,
+  calculateSpeedupOfColumn(&table, TIME_FOR_HASH_JOIN_COLUMN_NUM,
                            TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM,
                            JOIN_ALGORITHM_SPEEDUP_COLUMN_NUM);
 
   // For more specific adjustments.
-  return (*table);
+  return table;
 }
 
 /*
