@@ -88,6 +88,28 @@ static void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 }
 
 /*
+The columns of the automaticly generated benchmark tables contain the following
+informations:
+- The parameter, that changes with every row..
+- Time needed for sorting `IdTable`s.
+- Time needed for merge/galloping join.
+- Time needed for sorting and merge/galloping added togehter.
+- Time needed for the hash join.
+- How many rows the result of joining the tables has.
+- How much faster the hash join is. For example: Two times faster.
+
+The following global variables exist, in order to make the information about the
+order of columns explicit.
+*/
+constexpr size_t CHANGING_PARAMTER_COLUMN_NUM = 0;
+constexpr size_t TIME_FOR_SORTING_COLUMN_NUM = 1;
+constexpr size_t TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM = 2;
+constexpr size_t TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM = 3;
+constexpr size_t TIME_FOR_HASH_JOIN_COLUMN_NUM = 4;
+constexpr size_t NUM_ROWS_OF_JOIN_RESULT_COLUMN_NUM = 5;
+constexpr size_t JOIN_ALGORITHM_SPEEDUP_COLUMN_NUM = 6;
+
+/*
 @brief Adds the function time measurements to a row of the benchmark table
 in `makeBenchmarkTable`.
 For an explanation of the parameters, see `makeBenchmarkTable`.
@@ -170,7 +192,7 @@ static void addMeasurementsToRowOfBenchmarkTable(
   // Hash join first, because merge/galloping join sorts all tables, if
   // needed, before joining them.
   table->addMeasurement(
-      row, 4,
+      row, TIME_FOR_HASH_JOIN_COLUMN_NUM,
       [&numberRowsOfResult, &smallerTable, &biggerTable, &hashJoinLambda]() {
         numberRowsOfResult =
             useJoinFunctionOnIdTables(smallerTable, biggerTable, hashJoinLambda)
@@ -183,7 +205,7 @@ static void addMeasurementsToRowOfBenchmarkTable(
   result.
   */
   table->addMeasurement(
-      row, 1,
+      row, TIME_FOR_SORTING_COLUMN_NUM,
       [&smallerTable, &smallerTableSorted, &biggerTable, &biggerTableSorted]() {
         if (!smallerTableSorted) {
           sortIdTableByJoinColumnInPlace(smallerTable);
@@ -195,7 +217,7 @@ static void addMeasurementsToRowOfBenchmarkTable(
 
   // The merge/galloping join.
   table->addMeasurement(
-      row, 2,
+      row, TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM,
       [&numberRowsOfResult, &smallerTable, &biggerTable, &joinLambda]() {
         numberRowsOfResult =
             useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
@@ -203,7 +225,8 @@ static void addMeasurementsToRowOfBenchmarkTable(
       });
 
   // Adding the number of rows of the result.
-  table->setEntry(row, 5, std::to_string(numberRowsOfResult));
+  table->setEntry(row, NUM_ROWS_OF_JOIN_RESULT_COLUMN_NUM,
+                  std::to_string(numberRowsOfResult));
 }
 
 // `T` must be a function, that returns something of type `ReturnType`, when
@@ -364,7 +387,7 @@ static ResultTable& makeGrowingBenchmarkTable(
 
     // Add a new row without content.
     table->addRow();
-    table->setEntry(rowNumber, 0,
+    table->setEntry(rowNumber, CHANGING_PARAMTER_COLUMN_NUM,
                     std::to_string(returnFirstGrowthFunction(
                         overlap, ratioRows, smallerTableAmountRows,
                         smallerTableAmountColumns, biggerTableAmountColumns,
@@ -388,11 +411,15 @@ static ResultTable& makeGrowingBenchmarkTable(
 
   // Adding together the time for sorting the `IdTables` and then joining
   // them using merge/galloping join.
-  sumUpColumns(table, 3, static_cast<size_t>(1), static_cast<size_t>(2));
+  sumUpColumns(table, TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM,
+               TIME_FOR_SORTING_COLUMN_NUM,
+               TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM);
 
   // Calculate, how much of a speedup the hash join algorithm has in comparison
   // to the merge/galloping join algrithm.
-  calculateSpeedupOfColumn(table, 4, 3, 6);
+  calculateSpeedupOfColumn(table, TIME_FOR_HASH_JOIN_COLUMN_NUM,
+                           TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM,
+                           JOIN_ALGORITHM_SPEEDUP_COLUMN_NUM);
 
   // For more specific adjustments.
   return (*table);
@@ -409,8 +436,9 @@ static bool checkIfFunctionMeasurementOfRowUnderMaxtime(
     return table.getEntry<float>(row, column) <= maxTime;
   };
 
-  // We measure functions in column 1, 2 and 4.
-  return checkTime(1) && checkTime(2) && checkTime(4);
+  return checkTime(TIME_FOR_SORTING_COLUMN_NUM) &&
+         checkTime(TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM) &&
+         checkTime(TIME_FOR_HASH_JOIN_COLUMN_NUM);
 }
 
 /*
@@ -888,7 +916,8 @@ auto createDefaultStoppingLambda(
                row,
                [&resultTableAmountColumns, &table](const size_t& rowNumber) {
                  return approximateMemoryNeededByIdTable(
-                     std::stoull(table.getEntry<std::string>(rowNumber, 5)),
+                     std::stoull(table.getEntry<std::string>(
+                         rowNumber, NUM_ROWS_OF_JOIN_RESULT_COLUMN_NUM)),
                      resultTableAmountColumns);
                },
                maxMemoryJoinResultTable);
