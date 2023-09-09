@@ -6,6 +6,8 @@
 #define QLEVER_ASIOHELPERS_H
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/dispatch.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
 namespace ad_utility {
 

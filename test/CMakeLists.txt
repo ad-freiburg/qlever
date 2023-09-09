@@ -351,3 +351,7 @@ addLinkAndDiscoverTest(MemorySizeTest memorySize)
 addLinkAndDiscoverTest(JsonUtilTest)
 
 addLinkAndDiscoverTest(JoinAlgorithmsTest)
+
+addLinkAndDiscoverTest(AsioHelpersTest)
+
+addLinkAndDiscoverTest(UniqueCleanupTest)
