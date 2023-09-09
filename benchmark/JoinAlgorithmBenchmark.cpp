@@ -635,31 +635,29 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     };
     config.addValidator(
         [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
-                                             size_t smallerTableAmountColumns) {
+                                             size_t smallerTableNumColumns) {
           return checkIfMaxMemoryBigEnoughForOneRow(
-              ad_utility::MemorySize::parse(maxMemory),
-              smallerTableAmountColumns);
+              ad_utility::MemorySize::parse(maxMemory), smallerTableNumColumns);
         },
         "'maxMemory' must be big enough, for at least one row in the the "
         "smaller table.",
         maxMemoryInStringFormat, smallerTableAmountColumns);
     config.addValidator(
         [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
-                                             size_t biggerTableAmountColumns) {
+                                             size_t biggerTableNumColumns) {
           return checkIfMaxMemoryBigEnoughForOneRow(
-              ad_utility::MemorySize::parse(maxMemory),
-              biggerTableAmountColumns);
+              ad_utility::MemorySize::parse(maxMemory), biggerTableNumColumns);
         },
         "'maxMemory' must be big enough, for at least one row in the the "
         "bigger table.",
         maxMemoryInStringFormat, biggerTableAmountColumns);
     config.addValidator(
         [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
-                                             size_t smallerTableAmountColumns,
-                                             size_t biggerTableAmountColumns) {
+                                             size_t smallerTableNumColumns,
+                                             size_t biggerTableNumColumns) {
           return checkIfMaxMemoryBigEnoughForOneRow(
               ad_utility::MemorySize::parse(maxMemory),
-              smallerTableAmountColumns + biggerTableAmountColumns - 1);
+              smallerTableNumColumns + biggerTableNumColumns - 1);
         },
         "'maxMemory' must be big enough, for at least one row in the the "
         "result of joining the smaller and bigger table.",
