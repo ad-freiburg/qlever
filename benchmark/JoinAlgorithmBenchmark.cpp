@@ -502,7 +502,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   understand forms.
   */
   float maxTimeSingleMeasurement_;
-  std::string maxMemoryConfigVariable_;
+  std::string configVariableMaxMemory_;
 
  protected:
   /*
@@ -585,7 +585,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "maxMemory",
         "Max amount of memory that a `IdTable` is allowed to take up. `0` for "
         "unlimited memory. Example: 4kB, 8MB, 24 B, etc. ...",
-        &maxMemoryConfigVariable_, "0 B"s);
+        &configVariableMaxMemory_, "0 B"s);
 
     decltype(auto) maxTimeSingleMeasurement = config.addOption(
         "maxTimeSingleMeasurement",
@@ -748,7 +748,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     addInfiniteWhen0("maxTimeSingleMeasurement", maxTimeSingleMeasurement_);
     addInfiniteWhen0(
         "maxMemory",
-        ad_utility::MemorySize::parse(maxMemoryConfigVariable_).getBytes());
+        ad_utility::MemorySize::parse(configVariableMaxMemory_).getBytes());
   }
 
   /*
@@ -764,24 +764,32 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   }
 
   /*
-  The maximum amount of memory, any table is allowed to take up.
+  @brief The maximum amount of memory, the bigger table, and by simple logic
+  also the smaller table, is allowed to take up. Iff returns the same value as
+  `maxMemory()`, if the `maxMemory` configuration option, interpreted as a
+  `MemorySize`, wasn't set to `0`. (Which stand for infinite memory.)
   */
-  ad_utility::MemorySize maxMemory() const {
-    /*
-    Returns the value of the `maxMemory` configuration option interpreted as a
-    `MemorySize`, if it wasn't set to `0`. (Which stand for infinite memory.) In
-    the case of `0`, returns the amount of memory, a table with
-    `maxBiggerTableRows_` rows and `biggerTableAmountColumns_` columns would
-    take up.
-    */
+  ad_utility::MemorySize maxMemoryBiggerTable() const {
+    return maxMemory().value_or(approximateMemoryNeededByIdTable(
+        maxBiggerTableRows_, biggerTableAmountColumns_));
+  }
+
+  /*
+  The maximum amount of memory, any table is allowed to take up.
+  Returns the value of the `maxMemory` configuration option interpreted as a
+  `MemorySize`, if it wasn't set to `0`. (Which stand for infinite memory.) In
+  the case of `0`, returns an empty optional.
+  */
+  std::optional<ad_utility::MemorySize> maxMemory() const {
     ad_utility::MemorySize maxMemory{
-        ad_utility::MemorySize::parse(maxMemoryConfigVariable_)};
+        ad_utility::MemorySize::parse(configVariableMaxMemory_)};
     // TODO Use normal comparison, once the branch with the `MemorySize`
     // comparison operator has been merged.
-    return maxMemory.getBytes() != 0UL
-               ? std::move(maxMemory)
-               : approximateMemoryNeededByIdTable(maxBiggerTableRows_,
-                                                  biggerTableAmountColumns_);
+    if (maxMemory.getBytes() != 0UL) {
+      return {std::move(maxMemory)};
+    } else {
+      return {std::nullopt};
+    }
   }
 };
 
@@ -801,15 +809,16 @@ auto createDefaultGrowthLambda(const size_t& base,
 /*
 @brief Create and return a lambda, that returns true, iff:
 - (Can be turned off) None of the benchmark measurements took to long.
-- (Can be turned off) None of the generated `IdTable`s are to big.
+- None of the generated `IdTable`s are to big.
 
 @tparam SmallerTableMemorySizeFunction, BiggerTableMemorySizeFunction A lambda
 function, that takes a `const size_t&` and return a `MemorySize`.
 
 @param maxTime The maximum amount of time, a single function measurements is
 allowed to take. If no value is given, it will not be tested.
-@param maxMemory How much memory space a `IdTable` is allowed to have at
-maximum. If no value is given, it will not be tested.
+@param maxMemorySmallerTable, maxMemoryBiggerTable, maxMemoryJoinResultTable How
+much memory space the `IdTable` is allowed to have at maximum. If no value is
+given, it will  not be tested.
 @param smallerTableMemorySizeFunction, biggerTableMemorySizeFunction These
 functions should calculate/approximate the amount of memory, the bigger and
 smaller `IdTable` take. The only parameter given is the row number in
@@ -824,11 +833,14 @@ template <invocableWithReturnType<ad_utility::MemorySize, const size_t&>
               BiggerTableMemorySizeFunction>
 auto createDefaultStoppingLambda(
     const std::optional<float>& maxTime,
-    const std::optional<ad_utility::MemorySize>& maxMemory,
+    const std::optional<ad_utility::MemorySize>& maxMemorySmallerTable,
+    const std::optional<ad_utility::MemorySize>& maxMemoryBiggerTable,
+    const std::optional<ad_utility::MemorySize>& maxMemoryJoinResultTable,
     const SmallerTableMemorySizeFunction& smallerTableMemorySizeFunction,
     const BiggerTableMemorySizeFunction& biggerTableMemorySizeFunction,
     const size_t& resultTableAmountColumns) {
-  return [maxTime, maxMemory, smallerTableMemorySizeFunction,
+  return [maxTime, maxMemorySmallerTable, maxMemoryBiggerTable,
+          maxMemoryJoinResultTable, smallerTableMemorySizeFunction,
           biggerTableMemorySizeFunction,
           resultTableAmountColumns](const ResultTable& table) -> bool {
     // If the tables has no rows, that's an automatic pass.
@@ -841,43 +853,58 @@ auto createDefaultStoppingLambda(
 
     // Checks, if all tables don't take up to much memory space. Takes the
     // number of the current row in the benchmark table.
-    auto checkMemorySizeOfTables =
-        [&smallerTableMemorySizeFunction, &biggerTableMemorySizeFunction,
-         &maxMemory, &resultTableAmountColumns,
-         &table](const size_t& benchmarkTableRowNumber) {
-          // TODO Use normal comparison, once the branch with the `MemorySize`
-          // comparison operator has been merged.
-          /*
-          Remember: We are currently deciding, if the current `ResultTable`
-          should get a new row and we don't want to create `IdTable`s, that are
-          to big.
-          However, unlike the function measurement times, we CAN calculate the
-          memory space taken up by a `IdTable`, without creating it.
-          So, we check, if the smaller and bigger table of the NEXT row would be
-          to big, instead of the smaller and bigger table of this row.
+    auto checkMemorySizeOfTables = [&smallerTableMemorySizeFunction,
+                                    &biggerTableMemorySizeFunction,
+                                    &resultTableAmountColumns, &table,
+                                    &maxMemorySmallerTable,
+                                    &maxMemoryBiggerTable,
+                                    &maxMemoryJoinResultTable](
+                                       const size_t& benchmarkTableRowNumber) {
+      // TODO Use normal comparison, once the branch with the `MemorySize`
+      // comparison operator has been merged.
+      /*
+      Remember: We are currently deciding, if the current `ResultTable`
+      should get a new row and we don't want to create `IdTable`s, that are
+      to big.
+      However, unlike the function measurement times, we CAN calculate the
+      memory space taken up by a `IdTable`, without creating it.
+      So, we check, if the smaller and bigger table of the NEXT row would be
+      to big, instead of the smaller and bigger table of this row.
 
-          Unfortunaly, that can't be done with the result of joining the two
-          tables. For that, we would need the amount of rows in it, which we
-          can't have, without having already created it.
-          */
-          return (smallerTableMemorySizeFunction(benchmarkTableRowNumber + 1)
-                      .getBytes() <= maxMemory.value().getBytes()) &&
-                 (biggerTableMemorySizeFunction(benchmarkTableRowNumber + 1)
-                      .getBytes() <= maxMemory.value().getBytes()) &&
-                 (approximateMemoryNeededByIdTable(
-                      std::stoull(table.getEntry<std::string>(
-                          benchmarkTableRowNumber, 5)),
-                      resultTableAmountColumns)
-                      .getBytes() <= maxMemory.value().getBytes());
-        };
+      Unfortunaly, that can't be done with the result of joining the two
+      tables. For that, we would need the amount of rows in it, which we
+      can't have, without having already created it.
+      */
+      const bool smallerTableCheckResult =
+          maxMemorySmallerTable.has_value()
+              ? smallerTableMemorySizeFunction(benchmarkTableRowNumber + 1)
+                        .getBytes() <= maxMemorySmallerTable.value().getBytes()
+              : true;
+      const bool biggerTableCheckResult =
+          maxMemoryBiggerTable.has_value()
+              ? biggerTableMemorySizeFunction(benchmarkTableRowNumber + 1)
+                        .getBytes() <= maxMemoryBiggerTable.value().getBytes()
+              : true;
+      const bool joinResultTableCheckResult =
+          maxMemoryJoinResultTable.has_value()
+              ? approximateMemoryNeededByIdTable(
+                    std::stoull(table.getEntry<std::string>(
+                        benchmarkTableRowNumber, 5)),
+                    resultTableAmountColumns)
+                        .getBytes() <=
+                    maxMemoryJoinResultTable.value().getBytes()
+              : true;
+
+      return smallerTableCheckResult && biggerTableCheckResult &&
+             joinResultTableCheckResult;
+    };
 
     // Did any measurement take to long in the newest row? Or did any table have
     // to many rows?
-    return (!maxTime.has_value() && !maxMemory.has_value()) ||
-           ((maxTime.has_value() ? checkIfFunctionMeasurementOfRowUnderMaxtime(
-                                       table, row, maxTime.value())
-                                 : true) &&
-            (maxMemory.has_value() ? checkMemorySizeOfTables(row) : true));
+    return (maxTime.has_value() ? checkIfFunctionMeasurementOfRowUnderMaxtime(
+                                      table, row, maxTime.value())
+                                : true) &&
+           checkMemorySizeOfTables(row);
   };
 }
 
@@ -910,8 +937,11 @@ class BmOnlyBiggerTableSizeChanges final
 
         // The lambda for signalling the benchmark table creation function, that
         // the table is finished.
+        const ad_utility::MemorySize maxMemorySizeBiggeTable =
+            maxMemoryBiggerTable();
         auto stoppingFunction = createDefaultStoppingLambda(
-            maxTimeSingleMeasurement(), maxMemory(),
+            maxTimeSingleMeasurement(), maxMemorySizeBiggeTable,
+            maxMemorySizeBiggeTable, maxMemory(),
             [this](const size_t&) {
               return approximateMemoryNeededByIdTable(
                   smallerTableAmountRows_, smallerTableAmountColumns_);
@@ -987,8 +1017,11 @@ class BmOnlySmallerTableSizeChanges final
 
           // The lambda for signalling the benchmark table creation function,
           // that the table is finished.
+          const ad_utility::MemorySize maxMemorySizeBiggeTable =
+              maxMemoryBiggerTable();
           auto stoppingFunction = createDefaultStoppingLambda(
-              maxTimeSingleMeasurement(), maxMemory(),
+              maxTimeSingleMeasurement(), maxMemorySizeBiggeTable,
+              maxMemorySizeBiggeTable, maxMemory(),
               [this, &growthFunction](const size_t& row) {
                 return approximateMemoryNeededByIdTable(
                     growthFunction(row), smallerTableAmountColumns_);
@@ -1058,8 +1091,11 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
         // The lambda for signalling the benchmark table creation function,
         // that the table is finished.
+        const ad_utility::MemorySize maxMemorySizeBiggeTable =
+            maxMemoryBiggerTable();
         auto stoppingFunction = createDefaultStoppingLambda(
-            maxTimeSingleMeasurement(), maxMemory(),
+            maxTimeSingleMeasurement(), maxMemorySizeBiggeTable,
+            maxMemorySizeBiggeTable, maxMemory(),
             [this, &growthFunction](const size_t& row) {
               return approximateMemoryNeededByIdTable(
                   growthFunction(row), smallerTableAmountColumns_);
