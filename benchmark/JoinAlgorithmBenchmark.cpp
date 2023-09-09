@@ -849,60 +849,49 @@ auto createDefaultStoppingLambda(
     // The row, that we are looking at.
     const size_t row = table.numRows() - 1;
 
-    // Checks, if all tables don't take up to much memory space. Takes the
-    // number of the current row in the benchmark table.
-    auto checkMemorySizeOfTables = [&smallerTableMemorySizeFunction,
-                                    &biggerTableMemorySizeFunction,
-                                    &resultTableAmountColumns, &table,
-                                    &maxMemorySmallerTable,
-                                    &maxMemoryBiggerTable,
-                                    &maxMemoryJoinResultTable](
-                                       const size_t& benchmarkTableRowNumber) {
-      // TODO Use normal comparison, once the branch with the `MemorySize`
-      // comparison operator has been merged.
-      /*
-      Remember: We are currently deciding, if the current `ResultTable`
-      should get a new row and we don't want to create `IdTable`s, that are
-      to big.
-      However, unlike the function measurement times, we CAN calculate the
-      memory space taken up by a `IdTable`, without creating it.
-      So, we check, if the smaller and bigger table of the NEXT row would be
-      to big, instead of the smaller and bigger table of this row.
+    // Checks, if the table, described by the `memorySizeFunction`, doesn't take
+    // up to much memory space.
+    auto checkMemorySizeOfTable =
+        [](const size_t& benchmarkTableRowNumber,
+           invocableWithReturnType<ad_utility::MemorySize, const size_t&> auto
+               memorySizeFunction,
+           const std::optional<ad_utility::MemorySize> maxMemory) {
+          // TODO Use normal comparison, once the branch with the `MemorySize`
+          // comparison operator has been merged.
+          return maxMemory.has_value()
+                     ? memorySizeFunction(benchmarkTableRowNumber).getBytes() <=
+                           maxMemory.value().getBytes()
+                     : true;
+        };
 
-      Unfortunaly, that can't be done with the result of joining the two
-      tables. For that, we would need the amount of rows in it, which we
-      can't have, without having already created it.
-      */
-      const bool smallerTableCheckResult =
-          maxMemorySmallerTable.has_value()
-              ? smallerTableMemorySizeFunction(benchmarkTableRowNumber + 1)
-                        .getBytes() <= maxMemorySmallerTable.value().getBytes()
-              : true;
-      const bool biggerTableCheckResult =
-          maxMemoryBiggerTable.has_value()
-              ? biggerTableMemorySizeFunction(benchmarkTableRowNumber + 1)
-                        .getBytes() <= maxMemoryBiggerTable.value().getBytes()
-              : true;
-      const bool joinResultTableCheckResult =
-          maxMemoryJoinResultTable.has_value()
-              ? approximateMemoryNeededByIdTable(
-                    std::stoull(table.getEntry<std::string>(
-                        benchmarkTableRowNumber, 5)),
-                    resultTableAmountColumns)
-                        .getBytes() <=
-                    maxMemoryJoinResultTable.value().getBytes()
-              : true;
+    /*
+    Remember: We are currently deciding, if the current `ResultTable`
+    should get a new row and we don't want to create `IdTable`s, that are
+    to big.
+    However, unlike the function measurement times, we CAN calculate the
+    memory space taken up by a `IdTable`, without creating it.
+    So, we check, if the smaller and bigger table of the NEXT row would be
+    to big, instead of the smaller and bigger table of this row.
 
-      return smallerTableCheckResult && biggerTableCheckResult &&
-             joinResultTableCheckResult;
-    };
-
-    // Did any measurement take to long in the newest row? Or did any table have
-    // to many rows?
+    Unfortunaly, that can't be done with the result of joining the two
+    tables. For that, we would need the amount of rows in it, which we
+    can't have, without having already created it.
+    */
     return (maxTime.has_value() ? checkIfFunctionMeasurementOfRowUnderMaxtime(
                                       table, row, maxTime.value())
                                 : true) &&
-           checkMemorySizeOfTables(row);
+           checkMemorySizeOfTable(row + 1, smallerTableMemorySizeFunction,
+                                  maxMemorySmallerTable) &&
+           checkMemorySizeOfTable(row + 1, biggerTableMemorySizeFunction,
+                                  maxMemoryBiggerTable) &&
+           checkMemorySizeOfTable(
+               row,
+               [&resultTableAmountColumns, &table](const size_t& rowNumber) {
+                 return approximateMemoryNeededByIdTable(
+                     std::stoull(table.getEntry<std::string>(rowNumber, 5)),
+                     resultTableAmountColumns);
+               },
+               maxMemoryJoinResultTable);
   };
 }
 
