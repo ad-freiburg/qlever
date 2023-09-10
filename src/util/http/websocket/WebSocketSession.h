@@ -16,7 +16,7 @@ namespace net = boost::asio;
 namespace beast = boost::beast;
 namespace http = beast::http;
 using boost::asio::ip::tcp;
-using websocket::common::QueryId;
+using websocket::QueryId;
 using websocket = beast::websocket::stream<tcp::socket>;
 
 /// Class to manage the lifecycle of a single websocket. Single-use only.

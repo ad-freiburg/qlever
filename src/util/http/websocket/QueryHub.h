@@ -12,7 +12,6 @@
 #include "util/http/websocket/QueryToSocketDistributor.h"
 
 namespace ad_utility::websocket {
-using common::QueryId;
 using StrandType = net::strand<net::any_io_executor>;
 
 /// Class that provides the functionality to create and/or acquire a

@@ -13,9 +13,7 @@
 #include "util/Synchronized.h"
 #include "util/UniqueCleanup.h"
 
-// Provides types required by most of the other files in this directory
-// and a select few other places
-namespace ad_utility::websocket::common {
+namespace ad_utility::websocket {
 
 /// Typed wrapper class for a query id represented as a string
 class QueryId {
@@ -113,4 +111,4 @@ class QueryRegistry {
     return std::move(result.value());
   }
 };
-}  // namespace ad_utility::websocket::common
+}  // namespace ad_utility::websocket

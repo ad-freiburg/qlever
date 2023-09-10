@@ -59,7 +59,7 @@ class Server {
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
-  ad_utility::websocket::common::QueryRegistry queryRegistry_{};
+  ad_utility::websocket::QueryRegistry queryRegistry_{};
 
   bool enablePatternTrick_;
 
@@ -130,6 +130,6 @@ class Server {
   ///
   /// \return An OwningQueryId object. It removes itself from the registry
   ///         on destruction.
-  ad_utility::websocket::common::OwningQueryId getQueryId(
+  ad_utility::websocket::OwningQueryId getQueryId(
       const ad_utility::httpUtils::HttpRequest auto& request);
 };

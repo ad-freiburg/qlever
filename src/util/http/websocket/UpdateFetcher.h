@@ -11,7 +11,6 @@
 #include "util/http/websocket/QueryId.h"
 
 namespace ad_utility::websocket {
-using common::QueryId;
 /// Class that provides an interface for boost::asio, so a websocket connection
 /// can "asynchronously wait" for an update of a specified query to occur.
 /// There is one instance of this class for every connected websocket.

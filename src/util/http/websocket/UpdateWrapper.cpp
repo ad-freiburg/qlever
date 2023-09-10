@@ -6,7 +6,7 @@
 
 namespace ad_utility::websocket {
 
-net::awaitable<UpdateWrapper> UpdateWrapper::create(common::QueryId queryId,
+net::awaitable<UpdateWrapper> UpdateWrapper::create(QueryId queryId,
                                                     QueryHub& queryHub) {
   co_return UpdateWrapper{
       co_await queryHub.createOrAcquireDistributor(std::move(queryId), true),

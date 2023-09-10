@@ -42,7 +42,7 @@ class UpdateWrapper {
   /// Asynchronously creates an instance of this class. This is because because
   /// creating a distributor for this class needs to be done in a synchronized
   /// way.
-  static net::awaitable<UpdateWrapper> create(common::QueryId queryId,
+  static net::awaitable<UpdateWrapper> create(QueryId queryId,
                                               QueryHub& queryHub);
 
   /// Broadcast the string to all listeners of this query asynchronously.
