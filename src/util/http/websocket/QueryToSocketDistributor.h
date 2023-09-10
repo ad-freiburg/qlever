@@ -81,11 +81,9 @@ class QueryToSocketDistributor {
   net::awaitable<std::shared_ptr<const std::string>> waitForNextDataPiece(
       size_t index);
 
-  /// Signal that a query will now start sending messages
-  net::awaitable<void> signalStart();
-
-  /// Check if the designated query has started to send messages
-  net::awaitable<bool> hasStarted();
+  /// Signal that a query will now start sending messages, the bool inside
+  /// the awaitable being returned indicates if the query was already started.
+  net::awaitable<bool> signalStartIfNotStarted();
 };
 }  // namespace ad_utility::websocket
 

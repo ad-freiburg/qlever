@@ -27,8 +27,7 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId,
       if (!replaceExisting) {
         co_return ptr;
       }
-      if (!co_await sameExecutor(ptr->hasStarted())) {
-        co_await sameExecutor(ptr->signalStart());
+      if (!co_await sameExecutor(ptr->signalStartIfNotStarted())) {
         co_return ptr;
       }
     }
@@ -63,7 +62,7 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId,
   *pointerHolder = distributor;
   socketDistributors_.emplace(queryId, distributor);
   if (replaceExisting) {
-    co_await sameExecutor(distributor->signalStart());
+    co_await sameExecutor(distributor->signalStartIfNotStarted());
   }
   co_return distributor;
 }

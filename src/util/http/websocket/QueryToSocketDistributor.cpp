@@ -107,16 +107,12 @@ QueryToSocketDistributor::waitForNextDataPiece(size_t index) {
 
 // _____________________________________________________________________________
 
-net::awaitable<void> QueryToSocketDistributor::signalStart() {
+net::awaitable<bool> QueryToSocketDistributor::signalStartIfNotStarted() {
   co_await net::dispatch(strand_, net::use_awaitable);
-  AD_CORRECTNESS_CHECK(!started_);
-  started_ = true;
-}
-
-// _____________________________________________________________________________
-
-net::awaitable<bool> QueryToSocketDistributor::hasStarted() {
-  co_await net::dispatch(strand_, net::use_awaitable);
-  co_return started_;
+  if (!started_) {
+    started_ = true;
+    co_return false;
+  }
+  co_return true;
 }
 }  // namespace ad_utility::websocket
