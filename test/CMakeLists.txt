@@ -355,3 +355,5 @@ addLinkAndDiscoverTest(JoinAlgorithmsTest)
 addLinkAndDiscoverTest(AsioHelpersTest)
 
 addLinkAndDiscoverTest(UniqueCleanupTest)
+
+addLinkAndDiscoverTest(WebSocketSessionTest http)
