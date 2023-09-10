@@ -357,3 +357,5 @@ addLinkAndDiscoverTest(AsioHelpersTest)
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
 addLinkAndDiscoverTest(WebSocketSessionTest http)
+
+addLinkAndDiscoverTest(QueryIdTest)

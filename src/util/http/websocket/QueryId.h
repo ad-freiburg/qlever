@@ -18,7 +18,9 @@ namespace ad_utility::websocket {
 /// Typed wrapper class for a query id represented as a string
 class QueryId {
   std::string id_;
-  explicit QueryId(std::string id) : id_{std::move(id)} {}
+  explicit QueryId(std::string id) : id_{std::move(id)} {
+    AD_CONTRACT_CHECK(!id_.empty());
+  }
 
  public:
   /// Construct this object with the passed string
