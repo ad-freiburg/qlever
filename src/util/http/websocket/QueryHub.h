@@ -8,7 +8,7 @@
 #include <absl/container/flat_hash_map.h>
 
 #include "util/http/beast.h"
-#include "util/http/websocket/Common.h"
+#include "util/http/websocket/QueryId.h"
 #include "util/http/websocket/QueryToSocketDistributor.h"
 
 namespace ad_utility::websocket {

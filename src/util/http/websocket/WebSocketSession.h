@@ -7,8 +7,8 @@
 #include <boost/beast/websocket.hpp>
 
 #include "util/http/beast.h"
-#include "util/http/websocket/Common.h"
 #include "util/http/websocket/QueryHub.h"
+#include "util/http/websocket/QueryId.h"
 #include "util/http/websocket/UpdateFetcher.h"
 
 namespace ad_utility::websocket {

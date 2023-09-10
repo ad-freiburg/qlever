@@ -8,8 +8,8 @@
 #include <boost/asio/co_spawn.hpp>
 
 #include "util/UniqueCleanup.h"
-#include "util/http/websocket/Common.h"
 #include "util/http/websocket/QueryHub.h"
+#include "util/http/websocket/QueryId.h"
 #include "util/http/websocket/QueryToSocketDistributor.h"
 
 namespace ad_utility::websocket {

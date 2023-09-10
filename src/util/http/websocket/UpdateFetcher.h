@@ -7,8 +7,8 @@
 
 #include <boost/asio/awaitable.hpp>
 
-#include "util/http/websocket/Common.h"
 #include "util/http/websocket/QueryHub.h"
+#include "util/http/websocket/QueryId.h"
 
 namespace ad_utility::websocket {
 using common::QueryId;
