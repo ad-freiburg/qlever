@@ -20,11 +20,11 @@ bool equals(const std::weak_ptr<T>& t, const std::weak_ptr<U>& u) noexcept {
 
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorInternal(QueryId queryId,
-                                             bool replaceExisting) {
+                                             bool isProvider) {
   co_await net::dispatch(globalStrand_, net::use_awaitable);
   if (socketDistributors_.contains(queryId)) {
     if (auto ptr = socketDistributors_.at(queryId).lock()) {
-      if (!replaceExisting) {
+      if (!isProvider) {
         co_return ptr;
       }
       if (!co_await sameExecutor(ptr->signalStartIfNotStarted())) {
@@ -61,7 +61,7 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId,
       });
   *pointerHolder = distributor;
   socketDistributors_.emplace(queryId, distributor);
-  if (replaceExisting) {
+  if (isProvider) {
     co_await sameExecutor(distributor->signalStartIfNotStarted());
   }
   co_return distributor;
@@ -70,8 +70,8 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId,
 // _____________________________________________________________________________
 
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
-QueryHub::createOrAcquireDistributor(QueryId queryId, bool replaceExisting) {
+QueryHub::createOrAcquireDistributor(QueryId queryId, bool isProvider) {
   return sameExecutor(
-      createOrAcquireDistributorInternal(std::move(queryId), replaceExisting));
+      createOrAcquireDistributorInternal(std::move(queryId), isProvider));
 }
 }  // namespace ad_utility::websocket

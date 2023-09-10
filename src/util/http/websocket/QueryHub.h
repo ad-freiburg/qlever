@@ -36,7 +36,9 @@ class QueryHub {
       : ioContext_{ioContext}, globalStrand_{net::make_strand(ioContext)} {}
 
   /// Creates a new `QueryToSocketDistributor` or returns the pre-existing
-  /// for the provided query id if there already is one.
+  /// for the provided query id if there already is one. The bool parameter
+  /// should be set to true if the caller of this methods intends to use
+  /// the distributor object to send data, rather than just receiving it.
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
   createOrAcquireDistributor(QueryId, bool = false);
 };

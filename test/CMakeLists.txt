@@ -359,3 +359,5 @@ addLinkAndDiscoverTest(UniqueCleanupTest)
 addLinkAndDiscoverTest(WebSocketSessionTest http)
 
 addLinkAndDiscoverTest(QueryIdTest)
+
+addLinkAndDiscoverTest(QueryHubTest http)
