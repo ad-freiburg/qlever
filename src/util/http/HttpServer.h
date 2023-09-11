@@ -214,11 +214,15 @@ class HttpServer {
       try {
         // Set the timeout for reading the next request.
         stream.expires_after(std::chrono::seconds(30));
-        http::request<http::string_body> req;
 
-        // Read a request
-        co_await http::async_read(stream, buffer, req,
+        // Read the next request using a parser (so that we can increase
+        // the limit of the size of the request).
+        http::request<http::string_body> req;
+        http::request_parser<http::string_body> parser;
+        parser.body_limit(1024 * 1024 * 1024);
+        co_await http::async_read(stream, buffer, parser,
                                   boost::asio::use_awaitable);
+        req = std::move(parser.get());
 
         // Currently there is no timeout on the server side, this is handled
         // by QLever's timeout mechanism.
