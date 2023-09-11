@@ -6,6 +6,7 @@
 #define QLEVER_QUERYTOSOCKETDISTRIBUTOR_H
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/deadline_timer.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/strand.hpp>
 #include <functional>
@@ -24,18 +25,9 @@ namespace net = boost::asio;
 /// will end up on a different executor when awaiting it, so make sure
 /// to use a wrapper like `sameExecutor()` to stay on your executor!
 class QueryToSocketDistributor {
-  // Counter to generate unique ids
-  uint64_t counter_ = 0;
-  // Helper struct to bundle a function with a unique id
-  struct IdentifiableFunction {
-    std::function<void()> function_;
-    uint64_t id_;
-  };
   /// Strand to synchronize all operations on this class
   net::strand<net::any_io_executor> strand_;
-  /// Vector to store all callbacks of websockets waiting for an update.
-  std::shared_ptr<std::vector<IdentifiableFunction>> wakeupCalls_ =
-      std::make_unique<std::vector<IdentifiableFunction>>();
+  net::deadline_timer infiniteTimer_;
   /// Vector that stores the actual data, so all websockets can read it at
   /// their own pace.
   std::vector<std::shared_ptr<const std::string>> data_{};
@@ -55,17 +47,20 @@ class QueryToSocketDistributor {
 
   /// Function that can be used to "block" in boost asio until there's a new
   /// update to the data.
-  template <typename CompletionToken>
-  auto waitForUpdate(CompletionToken&& token);
+  net::awaitable<void> waitForUpdate();
 
  public:
   /// Constructor that builds a new strand from the provided io context.
   explicit QueryToSocketDistributor(net::io_context& ioContext,
                                     std::function<void()> cleanupCall)
       : strand_{net::make_strand(ioContext)},
+        infiniteTimer_{strand_},
         cleanupCall_{std::move(cleanupCall), [](const auto& cleanupCall) {
                        std::invoke(cleanupCall);
-                     }} {}
+                     }} {
+    // Specifying time directly in constructor is ambiguous
+    runAndEraseWakeUpCallsSynchronously();
+  }
 
   /// Appends specified data to the vector and signals all waiting websockets
   /// that new data is available

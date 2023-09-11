@@ -4,53 +4,33 @@
 
 #include "util/http/websocket/QueryToSocketDistributor.h"
 
-#include <boost/asio/associated_cancellation_slot.hpp>
+#include <boost/asio/as_tuple.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include "util/Log.h"
 
 namespace ad_utility::websocket {
 
-template <typename CompletionToken>
-auto QueryToSocketDistributor::waitForUpdate(CompletionToken&& token) {
-  auto id = counter_;
-  counter_++;
-  auto initiate = [strand = strand_, wakeupCalls = wakeupCalls_,
-                   id]<typename Handler>(Handler&& self) mutable {
-    auto sharedSelf = std::make_shared<Handler>(std::forward<Handler>(self));
-    auto cancellationSlot = net::get_associated_cancellation_slot(
-        *sharedSelf, net::cancellation_slot());
-
-    net::dispatch(strand, [wakeupCalls, sharedSelf, id]() mutable {
-      wakeupCalls->emplace_back(IdentifiableFunction{
-          .function_ = [sharedSelf =
-                            std::move(sharedSelf)]() { (*sharedSelf)(); },
-          .id_ = id});
-    });
-
-    if (cancellationSlot.is_connected()) {
-      cancellationSlot.assign([strand = std::move(strand),
-                               wakeupCalls = std::move(wakeupCalls),
-                               id](net::cancellation_type) mutable {
-        // Make sure wakeupCalls_ is accessed safely.
-        net::dispatch(strand, [wakeupCalls = std::move(wakeupCalls), id]() {
-          std::erase_if(*wakeupCalls,
-                        [id](auto idFunc) { return idFunc.id_ == id; });
-        });
-      });
+net::awaitable<void> QueryToSocketDistributor::waitForUpdate() {
+  try {
+    co_await infiniteTimer_.async_wait(net::use_awaitable);
+    AD_THROW("Infinite timer expired. This should not happen");
+  } catch (boost::system::system_error& error) {
+    if (error.code() != boost::asio::error::operation_aborted) {
+      throw;
     }
-  };
-  return net::async_initiate<CompletionToken, void()>(
-      initiate, std::forward<CompletionToken>(token));
+  }
+  // Clear cancellation flag if set, and wake up to allow the caller
+  // to return no-data and gracefully end this
+  co_await net::this_coro::reset_cancellation_state();
+  co_await net::dispatch(strand_, net::use_awaitable);
 }
 
 // _____________________________________________________________________________
 
 void QueryToSocketDistributor::runAndEraseWakeUpCallsSynchronously() {
-  for (auto& wakeupCall : *wakeupCalls_) {
-    std::invoke(wakeupCall.function_);
-  }
-  wakeupCalls_->clear();
+  // Setting the time anew automatically cancels waiting operations
+  infiniteTimer_.expires_at(boost::posix_time::pos_infin);
 }
 
 // _____________________________________________________________________________
@@ -85,6 +65,8 @@ net::awaitable<void> QueryToSocketDistributor::signalEnd() {
 
 net::awaitable<std::shared_ptr<const std::string>>
 QueryToSocketDistributor::waitForNextDataPiece(size_t index) {
+  co_await net::this_coro::reset_cancellation_state(
+      [](auto) { return net::cancellation_type::terminal; });
   co_await net::dispatch(strand_, net::use_awaitable);
 
   if (index < data_.size()) {
@@ -93,14 +75,11 @@ QueryToSocketDistributor::waitForNextDataPiece(size_t index) {
     co_return nullptr;
   }
 
-  co_await waitForUpdate(net::use_awaitable);
+  co_await waitForUpdate();
 
   if (index < data_.size()) {
     co_return data_.at(index);
   } else {
-    if (!finished_) {
-      LOG(WARN) << "No new data after waking up" << std::endl;
-    }
     co_return nullptr;
   }
 }
