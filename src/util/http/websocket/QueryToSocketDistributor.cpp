@@ -16,7 +16,7 @@ net::awaitable<void> QueryToSocketDistributor::waitForUpdate() {
     co_await infiniteTimer_.async_wait(net::use_awaitable);
     AD_THROW("Infinite timer expired. This should not happen");
   } catch (boost::system::system_error& error) {
-    if (error.code() != boost::asio::error::operation_aborted) {
+    if (error.code() != net::error::operation_aborted) {
       throw;
     }
   }
@@ -28,7 +28,7 @@ net::awaitable<void> QueryToSocketDistributor::waitForUpdate() {
 
 // _____________________________________________________________________________
 
-void QueryToSocketDistributor::runAndEraseWakeUpCallsSynchronously() {
+void QueryToSocketDistributor::wakeUpWaitingListeners() {
   // Setting the time anew automatically cancels waiting operations
   infiniteTimer_.expires_at(boost::posix_time::pos_infin);
 }
@@ -47,7 +47,7 @@ net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
     co_return;
   }
   data_.push_back(std::move(sharedPayload));
-  runAndEraseWakeUpCallsSynchronously();
+  wakeUpWaitingListeners();
 }
 
 // _____________________________________________________________________________
@@ -56,7 +56,7 @@ net::awaitable<void> QueryToSocketDistributor::signalEnd() {
   co_await net::dispatch(strand_, net::use_awaitable);
   AD_CORRECTNESS_CHECK(!finished_);
   finished_ = true;
-  runAndEraseWakeUpCallsSynchronously();
+  wakeUpWaitingListeners();
   // Invoke cleanup pre-emptively
   auto cleanupCall = std::move(cleanupCall_);
 }

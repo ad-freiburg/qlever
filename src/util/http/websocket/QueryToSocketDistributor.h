@@ -43,7 +43,7 @@ class QueryToSocketDistributor {
   /// Wakes up all websockets that are currently "blocked" and waiting for an
   /// update of the given query. After being woken up they will check for
   /// updates and resume execution.
-  void runAndEraseWakeUpCallsSynchronously();
+  void wakeUpWaitingListeners();
 
   /// Function that can be used to "block" in boost asio until there's a new
   /// update to the data.
@@ -54,13 +54,11 @@ class QueryToSocketDistributor {
   explicit QueryToSocketDistributor(net::io_context& ioContext,
                                     std::function<void()> cleanupCall)
       : strand_{net::make_strand(ioContext)},
-        infiniteTimer_{strand_},
+        infiniteTimer_{strand_, static_cast<net::deadline_timer::time_type>(
+                                    boost::posix_time::pos_infin)},
         cleanupCall_{std::move(cleanupCall), [](const auto& cleanupCall) {
                        std::invoke(cleanupCall);
-                     }} {
-    // Specifying time directly in constructor is ambiguous
-    runAndEraseWakeUpCallsSynchronously();
-  }
+                     }} {}
 
   /// Appends specified data to the vector and signals all waiting websockets
   /// that new data is available
