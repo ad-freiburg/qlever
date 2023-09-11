@@ -28,6 +28,7 @@
 #include <engine/Values.h>
 #include <parser/Alias.h>
 #include <parser/SparqlParserHelpers.h>
+#include <engine/WordIndexScan.h>
 
 #include <algorithm>
 #include <ctime>
@@ -1158,7 +1159,7 @@ Variable QueryPlanner::generateUniqueVarName() {
 }
 
 // _____________________________________________________________________________
-QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
+QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan( // QUESTION: should the wordIndexScan go here?
     const QueryPlanner::TripleGraph::Node& node) const {
   SubtreePlan plan(_qec);
   plan._idsOfIncludedNodes |= (size_t(1) << node._id);
