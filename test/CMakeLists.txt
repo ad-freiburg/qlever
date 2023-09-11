@@ -361,3 +361,5 @@ addLinkAndDiscoverTest(WebSocketSessionTest http)
 addLinkAndDiscoverTest(QueryIdTest)
 
 addLinkAndDiscoverTest(QueryHubTest http)
+
+addLinkAndDiscoverTest(QueryToSocketDistributorTest http)

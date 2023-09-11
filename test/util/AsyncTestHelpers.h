@@ -9,23 +9,18 @@
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/use_future.hpp>
 
 namespace net = boost::asio;
 
 template <typename Func>
 void runCoroutine(Func innerRun) {
   net::io_context ioContext{};
-  bool sanityFlag = false;
-  auto lambdaWrapper = [&]() -> net::awaitable<void> {
-    co_await innerRun(ioContext);
-    sanityFlag = true;
-  };
 
-  net::co_spawn(ioContext, lambdaWrapper(), net::detached);
+  auto future = net::co_spawn(ioContext, innerRun(ioContext), net::use_future);
   ioContext.run();
-  EXPECT_TRUE(sanityFlag);
+  future.get();
 }
 
 #define COROUTINE_NAME(test_suite_name, test_name) \

@@ -39,13 +39,7 @@ net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
     std::string payload) {
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
   co_await net::dispatch(strand_, net::use_awaitable);
-  if (finished_) {
-    // This warning indicates that something is wrong with your code
-    LOG(WARN) << "Added query status after being finished. Doing nothing"
-                 "in order to prevent surprising behaviour!"
-              << std::endl;
-    co_return;
-  }
+  AD_CONTRACT_CHECK(!finished_);
   data_.push_back(std::move(sharedPayload));
   wakeUpWaitingListeners();
 }
@@ -54,7 +48,8 @@ net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
 
 net::awaitable<void> QueryToSocketDistributor::signalEnd() {
   co_await net::dispatch(strand_, net::use_awaitable);
-  AD_CORRECTNESS_CHECK(!finished_);
+  AD_CONTRACT_CHECK(started_);
+  AD_CONTRACT_CHECK(!finished_);
   finished_ = true;
   wakeUpWaitingListeners();
   // Invoke cleanup pre-emptively
@@ -65,8 +60,6 @@ net::awaitable<void> QueryToSocketDistributor::signalEnd() {
 
 net::awaitable<std::shared_ptr<const std::string>>
 QueryToSocketDistributor::waitForNextDataPiece(size_t index) {
-  co_await net::this_coro::reset_cancellation_state(
-      [](auto) { return net::cancellation_type::terminal; });
   co_await net::dispatch(strand_, net::use_awaitable);
 
   if (index < data_.size()) {
