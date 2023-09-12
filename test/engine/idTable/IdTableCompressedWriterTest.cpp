@@ -74,7 +74,7 @@ TEST(IdTableCompressedSorter, firstTest) {
   };
   // TODO<joka921> also test the static case.
   ExternalIdTableSorter<decltype(firstCol), 0> writer{
-      filename, 3, 20'000'000, ad_utility::testing::makeAllocator()};
+      filename, 3, 16, ad_utility::testing::makeAllocator()};
   std::vector<CopyableIdTable<0>> tables;
   tables.push_back(makeIdTableFromVector({{2, 4, 7}, {3, 6, 8}, {4, 3, 2}}));
   tables.push_back(makeIdTableFromVector({{2, 3, 7}, {3, 6, 8}, {4, 2, 123}}));
@@ -94,4 +94,4 @@ TEST(IdTableCompressedSorter, firstTest) {
   ASSERT_THAT(result, Eq(tables.at(0)));
 }
 
-*/
+ */

@@ -10,7 +10,6 @@
 
 namespace ad_benchmark {
 
-
 using A = std::array<Id, 3>;
 class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
   std::string name() const final {
@@ -42,7 +41,7 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
         filename, 3, memForStxxl, ad_utility::testing::makeAllocator()};
 
     auto runPush = [&]() {
-      for ([[maybe_unused]]auto i : std::views::iota(0u, numInputRows)) {
+      for ([[maybe_unused]] auto i : std::views::iota(0u, numInputRows)) {
         writer.push(generateRandomRow());
       }
     };

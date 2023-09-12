@@ -24,8 +24,6 @@
 // of the single tables.
 class IdTableCompressedWriter {
   // Metadata for a compressed block of bytes.
-  // Note that there are two types of blocks: the (small) compressed blocks and
-  // the large blocks that are used in the external interface.
   struct CompressedBlockMetadata {
     // The sizes are in Bytes.
     size_t compressedSize_;
@@ -264,6 +262,9 @@ class ExternalIdTableSorter {
       // TODO<joka921> The move operations of the `IdTable` currently have wrong
       // semantics as they don't restore the empty column vectors.
       currentBlock_ = IdTableStatic<NumStaticCols>(writer_.allocator());
+      if constexpr (NumStaticCols == 0) {
+        currentBlock_.setNumColumns(row.size());
+      }
       currentBlock_.reserve(blocksize_);
     }
   }
@@ -302,8 +303,10 @@ class ExternalIdTableSorter {
       return *el.first;
     };
     // TODO<joka921> Debug why we can't use `std::ranges::min_element` here.
+    // NOTE: We have to switch the arguments, because the heap operations by
+    // default order descending...
     auto comp = [&, this](const auto& a, const auto& b) {
-      return comp_(projection(a), projection(b));
+      return comp_(projection(b), projection(a));
     };
     std::vector<P> pq;
 
