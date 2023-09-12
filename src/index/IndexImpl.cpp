@@ -556,7 +556,9 @@ CompressedRelationMetadata IndexImpl::writeSwitchedRel(
   for (BufferedIdTable::row_reference row : buffer) {
     std::swap(row[0], row[1]);
   }
-  std::ranges::sort(buffer, [](const auto& a, const auto& b) {
+  //std::ranges::sort(buffer, [](const auto& a, const auto& b) {
+    std::ranges::sort(buffer.begin(), buffer.end(), [](const auto& a, const auto& b) {
+
     return std::ranges::lexicographical_compare(a, b);
   });
   Id lastLhs = std::numeric_limits<Id>::max();

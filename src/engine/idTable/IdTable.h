@@ -130,8 +130,8 @@ class IdTable {
   // details, see the comment above and the definition of the `Row` and
   // `RowReference` class.
   using row_type = Row<T, NumColumns>;
-  using row_reference = RowReference<IdTable, ad_utility::IsConst::False>;
-  using const_row_reference = RowReference<IdTable, ad_utility::IsConst::True>;
+  using row_reference = std::conditional_t<isDynamic,RowReference<IdTable, ad_utility::IsConst::False>, StaticRowReference<NumColumns, T, ad_utility::IsConst::False>>;
+  using const_row_reference = std::conditional_t<isDynamic,RowReference<IdTable, ad_utility::IsConst::True>, StaticRowReference<NumColumns, T, ad_utility::IsConst::True>>;
 
  private:
   // Assign shorter aliases for some types that are important for the correct
@@ -140,7 +140,9 @@ class IdTable {
   // Note: Using the (safer) `restricted` row references is not supported by
   // `libc++` as it enforces that the `reference_type` of an iterator and the
   // type returned by `operator*` are exactly the same.
-#ifdef __GLIBCXX__
+//#ifdef __GLIBCXX__
+  // TODO<joka921> Fix this.
+#if false
   using row_reference_restricted =
       RowReferenceImpl::RowReferenceWithRestrictedAccess<
           IdTable, ad_utility::IsConst::False>;
@@ -607,21 +609,38 @@ class IdTable {
   // TODO<joka921> We should probably change the names of all those
   // typedefs (`iterator` as well as `row_type` etc.) to `PascalCase` for
   // consistency.
-  using const_iterator = ad_utility::IteratorForAccessOperator<
+  using const_iterator = std::conditional_t<isDynamic,ad_utility::IteratorForAccessOperator<
       IdTable, IteratorHelper<const_row_reference_restricted>,
-      ad_utility::IsConst::True, row_type, const_row_reference>;
+      ad_utility::IsConst::True, row_type, const_row_reference>, StaticIdTableIterator<T, NumColumns, ad_utility::IsConst::True>>;
   using iterator = std::conditional_t<
-      isView, const_iterator,
+      isView, const_iterator, std::conditional_t<isDynamic,
       ad_utility::IteratorForAccessOperator<
           IdTable, IteratorHelper<row_reference_restricted>,
-          ad_utility::IsConst::False, row_type, row_reference>>;
+          ad_utility::IsConst::False, row_type, row_reference>, StaticIdTableIterator<T, NumColumns, ad_utility::IsConst::False>>>;
 
   // The usual overloads of `begin()` and `end()` for const and mutable
   // `IdTable`s.
-  iterator begin() requires(!isView) { return {this, 0}; }
-  iterator end() requires(!isView) { return {this, size()}; }
-  const_iterator begin() const { return {this, 0}; }
-  const_iterator end() const { return {this, size()}; }
+ private:
+  template <typename Self>
+  static auto makeIterator(Self&& self, size_t index) {
+    static constexpr bool isConst = std::is_const_v<std::remove_reference_t<Self>> || isView;
+    using It = std::conditional_t<isConst, const_iterator, iterator>;
+    if constexpr (isDynamic) {
+      return It{&self, index};
+    } else {
+      using Ptr = std::conditional_t<isConst, const T*, T*>;
+      std::array<Ptr, NumColumns> cols;
+      for (size_t i = 0; i < NumColumns; ++i) {
+        cols[i] = self.data()[i].data() + index;
+      }
+      return It{cols};
+    }
+  }
+ public:
+  iterator begin() requires(!isView) { return makeIterator(*this, 0); }
+  iterator end() requires(!isView) { return makeIterator(*this, size()); }
+  const_iterator begin() const { return makeIterator(*this, 0); }
+  const_iterator end() const { return makeIterator(*this, size()); }
 
   // `cbegin()` and `cend()` allow to explicitly obtain a const iterator from
   // a mutable object.

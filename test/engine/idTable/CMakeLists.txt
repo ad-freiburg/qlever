@@ -1,1 +1,1 @@
-addLinkAndDiscoverTest(IdTableCompressedWriterTest)
+addLinkAndDiscoverTest(IdTableCompressedWriterTest engine index)

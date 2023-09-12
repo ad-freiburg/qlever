@@ -9,10 +9,12 @@
 #include <type_traits>
 #include <variant>
 #include <vector>
+#include <ranges>
 
 #include "util/Enums.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/StringUtils.h"
 #include "util/Iterators.h"
 #include "util/TypeTraits.h"
 #include "util/UninitializedAllocator.h"
@@ -395,5 +397,226 @@ class RowReference
   // If necessary, we can still enable it in the future.
   RowReference(const RowReference&) = delete;
 };
+
+
+template <size_t NumCols, typename T, ad_utility::IsConst isConstTag>
+struct StaticRowReference {
+  static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
+  using Ptr = std::conditional_t<isConst, const T*, T*>;
+  using Ref = std::conditional_t<isConst, const T&, T&>;
+  using ConstRef = const T&;
+  using Arr = std::array<Ptr, NumCols>;
+  Arr ptrs_;
+
+  constexpr static size_t numColumns() {
+    return NumCols;
+  }
+
+  // Access to the `i`-th column of this row.
+  T& operator[](size_t i) requires(!isConst) {
+    return *ptrs_[i];
+  }
+  const T& operator[](size_t i) const {
+    return *ptrs_[i];
+  }
+
+  auto transformToRef() {
+    return std::views::transform(ptrs_, [](auto& ptr) -> Ref {return *ptr;});
+  }
+  auto transformToRef() const {
+    return std::views::transform(ptrs_, [](auto& ptr) -> ConstRef {return *ptr;});
+  }
+  friend void PrintTo(const StaticRowReference& ref, std::ostream* os) {
+      *os << ad_utility::lazyStrJoin(ref.transformToRef(), ", ");
+  }
+
+  // The iterators are implemented in the base class and can simply be
+  // forwarded.
+  auto begin() { return transformToRef().begin();};
+  auto end() { return transformToRef().end();};
+  auto begin() const { return transformToRef().begin();};
+  auto end() const { return transformToRef().end();};
+  // TODO : cbegin and cend.
+
+  // __________________________________________________________________________
+  template <ad_utility::SimilarTo<StaticRowReference> R>
+  friend void swap(R&& a, R&& b) requires(!isConst) {
+    for (size_t i = 0; i < NumCols; ++i) {
+      std::swap(*a.ptrs_[i], *b.ptrs_[i]);
+    }
+  }
+
+  bool operator==(const StaticRowReference& other) const {
+    for (size_t i = 0; i < NumCols; ++i) {
+      if (*ptrs_[i] != *other.ptrs_[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Assignment from a `Row` with the same number of columns.
+  StaticRowReference& operator=(const Row<T, NumCols>& other) & {
+    // TODO<joka921> Do we need guaranteed template unrolling, or is the loop optimized?
+    for (size_t i = 0; i < NumCols; ++i) {
+      *ptrs_[i] = other[i];
+    }
+    return *this;
+  }
+  StaticRowReference& operator=(const Row<T, NumCols>& other) && {
+    // TODO<joka921> Do we need guaranteed template unrolling, or is the loop optimized?
+    for (size_t i = 0; i < NumCols; ++i) {
+      *ptrs_[i] = other[i];
+    }
+    return *this;
+  }
+  StaticRowReference& operator=(const Row<T, NumCols>& other) const&&;
+
+  StaticRowReference& operator=(const StaticRowReference& other) &  {
+    for (size_t i = 0; i < NumCols; ++i) {
+      *ptrs_[i] = *other.ptrs_[i];
+    }
+    return *this;
+  }
+
+  StaticRowReference& operator=(const StaticRowReference& other) && {
+    for (size_t i = 0; i < NumCols; ++i) {
+      *ptrs_[i] = *other.ptrs_[i];
+    }
+    return *this;
+  }
+  StaticRowReference& operator=(const StaticRowReference& other) const && ;
+
+  StaticRowReference(const StaticRowReference&) = default;
+  StaticRowReference(const Arr& arr) : ptrs_(arr){}
+  StaticRowReference() = default;
+
+
+  // Convert from a `RowReference` to a `Row`.
+  operator Row<T, NumCols>() const {
+    Row<T, NumCols> result{NumCols};
+    for (size_t i = 0; i < NumCols; ++i) {
+      result[i] = *ptrs_[i];
+    }
+    return result;
+  }
+
+  void increase(std::ptrdiff_t x) {
+    for (size_t i = 0; i < NumCols; ++i) {
+      ptrs_[i] += x ;
+    }
+  }
+};
+
+template <typename T, size_t N, ad_utility::IsConst isConstTag>
+struct StaticIdTableIterator {
+  using reference = StaticRowReference<N, T, isConstTag>;
+  using value_type = Row<T, N>;
+  using pointer = value_type*;
+  reference ref_;
+  static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
+  using iterator_category = std::random_access_iterator_tag;
+  using difference_type = int64_t;
+
+  explicit StaticIdTableIterator(const reference::Arr& arr) : ref_{arr} {}
+  StaticIdTableIterator& operator=(const StaticIdTableIterator& other) {
+    for (size_t i = 0; i < N; ++i) {
+      ref_.ptrs_[i] = other.ref_.ptrs_[i];
+    }
+    return *this;
+  }
+  StaticIdTableIterator& operator=(StaticIdTableIterator&& other) {
+    for (size_t i = 0; i < N; ++i) {
+      ref_.ptrs_[i] = other.ref_.ptrs_[i];
+    }
+    return *this;
+  }
+
+  StaticIdTableIterator(const StaticIdTableIterator& other) {
+    for (size_t i = 0; i < N; ++i) {
+      ref_.ptrs_[i] = other.ref_.ptrs_[i];
+    }
+  }
+  StaticIdTableIterator(StaticIdTableIterator&& other) {
+    for (size_t i = 0; i < N; ++i) {
+      ref_.ptrs_[i] = other.ref_.ptrs_[i];
+    }
+  }
+
+  StaticIdTableIterator() = default;
+
+  auto operator <=>(const StaticIdTableIterator& rhs) const {
+    return ref_.ptrs_[0] <=> rhs.ref_.ptrs_[0];
+  }
+
+  bool operator ==(const StaticIdTableIterator& rhs) const {
+    return ref_.ptrs_[0] == rhs.ref_.ptrs_[0];
+  }
+
+  StaticIdTableIterator& operator+=(difference_type n) {
+    ref_.increase(n);
+    return *this;
+  }
+  StaticIdTableIterator operator+(difference_type n) const {
+    StaticIdTableIterator result{*this};
+    result += n;
+    return result;
+  }
+
+  StaticIdTableIterator& operator++() {
+    ref_.increase(1);
+    return *this;
+  }
+  StaticIdTableIterator operator++(int) & {
+    StaticIdTableIterator result{*this};
+    ++result;
+    return result;
+  }
+
+  StaticIdTableIterator& operator--() {
+    ref_.increase(-1);
+    return *this;
+  }
+  StaticIdTableIterator operator--(int) & {
+    StaticIdTableIterator result{*this};
+    --result;
+    return result;
+  }
+
+  friend StaticIdTableIterator operator+(
+      difference_type n, const StaticIdTableIterator& it) {
+    return it + n;
+  }
+
+  StaticIdTableIterator& operator-=(difference_type n) {
+    ref_.increase(-n);
+    return *this;
+  }
+
+  StaticIdTableIterator operator-(difference_type n) const {
+    StaticIdTableIterator result{*this};
+    result -= n;
+    return result;
+  }
+
+  difference_type operator-(const StaticIdTableIterator& rhs) const {
+    return ref_.ptrs_[0] - rhs.ref_.ptrs_[0];
+  }
+
+  // TODO<joka921> We have shallow constness here...
+  reference operator*() const { return ref_; }
+  reference operator*() requires(!isConst) {
+    return ref_;
+  }
+
+  reference operator[](difference_type n) const {
+    auto ref = ref_;
+    ref.increase(n);
+    return ref;
+  }
+};
+
+static_assert(std::input_iterator<StaticIdTableIterator<int, 2, ad_utility::IsConst::True>>);
+
 
 }  // namespace columnBasedIdTable
