@@ -2,6 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <boost/asio/experimental/awaitable_operators.hpp>
@@ -14,6 +15,9 @@ namespace net = boost::asio;
 
 using ad_utility::websocket::QueryToSocketDistributor;
 using namespace boost::asio::experimental::awaitable_operators;
+using namespace std::string_literals;
+
+using ::testing::Pointee;
 
 template <typename T>
 net::awaitable<T> withTimeout(net::awaitable<T> t) {
@@ -106,8 +110,7 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateWakesUpListeners) {
     waiting = true;
     auto result =
         co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(0));
-    ASSERT_TRUE(result);
-    EXPECT_EQ(*result, "Abc");
+    EXPECT_THAT(result, Pointee("Abc"s));
   };
 
   auto broadcaster = [&]() -> net::awaitable<void> {
@@ -125,8 +128,7 @@ ASYNC_TEST(QueryToSocketDistributor, listeningBeforeStartWorks) {
     waiting = true;
     auto result =
         co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(0));
-    ASSERT_TRUE(result);
-    EXPECT_EQ(*result, "Abc");
+    EXPECT_THAT(result, Pointee("Abc"s));
   };
 
   auto broadcaster = [&]() -> net::awaitable<void> {
@@ -158,12 +160,10 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateBeforeListenersWorks) {
     waiting = true;
     auto result =
         co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(0));
-    ASSERT_TRUE(result);
-    EXPECT_EQ(*result, "Abc");
+    EXPECT_THAT(result, Pointee("Abc"s));
     result =
         co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(1));
-    ASSERT_TRUE(result);
-    EXPECT_EQ(*result, "Def");
+    EXPECT_THAT(result, Pointee("Def"s));
   };
   co_await (broadcaster() && listener());
 }
@@ -189,12 +189,10 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndDoesNotPreventConsumptionOfRest) {
     waiting = true;
     auto result =
         co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(0));
-    ASSERT_TRUE(result);
-    EXPECT_EQ(*result, "Abc");
+    EXPECT_THAT(result, Pointee("Abc"s));
     result =
         co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(1));
-    ASSERT_TRUE(result);
-    EXPECT_EQ(*result, "Def");
+    EXPECT_THAT(result, Pointee("Def"s));
     result =
         co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(2));
     ASSERT_FALSE(result);
