@@ -19,8 +19,7 @@ bool equals(const std::weak_ptr<T>& t, const std::weak_ptr<U>& u) noexcept {
 // _____________________________________________________________________________
 
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
-QueryHub::createOrAcquireDistributorInternal(QueryId queryId,
-                                             bool isProvider) {
+QueryHub::createOrAcquireDistributorInternal(QueryId queryId, bool isProvider) {
   co_await net::dispatch(globalStrand_, net::use_awaitable);
   if (socketDistributors_.contains(queryId)) {
     if (auto ptr = socketDistributors_.at(queryId).lock()) {
