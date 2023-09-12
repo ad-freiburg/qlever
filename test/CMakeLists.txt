@@ -363,3 +363,7 @@ addLinkAndDiscoverTest(QueryIdTest)
 addLinkAndDiscoverTest(QueryHubTest http)
 
 addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
+
+addLinkAndDiscoverTest(UpdateFetcherTest http)
+
+addLinkAndDiscoverTest(UpdateWrapperTest http)

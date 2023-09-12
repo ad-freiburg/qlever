@@ -14,7 +14,9 @@ net::awaitable<UpdateWrapper> UpdateWrapper::create(QueryId queryId,
 }
 
 void UpdateWrapper::operator()(std::string json) const {
-  auto lambda = [](auto distributor, auto json) -> net::awaitable<void> {
+  auto lambda = [](auto distributor,
+                   auto json) mutable -> net::awaitable<void> {
+    // It is important `distributor` is kept alive during this call!
     co_await distributor->addQueryStatusUpdate(std::move(json));
   };
   net::co_spawn(executor_, lambda(*distributor_, std::move(json)),
