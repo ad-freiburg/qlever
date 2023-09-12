@@ -81,7 +81,7 @@ TEST(IdTableCompressedSorter, firstTest) {
 
   for (const auto& table : tables) {
     for (const auto& row : table) {
-      writer.pushRow(row);
+      writer.push(row);
     }
   }
 

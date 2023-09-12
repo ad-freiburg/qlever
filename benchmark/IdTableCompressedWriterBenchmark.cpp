@@ -18,8 +18,8 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
 
   BenchmarkResults runAllBenchmarks() final {
     constexpr size_t numCols = 3;
-    const size_t numInputRows = 200'000'000;
-    const size_t memForStxxl = 500'000'000;
+    const size_t numInputRows = 20'000'000;
+    const size_t memForStxxl = 50'000'000;
     BenchmarkResults results{};
 
     auto generateRandomRow =
@@ -42,7 +42,7 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
 
     auto runPush = [&]() {
       for (auto i : std::views::iota(0u, numInputRows)) {
-        writer.pushRow(generateRandomRow());
+        writer.push(generateRandomRow());
       }
     };
     auto run = [&]() {
