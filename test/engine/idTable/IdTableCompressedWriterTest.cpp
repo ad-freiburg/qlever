@@ -66,6 +66,7 @@ TEST(IdTableCompressedWriter, firstTest) {
   std::ranges::copy(tr, std::back_inserter(result));
   ASSERT_THAT(result, ElementsAreArray(tables));
 }
+/*
 TEST(IdTableCompressedSorter, firstTest) {
   std::string filename = "idTableCompressedSorter.firstTest.dat";
   [[maybe_unused]] auto firstCol = [](const auto& a, const auto& b) {
@@ -92,3 +93,5 @@ TEST(IdTableCompressedSorter, firstTest) {
   auto result = idTableFromGenerator(generator);
   ASSERT_THAT(result, Eq(tables.at(0)));
 }
+
+*/

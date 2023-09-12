@@ -10,6 +10,7 @@
 
 namespace ad_benchmark {
 
+
 using A = std::array<Id, 3>;
 class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
   std::string name() const final {
@@ -18,8 +19,8 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
 
   BenchmarkResults runAllBenchmarks() final {
     constexpr size_t numCols = 3;
-    const size_t numInputRows = 20'000'000;
-    const size_t memForStxxl = 50'000'000;
+    const size_t numInputRows = 200'000'000;
+    const size_t memForStxxl = 500'000'000;
     BenchmarkResults results{};
 
     auto generateRandomRow =
@@ -41,7 +42,7 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
         filename, 3, memForStxxl, ad_utility::testing::makeAllocator()};
 
     auto runPush = [&]() {
-      for (auto i : std::views::iota(0u, numInputRows)) {
+      for ([[maybe_unused]]auto i : std::views::iota(0u, numInputRows)) {
         writer.push(generateRandomRow());
       }
     };
@@ -58,14 +59,14 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
     results.addMeasurement("ReadAndMerge", run);
 
     auto pushStxxl = [&]() {
-      for (auto i : std::views::iota(0u, numInputRows)) {
+      for ([[maybe_unused]] auto i : std::views::iota(0u, numInputRows)) {
         sorter.push(generateRandomRow());
       }
     };
 
     auto drainStxxl = [&]() {
       size_t i = 1;
-      for (const auto& row : sorter.sortedView()) {
+      for ([[maybe_unused]] const auto& row : sorter.sortedView()) {
         ++i;
       }
       std::cout << i;
