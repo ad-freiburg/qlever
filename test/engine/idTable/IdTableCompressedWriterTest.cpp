@@ -85,7 +85,7 @@ TEST(IdTableCompressedSorter, firstTest) {
     }
   }
 
-  auto generator = writer.sortedView();
+  auto generator = writer.sortedBlocks();
   // TODO<joka921> First make it compile, then make it correct.
 
   using namespace ::testing;

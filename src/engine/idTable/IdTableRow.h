@@ -496,6 +496,14 @@ struct StaticRowReference {
     return result;
   }
 
+  operator std::array<T, NumCols>() const {
+    std::array<T, NumCols> result;
+    for (size_t i = 0; i < NumCols; ++i) {
+      result[i] = *ptrs_[i];
+    }
+    return result;
+  }
+
   void increase(std::ptrdiff_t x) {
     for (size_t i = 0; i < NumCols; ++i) {
       ptrs_[i] += x;

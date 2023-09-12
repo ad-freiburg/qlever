@@ -200,8 +200,12 @@ class ExternalIdTableSorter {
 
  private:
   void pushBlock(IdTableStatic<NumStaticCols> block) {
-    // std::ranges::sort(block, comp_);
+#ifdef USE_PARALLEL
     ad_utility::parallel_sort(block.begin(), block.end(), comp_);
+#else
+    std::ranges::sort(block, comp_);
+#endif
+
     if (fut_.valid()) {
       fut_.get();
     }

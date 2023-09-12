@@ -444,7 +444,7 @@ class IdTable {
   // complicated.
   template <typename RowT>
   requires ad_utility::isTypeContainedIn<
-      RowT, std::tuple<row_reference, const_row_reference,
+      RowT, std::tuple<row_reference, const_row_reference, row_type,
                        row_reference_restricted, const_row_reference_restricted,
                        const_row_reference_view_restricted>>
   void push_back(const RowT& newRow) requires(!isView) {

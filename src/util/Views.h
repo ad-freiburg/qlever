@@ -49,15 +49,14 @@ cppcoro::generator<typename View::value_type> bufferedAsyncView(
 
 /// Takes a view and yields the elements of the same view, but skips over
 /// consecutive duplicates.
-template <typename SortedView>
-cppcoro::generator<typename SortedView::value_type> uniqueView(
-    SortedView view) {
+template <typename SortedView, typename ValueType = SortedView::value_type>
+cppcoro::generator<ValueType> uniqueView(SortedView view) {
   auto it = view.begin();
   if (it == view.end()) {
     co_return;
   }
-  auto previousValue = std::move(*it);
-  auto previousValueCopy = previousValue;
+  ValueType previousValue = std::move(*it);
+  ValueType previousValueCopy = previousValue;
   co_yield previousValueCopy;
   ++it;
 

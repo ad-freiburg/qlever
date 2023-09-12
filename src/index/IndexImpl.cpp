@@ -172,7 +172,9 @@ void IndexImpl::createFromFile(const string& filename) {
                                    stxxlMemoryInBytes() / 5, allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
-  auto uniqueSorter = ad_utility::uniqueView(psoSorter.sortedView());
+  auto uniqueSorter = ad_utility::uniqueView<decltype(psoSorter.sortedView()),
+                                             IdTableStatic<3>::row_type>(
+      psoSorter.sortedView());
 
   size_t numPredicatesNormal = 0;
   createPermutationPair(
@@ -428,7 +430,8 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
 
   // Iterate over all partial vocabularies.
   TripleVec::bufreader_type reader(data);
-  auto resultPtr = std::make_unique<PsoSorter>(stxxlMemoryInBytes() / 5);
+  auto resultPtr = std::make_unique<PsoSorter>(
+      onDiskBase_ + "pso-sorter.dat", 3, stxxlMemoryInBytes() / 5, allocator_);
   auto& result = *resultPtr;
   size_t i = 0;
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
