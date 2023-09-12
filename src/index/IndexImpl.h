@@ -42,6 +42,8 @@
 #include <stxxl/vector>
 #include <vector>
 
+#include "engine/idTable/IdTableCompressedWriter.h"
+
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
 using ad_utility::MmapVectorView;
@@ -53,9 +55,14 @@ using std::vector;
 
 using json = nlohmann::json;
 
+/*
 template <typename Comparator>
 using StxxlSorter =
     ad_utility::BackgroundStxxlSorter<std::array<Id, 3>, Comparator>;
+    */
+
+template <typename Comparator>
+using StxxlSorter = ExternalIdTableSorter<Comparator, 3>;
 
 using PsoSorter = StxxlSorter<SortByPSO>;
 

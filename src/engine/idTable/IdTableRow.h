@@ -6,16 +6,16 @@
 
 #include <array>
 #include <iostream>
+#include <ranges>
 #include <type_traits>
 #include <variant>
 #include <vector>
-#include <ranges>
 
 #include "util/Enums.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
-#include "util/StringUtils.h"
 #include "util/Iterators.h"
+#include "util/StringUtils.h"
 #include "util/TypeTraits.h"
 #include "util/UninitializedAllocator.h"
 
@@ -398,7 +398,6 @@ class RowReference
   RowReference(const RowReference&) = delete;
 };
 
-
 template <size_t NumCols, typename T, ad_utility::IsConst isConstTag>
 struct StaticRowReference {
   static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
@@ -408,34 +407,29 @@ struct StaticRowReference {
   using Arr = std::array<Ptr, NumCols>;
   Arr ptrs_;
 
-  constexpr static size_t numColumns() {
-    return NumCols;
-  }
+  constexpr static size_t numColumns() { return NumCols; }
 
   // Access to the `i`-th column of this row.
-  T& operator[](size_t i) requires(!isConst) {
-    return *ptrs_[i];
-  }
-  const T& operator[](size_t i) const {
-    return *ptrs_[i];
-  }
+  T& operator[](size_t i) requires(!isConst) { return *ptrs_[i]; }
+  const T& operator[](size_t i) const { return *ptrs_[i]; }
 
   auto transformToRef() {
-    return std::views::transform(ptrs_, [](auto& ptr) -> Ref {return *ptr;});
+    return std::views::transform(ptrs_, [](auto& ptr) -> Ref { return *ptr; });
   }
   auto transformToRef() const {
-    return std::views::transform(ptrs_, [](auto& ptr) -> ConstRef {return *ptr;});
+    return std::views::transform(ptrs_,
+                                 [](auto& ptr) -> ConstRef { return *ptr; });
   }
   friend void PrintTo(const StaticRowReference& ref, std::ostream* os) {
-      *os << ad_utility::lazyStrJoin(ref.transformToRef(), ", ");
+    *os << ad_utility::lazyStrJoin(ref.transformToRef(), ", ");
   }
 
   // The iterators are implemented in the base class and can simply be
   // forwarded.
-  auto begin() { return transformToRef().begin();};
-  auto end() { return transformToRef().end();};
-  auto begin() const { return transformToRef().begin();};
-  auto end() const { return transformToRef().end();};
+  auto begin() { return transformToRef().begin(); };
+  auto end() { return transformToRef().end(); };
+  auto begin() const { return transformToRef().begin(); };
+  auto end() const { return transformToRef().end(); };
   // TODO : cbegin and cend.
 
   // __________________________________________________________________________
@@ -457,14 +451,16 @@ struct StaticRowReference {
 
   // Assignment from a `Row` with the same number of columns.
   StaticRowReference& operator=(const Row<T, NumCols>& other) & {
-    // TODO<joka921> Do we need guaranteed template unrolling, or is the loop optimized?
+    // TODO<joka921> Do we need guaranteed template unrolling, or is the loop
+    // optimized?
     for (size_t i = 0; i < NumCols; ++i) {
       *ptrs_[i] = other[i];
     }
     return *this;
   }
   StaticRowReference& operator=(const Row<T, NumCols>& other) && {
-    // TODO<joka921> Do we need guaranteed template unrolling, or is the loop optimized?
+    // TODO<joka921> Do we need guaranteed template unrolling, or is the loop
+    // optimized?
     for (size_t i = 0; i < NumCols; ++i) {
       *ptrs_[i] = other[i];
     }
@@ -472,7 +468,7 @@ struct StaticRowReference {
   }
   StaticRowReference& operator=(const Row<T, NumCols>& other) const&&;
 
-  StaticRowReference& operator=(const StaticRowReference& other) &  {
+  StaticRowReference& operator=(const StaticRowReference& other) & {
     for (size_t i = 0; i < NumCols; ++i) {
       *ptrs_[i] = *other.ptrs_[i];
     }
@@ -485,12 +481,11 @@ struct StaticRowReference {
     }
     return *this;
   }
-  StaticRowReference& operator=(const StaticRowReference& other) const && ;
+  StaticRowReference& operator=(const StaticRowReference& other) const&&;
 
   StaticRowReference(const StaticRowReference&) = default;
-  StaticRowReference(const Arr& arr) : ptrs_(arr){}
+  StaticRowReference(const Arr& arr) : ptrs_(arr) {}
   StaticRowReference() = default;
-
 
   // Convert from a `RowReference` to a `Row`.
   operator Row<T, NumCols>() const {
@@ -503,7 +498,7 @@ struct StaticRowReference {
 
   void increase(std::ptrdiff_t x) {
     for (size_t i = 0; i < NumCols; ++i) {
-      ptrs_[i] += x ;
+      ptrs_[i] += x;
     }
   }
 };
@@ -545,11 +540,11 @@ struct StaticIdTableIterator {
 
   StaticIdTableIterator() = default;
 
-  auto operator <=>(const StaticIdTableIterator& rhs) const {
+  auto operator<=>(const StaticIdTableIterator& rhs) const {
     return ref_.ptrs_[0] <=> rhs.ref_.ptrs_[0];
   }
 
-  bool operator ==(const StaticIdTableIterator& rhs) const {
+  bool operator==(const StaticIdTableIterator& rhs) const {
     return ref_.ptrs_[0] == rhs.ref_.ptrs_[0];
   }
 
@@ -583,8 +578,8 @@ struct StaticIdTableIterator {
     return result;
   }
 
-  friend StaticIdTableIterator operator+(
-      difference_type n, const StaticIdTableIterator& it) {
+  friend StaticIdTableIterator operator+(difference_type n,
+                                         const StaticIdTableIterator& it) {
     return it + n;
   }
 
@@ -605,9 +600,7 @@ struct StaticIdTableIterator {
 
   // TODO<joka921> We have shallow constness here...
   reference operator*() const { return ref_; }
-  reference operator*() requires(!isConst) {
-    return ref_;
-  }
+  reference operator*() requires(!isConst) { return ref_; }
 
   reference operator[](difference_type n) const {
     auto ref = ref_;
@@ -616,7 +609,7 @@ struct StaticIdTableIterator {
   }
 };
 
-static_assert(std::input_iterator<StaticIdTableIterator<int, 2, ad_utility::IsConst::True>>);
-
+static_assert(std::input_iterator<
+              StaticIdTableIterator<int, 2, ad_utility::IsConst::True>>);
 
 }  // namespace columnBasedIdTable

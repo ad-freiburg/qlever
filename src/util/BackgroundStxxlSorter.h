@@ -39,7 +39,7 @@ class BackgroundStxxlSorter {
  public:
   using value_type = ValueType;
 
-  size_t numBlocks() const {return _numBlocks;}
+  size_t numBlocks() const { return _numBlocks; }
 
   // The BackgroundStxxlSorter will actually use 3 * memoryForStxxl bytes plus
   // some overhead.

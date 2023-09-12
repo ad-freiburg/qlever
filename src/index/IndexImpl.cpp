@@ -168,7 +168,8 @@ void IndexImpl::createFromFile(const string& filename) {
     numTriplesNormal += !std::ranges::any_of(triple, isInternalId);
   };
 
-  StxxlSorter<SortBySPO> spoSorter{stxxlMemoryInBytes() / 5};
+  StxxlSorter<SortBySPO> spoSorter{onDiskBase_ + ".spo-sorter.dat", 3,
+                                   stxxlMemoryInBytes() / 5, allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
   auto uniqueSorter = ad_utility::uniqueView(psoSorter.sortedView());
@@ -180,11 +181,13 @@ void IndexImpl::createFromFile(const string& filename) {
   configurationJson_["num-predicates-normal"] = numPredicatesNormal;
   configurationJson_["num-triples-normal"] = numTriplesNormal;
   writeConfiguration();
-  psoSorter.clear();
+  // TODO<joka921> implement a function to clear the new sorters.
+  // psoSorter.clear();
 
   if (loadAllPermutations_) {
     // After the SPO permutation, create patterns if so desired.
-    StxxlSorter<SortByOSP> ospSorter{stxxlMemoryInBytes() / 5};
+    StxxlSorter<SortByOSP> ospSorter{onDiskBase_ + ".osp-sorter.dat", 3,
+                                     stxxlMemoryInBytes() / 5, allocator_};
     size_t numSubjectsNormal = 0;
     auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
     if (usePatterns_) {
@@ -203,7 +206,7 @@ void IndexImpl::createFromFile(const string& filename) {
       createPermutationPair(spoSorter.sortedView(), spo_, sop_,
                             ospSorter.makePushCallback(), numSubjectCounter);
     }
-    spoSorter.clear();
+    // spoSorter.clear();
     configurationJson_["num-subjects-normal"] = numSubjectsNormal;
     writeConfiguration();
 
@@ -556,11 +559,11 @@ CompressedRelationMetadata IndexImpl::writeSwitchedRel(
   for (BufferedIdTable::row_reference row : buffer) {
     std::swap(row[0], row[1]);
   }
-  //std::ranges::sort(buffer, [](const auto& a, const auto& b) {
-    std::ranges::sort(buffer.begin(), buffer.end(), [](const auto& a, const auto& b) {
-
-    return std::ranges::lexicographical_compare(a, b);
-  });
+  // std::ranges::sort(buffer, [](const auto& a, const auto& b) {
+  std::ranges::sort(buffer.begin(), buffer.end(),
+                    [](const auto& a, const auto& b) {
+                      return std::ranges::lexicographical_compare(a, b);
+                    });
   Id lastLhs = std::numeric_limits<Id>::max();
 
   size_t distinctC1 = 0;

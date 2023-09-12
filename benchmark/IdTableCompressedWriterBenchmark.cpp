@@ -22,16 +22,16 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
     const size_t memForStxxl = 500'000'000;
     BenchmarkResults results{};
 
-    auto generateRandomRow = [gen = FastRandomIntGenerator<uint64_t>{}]() mutable {
-      std::array<Id, numCols> arr;
-      for (auto& id : arr) {
-        id = Id::fromBits(gen());
-      }
-      return arr;
-    };
+    auto generateRandomRow =
+        [gen = FastRandomIntGenerator<uint64_t>{}]() mutable {
+          std::array<Id, numCols> arr;
+          for (auto& id : arr) {
+            id = Id::fromBits(gen() >> 40);
+          }
+          return arr;
+        };
 
     ad_utility::BackgroundStxxlSorter<A, SortByPSO> sorter{memForStxxl};
-
 
     std::string filename = "idTableCompressedSorter.benchmark.dat";
     [[maybe_unused]] auto firstCol = [](const auto& a, const auto& b) {
@@ -47,8 +47,11 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
     };
     auto run = [&]() {
       auto view = writer.sortedView();
-      const auto& res = *view.begin();
-      std::cout << res.size();
+      size_t res = 0;
+      for (const auto& block : view) {
+        res += block[0].getBits();
+      }
+      std::cout << res << std::endl;
     };
 
     results.addMeasurement("SortingAndWritingBlocks", runPush);
@@ -61,11 +64,11 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
     };
 
     auto drainStxxl = [&]() {
-        size_t i = 1;
-        for (const auto& row : sorter.sortedView()) {
-          ++i;
-        }
-        std::cout << i;
+      size_t i = 1;
+      for (const auto& row : sorter.sortedView()) {
+        ++i;
+      }
+      std::cout << i;
     };
 
     results.addMeasurement("Time using stxxl for push", pushStxxl);
