@@ -117,217 +117,228 @@ class RowReferenceImpl {
   // message. The class is templated on the underlying table and on whether this
   // is a const or a mutable reference.
   template <typename Table, int NumCols, ad_utility::IsConst isConstTag>
-  class RowReferenceWithRestrictedAccess {
-   public:
-    static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
-    using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
-    using T = typename Table::value_type;
-    static constexpr int numStaticColumns = Table::numStaticColumns;
-    static_assert(Table::numStaticColumns == NumCols);
-    // TODO<joka921> activate this as soon as we have the static reference activated.
-    //static_assert(NumCols == 0);
+  class RowReferenceWithRestrictedAccess;
+};
 
-    // Grant the `IdTable` class access to the internal details.
-    template <typename T, int NumColsOfFriend, typename Allocator, IsView isView>
-    friend class IdTable;
+template <typename Impl, ad_utility::IsConst isConstTag, typename RowType>
+class RestrictedRowReferenceMixin {
+ public:
+  constexpr static bool isConst = isConstTag == ad_utility::IsConst::True;
+  // Access to the `i`-th columns of this row. Only allowed for const values
+  // and for rvalues.
+  auto& operator[](size_t i) && requires(!isConst) {
+    return Impl::operatorBracketImpl(static_cast<Impl&>(*this), i);
+  }
+  const auto& operator[](size_t i) const& {
+    return Impl::operatorBracketImpl(static_cast<const Impl&>(*this), i);
+  }
+  const auto& operator[](size_t i) const&& {
+    return Impl::operatorBracketImpl(static_cast<const Impl&&>(*this), i);
+  }
 
-   private:
-    // Make the long class type a little shorter where possible.
-    using This = RowReferenceWithRestrictedAccess;
+ private:
+  // Swap two `RowReference`s, but only if they are temporaries (rvalues).
+  // This modifies the underlying table.
+  static void localSwapImpl(Impl&& a, Impl&& b) requires(!isConst) {
+    return Impl::swapImpl(AD_FWD(a), AD_FWD(b));
+  }
 
-   private:
-    // The `Table` (as a pointer) and the row (as an index) to which this
-    // reference points.
-    //
-    // TODO<joka921> Only storing the row index makes the implementation easy,
-    // but possibly harms the performance because every access to a reference
-    // involves a multiplication. However, this cannot simply be fixed inside
-    // the row reference, but needs iterators/references to single columns and
-    // special algorithms that are aware of the column-based structure of the
-    // `IdTable`.
-    TablePtr table_ = nullptr;
-    size_t row_ = 0;
+ public:
+  friend void swap(Impl&& a, Impl&& b) requires(!isConst) {
+    return localSwapImpl(AD_FWD(a), AD_FWD(b));
+  }
+  // Equality is implemented in terms of the values that the reference points
+  // to.
+  friend bool operator==(const Impl& a, const Impl& b) {
+    if (a.numColumns() != b.numColumns()) {
+      return false;
+    }
+    for (size_t i = 0; i < a.numColumns(); ++i) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+  // Assignment from a `Row` with the same number of columns.
+  Impl& operator=(const RowType& other) && {
+    return Impl::assignmentImpl(static_cast<Impl&>(*this), other);
+  }
 
-    // The constructor is public, but the whole class is private. the
-    // constructor must be public, because `IdTable` must have access to it.
-   public:
-    explicit RowReferenceWithRestrictedAccess(TablePtr table, size_t row)
-        : table_{table}, row_{row} {}
+  Impl& operator=(const RowType& other) const&&;
+};
 
-   protected:
-    // The actual implementation of operator[].
-    static T& operatorBracketImpl(auto& self, size_t i)
+template <typename Table, ad_utility::IsConst isConstTagV>
+    class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, 0, isConstTagV> : public RestrictedRowReferenceMixin<RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, 0, isConstTagV>, isConstTagV, typename Table::row_type> {
+    public:
+        static constexpr ad_utility::IsConst isConstTag = isConstTagV;
+        static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
+        using table_type = Table;
+        using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
+        using T = typename Table::value_type;
+        using value_type = T;
+        static constexpr int numStaticColumns = Table::numStaticColumns;
+        using row_type = Row<T, numStaticColumns>;
+        // TODO<joka921> activate this as soon as we have the static reference activated.
+
+        // Grant the `IdTable` class access to the internal details.
+        template <typename T, int NumColsOfFriend, typename Allocator, IsView isView>
+        friend class IdTable;
+
+        using Mixin = RestrictedRowReferenceMixin<RowReferenceWithRestrictedAccess, isConstTag, row_type>;
+        friend class RestrictedRowReferenceMixin<RowReferenceWithRestrictedAccess, isConstTag, row_type>;
+        using Mixin::operator=;
+
+    private:
+        // Make the long class type a little shorter where possible.
+        using This = RowReferenceWithRestrictedAccess;
+
+    private:
+        // The `Table` (as a pointer) and the row (as an index) to which this
+        // reference points.
+        //
+        TablePtr table_ = nullptr;
+        size_t row_ = 0;
+
+        // The constructor is public, but the whole class is private. the
+        // constructor must be public, because `IdTable` must have access to it.
+    public:
+        explicit RowReferenceWithRestrictedAccess(TablePtr table, size_t row)
+                : table_{table}, row_{row} {}
+
+    protected:
+        // The actual implementation of operator[].
+        static T& operatorBracketImpl(auto& self, size_t i)
         requires(!std::is_const_v<std::remove_reference_t<decltype(self)>> &&
                  !isConst) {
-      return (*self.table_)(self.row_, i);
-    }
-    static const T& operatorBracketImpl(const auto& self, size_t i) {
-      return (*self.table_)(self.row_, i);
-    }
+            return (*self.table_)(self.row_, i);
+        }
+        static const T& operatorBracketImpl(const auto& self, size_t i) {
+            return (*self.table_)(self.row_, i);
+        }
 
+    public:
+        // Define iterators.
+        template <typename RowT>
+        struct IteratorHelper {
+            decltype(auto) operator()(auto&& row, size_t colIdx) const {
+                return std::decay_t<decltype(row)>::operatorBracketImpl(AD_FWD(row),
+                                                                        colIdx);
+            }
+        };
+        using iterator = ad_utility::IteratorForAccessOperator<
+                RowReferenceWithRestrictedAccess,
+                IteratorHelper<RowReferenceWithRestrictedAccess>,
+                ad_utility::IsConst::False>;
+        using const_iterator = ad_utility::IteratorForAccessOperator<
+                RowReferenceWithRestrictedAccess,
+                IteratorHelper<RowReferenceWithRestrictedAccess>,
+                ad_utility::IsConst::True>;
+        // Non-const iterators allow non-const access and are therefore only allowed
+        // on rvalues.
+        iterator begin() && { return {this, 0}; };
+        iterator end() && { return {this, numColumns()}; };
+        // Const iterators are always fine.
+        const_iterator cbegin() const { return {this, 0}; };
+        const_iterator cend() const { return {this, numColumns()}; };
+        const_iterator begin() const& { return {this, 0}; };
+        const_iterator end() const& { return {this, numColumns()}; };
+        const_iterator begin() const&& { return {this, 0}; };
+        const_iterator end() const&& { return {this, numColumns()}; };
+
+        // The number of columns that this row contains.
+        size_t numColumns() const { return table_->numColumns(); }
+
+        size_t rowIndex() const { return row_; }
+
+        size_t size() const { return numColumns(); }
+
+        // TODO<joka921> Make protected and the Mixin a friend.
    public:
-    // Access to the `i`-th columns of this row. Only allowed for const values
-    // and for rvalues.
-    T& operator[](size_t i) && requires(!isConst) {
-      return operatorBracketImpl(*this, i);
-    }
-    const T& operator[](size_t i) const& {
-      return operatorBracketImpl(*this, i);
-    }
-    const T& operator[](size_t i) const&& {
-      return operatorBracketImpl(*this, i);
-    }
+        // The implementation of swapping two `RowReference`s (passed either by
+        // value or by reference).
+        static void swapImpl(auto&& a, auto&& b) requires(!isConst) {
+            for (size_t i = 0; i < a.numColumns(); ++i) {
+                std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
+            }
+        }
 
-    // Define iterators.
-    template <typename RowT>
-    struct IteratorHelper {
-      decltype(auto) operator()(auto&& row, size_t colIdx) const {
-        return std::decay_t<decltype(row)>::operatorBracketImpl(AD_FWD(row),
-                                                                colIdx);
-      }
-    };
-    using iterator = ad_utility::IteratorForAccessOperator<
-        RowReferenceWithRestrictedAccess,
-        IteratorHelper<RowReferenceWithRestrictedAccess>,
-        ad_utility::IsConst::False>;
-    using const_iterator = ad_utility::IteratorForAccessOperator<
-        RowReferenceWithRestrictedAccess,
-        IteratorHelper<RowReferenceWithRestrictedAccess>,
-        ad_utility::IsConst::True>;
-    // Non-const iterators allow non-const access and are therefore only allowed
-    // on rvalues.
-    iterator begin() && { return {this, 0}; };
-    iterator end() && { return {this, numColumns()}; };
-    // Const iterators are always fine.
-    const_iterator cbegin() const { return {this, 0}; };
-    const_iterator cend() const { return {this, numColumns()}; };
-    const_iterator begin() const& { return {this, 0}; };
-    const_iterator end() const& { return {this, numColumns()}; };
-    const_iterator begin() const&& { return {this, 0}; };
-    const_iterator end() const&& { return {this, numColumns()}; };
+        // Protected implementation for the "ordinary" non-const iterators for
+        // lvalues s.t. the not restricted child class can access them.
+        iterator beginImpl() { return {this, 0}; }
+        iterator endImpl() { return {this, numColumns()}; }
 
-    // The number of columns that this row contains.
-    size_t numColumns() const { return table_->numColumns(); }
-
-    size_t rowIndex() const { return row_; }
-
-    size_t size() const { return numColumns(); }
-
-   protected:
-    // The implementation of swapping two `RowReference`s (passed either by
-    // value or by reference).
-    static void swapImpl(auto&& a, auto&& b) requires(!isConst) {
-      for (size_t i = 0; i < a.numColumns(); ++i) {
-        std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
-      }
-    }
-
-    // Protected implementation for the "ordinary" non-const iterators for
-    // lvalues s.t. the not restricted child class can access them.
-    iterator beginImpl() { return {this, 0}; }
-    iterator endImpl() { return {this, numColumns()}; }
-
-   public:
-    // Swap two `RowReference`s, but only if they are temporaries (rvalues).
-    // This modifies the underlying table.
-    friend void swap(This&& a, This&& b) requires(!isConst) {
-      return swapImpl(a, b);
-    }
-
-    // Equality comparison. Works between two `RowReference`s, but also between
-    // a `RowReference` and a `Row` if the number of columns match.
-    template <typename U>
-    bool operator==(const U& other) const
+    public:
+        // Equality comparison. Works between two `RowReference`s, but also between
+        // a `RowReference` and a `Row` if the number of columns match.
+        template <typename U>
+        bool operator==(const U& other) const
         requires(numStaticColumns == U::numStaticColumns) {
-      if constexpr (numStaticColumns == 0) {
-        if (numColumns() != other.numColumns()) {
-          return false;
+            if (numColumns() != other.numColumns()) {
+                return false;
+            }
+            for (size_t i = 0; i < numColumns(); ++i) {
+                if ((*this)[i] != other[i]) {
+                    return false;
+                }
+            }
+            return true;
         }
-      }
-      for (size_t i = 0; i < numColumns(); ++i) {
-        if ((*this)[i] != other[i]) {
-          return false;
+
+        // Convert from a `RowReference` to a `Row`.
+        operator Row<T, numStaticColumns>() const {
+            auto numCols = (std::move(*this)).numColumns();
+            Row<T, numStaticColumns> result{numCols};
+            for (size_t i = 0; i < numCols; ++i) {
+                result[i] = std::move(*this)[i];
+            }
+            return result;
         }
-      }
-      return true;
-    }
 
-    // Convert from a `RowReference` to a `Row`.
-    operator Row<T, numStaticColumns>() const {
-      auto numCols = (std::move(*this)).numColumns();
-      Row<T, numStaticColumns> result{numCols};
-      for (size_t i = 0; i < numCols; ++i) {
-        result[i] = std::move(*this)[i];
-      }
-      return result;
-    }
+    protected:
+        // Internal implementation of the assignment from a `Row` as well as a
+        // `RowReference`. This assignment actually writes to the underlying table.
+        static This& assignmentImpl(auto&& self, const auto& other) {
+            if constexpr (numStaticColumns == 0) {
+                AD_CONTRACT_CHECK(self.numColumns() == other.numColumns());
+            }
+            for (size_t i = 0; i < self.numColumns(); ++i) {
+                operatorBracketImpl(self, i) = other[i];
+            }
+            return self;
+        }
+       public:
+        This& operator=(const This& other) && {
+            return assignmentImpl(*this, other);
+        }
 
-   protected:
-    // Internal implementation of the assignment from a `Row` as well as a
-    // `RowReference`. This assignment actually writes to the underlying table.
-    static This& assignmentImpl(auto&& self, const auto& other) {
-      if constexpr (numStaticColumns == 0) {
-        AD_CONTRACT_CHECK(self.numColumns() == other.numColumns());
-      }
-      for (size_t i = 0; i < self.numColumns(); ++i) {
-        operatorBracketImpl(self, i) = other[i];
-      }
-      return self;
-    }
-
-   public:
-    // Assignment from a `Row` with the same number of columns.
-    This& operator=(const Row<T, numStaticColumns>& other) && {
-      return assignmentImpl(*this, other);
-    }
-
-    // Assignment from a `RowReference` with the same number of columns.
-    This& operator=(const RowReferenceWithRestrictedAccess& other) && {
-      return assignmentImpl(*this, other);
-    }
-
-    // TODO<joka921> Also replace this....
-    /*
-    // Assignment from a `const` RowReference to a `mutable` RowReference
-    This& operator=(const RowReferenceWithRestrictedAccess<
-                    Table, ad_utility::IsConst::True>& other) &&
-        requires(!isConst) {
-      return assignmentImpl(*this, other);
-    }
-     */
-
-    // This strange overload needs to be declared to make `Row` a
-    // `std::random_access_range` that can be used e.g. with
-    // `std::ranges::sort`. There is no need to define it, as it is only
-    // needed to fulfill the concept `std::indirectly_writable`. For more
-    // details on this "esoteric" overload see the notes at the end of
-    // `https://en.cppreference.com/w/cpp/iterator/indirectly_writable`
-    This& operator=(const Row<T, numStaticColumns>& other) const&&;
-
-   protected:
-    // No need to copy this internal type, but the implementation of the
-    // `RowReference` class below requires it,
-    // so the copy Constructor is protected.
-    RowReferenceWithRestrictedAccess(const RowReferenceWithRestrictedAccess&) =
+    protected:
+        // No need to copy this internal type, but the implementation of the
+        // `RowReference` class below requires it,
+        // so the copy Constructor is protected.
+        RowReferenceWithRestrictedAccess(const RowReferenceWithRestrictedAccess&) =
         default;
-  };
-};
+    };
 
 // The actual `RowReference` type that should be used externally when a
 // reference actually needs to be stored. Most of its implementation is
 // inherited from or delegated to the `RowReferenceWithRestrictedAccess`
 // class above, but it also supports mutable access to lvalues.
-template <typename RowReferenceWithRestrictedAccess>
-class RowReference
+    template <typename RowReferenceWithRestrictedAccess>
+    class RowReference
     : public RowReferenceWithRestrictedAccess {
- private:
+    public:
   using Base =
      RowReferenceWithRestrictedAccess;
-  using Base::numStaticColumns;
-  using TablePtr = typename Base::TablePtr;
+  using table_type = typename Base::table_type;
+  using row_type = typename Base::row_type;
   using T = typename Base::T;
+  using value_type = T;
   static constexpr bool isConst = Base::isConst;
+  using RowReferenceWithRestrictedAccess::isConstTag;
+  static constexpr int numStaticColumns = Base::numStaticColumns;
 
+ private:
   // Efficient access to the base class subobject to invoke its functions.
   Base& base() { return static_cast<Base&>(*this); }
   const Base& base() const { return static_cast<const Base&>(*this); }
@@ -351,10 +362,17 @@ class RowReference
 
   // The iterators are implemented in the base class and can simply be
   // forwarded.
+  // TODO<joka921> get rid of `auto`
+  /*
   typename Base::iterator begin() { return Base::beginImpl(); };
   typename Base::iterator end() { return Base::endImpl(); };
   typename Base::const_iterator begin() const { return Base::begin(); };
   typename Base::const_iterator end() const { return Base::end(); };
+   */
+        auto begin() { return Base::beginImpl(); };
+        auto end() { return Base::endImpl(); };
+        auto begin() const { return Base::begin(); };
+        auto end() const { return Base::end(); };
   // The `cbegin` and `cend` functions are implicitly inherited from `Base`.
 
   // __________________________________________________________________________
@@ -413,21 +431,37 @@ class RowReference
 // TODO<joka921> Maybe we can make the `ordinary` row reference a template
 // specialization of this class to reduce the number of different classes we
 // have in this file.
-template <typename Table,size_t NumCols, typename T, ad_utility::IsConst isConstTag>
-struct StaticRowReference {
+ template <typename Table, int NumCols, ad_utility::IsConst isConstTagV> requires (NumCols > 0)
+class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, NumCols, isConstTagV> : public RestrictedRowReferenceMixin<RowReferenceWithRestrictedAccess<Table, NumCols, isConstTagV>, isConstTagV, typename Table::row_type>{
+ public:
+  using table_type = Table;
+  static constexpr ad_utility::IsConst isConstTag = isConstTagV;
   static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
+  using T = typename Table::value_type;
+  using row_type = Row<T, NumCols>;
   using Ptr = std::conditional_t<isConst, const T*, T*>;
   using Ref = std::conditional_t<isConst, const T&, T&>;
   using ConstRef = const T&;
   // We store one pointer per column of the IdTable.
   using Ptrs = std::array<Ptr, NumCols>;
   Ptrs ptrs_;
+  static constexpr int numStaticColumns = Table::numStaticColumns;
+
+ using Mixin = RestrictedRowReferenceMixin<RowReferenceWithRestrictedAccess, isConstTag, row_type>;
+ friend class RestrictedRowReferenceMixin<RowReferenceWithRestrictedAccess, isConstTag, row_type>;
+
+ using Mixin::operator=;
+
+  static_assert(Table::numStaticColumns == NumCols);
+  static_assert(NumCols > 0);
 
   constexpr static size_t numColumns() { return NumCols; }
 
-  // Access to the `i`-th column of this row.
-  T& operator[](size_t i) requires(!isConst) { return *ptrs_[i]; }
-  const T& operator[](size_t i) const { return *ptrs_[i]; }
+  // TODO<joka921> make protected
+    // The actual implementation of operator[].
+    static decltype(auto) operatorBracketImpl(auto& self, size_t i) {
+        return *self.ptrs_[i];
+    }
 
  private:
   // Transform the array of pointers to a view of references for easier
@@ -442,28 +476,34 @@ struct StaticRowReference {
 
  public:
   // Printing for googletest.
-  friend void PrintTo(const StaticRowReference& ref, std::ostream* os) {
+  friend void PrintTo(const RowReferenceWithRestrictedAccess& ref, std::ostream* os) {
     *os << ad_utility::lazyStrJoin(ref.transformToRef(), ", ");
   }
 
   // Iterators for iterating over a single row.
   auto begin() { return transformToRef().begin(); };
+  auto beginImpl() { return transformToRef().begin(); };
   auto end() { return transformToRef().end(); };
+  auto endImpl() { return transformToRef().end(); };
   auto begin() const { return transformToRef().begin(); };
   auto end() const { return transformToRef().end(); };
-  // TODO : cbegin and cend.
+  auto cbegin() const { return transformToRef().begin(); };
+  auto cend() const { return transformToRef().end(); };
 
-  // Swap the values that are pointed to, not the pointers.
-  template <ad_utility::SimilarTo<StaticRowReference> R>
-  friend void swap(R&& a, R&& b) requires(!isConst) {
-    for (size_t i = 0; i < NumCols; ++i) {
-      std::swap(a[i], b[i]);
+ protected:
+  // The implementation of swapping two `RowReference`s (passed either by
+  // value or by reference).
+  static void swapImpl(auto&& a, auto&& b) requires(!isConst) {
+      for (size_t i = 0; i < NumCols; ++i) {
+          std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
     }
   }
 
+
+  /*
   // Equality is implemented in terms of the values that the reference points
   // to.
-  bool operator==(const StaticRowReference& other) const {
+  bool operator==(const RowReferenceWithRestrictedAccess& other) const {
     for (size_t i = 0; i < NumCols; ++i) {
       if ((*this)[i] != other[i]) {
         return false;
@@ -471,40 +511,29 @@ struct StaticRowReference {
     }
     return true;
   }
+   */
 
- private:
+  // TODO<joka921> solve using `friend`
+ public:
   // Assignment from a `Row` and copy assignment.
-  static StaticRowReference& assignmentImpl(auto&& self, auto&& other) {
+  static RowReferenceWithRestrictedAccess& assignmentImpl(auto&& self, auto&& other) {
     for (size_t i = 0; i < NumCols; ++i) {
-      self[i] = other[i];
+      operatorBracketImpl(self, i) = AD_FWD(other)[i];
     }
     return self;
   }
 
  public:
-  // Assignment from a `Row` and copy assignment.
-  StaticRowReference& operator=(const Row<T, NumCols>& other) & {
-    return assignmentImpl(*this, other);
-  }
-  StaticRowReference& operator=(const Row<T, NumCols>& other) && {
-    return assignmentImpl(*this, other);
-  }
-  // Needs to be declared for this class to work with `std::ranges`.
-  StaticRowReference& operator=(const Row<T, NumCols>& other) const&&;
 
-  StaticRowReference& operator=(const StaticRowReference& other) & {
+  RowReferenceWithRestrictedAccess& operator=(const RowReferenceWithRestrictedAccess& other) && {
     return assignmentImpl(*this, other);
   }
-
-  StaticRowReference& operator=(const StaticRowReference& other) && {
-    return assignmentImpl(*this, other);
-  }
-  StaticRowReference& operator=(const StaticRowReference& other) const&&;
+  RowReferenceWithRestrictedAccess& operator=(const RowReferenceWithRestrictedAccess& other) const&&;
 
   // The copy constructor copies the pointers.
-  StaticRowReference(const StaticRowReference&) = default;
-  StaticRowReference(const Ptrs& arr) : ptrs_(arr) {}
-  StaticRowReference() = default;
+  RowReferenceWithRestrictedAccess(const RowReferenceWithRestrictedAccess&) = default;
+  RowReferenceWithRestrictedAccess(const Ptrs& arr) : ptrs_(arr) {}
+  RowReferenceWithRestrictedAccess() = default;
 
   // Convert from a `RowReference` to a `Row`.
   operator Row<T, NumCols>() const {
@@ -533,118 +562,163 @@ struct StaticRowReference {
   }
 };
 
+template <typename Reference>
+concept RowRefC = std::is_integral_v<decltype(Reference::numStaticColumns)> && ad_utility::SimilarTo<ad_utility::IsConst, decltype(Reference::isConstTag)>;
+
+template <RowRefC Reference, typename RestrictedReference>
+struct IdTableIterator;
+
+// Helper `struct` that stores a pointer to this table and has an `operator()`
+// that can be called with a reference to an `IdTable` and the index of a row
+// and then returns a `row_reference_restricted` to that row. This struct is
+// used to automatically create random access iterators using the
+// `ad_utility::IteratorForAccessOperator` template.
+    template <typename ReferenceType>
+    struct IteratorHelper {
+        auto operator()(auto&& idTable, size_t rowIdx) const {
+            return ReferenceType{&idTable, rowIdx};
+        }
+    };
+
+    template <RowRefC Reference, typename RestrictedReference> requires (Reference::numStaticColumns == 0)
+struct IdTableIterator<Reference, RestrictedReference>: public
+    ad_utility::IteratorForAccessOperatorMixin<IdTableIterator<Reference, RestrictedReference>,
+            typename Reference::table_type, IteratorHelper<RestrictedReference>,
+            RestrictedReference::isConstTag, typename RestrictedReference::row_type, Reference> {
+        using Base = ad_utility::IteratorForAccessOperatorMixin<
+            IdTableIterator<Reference, RestrictedReference>,
+            typename Reference::table_type, IteratorHelper<RestrictedReference>,
+            RestrictedReference::isConstTag,
+            typename RestrictedReference::row_type, Reference>;
+        using Base::Base;
+        IdTableIterator() = default;
+        IdTableIterator(const Base& b) : Base{b} {}
+    IdTableIterator(Base&& b) : Base{std::move(b)} {}
+    };
+
+
+
 // A random access iterator for static `IdTables` that uses the
 // `StaticRowReference` from above.
-template <typename T, size_t N, ad_utility::IsConst isConstTag>
-struct StaticIdTableIterator {
-  using reference = StaticRowReference<N, T, isConstTag>;
+template <RowRefC Reference, typename RestrictedReference> requires (RestrictedReference::numStaticColumns > 0)
+struct IdTableIterator<Reference, RestrictedReference> {
+  using reference = Reference;
+  using T = typename reference::value_type;
+  static constexpr size_t N = reference::numStaticColumns;
+  static constexpr bool isConst = reference::isConst;
   using value_type = Row<T, N>;
   using pointer = value_type*;
-  reference ref_;
-  static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
+  RestrictedReference ref_;
   using iterator_category = std::random_access_iterator_tag;
   using difference_type = int64_t;
 
-  explicit StaticIdTableIterator(const reference::Ptrs& arr) : ref_{arr} {}
+  explicit IdTableIterator(const reference::Ptrs& arr) : ref_{arr} {}
+
+  template <ad_utility::SimilarTo<typename Reference::table_type> Table>
+  IdTableIterator(Table* table, size_t index)
+      : ref_{[&]() {
+          typename RestrictedReference::Ptrs arr;
+          for (size_t i : std::views::iota(0u, N)) {
+            arr[i] = table->getColumn(i).data() + index;
+          }
+      return arr;
+  }()} {}
 
  private:
  public:
-  StaticIdTableIterator& operator=(const StaticIdTableIterator& other) {
+  IdTableIterator& operator=(const IdTableIterator& other) {
     for (size_t i = 0; i < N; ++i) {
       ref_.ptrs_[i] = other.ref_.ptrs_[i];
     }
     return *this;
   }
-  StaticIdTableIterator& operator=(StaticIdTableIterator&& other) {
+  IdTableIterator& operator=(IdTableIterator&& other) {
     for (size_t i = 0; i < N; ++i) {
       ref_.ptrs_[i] = other.ref_.ptrs_[i];
     }
     return *this;
   }
 
-  StaticIdTableIterator(const StaticIdTableIterator& other) {
+  IdTableIterator(const IdTableIterator& other) {
     for (size_t i = 0; i < N; ++i) {
       ref_.ptrs_[i] = other.ref_.ptrs_[i];
     }
   }
-  StaticIdTableIterator(StaticIdTableIterator&& other) {
+  IdTableIterator(IdTableIterator&& other) {
     for (size_t i = 0; i < N; ++i) {
       ref_.ptrs_[i] = other.ref_.ptrs_[i];
     }
   }
 
-  StaticIdTableIterator() = default;
+  IdTableIterator() = default;
 
-  auto operator<=>(const StaticIdTableIterator& rhs) const {
+  auto operator<=>(const IdTableIterator& rhs) const {
     return ref_.ptrs_[0] <=> rhs.ref_.ptrs_[0];
   }
 
-  bool operator==(const StaticIdTableIterator& rhs) const {
+  bool operator==(const IdTableIterator& rhs) const {
     return ref_.ptrs_[0] == rhs.ref_.ptrs_[0];
   }
 
-  StaticIdTableIterator& operator+=(difference_type n) {
+  IdTableIterator& operator+=(difference_type n) {
     ref_.increase(n);
     return *this;
   }
-  StaticIdTableIterator operator+(difference_type n) const {
-    StaticIdTableIterator result{*this};
+  IdTableIterator operator+(difference_type n) const {
+    IdTableIterator result{*this};
     result += n;
     return result;
   }
 
-  StaticIdTableIterator& operator++() {
+  IdTableIterator& operator++() {
     ref_.increase(1);
     return *this;
   }
-  StaticIdTableIterator operator++(int) & {
-    StaticIdTableIterator result{*this};
+  IdTableIterator operator++(int) & {
+    IdTableIterator result{*this};
     ++result;
     return result;
   }
 
-  StaticIdTableIterator& operator--() {
+  IdTableIterator& operator--() {
     ref_.increase(-1);
     return *this;
   }
-  StaticIdTableIterator operator--(int) & {
-    StaticIdTableIterator result{*this};
+  IdTableIterator operator--(int) & {
+    IdTableIterator result{*this};
     --result;
     return result;
   }
 
-  friend StaticIdTableIterator operator+(difference_type n,
-                                         const StaticIdTableIterator& it) {
+  friend IdTableIterator operator+(difference_type n,
+                                         const IdTableIterator& it) {
     return it + n;
   }
 
-  StaticIdTableIterator& operator-=(difference_type n) {
+  IdTableIterator& operator-=(difference_type n) {
     ref_.increase(-n);
     return *this;
   }
 
-  StaticIdTableIterator operator-(difference_type n) const {
-    StaticIdTableIterator result{*this};
+  IdTableIterator operator-(difference_type n) const {
+    IdTableIterator result{*this};
     result -= n;
     return result;
   }
 
-  difference_type operator-(const StaticIdTableIterator& rhs) const {
+  difference_type operator-(const IdTableIterator& rhs) const {
     return ref_.ptrs_[0] - rhs.ref_.ptrs_[0];
   }
 
   // TODO<joka921> We have shallow constness here...
-  reference operator*() const { return ref_; }
-  reference operator*() requires(!isConst) { return ref_; }
+  RestrictedReference operator*() const { return ref_; }
+  RestrictedReference operator*() requires(!isConst) { return ref_; }
 
-  reference operator[](difference_type n) const {
+  RestrictedReference operator[](difference_type n) const {
     auto ref = ref_;
     ref.increase(n);
     return ref;
   }
 };
-
-static_assert(std::input_iterator<
-              StaticIdTableIterator<int, 2, ad_utility::IsConst::True>>);
 
 }  // namespace columnBasedIdTable

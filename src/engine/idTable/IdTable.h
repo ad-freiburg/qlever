@@ -608,6 +608,9 @@ class IdTable {
   // TODO<joka921> We should probably change the names of all those
   // typedefs (`iterator` as well as `row_type` etc.) to `PascalCase` for
   // consistency.
+  using const_iterator = IdTableIterator<const_row_reference, const_row_reference_restricted>;
+  using iterator = IdTableIterator<row_reference, row_reference_restricted>;
+  /*
   using const_iterator = ad_utility::IteratorForAccessOperator<
       IdTable, IteratorHelper<const_row_reference_restricted>,
       ad_utility::IsConst::True, row_type, const_row_reference>;
@@ -616,6 +619,7 @@ class IdTable {
       ad_utility::IteratorForAccessOperator<
           IdTable, IteratorHelper<row_reference_restricted>,
           ad_utility::IsConst::False, row_type, row_reference>>;
+          */
 
   // The usual overloads of `begin()` and `end()` for const and mutable
   // `IdTable`s.
@@ -641,8 +645,11 @@ class IdTable {
   // out-of-place algorithm that only writes the distinct elements. The the
   // follwing two functions can be deleted.
   void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
+    // TODO<joka921> Make this check work again.
+    /*
     AD_EXPENSIVE_CHECK(begin() <= beginIt && beginIt <= endIt &&
                        endIt <= end());
+                       */
     auto startIndex = beginIt - begin();
     auto endIndex = endIt - begin();
     auto numErasedElements = endIndex - startIndex;

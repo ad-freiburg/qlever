@@ -39,11 +39,12 @@ using AccessViaBracketOperator = decltype(accessViaBracketOperator);
  * assignable), consider using `ad_utility::makeAssignableLambda` in
  * `LambdaHelpers.h`.
  */
-template <typename RandomAccessContainer,
+ // TODO<joka921> Document the mixin.
+template <typename Derived, typename RandomAccessContainer,
           typename Accessor = AccessViaBracketOperator,
           IsConst isConstTag = IsConst::True, typename ValueType = void,
           typename Reference = void>
-class IteratorForAccessOperator {
+class IteratorForAccessOperatorMixin {
  public:
   static constexpr bool isConst = isConstTag == IsConst::True;
   using iterator_category = std::random_access_iterator_tag;
@@ -72,73 +73,79 @@ class IteratorForAccessOperator {
   Accessor _accessor{};
 
  public:
-  IteratorForAccessOperator() requires std::is_default_constructible_v<Accessor>
+  IteratorForAccessOperatorMixin() requires std::is_default_constructible_v<Accessor>
   = default;
-  IteratorForAccessOperator(RandomAccessContainerPtr vec, index_type index,
+  IteratorForAccessOperatorMixin(RandomAccessContainerPtr vec, index_type index,
                             Accessor accessor = Accessor{})
       : _vector{vec}, _index{index}, _accessor{std::move(accessor)} {}
 
-  IteratorForAccessOperator(const IteratorForAccessOperator&) = default;
-  IteratorForAccessOperator(IteratorForAccessOperator&&) noexcept = default;
-  IteratorForAccessOperator& operator=(const IteratorForAccessOperator& other) =
+  IteratorForAccessOperatorMixin(const IteratorForAccessOperatorMixin&) = default;
+  IteratorForAccessOperatorMixin(IteratorForAccessOperatorMixin&&) noexcept = default;
+  IteratorForAccessOperatorMixin& operator=(const IteratorForAccessOperatorMixin& other) =
       default;
-  IteratorForAccessOperator& operator=(IteratorForAccessOperator&&) noexcept =
+  IteratorForAccessOperatorMixin& operator=(IteratorForAccessOperatorMixin&&) noexcept =
       default;
 
-  auto operator<=>(const IteratorForAccessOperator& rhs) const {
-    return (_index <=> rhs._index);
+  /*
+  template <IsConst tagA, IsConst tagB>
+  friend auto operator<=>(const IteratorForAccessOperator<RandomAccessContainer, Accessor, tagA, ValueType, Reference>& lhs, const IteratorForAccessOperator<RandomAccessContainer, Accessor, tagB, ValueType, Reference>& rhs) {
+    return (lhs._index <=> rhs._index);
   }
-  bool operator==(const IteratorForAccessOperator& rhs) const {
+   */
+  friend auto operator<=>(const Derived& lhs, const Derived& rhs) {
+      return (lhs._index <=> rhs._index);
+  }
+  bool operator==(const IteratorForAccessOperatorMixin& rhs) const {
     return _index == rhs._index;
   }
 
-  IteratorForAccessOperator& operator+=(difference_type n) {
+  Derived& operator+=(difference_type n) {
     _index += n;
-    return *this;
+    return static_cast<Derived&>(*this);
   }
-  IteratorForAccessOperator operator+(difference_type n) const {
-    IteratorForAccessOperator result{*this};
+  Derived operator+(difference_type n) const {
+    Derived result{*this};
     result += n;
     return result;
   }
 
-  IteratorForAccessOperator& operator++() {
+  Derived& operator++() {
     ++_index;
-    return *this;
+   return static_cast<Derived&>(*this);
   }
-  IteratorForAccessOperator operator++(int) & {
-    IteratorForAccessOperator result{*this};
+  Derived operator++(int) & {
+    Derived result{*this};
     ++_index;
     return result;
   }
 
-  IteratorForAccessOperator& operator--() {
+  Derived& operator--() {
     --_index;
-    return *this;
+    return static_cast<Derived&>(*this);
   }
-  IteratorForAccessOperator operator--(int) & {
-    IteratorForAccessOperator result{*this};
+  Derived operator--(int) & {
+    Derived result{*this};
     --_index;
     return result;
   }
 
-  friend IteratorForAccessOperator operator+(
-      difference_type n, const IteratorForAccessOperator& it) {
+  friend Derived operator+(
+      difference_type n, const Derived& it) {
     return it + n;
   }
 
-  IteratorForAccessOperator& operator-=(difference_type n) {
+  Derived& operator-=(difference_type n) {
     _index -= n;
-    return *this;
+    return static_cast<Derived&>(*this);
   }
 
-  IteratorForAccessOperator operator-(difference_type n) const {
-    IteratorForAccessOperator result{*this};
+  Derived operator-(difference_type n) const {
+    Derived result{*this};
     result -= n;
     return result;
   }
 
-  difference_type operator-(const IteratorForAccessOperator& rhs) const {
+  difference_type operator-(const Derived& rhs) const {
     return static_cast<difference_type>(_index) -
            static_cast<difference_type>(rhs._index);
   }
@@ -166,6 +173,16 @@ class IteratorForAccessOperator {
     return _accessor(*_vector, _index + n);
   }
 };
+
+    template <typename RandomAccessContainer,
+            typename Accessor = AccessViaBracketOperator,
+            IsConst isConstTag = IsConst::True, typename ValueType = void,
+            typename Reference = void>
+    struct IteratorForAccessOperator : public IteratorForAccessOperatorMixin<IteratorForAccessOperator<RandomAccessContainer, Accessor, isConstTag, ValueType, Reference>, RandomAccessContainer, Accessor, isConstTag, ValueType, Reference> {
+  using Base = IteratorForAccessOperatorMixin<IteratorForAccessOperator<RandomAccessContainer, Accessor, isConstTag, ValueType, Reference>, RandomAccessContainer, Accessor, isConstTag, ValueType, Reference>;
+  using Base::Base;
+  IteratorForAccessOperator(const Base& b) : Base{b}{}
+    };
 
 /// If `T` is a type that can safely be moved from (e.g. std::vector<int> or
 /// std::vector<int>&&), then return `std::make_move_iterator(iterator)`. Else
