@@ -9,12 +9,14 @@
 #include <type_traits>
 #include <variant>
 #include <vector>
+#include <ranges>
 
 #include "util/Enums.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
 #include "util/TypeTraits.h"
+#include "util/StringUtils.h"
 #include "util/UninitializedAllocator.h"
 
 namespace columnBasedIdTable {
@@ -103,7 +105,7 @@ class RowReferenceImpl {
  private:
   // The actual implementation is in a private subclass and only the
   // `RowReference` and the `IdTable` have direct access to it.
-  template <typename Table, ad_utility::IsConst isConst>
+  template <typename RowReferenceWithRestrictedAccess>
   friend class RowReference;
 
   template <typename T, int NumCols, typename Allocator, IsView isView>
@@ -114,16 +116,19 @@ class RowReferenceImpl {
   // that the most likely problem becomes visible from the compiler's error
   // message. The class is templated on the underlying table and on whether this
   // is a const or a mutable reference.
-  template <typename Table, ad_utility::IsConst isConstTag>
+  template <typename Table, int NumCols, ad_utility::IsConst isConstTag>
   class RowReferenceWithRestrictedAccess {
    public:
     static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
     using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
     using T = typename Table::value_type;
     static constexpr int numStaticColumns = Table::numStaticColumns;
+    static_assert(Table::numStaticColumns == NumCols);
+    // TODO<joka921> activate this as soon as we have the static reference activated.
+    //static_assert(NumCols == 0);
 
     // Grant the `IdTable` class access to the internal details.
-    template <typename T, int NumCols, typename Allocator, IsView isView>
+    template <typename T, int NumColsOfFriend, typename Allocator, IsView isView>
     friend class IdTable;
 
    private:
@@ -281,12 +286,15 @@ class RowReferenceImpl {
       return assignmentImpl(*this, other);
     }
 
+    // TODO<joka921> Also replace this....
+    /*
     // Assignment from a `const` RowReference to a `mutable` RowReference
     This& operator=(const RowReferenceWithRestrictedAccess<
                     Table, ad_utility::IsConst::True>& other) &&
         requires(!isConst) {
       return assignmentImpl(*this, other);
     }
+     */
 
     // This strange overload needs to be declared to make `Row` a
     // `std::random_access_range` that can be used e.g. with
@@ -309,17 +317,16 @@ class RowReferenceImpl {
 // reference actually needs to be stored. Most of its implementation is
 // inherited from or delegated to the `RowReferenceWithRestrictedAccess`
 // class above, but it also supports mutable access to lvalues.
-template <typename Table, ad_utility::IsConst isConstTag>
+template <typename RowReferenceWithRestrictedAccess>
 class RowReference
-    : public RowReferenceImpl::RowReferenceWithRestrictedAccess<Table,
-                                                                isConstTag> {
+    : public RowReferenceWithRestrictedAccess {
  private:
   using Base =
-      RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, isConstTag>;
+     RowReferenceWithRestrictedAccess;
   using Base::numStaticColumns;
   using TablePtr = typename Base::TablePtr;
   using T = typename Base::T;
-  static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
+  static constexpr bool isConst = Base::isConst;
 
   // Efficient access to the base class subobject to invoke its functions.
   Base& base() { return static_cast<Base&>(*this); }
@@ -382,6 +389,9 @@ class RowReference
     return *this;
   }
 
+  /*
+  // TODO<joka921> actually this should be forbidden, as it violates the constness.
+  // But what could maybe be useful is the copy construction of const references from non-const references.
   // Assignment from a `const` RowReference to a `mutable` RowReference
   RowReference& operator=(
       const RowReference<Table, ad_utility::IsConst::True>& other)
@@ -389,11 +399,252 @@ class RowReference
     this->assignmentImpl(base(), other);
     return *this;
   }
+   */
 
   // No need to copy `RowReference`s, because that is also most likely a bug.
   // Currently none of our functions or of the STL-algorithms require it.
   // If necessary, we can still enable it in the future.
   RowReference(const RowReference&) = delete;
 };
+// A reference to a row for the case where the number of columns is statically
+// known. We store a `std::array<T*>` which allows for loop unrolling and other
+// compiler optimizations.
+// TODO<joka921> We should also implement the `restriction` mechanism.
+// TODO<joka921> Maybe we can make the `ordinary` row reference a template
+// specialization of this class to reduce the number of different classes we
+// have in this file.
+template <typename Table,size_t NumCols, typename T, ad_utility::IsConst isConstTag>
+struct StaticRowReference {
+  static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
+  using Ptr = std::conditional_t<isConst, const T*, T*>;
+  using Ref = std::conditional_t<isConst, const T&, T&>;
+  using ConstRef = const T&;
+  // We store one pointer per column of the IdTable.
+  using Ptrs = std::array<Ptr, NumCols>;
+  Ptrs ptrs_;
+
+  constexpr static size_t numColumns() { return NumCols; }
+
+  // Access to the `i`-th column of this row.
+  T& operator[](size_t i) requires(!isConst) { return *ptrs_[i]; }
+  const T& operator[](size_t i) const { return *ptrs_[i]; }
+
+ private:
+  // Transform the array of pointers to a view of references for easier
+  // implementation of several member functions.
+  auto transformToRef() {
+    return std::views::transform(ptrs_, [](auto& ptr) -> Ref { return *ptr; });
+  }
+  auto transformToRef() const {
+    return std::views::transform(ptrs_,
+                                 [](auto& ptr) -> ConstRef { return *ptr; });
+  }
+
+ public:
+  // Printing for googletest.
+  friend void PrintTo(const StaticRowReference& ref, std::ostream* os) {
+    *os << ad_utility::lazyStrJoin(ref.transformToRef(), ", ");
+  }
+
+  // Iterators for iterating over a single row.
+  auto begin() { return transformToRef().begin(); };
+  auto end() { return transformToRef().end(); };
+  auto begin() const { return transformToRef().begin(); };
+  auto end() const { return transformToRef().end(); };
+  // TODO : cbegin and cend.
+
+  // Swap the values that are pointed to, not the pointers.
+  template <ad_utility::SimilarTo<StaticRowReference> R>
+  friend void swap(R&& a, R&& b) requires(!isConst) {
+    for (size_t i = 0; i < NumCols; ++i) {
+      std::swap(a[i], b[i]);
+    }
+  }
+
+  // Equality is implemented in terms of the values that the reference points
+  // to.
+  bool operator==(const StaticRowReference& other) const {
+    for (size_t i = 0; i < NumCols; ++i) {
+      if ((*this)[i] != other[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+ private:
+  // Assignment from a `Row` and copy assignment.
+  static StaticRowReference& assignmentImpl(auto&& self, auto&& other) {
+    for (size_t i = 0; i < NumCols; ++i) {
+      self[i] = other[i];
+    }
+    return self;
+  }
+
+ public:
+  // Assignment from a `Row` and copy assignment.
+  StaticRowReference& operator=(const Row<T, NumCols>& other) & {
+    return assignmentImpl(*this, other);
+  }
+  StaticRowReference& operator=(const Row<T, NumCols>& other) && {
+    return assignmentImpl(*this, other);
+  }
+  // Needs to be declared for this class to work with `std::ranges`.
+  StaticRowReference& operator=(const Row<T, NumCols>& other) const&&;
+
+  StaticRowReference& operator=(const StaticRowReference& other) & {
+    return assignmentImpl(*this, other);
+  }
+
+  StaticRowReference& operator=(const StaticRowReference& other) && {
+    return assignmentImpl(*this, other);
+  }
+  StaticRowReference& operator=(const StaticRowReference& other) const&&;
+
+  // The copy constructor copies the pointers.
+  StaticRowReference(const StaticRowReference&) = default;
+  StaticRowReference(const Ptrs& arr) : ptrs_(arr) {}
+  StaticRowReference() = default;
+
+  // Convert from a `RowReference` to a `Row`.
+  operator Row<T, NumCols>() const {
+    Row<T, NumCols> result{NumCols};
+    for (size_t i = 0; i < NumCols; ++i) {
+      result[i] = *ptrs_[i];
+    }
+    return result;
+  }
+
+  // Convert from a `RowReference` to `std::array`.
+  operator std::array<T, NumCols>() const {
+    std::array<T, NumCols> result;
+    for (size_t i = 0; i < NumCols; ++i) {
+      result[i] = *ptrs_[i];
+    }
+    return result;
+  }
+
+  // Change all the pointers by the given offset. This reference then points to
+  // the row at `indexOfPreviousRow + offset`.
+  void increase(std::ptrdiff_t offset) {
+    for (size_t i = 0; i < NumCols; ++i) {
+      ptrs_[i] += offset;
+    }
+  }
+};
+
+// A random access iterator for static `IdTables` that uses the
+// `StaticRowReference` from above.
+template <typename T, size_t N, ad_utility::IsConst isConstTag>
+struct StaticIdTableIterator {
+  using reference = StaticRowReference<N, T, isConstTag>;
+  using value_type = Row<T, N>;
+  using pointer = value_type*;
+  reference ref_;
+  static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
+  using iterator_category = std::random_access_iterator_tag;
+  using difference_type = int64_t;
+
+  explicit StaticIdTableIterator(const reference::Ptrs& arr) : ref_{arr} {}
+
+ private:
+ public:
+  StaticIdTableIterator& operator=(const StaticIdTableIterator& other) {
+    for (size_t i = 0; i < N; ++i) {
+      ref_.ptrs_[i] = other.ref_.ptrs_[i];
+    }
+    return *this;
+  }
+  StaticIdTableIterator& operator=(StaticIdTableIterator&& other) {
+    for (size_t i = 0; i < N; ++i) {
+      ref_.ptrs_[i] = other.ref_.ptrs_[i];
+    }
+    return *this;
+  }
+
+  StaticIdTableIterator(const StaticIdTableIterator& other) {
+    for (size_t i = 0; i < N; ++i) {
+      ref_.ptrs_[i] = other.ref_.ptrs_[i];
+    }
+  }
+  StaticIdTableIterator(StaticIdTableIterator&& other) {
+    for (size_t i = 0; i < N; ++i) {
+      ref_.ptrs_[i] = other.ref_.ptrs_[i];
+    }
+  }
+
+  StaticIdTableIterator() = default;
+
+  auto operator<=>(const StaticIdTableIterator& rhs) const {
+    return ref_.ptrs_[0] <=> rhs.ref_.ptrs_[0];
+  }
+
+  bool operator==(const StaticIdTableIterator& rhs) const {
+    return ref_.ptrs_[0] == rhs.ref_.ptrs_[0];
+  }
+
+  StaticIdTableIterator& operator+=(difference_type n) {
+    ref_.increase(n);
+    return *this;
+  }
+  StaticIdTableIterator operator+(difference_type n) const {
+    StaticIdTableIterator result{*this};
+    result += n;
+    return result;
+  }
+
+  StaticIdTableIterator& operator++() {
+    ref_.increase(1);
+    return *this;
+  }
+  StaticIdTableIterator operator++(int) & {
+    StaticIdTableIterator result{*this};
+    ++result;
+    return result;
+  }
+
+  StaticIdTableIterator& operator--() {
+    ref_.increase(-1);
+    return *this;
+  }
+  StaticIdTableIterator operator--(int) & {
+    StaticIdTableIterator result{*this};
+    --result;
+    return result;
+  }
+
+  friend StaticIdTableIterator operator+(difference_type n,
+                                         const StaticIdTableIterator& it) {
+    return it + n;
+  }
+
+  StaticIdTableIterator& operator-=(difference_type n) {
+    ref_.increase(-n);
+    return *this;
+  }
+
+  StaticIdTableIterator operator-(difference_type n) const {
+    StaticIdTableIterator result{*this};
+    result -= n;
+    return result;
+  }
+
+  difference_type operator-(const StaticIdTableIterator& rhs) const {
+    return ref_.ptrs_[0] - rhs.ref_.ptrs_[0];
+  }
+
+  // TODO<joka921> We have shallow constness here...
+  reference operator*() const { return ref_; }
+  reference operator*() requires(!isConst) { return ref_; }
+
+  reference operator[](difference_type n) const {
+    auto ref = ref_;
+    ref.increase(n);
+    return ref;
+  }
+};
+
+static_assert(std::input_iterator<
+              StaticIdTableIterator<int, 2, ad_utility::IsConst::True>>);
 
 }  // namespace columnBasedIdTable

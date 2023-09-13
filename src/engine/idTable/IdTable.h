@@ -123,15 +123,6 @@ class IdTable {
       std::is_constructible_v<ColumnStorage, size_t, Allocator>;
 
   using value_type = T;
-  // Because of the column-major layout, the `row_type` (a value type that
-  // stores the values of a  single row) and the `row_reference` (a type that
-  // refers to a specific row of a specific `IdTable`) are different. They are
-  // implemented in a way that makes it hard to use them incorrectly. For
-  // details, see the comment above and the definition of the `Row` and
-  // `RowReference` class.
-  using row_type = Row<T, NumColumns>;
-  using row_reference = RowReference<IdTable, ad_utility::IsConst::False>;
-  using const_row_reference = RowReference<IdTable, ad_utility::IsConst::True>;
 
  private:
   // Assign shorter aliases for some types that are important for the correct
@@ -143,13 +134,13 @@ class IdTable {
 #ifdef __GLIBCXX__
   using row_reference_restricted =
       RowReferenceImpl::RowReferenceWithRestrictedAccess<
-          IdTable, ad_utility::IsConst::False>;
+          IdTable, NumColumns, ad_utility::IsConst::False>;
   using const_row_reference_restricted =
       RowReferenceImpl::RowReferenceWithRestrictedAccess<
-          IdTable, ad_utility::IsConst::True>;
+          IdTable, NumColumns, ad_utility::IsConst::True>;
   using const_row_reference_view_restricted =
       RowReferenceImpl::RowReferenceWithRestrictedAccess<
-          IdTable<T, NumColumns, ColumnStorage, IsView::True>,
+          IdTable<T, NumColumns, ColumnStorage, IsView::True>, NumColumns,
           ad_utility::IsConst::True>;
 #else
   using row_reference_restricted = row_reference;
@@ -158,6 +149,16 @@ class IdTable {
       RowReference<IdTable<T, NumColumns, ColumnStorage, IsView::True>,
                    ad_utility::IsConst::True>;
 #endif
+ public:
+        // Because of the column-major layout, the `row_type` (a value type that
+        // stores the values of a  single row) and the `row_reference` (a type that
+        // refers to a specific row of a specific `IdTable`) are different. They are
+        // implemented in a way that makes it hard to use them incorrectly. For
+        // details, see the comment above and the definition of the `Row` and
+        // `RowReference` class.
+        using row_type = Row<T, NumColumns>;
+        using row_reference = RowReference<row_reference_restricted >;
+        using const_row_reference = RowReference<const_row_reference_restricted>;
 
  private:
   Data data_;
