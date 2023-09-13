@@ -12,6 +12,7 @@
 #include <variant>
 #include <vector>
 
+#include "engine/idTable/IdTableIterator.h"
 #include "engine/idTable/IdTableRow.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
@@ -150,15 +151,15 @@ class IdTable {
                    ad_utility::IsConst::True>;
 #endif
  public:
-        // Because of the column-major layout, the `row_type` (a value type that
-        // stores the values of a  single row) and the `row_reference` (a type that
-        // refers to a specific row of a specific `IdTable`) are different. They are
-        // implemented in a way that makes it hard to use them incorrectly. For
-        // details, see the comment above and the definition of the `Row` and
-        // `RowReference` class.
-        using row_type = Row<T, NumColumns>;
-        using row_reference = RowReference<row_reference_restricted >;
-        using const_row_reference = RowReference<const_row_reference_restricted>;
+  // Because of the column-major layout, the `row_type` (a value type that
+  // stores the values of a  single row) and the `row_reference` (a type that
+  // refers to a specific row of a specific `IdTable`) are different. They are
+  // implemented in a way that makes it hard to use them incorrectly. For
+  // details, see the comment above and the definition of the `Row` and
+  // `RowReference` class.
+  using row_type = Row<T, NumColumns>;
+  using row_reference = RowReference<row_reference_restricted>;
+  using const_row_reference = RowReference<const_row_reference_restricted>;
 
  private:
   Data data_;
@@ -608,7 +609,8 @@ class IdTable {
   // TODO<joka921> We should probably change the names of all those
   // typedefs (`iterator` as well as `row_type` etc.) to `PascalCase` for
   // consistency.
-  using const_iterator = IdTableIterator<const_row_reference, const_row_reference_restricted>;
+  using const_iterator =
+      IdTableIterator<const_row_reference, const_row_reference_restricted>;
   using iterator = IdTableIterator<row_reference, row_reference_restricted>;
   /*
   using const_iterator = ad_utility::IteratorForAccessOperator<
