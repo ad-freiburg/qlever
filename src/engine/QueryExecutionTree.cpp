@@ -13,6 +13,7 @@
 
 #include "absl/strings/str_join.h"
 #include "engine/Bind.h"
+#include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Distinct.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -99,7 +100,8 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     const SelectClause& selectClause, bool includeQuestionMark) const {
   ColumnIndicesAndTypes exportColumns;
 
-  for (const auto& var : selectClause.getSelectedVariables()) {
+  auto variables = selectClause.getSelectedVariables();
+  for (const auto& var : variables) {
     std::string varString = var.name();
     if (getVariableColumns().contains(var)) {
       auto columnIndex = getVariableColumns().at(var).columnIndex_;
@@ -219,6 +221,8 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
   } else if constexpr (std::is_same_v<Op, ValuesForTesting> ||
                        std::is_same_v<Op, ValuesForTestingNoKnownEmptyResult>) {
     _type = DUMMY;
+  } else if constexpr (std::is_same_v<Op, CartesianProductJoin>) {
+    _type = CARTESIAN_PRODUCT_JOIN;
   } else {
     static_assert(ad_utility::alwaysFalse<Op>,
                   "New type of operation that was not yet registered");
@@ -254,6 +258,8 @@ template void QueryExecutionTree::setOperation(
     std::shared_ptr<ValuesForTesting>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<ValuesForTestingNoKnownEmptyResult>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<CartesianProductJoin>);
 
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(

@@ -56,6 +56,8 @@ static const std::string INTERNAL_VARIABLE_PREFIX =
     "?_QLever_internal_variable_";
 
 static constexpr std::string_view TEXTSCORE_VARIABLE_PREFIX = "?ql_textscore_";
+static constexpr std::string_view MATCHINGWORD_VARIABLE_PREFIX =
+    "?ql_matchingword_";
 
 // For anonymous nodes in Turtle.
 static const std::string ANON_NODE_PREFIX = "QLever-Anon-Node";

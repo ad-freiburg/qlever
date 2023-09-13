@@ -41,7 +41,7 @@ fragment Y : [yY];
 fragment Z : [zZ];
 
 // Keywords.
-MEMORY_UNIT : K B | M B | G B | T B | P B;
+MEMORY_UNIT : K B | M B | G B | T B | K | M | G | T;
 BYTE: B ;
 
 // The literals.

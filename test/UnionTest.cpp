@@ -16,18 +16,19 @@
 
 namespace {
 auto V = ad_utility::testing::VocabId;
-}
+using Vars = std::vector<std::optional<Variable>>;
+}  // namespace
 
 // A simple test for computing a union.
 TEST(UnionTest, computeUnion) {
   auto* qec = ad_utility::testing::getQec();
   IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, left.clone(), std::vector{Variable{"?x"}});
+      qec, left.clone(), Vars{Variable{"?x"}});
 
   IdTable right = makeIdTableFromVector({{V(4), V(5)}, {V(6), V(7)}});
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, right.clone(), std::vector{Variable{"?u"}, Variable{"?x"}});
+      qec, right.clone(), Vars{Variable{"?u"}, Variable{"?x"}});
 
   Union u{ad_utility::testing::getQec(), leftT, rightT};
   auto resultTable = u.computeResultOnlyForTesting();
@@ -59,10 +60,10 @@ TEST(UnionTest, computeUnionLarge) {
     expected.push_back(std::vector<IntOrId>{U, V(i + 425)});
   }
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, makeIdTableFromVector(leftInput), std::vector{Variable{"?x"}});
+      qec, makeIdTableFromVector(leftInput), Vars{Variable{"?x"}});
 
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, makeIdTableFromVector(rightInput), std::vector{Variable{"?u"}});
+      qec, makeIdTableFromVector(rightInput), Vars{Variable{"?u"}});
 
   Union u{ad_utility::testing::getQec(), leftT, rightT};
   auto resultTable = u.computeResultOnlyForTesting();
