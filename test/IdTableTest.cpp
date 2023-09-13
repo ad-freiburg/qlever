@@ -138,7 +138,6 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
 
 // The following test demonstrates the iterator functionality of a single
 // row.
-// TODO<joka921> make these work again
 TEST(IdTable, rowIterators) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   auto testRow = [](auto row) {
@@ -1002,8 +1001,6 @@ TEST(IdTable, shrinkToFit) {
 }
 
 TEST(IdTable, staticAsserts) {
-  // static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
-  // static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
   static_assert(std::ranges::range<IdTable>);
   static_assert(std::ranges::random_access_range<IdTable>);
   static_assert(std::ranges::random_access_range<IdTableStatic<1>>);

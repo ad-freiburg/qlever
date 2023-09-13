@@ -5,6 +5,11 @@
 #ifndef QLEVER_IDTABLEITERATOR_H
 #define QLEVER_IDTABLEITERATOR_H
 
+#include "util/TypeTraits.h"
+#include "util/Enums.h"
+#include "util/Iterators.h"
+#include "engine/idTable/IdTableRow.h"
+
 namespace columnBasedIdTable {
 
 template <typename Reference>
@@ -54,12 +59,13 @@ struct IdTableIterator<Reference, RestrictedReference> {
   using reference = Reference;
   using T = typename reference::value_type;
   static constexpr size_t N = reference::numStaticColumns;
-  static constexpr bool isConst = reference::isConst;
   using value_type = Row<T, N>;
   using pointer = value_type*;
-  RestrictedReference ref_;
+  static constexpr bool isConst = reference::isConst;
   using iterator_category = std::random_access_iterator_tag;
   using difference_type = int64_t;
+
+    RestrictedReference ref_;
 
   explicit IdTableIterator(const reference::Ptrs& arr) : ref_{arr} {}
 
@@ -73,7 +79,6 @@ struct IdTableIterator<Reference, RestrictedReference> {
           return arr;
         }()} {}
 
- private:
  public:
   IdTableIterator& operator=(const IdTableIterator& other) {
     for (size_t i = 0; i < N; ++i) {
