@@ -5,19 +5,16 @@
 #ifndef QLEVER_IDTABLEITERATOR_H
 #define QLEVER_IDTABLEITERATOR_H
 
-#include "util/TypeTraits.h"
+#include "engine/idTable/IdTableRow.h"
 #include "util/Enums.h"
 #include "util/Iterators.h"
-#include "engine/idTable/IdTableRow.h"
+#include "util/TypeTraits.h"
 
 namespace columnBasedIdTable {
 
-template <typename Reference>
-concept RowRefC =
-    std::is_integral_v<decltype(Reference::numStaticColumns)> &&
-    ad_utility::SimilarTo<ad_utility::IsConst, decltype(Reference::isConstTag)>;
-
-template <RowRefC Reference, typename RestrictedReference>
+// Iterators for the `IdTable` class, there is one implementation for the
+// dynamic case (`NumCols == 0`) and one for the (more efficient) static case.
+template <typename Reference, typename RestrictedReference>
 struct IdTableIterator;
 
 // Helper `struct` that stores a pointer to this table and has an `operator()`
@@ -32,7 +29,11 @@ struct IteratorHelper {
   }
 };
 
-template <RowRefC Reference, typename RestrictedReference>
+// Implementation for the dynamic case. Is directly derived from
+// `IteratorForAccessOperator`, but needs to use the more involved mixin variant
+// because we want a unique interface to the iterator classes in the `IdTable`
+// to reduce the complexity there.
+template <typename Reference, typename RestrictedReference>
 requires(Reference::numStaticColumns == 0)
 struct IdTableIterator<Reference, RestrictedReference>
     : public ad_utility::IteratorForAccessOperatorMixin<
@@ -51,11 +52,14 @@ struct IdTableIterator<Reference, RestrictedReference>
   IdTableIterator(Base&& b) : Base{std::move(b)} {}
 };
 
-// A random access iterator for static `IdTables` that uses the
-// `StaticRowReference` from above.
-template <RowRefC Reference, typename RestrictedReference>
+// A random access iterator for static `IdTables`  (NumCols != 0). Needs to be
+// implemented manually.
+template <typename Reference, typename RestrictedReference>
 requires(RestrictedReference::numStaticColumns > 0)
-struct IdTableIterator<Reference, RestrictedReference> {
+class IdTableIterator<Reference, RestrictedReference> {
+ public:
+  // Most of these typedefs are needed by the STL to properly accept this class
+  // as a random access iterator.
   using reference = Reference;
   using T = typename reference::value_type;
   static constexpr size_t N = reference::numStaticColumns;
@@ -65,47 +69,39 @@ struct IdTableIterator<Reference, RestrictedReference> {
   using iterator_category = std::random_access_iterator_tag;
   using difference_type = int64_t;
 
-    RestrictedReference ref_;
-
-  explicit IdTableIterator(const reference::Ptrs& arr) : ref_{arr} {}
-
-  template <ad_utility::SimilarTo<typename Reference::table_type> Table>
-  IdTableIterator(Table* table, size_t index)
-      : ref_{[&]() {
-          typename RestrictedReference::Ptrs arr;
-          for (size_t i : std::views::iota(0u, N)) {
-            arr[i] = table->getColumn(i).data() + index;
-          }
-          return arr;
-        }()} {}
+ private:
+  RestrictedReference ref_;
 
  public:
+  // Default constructor.
+  IdTableIterator() = default;
+
+  // Construct from a pointer to an `IdTable` and a row index.
+  // Note that all copy and assignment operations on iterators need to set the
+  // pointers of the underlying `RowReference`, not the values that those
+  // point to.
+  template <ad_utility::SimilarTo<typename Reference::table_type> Table>
+  IdTableIterator(Table* table, size_t index) {
+    for (size_t i : std::views::iota(0u, N)) {
+      ref_.ptrs_[i] = table->getColumn(i).data() + index;
+    }
+  }
+
+  // Copy constructor and copy assignment.
+  IdTableIterator(const IdTableIterator& other) {
+    for (size_t i = 0; i < N; ++i) {
+      ref_.ptrs_[i] = other.ref_.ptrs_[i];
+    }
+  }
+
   IdTableIterator& operator=(const IdTableIterator& other) {
     for (size_t i = 0; i < N; ++i) {
       ref_.ptrs_[i] = other.ref_.ptrs_[i];
     }
     return *this;
   }
-  IdTableIterator& operator=(IdTableIterator&& other) {
-    for (size_t i = 0; i < N; ++i) {
-      ref_.ptrs_[i] = other.ref_.ptrs_[i];
-    }
-    return *this;
-  }
 
-  IdTableIterator(const IdTableIterator& other) {
-    for (size_t i = 0; i < N; ++i) {
-      ref_.ptrs_[i] = other.ref_.ptrs_[i];
-    }
-  }
-  IdTableIterator(IdTableIterator&& other) {
-    for (size_t i = 0; i < N; ++i) {
-      ref_.ptrs_[i] = other.ref_.ptrs_[i];
-    }
-  }
-
-  IdTableIterator() = default;
-
+  // Comparison is done by comparing the first pointer.
   auto operator<=>(const IdTableIterator& rhs) const {
     return ref_.ptrs_[0] <=> rhs.ref_.ptrs_[0];
   }
@@ -114,6 +110,8 @@ struct IdTableIterator<Reference, RestrictedReference> {
     return ref_.ptrs_[0] == rhs.ref_.ptrs_[0];
   }
 
+  // All the arithmetic operators on iterators. All of them are implemented by
+  // adding a certain offset to the underlying pointers.
   IdTableIterator& operator+=(difference_type n) {
     ref_.increase(n);
     return *this;
@@ -164,7 +162,11 @@ struct IdTableIterator<Reference, RestrictedReference> {
     return ref_.ptrs_[0] - rhs.ref_.ptrs_[0];
   }
 
-  // TODO<joka921> We have shallow constness here...
+  // Dereferencing operators.
+  // Note: We currently violate the logical constness here, as we would need to
+  // return `ConstRestrictedReferences` for the const overloads.
+  // TODO<joka921> Implement the necessary machinery and test that it works
+  // correctly.
   RestrictedReference operator*() const { return ref_; }
   RestrictedReference operator*() requires(!isConst) { return ref_; }
 

@@ -120,6 +120,13 @@ class RowReferenceImpl {
   class RowReferenceWithRestrictedAccess;
 };
 
+// This mixin class implements most of the common functionality for the
+// restricted row references. In particular, it consists of common code for the
+// restricted row references for the dynamic and static IdTables.
+// The first template parameter `Impl` is the type of the actual
+// `RestrictedRowReference` for which this mixin is used. For this to work, the
+// `Impl` class has to provide all the `...Impl` functions that the mixin
+// implicitly uses, and the `Impl` must inherit from the mixin.
 template <typename Impl, ad_utility::IsConst isConstTag, typename RowType>
 class RestrictedRowReferenceMixin {
  public:
@@ -138,7 +145,9 @@ class RestrictedRowReferenceMixin {
 
  private:
   // Swap two `RowReference`s, but only if they are temporaries (rvalues).
-  // This modifies the underlying table.
+  // This modifies the underlying table. The `localSwapImpl` is needed because
+  // we cannot use private functions from the `Impl` in `friend` functions, even
+  // if this class is a friend of the `Impl`.
   static void localSwapImpl(Impl&& a, Impl&& b) requires(!isConst) {
     return Impl::swapImpl(AD_FWD(a), AD_FWD(b));
   }
@@ -147,8 +156,9 @@ class RestrictedRowReferenceMixin {
   friend void swap(Impl&& a, Impl&& b) requires(!isConst) {
     return localSwapImpl(AD_FWD(a), AD_FWD(b));
   }
-  // Equality is implemented in terms of the values that the reference points
-  // to.
+
+  // The equality operator for rows can be implemented in terms of elementwise
+  // equality.
   friend bool operator==(const Impl& a, const Impl& b) {
     if (a.numColumns() != b.numColumns()) {
       return false;
@@ -161,6 +171,8 @@ class RestrictedRowReferenceMixin {
     return true;
   }
   // Assignment from a `Row` with the same number of columns.
+  // Note that the copy assignment operators cannot be implemented inside the
+  // mixin, because they cannot be inherited.
   Impl& operator=(const RowType& other) && {
     return Impl::assignmentImpl(static_cast<Impl&>(*this), other);
   }
@@ -197,6 +209,8 @@ class RestrictedRowReferenceMixin {
   };
 };
 
+// The restricted row reference for dynamic `IdTables` (with `numStaticCols ==
+// 0`).
 template <typename Table, ad_utility::IsConst isConstTagV>
 class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, 0, isConstTagV>
     : public RestrictedRowReferenceMixin<
@@ -204,28 +218,27 @@ class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, 0, isConstTagV>
                                                              isConstTagV>,
           isConstTagV, typename Table::row_type> {
  public:
+  // Several constants and member types, some of those are required by the
+  // interface of the `RowReference` class, whereas some others are only defined
+  // for convenience.
   static constexpr ad_utility::IsConst isConstTag = isConstTagV;
   static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
   using table_type = Table;
   using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
-  using T = typename Table::value_type;
-  using value_type = T;
+  using value_type = typename Table::value_type;
   static constexpr int numStaticColumns = Table::numStaticColumns;
-  using row_type = Row<T, numStaticColumns>;
+  using row_type = Row<value_type, numStaticColumns>;
 
   // Grant the `IdTable` class access to the internal details.
   template <typename T, int NumColsOfFriend, typename Allocator, IsView isView>
   friend class IdTable;
 
+  // Make the mixin a friend and use its assignment operator from rows.
   using Mixin = RestrictedRowReferenceMixin<RowReferenceWithRestrictedAccess,
                                             isConstTag, row_type>;
   friend class RestrictedRowReferenceMixin<RowReferenceWithRestrictedAccess,
                                            isConstTag, row_type>;
   using Mixin::operator=;
-
- private:
-  // Make the long class type a little shorter where possible.
-  using This = RowReferenceWithRestrictedAccess;
 
  private:
   // The `Table` (as a pointer) and the row (as an index) to which this
@@ -239,20 +252,19 @@ class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, 0, isConstTagV>
  public:
   explicit RowReferenceWithRestrictedAccess(TablePtr table, size_t row)
       : table_{table}, row_{row} {}
+  // The number of columns that this row contains.
+  size_t numColumns() const { return table_->numColumns(); }
+  size_t size() const { return numColumns(); }
+
+  size_t rowIndex() const { return row_; }
 
  protected:
   // The actual implementation of operator[].
-  static T& operatorBracketImpl(auto& self, size_t i)
-      requires(!std::is_const_v<std::remove_reference_t<decltype(self)>> &&
-               !isConst) {
-    return (*self.table_)(self.row_, i);
-  }
-  static const T& operatorBracketImpl(const auto& self, size_t i) {
+  static auto& operatorBracketImpl(auto& self, size_t i) {
     return (*self.table_)(self.row_, i);
   }
 
- public:
-  // Define iterators.
+  // Define iterators over a single row.
   template <typename RowT>
   struct IteratorHelper {
     decltype(auto) operator()(auto&& row, size_t colIdx) const {
@@ -269,15 +281,6 @@ class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, 0, isConstTagV>
       IteratorHelper<RowReferenceWithRestrictedAccess>,
       ad_utility::IsConst::True>;
 
-  // The number of columns that this row contains.
-  size_t numColumns() const { return table_->numColumns(); }
-
-  size_t rowIndex() const { return row_; }
-
-  size_t size() const { return numColumns(); }
-
-  // TODO<joka921> Make protected and the Mixin a friend.
- public:
   // The implementation of swapping two `RowReference`s (passed either by
   // value or by reference).
   static void swapImpl(auto&& a, auto&& b) requires(!isConst) {
@@ -311,9 +314,9 @@ class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, 0, isConstTagV>
   }
 
   // Convert from a `RowReference` to a `Row`.
-  operator Row<T, numStaticColumns>() const {
+  operator row_type() const {
     auto numCols = (std::move(*this)).numColumns();
-    Row<T, numStaticColumns> result{numCols};
+    row_type result{numCols};
     for (size_t i = 0; i < numCols; ++i) {
       result[i] = std::move(*this)[i];
     }
@@ -323,7 +326,8 @@ class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, 0, isConstTagV>
  protected:
   // Internal implementation of the assignment from a `Row` as well as a
   // `RowReference`. This assignment actually writes to the underlying table.
-  static This& assignmentImpl(auto&& self, const auto& other) {
+  static RowReferenceWithRestrictedAccess& assignmentImpl(auto&& self,
+                                                          const auto& other) {
     if constexpr (numStaticColumns == 0) {
       AD_CONTRACT_CHECK(self.numColumns() == other.numColumns());
     }
@@ -334,7 +338,10 @@ class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, 0, isConstTagV>
   }
 
  public:
-  This& operator=(const This& other) && { return assignmentImpl(*this, other); }
+  RowReferenceWithRestrictedAccess& operator=(
+      const RowReferenceWithRestrictedAccess& other) && {
+    return assignmentImpl(*this, other);
+  }
 
  protected:
   // No need to copy this internal type, but the implementation of the
@@ -354,7 +361,7 @@ class RowReference : public RowReferenceWithRestrictedAccess {
   using Base = RowReferenceWithRestrictedAccess;
   using table_type = typename Base::table_type;
   using row_type = typename Base::row_type;
-  using T = typename Base::T;
+  using T = typename Base::value_type;
   using value_type = T;
   static constexpr bool isConst = Base::isConst;
   using RowReferenceWithRestrictedAccess::isConstTag;
@@ -427,6 +434,7 @@ class RowReference : public RowReferenceWithRestrictedAccess {
   // If necessary, we can still enable it in the future.
   RowReference(const RowReference&) = delete;
 };
+
 // A reference to a row for the case where the number of columns is statically
 // known. We store a `std::array<T*>` which allows for loop unrolling and other
 // compiler optimizations.
@@ -438,17 +446,16 @@ class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, NumCols,
           RowReferenceWithRestrictedAccess<Table, NumCols, isConstTagV>,
           isConstTagV, typename Table::row_type> {
  public:
+  // Typedefs and constants, some of them are needed as part of the external
+  // interface because the `RowReference` template requires them.
   using table_type = Table;
   static constexpr ad_utility::IsConst isConstTag = isConstTagV;
   static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
-  using T = typename Table::value_type;
-  using row_type = Row<T, NumCols>;
-  using Ptr = std::conditional_t<isConst, const T*, T*>;
-  using Ref = std::conditional_t<isConst, const T&, T&>;
-  using ConstRef = const T&;
+  using value_type = typename Table::value_type;
+  using row_type = Row<value_type, NumCols>;
+  using Ptr = std::conditional_t<isConst, const value_type*, value_type*>;
   // We store one pointer per column of the IdTable.
   using Ptrs = std::array<Ptr, NumCols>;
-  Ptrs ptrs_;
   static constexpr int numStaticColumns = Table::numStaticColumns;
 
   using Mixin = RestrictedRowReferenceMixin<RowReferenceWithRestrictedAccess,
@@ -464,14 +471,22 @@ class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, NumCols,
   constexpr static size_t numColumns() { return NumCols; }
 
  private:
+  // The actual array of pointers to values in the IdTable.
+  Ptrs ptrs_;
+  // The iterator needs access to the internals.
+  template <typename Reference, typename RestrictedReference>
+  friend struct IdTableIterator;
+
   // Transform the array of pointers to a view of references for easier
   // implementation of several member functions.
   auto transformToRef() {
-    return std::views::transform(ptrs_, [](auto& ptr) -> Ref { return *ptr; });
+    return std::views::transform(
+        ptrs_, [](auto& ptr) -> decltype(auto) { return *ptr; });
   }
+
   auto transformToRef() const {
-    return std::views::transform(ptrs_,
-                                 [](auto& ptr) -> ConstRef { return *ptr; });
+    return std::views::transform(
+        ptrs_, [](auto& ptr) -> decltype(auto) { return *ptr; });
   }
 
  public:
@@ -501,7 +516,7 @@ class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, NumCols,
     }
   }
 
-  // Assignment from a `Row` and copy assignment.
+  // The implementation for assignment from a `Row` and copy assignment.
   static RowReferenceWithRestrictedAccess& assignmentImpl(auto&& self,
                                                           auto&& other) {
     for (size_t i = 0; i < NumCols; ++i) {
@@ -511,22 +526,29 @@ class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, NumCols,
   }
 
  public:
+  // Copy assignment is only allowed for rvalue-references (see the comments at
+  // the beginning of the file, this is the implementation of the restricted
+  // references).
   RowReferenceWithRestrictedAccess& operator=(
       const RowReferenceWithRestrictedAccess& other) && {
     return assignmentImpl(*this, other);
   }
+
   RowReferenceWithRestrictedAccess& operator=(
       const RowReferenceWithRestrictedAccess& other) const&&;
 
+  // Constructors.
+  RowReferenceWithRestrictedAccess() = default;
   // The copy constructor copies the pointers.
   RowReferenceWithRestrictedAccess(const RowReferenceWithRestrictedAccess&) =
       default;
+
+  // Manually construct from an array of pointers
   RowReferenceWithRestrictedAccess(const Ptrs& arr) : ptrs_(arr) {}
-  RowReferenceWithRestrictedAccess() = default;
 
   // Convert from a `RowReference` to a `Row`.
-  operator Row<T, NumCols>() const {
-    Row<T, NumCols> result{NumCols};
+  operator row_type() const {
+    row_type result{NumCols};
     for (size_t i = 0; i < NumCols; ++i) {
       result[i] = *ptrs_[i];
     }
@@ -534,8 +556,8 @@ class RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, NumCols,
   }
 
   // Convert from a `RowReference` to `std::array`.
-  operator std::array<T, NumCols>() const {
-    std::array<T, NumCols> result;
+  operator std::array<value_type, NumCols>() const {
+    std::array<value_type, NumCols> result;
     for (size_t i = 0; i < NumCols; ++i) {
       result[i] = *ptrs_[i];
     }
