@@ -56,7 +56,7 @@ struct IdTableIterator<Reference, RestrictedReference>
 // implemented manually.
 template <typename Reference, typename RestrictedReference>
 requires(RestrictedReference::numStaticColumns > 0)
-class IdTableIterator<Reference, RestrictedReference> {
+struct IdTableIterator<Reference, RestrictedReference> {
  public:
   // Most of these typedefs are needed by the STL to properly accept this class
   // as a random access iterator.
