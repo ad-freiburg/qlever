@@ -260,9 +260,9 @@ class IdTable {
  public:
   // For an empty and dynamic (`NumColumns == 0`) `IdTable`, specify the
   // number of columns.
-  void setNumColumns(size_t numColumns)
-      requires(isDynamic && columnsAreAllocatable) {
+  void setNumColumns(size_t numColumns) requires(columnsAreAllocatable) {
     AD_CONTRACT_CHECK(empty());
+    AD_CONTRACT_CHECK(isDynamic || numColumns == NumColumns);
     numColumns_ = numColumns;
     data().resize(numColumns, ColumnStorage{allocator_});
   }

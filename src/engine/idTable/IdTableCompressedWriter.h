@@ -11,8 +11,10 @@
 #include <queue>
 #include <ranges>
 
+#include "absl/strings/str_cat.h"
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/IdTable.h"
+#include "util/AsyncStream.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
@@ -64,13 +66,15 @@ class IdTableCompressedWriter {
   // Destructor. Deletes the stored file.
   ~IdTableCompressedWriter() {
     file_.wlock()->close();
-    // TODO<joka921> Get it back in.
-    // ad_utility::deleteFile(filename_);
+    ad_utility::deleteFile(filename_);
   }
 
   // Simple getters for the stored allocator and the number of columns;
   const auto& allocator() const { return allocator_; }
   size_t numColumns() const { return blocksPerColumn_.size(); }
+  ad_utility::MemorySize blockSizeCompression() const {
+    return blockSizeCompression_;
+  }
 
   // Store an `idTable`.
   void writeIdTable(const IdTable& table) {
@@ -110,7 +114,6 @@ class IdTableCompressedWriter {
     }
   }
 
- public:
   // Return a vector of generators where the `i-th` generator generates the
   // `i-th` IdTable that was stored. The IdTables are yielded in (smaller)
   // blocks which are `IdTables` themselves.
@@ -138,6 +141,13 @@ class IdTableCompressedWriter {
       result.push_back(makeGeneratorForRows<N>(i));
     }
     return result;
+  }
+
+  // Clear the underlying file.
+  void clear() {
+    file_.wlock()->close();
+    ad_utility::deleteFile(filename_);
+    file_.wlock()->open(filename_, "w+");
   }
 
  private:
@@ -220,34 +230,54 @@ class IdTableCompressedWriter {
 // interface is as follows: First there is one call to `push` for each row of
 // the IdTable, and then there is one single call to `sortedView` which yields a
 // generator that yields the sorted rows one by one.
+
+// When using very small block sizes in unit tests, then sometimes there are
+// false positives in the memory limit mechanism, so setting the following
+// variable to `true` allows to disable the memory limit.
+inline bool EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 template <typename Comparator, size_t NumStaticCols>
 class ExternalIdTableSorter {
  private:
-  boost::asio::thread_pool threadPool_{4};
-  using Strand = boost::asio::strand<boost::asio::thread_pool::executor_type>;
-  Strand writeStrand_{threadPool_.get_executor()};
+  using MemorySize = ad_utility::MemorySize;
   // Used to aggregate rows for the next block.
   IdTableStatic<NumStaticCols> currentBlock_;
-  // The number of rows per block.
-  size_t blocksize_;
+  // The number of columns of the `IdTable`s to be sorted. Might be different
+  // from `NumStaticCols` when dynamic tables (NumStaticCols == 0) are used;
+  size_t numColumns_;
+  // The maximum amount of memory that this sorter can use.
+  MemorySize memory_;
+  // The number of rows per block in the first phase.
+  // The division by two is there because we store two blocks at the same time:
+  // One that is currently being sorted and written to disk in the background,
+  // and one that is used to collect rows in the calls to `push`.
+  size_t blocksize_{memory_.getBytes() / numColumns_ / sizeof(Id) / 2};
   IdTableCompressedWriter writer_;
   Comparator comp_{};
   // Used to compress and write a block on a background thread while we can
   // already collect the rows for the next block.
   std::future<void> sortAndWriteFuture_;
 
+  // Track if we are currently in the merging phase.
+  std::atomic<bool> mergeIsActive_ = false;
+
+  // The maximal blocksize in the output phase.
+  MemorySize maxOutputBlocksize = MemorySize::gigabytes(1ul);
+  // The number of merged blocks that are buffered during the
+  //  output phase.
+  int numBufferedOutputBlocks = 4;
+
  public:
-  //
+  // Constructor.
   explicit ExternalIdTableSorter(std::string filename, size_t numCols,
                                  size_t memoryInBytes,
                                  ad_utility::AllocatorWithLimit<Id> allocator)
       : currentBlock_{allocator},
-        blocksize_{memoryInBytes / numCols / sizeof(Id)},
+        numColumns_{numCols},
+        memory_{MemorySize::bytes(memoryInBytes)},
         writer_{std::move(filename), numCols, allocator} {
-    if constexpr (NumStaticCols == 0) {
-      currentBlock_.setNumColumns(numCols);
-    }
+    currentBlock_.setNumColumns(numCols);
     currentBlock_.reserve(blocksize_);
+    AD_CONTRACT_CHECK(NumStaticCols == 0 || NumStaticCols == numCols);
   }
 
  public:
@@ -261,10 +291,8 @@ class ExternalIdTableSorter {
       pushBlock(std::move(currentBlock_));
       // TODO<joka921> The move operations of the `IdTable` currently have wrong
       // semantics as they don't restore the empty column vectors.
-      currentBlock_ = IdTableStatic<NumStaticCols>(writer_.allocator());
-      if constexpr (NumStaticCols == 0) {
-        currentBlock_.setNumColumns(row.size());
-      }
+      currentBlock_ =
+          IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
       currentBlock_.reserve(blocksize_);
     }
   }
@@ -272,7 +300,7 @@ class ExternalIdTableSorter {
   /// Return a lambda that takes a `ValueType` and calls `push` for that value.
   /// Note that `this` is captured by reference
   auto makePushCallback() {
-    return [this](auto&& value) { push(AD_FWD(value)); };
+    return [self = this](auto&& value) { self->push(AD_FWD(value)); };
   }
 
   /// Transition from the input phase, where `push()` may be called, to the
@@ -281,28 +309,77 @@ class ExternalIdTableSorter {
   cppcoro::generator<
       const typename IdTableStatic<NumStaticCols>::const_row_reference>
   sortedView() {
-    for (const auto& block : sortedBlocks()) {
+    mergeIsActive_.store(true, std::memory_order_acquire);
+    for (const auto& block : ad_utility::streams::runStreamAsync(
+             sortedBlocks(), std::max(0, numBufferedOutputBlocks - 2))) {
       for (const auto& row : block) {
         co_yield row;
       }
     }
+    mergeIsActive_.store(false, std::memory_order_release);
   }
 
+  // Delete the underlying file and reset the sorter. May only be called if no
+  // active `sortedBlocks()` generator that has not been fully iterated over is
+  // currently active, else an exception will be thrown.
+  void clear() {
+    if (mergeIsActive_.load()) {
+      throw std::runtime_error{
+          "Calling `clear` on an an `ExternalIdTableSorter` that is currently "
+          "been iterated over is forbidden."};
+    }
+    currentBlock_.clear();
+    if (sortAndWriteFuture_.valid()) {
+      sortAndWriteFuture_.get();
+    }
+    writer_.clear();
+  }
+
+ private:
   /// Transition from the input phase, where `push()` may be called, to the
   /// output phase and return a generator that yields the sorted elements. This
   /// function may be called exactly once.
-  cppcoro::generator<const IdTableStatic<NumStaticCols>> sortedBlocks() {
+  cppcoro::generator<IdTableStatic<NumStaticCols>> sortedBlocks() {
     pushBlock(std::move(currentBlock_));
     if (sortAndWriteFuture_.valid()) {
       sortAndWriteFuture_.get();
     }
     auto rowGenerators = writer_.getAllRowGenerators<NumStaticCols>();
+
+    auto requiredMemoryForInputBlocks =
+        rowGenerators.size() * numColumns_ * writer_.blockSizeCompression();
+    const size_t blockSizeOutput = [&]() -> size_t {
+      if (EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING) {
+        // For unit tests, always yield 5 outputs at once.
+        return 5;
+      } else {
+        if (requiredMemoryForInputBlocks >= memory_) {
+          throw std::runtime_error{absl::StrCat(
+              "Insufficient memory for merging ", rowGenerators.size(),
+              " blocks. Please increase the memory settings")};
+        }
+        using namespace ad_utility::memory_literals;
+        // Don't use a too large output size.
+        auto blockSizeOutputMemory = std::min(
+            (memory_ - requiredMemoryForInputBlocks) / numBufferedOutputBlocks,
+            maxOutputBlocksize);
+
+        size_t blockSizeForOutput =
+            blockSizeOutputMemory.getBytes() / sizeof(Id) / numColumns_;
+        if (blockSizeForOutput <= 100) {
+          throw std::runtime_error{absl::StrCat(
+              "Insufficient memory for merging ", rowGenerators.size(),
+              " blocks. Please increase the memory settings")};
+        }
+        return blockSizeForOutput;
+      }
+    }();
+
     using P = std::pair<decltype(rowGenerators[0].begin()),
                         decltype(rowGenerators[0].end())>;
     auto projection = [](const auto& el) -> decltype(auto) {
       return *el.first;
     };
-    // TODO<joka921> Debug why we can't use `std::ranges::min_element` here.
     // NOTE: We have to switch the arguments, because the heap operations by
     // default order descending...
     auto comp = [&, this](const auto& a, const auto& b) {
@@ -314,10 +391,9 @@ class ExternalIdTableSorter {
       pq.emplace_back(gen.begin(), gen.end());
     }
     std::make_heap(pq.begin(), pq.end(), comp);
-    // TODO<joka921> yield in parallael.
     IdTableStatic<NumStaticCols> result(writer_.numColumns(),
                                         writer_.allocator());
-    result.reserve(blocksize_);
+    result.reserve(blockSizeOutput);
     while (!pq.empty()) {
       std::pop_heap(pq.begin(), pq.end(), comp);
       auto& min = pq.back();
@@ -328,16 +404,16 @@ class ExternalIdTableSorter {
       } else {
         std::push_heap(pq.begin(), pq.end(), comp);
       }
-      if (result.size() >= blocksize_) {
+      if (result.size() >= blockSizeOutput) {
         co_yield result;
-        // TODO<joka921> prepare the next block in parallel
-        result.clear();
+        result = IdTableStatic<NumStaticCols>(writer_.numColumns(),
+                                              writer_.allocator());
+        result.reserve(blockSizeOutput);
       }
     }
     co_yield result;
   }
 
- private:
   void pushBlock(IdTableStatic<NumStaticCols> block) {
     if (sortAndWriteFuture_.valid()) {
       sortAndWriteFuture_.get();
@@ -345,31 +421,15 @@ class ExternalIdTableSorter {
     if (block.empty()) {
       return;
     }
-    /*
-    auto sortAndWrite = [this](auto block) -> boost::asio::awaitable<void> {
-// TODO<joka921> We probably need one thread for sorting and one for writing for
-// the maximal performance.
-#ifdef USE_PARALLEL
-      ad_utility::parallel_sort(block.begin(), block.end(), comp_);
-#else
-      std::ranges::sort(block, comp_);
-#endif
-      //co_await boost::asio::dispatch(writeStrand_,
-boost::asio::use_awaitable); writer_.writeIdTable(std::move(block).toDynamic());
-      co_return;
-    };
-    sortAndWriteFuture_ =
-        boost::asio::co_spawn(threadPool_.get_executor(),
-sortAndWrite(std::move(block)), boost::asio::use_future);
-*/
+    // TODO<joka921> We probably need one thread for sorting and one for writing
+    // for the maximal performance. But this requires more work for a general
+    // synchronization framework.
     sortAndWriteFuture_ = std::async(
         std::launch::async, [block = std::move(block), this]() mutable {
-// TODO<joka921> We probably need one thread for sorting and one for writing for
-// the maximal performance.
-#ifdef USE_PARALLEL
+#ifdef _PARALLEL_SORT
           ad_utility::parallel_sort(block.begin(), block.end(), comp_);
 #else
-          std::ranges::sort(block, comp_);
+                std::ranges::sort(block, comp_);
 #endif
           writer_.writeIdTable(std::move(block).toDynamic());
         });

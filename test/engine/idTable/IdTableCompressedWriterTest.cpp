@@ -23,7 +23,7 @@ class CopyableIdTable : public TableImpl<N> {
   }
 };
 
-auto idTableFromGenerator = [](auto& generator) -> CopyableIdTable<0> {
+auto idTableFromBlockGenerator = [](auto& generator) -> CopyableIdTable<0> {
   CopyableIdTable<0> result(ad_utility::testing::makeAllocator());
   for (const auto& blockStatic : generator) {
     auto block = blockStatic.clone().toDynamic();
@@ -40,6 +40,15 @@ auto idTableFromGenerator = [](auto& generator) -> CopyableIdTable<0> {
       decltype(auto) resultCol = result.getColumn(i);
       std::ranges::copy(blockCol, resultCol.begin() + size);
     }
+  }
+  return result;
+};
+
+auto idTableFromRowGenerator = [](auto& generator,
+                                  size_t numColumns) -> CopyableIdTable<0> {
+  CopyableIdTable<0> result(numColumns, ad_utility::testing::makeAllocator());
+  for (const auto& row : generator) {
+    result.push_back(row);
   }
   return result;
 };
@@ -62,16 +71,17 @@ TEST(IdTableCompressedWriter, firstTest) {
 
   using namespace ::testing;
   std::vector<CopyableIdTable<0>> result;
-  auto tr = std::ranges::transform_view(generators, idTableFromGenerator);
+  auto tr = std::ranges::transform_view(generators, idTableFromBlockGenerator);
   std::ranges::copy(tr, std::back_inserter(result));
   ASSERT_THAT(result, ElementsAreArray(tables));
 }
-/*
+
 TEST(IdTableCompressedSorter, firstTest) {
   std::string filename = "idTableCompressedSorter.firstTest.dat";
   [[maybe_unused]] auto firstCol = [](const auto& a, const auto& b) {
     return a[0] < b[0];
   };
+  EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   // TODO<joka921> also test the static case.
   ExternalIdTableSorter<decltype(firstCol), 0> writer{
       filename, 3, 16, ad_utility::testing::makeAllocator()};
@@ -86,12 +96,10 @@ TEST(IdTableCompressedSorter, firstTest) {
     }
   }
 
-  auto generator = writer.sortedBlocks();
+  auto generator = writer.sortedView();
   // TODO<joka921> First make it compile, then make it correct.
 
   using namespace ::testing;
-  auto result = idTableFromGenerator(generator);
+  auto result = idTableFromRowGenerator(generator, 3);
   ASSERT_THAT(result, Eq(tables.at(0)));
 }
-
- */

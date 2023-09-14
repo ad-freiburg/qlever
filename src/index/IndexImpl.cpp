@@ -169,7 +169,7 @@ void IndexImpl::createFromFile(const string& filename) {
   };
 
   StxxlSorter<SortBySPO> spoSorter{onDiskBase_ + ".spo-sorter.dat", 3,
-                                   stxxlMemoryInBytes() / 5, allocator_};
+                                   stxxlMemoryInBytes() / 3, allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
   auto uniqueSorter = ad_utility::uniqueView<decltype(psoSorter.sortedView()),
@@ -183,13 +183,12 @@ void IndexImpl::createFromFile(const string& filename) {
   configurationJson_["num-predicates-normal"] = numPredicatesNormal;
   configurationJson_["num-triples-normal"] = numTriplesNormal;
   writeConfiguration();
-  // TODO<joka921> implement a function to clear the new sorters.
-  // psoSorter.clear();
+  psoSorter.clear();
 
   if (loadAllPermutations_) {
     // After the SPO permutation, create patterns if so desired.
     StxxlSorter<SortByOSP> ospSorter{onDiskBase_ + ".osp-sorter.dat", 3,
-                                     stxxlMemoryInBytes() / 5, allocator_};
+                                     stxxlMemoryInBytes() / 3, allocator_};
     size_t numSubjectsNormal = 0;
     auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
     if (usePatterns_) {
@@ -208,7 +207,7 @@ void IndexImpl::createFromFile(const string& filename) {
       createPermutationPair(spoSorter.sortedView(), spo_, sop_,
                             ospSorter.makePushCallback(), numSubjectCounter);
     }
-    // spoSorter.clear();
+    spoSorter.clear();
     configurationJson_["num-subjects-normal"] = numSubjectsNormal;
     writeConfiguration();
 
@@ -431,7 +430,7 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
   // Iterate over all partial vocabularies.
   TripleVec::bufreader_type reader(data);
   auto resultPtr = std::make_unique<PsoSorter>(
-      onDiskBase_ + "pso-sorter.dat", 3, stxxlMemoryInBytes() / 5, allocator_);
+      onDiskBase_ + "pso-sorter.dat", 3, stxxlMemoryInBytes() / 3, allocator_);
   auto& result = *resultPtr;
   size_t i = 0;
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();

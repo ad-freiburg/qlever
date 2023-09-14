@@ -2,11 +2,14 @@
 // Created by kalmbacj on 9/8/23.
 //
 
+#include <cmath>
+
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../test/util/IdTableHelpers.h"
 #include "engine/idTable/IdTableCompressedWriter.h"
 #include "index/StxxlSortFunctors.h"
 #include "util/BackgroundStxxlSorter.h"
+#include "util/Log.h"
 
 namespace ad_benchmark {
 
@@ -18,8 +21,8 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
 
   BenchmarkResults runAllBenchmarks() final {
     constexpr size_t numCols = 3;
-    const size_t numInputRows = 200'000'000;
-    const size_t memForStxxl = 500'000'000;
+    const size_t numInputRows = 20'000'000'000;
+    const size_t memForStxxl = 5'000'000'000;
     BenchmarkResults results{};
 
     auto generateRandomRow =
@@ -41,40 +44,58 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
         filename, 3, memForStxxl, ad_utility::testing::makeAllocator()};
 
     auto runPush = [&]() {
-      for ([[maybe_unused]] auto i : std::views::iota(0u, numInputRows)) {
+      for (auto i : std::views::iota(0UL, numInputRows)) {
         writer.push(generateRandomRow());
+        if (i % 100'000'000 == 0) {
+          LOG(INFO) << "Pushed " << i << " lines" << std::endl;
+        }
       }
     };
     auto run = [&]() {
       auto view = writer.sortedView();
-      size_t res = 0;
+      double res = 0;
+      size_t count = 0;
       for (const auto& block : view) {
-        res += block[0].getBits();
+        res += std::sqrt(static_cast<double>(
+            block[0].getBits() + block[1].getBits() + block[2].getBits()));
+        ++count;
+        if (count % 100'000'000 == 0) {
+          LOG(INFO) << "Merged " << count << " lines" << std::endl;
+        }
       }
-      std::cout << res << std::endl;
+      std::cout << res << ' ' << count << std::endl;
     };
 
     results.addMeasurement("SortingAndWritingBlocks", runPush);
+    std::cout << "Finish sorting" << std::endl;
     results.addMeasurement("ReadAndMerge", run);
+    std::cout << "Finish merging" << std::endl;
 
-    auto pushStxxl = [&]() {
-      for ([[maybe_unused]] auto i : std::views::iota(0u, numInputRows)) {
-        sorter.push(generateRandomRow());
-      }
-    };
+    /*
+  auto pushStxxl = [&]() {
+    for ([[maybe_unused]] auto i : std::views::iota(0UL, numInputRows)) {
+      sorter.push(generateRandomRow());
+    }
+  };
 
-    auto drainStxxl = [&]() {
-      size_t i = 1;
-      for ([[maybe_unused]] const auto& row : sorter.sortedView()) {
-        ++i;
-      }
-      std::cout << i;
-    };
+  auto drainStxxl = [&]() {
+    double i = 0;
+    size_t count = 0;
+    for ([[maybe_unused]] const auto& row : sorter.sortedView()) {
+        i += std::sqrt(static_cast<double>(row[0].getBits() + row[1].getBits() +
+  row[2].getBits()));
+        ++count;
+    }
+    std::cout << i << ' ' << count << std::endl;
+  };
 
-    results.addMeasurement("Time using stxxl for push", pushStxxl);
-    results.addMeasurement("Time using stxxl for pull", drainStxxl);
+  results.addMeasurement("Time using stxxl for push", pushStxxl);
+  std::cout << "Finished pushing stxxl" << std::endl;
+  results.addMeasurement("Time using stxxl for pull", drainStxxl);
+    std::cout << "Finished merging stxxl" << std::endl;
 
-    std::cout << "\nNum blocks in stxxl" << sorter.numBlocks() << std::endl;
+  std::cout << "\nNum blocks in stxxl" << sorter.numBlocks() << std::endl;
+     */
 
     return results;
   }
