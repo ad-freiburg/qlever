@@ -1,7 +1,10 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/VariadicExpression.h"
+
 namespace sparqlExpression {
 namespace detail::string_expressions {
 // String functions.
@@ -63,14 +66,39 @@ class StringExpressionImpl : public SparqlExpression {
   }
 };
 
-// STRLEN
-[[maybe_unused]] auto strlen = [](std::optional<std::string> s) {
-  if (!s.has_value()) {
-    return Id::makeUndefined();
+// Lift a `Function` that takes one or multiple `std::string`s (possibly via
+// references) and returns an `Id` or `std::string` to a function that takes the
+// same number of `std::optional<std::string>` and returns `Id` or `IdOrString`.
+// If any of the optionals is `std::nullopt`, then UNDEF is returned, else the
+// result of the `Function` with the values of the optionals. This is a useful
+// helper function for implementing expressions that work on strings.
+template <typename Function>
+struct LiftStringFunction {
+  template <std::same_as<std::optional<std::string>>... Arguments>
+  auto operator()(Arguments... arguments) const {
+    using ResultOfFunction =
+        decltype(std::invoke(Function{}, std::move(arguments.value())...));
+    static_assert(std::same_as<ResultOfFunction, Id> ||
+                      std::same_as<ResultOfFunction, std::string>,
+                  "Template argument of `LiftStringFunction` must return `Id` "
+                  "or `std::string`");
+    using Result =
+        std::conditional_t<ad_utility::isSimilar<ResultOfFunction, Id>, Id,
+                           IdOrString>;
+    if ((... || !arguments.has_value())) {
+      return Result{Id::makeUndefined()};
+    }
+    return Result{std::invoke(Function{}, std::move(arguments.value())...)};
   }
-  return Id::makeFromInt(static_cast<int64_t>(s.value().size()));
 };
-using StrlenExpression = StringExpressionImpl<1, decltype(strlen)>;
+
+// STRLEN
+[[maybe_unused]] auto strlen = [](std::string_view s) {
+  return Id::makeFromInt(static_cast<int64_t>(s.size()));
+};
+
+using StrlenExpression =
+    StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
 
 // LCASE
 [[maybe_unused]] auto lowercaseImpl =
@@ -162,27 +190,224 @@ class SubstrImpl {
 
 using SubstrExpression =
     StringExpressionImpl<3, SubstrImpl, NumericValueGetter, NumericValueGetter>;
+
+// STRSTARTS
+[[maybe_unused]] auto strStartsImpl = [](std::string_view text,
+                                         std::string_view pattern) -> Id {
+  return Id::makeFromBool(text.starts_with(pattern));
+};
+
+using StrStartsExpression =
+    StringExpressionImpl<2, LiftStringFunction<decltype(strStartsImpl)>,
+                         StringValueGetter>;
+
+// STRENDS
+[[maybe_unused]] auto strEndsImpl = [](std::string_view text,
+                                       std::string_view pattern) {
+  return Id::makeFromBool(text.ends_with(pattern));
+};
+
+using StrEndsExpression =
+    StringExpressionImpl<2, LiftStringFunction<decltype(strEndsImpl)>,
+                         StringValueGetter>;
+
+// STRCONTAINS
+[[maybe_unused]] auto containsImpl = [](std::string_view text,
+                                        std::string_view pattern) {
+  return Id::makeFromBool(text.find(pattern) != std::string::npos);
+};
+
+using ContainsExpression =
+    StringExpressionImpl<2, LiftStringFunction<decltype(containsImpl)>,
+                         StringValueGetter>;
+
+// STRAFTER / STRBEFORE
+template <bool isStrAfter>
+[[maybe_unused]] auto strAfterOrBeforeImpl =
+    [](std::string text, std::string_view pattern) -> std::string {
+  // Required by the SPARQL standard.
+  if (pattern.empty()) {
+    return text;
+  }
+  auto pos = text.find(pattern);
+  if (pos >= text.size()) {
+    return "";
+  }
+  if constexpr (isStrAfter) {
+    return text.substr(pos + pattern.size());
+  } else {
+    // STRBEFORE
+    return text.substr(0, pos);
+  }
+};
+
+auto strAfter = strAfterOrBeforeImpl<true>;
+
+using StrAfterExpression =
+    StringExpressionImpl<2, LiftStringFunction<decltype(strAfter)>,
+                         StringValueGetter>;
+
+auto strBefore = strAfterOrBeforeImpl<false>;
+using StrBeforeExpression =
+    StringExpressionImpl<2, LiftStringFunction<decltype(strBefore)>,
+                         StringValueGetter>;
+
+[[maybe_unused]] auto replaceImpl =
+    [](std::optional<std::string> input,
+       const std::unique_ptr<re2::RE2>& pattern,
+       const std::optional<std::string>& replacement) -> IdOrString {
+  if (!input.has_value() || !pattern || !replacement.has_value()) {
+    return Id::makeUndefined();
+  }
+  auto& in = input.value();
+  const auto& pat = *pattern;
+  // Check for invalid regexes.
+  if (!pat.ok()) {
+    return Id::makeUndefined();
+  }
+  const auto& repl = replacement.value();
+  re2::RE2::GlobalReplace(&in, pat, repl);
+  return std::move(in);
+};
+
+using ReplaceExpression =
+    StringExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
+                         StringValueGetter>;
+
+// CONCAT
+class ConcatExpression : public detail::VariadicExpression {
+ public:
+  using VariadicExpression::VariadicExpression;
+
+  // _________________________________________________________________
+  ExpressionResult evaluate(EvaluationContext* ctx) const override {
+    using StringVec = VectorWithMemoryLimit<std::string>;
+    // We evaluate one child after the other and append the strings from child i
+    // to the strings already constructed for children 0, …, i - 1. The
+    // seemingly more natural row-by-row approach has two problems. First, the
+    // distinction between children with constant results and vector results
+    // would not be cache-efficient. Second, when the evaluation is part of
+    // GROUP BY, we don't have the information in advance whether all children
+    // have constant results (in which case, we need to evaluate the whole
+    // expression only once).
+
+    // We store the (intermediate) result either as single string or a vector.
+    // If the result is a string, then all the previously evaluated children
+    // were constants (see above).
+    std::variant<std::string, StringVec> result{std::string{""}};
+    auto visitSingleExpressionResult =
+        [&ctx, &result ]<SingleExpressionResult T>(T && s)
+            requires std::is_rvalue_reference_v<T&&> {
+      if constexpr (isConstantResult<T>) {
+        std::string strFromConstant = StringValueGetter{}(s, ctx).value_or("");
+        if (std::holds_alternative<std::string>(result)) {
+          // All previous children were constants, and the current child also is
+          // a constant.
+          std::get<std::string>(result).append(strFromConstant);
+        } else {
+          // One of the previous children was not a constant, so we already
+          // store a vector.
+          auto& resultAsVector = std::get<StringVec>(result);
+          std::ranges::for_each(resultAsVector, [&](std::string& target) {
+            target.append(strFromConstant);
+          });
+        }
+      } else {
+        auto gen = sparqlExpression::detail::makeGenerator(AD_FWD(s),
+                                                           ctx->size(), ctx);
+
+        if (std::holds_alternative<std::string>(result)) {
+          // All previous children were constants, but now we have a
+          // non-constant child, so we have to expand the `result` from a single
+          // string to a vector.
+          std::string constantResultSoFar =
+              std::move(std::get<std::string>(result));
+          result.emplace<StringVec>(ctx->_allocator);
+          auto& resultAsVec = std::get<StringVec>(result);
+          resultAsVec.reserve(ctx->size());
+          std::fill_n(std::back_inserter(resultAsVec), ctx->size(),
+                      constantResultSoFar);
+        }
+
+        // The `result` already is a vector, and the current child also returns
+        // multiple results, so we do the `natural` way.
+        auto& resultAsVec = std::get<StringVec>(result);
+        // TODO<C++23> Use `std::views::zip` or `enumerate`.
+        size_t i = 0;
+        for (auto& el : gen) {
+          if (auto str = StringValueGetter{}(std::move(el), ctx);
+              str.has_value()) {
+            resultAsVec[i].append(str.value());
+          }
+          ++i;
+        }
+      }
+    };
+    std::ranges::for_each(
+        childrenVec(), [&ctx, &visitSingleExpressionResult](const auto& child) {
+          std::visit(visitSingleExpressionResult, child->evaluate(ctx));
+        });
+
+    // Lift the result from `string` to `IdOrString` which is needed for the
+    // expression module.
+    if (std::holds_alternative<std::string>(result)) {
+      return IdOrString{std::move(std::get<std::string>(result))};
+    } else {
+      auto& stringVec = std::get<StringVec>(result);
+      VectorWithMemoryLimit<IdOrString> resultAsVec{
+          std::make_move_iterator(stringVec.begin()),
+          std::make_move_iterator(stringVec.end()), ctx->_allocator};
+      return resultAsVec;
+    }
+  }
+};
+
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
-SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<StrExpression>(std::move(child));
+using std::make_unique;
+using std::move;
+using Expr = SparqlExpression::Ptr;
+
+template <typename T>
+Expr make(std::same_as<Expr> auto&... children) {
+  return std::make_unique<T>(std::move(children)...);
 }
-SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<StrlenExpression>(std::move(child));
+Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }
+Expr makeStrlenExpression(Expr child) { return make<StrlenExpression>(child); }
+
+Expr makeSubstrExpression(Expr string, Expr start, Expr length) {
+  return make<SubstrExpression>(string, start, length);
 }
 
-SparqlExpression::Ptr makeLowercaseExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<LowercaseExpression>(std::move(child));
+Expr makeStrStartsExpression(Expr child1, Expr child2) {
+  return make<StrStartsExpression>(child1, child2);
 }
 
-SparqlExpression::Ptr makeUppercaseExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<UppercaseExpression>(std::move(child));
+Expr makeLowercaseExpression(Expr child) {
+  return make<LowercaseExpression>(child);
 }
 
-SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
-                                           SparqlExpression::Ptr start,
-                                           SparqlExpression::Ptr length) {
-  return std::make_unique<SubstrExpression>(std::move(string), std::move(start),
-                                            std::move(length));
+Expr makeUppercaseExpression(Expr child) {
+  return make<UppercaseExpression>(child);
+}
+
+Expr makeStrEndsExpression(Expr child1, Expr child2) {
+  return make<StrEndsExpression>(child1, child2);
+}
+Expr makeStrAfterExpression(Expr child1, Expr child2) {
+  return make<StrAfterExpression>(child1, child2);
+}
+Expr makeStrBeforeExpression(Expr child1, Expr child2) {
+  return make<StrBeforeExpression>(child1, child2);
+}
+
+Expr makeReplaceExpression(Expr input, Expr pattern, Expr repl) {
+  return make<ReplaceExpression>(input, pattern, repl);
+}
+Expr makeContainsExpression(Expr child1, Expr child2) {
+  return make<ContainsExpression>(child1, child2);
+}
+Expr makeConcatExpression(std::vector<Expr> children) {
+  return std::make_unique<ConcatExpression>(std::move(children));
 }
 }  // namespace sparqlExpression

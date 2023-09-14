@@ -57,38 +57,70 @@ std::string Visitor::getOriginalInputForContext(
 ExpressionPtr Visitor::processIriFunctionCall(
     const std::string& iri, std::vector<ExpressionPtr> argList,
     const antlr4::ParserRuleContext* ctx) {
-  // Lambda that checks the number of arguments and throws an error if it's
-  // not right.
-  auto checkNumArgs = [&argList, &ctx](const std::string_view prefix,
-                                       const std::string_view functionName,
-                                       size_t numArgs) {
+  std::string_view functionName = iri;
+  std::string_view prefixName;
+  // Helper lambda that checks if `functionName` starts with the given prefix.
+  // If yes, remove the prefix and the final `>` from `functionName` and set
+  // `prefixName` to the short name of the prefix; see `global/Constants.h`.
+  auto checkPrefix = [&functionName, &prefixName](
+                         std::pair<std::string_view, std::string_view> prefix) {
+    if (functionName.starts_with(prefix.second)) {
+      prefixName = prefix.first;
+      functionName.remove_prefix(prefix.second.size());
+      AD_CONTRACT_CHECK(functionName.ends_with('>'));
+      functionName.remove_suffix(1);
+      return true;
+    } else {
+      return false;
+    }
+  };
+  // Helper lambda that checks the number of arguments and throws an error
+  // if it's not right. The `functionName` and `prefixName` are used for the
+  // error message.
+  auto checkNumArgs = [&argList, &ctx, &functionName,
+                       &prefixName](size_t numArgs) {
     static std::array<std::string, 6> wordForNumArgs = {
         "no", "one", "two", "three", "four", "five"};
     if (argList.size() != numArgs) {
       reportError(ctx,
-                  absl::StrCat("Function ", prefix, functionName, " takes ",
+                  absl::StrCat("Function ", prefixName, functionName, " takes ",
                                numArgs < 5 ? wordForNumArgs[numArgs]
                                            : std::to_string(numArgs),
                                numArgs == 1 ? " argument" : " arguments"));
     }
   };
-
-  constexpr static std::string_view geofPrefix =
-      "<http://www.opengis.net/def/function/geosparql/";
-  if (std::string_view iriView = iri; iriView.starts_with(geofPrefix)) {
-    iriView.remove_prefix(geofPrefix.size());
-    AD_CONTRACT_CHECK(iriView.ends_with('>'));
-    iriView.remove_suffix(1);
-    if (iriView == "distance") {
-      checkNumArgs("geof:", iriView, 2);
+  // Geo functions.
+  if (checkPrefix(GEOF_PREFIX)) {
+    if (functionName == "distance") {
+      checkNumArgs(2);
       return sparqlExpression::makeDistExpression(std::move(argList[0]),
                                                   std::move(argList[1]));
-    } else if (iriView == "longitude") {
-      checkNumArgs("geof:", iriView, 1);
+    } else if (functionName == "longitude") {
+      checkNumArgs(1);
       return sparqlExpression::makeLongitudeExpression(std::move(argList[0]));
-    } else if (iriView == "latitude") {
-      checkNumArgs("geof:", iriView, 1);
+    } else if (functionName == "latitude") {
+      checkNumArgs(1);
       return sparqlExpression::makeLatitudeExpression(std::move(argList[0]));
+    }
+  } else if (checkPrefix(MATH_PREFIX)) {
+    if (functionName == "log") {
+      checkNumArgs(1);
+      return sparqlExpression::makeLogExpression(std::move(argList[0]));
+    } else if (functionName == "exp") {
+      checkNumArgs(1);
+      return sparqlExpression::makeExpExpression(std::move(argList[0]));
+    } else if (functionName == "sqrt") {
+      checkNumArgs(1);
+      return sparqlExpression::makeSqrtExpression(std::move(argList[0]));
+    } else if (functionName == "sin") {
+      checkNumArgs(1);
+      return sparqlExpression::makeSinExpression(std::move(argList[0]));
+    } else if (functionName == "cos") {
+      checkNumArgs(1);
+      return sparqlExpression::makeCosExpression(std::move(argList[0]));
+    } else if (functionName == "tan") {
+      checkNumArgs(1);
+      return sparqlExpression::makeTanExpression(std::move(argList[0]));
     }
   }
   reportNotSupported(ctx, "Function \"" + iri + "\" is");
@@ -878,10 +910,11 @@ vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::ExpressionListContext*) {
-  // This rule is only used by the `RelationExpression` and `BuiltInCall` rules
-  // which also are not supported and should already have thrown an exception.
-  AD_FAIL();
+std::vector<ExpressionPtr> Visitor::visit(Parser::ExpressionListContext* ctx) {
+  if (ctx->NIL()) {
+    return {};
+  }
+  return visitVector(ctx->expression());
 }
 
 // ____________________________________________________________________________________
@@ -1587,6 +1620,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return visit(ctx->langExpression());
   } else if (ctx->substringExpression()) {
     return visit(ctx->substringExpression());
+  } else if (ctx->strReplaceExpression()) {
+    return visit(ctx->strReplaceExpression());
   }
   // Get the function name and the arguments. Note that we do not have to check
   // the number of arguments like for `processIriFunctionCall`, since the number
@@ -1598,17 +1633,38 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary =
-      [&argList]<typename Function>(Function function)
-          requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr>
-  {
-    AD_CONTRACT_CHECK(argList.size() == 1);
+  auto createUnary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
+    AD_CORRECTNESS_CHECK(argList.size() == 1);
     return function(std::move(argList[0]));
+  };
+  auto createBinary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                     ExpressionPtr> {
+    AD_CORRECTNESS_CHECK(argList.size() == 2);
+    return function(std::move(argList[0]), std::move(argList[1]));
+  };
+  auto createTernary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                     ExpressionPtr, ExpressionPtr> {
+    AD_CORRECTNESS_CHECK(argList.size() == 3);
+    return function(std::move(argList[0]), std::move(argList[1]),
+                    std::move(argList[2]));
   };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
   } else if (functionName == "strlen") {
     return createUnary(&makeStrlenExpression);
+  } else if (functionName == "strbefore") {
+    return createBinary(&makeStrBeforeExpression);
+  } else if (functionName == "strafter") {
+    return createBinary(&makeStrAfterExpression);
+  } else if (functionName == "contains") {
+    return createBinary(&makeContainsExpression);
+  } else if (functionName == "strends") {
+    return createBinary(&makeStrEndsExpression);
+  } else if (functionName == "strstarts") {
+    return createBinary(&makeStrStartsExpression);
   } else if (functionName == "ucase") {
     return createUnary(&makeUppercaseExpression);
   } else if (functionName == "lcase") {
@@ -1630,6 +1686,14 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeRoundExpression);
   } else if (functionName == "floor") {
     return createUnary(&makeFloorExpression);
+  } else if (functionName == "if") {
+    return createTernary(&makeIfExpression);
+  } else if (functionName == "coalesce") {
+    AD_CORRECTNESS_CHECK(ctx->expressionList());
+    return makeCoalesceExpression(visit(ctx->expressionList()));
+  } else if (functionName == "concat") {
+    AD_CORRECTNESS_CHECK(ctx->expressionList());
+    return makeConcatExpression(visit(ctx->expressionList()));
   } else {
     reportError(
         ctx,
@@ -1682,8 +1746,21 @@ SparqlExpression::Ptr Visitor::visit(Parser::SubstringExpressionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(const Parser::StrReplaceExpressionContext* ctx) {
-  reportNotSupported(ctx, "The REPLACE function is");
+SparqlExpression::Ptr Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
+  auto children = visitVector(ctx->expression());
+  AD_CORRECTNESS_CHECK(children.size() == 3 || children.size() == 4);
+  if (children.size() == 4) {
+    reportError(
+        ctx,
+        "REPLACE expressions with four arguments (including regex flags) are "
+        "currently not supported by QLever. You can however incorporate flags "
+        "directly into a regex by prepending `(?<flags>)` to your regex. For "
+        "example `(?i)[ei]` will match the regex `[ei]` in a case-insensitive "
+        "way.");
+  }
+  return sparqlExpression::makeReplaceExpression(std::move(children.at(0)),
+                                                 std::move(children.at(1)),
+                                                 std::move(children.at(2)));
 }
 
 // ____________________________________________________________________________________

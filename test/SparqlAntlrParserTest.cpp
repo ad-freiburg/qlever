@@ -87,7 +87,7 @@ struct ExpectCompleteParse {
                   SparqlQleverVisitor::PrefixMap prefixMap,
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) const {
-    auto tr = generateLocationTrace(l, "succesful parsing was expected here");
+    auto tr = generateLocationTrace(l, "successful parsing was expected here");
     EXPECT_NO_THROW({
       return expectCompleteParse(
           parse<Clause>(input, std::move(prefixMap), disableSomeChecks),
@@ -1226,7 +1226,7 @@ auto matchNaryWithChildrenMatchers(auto makeFunction,
     return std::type_index{typeid(*ptr)};
   };
 
-  auto makeDummyChild = [](auto&&) -> SparqlExpression::Ptr {
+  [[maybe_unused]] auto makeDummyChild = [](auto&&) -> SparqlExpression::Ptr {
     return std::make_unique<VariableExpression>(Variable{"?x"});
   };
   auto expectedTypeIndex =
@@ -1284,6 +1284,25 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("floor(?x)", matchUnary(&makeFloorExpression));
   expectBuiltInCall("round(?x)", matchUnary(&makeRoundExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
+  expectBuiltInCall("COALESCE(?x)", matchUnary(makeCoalesceExpressionVariadic));
+  expectBuiltInCall("COALESCE()", matchNary(makeCoalesceExpressionVariadic));
+  expectBuiltInCall("COALESCE(?x, ?y, ?z)",
+                    matchNary(makeCoalesceExpressionVariadic, Var{"?x"},
+                              Var{"?y"}, Var{"?z"}));
+  expectBuiltInCall("CONCAT(?x)", matchUnary(makeConcatExpressionVariadic));
+  expectBuiltInCall("concaT()", matchNary(makeConcatExpressionVariadic));
+  expectBuiltInCall(
+      "concat(?x, ?y, ?z)",
+      matchNary(makeConcatExpressionVariadic, Var{"?x"}, Var{"?y"}, Var{"?z"}));
+
+  expectBuiltInCall(
+      "replace(?x, ?y, ?z)",
+      matchNary(&makeReplaceExpression, Var{"?x"}, Var{"?y"}, Var{"?z"}));
+  expectFails("replace(?x, ?y, ?z, \"i\")",
+              ::testing::AllOf(::testing::ContainsRegex("regex"),
+                               ::testing::ContainsRegex("flags")));
+  expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
+                                                Var{"?h"}, Var{"?c"}));
 
   // The following three cases delegate to a separate parsing function, so we
   // only perform rather simple checks.
@@ -1396,17 +1415,29 @@ TEST(SparqlParser, FunctionCall) {
   using namespace builtInCallTestHelpers;
   auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
   auto expectFunctionCallFails = ExpectParseFails<&Parser::functionCall>{};
+  auto geof = GEOF_PREFIX.second;
+  auto math = MATH_PREFIX.second;
 
   // Correct function calls. Check that the parser picks the correct expression.
+  expectFunctionCall(absl::StrCat(geof, "latitude>(?x)"),
+                     matchUnary(&makeLatitudeExpression));
+  expectFunctionCall(absl::StrCat(geof, "longitude>(?x)"),
+                     matchUnary(&makeLongitudeExpression));
   expectFunctionCall(
-      "<http://www.opengis.net/def/function/geosparql/latitude>(?x)",
-      matchUnary(&makeLatitudeExpression));
-  expectFunctionCall(
-      "<http://www.opengis.net/def/function/geosparql/longitude>(?x)",
-      matchUnary(&makeLongitudeExpression));
-  expectFunctionCall(
-      "<http://www.opengis.net/def/function/geosparql/distance>(?a, ?b)",
+      absl::StrCat(geof, "distance>(?a, ?b)"),
       matchNary(&makeDistExpression, Variable{"?a"}, Variable{"?b"}));
+  expectFunctionCall(absl::StrCat(math, "log>(?x)"),
+                     matchUnary(&makeLogExpression));
+  expectFunctionCall(absl::StrCat(math, "exp>(?x)"),
+                     matchUnary(&makeExpExpression));
+  expectFunctionCall(absl::StrCat(math, "sqrt>(?x)"),
+                     matchUnary(&makeSqrtExpression));
+  expectFunctionCall(absl::StrCat(math, "sin>(?x)"),
+                     matchUnary(&makeSinExpression));
+  expectFunctionCall(absl::StrCat(math, "cos>(?x)"),
+                     matchUnary(&makeCosExpression));
+  expectFunctionCall(absl::StrCat(math, "tan>(?x)"),
+                     matchUnary(&makeTanExpression));
 
   // Wrong number of arguments.
   expectFunctionCallFails(
@@ -1419,7 +1450,8 @@ TEST(SparqlParser, FunctionCall) {
       "<http://www.no-existing-prefixes.com/notExisting>()");
 }
 
-TEST(SparqlParser, SubstringExpression) {
+// ______________________________________________________________________________
+TEST(SparqlParser, substringExpression) {
   using namespace sparqlExpression;
   using namespace builtInCallTestHelpers;
   using V = Variable;
@@ -1441,4 +1473,23 @@ TEST(SparqlParser, SubstringExpression) {
   expectBuiltInCallFails("SUBSTR(?x)");
   // Too many arguments
   expectBuiltInCallFails("SUBSTR(?x), 3, 8, 12");
+}
+
+// _________________________________________________________
+TEST(SparqlParser, binaryStringExpressions) {
+  using namespace sparqlExpression;
+  using namespace builtInCallTestHelpers;
+  using V = Variable;
+  auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
+  auto expectBuiltInCallFails = ExpectParseFails<&Parser::builtInCall>{};
+
+  auto makeMatcher = [](auto function) {
+    return matchNary(function, V{"?x"}, V{"?y"});
+  };
+
+  expectBuiltInCall("STRSTARTS(?x, ?y)", makeMatcher(&makeStrStartsExpression));
+  expectBuiltInCall("STRENDS(?x, ?y)", makeMatcher(&makeStrEndsExpression));
+  expectBuiltInCall("CONTAINS(?x, ?y)", makeMatcher(&makeContainsExpression));
+  expectBuiltInCall("STRAFTER(?x, ?y)", makeMatcher(&makeStrAfterExpression));
+  expectBuiltInCall("STRBEFORE(?x, ?y)", makeMatcher(&makeStrBeforeExpression));
 }

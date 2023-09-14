@@ -5,6 +5,8 @@
 #ifndef QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H
 #define QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H
 
+#include <re2/re2.h>
+
 #include "../../global/Id.h"
 #include "../ResultTable.h"
 #include "./SparqlExpressionTypes.h"
@@ -19,6 +21,7 @@ namespace sparqlExpression::detail {
 struct NotNumeric {};
 // The input to an expression that expects a numeric value.
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
+using IntOrDouble = std::variant<double, int64_t>;
 
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
 // from above) into an `ID`. When `NanToUndef` is `true` then floating point NaN
@@ -106,6 +109,11 @@ struct StringValueGetter {
   std::optional<string> operator()(ValueId, const EvaluationContext*) const;
 
   std::optional<string> operator()(string s, const EvaluationContext*) const {
+    // Strip quotes
+    // TODO<joka921> Use stronger types to encode literals/ IRIs/ ETC
+    if (s.size() >= 2 && s.starts_with('"') && s.ends_with('"')) {
+      return s.substr(1, s.size() - 2);
+    }
     return s;
   }
 
@@ -147,8 +155,11 @@ struct LiteralFromIdGetter {
                                    const EvaluationContext* context) const;
   std::optional<string> operator()(std::string s,
                                    const EvaluationContext*) const {
-    // TODO<joka921> `string` should be a type that is aware of Literals vs
-    // strings.
+    // Strip quotes
+    // TODO<joka921> Use stronger types to encode literals/ IRIs/ ETC
+    if (s.size() >= 2 && s.starts_with('"') && s.ends_with('"')) {
+      return s.substr(1, s.size() - 2);
+    }
     return s;
   }
 
@@ -156,6 +167,21 @@ struct LiteralFromIdGetter {
                                    const EvaluationContext* ctx) const {
     return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
                       std::move(s));
+  }
+};
+
+// Convert the input into a `unique_ptr<RE2>`. Return nullptr if the input is
+// not convertible to a string.
+struct RegexValueGetter {
+  template <SingleExpressionResult S>
+  requires std::invocable<StringValueGetter, S&&, const EvaluationContext*>
+  std::unique_ptr<re2::RE2> operator()(S&& input,
+                                       const EvaluationContext* context) const {
+    auto str = StringValueGetter{}(AD_FWD(input), context);
+    if (!str.has_value()) {
+      return nullptr;
+    }
+    return std::make_unique<re2::RE2>(str.value(), re2::RE2::Quiet);
   }
 };
 

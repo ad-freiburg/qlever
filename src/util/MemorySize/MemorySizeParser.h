@@ -21,9 +21,8 @@ class MemorySizeParser final {
   @brief Parse the given string and create a `MemorySize` object, set to the
   memory size described.
 
-  @param str A string following `./generated/MemorySizeLanguage.g4`. In short:
-  An amount of bytes described via a user defined literal.
-  */
+  @param str A string following `./generated/MemorySizeLanguage.g4`.
+ */
   static ad_utility::MemorySize parseMemorySize(std::string_view str);
 
  private:

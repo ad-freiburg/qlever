@@ -66,7 +66,9 @@ void PatternCreator::finish() {
   _isFinished = true;
 
   // Write the pattern of the last subject.
-  finishSubject(_currentSubjectIndex.value(), _currentPattern);
+  if (_currentSubjectIndex.has_value()) {
+    finishSubject(_currentSubjectIndex.value(), _currentPattern);
+  }
 
   // The mapping from subjects to patterns is already written to disk at this
   // point.

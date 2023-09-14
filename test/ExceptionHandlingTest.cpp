@@ -8,6 +8,8 @@
 
 // ________________________________________________________________
 TEST(OnDestruction, terminateIfThrows) {
+  // Avoid warnings and crashes when running all tests at once.
+  ::testing::FLAGS_gtest_death_test_style = "threadsafe";
   int numCallsToMockedTerminate = 0;
   auto mockedTerminate = [&numCallsToMockedTerminate]() noexcept {
     ++numCallsToMockedTerminate;

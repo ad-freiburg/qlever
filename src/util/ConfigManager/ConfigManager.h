@@ -28,17 +28,31 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
+#include "util/StringUtils.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
 namespace ad_utility {
 
 /*
+A validator function is any invocable object, who takes the given parameter
+types, in the same order and transformed to `const type&`, and returns a
+bool.
+
+This concept is used for `ConfigManager::addValidator`.
+*/
+template <typename Func, typename... ParameterTypes>
+concept Validator =
+    std::regular_invocable<Func, const ParameterTypes&...> &&
+    std::same_as<std::invoke_result_t<Func, const ParameterTypes&...>, bool>;
+
+/*
 Manages a bunch of `ConfigOption`s.
 */
 class ConfigManager {
   /*
-  The added configuration options.
+  The added configuration options. Configuration managers are used by the user
+  to describe a json object literal more explicitly.
 
   A configuration option tends to be placed like a key value pair in a json
   object. For example: `{"object 1" : [{"object 2" : { "The configuration option
@@ -47,8 +61,17 @@ class ConfigManager {
   The string key describes their location in the json object literal, by
   representing a json pointer in string form.
   */
-  ad_utility::HashMap<std::string, std::unique_ptr<ConfigOption>>
-      configurationOptions_;
+  using HashMapEntry =
+      std::unique_ptr<std::variant<ConfigOption, ConfigManager>>;
+  ad_utility::HashMap<std::string, HashMapEntry> configurationOptions_;
+
+  /*
+  List of the added validators. Whenever the values of the options are set,
+  they are called afterwards with `verifyWithValidators` to make sure, that
+  the new values are valid.
+  If the new value isn't valid, it throws an exception.
+  */
+  std::vector<std::function<void(void)>> validators_;
 
  public:
   /*
@@ -153,13 +176,27 @@ class ConfigManager {
   }
 
   /*
+  @brief Creates and adds a new configuration manager with a prefix path for
+  it's internally held configuration options and managers.
+
+  @param pathToOption Describes a path in json, which will be a prefix to all
+  the other paths held in the newly created ConfigManager.
+
+  @return A reference to the newly created configuration manager. This reference
+  will stay valid, even after adding more options.
+  */
+  ConfigManager& addSubManager(const std::vector<std::string>& path);
+
+  /*
   @brief Sets the configuration options based on the given json.
 
   @param j There will be an exception thrown, if:
   - `j` doesn't contain values for all configuration options, that must be set
   at runtime.
-  - Same, if there are values for configuration options, that do not exist.
+  - Same, if there are values for configuration options, that do not exist, or
+  are not contained in this manager, or its sub mangangers.
   - `j` is anything but a json object literal.
+  - Any of the added validators return false.
   */
   void parseConfig(const nlohmann::json& j);
 
@@ -186,10 +223,71 @@ class ConfigManager {
   */
   std::string printConfigurationDoc(bool printCurrentJsonConfiguration) const;
 
+  /*
+  @brief Add a function to the configuration manager for verifying, that the
+  values of the given configuration options are valid. Will always be called
+  after parsing.
+
+  @tparam ValidatorParameterTypes The types of the values in the
+  `validatorParameter`. Can be left up to type deduction.
+
+  @param validatorFunction Checks, if the values of the given configuration
+  options are valid. Should return true, if they are valid.
+  @param errorMessage A `std::runtime_error` with this as an error message will
+  get thrown, if the `validatorFunction` returns false.
+  @param configOptionsToBeChecked Proxies for the configuration options, whos
+  values will be passed to the validator function as function arguments. Will
+  keep the same order.
+  */
+  template <typename... ValidatorParameterTypes>
+  void addValidator(
+      Validator<ValidatorParameterTypes...> auto validatorFunction,
+      std::string_view errorMessage,
+      ConstConfigOptionProxy<
+          ValidatorParameterTypes>... configOptionsToBeChecked)
+      requires(sizeof...(configOptionsToBeChecked) > 0) {
+    addValidatorImpl(
+        "addValidator",
+        []<typename T>(ConstConfigOptionProxy<T> opt) {
+          return opt.getConfigOption().template getValue<std::decay_t<T>>();
+        },
+        validatorFunction, errorMessage, configOptionsToBeChecked...);
+  }
+
+  /*
+  @brief Add a function to the configuration manager for verifying, that the
+  given configuration options are valid. Will always be called after parsing.
+
+  @param validatorFunction Checks, if the given configuration options are valid.
+  Should return true, if they are valid.
+  @param errorMessage A `std::runtime_error` with this as an error message will
+  get thrown, if the `validatorFunction` returns false.
+  @param configOptionsToBeChecked Proxies for the configuration options, who
+  will be passed to the validator function as function arguments. Will keep the
+  same order.
+  */
+  template <typename ValidatorT>
+  void addOptionValidator(
+      ValidatorT validatorFunction, std::string_view errorMessage,
+      isInstantiation<ConstConfigOptionProxy> auto... configOptionsToBeChecked)
+      requires(
+          sizeof...(configOptionsToBeChecked) > 0 &&
+          Validator<ValidatorT,
+                    decltype(configOptionsToBeChecked.getConfigOption())...>) {
+    addValidatorImpl(
+        "addOptionValidator",
+        []<typename T>(ConstConfigOptionProxy<T> opt) {
+          return opt.getConfigOption();
+        },
+        validatorFunction, errorMessage, configOptionsToBeChecked...);
+  }
+
  private:
   FRIEND_TEST(ConfigManagerTest, ParseConfig);
   FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
   FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
+  FRIEND_TEST(ConfigManagerTest, ContainsOption);
+  FRIEND_TEST(ConfigManagerTest, CheckForBrokenPaths);
 
   /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
@@ -199,15 +297,12 @@ class ConfigManager {
       const std::vector<std::string>& keys);
 
   /*
-  @brief Verifies, that the given path is a valid path for an option, with this
-  name. If not, throws exceptions.
+  @brief Verifies, that the given path is a valid path for an option, or sub
+  manager. If not, throws exceptions.
 
-  @param pathToOption Describes a path in json, that points to the value held by
-  the configuration option.
-  @param optionName The identifier of the `ConfigOption`.
+  @param pathToOption Describes a path in json.
   */
-  void verifyPathToConfigOption(const std::vector<std::string>& pathToOption,
-                                std::string_view optionName) const;
+  void verifyPath(const std::vector<std::string>& path) const;
 
   /*
   @brief Adds a configuration option, that can be accessed with the given path.
@@ -217,8 +312,8 @@ class ConfigManager {
 
   @return The added config option.
   */
-  const ConfigOption& addConfigOption(
-      const std::vector<std::string>& pathToOption, ConfigOption&& option);
+  ConfigOption& addConfigOption(const std::vector<std::string>& pathToOption,
+                                ConfigOption&& option);
 
   /*
   @brief Return string representation of a `std::vector<std::string>`.
@@ -261,14 +356,7 @@ class ConfigManager {
       OptionType* variableToPutValueOfTheOptionIn,
       std::optional<OptionType> defaultValue =
           std::optional<OptionType>(std::nullopt)) {
-    /*
-    We need a non-empty path to construct a ConfigOption object, the `verify...`
-    function always throws an exception for this case. No need to duplicate the
-    error code.
-    */
-    if (pathToOption.empty()) {
-      verifyPathToConfigOption(pathToOption, "");
-    }
+    verifyPath(pathToOption);
 
     /*
     The `unqiue_ptr` was created, by creating a new `ConfigOption` via it's
@@ -282,10 +370,107 @@ class ConfigManager {
   }
 
   /*
-  @brief Provide a range of tuples, that hold references to the key value pairs
-  in `configurationOptions_`, but with the pointer dereferenced.
+  @brief A vector to all the configuratio options, held by this manager,
+  represented with their json paths and reference to them. Options held by a sub
+  manager, are also included with the path to the sub manager as prefix.
   */
-  auto configurationOptions();
-  auto configurationOptions() const;
+  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions();
+  std::vector<std::pair<std::string, const ConfigOption&>>
+  configurationOptions() const;
+
+  /*
+  @brief The implementation for `configurationOptions`.
+
+  @tparam ReturnReference Should be either `ConfigOption&`, or `const
+  ConfigOption&`.
+
+  @param pathPrefix This prefix will be added to all configuration option json
+  paths, that will be returned.
+  */
+  template <typename ReturnReference>
+  requires std::same_as<ReturnReference, ConfigOption&> ||
+           std::same_as<ReturnReference, const ConfigOption&>
+  static std::vector<std::pair<std::string, ReturnReference>>
+  configurationOptionsImpl(auto& configurationOptions,
+                           std::string_view pathPrefix = "");
+
+  /*
+  @brief Call all the validators to check, if the current value is valid.
+  */
+  void verifyWithValidators() const;
+
+  /*
+  Checks, if the given configuration option is contained in the manager.
+  Note: This checks for identity (pointer equality), not semantic equality.
+  */
+  bool containsOption(const ConfigOption& opt) const;
+
+  /*
+  @brief The implementation of `addValidator` and `addOptionValidator`.
+
+  @param addValidatorFunctionName The name of the function, that is calling this
+  implementation. So that people can easier identify them.
+  @param translationFunction Transforms the given `ConstConfigOptionProxy` in
+  the value form for the validator function.
+  @param validatorFunction Should return true, if the transformed
+  `ConstConfigOptionProxy` represent valid values. For example: There
+  configuration options were all set at run time, or contain numbers bigger
+  than 10.
+  @param errorMessage A `std::runtime_error` with this as an error message will
+  get thrown, if the `validatorFunction` returns false.
+  @param configOptionsToBeChecked Proxies for the configuration options, who
+  will be passed to the validator function as function arguments, after being
+  transformed. Will keep the same order.
+  */
+  template <typename TranslationFunction, typename ValidatorFunction,
+            isInstantiation<ConstConfigOptionProxy>... ValidatorParameter>
+  requires(std::invocable<TranslationFunction, const ValidatorParameter> &&
+           ...) &&
+          Validator<ValidatorFunction,
+                    std::invoke_result_t<TranslationFunction,
+                                         ValidatorParameter>...> &&
+          (sizeof...(ValidatorParameter) > 0)
+  void addValidatorImpl(std::string_view addValidatorFunctionName,
+                        TranslationFunction translationFunction,
+                        ValidatorFunction validatorFunction,
+                        std::string_view errorMessage,
+                        const ValidatorParameter... configOptionsToBeChecked) {
+    // Check, if we contain all the configuration options, that were given us.
+    auto checkIfContainOption = [this, &addValidatorFunctionName]<typename T>(
+                                    ConstConfigOptionProxy<T> opt) {
+      if (!containsOption(opt.getConfigOption())) {
+        throw std::runtime_error(absl::StrCat(
+            "Error while adding validator with ", addValidatorFunctionName,
+            ": The given configuration "
+            "option '",
+            opt.getConfigOption().getIdentifier(),
+            "' is not contained in the configuration manager."));
+      }
+    };
+    (checkIfContainOption(configOptionsToBeChecked), ...);
+
+    // Create the expanded error message.
+    const std::array optionNames{absl::StrCat(
+        "'", configOptionsToBeChecked.getConfigOption().getIdentifier(),
+        "'")...};
+    std::string expandedErrorMessage =
+        absl::StrCat("Validity check of configuration options ",
+                     lazyStrJoin(optionNames, ", "), " failed: ", errorMessage);
+
+    /*
+    Add a function wrapper to our list of validators, that calls the
+    `validatorFunction` with the config options and throws an exception, if the
+    `validatorFunction` returns false.
+    */
+    validators_.emplace_back([translationFunction, validatorFunction,
+                              errorMessage = std::move(expandedErrorMessage),
+                              configOptionsToBeChecked...]() {
+      if (!std::invoke(
+              validatorFunction,
+              std::invoke(translationFunction, configOptionsToBeChecked)...)) {
+        throw std::runtime_error(errorMessage);
+      }
+    });
+  }
 };
 }  // namespace ad_utility

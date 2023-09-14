@@ -34,7 +34,7 @@ class TestHttpServer {
 
   // Indicator whether the server has been shut down. We need this because
   // `HttpServer::shutDown` must only be called once.
-  bool hasBeenShutDown_ = false;
+  std::atomic<bool> hasBeenShutDown_ = false;
 
  public:
   // Create server on localhost. Try out 10 different ports, if connection

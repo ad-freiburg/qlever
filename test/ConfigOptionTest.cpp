@@ -16,11 +16,10 @@
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
+#include "util/GTestHelpers.h"
 #include "util/json.h"
 
-// Easier usage.
-using ConfigOption = ad_utility::ConfigOption;
-
+namespace ad_utility {
 /*
 Not all identifiers are allowed for configuration options.
 */
@@ -386,3 +385,5 @@ TEST(ConfigOptionTest, HoldsType) {
 
   doForTypeInConfigOptionValueType(doTest);
 }
+
+}  // namespace ad_utility
