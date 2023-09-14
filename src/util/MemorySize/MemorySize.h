@@ -174,6 +174,14 @@ constexpr static double sizeTDivision(const size_t dividend,
          static_cast<double>(dividend % divisor) / static_cast<double>(divisor);
 }
 
+// The maximal amount of a memory unit, that a `MemorySize` can remember.
+constexpr ConstexprMap<std::string_view, double, 5> maxAmountOfUnit(
+    {std::pair{"B", sizeTDivision(size_t_max, numBytesPerUnit.at("B"))},
+     std::pair{"kB", sizeTDivision(size_t_max, numBytesPerUnit.at("kB"))},
+     std::pair{"MB", sizeTDivision(size_t_max, numBytesPerUnit.at("MB"))},
+     std::pair{"GB", sizeTDivision(size_t_max, numBytesPerUnit.at("GB"))},
+     std::pair{"TB", sizeTDivision(size_t_max, numBytesPerUnit.at("TB"))}});
+
 // Converts a given number to `size_t`. Rounds up, if needed.
 template <Arithmetic T>
 constexpr size_t ceilAndCastToSizeT(const T d) {
@@ -210,7 +218,7 @@ constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
   than what can represented with `T`.
   */
   if (static_cast<T>(
-          std::min(sizeTDivision(size_t_max, numBytesPerUnit.at(unitName)),
+          std::min(maxAmountOfUnit.at(unitName),
                    static_cast<double>(std::numeric_limits<T>::max()))) <
       amountOfUnits) {
     throw std::runtime_error(
