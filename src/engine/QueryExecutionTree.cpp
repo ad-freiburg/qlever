@@ -29,6 +29,7 @@
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/TextOperationWithFilter.h"
+#include "engine/WordIndexScan.h"
 #include "engine/TransitivePath.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
@@ -209,6 +210,8 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     _type = JOIN;
   } else if constexpr (std::is_same_v<Op, TextOperationWithFilter>) {
     _type = TEXT_WITH_FILTER;
+  } else if constexpr (std::is_same_v<Op, WordIndexScan>) {
+    _type = WORD_INDEX_SCAN;
   } else if constexpr (std::is_same_v<Op, CountAvailablePredicates>) {
     _type = COUNT_AVAILABLE_PREDICATES;
   } else if constexpr (std::is_same_v<Op, Minus>) {
@@ -245,6 +248,8 @@ template void QueryExecutionTree::setOperation(
 template void QueryExecutionTree::setOperation(std::shared_ptr<Join>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<TextOperationWithFilter>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<WordIndexScan>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<CountAvailablePredicates>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Minus>);

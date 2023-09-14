@@ -1,9 +1,13 @@
 #include "engine/WordIndexScan.h"
 
 // _____________________________________________________________________________
-WordIndexScan::WordIndexScan(QueryExecutionContext* qec, Variable var,
+WordIndexScan::WordIndexScan(QueryExecutionContext* qec,
+                             SetOfVariables variables, Variable cvar,
                              string word)
-    : Operation(qec), var_(var), word_(word) {
+    : Operation(qec),
+      variables_(std::move(variables)),
+      cvar_(std::move(cvar)),
+      word_(word) {
   if (word_.ends_with('*')) {
     isPrefix_ = true;
   }
@@ -11,28 +15,32 @@ WordIndexScan::WordIndexScan(QueryExecutionContext* qec, Variable var,
 
 // _____________________________________________________________________________
 ResultTable WordIndexScan::computeResult() {
+  LOG(INFO) << "words compute: " << word_ << endl;
   IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(3 + isPrefix_);
+  idTable.setNumColumns(1 + variables_.size() + isPrefix_);
   Index::WordEntityPostings wep =
       getExecutionContext()->getIndex().getEntityPostingsForTerm(word_);
   idTable.resize(wep.cids_.size());
   int i = 0;
   decltype(auto) cidColumn = idTable.getColumn(i++);
-  decltype(auto) widColumn = idTable.getColumn(i);
-  i += isPrefix_;
-  decltype(auto) eidColumn = idTable.getColumn(i++);
+  std::ranges::transform(wep.cids_, cidColumn.begin(),
+                         &Id::makeFromTextRecordIndex);
+  if (isPrefix_) {
+    decltype(auto) widColumn = idTable.getColumn(i++);
+    std::ranges::transform(wep.wids_[0], widColumn.begin(), [](WordIndex id) {
+      return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
+    });
+  }
   decltype(auto) scoreColumn = idTable.getColumn(i++);
-
-  eidColumn = wep.eids_;
-  for (size_t k = 0; k < wep.cids_.size(); k++) {
-    cidColumn[k] = Id::makeFromTextRecordIndex(wep.cids_[k]);
-    scoreColumn[k] = Id::makeFromInt(wep.scores_[k]);
-    if (isPrefix_) {
-      widColumn[k] = Id::makeFromWordVocabIndex(WordVocabIndex::make(wep.wids_[0][k]));
-    }
+  std::ranges::transform(wep.scores_, scoreColumn.begin(), &Id::makeFromInt);
+  if (variables_.size() - 1 == 1) {
+    decltype(auto) eidColumn = idTable.getColumn(i++);
+    std::ranges::copy(wep.eids_.begin(), wep.eids_.end(), eidColumn.begin());
+  } else if (variables_.size() - 1 >= 2) {
+    // TODO: implement mult var case
   }
 
-  return {std::move(idTable), resultSortedOn(), LocalVocab{}};;
+  return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
 
 // _____________________________________________________________________________
@@ -43,17 +51,24 @@ VariableToColumnMap WordIndexScan::computeVariableToColumnMap() const {
     vcmap[var] = makeAlwaysDefinedColumn(index);
     ++index;
   };
-  addDefinedVar(var_);
+  addDefinedVar(cvar_);
   if (isPrefix_) {
-    addDefinedVar(var_.getMatchingWordVariable(word_));
+    addDefinedVar(
+        cvar_.getMatchingWordVariable(word_.substr(0, word_.size() - 1)));
   }
-  addDefinedVar(var_.getEntityVariable());
-  addDefinedVar(var_.getScoreVariable());
+  addDefinedVar(cvar_.getScoreVariable());
+  for (const auto& var : variables_) {
+    if (var != cvar_) {
+      addDefinedVar(var);
+    }
+  }
   return vcmap;
 }
 
 // _____________________________________________________________________________
-size_t WordIndexScan::getResultWidth() const { return 3 + isPrefix_; }
+size_t WordIndexScan::getResultWidth() const {
+  return 1 + variables_.size() + isPrefix_;
+}
 
 // _____________________________________________________________________________
 vector<ColumnIndex> WordIndexScan::resultSortedOn() const {
@@ -62,7 +77,7 @@ vector<ColumnIndex> WordIndexScan::resultSortedOn() const {
 
 // _____________________________________________________________________________
 string WordIndexScan::getDescriptor() const {
-  return "WordIndexScan on " + var_.name() + " with word " + word_;
+  return "WordIndexScan on " + cvar_.name() + " with word " + word_;
 }
 
 // _____________________________________________________________________________
@@ -72,7 +87,7 @@ string WordIndexScan::asStringImpl(size_t indent) const {
     os << " ";
   }
   os << "WORD INDEX SCAN: "
-     << " with word: \"" << word_ << "\" and variable: \"" << var_.name()
+     << " with word: \"" << word_ << "\" and variable: \"" << cvar_.name()
      << " \"";
   ;
   return std::move(os).str();

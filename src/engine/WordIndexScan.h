@@ -5,12 +5,18 @@
 #include "./Operation.h"
 
 class WordIndexScan : public Operation {
+  public:
+  using SetOfVariables = ad_utility::HashSet<Variable>;
  private:
-  Variable var_;
-  string word_;
+  const SetOfVariables variables_;
+  const Variable cvar_;
+  const string word_;
   bool isPrefix_ = false;
+
  public:
-  WordIndexScan(QueryExecutionContext* qec, Variable var, string word);
+  WordIndexScan(QueryExecutionContext* qec, SetOfVariables variables, Variable cvar, string word);
+
+  virtual ~WordIndexScan() = default;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 

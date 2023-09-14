@@ -1008,7 +1008,7 @@ vector<TripleWithPropertyPath> Visitor::visit(
     if (auto* var = std::get_if<Variable>(&subject)) {
       if (auto* propertyPath = std::get_if<PropertyPath>(&predicate)) {
         if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
-          addVisibleVariable(var->getTextScoreVariable());
+          addVisibleVariable(var->getScoreVariable());
           string name = object.toSparql();
           if (!((name.starts_with('"') && name.ends_with('"')) ||
                 (name.starts_with('\'') && name.ends_with('\'')))) {
@@ -1025,7 +1025,8 @@ vector<TripleWithPropertyPath> Visitor::visit(
                 var->getMatchingWordVariable(s.substr(0, s.size() - 1)));
           }
         } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
-          addVisibleVariable(var->getTextScoreVariable());
+          // addVisibleVariable(var->getTextScoreVariable());
+          addVisibleVariable(var->getScoreVariable());
         }
       }
     }
@@ -1597,8 +1598,10 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary = [&argList]<typename Function>(Function function)
-      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
+  auto createUnary =
+      [&argList]<typename Function>(Function function)
+          requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr>
+  {
     AD_CONTRACT_CHECK(argList.size() == 1);
     return function(std::move(argList[0]));
   };

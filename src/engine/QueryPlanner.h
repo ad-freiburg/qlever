@@ -377,7 +377,7 @@ class QueryPlanner {
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
       const vector<vector<SubtreePlan>>& children);
 
-  [[nodiscard]] SubtreePlan getTextLeafPlan(
+  [[nodiscard]] vector<SubtreePlan> getTextLeafPlan(
       const TripleGraph::Node& node) const;
 
   /**

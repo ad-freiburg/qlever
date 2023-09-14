@@ -26,9 +26,9 @@
 #include <engine/TransitivePath.h>
 #include <engine/Union.h>
 #include <engine/Values.h>
+#include <engine/WordIndexScan.h>
 #include <parser/Alias.h>
 #include <parser/SparqlParserHelpers.h>
-#include <engine/WordIndexScan.h>
 
 #include <algorithm>
 #include <ctime>
@@ -723,7 +723,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     using enum Permutation::Enum;
 
     if (node._cvar.has_value()) {
-      seeds.push_back(getTextLeafPlan(node));
+      vector<SubtreePlan> plans = getTextLeafPlan(node);
+      seeds.insert(seeds.end(), plans.begin(), plans.end());
       continue;
     }
     if (node._variables.empty()) {
@@ -1159,17 +1160,20 @@ Variable QueryPlanner::generateUniqueVarName() {
 }
 
 // _____________________________________________________________________________
-QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan( // QUESTION: should the wordIndexScan go here?
+vector<QueryPlanner::SubtreePlan> QueryPlanner::getTextLeafPlan(
     const QueryPlanner::TripleGraph::Node& node) const {
-  SubtreePlan plan(_qec);
-  plan._idsOfIncludedNodes |= (size_t(1) << node._id);
-  auto& tree = *plan._qet;
+  vector<SubtreePlan> vecPlans;
   AD_CONTRACT_CHECK(node._wordPart.has_value());
-  auto textOp = std::make_shared<TextOperationWithoutFilter>(
-      _qec, node._wordPart.value(), node._variables, node._cvar.value());
-  tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
-                    textOp);
-  return plan;
+  for (string word : node._wordPart.value()) {
+    SubtreePlan plan(_qec);
+    plan._idsOfIncludedNodes |= (size_t(1) << node._id);
+    auto& tree = *plan._qet;
+    auto textOp = std::make_shared<WordIndexScan>(_qec, node._variables, node._cvar.value(), word);
+    tree.setOperation(QueryExecutionTree::OperationType::WORD_INDEX_SCAN,
+                      textOp);
+    vecPlans.push_back(plan);
+  }
+  return vecPlans;
 }
 
 // _____________________________________________________________________________
