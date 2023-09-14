@@ -7,10 +7,12 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <algorithm>
 #include <cassert>
 #include <concepts>
 #include <cstddef>
 #include <functional>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -60,14 +62,10 @@ class MemorySize {
   size wanted.
   */
   constexpr static MemorySize bytes(std::integral auto numBytes);
-  constexpr static MemorySize kilobytes(size_t numKilobytes);
-  constexpr static MemorySize kilobytes(double numKilobytes);
-  constexpr static MemorySize megabytes(size_t numMegabytes);
-  constexpr static MemorySize megabytes(double numMegabytes);
-  constexpr static MemorySize gigabytes(size_t numGigabytes);
-  constexpr static MemorySize gigabytes(double numGigabytes);
-  constexpr static MemorySize terabytes(size_t numTerabytes);
-  constexpr static MemorySize terabytes(double numTerabytes);
+  constexpr static MemorySize kilobytes(Arithmetic auto numKilobytes);
+  constexpr static MemorySize megabytes(Arithmetic auto numMegabytes);
+  constexpr static MemorySize gigabytes(Arithmetic auto numGigabytes);
+  constexpr static MemorySize terabytes(Arithmetic auto numTerabytes);
 
   /*
   Return the internal memory amount in the wanted memory unit format.
@@ -193,7 +191,7 @@ constexpr size_t ceilAndCastToSizeT(const T d) {
 /*
 @brief Calculate the amount of bytes for a given amount of units.
 
-@param unitName Must be `B`, `kB`, `MB`, `GB`, or `TB`.
+@param unitName Must be `kB`, `MB`, `GB`, or `TB`.
 
 @return The amount of bytes. Rounded up, if needed.
 */
@@ -206,8 +204,14 @@ constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
   // Must be one of the supported units.
   AD_CONTRACT_CHECK(numBytesPerUnit.contains(unitName));
 
-  // Max value for `amountOfUnits`.
-  if (static_cast<T>(sizeTDivision(size_t_max, numBytesPerUnit.at(unitName))) <
+  /*
+  Max value for `amountOfUnits`.
+  Note, that max amount of units for a unit of `unitName` is sometimes bigger
+  than what can represented with `T`.
+  */
+  if (static_cast<T>(
+          std::min(sizeTDivision(size_t_max, numBytesPerUnit.at(unitName)),
+                   static_cast<double>(std::numeric_limits<T>::max()))) <
       amountOfUnits) {
     throw std::runtime_error(
         absl::StrCat(amountOfUnits, " ", unitName,
@@ -217,10 +221,11 @@ constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
 
   if constexpr (std::is_floating_point_v<T>) {
     return ceilAndCastToSizeT(
-        amountOfUnits * static_cast<double>(numBytesPerUnit.at(unitName)));
+        static_cast<double>(amountOfUnits) *
+        static_cast<double>(numBytesPerUnit.at(unitName)));
   } else {
     static_assert(std::is_integral_v<T>);
-    return amountOfUnits * numBytesPerUnit.at(unitName);
+    return static_cast<size_t>(amountOfUnits) * numBytesPerUnit.at(unitName);
   }
 }
 
@@ -263,42 +268,22 @@ constexpr MemorySize MemorySize::bytes(std::integral auto numBytes) {
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::kilobytes(size_t numKilobytes) {
+constexpr MemorySize MemorySize::kilobytes(Arithmetic auto numKilobytes) {
   return MemorySize{detail::convertMemoryUnitsToBytes(numKilobytes, "kB")};
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::kilobytes(double numKilobytes) {
-  return MemorySize{detail::convertMemoryUnitsToBytes(numKilobytes, "kB")};
-}
-
-// _____________________________________________________________________________
-constexpr MemorySize MemorySize::megabytes(size_t numMegabytes) {
+constexpr MemorySize MemorySize::megabytes(Arithmetic auto numMegabytes) {
   return MemorySize{detail::convertMemoryUnitsToBytes(numMegabytes, "MB")};
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::megabytes(double numMegabytes) {
-  return MemorySize{detail::convertMemoryUnitsToBytes(numMegabytes, "MB")};
-}
-
-// _____________________________________________________________________________
-constexpr MemorySize MemorySize::gigabytes(size_t numGigabytes) {
+constexpr MemorySize MemorySize::gigabytes(Arithmetic auto numGigabytes) {
   return MemorySize{detail::convertMemoryUnitsToBytes(numGigabytes, "GB")};
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::gigabytes(double numGigabytes) {
-  return MemorySize{detail::convertMemoryUnitsToBytes(numGigabytes, "GB")};
-}
-
-// _____________________________________________________________________________
-constexpr MemorySize MemorySize::terabytes(size_t numTerabytes) {
-  return MemorySize{detail::convertMemoryUnitsToBytes(numTerabytes, "TB")};
-}
-
-// _____________________________________________________________________________
-constexpr MemorySize MemorySize::terabytes(double numTerabytes) {
+constexpr MemorySize MemorySize::terabytes(Arithmetic auto numTerabytes) {
   return MemorySize{detail::convertMemoryUnitsToBytes(numTerabytes, "TB")};
 }
 
