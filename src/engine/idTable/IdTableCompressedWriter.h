@@ -23,11 +23,11 @@ namespace ad_utility {
 
 using namespace ad_utility::memory_literals;
 // A class that stores a sequence of `IdTable`s in a file. Each `IdTable` is
-// compressed blockwise (typically the blocksize is much smaller than the size
+// compressed blockwise. Typically, the blocksize is much smaller than the size
 // of a single IdTable, such that there are multiple blocks per IdTable. This is
 // an important building block for an external merge sort implementation where
 // we want very large presorted `IdTables` over which we need to incrementally
-// iterate (hence the smaller blocks for compression).These tables all have the
+// iterate (hence the smaller blocks for compression). These tables all have the
 // same number of columns, so they can be thought of as large blocks of a very
 // large `IdTable` which is formed by the concatenation of the single tables.
 class IdTableCompressedWriter {
@@ -335,9 +335,9 @@ class ExternalIdTableSorter {
     return [self = this](auto&& value) { self->push(AD_FWD(value)); };
   }
 
-  // Transition from the input phase, where `push()` may be called, to the
+  // Transition from the input phase, where `push()` can be called, to the
   // output phase and return a generator that yields the sorted elements. This
-  // function may be called exactly once.
+  // function must be called exactly once.
   cppcoro::generator<
       const typename IdTableStatic<NumStaticCols>::const_row_reference>
   sortedView() {
