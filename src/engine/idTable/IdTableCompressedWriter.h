@@ -72,7 +72,10 @@ class IdTableCompressedWriter {
   // Simple getters for the stored allocator and the number of columns;
   const auto& allocator() const { return allocator_; }
   size_t numColumns() const { return blocksPerColumn_.size(); }
-  ad_utility::MemorySize blockSizeCompression() const {
+
+  // The compression blocksize can also be changed, this is mostly used for
+  // testing.
+  ad_utility::MemorySize& blockSizeCompression() {
     return blockSizeCompression_;
   }
 
@@ -309,14 +312,15 @@ class ExternalIdTableSorter {
   cppcoro::generator<
       const typename IdTableStatic<NumStaticCols>::const_row_reference>
   sortedView() {
-    mergeIsActive_.store(true, std::memory_order_acquire);
+    mergeIsActive_.store(true);
     for (const auto& block : ad_utility::streams::runStreamAsync(
              sortedBlocks(), std::max(0, numBufferedOutputBlocks - 2))) {
-      for (const auto& row : block) {
+      for (typename IdTableStatic<NumStaticCols>::const_row_reference row :
+           block) {
         co_yield row;
       }
     }
-    mergeIsActive_.store(false, std::memory_order_release);
+    mergeIsActive_.store(false);
   }
 
   // Delete the underlying file and reset the sorter. May only be called if no
@@ -333,6 +337,12 @@ class ExternalIdTableSorter {
       sortAndWriteFuture_.get();
     }
     writer_.clear();
+  }
+
+  // The compression blocksize can also be changed, this is mostly used for
+  // testing.
+  ad_utility::MemorySize& blockSizeCompression() {
+    return writer_.blockSizeCompression();
   }
 
  private:

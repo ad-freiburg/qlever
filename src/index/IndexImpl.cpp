@@ -169,7 +169,7 @@ void IndexImpl::createFromFile(const string& filename) {
   };
 
   ExternalSorter<SortBySPO> spoSorter{onDiskBase_ + ".spo-sorter.dat", 3,
-                                   stxxlMemoryInBytes() / 3, allocator_};
+                                      stxxlMemoryInBytes() / 3, allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
   auto uniqueSorter = ad_utility::uniqueView<decltype(psoSorter.sortedView()),
@@ -188,7 +188,7 @@ void IndexImpl::createFromFile(const string& filename) {
   if (loadAllPermutations_) {
     // After the SPO permutation, create patterns if so desired.
     ExternalSorter<SortByOSP> ospSorter{onDiskBase_ + ".osp-sorter.dat", 3,
-                                     stxxlMemoryInBytes() / 3, allocator_};
+                                        stxxlMemoryInBytes() / 3, allocator_};
     size_t numSubjectsNormal = 0;
     auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
     if (usePatterns_) {
@@ -520,7 +520,7 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     metaData1.add(md1);
     metaData2.add(md2);
   };
-  for (auto triple : AD_FWD(sortedTriples)) {
+  for (const auto& triple : AD_FWD(sortedTriples)) {
     if (!currentRel.has_value()) {
       currentRel = triple[c0];
     }

@@ -79,8 +79,8 @@ struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
   std::vector<size_t> actualPartialSizes;
 };
 
-// All the data from IndexBuilderDataBase and a ExternalSorter that stores all ID
-// triples sorted by the PSO permutation.
+// All the data from IndexBuilderDataBase and a ExternalSorter that stores all
+// ID triples sorted by the PSO permutation.
 struct IndexBuilderDataAsPsoSorter : IndexBuilderDataBase {
   using SorterPtr = std::unique_ptr<ExternalSorter<SortByPSO>>;
   SorterPtr psoSorter;
