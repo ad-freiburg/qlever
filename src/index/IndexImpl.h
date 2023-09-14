@@ -55,16 +55,10 @@ using std::vector;
 
 using json = nlohmann::json;
 
-/*
 template <typename Comparator>
-using StxxlSorter =
-    ad_utility::BackgroundStxxlSorter<std::array<Id, 3>, Comparator>;
-    */
+using ExternalSorter = ExternalIdTableSorter<Comparator, 3>;
 
-template <typename Comparator>
-using StxxlSorter = ExternalIdTableSorter<Comparator, 3>;
-
-using PsoSorter = StxxlSorter<SortByPSO>;
+using PsoSorter = ExternalSorter<SortByPSO>;
 
 // Several data that are passed along between different phases of the
 // index builder.
@@ -85,10 +79,10 @@ struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
   std::vector<size_t> actualPartialSizes;
 };
 
-// All the data from IndexBuilderDataBase and a StxxlSorter that stores all ID
+// All the data from IndexBuilderDataBase and a ExternalSorter that stores all ID
 // triples sorted by the PSO permutation.
 struct IndexBuilderDataAsPsoSorter : IndexBuilderDataBase {
-  using SorterPtr = std::unique_ptr<StxxlSorter<SortByPSO>>;
+  using SorterPtr = std::unique_ptr<ExternalSorter<SortByPSO>>;
   SorterPtr psoSorter;
   IndexBuilderDataAsPsoSorter(const IndexBuilderDataBase& base,
                               SorterPtr sorter)
@@ -448,7 +442,7 @@ class IndexImpl {
       std::unique_ptr<ItemMapArray> items, auto localIds,
       ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr);
 
-  std::unique_ptr<StxxlSorter<SortByPSO>> convertPartialToGlobalIds(
+  std::unique_ptr<ExternalSorter<SortByPSO>> convertPartialToGlobalIds(
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial);
 

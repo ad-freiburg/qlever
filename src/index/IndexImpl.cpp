@@ -168,7 +168,7 @@ void IndexImpl::createFromFile(const string& filename) {
     numTriplesNormal += !std::ranges::any_of(triple, isInternalId);
   };
 
-  StxxlSorter<SortBySPO> spoSorter{onDiskBase_ + ".spo-sorter.dat", 3,
+  ExternalSorter<SortBySPO> spoSorter{onDiskBase_ + ".spo-sorter.dat", 3,
                                    stxxlMemoryInBytes() / 3, allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
@@ -187,7 +187,7 @@ void IndexImpl::createFromFile(const string& filename) {
 
   if (loadAllPermutations_) {
     // After the SPO permutation, create patterns if so desired.
-    StxxlSorter<SortByOSP> ospSorter{onDiskBase_ + ".osp-sorter.dat", 3,
+    ExternalSorter<SortByOSP> ospSorter{onDiskBase_ + ".osp-sorter.dat", 3,
                                      stxxlMemoryInBytes() / 3, allocator_};
     size_t numSubjectsNormal = 0;
     auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
