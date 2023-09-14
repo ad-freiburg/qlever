@@ -256,7 +256,7 @@ constexpr MemorySize magicImplForDivAndMul(const MemorySize& m, const T c,
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::bytes(size_t numBytes) {
-  return MemorySize{numBytes};
+  return MemorySize{detail::convertMemoryUnitsToBytes(numBytes, "B")};
 }
 
 // _____________________________________________________________________________
