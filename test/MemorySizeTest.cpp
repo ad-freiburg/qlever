@@ -95,16 +95,16 @@ TEST(MemorySize, MemorySizeConstructor) {
   ad_utility::MemorySize m1;
   checkAllMemorySizeGetter(m1, AllMemoryUnitSizes{0uL, 0.0, 0.0, 0.0, 0.0});
 
-  // Factory functions for size_t overload.
-  checkAllMemorySizeGetter(ad_utility::MemorySize::bytes(1uL),
+  // Factory functions for integral overload.
+  checkAllMemorySizeGetter(ad_utility::MemorySize::bytes(1),
                            singleMemoryUnitSizes.at("B"));
-  checkAllMemorySizeGetter(ad_utility::MemorySize::kilobytes(1uL),
+  checkAllMemorySizeGetter(ad_utility::MemorySize::kilobytes(1),
                            singleMemoryUnitSizes.at("kB"));
-  checkAllMemorySizeGetter(ad_utility::MemorySize::megabytes(1uL),
+  checkAllMemorySizeGetter(ad_utility::MemorySize::megabytes(1),
                            singleMemoryUnitSizes.at("MB"));
-  checkAllMemorySizeGetter(ad_utility::MemorySize::gigabytes(1uL),
+  checkAllMemorySizeGetter(ad_utility::MemorySize::gigabytes(1),
                            singleMemoryUnitSizes.at("GB"));
-  checkAllMemorySizeGetter(ad_utility::MemorySize::terabytes(1uL),
+  checkAllMemorySizeGetter(ad_utility::MemorySize::terabytes(1),
                            singleMemoryUnitSizes.at("TB"));
 
   // Factory functions for double overload.
