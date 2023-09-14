@@ -45,7 +45,7 @@ class IdTableCompressedWriter {
   std::vector<ColumnMetadata> blocksPerColumn_;
   // For each contained `IdTable` contains the index in the `ColumnMetadata`
   // where the blocks of this table begin.
-  std::vector<size_t> startOfSingleIdTables;
+  std::vector<size_t> startOfSingleIdTables_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   // Each column of each `IdTable` will be split up into blocks of this size and
   // then separately compressed and stored. Has to be chosen s.t. it is much
@@ -84,7 +84,7 @@ class IdTableCompressedWriter {
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
     size_t blockSizeInBytes = blockSizeCompression_.getBytes() / sizeof(Id);
     AD_CONTRACT_CHECK(blockSizeInBytes > 0);
-    startOfSingleIdTables.push_back(blocksPerColumn_.at(0).size());
+    startOfSingleIdTables_.push_back(blocksPerColumn_.at(0).size());
     // The columns are compressed and stored in parallel.
     // TODO<joka921> Use parallelism per block instead of per column (more
     // fine-grained) but only once we have a reasonable abstraction for
@@ -124,8 +124,8 @@ class IdTableCompressedWriter {
   std::vector<cppcoro::generator<const IdTableStatic<N>>> getAllGenerators() {
     file_.wlock()->flush();
     std::vector<cppcoro::generator<const IdTableStatic<N>>> result;
-    result.reserve(startOfSingleIdTables.size());
-    for (auto i : std::views::iota(0u, startOfSingleIdTables.size())) {
+    result.reserve(startOfSingleIdTables_.size());
+    for (auto i : std::views::iota(0u, startOfSingleIdTables_.size())) {
       result.push_back(makeGeneratorForIdTable<N>(i));
     }
     return result;
@@ -139,18 +139,21 @@ class IdTableCompressedWriter {
   getAllRowGenerators() {
     file_.wlock()->flush();
     std::vector<decltype(makeGeneratorForRows<N>(0))> result;
-    result.reserve(startOfSingleIdTables.size());
-    for (auto i : std::views::iota(0u, startOfSingleIdTables.size())) {
+    result.reserve(startOfSingleIdTables_.size());
+    for (auto i : std::views::iota(0u, startOfSingleIdTables_.size())) {
       result.push_back(makeGeneratorForRows<N>(i));
     }
     return result;
   }
 
-  // Clear the underlying file.
+  // Clear the underlying file and completely reset the data structure s.t. it
+  // can be reused.
   void clear() {
     file_.wlock()->close();
     ad_utility::deleteFile(filename_);
     file_.wlock()->open(filename_, "w+");
+    std::ranges::for_each(blocksPerColumn_, [](auto& block) { block.clear(); });
+    startOfSingleIdTables_.clear();
   }
 
  private:
@@ -172,9 +175,9 @@ class IdTableCompressedWriter {
   cppcoro::generator<const IdTableStatic<NumCols>> makeGeneratorForIdTable(
       size_t index) {
     using Table = IdTableStatic<NumCols>;
-    auto firstBlock = startOfSingleIdTables.at(index);
-    auto lastBlock = index + 1 < startOfSingleIdTables.size()
-                         ? startOfSingleIdTables.at(index + 1)
+    auto firstBlock = startOfSingleIdTables_.at(index);
+    auto lastBlock = index + 1 < startOfSingleIdTables_.size()
+                         ? startOfSingleIdTables_.at(index + 1)
                          : blocksPerColumn_.at(0).size();
 
     auto readBlock = [this](size_t blockIdx) {
@@ -220,10 +223,9 @@ class IdTableCompressedWriter {
       }
     }
     // Last block.
-    if (fut.valid()) {
-      auto table = fut.get();
-      co_yield table;
-    }
+    AD_CORRECTNESS_CHECK(fut.valid());
+    auto table = fut.get();
+    co_yield table;
   }
 };
 
@@ -351,6 +353,9 @@ class ExternalIdTableSorter {
   /// function may be called exactly once.
   cppcoro::generator<IdTableStatic<NumStaticCols>> sortedBlocks() {
     pushBlock(std::move(currentBlock_));
+    currentBlock_ =
+        IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
+    currentBlock_.setNumColumns(numColumns_);
     if (sortAndWriteFuture_.valid()) {
       sortAndWriteFuture_.get();
     }

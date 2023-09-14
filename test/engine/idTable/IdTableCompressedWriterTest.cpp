@@ -91,29 +91,33 @@ TEST(IdTableCompressedWriter, firstTest) {
 template <size_t NumStaticColumns>
 void testExternalSorter(size_t numDynamicColumns) {
   std::string filename = "idTableCompressedSorter.firstTest.dat";
+  using namespace ad_utility::memory_literals;
 
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  // TODO<joka921> also test the static case.
   ExternalIdTableSorter<SortByOPS, NumStaticColumns> writer{
       filename, numDynamicColumns, 100'000,
       ad_utility::testing::makeAllocator()};
+  writer.blockSizeCompression() = 5_kB;
 
-  CopyableIdTable<NumStaticColumns> randomTable =
-      createRandomlyFilledIdTable(100'000, numDynamicColumns)
-          .toStatic<NumStaticColumns>();
+  for (size_t i = 0; i < 2; ++i) {
+    CopyableIdTable<NumStaticColumns> randomTable =
+        createRandomlyFilledIdTable(100'000, numDynamicColumns)
+            .toStatic<NumStaticColumns>();
 
-  for (const auto& row : randomTable) {
-    writer.push(row);
+    for (const auto& row : randomTable) {
+      writer.push(row);
+    }
+
+    std::ranges::sort(randomTable, SortByOPS{});
+
+    auto generator = writer.sortedView();
+
+    using namespace ::testing;
+    auto result =
+        idTableFromRowGenerator<NumStaticColumns>(generator, numDynamicColumns);
+    ASSERT_THAT(result, Eq(randomTable));
+    writer.clear();
   }
-
-  std::ranges::sort(randomTable, SortByOPS{});
-
-  auto generator = writer.sortedView();
-
-  using namespace ::testing;
-  auto result =
-      idTableFromRowGenerator<NumStaticColumns>(generator, numDynamicColumns);
-  ASSERT_THAT(result, Eq(randomTable));
 }
 
 TEST(IdTableCompressedSorter, testRandomInput) {
