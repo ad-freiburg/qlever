@@ -1084,3 +1084,31 @@ TEST(QueryPlannerTest, SimpleTripleThreeVariables) {
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?o",
             h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {POS}));
 }
+
+TEST(QueryPlannerTest, CartesianProductJoin) {
+  auto scan = h::IndexScanFromStrings;
+  h::expect(
+      "SELECT ?x ?p ?o WHERE {"
+      "<s> <p> ?o . ?a <b> <c> }",
+      h::CartesianProductJoin(scan("<s>", "<p>", "?o"),
+                              scan("?a", "<b>", "<c>")));
+  // This currently fails because of a bug, we have to fix the bug...
+  h::expect(
+      "SELECT ?x ?p ?o WHERE {"
+      "<s> ?p ?o . ?a ?b ?c }",
+      h::CartesianProductJoin(scan("<s>", "?p", "?o"), scan("?a", "?b", "?c")));
+  h::expect(
+      "SELECT * WHERE {"
+      "?s <p> <o> . ?s <p2> ?o2 . ?x <b> ?c }",
+      h::CartesianProductJoin(
+          h::Join(scan("?s", "<p>", "<o>"), scan("?s", "<p2>", "?o2")),
+          scan("?x", "<b>", "?c")));
+}
+
+// __________________________________________________________________________
+TEST(QueryPlanner, BindAtBeginningOfQuery) {
+  h::expect(
+      "SELECT * WHERE {"
+      " BIND (3 + 5 AS ?x) }",
+      h::Bind(h::NeutralElementOperation(), "3 + 5", Variable{"?x"}));
+}

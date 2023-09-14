@@ -135,6 +135,78 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
 }
 
 /*
+Cases, that caused exceptions with `addOption` in the past, even though they
+shouldn't have.
+*/
+TEST(ConfigManagerTest, AddConfigurationOptionFalseExceptionTest) {
+  /*
+  First of, a short explanation, of what a path collision is.
+
+  A path collisions is, when the path for a new config option, or sub manager,
+  would cause problems with the path of an already added config option, or
+  manager. More specifically, we call the following cases path collisions:
+  - Same path. Makes it impossible for the user to later identify the correct
+  one.
+  - Prefix of the path of an already exiting option/manager. This would mean,
+  that the old config option, or sub manager, are part of the new config option,
+  or sub manager from the view of json. This is not allowed for a new config
+  option, because there is currently no support to put config options, or sub
+  managers, inside config options. For a new sub manager it's not allowed,
+  because nesting should be done on the `C++` level, not on the json path level.
+  - The path of an already exiting option/manager is a prefix of the new path.
+  The reasons, why it's not allowed, are basically the same.
+
+  In the past, it was possible to cause path collisions even though there
+  weren't any, by having paths, which json pointer representation fullfilled the
+  conditions for one of the cases. For example: It should be possible, to have
+  one option under `[prefixes]` and one under
+  `[prefixes-eternal]`. But, because `/prefixes` is a prefix of
+  `/prefixes-eternal` a false exception was thrown.
+
+  Which is why, we are testing the second and third case for path collisions
+  with such cases here.
+  */
+  ad_utility::ConfigManager config{};
+
+  // Configuration options for testing.
+  int notUsed;
+  config.addOption({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s},
+                   "", &notUsed, 42);
+
+  /*
+  Adding a config option, where the json pointer version of the path is a prefix
+  of the json pointer version of a config option path, that is is already in
+  use.
+  */
+  ASSERT_NO_THROW(
+      config.addOption({"Shared_part"s, "Unique_part"s}, "", &notUsed, 42));
+
+  /*
+  Adding a config option and there exists an already in use config option path,
+  whose json pointer version is a prefix of the json pointer version of the new
+  path.
+  */
+  ASSERT_NO_THROW(config.addOption(
+      {"Shared_part"s, "Unique_part_1"s, "Sense_of_existence_42"s}, "",
+      &notUsed, 42));
+
+  /*
+  Adding a config option, where the json pointer version of the path is a prefix
+  of the json pointer version of a sub manager path, that is is already in use.
+  */
+  config.addSubManager({"sub"s, "manager"s})
+      .addOption("someOpt"s, "", &notUsed, 42);
+  ASSERT_NO_THROW(config.addOption({"sub"s, "man"s}, "", &notUsed, 42));
+
+  /*
+  Adding a config option and there exists an already in use sub manager path,
+  whose json pointer version is a prefix of the json pointer version of the new
+  path.
+  */
+  ASSERT_NO_THROW(config.addOption({"sub"s, "manager4"s}, "", &notUsed, 42));
+}
+
+/*
 The exceptions for adding sub managers.
 */
 TEST(ConfigManagerTest, addSubManagerExceptionTest) {
@@ -212,6 +284,81 @@ TEST(ConfigManagerTest, addSubManagerExceptionTest) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       config.addSubManager({"some"s, "option"s}),
       ::testing::ContainsRegex(R"('\[some\]\[option\]')"));
+}
+
+/*
+Cases, that caused exceptions with `addSubManager` in the past, even though they
+shouldn't have.
+*/
+TEST(ConfigManagerTest, AddSubManagerFalseExceptionTest) {
+  /*
+  First of, a short explanation, of what a path collision is.
+
+  A path collisions is, when the path for a new config option, or sub manager,
+  would cause problems with the path of an already added config option, or
+  manager. More specifically, we call the following cases path collisions:
+  - Same path. Makes it impossible for the user to later identify the correct
+  one.
+  - Prefix of the path of an already exiting option/manager. This would mean,
+  that the old config option, or sub manager, are part of the new config option,
+  or sub manager from the view of json. This is not allowed for a new config
+  option, because there is currently no support to put config options, or sub
+  managers, inside config options. For a new sub manager it's not allowed,
+  because nesting should be done on the `C++` level, not on the json path level.
+  - The path of an already exiting option/manager is a prefix of the new path.
+  The reasons, why it's not allowed, are basically the same.
+
+  In the past, it was possible to cause path collisions even though there
+  weren't any, by having paths, which json pointer representation fullfilled the
+  conditions for one of the cases. For example: It should be possible, to have
+  one sub manager under `[prefixes]` and one under
+  `[prefixes-eternal]`. But, because `/prefixes` is a prefix of
+  `/prefixes-eternal` a false exception was thrown.
+
+  Which is why, we are testing the second and third case for path collisions
+  with such cases here.
+  */
+  ad_utility::ConfigManager config{};
+
+  // Sub manager for testing. Empty sub manager are not allowed.
+  int notUsed;
+  config
+      .addSubManager({"Shared_part"s, "Unique_part_1"s, "Sense_of_existence"s})
+      .addOption("ignore", "", &notUsed);
+
+  /*
+  Adding a sub manager, where the json pointer version of the path is a prefix
+  of the json pointer version of a sub manager path, that is is already in use.
+  */
+  ASSERT_NO_THROW(config.addSubManager({"Shared_part"s, "Unique_part"s})
+                      .addOption("ignore", "", &notUsed));
+
+  /*
+  Adding a sub manager and there exists an already in use sub manager path,
+  whose json pointer version is a prefix of the json pointer version of the new
+  path.
+  */
+  ASSERT_NO_THROW(config
+                      .addSubManager({"Shared_part"s, "Unique_part_1"s,
+                                      "Sense_of_existence_42"s})
+                      .addOption("ignore", "", &notUsed));
+
+  /*
+  Adding a sub manager, where the json pointer version of the path is a prefix
+  of the json pointer version of a config option path, that is is already in
+  use.
+  */
+  config.addOption({"some"s, "option"s}, "", &notUsed);
+  ASSERT_NO_THROW(config.addSubManager({"some"s, "opt"s})
+                      .addOption("ignore", "", &notUsed));
+
+  /*
+  Adding a sub manager and there exists an already in use config option path,
+  whose json pointer version is a prefix of the json pointer version of the new
+  path.
+  */
+  ASSERT_NO_THROW(config.addSubManager({"some"s, "options"s})
+                      .addOption("ignore", "", &notUsed));
 }
 
 TEST(ConfigManagerTest, ParseConfigNoSubManager) {
