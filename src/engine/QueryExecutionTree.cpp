@@ -30,11 +30,11 @@
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/TextOperationWithFilter.h"
-#include "engine/WordIndexScan.h"
 #include "engine/TransitivePath.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/WordIndexScan.h"
 #include "parser/RdfEscaping.h"
 
 using std::string;
@@ -251,8 +251,7 @@ template void QueryExecutionTree::setOperation(
 template void QueryExecutionTree::setOperation(std::shared_ptr<Join>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<TextOperationWithFilter>);
-template void QueryExecutionTree::setOperation(
-    std::shared_ptr<WordIndexScan>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<WordIndexScan>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<CountAvailablePredicates>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Minus>);

@@ -1169,7 +1169,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getTextLeafPlan(
     SubtreePlan plan(_qec);
     plan._idsOfIncludedNodes |= (size_t(1) << node._id);
     auto& tree = *plan._qet;
-    auto textOp = std::make_shared<WordIndexScan>(_qec, node._variables, node._cvar.value(), word);
+    auto textOp = std::make_shared<WordIndexScan>(_qec, node._variables,
+                                                  node._cvar.value(), word);
     tree.setOperation(QueryExecutionTree::OperationType::WORD_INDEX_SCAN,
                       textOp);
     vecPlans.push_back(plan);
