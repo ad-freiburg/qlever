@@ -56,7 +56,7 @@ using std::vector;
 using json = nlohmann::json;
 
 template <typename Comparator>
-using ExternalSorter = ExternalIdTableSorter<Comparator, 3>;
+using ExternalSorter = ad_utility::ExternalIdTableSorter<Comparator, 3>;
 
 using PsoSorter = ExternalSorter<SortByPSO>;
 

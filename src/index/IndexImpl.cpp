@@ -168,8 +168,8 @@ void IndexImpl::createFromFile(const string& filename) {
     numTriplesNormal += !std::ranges::any_of(triple, isInternalId);
   };
 
-  ExternalSorter<SortBySPO> spoSorter{onDiskBase_ + ".spo-sorter.dat", 3,
-                                      stxxlMemoryInBytes() / 3, allocator_};
+  ExternalSorter<SortBySPO> spoSorter{onDiskBase_ + ".spo-sorter.dat",
+                                      stxxlMemoryInBytes() / 2, allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
   auto uniqueSorter = ad_utility::uniqueView<decltype(psoSorter.sortedView()),
@@ -187,8 +187,8 @@ void IndexImpl::createFromFile(const string& filename) {
 
   if (loadAllPermutations_) {
     // After the SPO permutation, create patterns if so desired.
-    ExternalSorter<SortByOSP> ospSorter{onDiskBase_ + ".osp-sorter.dat", 3,
-                                        stxxlMemoryInBytes() / 3, allocator_};
+    ExternalSorter<SortByOSP> ospSorter{onDiskBase_ + ".osp-sorter.dat",
+                                        stxxlMemoryInBytes() / 2, allocator_};
     size_t numSubjectsNormal = 0;
     auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
     if (usePatterns_) {
@@ -430,7 +430,7 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
   // Iterate over all partial vocabularies.
   TripleVec::bufreader_type reader(data);
   auto resultPtr = std::make_unique<PsoSorter>(
-      onDiskBase_ + "pso-sorter.dat", 3, stxxlMemoryInBytes() / 3, allocator_);
+      onDiskBase_ + ".pso-sorter.dat", stxxlMemoryInBytes() / 2, allocator_);
   auto& result = *resultPtr;
   size_t i = 0;
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();

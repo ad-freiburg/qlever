@@ -257,7 +257,7 @@ class RowReferenceImpl {
       return result;
     }
 
-    // Convert from a static `RowReference` to a `std::array`
+    // Convert from a static `RowReference` to a `std::array` (makes a copy).
     operator std::array<T, numStaticColumns>() const
         requires(numStaticColumns != 0) {
       std::array<T, numStaticColumns> result;

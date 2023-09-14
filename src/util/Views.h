@@ -8,6 +8,7 @@
 #include <future>
 
 #include "./Generator.h"
+#include "util/Log.h"
 
 namespace ad_utility {
 
@@ -51,6 +52,8 @@ cppcoro::generator<typename View::value_type> bufferedAsyncView(
 /// consecutive duplicates.
 template <typename SortedView, typename ValueType = SortedView::value_type>
 cppcoro::generator<ValueType> uniqueView(SortedView view) {
+  size_t numInputs = 0;
+  size_t numUnique = 0;
   auto it = view.begin();
   if (it == view.end()) {
     co_return;
@@ -58,16 +61,24 @@ cppcoro::generator<ValueType> uniqueView(SortedView view) {
   ValueType previousValue = std::move(*it);
   ValueType previousValueCopy = previousValue;
   co_yield previousValueCopy;
+  numInputs = 1;
+  numUnique = 1;
   ++it;
 
   for (; it != view.end(); ++it) {
+    ++numInputs;
     if (*it != previousValue) {
       previousValue = std::move(*it);
       previousValueCopy = previousValue;
+      ++numUnique;
       co_yield previousValueCopy;
     }
   }
+  LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
+  LOG(INFO) << "Number of unique outputs of `uniqueView`: " << numUnique
+            << std::endl;
 }
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_VIEWS_H

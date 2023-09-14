@@ -6,7 +6,6 @@
 #define QLEVER_IDTABLECOMPRESSEDWRITER_H
 
 #include <algorithm>
-#include <execution>
 #include <future>
 #include <queue>
 #include <ranges>
@@ -20,12 +19,20 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/http/beast.h"
 
-// A class that stores a  compressed  sequence of `IdTable`s  in a file. These
-// tables all have the same number of columns, so they can be thought of as
-// large blocks of a very large `IdTable` which is formed by the concatenation
-// of the single tables.
+namespace ad_utility {
+
+using namespace ad_utility::memory_literals;
+// A class that stores a sequence of `IdTable`s in a file. Each `IdTable` is
+// compressed blockwise (typically the blocksize is much smaller than the size
+// of a single IdTable, such that there are multiple blocks per IdTable. This is
+// an important building block for an external merge sort implementation where
+// we want very large presorted `IdTables` over which we need to incrementally
+// iterate (hence the smaller blocks for compression).These tables all have the
+// same number of columns, so they can be thought of as large blocks of a very
+// large `IdTable` which is formed by the concatenation of the single tables.
 class IdTableCompressedWriter {
-  // Metadata for a compressed block of bytes.
+  // Metadata for a compressed block of bytes. A block is a contiguous part of a
+  // column of an `IdTable`.
   struct CompressedBlockMetadata {
     // The sizes are in Bytes.
     size_t compressedSize_;
@@ -38,30 +45,34 @@ class IdTableCompressedWriter {
   std::string filename_;
   ad_utility::Synchronized<ad_utility::File, std::shared_mutex> file_{filename_,
                                                                       "w+"};
-  // The metadata of a single column of the IdTable (each column is split up
-  // into several blocks).
+  // For a single column, the concatenation of the blocks for that column of all
+  // `IdTables`.
   using ColumnMetadata = std::vector<CompressedBlockMetadata>;
-  // The metadata of each column.
+
+  // The `ColumnMetadata` of each column.
   std::vector<ColumnMetadata> blocksPerColumn_;
   // For each contained `IdTable` contains the index in the `ColumnMetadata`
   // where the blocks of this table begin.
   std::vector<size_t> startOfSingleIdTables_;
+
   ad_utility::AllocatorWithLimit<Id> allocator_;
   // Each column of each `IdTable` will be split up into blocks of this size and
   // then separately compressed and stored. Has to be chosen s.t. it is much
   // smaller than the size of the single `IdTables` and  large enough to make
   // the used compression algorithm work well.
-  ad_utility::MemorySize blockSizeCompression_ =
-      ad_utility::MemorySize::megabytes(4ul);
+  ad_utility::MemorySize blockSizeUncompressed_ = 4_MB;
 
  public:
   // Constructor. The file at `filename` will be overwritten. Each of the
   // `IdTables` that will be passed in has to have exactly `numCols` columns.
-  explicit IdTableCompressedWriter(std::string filename, size_t numCols,
-                                   ad_utility::AllocatorWithLimit<Id> allocator)
+  explicit IdTableCompressedWriter(
+      std::string filename, size_t numCols,
+      ad_utility::AllocatorWithLimit<Id> allocator,
+      ad_utility::MemorySize blockSizeUncompressed = 4_MB)
       : filename_{std::move(filename)},
         blocksPerColumn_(numCols),
-        allocator_{std::move(allocator)} {}
+        allocator_{std::move(allocator)},
+        blockSizeUncompressed_(blockSizeUncompressed) {}
 
   // Destructor. Deletes the stored file.
   ~IdTableCompressedWriter() {
@@ -72,18 +83,15 @@ class IdTableCompressedWriter {
   // Simple getters for the stored allocator and the number of columns;
   const auto& allocator() const { return allocator_; }
   size_t numColumns() const { return blocksPerColumn_.size(); }
-
-  // The compression blocksize can also be changed, this is mostly used for
-  // testing.
-  ad_utility::MemorySize& blockSizeCompression() {
-    return blockSizeCompression_;
+  const MemorySize& blockSizeUncompressed() const {
+    return blockSizeUncompressed_;
   }
 
   // Store an `idTable`.
   void writeIdTable(const IdTable& table) {
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
-    size_t blockSizeInBytes = blockSizeCompression_.getBytes() / sizeof(Id);
-    AD_CONTRACT_CHECK(blockSizeInBytes > 0);
+    size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
+    AD_CONTRACT_CHECK(blockSize > 0);
     startOfSingleIdTables_.push_back(blocksPerColumn_.at(0).size());
     // The columns are compressed and stored in parallel.
     // TODO<joka921> Use parallelism per block instead of per column (more
@@ -92,23 +100,24 @@ class IdTableCompressedWriter {
     std::vector<std::future<void>> compressColumFutures;
     for (auto i : std::views::iota(0u, numColumns())) {
       compressColumFutures.push_back(
-          std::async(std::launch::async, [this, i, blockSizeInBytes, &table]() {
+          std::async(std::launch::async, [this, i, blockSize, &table]() {
             auto& blockMetadata = blocksPerColumn_.at(i);
             decltype(auto) column = table.getColumn(i);
             // TODO<C++23> Use `std::views::chunk`
-            for (size_t lower = 0; lower < column.size();
-                 lower += blockSizeInBytes) {
-              size_t upper = std::min(lower + blockSizeInBytes, column.size());
-              auto sizeInBytes = (upper - lower) * sizeof(Id);
-              auto compressed = ZstdWrapper::compress(
-                  const_cast<Id*>(column.data()) + lower, sizeInBytes);
+            for (size_t lower = 0; lower < column.size(); lower += blockSize) {
+              size_t upper = std::min(lower + blockSize, column.size());
+              auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
+              auto compressed =
+                  ZstdWrapper::compress(const_cast<Id*>(column.data()) + lower,
+                                        thisBlockSizeUncompressed);
               size_t offset = 0;
               {
                 auto lck = file_.wlock();
                 offset = lck->tell();
                 lck->write(compressed.data(), compressed.size());
               }
-              blockMetadata.push_back({compressed.size(), sizeInBytes, offset});
+              blockMetadata.push_back(
+                  {compressed.size(), thisBlockSizeUncompressed, offset});
             }
           }));
     }
@@ -180,12 +189,14 @@ class IdTableCompressedWriter {
                          ? startOfSingleIdTables_.at(index + 1)
                          : blocksPerColumn_.at(0).size();
 
+    // Lambda that decompresses the block at the given `blockIdx`. The
+    // individual columns are decompressed concurrently.
     auto readBlock = [this](size_t blockIdx) {
       Table block{numColumns(), allocator_};
-      block.reserve(blockSizeCompression_.getBytes() / sizeof(Id));
-      size_t size =
+      block.reserve(blockSizeUncompressed_.getBytes() / sizeof(Id));
+      size_t blockSize =
           blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
-      block.resize(size);
+      block.resize(blockSize);
       std::vector<std::future<void>> readColumnFutures;
       for (auto i : std::views::iota(0u, numColumns())) {
         readColumnFutures.push_back(
@@ -194,14 +205,15 @@ class IdTableCompressedWriter {
               const auto& metaData = blocksPerColumn_.at(i).at(blockIdx);
               std::vector<char> compressed;
               compressed.resize(metaData.compressedSize_);
-              // TODO<joka921> Check that we have decompressed the correct
-              // sizes.
-              file_.wlock()->read(compressed.data(), metaData.compressedSize_,
-                                  metaData.offsetInFile_);
-              // TODO<joka921> also do this here.
-              ZstdWrapper::decompressToBuffer(compressed.data(),
-                                              compressed.size(), col.data(),
-                                              metaData.uncompressedSize_);
+              auto numBytesRead = file_.wlock()->read(compressed.data(),
+                                                      metaData.compressedSize_,
+                                                      metaData.offsetInFile_);
+              AD_CORRECTNESS_CHECK(numBytesRead == metaData.compressedSize_);
+              auto numBytesDecompressed = ZstdWrapper::decompressToBuffer(
+                  compressed.data(), compressed.size(), col.data(),
+                  metaData.uncompressedSize_);
+              AD_CORRECTNESS_CHECK(numBytesDecompressed ==
+                                   metaData.uncompressedSize_);
             }));
       }
       for (auto& fut : readColumnFutures) {
@@ -212,6 +224,8 @@ class IdTableCompressedWriter {
 
     std::future<Table> fut;
 
+    // Yield one block after the other. While one block is yielded the next
+    // block is already read concurrently.
     for (size_t blockIdx = firstBlock; blockIdx < lastBlock; ++blockIdx) {
       std::optional<Table> table;
       if (fut.valid()) {
@@ -246,6 +260,8 @@ class ExternalIdTableSorter {
   using MemorySize = ad_utility::MemorySize;
   // Used to aggregate rows for the next block.
   IdTableStatic<NumStaticCols> currentBlock_;
+  // For statistical reasons
+  size_t numElementsPushed_ = 0;
   // The number of columns of the `IdTable`s to be sorted. Might be different
   // from `NumStaticCols` when dynamic tables (NumStaticCols == 0) are used;
   size_t numColumns_;
@@ -255,7 +271,7 @@ class ExternalIdTableSorter {
   // The division by two is there because we store two blocks at the same time:
   // One that is currently being sorted and written to disk in the background,
   // and one that is used to collect rows in the calls to `push`.
-  size_t blocksize_{memory_.getBytes() / numColumns_ / sizeof(Id) / 2};
+  size_t blocksize_{memory_.getBytes() / (numColumns_ * sizeof(Id) * 2)};
   IdTableCompressedWriter writer_;
   Comparator comp_{};
   // Used to compress and write a block on a background thread while we can
@@ -266,7 +282,7 @@ class ExternalIdTableSorter {
   std::atomic<bool> mergeIsActive_ = false;
 
   // The maximal blocksize in the output phase.
-  MemorySize maxOutputBlocksize = MemorySize::gigabytes(1ul);
+  MemorySize maxOutputBlocksize = 1_GB;
   // The number of merged blocks that are buffered during the
   //  output phase.
   int numBufferedOutputBlocks = 4;
@@ -275,21 +291,32 @@ class ExternalIdTableSorter {
   // Constructor.
   explicit ExternalIdTableSorter(std::string filename, size_t numCols,
                                  size_t memoryInBytes,
-                                 ad_utility::AllocatorWithLimit<Id> allocator)
+                                 ad_utility::AllocatorWithLimit<Id> allocator,
+                                 MemorySize blocksizeCompression = 4_MB)
       : currentBlock_{allocator},
         numColumns_{numCols},
         memory_{MemorySize::bytes(memoryInBytes)},
-        writer_{std::move(filename), numCols, allocator} {
+        writer_{std::move(filename), numCols, allocator, blocksizeCompression} {
     currentBlock_.setNumColumns(numCols);
     currentBlock_.reserve(blocksize_);
     AD_CONTRACT_CHECK(NumStaticCols == 0 || NumStaticCols == numCols);
   }
+
+  // When we have a static number of columns, then the `numCols` argument to the
+  // constructor is redundant.
+  explicit ExternalIdTableSorter(std::string filename, size_t memoryInBytes,
+                                 ad_utility::AllocatorWithLimit<Id> allocator,
+                                 MemorySize blocksizeCompression = 4_MB)
+      requires(NumStaticCols > 0)
+      : ExternalIdTableSorter(std::move(filename), NumStaticCols, memoryInBytes,
+                              std::move(allocator), blocksizeCompression) {}
 
  public:
   // Add a single row to the input. The type of `row` needs to be something that
   // can be `push_back`ed to a `IdTable`.
   void push(const auto& row) requires requires { currentBlock_.push_back(row); }
   {
+    ++numElementsPushed_;
     currentBlock_.push_back(row);
     if (currentBlock_.size() >= blocksize_) {
       // TODO<joka921> Also do this in parallel.
@@ -302,26 +329,29 @@ class ExternalIdTableSorter {
     }
   }
 
-  /// Return a lambda that takes a `ValueType` and calls `push` for that value.
-  /// Note that `this` is captured by reference
+  // Return a lambda that takes a `ValueType` and calls `push` for that value.
+  // Note that `this` is captured by reference
   auto makePushCallback() {
     return [self = this](auto&& value) { self->push(AD_FWD(value)); };
   }
 
-  /// Transition from the input phase, where `push()` may be called, to the
-  /// output phase and return a generator that yields the sorted elements. This
-  /// function may be called exactly once.
+  // Transition from the input phase, where `push()` may be called, to the
+  // output phase and return a generator that yields the sorted elements. This
+  // function may be called exactly once.
   cppcoro::generator<
       const typename IdTableStatic<NumStaticCols>::const_row_reference>
   sortedView() {
+    size_t numYielded = 0;
     mergeIsActive_.store(true);
     for (const auto& block : ad_utility::streams::runStreamAsync(
-             sortedBlocks(), std::max(0, numBufferedOutputBlocks - 2))) {
+             sortedBlocks(), std::max(1, numBufferedOutputBlocks - 2))) {
       for (typename IdTableStatic<NumStaticCols>::const_row_reference row :
            block) {
+        ++numYielded;
         co_yield row;
       }
     }
+    AD_CORRECTNESS_CHECK(numYielded == numElementsPushed_);
     mergeIsActive_.store(false);
   }
 
@@ -335,22 +365,17 @@ class ExternalIdTableSorter {
           "been iterated over is forbidden."};
     }
     currentBlock_.clear();
+    numElementsPushed_ = 0;
     if (sortAndWriteFuture_.valid()) {
       sortAndWriteFuture_.get();
     }
     writer_.clear();
   }
 
-  // The compression blocksize can also be changed, this is mostly used for
-  // testing.
-  ad_utility::MemorySize& blockSizeCompression() {
-    return writer_.blockSizeCompression();
-  }
-
  private:
-  /// Transition from the input phase, where `push()` may be called, to the
-  /// output phase and return a generator that yields the sorted elements. This
-  /// function may be called exactly once.
+  // Transition from the input phase, where `push()` may be called, to the
+  // output phase and return a generator that yields the sorted elements. This
+  // function may be called exactly once.
   cppcoro::generator<IdTableStatic<NumStaticCols>> sortedBlocks() {
     pushBlock(std::move(currentBlock_));
     currentBlock_ =
@@ -362,7 +387,7 @@ class ExternalIdTableSorter {
     auto rowGenerators = writer_.getAllRowGenerators<NumStaticCols>();
 
     auto requiredMemoryForInputBlocks =
-        rowGenerators.size() * numColumns_ * writer_.blockSizeCompression();
+        rowGenerators.size() * numColumns_ * writer_.blockSizeUncompressed();
     const size_t blockSizeOutput = [&]() -> size_t {
       if (EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING) {
         // For unit tests, always yield 5 outputs at once.
@@ -380,7 +405,7 @@ class ExternalIdTableSorter {
             maxOutputBlocksize);
 
         size_t blockSizeForOutput =
-            blockSizeOutputMemory.getBytes() / sizeof(Id) / numColumns_;
+            blockSizeOutputMemory.getBytes() / (sizeof(Id) * numColumns_);
         if (blockSizeForOutput <= 100) {
           throw std::runtime_error{absl::StrCat(
               "Insufficient memory for merging ", rowGenerators.size(),
@@ -409,6 +434,7 @@ class ExternalIdTableSorter {
     IdTableStatic<NumStaticCols> result(writer_.numColumns(),
                                         writer_.allocator());
     result.reserve(blockSizeOutput);
+    size_t numPopped = 0;
     while (!pq.empty()) {
       std::pop_heap(pq.begin(), pq.end(), comp);
       auto& min = pq.back();
@@ -420,13 +446,17 @@ class ExternalIdTableSorter {
         std::push_heap(pq.begin(), pq.end(), comp);
       }
       if (result.size() >= blockSizeOutput) {
+        numPopped += result.numRows();
         co_yield result;
+        // The `result` will be moved away, so we have to reset it again.
         result = IdTableStatic<NumStaticCols>(writer_.numColumns(),
                                               writer_.allocator());
         result.reserve(blockSizeOutput);
       }
     }
+    numPopped += result.numRows();
     co_yield result;
+    AD_CORRECTNESS_CHECK(numPopped == numElementsPushed_);
   }
 
   void pushBlock(IdTableStatic<NumStaticCols> block) {
@@ -450,5 +480,6 @@ class ExternalIdTableSorter {
         });
   }
 };
+}  // namespace ad_utility
 
 #endif  // QLEVER_IDTABLECOMPRESSEDWRITER_H

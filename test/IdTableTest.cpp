@@ -597,72 +597,6 @@ TEST(IdTable, sortTest) {
   ASSERT_EQ(std::as_const(orig).at(1), std::as_const(test).at(5));
 }
 
-TEST(IdTable, staticSortTest) {
-  IdTableStatic<2> test(2, makeAllocator());
-  test.push_back({V(3), V(1)});
-  test.push_back({V(8), V(9)});
-  test.push_back({V(1), V(5)});
-  test.push_back({V(0), V(4)});
-  test.push_back({V(5), V(8)});
-  test.push_back({V(6), V(2)});
-
-  auto orig = test.clone();
-
-  // First check for the requirements of the iterator:
-  // Value Swappable : swap rows 0 and 2
-  auto i1 = test.begin();
-  auto i2 = i1 + 2;
-  std::iter_swap(i1, i2);
-  ASSERT_EQ(orig[0], test[2]);
-  ASSERT_EQ(orig.at(0), test.at(2));
-  ASSERT_EQ(orig[2], test[0]);
-  ASSERT_EQ(orig.at(2), test.at(0));
-
-  // The value is move Assignable : create a temporary copy of 3 and move it to
-  // 1
-  i1 = test.begin() + 1;
-  i2 = i1 + 3;
-  IdTableStatic<2>::row_type tmp(2);
-  tmp = *i2;
-  *i1 = std::move(tmp);
-  ASSERT_EQ(orig[4], test[1]);
-  ASSERT_EQ(orig[4], test[4]);
-
-  // The value is move constructible: move construct from a row in the table
-  i1 = test.begin() + 4;
-  IdTableStatic<2>::row_type tmp2(*i1);
-  ASSERT_EQ(*i1, tmp2);
-
-  // Now try the actual sort
-  test = orig.clone();
-  std::ranges::sort(test, std::less<>{},
-                    [](const auto& row) { return row[0]; });
-
-  // The sorted order of the orig tables should be:
-  // 3, 2, 0, 4, 5, 1
-  EXPECT_EQ(orig[3], test[0]);
-  EXPECT_EQ(orig[2], test[1]);
-  EXPECT_EQ(orig[0], test[2]);
-  EXPECT_EQ(orig[4], test[3]);
-  EXPECT_EQ(orig[5], test[4]);
-  EXPECT_EQ(orig[1], test[5]);
-
-  // The same tests for the const and mutable overloads of `at()`.
-  ASSERT_EQ(orig.at(3), test.at(0));
-  ASSERT_EQ(orig.at(2), test.at(1));
-  ASSERT_EQ(orig.at(0), test.at(2));
-  ASSERT_EQ(orig.at(4), test.at(3));
-  ASSERT_EQ(orig.at(5), test.at(4));
-  ASSERT_EQ(orig.at(1), test.at(5));
-
-  ASSERT_EQ(std::as_const(orig).at(3), std::as_const(test).at(0));
-  ASSERT_EQ(std::as_const(orig).at(2), std::as_const(test).at(1));
-  ASSERT_EQ(std::as_const(orig).at(0), std::as_const(test).at(2));
-  ASSERT_EQ(std::as_const(orig).at(4), std::as_const(test).at(3));
-  ASSERT_EQ(std::as_const(orig).at(5), std::as_const(test).at(4));
-  ASSERT_EQ(std::as_const(orig).at(1), std::as_const(test).at(5));
-}
-
 // =============================================================================
 // IdTableStatic tests
 // =============================================================================
@@ -1069,8 +1003,8 @@ TEST(IdTable, shrinkToFit) {
 }
 
 TEST(IdTable, staticAsserts) {
-  // static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
-  // static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
+  static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
+  static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
   static_assert(std::ranges::random_access_range<IdTable>);
   static_assert(std::ranges::random_access_range<IdTableStatic<1>>);
 }

@@ -40,7 +40,7 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
     [[maybe_unused]] auto firstCol = [](const auto& a, const auto& b) {
       return a[0] < b[0];
     };
-    ExternalIdTableSorter<SortByPSO, 3> writer{
+    ad_utility::ExternalIdTableSorter<SortByPSO, 3> writer{
         filename, 3, memForStxxl, ad_utility::testing::makeAllocator()};
 
     auto runPush = [&]() {
