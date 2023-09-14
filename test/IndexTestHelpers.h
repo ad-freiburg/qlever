@@ -115,9 +115,22 @@ inline QueryExecutionContext* getQec(
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
+  // TODO<joka921> RobinTF has a similar tool in the pipeline that can be used
+  // here.
   struct TypeErasedCleanup {
     std::function<void()> callback_;
     ~TypeErasedCleanup() { callback_(); }
+    TypeErasedCleanup(std::function<void()> callback)
+        : callback_{std::move(callback)} {}
+    TypeErasedCleanup(const TypeErasedCleanup& rhs) = delete;
+    TypeErasedCleanup& operator=(const TypeErasedCleanup&) = delete;
+    // When being moved from, then the callback is disabled.
+    TypeErasedCleanup(TypeErasedCleanup&& rhs)
+        : callback_(std::exchange(rhs.callback_, [] {})) {}
+    TypeErasedCleanup& operator=(TypeErasedCleanup&& rhs) {
+      callback_ = std::exchange(rhs.callback_, [] {});
+      return *this;
+    }
   };
 
   // A `QueryExecutionContext` together with all data structures that it
