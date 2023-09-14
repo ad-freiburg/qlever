@@ -59,7 +59,7 @@ class MemorySize {
   memory size saved internally. Always requries the exact memory size unit and
   size wanted.
   */
-  constexpr static MemorySize bytes(size_t numBytes);
+  constexpr static MemorySize bytes(std::integral auto numBytes);
   constexpr static MemorySize kilobytes(size_t numKilobytes);
   constexpr static MemorySize kilobytes(double numKilobytes);
   constexpr static MemorySize megabytes(size_t numMegabytes);
@@ -255,8 +255,11 @@ constexpr MemorySize magicImplForDivAndMul(const MemorySize& m, const T c,
 }  // namespace detail
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::bytes(size_t numBytes) {
-  return MemorySize{numBytes};
+constexpr MemorySize MemorySize::bytes(std::integral auto numBytes) {
+  // Doesn't make much sense to a negativ amount of memory.
+  AD_CONTRACT_CHECK(numBytes >= 0);
+
+  return MemorySize{static_cast<size_t>(numBytes)};
 }
 
 // _____________________________________________________________________________
