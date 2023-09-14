@@ -10,6 +10,8 @@
 #include <cassert>
 #include <concepts>
 #include <cstddef>
+#include <functional>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 
@@ -24,6 +26,10 @@ namespace ad_utility {
 # Definition #
 ##############
 */
+
+// A concept, for when a type should be an integral, or a floating point.
+template <typename T>
+concept Arithmetic = std::integral<T> || std::floating_point<T>;
 
 /*
 An abstract class, that represents an amount of memory.
@@ -97,6 +103,27 @@ class MemorySize {
   */
   static MemorySize parse(std::string_view str);
 
+  // Arithmetic operators and arithmetic assignment operators.
+  constexpr MemorySize operator+(const MemorySize& m) const;
+  constexpr MemorySize& operator+=(const MemorySize& m);
+  constexpr MemorySize operator-(const MemorySize& m) const;
+  constexpr MemorySize& operator-=(const MemorySize& m);
+
+  template <Arithmetic T>
+  constexpr MemorySize operator*(const T c) const;
+
+  template <Arithmetic T>
+  friend constexpr MemorySize operator*(const T c, const MemorySize m);
+
+  template <Arithmetic T>
+  constexpr MemorySize& operator*=(const T c);
+
+  template <Arithmetic T>
+  constexpr MemorySize operator/(const T c) const;
+
+  template <Arithmetic T>
+  constexpr MemorySize& operator/=(const T c);
+
  private:
   // Constructor for the factory functions.
   explicit constexpr MemorySize(size_t amountOfMemoryInBytes)
@@ -149,6 +176,20 @@ constexpr static double sizeTDivision(const size_t dividend,
          static_cast<double>(dividend % divisor) / static_cast<double>(divisor);
 }
 
+// Converts a given number to `size_t`. Rounds up, if needed.
+template <Arithmetic T>
+constexpr size_t ceilAndCastToSizeT(const T d) {
+  if constexpr (std::is_floating_point_v<T>) {
+    // TODO<c++23> As of `c++23`, `std::ceil` is constexpr and can be used.
+    const auto unrounded = static_cast<size_t>(d);
+    // We (maybe) have to round up.
+    return d > static_cast<T>(unrounded) ? unrounded + 1 : unrounded;
+  } else {
+    static_assert(std::is_integral_v<T>);
+    return static_cast<size_t>(d);
+  }
+}
+
 /*
 @brief Calculate the amount of bytes for a given amount of units.
 
@@ -156,8 +197,7 @@ constexpr static double sizeTDivision(const size_t dividend,
 
 @return The amount of bytes. Rounded up, if needed.
 */
-template <typename T>
-requires std::integral<T> || std::floating_point<T>
+template <Arithmetic T>
 constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
                                            std::string_view unitName) {
   // Negativ values makes no sense.
@@ -172,22 +212,45 @@ constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
     throw std::runtime_error(
         absl::StrCat(amountOfUnits, " ", unitName,
                      " is larger than the maximum amount of memory that can be "
-                     "addressed using 64 bits"));
+                     "addressed using 64 bits."));
   }
 
   if constexpr (std::is_floating_point_v<T>) {
-    // TODO<c++23> As of `c++23`, `std::ceil` is constexpr and can be used.
-    const double doubleResult =
-        amountOfUnits * static_cast<double>(numBytesPerUnit.at(unitName));
-    const auto unroundedResult = static_cast<size_t>(doubleResult);
-    // We (maybe) have to round up.
-    return doubleResult > static_cast<double>(unroundedResult)
-               ? unroundedResult + 1
-               : unroundedResult;
+    return ceilAndCastToSizeT(
+        amountOfUnits * static_cast<double>(numBytesPerUnit.at(unitName)));
   } else {
     static_assert(std::is_integral_v<T>);
     return amountOfUnits * numBytesPerUnit.at(unitName);
   }
+}
+
+/*
+@brief The implementation for the `MemorySize` multiplication and division
+operator.
+
+@param m The `MemorySize` instance, which will deliver the amount of bytes for
+the first argument of `func`.
+@param c The constant, with which the given `MemorySize` will be
+multiplied/divied with.
+@param func This function will calculate the amount of bytes, that the new
+`MemorySize` records. It will be given the amount of bytes in `m`, followed by
+`c` for this calculation. Both will either have been cast to `size_t`, or
+`double.` Note, that the rounding and casting to `size_t` for floating point
+return types will be automaticly done, and can be ignored by `func`.
+ */
+template <Arithmetic T, typename Func>
+requires std::invocable<Func, const double, const double> ||
+         std::invocable<Func, const size_t, const size_t>
+constexpr MemorySize magicImplForDivAndMul(const MemorySize& m, const T c,
+                                           Func func) {
+  // In order for the results to be as precise as possible, we cast to highest
+  // precision data type variant of `T`.
+  using PrecisionType =
+      std::conditional_t<std::is_integral_v<T>, size_t, double>;
+
+  return MemorySize::bytes(detail::ceilAndCastToSizeT(
+      std::invoke(func, static_cast<PrecisionType>(m.getBytes()),
+                  static_cast<PrecisionType>(c))));
 }
 }  // namespace detail
 
@@ -261,6 +324,119 @@ constexpr double MemorySize::getGigabytes() const {
 constexpr double MemorySize::getTerabytes() const {
   return detail::sizeTDivision(memoryInBytes_,
                                detail::numBytesPerUnit.at("TB"));
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::operator+(const MemorySize& m) const {
+  // Check for overflow.
+  if (memoryInBytes_ > size_t_max - m.memoryInBytes_) {
+    throw std::overflow_error(
+        "Overflow error: Addition of the two given 'MemorySize's is not "
+        "possible. "
+        "It would result in a size_t overflow.");
+  }
+  return MemorySize::bytes(memoryInBytes_ + m.memoryInBytes_);
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize& MemorySize::operator+=(const MemorySize& m) {
+  *this = *this + m;
+  return *this;
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::operator-(const MemorySize& m) const {
+  // Check for underflow.
+  if (memoryInBytes_ < m.memoryInBytes_) {
+    throw std::underflow_error(
+        "Underflow error: Subtraction of the two given 'MemorySize's is not "
+        "possible. It would result in a size_t underflow.");
+  }
+  return MemorySize::bytes(memoryInBytes_ - m.memoryInBytes_);
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize& MemorySize::operator-=(const MemorySize& m) {
+  *this = *this - m;
+  return *this;
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize MemorySize::operator*(const T c) const {
+  // A negative amount of memory wouldn't make much sense.
+  AD_CONTRACT_CHECK(c >= static_cast<T>(0));
+
+  // Check for overflow.
+  if (static_cast<double>(c) >
+      detail::sizeTDivision(size_t_max, memoryInBytes_)) {
+    throw std::overflow_error(
+        "Overflow error: Multiplicaton of the given 'MemorySize' with the "
+        "given constant is not possible. It would result in a size_t "
+        "overflow.");
+  }
+  return detail::magicImplForDivAndMul(*this, c, std::multiplies{});
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize operator*(const T c, const MemorySize m) {
+  return m * c;
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize& MemorySize::operator*=(const T c) {
+  *this = *this * c;
+  return *this;
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize MemorySize::operator/(const T c) const {
+  // A negative amount of memory wouldn't make much sense.
+  AD_CONTRACT_CHECK(c > static_cast<T>(0));
+
+  /*
+  Check for overflow. Underflow isn't possible, because neither `MemorySize`,
+  nor `c`, can be negative.
+
+  Furthermore, overflow is only possible, if `T` is a floating point. Because
+  the quoutient, of the division between two natural numbers, is always smaller
+  than the dividend. Which is not always true, if the divisor is a floating
+  point number.
+  For example: 1/(1/2) = 2
+  */
+  if (std::floating_point<T> && static_cast<double>(memoryInBytes_) >
+                                    static_cast<double>(size_t_max) * c) {
+    throw std::overflow_error(
+        "Overflow error: Division of the given 'MemorySize' with the given "
+        "constant is not possible. It would result in a size_t overflow.");
+  }
+
+  /*
+  The default division for `size_t` doesn't always round up, which is the
+  wanted behavior for the calculation of memory sizes. Instead, we calculate
+  the division with as much precision as possible and leave the rounding to
+  `magicImpl`.
+  */
+  return detail::magicImplForDivAndMul(
+      *this, c,
+      []<typename DivisionType>(const DivisionType& a, const DivisionType& b) {
+        if constexpr (std::is_floating_point_v<DivisionType>) {
+          return a / b;
+        } else {
+          static_assert(std::is_integral_v<DivisionType>);
+          return detail::sizeTDivision(a, b);
+        }
+      });
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize& MemorySize::operator/=(const T c) {
+  *this = *this / c;
+  return *this;
 }
 
 namespace memory_literals {

@@ -236,7 +236,7 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
 
-  [[noreturn]] static void visit(Parser::ExpressionListContext* ctx);
+  std::vector<ExpressionPtr> visit(Parser::ExpressionListContext* ctx);
 
   [[nodiscard]] std::optional<parsedQuery::ConstructClause> visit(
       Parser::ConstructTemplateContext* ctx);
@@ -388,8 +388,7 @@ class SparqlQleverVisitor {
 
   ExpressionPtr visit(Parser::SubstringExpressionContext* ctx);
 
-  [[noreturn]] static void visit(
-      const Parser::StrReplaceExpressionContext* ctx);
+  ExpressionPtr visit(Parser::StrReplaceExpressionContext* ctx);
 
   [[noreturn]] static void visit(const Parser::ExistsFuncContext* ctx);
 
