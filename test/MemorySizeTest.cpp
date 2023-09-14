@@ -118,6 +118,11 @@ TEST(MemorySize, MemorySizeConstructor) {
                            singleMemoryUnitSizes.at("TB"));
 
   // Negative numbers are not allowed.
+  ASSERT_ANY_THROW(ad_utility::MemorySize::bytes(-1));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::kilobytes(-1));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::megabytes(-1));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::gigabytes(-1));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::terabytes(-1));
   ASSERT_ANY_THROW(ad_utility::MemorySize::kilobytes(-1.0));
   ASSERT_ANY_THROW(ad_utility::MemorySize::megabytes(-1.0));
   ASSERT_ANY_THROW(ad_utility::MemorySize::gigabytes(-1.0));
