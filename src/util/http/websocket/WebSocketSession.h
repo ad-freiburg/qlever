@@ -37,8 +37,7 @@ class WebSocketSession {
 
   /// Constructs an instance of this class
   WebSocketSession(UpdateFetcher updateFetcher, tcp::socket socket)
-      : updateFetcher_{std::move(updateFetcher)},
-        ws_{std::move(socket)} {}
+      : updateFetcher_{std::move(updateFetcher)}, ws_{std::move(socket)} {}
 
  public:
   /// The main interface for this class. The HTTP server is supposed to check
