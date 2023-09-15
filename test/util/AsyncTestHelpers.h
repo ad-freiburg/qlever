@@ -9,38 +9,24 @@
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/deadline_timer.hpp>
-#include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/use_future.hpp>
 
-namespace net = boost::asio;
-using namespace boost::asio::experimental::awaitable_operators;
+#include "util/Exception.h"
 
-template <typename T>
-net::awaitable<T> withTimeout(net::awaitable<T> t) {
-  net::deadline_timer timer{co_await net::this_coro::executor,
-                            boost::posix_time::seconds(2)};
-  auto variant =
-      co_await (std::move(t) || timer.async_wait(net::use_awaitable));
-  if (variant.index() == 0) {
-    if constexpr (std::is_void_v<T>) {
-      co_return;
-    } else {
-      co_return std::get<0>(variant);
-    }
-  }
-  ADD_FAILURE() << "Timeout while waiting for awaitable" << std::endl;
-  throw std::runtime_error{"Timeout while waiting for awaitable"};
-}
+namespace net = boost::asio;
 
 template <typename Func>
 void runCoroutine(Func innerRun) {
   net::io_context ioContext{};
 
   auto future = net::co_spawn(ioContext, innerRun(ioContext), net::use_future);
-  ioContext.run();
-  future.get();
+  ioContext.run_for(std::chrono::seconds(10));
+  auto status = future.wait_for(std::chrono::seconds(0));
+  AD_CORRECTNESS_CHECK(status != std::future_status::deferred);
+  if (status == std::future_status::timeout) {
+    FAIL() << "Timeout for awaitable reached!";
+  }
 }
 
 #define COROUTINE_NAME(test_suite_name, test_name) \

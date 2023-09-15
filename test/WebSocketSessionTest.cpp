@@ -85,7 +85,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
                                              std::move(stream.socket()));
   };
 
-  co_await withTimeout(serverLogic() && controllerActions());
+  co_await (serverLogic() && controllerActions());
 }
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
@@ -114,7 +114,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
                                              std::move(stream.socket()));
   };
 
-  co_await withTimeout(serverLogic() && controllerActions());
+  co_await (serverLogic() && controllerActions());
 }
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
@@ -155,5 +155,5 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
                                              std::move(stream.socket()));
   };
 
-  co_await withTimeout(serverLogic() && controllerActions());
+  co_await (serverLogic() && controllerActions());
 }

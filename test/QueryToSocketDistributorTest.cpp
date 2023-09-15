@@ -14,6 +14,7 @@
 namespace net = boost::asio;
 
 using ad_utility::websocket::QueryToSocketDistributor;
+using namespace boost::asio::experimental::awaitable_operators;
 using namespace std::string_literals;
 
 using ::testing::Pointee;
@@ -78,7 +79,7 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndWakesUpListeners) {
   co_await queryToSocketDistributor.signalStartIfNotStarted();
   auto listener = [&]() -> net::awaitable<void> {
     waiting = true;
-    co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(0));
+    co_await queryToSocketDistributor.waitForNextDataPiece(0);
   };
 
   auto broadcaster = [&]() -> net::awaitable<void> {
@@ -95,8 +96,7 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateWakesUpListeners) {
   co_await queryToSocketDistributor.signalStartIfNotStarted();
   auto listener = [&]() -> net::awaitable<void> {
     waiting = true;
-    auto result =
-        co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(0));
+    auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
     EXPECT_THAT(result, Pointee("Abc"s));
   };
 
@@ -113,8 +113,7 @@ ASYNC_TEST(QueryToSocketDistributor, listeningBeforeStartWorks) {
   bool waiting = false;
   auto listener = [&]() -> net::awaitable<void> {
     waiting = true;
-    auto result =
-        co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(0));
+    auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
     EXPECT_THAT(result, Pointee("Abc"s));
   };
 
@@ -145,11 +144,9 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateBeforeListenersWorks) {
     // Ensure correct order of execution
     ASSERT_TRUE(doneAdding);
     waiting = true;
-    auto result =
-        co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(0));
+    auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
     EXPECT_THAT(result, Pointee("Abc"s));
-    result =
-        co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(1));
+    result = co_await queryToSocketDistributor.waitForNextDataPiece(1);
     EXPECT_THAT(result, Pointee("Def"s));
   };
   co_await (broadcaster() && listener());
@@ -174,14 +171,11 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndDoesNotPreventConsumptionOfRest) {
     // Ensure correct order of execution
     ASSERT_TRUE(doneAdding);
     waiting = true;
-    auto result =
-        co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(0));
+    auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
     EXPECT_THAT(result, Pointee("Abc"s));
-    result =
-        co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(1));
+    result = co_await queryToSocketDistributor.waitForNextDataPiece(1);
     EXPECT_THAT(result, Pointee("Def"s));
-    result =
-        co_await withTimeout(queryToSocketDistributor.waitForNextDataPiece(2));
+    result = co_await queryToSocketDistributor.waitForNextDataPiece(2);
     ASSERT_FALSE(result);
   };
   co_await (broadcaster() && listener());
