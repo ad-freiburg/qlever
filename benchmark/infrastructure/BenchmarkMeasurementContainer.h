@@ -93,11 +93,27 @@ class ResultEntry : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, who's execution time will be
   measured and saved.
   */
-  template <typename Function>
-  requires std::invocable<Function>
-  ResultEntry(const std::string& descriptor, const Function& functionToMeasure)
+  ResultEntry(const std::string& descriptor,
+              const std::invocable auto& functionToMeasure)
       : descriptor_{descriptor},
         measuredTime_{measureTimeOfFunction(functionToMeasure, descriptor)} {}
+
+  /*
+  @brief Creates an instance of `ResultEntry` with a special descriptor for
+  usage within the log, instead of the normal descriptor.
+
+  @tparam Function Lambda function with no function arguments and returns void.
+
+  @param descriptor A string to identify this instance in json format later.
+  @param descriptorForLog A string to identify this instance in the log.
+  @param functionToMeasure The function, who's execution time will be
+  measured and saved.
+  */
+  ResultEntry(const std::string& descriptor, std::string_view descriptorForLog,
+              const std::invocable auto& functionToMeasure)
+      : descriptor_{descriptor},
+        measuredTime_{
+            measureTimeOfFunction(functionToMeasure, descriptorForLog)} {}
 
   // User defined conversion to `std::string`.
   explicit operator std::string() const;
@@ -112,6 +128,12 @@ class ResultEntry : public BenchmarkMetadataGetter {
 class ResultTable : public BenchmarkMetadataGetter {
   // For identification.
   std::string descriptor_;
+  /*
+  For identification within `Log(Info)`. This class knows nothing about the
+  groups, where it is a member, but we want to include this information in
+  the log. This is our workaround.
+  */
+  std::string descriptorForLog_;
   // The names of the columns.
   std::vector<std::string> columnNames_;
   // The entries in the table. Access is [row, column]. Can be the time in
@@ -139,6 +161,22 @@ class ResultTable : public BenchmarkMetadataGetter {
               const std::vector<std::string>& columnNames);
 
   /*
+  @brief Create an empty `ResultTable` with a special descriptor for usage
+  within the log, instead of the normal descriptor.
+
+  @param descriptor A string to identify this instance in json format later.
+  @param descriptorForLog A string to identify this instance in the log.
+  @param rowNames The names for the rows. The amount of rows in this table is
+  equal to the amount of row names. Important: This first column will be filled
+  with those names.
+  @param columnNames The names for the columns. The amount of columns in this
+  table is equal to the amount of column names.
+  */
+  ResultTable(const std::string& descriptor, std::string descriptorForLog,
+              const std::vector<std::string>& rowNames,
+              const std::vector<std::string>& columnNames);
+
+  /*
   @brief Measures the time needed for the execution of the given function and
   saves it as an entry in the table.
 
@@ -156,7 +194,7 @@ class ResultTable : public BenchmarkMetadataGetter {
     entries_.at(row).at(column) = measureTimeOfFunction(
         functionToMeasure,
         absl::StrCat("Entry at row ", row, ", column ", column,
-                     " of ResultTable '", descriptor_, "'"));
+                     " of ResultTable ", descriptorForLog_));
   }
 
   /*
@@ -212,6 +250,22 @@ class ResultTable : public BenchmarkMetadataGetter {
 
   // JSON serialization.
   friend void to_json(nlohmann::json& j, const ResultTable& resultTable);
+
+ private:
+  /*
+  @brief Sets the member variables for the constructure functions.
+
+  @param descriptor A string to identify this instance in json format later.
+  @param descriptorForLog A string to identify this instance in the log.
+  @param rowNames The names for the rows. The amount of rows in this table is
+  equal to the amount of row names. Important: This first column will be filled
+  with those names.
+  @param columnNames The names for the columns. The amount of columns in this
+  table is equal to the amount of column names.
+  */
+  void init(const std::string& descriptor, std::string descriptorForLog,
+            const std::vector<std::string>& rowNames,
+            const std::vector<std::string>& columnNames);
 };
 
 // Describes a group of `ResultEntry` and `ResultTable`.
@@ -259,7 +313,8 @@ class ResultGroup : public BenchmarkMetadataGetter {
   ResultEntry& addMeasurement(const std::string& descriptor,
                               const Function& functionToMeasure) {
     resultEntries_.push_back(ad_utility::make_copyable_unique<ResultEntry>(
-        descriptor, functionToMeasure));
+        descriptor, absl::StrCat(descriptor, " of group ", descriptor_),
+        functionToMeasure));
     return (*resultEntries_.back());
   }
 
