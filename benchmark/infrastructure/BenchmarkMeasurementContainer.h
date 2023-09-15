@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include <concepts>
@@ -14,6 +15,7 @@
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "util/CopyableUniquePtr.h"
 #include "util/Exception.h"
+#include "util/Log.h"
 #include "util/Timer.h"
 #include "util/json.h"
 
@@ -21,23 +23,34 @@ namespace ad_benchmark {
 
 // Helper function for adding time entries to the classes.
 /*
-@brief Return execution time of function in seconds.
+@brief Return execution time of function in seconds and inserts the progress in
+`LOG(INFO)`.
 
 @tparam Function Best left to type inference.
 
 @param functionToMeasure Must be a function, or callable.
+@param measurementSubjectName A description/name of what is being measured.
 */
-template <typename Function>
-requires std::invocable<Function>
-static float measureTimeOfFunction(const Function& functionToMeasure) {
+template <std::invocable Function>
+static float measureTimeOfFunction(
+    const Function& functionToMeasure,
+    std::string_view measurementSubjectIdentifier) {
+  LOG(INFO) << "Running measurement \"" << measurementSubjectIdentifier << "\"."
+            << std::endl;
+
+  // Measuring the time.
   ad_utility::timer::Timer benchmarkTimer(ad_utility::timer::Timer::Started);
   functionToMeasure();
   benchmarkTimer.stop();
 
   // This is used for a macro benchmark, so we don't need that high of a
   // precision.
-  return static_cast<float>(
+  const auto measuredTime = static_cast<float>(
       ad_utility::timer::Timer::toSeconds(benchmarkTimer.value()));
+  LOG(INFO) << "Finished measurement \"" << measurementSubjectIdentifier
+            << "\" in " << measuredTime << " seconds." << std::endl;
+
+  return measuredTime;
 }
 
 // A very simple wrapper for a `BenchmarkMetadata` getter.
@@ -84,7 +97,7 @@ class ResultEntry : public BenchmarkMetadataGetter {
   requires std::invocable<Function>
   ResultEntry(const std::string& descriptor, const Function& functionToMeasure)
       : descriptor_{descriptor},
-        measuredTime_{measureTimeOfFunction(functionToMeasure)} {}
+        measuredTime_{measureTimeOfFunction(functionToMeasure, descriptor)} {}
 
   // User defined conversion to `std::string`.
   explicit operator std::string() const;
@@ -140,7 +153,10 @@ class ResultTable : public BenchmarkMetadataGetter {
   void addMeasurement(const size_t& row, const size_t& column,
                       const Function& functionToMeasure) {
     AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
-    entries_.at(row).at(column) = measureTimeOfFunction(functionToMeasure);
+    entries_.at(row).at(column) = measureTimeOfFunction(
+        functionToMeasure,
+        absl::StrCat("Entry at row ", row, ", column ", column, " of ",
+                     static_cast<std::string>(*this)));
   }
 
   /*
