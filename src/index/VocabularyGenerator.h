@@ -135,7 +135,8 @@ class VocabularyMerger {
   template <typename InternalVocabularyAction>
   void writeQueueWordsToIdVec(
       const std::vector<QueueWord>& buffer,
-      InternalVocabularyAction& internalVocabularyAction);
+      InternalVocabularyAction& internalVocabularyAction,
+      const auto& comparison);
 
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {

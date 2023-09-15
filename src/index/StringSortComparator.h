@@ -613,14 +613,14 @@ class TripleComponentComparator {
       return res;  // actual value differs
     }
 
-    // if everything else matches and we are on the TOTAL level, we sort by the
-    // langtag
-    if (int res = a.langtag.compare(b.langtag); res != 0) {
+    // On the TOTAL level we then compare on the level of bytes.
+    if (int res = a.transformedVal.compare(b.transformedVal); res != 0) {
       return res;
     }
 
-    // TOTAL level and even the langtags match, sort by bytes
-    return a.transformedVal.compare(b.transformedVal);
+    // Only if two literals are bytewise equal, we compare by the langtag or
+    // datatype.
+    return a.langtag.compare(b.langtag);
   }
 
   /**
