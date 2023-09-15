@@ -210,6 +210,7 @@ constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
   AD_CONTRACT_CHECK(amountOfUnits >= 0);
 
   // Must be one of the supported units.
+  // TODO Replace with correctness check, should it ever become constexpr.
   AD_CONTRACT_CHECK(numBytesPerUnit.contains(unitName));
 
   /*
