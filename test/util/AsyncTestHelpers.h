@@ -24,10 +24,11 @@ net::awaitable<T> withTimeout(net::awaitable<T> t) {
   auto variant =
       co_await (std::move(t) || timer.async_wait(net::use_awaitable));
   if (variant.index() == 0) {
-    if constexpr (!std::is_void_v<T>) {
+    if constexpr (std::is_void_v<T>) {
+      co_return;
+    } else {
       co_return std::get<0>(variant);
     }
-    co_return;
   }
   ADD_FAILURE() << "Timeout while waiting for awaitable" << std::endl;
   throw std::runtime_error{"Timeout while waiting for awaitable"};
