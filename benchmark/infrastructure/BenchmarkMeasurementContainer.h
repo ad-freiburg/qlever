@@ -155,8 +155,8 @@ class ResultTable : public BenchmarkMetadataGetter {
     AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
     entries_.at(row).at(column) = measureTimeOfFunction(
         functionToMeasure,
-        absl::StrCat("Entry at row ", row, ", column ", column, " of ",
-                     static_cast<std::string>(*this)));
+        absl::StrCat("Entry at row ", row, ", column ", column,
+                     " of ResultTable '", descriptor_, "'"));
   }
 
   /*
