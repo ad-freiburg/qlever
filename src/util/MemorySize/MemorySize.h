@@ -206,8 +206,10 @@ constexpr size_t ceilAndCastToSizeT(const T d) {
 template <Arithmetic T>
 constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
                                            std::string_view unitName) {
-  // Negativ values makes no sense.
-  AD_CONTRACT_CHECK(amountOfUnits >= 0);
+  if constexpr (std::is_signed_v<T>) {
+    // Negativ values makes no sense.
+    AD_CONTRACT_CHECK(amountOfUnits >= 0);
+  }
 
   // Must be one of the supported units.
   // TODO Replace with correctness check, should it ever become constexpr.
@@ -270,8 +272,10 @@ constexpr MemorySize magicImplForDivAndMul(const MemorySize& m, const T c,
 
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::bytes(std::integral auto numBytes) {
-  // Doesn't make much sense to a negativ amount of memory.
-  AD_CONTRACT_CHECK(numBytes >= 0);
+  if constexpr (std::is_signed_v<decltype(numBytes)>) {
+    // Doesn't make much sense to a negativ amount of memory.
+    AD_CONTRACT_CHECK(numBytes >= 0);
+  }
 
   return MemorySize{static_cast<size_t>(numBytes)};
 }
@@ -361,8 +365,10 @@ constexpr MemorySize& MemorySize::operator-=(const MemorySize& m) {
 // _____________________________________________________________________________
 template <Arithmetic T>
 constexpr MemorySize MemorySize::operator*(const T c) const {
-  // A negative amount of memory wouldn't make much sense.
-  AD_CONTRACT_CHECK(c >= static_cast<T>(0));
+  if constexpr (std::is_signed_v<T>) {
+    // A negative amount of memory wouldn't make much sense.
+    AD_CONTRACT_CHECK(c >= static_cast<T>(0));
+  }
 
   // Check for overflow.
   if (static_cast<double>(c) >
@@ -391,8 +397,10 @@ constexpr MemorySize& MemorySize::operator*=(const T c) {
 // _____________________________________________________________________________
 template <Arithmetic T>
 constexpr MemorySize MemorySize::operator/(const T c) const {
-  // A negative amount of memory wouldn't make much sense.
-  AD_CONTRACT_CHECK(c > static_cast<T>(0));
+  if constexpr (std::is_signed_v<T>) {
+    // A negative amount of memory wouldn't make much sense.
+    AD_CONTRACT_CHECK(c > static_cast<T>(0));
+  }
 
   /*
   Check for overflow. Underflow isn't possible, because neither `MemorySize`,
