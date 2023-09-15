@@ -61,7 +61,8 @@ class MemorySize {
   memory size saved internally. Always requries the exact memory size unit and
   size wanted.
   */
-  constexpr static MemorySize bytes(std::integral auto numBytes);
+  template <std::integral T>
+  constexpr static MemorySize bytes(T numBytes);
   constexpr static MemorySize kilobytes(Arithmetic auto numKilobytes);
   constexpr static MemorySize megabytes(Arithmetic auto numMegabytes);
   constexpr static MemorySize gigabytes(Arithmetic auto numGigabytes);
@@ -271,8 +272,9 @@ constexpr MemorySize magicImplForDivAndMul(const MemorySize& m, const T c,
 }  // namespace detail
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::bytes(std::integral auto numBytes) {
-  if constexpr (std::is_signed_v<decltype(numBytes)>) {
+template <std::integral T>
+constexpr MemorySize MemorySize::bytes(T numBytes) {
+  if constexpr (std::is_signed_v<T>) {
     // Doesn't make much sense to a negativ amount of memory.
     AD_CONTRACT_CHECK(numBytes >= 0);
   }
