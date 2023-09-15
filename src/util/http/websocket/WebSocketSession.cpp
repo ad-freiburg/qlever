@@ -60,12 +60,13 @@ net::awaitable<void> WebSocketSession::waitForServerEvents() {
 
 // _____________________________________________________________________________
 
-net::awaitable<void> WebSocketSession::acceptAndWait() {
+net::awaitable<void> WebSocketSession::acceptAndWait(
+    const http::request<http::string_body>& request) {
   try {
     ws_.set_option(beast::websocket::stream_base::timeout::suggested(
         beast::role_type::server));
 
-    co_await ws_.async_accept(request_, boost::asio::use_awaitable);
+    co_await ws_.async_accept(request, boost::asio::use_awaitable);
 
     auto strand = net::make_strand(ws_.get_executor());
 
@@ -77,7 +78,9 @@ net::awaitable<void> WebSocketSession::acceptAndWait() {
     co_await (waitForServerEvents() && handleClientCommands());
 
   } catch (boost::system::system_error& error) {
-    if (error.code() == beast::websocket::error::closed) {
+    // Gracefully end if socket was closed
+    if (error.code() == beast::websocket::error::closed ||
+        error.code() == net::error::operation_aborted) {
       co_return;
     }
     // There was an unexpected error, rethrow
@@ -94,14 +97,13 @@ net::awaitable<void> WebSocketSession::acceptAndWait() {
 // _____________________________________________________________________________
 
 net::awaitable<void> WebSocketSession::handleSession(
-    QueryHub& queryHub, http::request<http::string_body> request,
+    QueryHub& queryHub, const http::request<http::string_body>& request,
     tcp::socket socket) {
   auto queryIdString = extractQueryId(request.target());
   AD_CORRECTNESS_CHECK(!queryIdString.empty());
   UpdateFetcher fetcher{queryHub, QueryId::idFromString(queryIdString)};
-  WebSocketSession webSocketSession{std::move(fetcher), std::move(request),
-                                    std::move(socket)};
-  co_await webSocketSession.acceptAndWait();
+  WebSocketSession webSocketSession{std::move(fetcher), std::move(socket)};
+  co_await webSocketSession.acceptAndWait(request);
 }
 // _____________________________________________________________________________
 

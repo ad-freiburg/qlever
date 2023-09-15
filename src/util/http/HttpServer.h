@@ -176,7 +176,10 @@ class HttpServer {
         // Schedule the session such that it may run in parallel to this loop.
         net::co_spawn(coroExecutor, session(std::move(socket)), net::detached);
       } catch (const boost::system::system_error& b) {
-        logBeastError(b.code(), "Error in the accept loop");
+        // If the server is shut down this will cause operations to abort
+        if (b.code() != boost::asio::error::operation_aborted) {
+          logBeastError(b.code(), "Error in the accept loop");
+        }
       }
     }
   }
@@ -229,13 +232,13 @@ class HttpServer {
         if (beast::websocket::is_upgrade(req)) {
           auto errorResponse = ad_utility::websocket::WebSocketSession::
               getErrorResponseIfPathIsInvalid(req);
-          if (errorResponse) {
-            co_await sendMessage(*errorResponse);
+          if (errorResponse.has_value()) {
+            co_await sendMessage(errorResponse.value());
           } else {
             // prevent cleanup after socket has been moved from
             releaseConnection.cancel();
             co_await ad_utility::websocket::WebSocketSession::handleSession(
-                queryHub_, std::move(req), std::move(stream.socket()));
+                queryHub_, req, std::move(stream.socket()));
             co_return;
           }
         } else {
@@ -258,10 +261,9 @@ class HttpServer {
           beast::error_code ec;
           stream.socket().shutdown(tcp::socket::shutdown_send, ec);
         } else {
-          // This is the error "The socket was closed due to a timeout" or
-          // indicates a socket has been closed mid-operation
+          // This is the error "The socket was closed due to a timeout".
           if (error.code() == beast::error::timeout ||
-              error.code() == boost::asio::error::operation_aborted) {
+              error.code() == boost::asio::error::eof) {
             LOG(TRACE) << error.what() << " (code " << error.code() << ")"
                        << std::endl;
           } else {

@@ -22,7 +22,6 @@ using websocket = beast::websocket::stream<tcp::socket>;
 /// Class to manage the lifecycle of a single websocket. Single-use only.
 class WebSocketSession {
   UpdateFetcher updateFetcher_;
-  http::request<http::string_body> request_;
   websocket ws_;
 
   /// Loop that waits for input from the client
@@ -34,13 +33,11 @@ class WebSocketSession {
 
   /// Accepts the websocket handshake and delegates further handling to
   /// `waitForServerEvents` and `handleClientCommands`
-  net::awaitable<void> acceptAndWait();
+  net::awaitable<void> acceptAndWait(const http::request<http::string_body>&);
 
   /// Constructs an instance of this class
-  WebSocketSession(UpdateFetcher updateFetcher,
-                   http::request<http::string_body> request, tcp::socket socket)
+  WebSocketSession(UpdateFetcher updateFetcher, tcp::socket socket)
       : updateFetcher_{std::move(updateFetcher)},
-        request_(std::move(request)),
         ws_{std::move(socket)} {}
 
  public:
@@ -49,7 +46,7 @@ class WebSocketSession {
   /// handling to this method if it is the case. It then accepts the websocket
   /// connection and "blocks" for the lifetime of it.
   static net::awaitable<void> handleSession(
-      QueryHub& queryHub, http::request<http::string_body> request,
+      QueryHub& queryHub, const http::request<http::string_body>& request,
       tcp::socket socket);
   /// Helper function to provide a proper error response if the provided URL
   /// path is not accepted by the server.

@@ -56,7 +56,6 @@ class OwningQueryId {
 
  public:
   [[nodiscard]] const QueryId& toQueryId() const& noexcept { return *id_; }
-  [[nodiscard]] QueryId&& toQueryId() && noexcept { return std::move(*id_); }
 };
 
 // Ensure promised copy semantics
