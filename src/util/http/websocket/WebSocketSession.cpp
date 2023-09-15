@@ -86,12 +86,6 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
     // There was an unexpected error, rethrow
     throw;
   }
-
-  // In case an unexpected exception is thrown, close the connection gracefully.
-  if (ws_.is_open()) {
-    co_await ws_.async_close(beast::websocket::close_code::internal_error,
-                             net::use_awaitable);
-  }
 }
 
 // _____________________________________________________________________________
