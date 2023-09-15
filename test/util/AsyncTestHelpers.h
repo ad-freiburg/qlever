@@ -9,10 +9,29 @@
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/deadline_timer.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/use_future.hpp>
 
 namespace net = boost::asio;
+using namespace boost::asio::experimental::awaitable_operators;
+
+template <typename T>
+net::awaitable<T> withTimeout(net::awaitable<T> t) {
+  net::deadline_timer timer{co_await net::this_coro::executor,
+                            boost::posix_time::seconds(2)};
+  auto variant =
+      co_await (std::move(t) || timer.async_wait(net::use_awaitable));
+  if (variant.index() == 0) {
+    if constexpr (!std::is_void_v<T>) {
+      co_return std::get<0>(variant);
+    }
+    co_return;
+  }
+  ADD_FAILURE() << "Timeout while waiting for awaitable" << std::endl;
+  throw std::runtime_error{"Timeout while waiting for awaitable"};
+}
 
 template <typename Func>
 void runCoroutine(Func innerRun) {

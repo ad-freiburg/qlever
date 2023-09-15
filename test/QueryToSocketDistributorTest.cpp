@@ -14,22 +14,9 @@
 namespace net = boost::asio;
 
 using ad_utility::websocket::QueryToSocketDistributor;
-using namespace boost::asio::experimental::awaitable_operators;
 using namespace std::string_literals;
 
 using ::testing::Pointee;
-
-template <typename T>
-net::awaitable<T> withTimeout(net::awaitable<T> t) {
-  net::deadline_timer timer{co_await net::this_coro::executor,
-                            boost::posix_time::seconds(2)};
-  auto variant =
-      co_await (std::move(t) || timer.async_wait(net::use_awaitable));
-  if (std::holds_alternative<T>(variant)) {
-    co_return std::get<0>(variant);
-  }
-  throw std::runtime_error{"Timeout while waiting for awaitable"};
-}
 
 // Hack to allow ASSERT_*() macros to work with ASYNC_TEST
 #define return co_return
