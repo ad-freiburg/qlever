@@ -33,16 +33,16 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
   // or literal. All internal IRIs or literals come before all external ones.
   // TODO<joka921> Change this as soon as we have Interleaved Ids via the
   // MilestoneIdManager
-
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
                                 const TripleComponentWithIndex& t2) {
-    if (t1._isExternal != t2._isExternal) {
-      return t2._isExternal;
+    if (t1.isExternal() != t2.isExternal()) {
+      return t2.isExternal();
     }
     return comparator(t1._iriOrLiteral, t2._iriOrLiteral);
   };
-  // TODO<joka921> Split up the actual lessThan of QueueWords and the
-  // "inversion" because of `std::priority_queue`
+
+  // For the priority queue we have to invert the comparison, because
+  // `std::priority_queue` sorts descending by default.
   auto greaterThanForQueue = [&lessThan](const QueueWord& p1,
                                          const QueueWord& p2) {
     return lessThan(p2._entry, p1._entry);
@@ -148,8 +148,7 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 template <typename InternalVocabularyAction>
 void VocabularyMerger::writeQueueWordsToIdVec(
     const std::vector<QueueWord>& buffer,
-    InternalVocabularyAction& internalVocabularyAction,
-    const auto& comparison) {
+    InternalVocabularyAction& internalVocabularyAction, const auto& lessThan) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
   // smaller grained buffer for the actual inner write
@@ -162,7 +161,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     if (!lastTripleComponent_.has_value() ||
         top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
       if (lastTripleComponent_.has_value() &&
-          !comparison(lastTripleComponent_.value(), top._entry)) {
+          !lessThan(lastTripleComponent_.value(), top._entry)) {
         LOG(WARN) << "Total vocabulary order violated for "
                   << lastTripleComponent_->iriOrLiteral() << " and "
                   << top.iriOrLiteral() << std::endl;
