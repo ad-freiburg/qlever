@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -24,6 +22,7 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -576,4 +575,7 @@ bool ConfigManager::containsOption(const ConfigOption& opt) const {
               [](const ConfigOption& option) { return &option; }),
       &opt);
 }
+
+// ____________________________________________________________________________
+const std::string& ErrorMessage::getMessage() const { return message_; }
 }  // namespace ad_utility
