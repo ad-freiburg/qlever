@@ -208,7 +208,9 @@ class IdTableCompressedWriter {
               auto numBytesRead = file_.wlock()->read(compressed.data(),
                                                       metaData.compressedSize_,
                                                       metaData.offsetInFile_);
-              AD_CORRECTNESS_CHECK(numBytesRead == metaData.compressedSize_);
+              AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
+                                   static_cast<size_t>(numBytesRead) ==
+                                       metaData.compressedSize_);
               auto numBytesDecompressed = ZstdWrapper::decompressToBuffer(
                   compressed.data(), compressed.size(), col.data(),
                   metaData.uncompressedSize_);
