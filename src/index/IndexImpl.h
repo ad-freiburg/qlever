@@ -71,7 +71,7 @@ struct IndexBuilderDataBase {
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
 // triples.
 struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
-  using TripleVec = stxxl::vector<array<Id, 3>>;
+  using TripleVec = ad_utility::ExternalIdTableCompressor<3>;
   // All the triples as Ids.
   std::unique_ptr<TripleVec> idTriples;
   // The number of triples for each partial vocabulary. This also depends on the
@@ -92,7 +92,7 @@ struct IndexBuilderDataAsPsoSorter : IndexBuilderDataBase {
 
 class IndexImpl {
  public:
-  using TripleVec = stxxl::vector<array<Id, 3>>;
+  using TripleVec = ad_utility::ExternalIdTableCompressor<3>;
   // Block Id, Context Id, Word Id, Score, entity
   using TextVec = stxxl::vector<
       tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
@@ -440,7 +440,7 @@ class IndexImpl {
   std::future<void> writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
       std::unique_ptr<ItemMapArray> items, auto localIds,
-      ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr);
+      ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
 
   std::unique_ptr<ExternalSorter<SortByPSO>> convertPartialToGlobalIds(
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,

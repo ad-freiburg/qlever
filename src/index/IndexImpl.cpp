@@ -239,8 +239,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial) {
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
-  std::unique_ptr<TripleVec> idTriples(new TripleVec());
-  ad_utility::Synchronized<TripleVec::bufwriter_type> writer(*idTriples);
+  ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
+      std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat",
+                                  1'000'000'000, allocator_));
   bool parserExhausted = false;
 
   size_t i = 0;
@@ -328,7 +329,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
         writeNextPartialVocabulary(i, numFiles, actualCurrentPartialSize,
                                    std::move(oldItemPtr),
-                                   std::move(localWriter), &writer);
+                                   std::move(localWriter), &idTriples);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually
     // deals with we will use this later for mapping from partial to global
@@ -340,11 +341,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       future.get();
     }
   }
-  writer.wlock()->finish();
   LOG(INFO) << "Done, total number of triples read: " << i
             << " [may contain duplicates]" << std::endl;
   LOG(INFO) << "Number of QLever-internal triples created: "
-            << (idTriples->size() - i) << " [may contain duplicates]"
+            << ((*idTriples.wlock())->size() - i) << " [may contain duplicates]"
             << std::endl;
 
   size_t sizeInternalVocabulary = 0;
@@ -403,7 +403,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
             << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
             << std::endl;
 
-  res.idTriples = std::move(idTriples);
+  res.idTriples = std::move(*idTriples.wlock());
   res.actualPartialSizes = std::move(actualPartialSizes);
 
   LOG(INFO) << "Removing temporary files ..." << std::endl;
@@ -428,11 +428,12 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
              << std::endl;
 
   // Iterate over all partial vocabularies.
-  TripleVec::bufreader_type reader(data);
   auto resultPtr = std::make_unique<PsoSorter>(
       onDiskBase_ + ".pso-sorter.dat", stxxlMemoryInBytes() / 2, allocator_);
   auto& result = *resultPtr;
   size_t i = 0;
+  auto triplesGenerator = data.sortedView();
+  auto it = triplesGenerator.begin();
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
        partialNum++) {
     std::string mmapFilename =
@@ -445,8 +446,8 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
     // update the triples for which this partial vocabulary was responsible
     for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[partialNum];
          ++tmpNum) {
-      std::array<Id, 3> curTriple = *reader;
-      ++reader;
+      std::array<Id, 3> curTriple = *it;
+      ++it;
 
       // For all triple elements find their mapping from partial to global ids.
       for (size_t k = 0; k < 3; ++k) {
@@ -1085,7 +1086,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 std::future<void> IndexImpl::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
     std::unique_ptr<ItemMapArray> items, auto localIds,
-    ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr) {
+    ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr) {
   LOG(DEBUG) << "Input triples read in this section: " << numLines << std::endl;
   LOG(DEBUG)
       << "Triples processed, also counting internal triples added by QLever: "
