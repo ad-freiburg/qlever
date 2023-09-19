@@ -139,7 +139,8 @@ static const std::string WARNING_PARALLEL_PARSING =
     "triples.";
 static const std::string LOCALE_DEFAULT_LANG = "en";
 static const std::string LOCALE_DEFAULT_COUNTRY = "US";
-static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;
+// TODO<joka921> Make this testable. But the ignore puncutation seems to be more brittle, so we default it.
+static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = true;
 
 // Constants for the range of valid compression prefixes
 // all ASCII- printable characters are left out.
