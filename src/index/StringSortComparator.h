@@ -489,9 +489,12 @@ class TripleComponentComparator {
    * @brief An entry of the Vocabulary, split up into its components and
    * possibly converted to a format that is easier to compare
    *
-   * @tparam ST either LocaleManager::SortKey or std::string_view. Since both
-   * variants differ greatly in their usage they are commented with the template
-   * instantiations
+   * @tparam InnerString either LocaleManager::SortKey or std::string_view.
+   * Since both variants differ greatly in their usage they are commented with
+   * the template instantiations
+   * @tparam LanguageTag, FullString, either `std::string` or
+   * `std::string_view`. They are used as deterministic tie breaks on the
+   * `TOTAL` sort level.
    */
   template <class InnerString, class LanguageTag, class FullString>
   struct SplitValBase {

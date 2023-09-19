@@ -152,6 +152,32 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
   ASSERT_FALSE(comp("\"१५१\"", "\"151\"@en"));
 }
 
+TEST(StringSortComparatorTest,
+     TripleComponentComparatorTotalIgnorePunctuation) {
+  TripleComponentComparator comparator("en", "US", true);
+  auto compTotal = [&comparator](const auto& a, const auto& b) {
+    return comparator(a, b, TripleComponentComparator::Level::TOTAL);
+  };
+
+  // Test that the comparison between `a` and  `b` always yields the same
+  // result, no matter if it is done on the level of strings or on `SortKey`s.
+  auto assertConsistent = [&comparator, &compTotal](const auto& a,
+                                                    const auto& b) {
+    bool ab = compTotal(a, b);
+    bool ba = compTotal(b, a);
+    auto aSplit = comparator.extractAndTransformComparable(
+        a, TripleComponentComparator::Level::TOTAL);
+    auto bSplit = comparator.extractAndTransformComparable(
+        b, TripleComponentComparator::Level::TOTAL);
+    EXPECT_EQ(ab, compTotal(aSplit, bSplit));
+    EXPECT_EQ(ba, compTotal(bSplit, aSplit));
+  };
+
+  assertConsistent("\"be.ta\"", "\beta\"");
+  assertConsistent("\"beta\\\"", "\beta\"");
+  // TODO<joka921> Add some of the previously warning entries that used to fail.
+}
+
 // ______________________________________________________________________________________________
 TEST(StringSortComparatorTest, SimpleStringComparator) {
   SimpleStringComparator comp("en", "US", true);

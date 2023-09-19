@@ -562,11 +562,3 @@ TEST(IndexTest, getPermutation) {
   EXPECT_EQ(&index.OPS(), &index.getPermutation(OPS));
   EXPECT_EQ(&index.OSP(), &index.getPermutation(OSP));
 }
-
-TEST(IndexTest, WarningsForInconsistentMerging) {
-  // std::string kg = R"(<x> <y> "Porto d\\"@en . <x> <y> "Porto d'Anzio"@en .
-  // )";
-  std::string kg = "";
-  kg += R"(<x> <y> "Porto d'Anzio\\"@en . <x> <y> "Porto d'Anzioa"@en  )";
-  [[maybe_unused]] auto x = getQec(kg);
-}
