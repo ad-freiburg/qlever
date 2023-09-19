@@ -160,15 +160,9 @@ void VocabularyMerger::writeQueueWordsToIdVec(
   for (auto& top : buffer) {
     if (!lastTripleComponent_.has_value() ||
         top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
-      if (lastTripleComponent_.has_value()) {
-        std::cerr << "Total vocabulary order check for "
-                  << lastTripleComponent_->iriOrLiteral() << " and "
-                  << top.iriOrLiteral() << std::endl;
-      }
       if (lastTripleComponent_.has_value() &&
           !lessThan(lastTripleComponent_.value(), top._entry)) {
-        // TODO<joka921> reinstate the LOG(WARN) here and find a useful way to test it.
-        std::cerr << "Total vocabulary order violated for "
+        LOG(WARN) << "Total vocabulary order violated for "
                   << lastTripleComponent_->iriOrLiteral() << " and "
                   << top.iriOrLiteral() << std::endl;
       }

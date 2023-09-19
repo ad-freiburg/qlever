@@ -167,7 +167,7 @@ class LocaleManager {
    * std::strcmp(getSortKey(s, level), getSortKey(t, level)
    */
   [[nodiscard]] SortKey getSortKey(std::string_view s,
-                                   const Level level, std::string_view fullFallBackForTotalLevel = "") const {
+                                   const Level level) const {
     auto utf16 = icu::UnicodeString::fromUTF8(toStringPiece(s));
     auto& col = *_collator[static_cast<uint8_t>(level)];
     auto sz = col.getSortKey(utf16, nullptr, 0);
@@ -183,12 +183,6 @@ class LocaleManager {
     // since this is a c-api we still have a trailing '\0'. Trimming this is
     // necessary for the prefix range to work correct.
     res.resize(res.size() - 1);
-    if (level == Level::TOTAL) {
-      // on the total Level, also concatenate with the actual bytes.
-      // might be a waste of space, but is only possibly used while building the
-      // index.
-      res += fullFallBackForTotalLevel;
-    }
     return finalRes;
   }
 
@@ -502,11 +496,13 @@ class TripleComponentComparator {
   template <class InnerString, class LanguageTag, class FullString>
   struct SplitValBase {
     SplitValBase() = default;
-    SplitValBase(char fst, InnerString trans, LanguageTag l, bool externalized, FullString fullInputForTotalComparison)
+    SplitValBase(char fst, InnerString trans, LanguageTag l, bool externalized,
+                 FullString fullInputForTotalComparison)
         : firstOriginalChar(fst),
           transformedVal(std::move(trans)),
           langtag(std::move(l)),
-          isExternalized{externalized}, fullInput{fullInputForTotalComparison} {}
+          isExternalized{externalized},
+          fullInput{fullInputForTotalComparison} {}
 
     /// The first char of the original value, used to distinguish between
     /// different datatypes
@@ -525,13 +521,15 @@ class TripleComponentComparator {
    * held Locale. This is used to transform the inner value and to safely pass
    * it around, e.g. when performing prefix comparisons in the vocabulary
    */
-  using SplitVal = SplitValBase<LocaleManager::SortKey, std::string, std::string>;
+  using SplitVal =
+      SplitValBase<LocaleManager::SortKey, std::string, std::string>;
 
   /**
    * This only holds string_views to substrings of a string.
    * Currently we only use this inside this class
    */
-  using SplitValNonOwning = SplitValBase<std::string_view, std::string_view, std::string_view>;
+  using SplitValNonOwning =
+      SplitValBase<std::string_view, std::string_view, std::string_view>;
 
   /**
    * \brief Compare two elements from the Vocabulary.
@@ -712,15 +710,10 @@ class TripleComponentComparator {
       }
     }
     if constexpr (std::is_same_v<SplitValType, SplitVal>) {
-      /*
       return {first, _locManager.getSortKey(res, level), std::string(langtag),
               isExternal, std::string{a}};
-              */
-      return {first, _locManager.getSortKey(res, level), std::string(langtag),
-              isExternal, ""};
     } else if constexpr (std::is_same_v<SplitValType, SplitValNonOwning>) {
-      //return {first, res, langtag, isExternal, a };
-      return {first, res, langtag, isExternal, " " };
+      return {first, res, langtag, isExternal, a};
     } else {
       static_assert(ad_utility::alwaysFalse<SplitValType>);
     }

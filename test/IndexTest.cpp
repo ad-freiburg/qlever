@@ -564,7 +564,9 @@ TEST(IndexTest, getPermutation) {
 }
 
 TEST(IndexTest, WarningsForInconsistentMerging) {
-  std::string kg = R"(<x> <y> "Porto d\\"@en . <x> <y> "Porto d'Anzio"@en .  )";
-  kg += R"(<x> <y> "Porto d\"Anzio"@en . <x> <y> "Porto d'Bnzio"@en  )";
+  // std::string kg = R"(<x> <y> "Porto d\\"@en . <x> <y> "Porto d'Anzio"@en .
+  // )";
+  std::string kg = "";
+  kg += R"(<x> <y> "Porto d'Anzio\\"@en . <x> <y> "Porto d'Anzioa"@en  )";
   [[maybe_unused]] auto x = getQec(kg);
 }
