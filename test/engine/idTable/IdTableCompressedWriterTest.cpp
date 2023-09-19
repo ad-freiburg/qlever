@@ -88,18 +88,19 @@ TEST(IdTableCompressedWriter, compressedWriterTest) {
 }
 
 template <size_t NumStaticColumns>
-void testExternalSorter(size_t numDynamicColumns) {
+void testExternalSorter(size_t numDynamicColumns, size_t numRows,
+                        ad_utility::MemorySize memoryToUse) {
   std::string filename = "idTableCompressedSorter.testExternalSorter.dat";
   using namespace ad_utility::memory_literals;
 
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   ad_utility::ExternalIdTableSorter<SortByOPS, NumStaticColumns> writer{
-      filename, numDynamicColumns, 100'000,
+      filename, numDynamicColumns, memoryToUse.getBytes(),
       ad_utility::testing::makeAllocator(), 5_kB};
 
   for (size_t i = 0; i < 2; ++i) {
     CopyableIdTable<NumStaticColumns> randomTable =
-        createRandomlyFilledIdTable(100'000, numDynamicColumns)
+        createRandomlyFilledIdTable(numRows, numDynamicColumns)
             .toStatic<NumStaticColumns>();
 
     for (const auto& row : randomTable) {
@@ -119,8 +120,14 @@ void testExternalSorter(size_t numDynamicColumns) {
 }
 
 TEST(IdTableCompressedSorter, testRandomInput) {
-  testExternalSorter<0>(3);
-  testExternalSorter<3>(3);
+  using namespace ad_utility::memory_literals;
+  // Test for dynamic (<0>) and static(<3>) tables.
+  // Test the case that there are multiple blocks to merge (many rows but a low
+  // memory limit), but also the case that there is a
+  testExternalSorter<0>(3, 10'000, 10_kB);
+  testExternalSorter<0>(3, 1000, 1_MB);
+  testExternalSorter<3>(3, 10'000, 10_kB);
+  testExternalSorter<3>(3, 1000, 1_MB);
 }
 
 TEST(IdTableCompressedSorter, memoryLimit) {
@@ -141,4 +148,45 @@ TEST(IdTableCompressedSorter, memoryLimit) {
   auto generator = writer.sortedView();
   AD_EXPECT_THROW_WITH_MESSAGE((idTableFromRowGenerator<0>(generator, 3)),
                                ::testing::ContainsRegex("Insufficient memory"));
+}
+
+template <size_t NumStaticColumns>
+void testExternalCompressor(size_t numDynamicColumns, size_t numRows,
+                            ad_utility::MemorySize memoryToUse) {
+  std::string filename = "idTableCompressedSorter.testExternalCompressor.dat";
+  using namespace ad_utility::memory_literals;
+
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  ad_utility::ExternalIdTableCompressor<NumStaticColumns> writer{
+      filename, numDynamicColumns, memoryToUse.getBytes(),
+      ad_utility::testing::makeAllocator(), 5_kB};
+
+  for (size_t i = 0; i < 2; ++i) {
+    CopyableIdTable<NumStaticColumns> randomTable =
+        createRandomlyFilledIdTable(numRows, numDynamicColumns)
+            .toStatic<NumStaticColumns>();
+
+    for (const auto& row : randomTable) {
+      writer.push(row);
+    }
+
+    auto generator = writer.getRows();
+
+    using namespace ::testing;
+    auto result =
+        idTableFromRowGenerator<NumStaticColumns>(generator, numDynamicColumns);
+    ASSERT_THAT(result, Eq(randomTable));
+    writer.clear();
+  }
+}
+
+TEST(ExternalIdTableCompressor, testRandomInput) {
+  using namespace ad_utility::memory_literals;
+  // Test for dynamic (<0>) and static(<3>) tables.
+  // Test the case that there are multiple blocks to merge (many rows but a low
+  // memory limit), but also the case that there is a
+  testExternalCompressor<0>(3, 10'000, 10_kB);
+  testExternalCompressor<0>(3, 1000, 1_MB);
+  testExternalCompressor<3>(3, 10'000, 10_kB);
+  testExternalCompressor<3>(3, 1000, 1_MB);
 }

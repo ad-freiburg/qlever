@@ -144,12 +144,7 @@ class IdTableCompressedWriter {
   // Return a vector of generators where the `i-th` generator generates the
   // `i-th` IdTable that was stored. The IdTables are yielded row by row.
   template <size_t N = 0>
-  /*
-  std::vector<
-      cppcoro::generator<typename IdTableStatic<N>::const_row_reference>>
-      */
-  auto
-  getAllRowGenerators() {
+  auto getAllRowGenerators() {
     file_.wlock()->flush();
     std::vector<decltype(makeGeneratorForRows<N>(0))> result;
     result.reserve(startOfSingleIdTables_.size());
@@ -160,17 +155,8 @@ class IdTableCompressedWriter {
   }
 
   template <size_t N = 0>
-  //cppcoro::generator<typename IdTableStatic<N>::const_row_reference>
-  auto
-  getGeneratorForAllRows() {
+  auto getGeneratorForAllRows() {
     return std::views::join(ad_utility::OwningView{getAllRowGenerators<N>()});
-    /*
-    for (auto& tableGenerator : getAllRowGenerators<N>()) {
-      for (auto& rowRef : tableGenerator) {
-        co_yield rowRef;
-      }
-    }
-     */
   }
 
   // Clear the underlying file and completely reset the data structure s.t. it
@@ -187,7 +173,8 @@ class IdTableCompressedWriter {
   // Get the row generator for a single IdTable, specified by the `index`.
   template <size_t N = 0>
   auto makeGeneratorForRows(size_t index) {
-    return ad_utility::OwningView{makeGeneratorForIdTable<N>(index)} | std::views::join;
+    return ad_utility::OwningView{makeGeneratorForIdTable<N>(index)} |
+           std::views::join;
   }
 
   // Get the block generator for a single IdTable, specified by the `index`.
@@ -256,20 +243,24 @@ class IdTableCompressedWriter {
   }
 };
 
-
-// TODO<joka921> Comment
+// This class allows the external and compressed storing of an `IdTable` that is
+// too large to be stored in RAM. `NumStaticCols == 0` means that the IdTable is
+// stored dynamically (see `IdTable.h` and `CallFixedSize.h` for details). The
+// interface is as follows: First there is one call to `push` for each row of
+// the IdTable, and then there is one single call to `getRows` which yields a
+// generator that yields the rows that have previously been pushed.
 template <size_t NumStaticCols>
 class ExternalIdTableCompressor {
- private:
+ protected:
   using MemorySize = ad_utility::MemorySize;
   // Used to aggregate rows for the next block.
   IdTableStatic<NumStaticCols> currentBlock_;
   // For statistical reasons
   size_t numElementsPushed_ = 0;
-  // The number of columns of the `IdTable`s to be sorted. Might be different
+  // The number of columns of the `IdTable`. Might be different
   // from `NumStaticCols` when dynamic tables (NumStaticCols == 0) are used;
   size_t numColumns_;
-  // The maximum amount of memory that this sorter can use.
+  // The maximum amount of memory that this class can use.
   MemorySize memory_;
   // The number of rows per block in the first phase.
   // The division by two is there because we store two blocks at the same time:
@@ -280,15 +271,6 @@ class ExternalIdTableCompressor {
   // Used to compress and write a block on a background thread while we can
   // already collect the rows for the next block.
   std::future<void> compressAndWriteFuture_;
-
-  // Track if we are currently in the merging phase.
-  std::atomic<bool> readIsActive_ = false;
-
-  // The maximal blocksize in the output phase.
-  MemorySize maxOutputBlocksize = 1_GB;
-  // The number of merged blocks that are buffered during the
-  //  output phase.
-  int numBufferedOutputBlocks = 4;
 
  public:
   // Constructor.
@@ -344,22 +326,14 @@ class ExternalIdTableCompressor {
   // Transition from the input phase, where `push()` can be called, to the
   // output phase and return a generator that yields the sorted elements. This
   // function must be called exactly once.
-  //cppcoro::generator<typename IdTableStatic<NumStaticCols>::const_row_reference>
-  auto sortedView() {
-    return getBlocks();
-  }
+  auto getRows() { return getBlocks(); }
 
   // Delete the underlying file and reset the sorter. May only be called if no
   // active `getBlocks()` generator that has not been fully iterated over is
-  // currently active, else an exception will be thrown.
+  // currently active, else the behavior is undefined.
   void clear() {
-    if (readIsActive_.load()) {
-      throw std::runtime_error{
-          "Calling `clear` on an an `ExternalIdTableCompressor` that is "
-          "currently "
-          "been iterated over is forbidden."};
-    }
-    currentBlock_.clear();
+    currentBlock_ =
+        IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
     numElementsPushed_ = 0;
     if (compressAndWriteFuture_.valid()) {
       compressAndWriteFuture_.get();
@@ -403,7 +377,7 @@ class ExternalIdTableCompressor {
 // large to be stored in RAM. `NumStaticCols == 0` means that the IdTable is
 // stored dynamically (see `IdTable.h` and `CallFixedSize.h` for details). The
 // interface is as follows: First there is one call to `push` for each row of
-// the IdTable, and then there is one single call to `sortedView` which yields a
+// the IdTable, and then there is one single call to `getRows` which yields a
 // generator that yields the sorted rows one by one.
 
 // When using very small block sizes in unit tests, then sometimes there are
@@ -520,7 +494,8 @@ class ExternalIdTableSorter {
           "Calling `clear` on an an `ExternalIdTableSorter` that is currently "
           "been iterated over is forbidden."};
     }
-    currentBlock_.clear();
+    currentBlock_ =
+        IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
     numElementsPushed_ = 0;
     if (sortAndWriteFuture_.valid()) {
       sortAndWriteFuture_.get();

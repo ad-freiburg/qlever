@@ -79,15 +79,19 @@ cppcoro::generator<ValueType> uniqueView(SortedView view) {
             << std::endl;
 }
 
-template <typename UnderlyingRange>
-struct OwningView : public std::ranges::view_interface<OwningView<UnderlyingRange>> {
+// A view that owns its underlying storage. It is a rather simple drop-in
+// replacement for
+//  `std::ranges::owning_view` which is not yet supported by `GCC 11`.
+template <std::ranges::range UnderlyingRange>
+struct OwningView
+    : public std::ranges::view_interface<OwningView<UnderlyingRange>> {
  private:
   UnderlyingRange value_;
+
  public:
-  OwningView(UnderlyingRange range) : value_{std::move(range)} {
-  }
-  auto begin() {return value_.begin();}
-  auto end() {return value_.end();}
+  explicit OwningView(UnderlyingRange range) : value_{std::move(range)} {}
+  auto begin() { return value_.begin(); }
+  auto end() { return value_.end(); }
 };
 
 }  // namespace ad_utility

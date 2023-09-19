@@ -432,7 +432,7 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
       onDiskBase_ + ".pso-sorter.dat", stxxlMemoryInBytes() / 2, allocator_);
   auto& result = *resultPtr;
   size_t i = 0;
-  auto triplesGenerator = data.sortedView();
+  auto triplesGenerator = data.getRows();
   auto it = triplesGenerator.begin();
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
        partialNum++) {

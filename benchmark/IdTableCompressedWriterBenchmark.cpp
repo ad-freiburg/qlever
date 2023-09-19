@@ -81,7 +81,7 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
   auto drainStxxl = [&]() {
     double i = 0;
     size_t count = 0;
-    for ([[maybe_unused]] const auto& row : sorter.sortedView()) {
+    for ([[maybe_unused]] const auto& row : sorter.getRows()) {
         i += std::sqrt(static_cast<double>(row[0].getBits() + row[1].getBits() +
   row[2].getBits()));
         ++count;
