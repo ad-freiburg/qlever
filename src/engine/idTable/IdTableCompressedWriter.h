@@ -17,6 +17,7 @@
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Views.h"
 #include "util/http/beast.h"
 
 namespace ad_utility {
@@ -143,8 +144,11 @@ class IdTableCompressedWriter {
   // Return a vector of generators where the `i-th` generator generates the
   // `i-th` IdTable that was stored. The IdTables are yielded row by row.
   template <size_t N = 0>
+  /*
   std::vector<
       cppcoro::generator<typename IdTableStatic<N>::const_row_reference>>
+      */
+  auto
   getAllRowGenerators() {
     file_.wlock()->flush();
     std::vector<decltype(makeGeneratorForRows<N>(0))> result;
@@ -156,13 +160,17 @@ class IdTableCompressedWriter {
   }
 
   template <size_t N = 0>
-  cppcoro::generator<typename IdTableStatic<N>::const_row_reference>
+  //cppcoro::generator<typename IdTableStatic<N>::const_row_reference>
+  auto
   getGeneratorForAllRows() {
+    return std::views::join(ad_utility::OwningView{getAllRowGenerators<N>()});
+    /*
     for (auto& tableGenerator : getAllRowGenerators<N>()) {
       for (auto& rowRef : tableGenerator) {
         co_yield rowRef;
       }
     }
+     */
   }
 
   // Clear the underlying file and completely reset the data structure s.t. it
@@ -178,15 +186,8 @@ class IdTableCompressedWriter {
  private:
   // Get the row generator for a single IdTable, specified by the `index`.
   template <size_t N = 0>
-  cppcoro::generator<typename IdTableStatic<N>::const_row_reference>
-  makeGeneratorForRows(size_t index) {
-    // TODO<joka921, GCC13> This whole function can be
-    // std::views::join(std::ranges::owning_view{makeGeneratorForIdTable<N>(index)});
-    for (auto& block : makeGeneratorForIdTable<N>(index)) {
-      for (typename IdTableStatic<N>::const_row_reference row : block) {
-        co_yield row;
-      }
-    }
+  auto makeGeneratorForRows(size_t index) {
+    return ad_utility::OwningView{makeGeneratorForIdTable<N>(index)} | std::views::join;
   }
 
   // Get the block generator for a single IdTable, specified by the `index`.
@@ -254,6 +255,7 @@ class IdTableCompressedWriter {
     co_yield table;
   }
 };
+
 
 // TODO<joka921> Comment
 template <size_t NumStaticCols>
@@ -342,8 +344,8 @@ class ExternalIdTableCompressor {
   // Transition from the input phase, where `push()` can be called, to the
   // output phase and return a generator that yields the sorted elements. This
   // function must be called exactly once.
-  cppcoro::generator<typename IdTableStatic<NumStaticCols>::const_row_reference>
-  sortedView() {
+  //cppcoro::generator<typename IdTableStatic<NumStaticCols>::const_row_reference>
+  auto sortedView() {
     return getBlocks();
   }
 
