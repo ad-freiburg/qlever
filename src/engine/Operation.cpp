@@ -290,6 +290,10 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
     }
   };
   setStatus(_runtimeInfo, setStatus);
+
+  if (_executionContext) {
+    _executionContext->signalQueryUpdate(_runtimeInfo);
+  }
 }
 
 // _______________________________________________________________________
