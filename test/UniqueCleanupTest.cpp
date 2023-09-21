@@ -22,6 +22,26 @@ TEST(UniqueCleanup, CorrectCallbackOnDestruction) {
   ASSERT_TRUE(run) << "Callback was not called on destruction";
 }
 
+// _____________________________________________________________________________
+
+TEST(UniqueCleanup, CorrectCallbackOnInvokeManuallyAndCancel) {
+  uint32_t counter = 0;
+  {
+    UniqueCleanup a{1337, [&counter](auto value) {
+                      EXPECT_EQ(value, 1337);
+                      counter++;
+                    }};
+    ASSERT_EQ(counter, 0) << "Callback was called too early";
+    a.invokeManuallyAndCancel();
+    ASSERT_EQ(counter, 1)
+        << "Callback was not called, or called too many times";
+  }
+  ASSERT_EQ(counter, 1)
+      << "Callback was run on instance which was moved out of";
+}
+
+// _____________________________________________________________________________
+
 TEST(UniqueCleanup, CorrectCallbackAfterMove) {
   uint32_t counter = 0;
   {

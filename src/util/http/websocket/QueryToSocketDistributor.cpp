@@ -53,7 +53,7 @@ net::awaitable<void> QueryToSocketDistributor::signalEnd() {
   finished_ = true;
   wakeUpWaitingListeners();
   // Invoke cleanup pre-emptively
-  auto cleanupCall = std::move(cleanupCall_);
+  cleanupCall_.invokeManuallyAndCancel();
 }
 
 // _____________________________________________________________________________
