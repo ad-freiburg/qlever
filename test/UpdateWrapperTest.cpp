@@ -26,7 +26,7 @@ ASYNC_TEST(UpdateWrapper, destructorCallsSignalEnd) {
   QueryHub queryHub{ioContext};
 
   auto distributor =
-      co_await queryHub.createOrAcquireDistributor(queryId, false);
+      co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
 
   co_await UpdateWrapper::create(queryId, queryHub);
 
@@ -47,7 +47,7 @@ ASYNC_TEST(UpdateWrapper, callingOperatorBroadcastsPayload) {
   QueryHub queryHub{ioContext};
 
   auto distributor =
-      co_await queryHub.createOrAcquireDistributor(queryId, false);
+      co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
 
   auto updateWrapper = co_await UpdateWrapper::create(queryId, queryHub);
 

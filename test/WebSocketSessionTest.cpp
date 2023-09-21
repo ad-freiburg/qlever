@@ -54,8 +54,8 @@ TEST(WebSocketSession, EnsureCorrectPathAcceptAndRejectBehaviour) {
 ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
   QueryHub queryHub{ioContext};
 
-  auto distributor = co_await queryHub.createOrAcquireDistributor(
-      QueryId::idFromString("some-id"), true);
+  auto distributor = co_await queryHub.createOrAcquireDistributorForSending(
+      QueryId::idFromString("some-id"));
 
   co_await distributor->addQueryStatusUpdate("my-event");
 
@@ -126,8 +126,8 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
 ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
   QueryHub queryHub{ioContext};
 
-  auto distributor = co_await queryHub.createOrAcquireDistributor(
-      QueryId::idFromString("some-id"), true);
+  auto distributor = co_await queryHub.createOrAcquireDistributorForSending(
+      QueryId::idFromString("some-id"));
 
   co_await distributor->addQueryStatusUpdate("my-event");
 

@@ -23,7 +23,7 @@ ASYNC_TEST(UpdateFetcher, checkIndexIncrements) {
   UpdateFetcher updateFetcher{queryHub, queryId};
 
   auto distributor =
-      co_await queryHub.createOrAcquireDistributor(queryId, false);
+      co_await queryHub.createOrAcquireDistributorForSending(queryId);
   co_await distributor->addQueryStatusUpdate("1");
   co_await distributor->addQueryStatusUpdate("2");
 

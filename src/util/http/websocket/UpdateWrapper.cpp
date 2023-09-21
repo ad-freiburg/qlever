@@ -25,7 +25,8 @@ UpdateWrapper::UpdateWrapper(
 net::awaitable<UpdateWrapper> UpdateWrapper::create(QueryId queryId,
                                                     QueryHub& queryHub) {
   co_return UpdateWrapper{
-      co_await queryHub.createOrAcquireDistributor(std::move(queryId), true),
+      co_await queryHub.createOrAcquireDistributorForSending(
+          std::move(queryId)),
       co_await net::this_coro::executor};
 }
 

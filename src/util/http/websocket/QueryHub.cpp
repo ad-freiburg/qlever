@@ -18,15 +18,17 @@ bool equals(const std::weak_ptr<T>& t, const std::weak_ptr<U>& u) noexcept {
 
 // _____________________________________________________________________________
 
-net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
-QueryHub::createOrAcquireDistributorInternal(QueryId queryId, bool isProvider) {
+template <bool isProvider>
+second_t<isProvider, net::awaitable<std::shared_ptr<QueryToSocketDistributor>>>
+QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
   co_await net::dispatch(globalStrand_, net::use_awaitable);
   if (socketDistributors_.contains(queryId)) {
     if (auto ptr = socketDistributors_.at(queryId).lock()) {
-      if (!isProvider) {
-        co_return ptr;
-      }
-      if (!co_await sameExecutor(ptr->signalStartIfNotStarted())) {
+      if constexpr (isProvider) {
+        if (!co_await sameExecutor(ptr->signalStartIfNotStarted())) {
+          co_return ptr;
+        }
+      } else {
         co_return ptr;
       }
     }
@@ -60,7 +62,7 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId, bool isProvider) {
       });
   *pointerHolder = distributor;
   socketDistributors_.emplace(queryId, distributor);
-  if (isProvider) {
+  if constexpr (isProvider) {
     co_await sameExecutor(distributor->signalStartIfNotStarted());
   }
   co_return distributor;
@@ -69,8 +71,16 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId, bool isProvider) {
 // _____________________________________________________________________________
 
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
-QueryHub::createOrAcquireDistributor(QueryId queryId, bool isProvider) {
+QueryHub::createOrAcquireDistributorForSending(QueryId queryId) {
   return sameExecutor(
-      createOrAcquireDistributorInternal(std::move(queryId), isProvider));
+      createOrAcquireDistributorInternal<true>(std::move(queryId)));
+}
+
+// _____________________________________________________________________________
+
+net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+QueryHub::createOrAcquireDistributorForReceiving(QueryId queryId) {
+  return sameExecutor(
+      createOrAcquireDistributorInternal<false>(std::move(queryId)));
 }
 }  // namespace ad_utility::websocket
