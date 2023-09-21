@@ -25,21 +25,12 @@ class UpdateWrapper {
 
   // This constructor is private because this instance should only ever be
   // created asynchronously. Use the public factory function `create` instead.
-  UpdateWrapper(std::shared_ptr<QueryToSocketDistributor> distributor,
-                net::any_io_executor executor)
-      : distributor_{std::move(distributor),
-                     [executor](auto&& distributor) {
-                       auto coroutine =
-                           [](auto distributor) -> net::awaitable<void> {
-                         co_await distributor->signalEnd();
-                       };
-                       net::co_spawn(executor, coroutine(AD_FWD(distributor)),
-                                     net::detached);
-                     }},
-        executor_{std::move(executor)} {}
+  UpdateWrapper(std::shared_ptr<QueryToSocketDistributor>,
+                net::any_io_executor);
 
  public:
   UpdateWrapper(UpdateWrapper&&) noexcept = default;
+  UpdateWrapper& operator=(UpdateWrapper&&) noexcept = default;
 
   /// Asynchronously creates an instance of this class. This is because because
   /// creating a distributor for this class needs to be done in a synchronized

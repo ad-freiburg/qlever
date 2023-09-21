@@ -17,6 +17,10 @@
 namespace net = boost::asio;
 
 template <typename Func>
+concept TestableCoroutine =
+    std::is_invocable_r_v<net::awaitable<void>, Func, net::io_context&>;
+
+template <TestableCoroutine Func>
 void runCoroutine(Func innerRun) {
   net::io_context ioContext{};
 
