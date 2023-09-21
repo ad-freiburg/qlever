@@ -41,24 +41,18 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
 
   auto pointerHolder =
       std::make_shared<std::optional<PointerType>>(std::nullopt);
-  auto cleanupAction = [](auto& distributors, auto queryId,
-                          auto referencePointer) -> net::awaitable<void> {
+  auto cleanupAction = [this, queryId, pointerHolder]() {
+    AD_CORRECTNESS_CHECK(pointerHolder->has_value());
+    auto referencePointer = std::move(pointerHolder->value());
     // Only erase object if we created it, otherwise we have a race condition
-    if (distributors.contains(queryId) &&
-        equals(referencePointer, distributors.at(queryId))) {
-      distributors.erase(queryId);
+    if (socketDistributors_.contains(queryId) &&
+        equals(referencePointer, socketDistributors_.at(queryId))) {
+      socketDistributors_.erase(queryId);
     }
-    // Make sure this is treated as coroutine
-    co_return;
   };
   auto distributor = std::make_shared<QueryToSocketDistributor>(
-      ioContext_, [this, queryId, coroutine = std::move(cleanupAction),
-                   pointerHolder]() mutable {
-        AD_CORRECTNESS_CHECK(pointerHolder->has_value());
-        net::co_spawn(globalStrand_,
-                      coroutine(socketDistributors_, std::move(queryId),
-                                std::move(pointerHolder->value())),
-                      net::detached);
+      ioContext_, [this, cleanupAction = std::move(cleanupAction)]() mutable {
+        net::dispatch(globalStrand_, std::move(cleanupAction));
       });
   *pointerHolder = distributor;
   socketDistributors_.emplace(queryId, distributor);
