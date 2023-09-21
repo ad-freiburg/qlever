@@ -48,6 +48,8 @@ TEST(AsioHelpers, sameExecutor) {
   EXPECT_EQ(sanityCounter, 2);
 }
 
+// _____________________________________________________________________________
+
 TEST(AsioHelpers, sameExecutorVoidOverload) {
   net::io_context ioContext{};
   auto strand1 = net::make_strand(ioContext);

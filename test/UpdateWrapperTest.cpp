@@ -40,6 +40,8 @@ ASYNC_TEST(UpdateWrapper, destructorCallsSignalEnd) {
   EXPECT_THAT(result, VariantWith<PayloadType>(PayloadType{}));
 }
 
+// _____________________________________________________________________________
+
 ASYNC_TEST(UpdateWrapper, callingOperatorBroadcastsPayload) {
   QueryId queryId = QueryId::idFromString("1337");
   QueryHub queryHub{ioContext};

@@ -29,6 +29,8 @@ TEST(QueryId, checkEmptyIdDisallowedByConstruction) {
   EXPECT_THROW(QueryId::idFromString(""), ad_utility::Exception);
 }
 
+// _____________________________________________________________________________
+
 // Note there's no guarantee for std::string to be empty after being
 // moved out of, but we check for it anyway to provide a reference case
 TEST(QueryId, checkEmptyAfterMove) {
@@ -36,6 +38,8 @@ TEST(QueryId, checkEmptyAfterMove) {
   { auto temporary = std::move(queryId); }
   EXPECT_TRUE(queryId.empty());
 }
+
+// _____________________________________________________________________________
 
 TEST(QueryRegistry, verifyUniqueIdProvidesUniqueIds) {
   QueryRegistry registry{};
@@ -45,6 +49,8 @@ TEST(QueryRegistry, verifyUniqueIdProvidesUniqueIds) {
   EXPECT_NE(queryIdOne.toQueryId(), queryIdTwo.toQueryId());
 }
 
+// _____________________________________________________________________________
+
 TEST(QueryRegistry, verifyUniqueIdFromStringEnforcesUniqueness) {
   QueryRegistry registry{};
   auto optionalQueryIdOne = registry.uniqueIdFromString("01123581321345589144");
@@ -53,6 +59,8 @@ TEST(QueryRegistry, verifyUniqueIdFromStringEnforcesUniqueness) {
   EXPECT_TRUE(optionalQueryIdOne.has_value());
   EXPECT_FALSE(optionalQueryIdTwo.has_value());
 }
+
+// _____________________________________________________________________________
 
 TEST(QueryRegistry, verifyIdIsUnregisteredAfterUse) {
   QueryRegistry registry{};
@@ -66,6 +74,8 @@ TEST(QueryRegistry, verifyIdIsUnregisteredAfterUse) {
   }
 }
 
+// _____________________________________________________________________________
+
 TEST(QueryRegistry, demonstrateRegistryLocalUniqueness) {
   QueryRegistry registryOne{};
   QueryRegistry registryTwo{};
@@ -78,8 +88,8 @@ TEST(QueryRegistry, demonstrateRegistryLocalUniqueness) {
   EXPECT_EQ(optQidOne->toQueryId(), optQidTwo->toQueryId());
 }
 
-// If this tests terminates without segfault or address sanitization error
-// this is already a success.
+// The code should guard against the case where the ids outlive their registries
+// so this should not segfault or raise any address sanitizer errors
 TEST(QueryRegistry, performCleanupFromDestroyedRegistry) {
   std::unique_ptr<OwningQueryId> holder;
   {

@@ -44,6 +44,8 @@ TEST(UniqueCleanup, CorrectCallbackAfterMove) {
       << "Callback was run on instance which was moved out of";
 }
 
+// _____________________________________________________________________________
+
 TEST(UniqueCleanup, VerifyCorrectValueAccess) {
   std::unique_ptr<std::string> pointer;
   UniqueCleanup uniqueCleanup{std::make_unique<std::string>("42"), [](auto) {}};

@@ -19,23 +19,24 @@ using boost::asio::ip::tcp;
 using websocket::QueryId;
 using websocket = beast::websocket::stream<tcp::socket>;
 
-/// Class to manage the lifecycle of a single websocket. Single-use only.
+/// Class to manage the lifecycle of a single websocket.
 class WebSocketSession {
   UpdateFetcher updateFetcher_;
   websocket ws_;
 
-  /// Loop that waits for input from the client
+  /// Wait for input from the client in a loop. Processing will happen in a
+  /// future version of Qlever.
   net::awaitable<void> handleClientCommands();
 
-  /// Loop that waits for an update of the given query to occur and send it
-  /// to the client once it happens
+  /// Wait for updates of the given query and sends them to the client when they
+  /// occur in a loop.
   net::awaitable<void> waitForServerEvents();
 
-  /// Accepts the websocket handshake and delegates further handling to
+  /// Accept the websocket handshake and delegate further handling to
   /// `waitForServerEvents` and `handleClientCommands`
   net::awaitable<void> acceptAndWait(const http::request<http::string_body>&);
 
-  /// Constructs an instance of this class
+  /// Construct an instance of this class
   WebSocketSession(UpdateFetcher updateFetcher, tcp::socket socket)
       : updateFetcher_{std::move(updateFetcher)}, ws_{std::move(socket)} {}
 

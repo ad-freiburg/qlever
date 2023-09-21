@@ -121,6 +121,9 @@ HttpClientImpl<StreamType>::sendWebSocketHandshake(
   http::request<http::string_body> request;
   request.method(method);
   request.target(target);
+  // See
+  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Protocol_upgrade_mechanism
+  // for more information on the websocket handshake mechanism.
   request.set(http::field::host, host);
   request.set(http::field::upgrade, "websocket");
   request.set(http::field::connection, "Upgrade");

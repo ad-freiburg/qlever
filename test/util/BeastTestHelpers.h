@@ -19,6 +19,7 @@
 namespace net = boost::asio;
 using namespace boost::asio::experimental::awaitable_operators;
 
+// Quickly connect 2 TCP/IP sockets together via the localhost loopback address.
 template <class Executor>
 net::awaitable<void> connect(
     net::basic_stream_socket<net::ip::tcp, Executor>& s1,

@@ -176,7 +176,9 @@ class HttpServer {
         // Schedule the session such that it may run in parallel to this loop.
         net::co_spawn(coroExecutor, session(std::move(socket)), net::detached);
       } catch (const boost::system::system_error& b) {
-        // If the server is shut down this will cause operations to abort
+        // If the server is shut down this will cause operations to abort.
+        // This will most likely only happen in tests, but could also occur
+        // in a future version of Qlever that manually handles SIGTERM signals.
         if (b.code() != boost::asio::error::operation_aborted) {
           logBeastError(b.code(), "Error in the accept loop");
         }
@@ -261,7 +263,8 @@ class HttpServer {
           beast::error_code ec;
           stream.socket().shutdown(tcp::socket::shutdown_send, ec);
         } else {
-          // This is the error "The socket was closed due to a timeout".
+          // This is the error "The socket was closed due to a timeout" or if
+          // the client stream ended unexpectedly.
           if (error.code() == beast::error::timeout ||
               error.code() == boost::asio::error::eof) {
             LOG(TRACE) << error.what() << " (code " << error.code() << ")"

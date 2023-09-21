@@ -19,6 +19,8 @@ ASYNC_TEST(QueryHub, simulateLifecycleWithoutListeners) {
   EXPECT_TRUE(observer.expired());
 }
 
+// _____________________________________________________________________________
+
 ASYNC_TEST(QueryHub, simulateLifecycleWithExclusivelyListeners) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
@@ -33,6 +35,8 @@ ASYNC_TEST(QueryHub, simulateLifecycleWithExclusivelyListeners) {
   }
   EXPECT_TRUE(observer.expired());
 }
+
+// _____________________________________________________________________________
 
 ASYNC_TEST(QueryHub, simulateLifecycleWithSubsequentProviders) {
   QueryHub queryHub{ioContext};
@@ -53,6 +57,8 @@ ASYNC_TEST(QueryHub, simulateLifecycleWithSubsequentProviders) {
   EXPECT_TRUE(observer2.expired());
 }
 
+// _____________________________________________________________________________
+
 ASYNC_TEST(QueryHub, simulateStandardLifecycle) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
@@ -72,6 +78,8 @@ ASYNC_TEST(QueryHub, simulateStandardLifecycle) {
   EXPECT_TRUE(observer.expired());
 }
 
+// _____________________________________________________________________________
+
 ASYNC_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
@@ -88,6 +96,8 @@ ASYNC_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
             co_await queryHub.createOrAcquireDistributor(queryId, false));
 }
 
+// _____________________________________________________________________________
+
 ASYNC_TEST(QueryHub, verifyDistributorIsStartedWithProvider) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
@@ -96,6 +106,8 @@ ASYNC_TEST(QueryHub, verifyDistributorIsStartedWithProvider) {
   EXPECT_TRUE(co_await distributor->signalStartIfNotStarted());
 }
 
+// _____________________________________________________________________________
+
 ASYNC_TEST(QueryHub, verifyDistributorIsNotStartedWithListener) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
@@ -103,6 +115,8 @@ ASYNC_TEST(QueryHub, verifyDistributorIsNotStartedWithListener) {
       co_await queryHub.createOrAcquireDistributor(queryId, false);
   EXPECT_FALSE(co_await distributor->signalStartIfNotStarted());
 }
+
+// _____________________________________________________________________________
 
 ASYNC_TEST(QueryHub, simulateLifecycleWithDifferentQueryIds) {
   QueryHub queryHub{ioContext};

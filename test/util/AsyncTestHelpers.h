@@ -32,6 +32,10 @@ void runCoroutine(Func innerRun) {
 #define COROUTINE_NAME(test_suite_name, test_name) \
   test_suite_name##_##test_name##_coroutine
 
+// Drop-in replacement for gtest's TEST() macro, but for tests that make
+// use of boost asio's awaitable coroutines. Note that this prevents you
+// from using ASSERT_* macros unless you redefine the return keword with
+// co_return so it works nicely with the coroutine.
 #define ASYNC_TEST(test_suite_name, test_name)                      \
   net::awaitable<void> COROUTINE_NAME(test_suite_name,              \
                                       test_name)(net::io_context&); \

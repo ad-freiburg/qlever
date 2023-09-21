@@ -29,11 +29,15 @@ ASYNC_TEST(QueryToSocketDistributor, signalStartWorks) {
   EXPECT_TRUE(co_await queryToSocketDistributor.signalStartIfNotStarted());
 }
 
+// _____________________________________________________________________________
+
 ASYNC_TEST(QueryToSocketDistributor, signalEndThrowsWhenNotStarted) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
   EXPECT_THROW(co_await queryToSocketDistributor.signalEnd(),
                ad_utility::Exception);
 }
+
+// _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateThrowsWhenFinished) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
@@ -42,6 +46,8 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateThrowsWhenFinished) {
   EXPECT_THROW(co_await queryToSocketDistributor.addQueryStatusUpdate("Abc"),
                ad_utility::Exception);
 }
+
+// _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, signalEndRunsCleanup) {
   bool executed = false;
@@ -52,6 +58,8 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndRunsCleanup) {
   co_await queryToSocketDistributor.signalEnd();
   EXPECT_TRUE(executed);
 }
+
+// _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, destructorRunsCleanup) {
   bool executed = false;
@@ -65,6 +73,8 @@ ASYNC_TEST(QueryToSocketDistributor, destructorRunsCleanup) {
   co_return;
 }
 
+// _____________________________________________________________________________
+
 ASYNC_TEST(QueryToSocketDistributor, doubleSignalEndThrowsError) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
   co_await queryToSocketDistributor.signalStartIfNotStarted();
@@ -72,6 +82,8 @@ ASYNC_TEST(QueryToSocketDistributor, doubleSignalEndThrowsError) {
   EXPECT_THROW(co_await queryToSocketDistributor.signalEnd(),
                ad_utility::Exception);
 }
+
+// _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, signalEndWakesUpListeners) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
@@ -89,6 +101,8 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndWakesUpListeners) {
   };
   co_await (listener() && broadcaster());
 }
+
+// _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateWakesUpListeners) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
@@ -108,6 +122,8 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateWakesUpListeners) {
   co_await (listener() && broadcaster());
 }
 
+// _____________________________________________________________________________
+
 ASYNC_TEST(QueryToSocketDistributor, listeningBeforeStartWorks) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
   bool waiting = false;
@@ -125,6 +141,8 @@ ASYNC_TEST(QueryToSocketDistributor, listeningBeforeStartWorks) {
   };
   co_await (listener() && broadcaster());
 }
+
+// _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateBeforeListenersWorks) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
@@ -151,6 +169,8 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateBeforeListenersWorks) {
   };
   co_await (broadcaster() && listener());
 }
+
+// _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, signalEndDoesNotPreventConsumptionOfRest) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};

@@ -46,6 +46,8 @@ TEST(WebSocketSession, EnsureCorrectPathAcceptAndRejectBehaviour) {
   assertNotFoundResponse(testFunc(withPath("/other-prefix/some-id")));
 }
 
+// _____________________________________________________________________________
+
 // Hack to allow ASSERT_*() macros to work with ASYNC_TEST
 #define return co_return
 
@@ -88,6 +90,8 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
   co_await (serverLogic() && controllerActions());
 }
 
+// _____________________________________________________________________________
+
 ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
   QueryHub queryHub{ioContext};
 
@@ -116,6 +120,8 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
 
   co_await (serverLogic() && controllerActions());
 }
+
+// _____________________________________________________________________________
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
   QueryHub queryHub{ioContext};

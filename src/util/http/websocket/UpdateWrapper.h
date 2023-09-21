@@ -23,6 +23,8 @@ class UpdateWrapper {
   UniqueCleanup<std::shared_ptr<QueryToSocketDistributor>> distributor_;
   net::any_io_executor executor_;
 
+  // This constructor is private because this instance should only ever be
+  // created asynchronously. Use the public factory function `create` instead.
   UpdateWrapper(std::shared_ptr<QueryToSocketDistributor> distributor,
                 net::any_io_executor executor)
       : distributor_{std::move(distributor),

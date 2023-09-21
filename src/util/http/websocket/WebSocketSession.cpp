@@ -47,6 +47,8 @@ net::awaitable<void> WebSocketSession::waitForServerEvents() {
     auto json = co_await updateFetcher_.waitForEvent();
     if (json == nullptr) {
       if (ws_.is_open()) {
+        // This will cause the loop within `handleClientCommands` to terminate
+        // by provoking an exception
         co_await ws_.async_close(beast::websocket::close_code::normal,
                                  net::use_awaitable);
       }
