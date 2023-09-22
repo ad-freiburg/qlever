@@ -501,21 +501,21 @@ class TripleComponentComparator {
     SplitValBase() = default;
     SplitValBase(char fst, InnerString trans, LanguageTag l, bool externalized,
                  FullString fullInputForTotalComparison)
-        : firstOriginalChar(fst),
-          transformedVal(std::move(trans)),
-          langtag(std::move(l)),
-          isExternalized{externalized},
-          fullInput{fullInputForTotalComparison} {}
+        : firstOriginalChar_(fst),
+          transformedVal_(std::move(trans)),
+          langtag_(std::move(l)),
+          isExternalized_{externalized},
+          fullInput_{fullInputForTotalComparison} {}
 
     /// The first char of the original value, used to distinguish between
     /// different datatypes
-    char firstOriginalChar = '\0';
-    InnerString transformedVal;  /// The original inner value, possibly
-                                 /// transformed by a locale().
-    LanguageTag langtag;         /// The language tag, possibly empty.
-    bool isExternalized;         /// Does this word belong to the externalized
-                                 /// vocabulary.
-    FullString fullInput;
+    char firstOriginalChar_ = '\0';
+    InnerString transformedVal_;  /// The original inner value, possibly
+                                  /// transformed by a locale().
+    LanguageTag langtag_;         /// The language tag, possibly empty.
+    bool isExternalized_;         /// Does this word belong to the externalized
+                                  /// vocabulary.
+    FullString fullInput_;
   };
 
   /**
@@ -587,8 +587,8 @@ class TripleComponentComparator {
   /**
    * @brief the inner comparison logic
    *
-   * First compares the datatypes by the firstOriginalChar, then the inner value
-   * and then the language tags
+   * First compares the datatypes by the firstOriginalChar_, then the inner
+   * value and then the language tags
    * @return <0 iff a<b, 0 iff a==b, >0 iff a>b
    */
   template <class A, class B, typename C>
@@ -598,11 +598,12 @@ class TripleComponentComparator {
     // Currently all internal words stand before all external words.
     // TODO<joka921> This has to be changed once we have the IDs interleaved
     // via the MilestoneIdManager.
-    if (a.isExternalized != b.isExternalized) {
-      return a.isExternalized ? 1 : -1;
+    if (a.isExternalized_ != b.isExternalized_) {
+      return a.isExternalized_ ? 1 : -1;
     }
 
-    if (auto res = std::strncmp(&a.firstOriginalChar, &b.firstOriginalChar, 1);
+    if (auto res =
+            std::strncmp(&a.firstOriginalChar_, &b.firstOriginalChar_, 1);
         res != 0) {
       return res;  // different data types, decide on the datatype
     }
@@ -610,19 +611,19 @@ class TripleComponentComparator {
     if (int res =
             // this correctly dispatches between SortKeys (already transformed)
             // and string_views (not-transformed, perform unicode collation)
-        _locManager.compare(a.transformedVal, b.transformedVal, level);
+        _locManager.compare(a.transformedVal_, b.transformedVal_, level);
         res != 0 || level != Level::TOTAL) {
       return res;  // actual value differs
     }
 
     // On the TOTAL level we then compare on the level of bytes.
-    if (int res = a.fullInput.compare(b.fullInput); res != 0) {
+    if (int res = a.fullInput_.compare(b.fullInput_); res != 0) {
       return res;
     }
 
     // Only if two literals are bytewise equal, we compare by the langtag or
     // datatype.
-    return a.langtag.compare(b.langtag);
+    return a.langtag_.compare(b.langtag_);
   }
 
   /**
@@ -646,18 +647,18 @@ class TripleComponentComparator {
       std::string_view s, const Level level) const {
     AD_CONTRACT_CHECK(level == Level::PRIMARY);
     auto transformed = extractAndTransformComparable(s, Level::PRIMARY, false);
-    // The `firstOriginalChar` is either " or < or @
+    // The `firstOriginalChar_` is either " or < or @
     AD_CONTRACT_CHECK(
-        static_cast<unsigned char>(transformed.firstOriginalChar) <
+        static_cast<unsigned char>(transformed.firstOriginalChar_) <
         std::numeric_limits<unsigned char>::max());
-    if (transformed.transformedVal.get().empty()) {
-      transformed.firstOriginalChar += 1;
+    if (transformed.transformedVal_.get().empty()) {
+      transformed.firstOriginalChar_ += 1;
     } else {
-      unsigned char last = transformed.transformedVal.get().back();
+      unsigned char last = transformed.transformedVal_.get().back();
       if (last < std::numeric_limits<unsigned char>::max()) {
-        transformed.transformedVal.get().back() += 1;
+        transformed.transformedVal_.get().back() += 1;
       } else {
-        transformed.transformedVal.get().push_back('\1');
+        transformed.transformedVal_.get().push_back('\1');
       }
     }
     return transformed;

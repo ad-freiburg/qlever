@@ -294,7 +294,7 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
     const auto& [id, splitVal] = idAndSplitVal;
-    TripleComponentWithIndex entry{word, splitVal.isExternalized, id};
+    TripleComponentWithIndex entry{word, splitVal.isExternalized_, id};
     serializer << entry;
   }
   serializer.close();
