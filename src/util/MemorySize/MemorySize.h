@@ -104,9 +104,7 @@ class MemorySize {
   static MemorySize parse(std::string_view str);
 
   // Three-way comparison
-  constexpr auto operator<=>(const MemorySize& m) const {
-    return memoryInBytes_ <=> m.memoryInBytes_;
-  }
+  constexpr auto operator<=>(const MemorySize& m) const = default;
 
   // Arithmetic operators and arithmetic assignment operators.
   constexpr MemorySize operator+(const MemorySize& m) const;

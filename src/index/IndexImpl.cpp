@@ -69,7 +69,7 @@ void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
   PatternCreator patternCreator{filename};
   for (const auto& triple : spoTriplesView) {
     if (!std::ranges::any_of(triple, isInternalId)) {
-      patternCreator.processTriple(triple);
+      patternCreator.processTriple(static_cast<std::array<Id, 3>>(triple));
     }
   }
   patternCreator.finish();
@@ -196,7 +196,7 @@ void IndexImpl::createFromFile(const string& filename) {
       auto pushTripleToPatterns = [&patternCreator,
                                    &isInternalId](const auto& triple) {
         if (!std::ranges::any_of(triple, isInternalId)) {
-          patternCreator.processTriple(triple);
+          patternCreator.processTriple(static_cast<std::array<Id, 3>>(triple));
         }
       };
       createPermutationPair(spoSorter.sortedView(), spo_, sop_,
@@ -446,7 +446,7 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
     // update the triples for which this partial vocabulary was responsible
     for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[partialNum];
          ++tmpNum) {
-      std::array<Id, 3> curTriple = *it;
+      typename TripleVec::value_type curTriple = *it;
       ++it;
 
       // For all triple elements find their mapping from partial to global ids.

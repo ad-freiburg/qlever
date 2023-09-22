@@ -32,6 +32,7 @@ using namespace ad_utility::memory_literals;
 // same number of columns, so they can be thought of as large blocks of a very
 // large `IdTable` which is formed by the concatenation of the single tables.
 class IdTableCompressedWriter {
+ private:
   // Metadata for a compressed block of bytes. A block is a contiguous part of a
   // column of an `IdTable`.
   struct CompressedBlockMetadata {
@@ -41,7 +42,6 @@ class IdTableCompressedWriter {
     size_t offsetInFile_;
   };
 
- private:
   // The filename and actual file to which the `IdTable` is written .
   std::string filename_;
   ad_utility::Synchronized<ad_utility::File, std::shared_mutex> file_{filename_,
@@ -112,13 +112,13 @@ class IdTableCompressedWriter {
                   ZstdWrapper::compress(const_cast<Id*>(column.data()) + lower,
                                         thisBlockSizeUncompressed);
               size_t offset = 0;
-              {
-                auto lck = file_.wlock();
-                offset = lck->tell();
-                lck->write(compressed.data(), compressed.size());
-              }
-              blockMetadata.push_back(
-                  {compressed.size(), thisBlockSizeUncompressed, offset});
+              file_.withWriteLock(
+                  [&offset, &compressed](ad_utility::File& file) {
+                    offset = file.tell();
+                    file.write(compressed.data(), compressed.size());
+                  });
+              blockMetadata.emplace_back(compressed.size(),
+                                         thisBlockSizeUncompressed, offset);
             }
           }));
     }
@@ -251,7 +251,12 @@ class IdTableCompressedWriter {
 // generator that yields the rows that have previously been pushed.
 template <size_t NumStaticCols>
 class ExternalIdTableCompressor {
- protected:
+ public:
+  using value_type = IdTableStatic<NumStaticCols>::row_type;
+  using reference = IdTableStatic<NumStaticCols>::row_reference;
+  using const_reference = IdTableStatic<NumStaticCols>::const_row_reference;
+
+ private:
   using MemorySize = ad_utility::MemorySize;
   // Used to aggregate rows for the next block.
   IdTableStatic<NumStaticCols> currentBlock_;
@@ -299,7 +304,6 @@ class ExternalIdTableCompressor {
 
   size_t size() const { return numElementsPushed_; }
 
- public:
   // Add a single row to the input. The type of `row` needs to be something that
   // can be `push_back`ed to a `IdTable`.
   void push(const auto& row) requires requires { currentBlock_.push_back(row); }
@@ -383,7 +387,8 @@ class ExternalIdTableCompressor {
 // When using very small block sizes in unit tests, then sometimes there are
 // false positives in the memory limit mechanism, so setting the following
 // variable to `true` allows to disable the memory limit.
-inline bool EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
+inline std::atomic<bool>
+    EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 template <typename Comparator, size_t NumStaticCols>
 class ExternalIdTableSorter {
  private:
@@ -403,7 +408,7 @@ class ExternalIdTableSorter {
   // and one that is used to collect rows in the calls to `push`.
   size_t blocksize_{memory_.getBytes() / (numColumns_ * sizeof(Id) * 2)};
   IdTableCompressedWriter writer_;
-  Comparator comp_{};
+  [[no_unique_address]] Comparator comp_{};
   // Used to compress and write a block on a background thread while we can
   // already collect the rows for the next block.
   std::future<void> sortAndWriteFuture_;
@@ -412,10 +417,10 @@ class ExternalIdTableSorter {
   std::atomic<bool> mergeIsActive_ = false;
 
   // The maximal blocksize in the output phase.
-  MemorySize maxOutputBlocksize = 1_GB;
+  MemorySize maxOutputBlocksize_ = 1_GB;
   // The number of merged blocks that are buffered during the
   //  output phase.
-  int numBufferedOutputBlocks = 4;
+  int numBufferedOutputBlocks_ = 4;
 
  public:
   // Constructor.
@@ -441,7 +446,6 @@ class ExternalIdTableSorter {
       : ExternalIdTableSorter(std::move(filename), NumStaticCols, memoryInBytes,
                               std::move(allocator), blocksizeCompression) {}
 
- public:
   // Add a single row to the input. The type of `row` needs to be something that
   // can be `push_back`ed to a `IdTable`.
   void push(const auto& row) requires requires { currentBlock_.push_back(row); }
@@ -474,7 +478,7 @@ class ExternalIdTableSorter {
     size_t numYielded = 0;
     mergeIsActive_.store(true);
     for (const auto& block : ad_utility::streams::runStreamAsync(
-             sortedBlocks(), std::max(1, numBufferedOutputBlocks - 2))) {
+             sortedBlocks(), std::max(1, numBufferedOutputBlocks_ - 2))) {
       for (typename IdTableStatic<NumStaticCols>::const_row_reference row :
            block) {
         ++numYielded;
@@ -539,8 +543,8 @@ class ExternalIdTableSorter {
         using namespace ad_utility::memory_literals;
         // Don't use a too large output size.
         auto blockSizeOutputMemory = std::min(
-            (memory_ - requiredMemoryForInputBlocks) / numBufferedOutputBlocks,
-            maxOutputBlocksize);
+            (memory_ - requiredMemoryForInputBlocks) / numBufferedOutputBlocks_,
+            maxOutputBlocksize_);
 
         size_t blockSizeForOutput =
             blockSizeOutputMemory.getBytes() / (sizeof(Id) * numColumns_);
@@ -568,20 +572,20 @@ class ExternalIdTableSorter {
     for (auto& gen : rowGenerators) {
       pq.emplace_back(gen.begin(), gen.end());
     }
-    std::make_heap(pq.begin(), pq.end(), comp);
+    std::ranges::make_heap(pq, comp);
     IdTableStatic<NumStaticCols> result(writer_.numColumns(),
                                         writer_.allocator());
     result.reserve(blockSizeOutput);
     size_t numPopped = 0;
     while (!pq.empty()) {
-      std::pop_heap(pq.begin(), pq.end(), comp);
+      std::ranges::pop_heap(pq, comp);
       auto& min = pq.back();
       result.push_back(*min.first);
       ++(min.first);
       if (min.first == min.second) {
         pq.pop_back();
       } else {
-        std::push_heap(pq.begin(), pq.end(), comp);
+        std::ranges::push_heap(pq, comp);
       }
       if (result.size() >= blockSizeOutput) {
         numPopped += result.numRows();

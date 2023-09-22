@@ -43,7 +43,7 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
     ad_utility::ExternalIdTableSorter<SortByPSO, 3> writer{
         filename, 3, memForStxxl, ad_utility::testing::makeAllocator()};
 
-    auto runPush = [&]() {
+    auto runPush = [&writer, &numInputRows, &generateRandomRow]() {
       for (auto i : std::views::iota(0UL, numInputRows)) {
         writer.push(generateRandomRow());
         if (i % 100'000'000 == 0) {
@@ -51,7 +51,7 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
         }
       }
     };
-    auto run = [&]() {
+    auto run = [&writer]() {
       auto view = writer.sortedView();
       double res = 0;
       size_t count = 0;
@@ -71,31 +71,29 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
     results.addMeasurement("ReadAndMerge", run);
     std::cout << "Finish merging" << std::endl;
 
-    /*
-  auto pushStxxl = [&]() {
-    for ([[maybe_unused]] auto i : std::views::iota(0UL, numInputRows)) {
-      sorter.push(generateRandomRow());
-    }
-  };
+    auto pushStxxl = [&sorter, &numInputRows, &generateRandomRow]() {
+      for ([[maybe_unused]] auto i : std::views::iota(0UL, numInputRows)) {
+        sorter.push(generateRandomRow());
+      }
+    };
 
-  auto drainStxxl = [&]() {
-    double i = 0;
-    size_t count = 0;
-    for ([[maybe_unused]] const auto& row : sorter.getRows()) {
+    auto drainStxxl = [&sorter]() {
+      double i = 0;
+      size_t count = 0;
+      for ([[maybe_unused]] const auto& row : sorter.sortedView()) {
         i += std::sqrt(static_cast<double>(row[0].getBits() + row[1].getBits() +
-  row[2].getBits()));
+                                           row[2].getBits()));
         ++count;
-    }
-    std::cout << i << ' ' << count << std::endl;
-  };
+      }
+      std::cout << i << ' ' << count << std::endl;
+    };
 
-  results.addMeasurement("Time using stxxl for push", pushStxxl);
-  std::cout << "Finished pushing stxxl" << std::endl;
-  results.addMeasurement("Time using stxxl for pull", drainStxxl);
+    results.addMeasurement("Time using stxxl for push", pushStxxl);
+    std::cout << "Finished pushing stxxl" << std::endl;
+    results.addMeasurement("Time using stxxl for pull", drainStxxl);
     std::cout << "Finished merging stxxl" << std::endl;
 
-  std::cout << "\nNum blocks in stxxl" << sorter.numBlocks() << std::endl;
-     */
+    std::cout << "\nNum blocks in stxxl" << sorter.numBlocks() << std::endl;
 
     return results;
   }
