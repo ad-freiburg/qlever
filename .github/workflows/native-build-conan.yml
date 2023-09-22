@@ -45,8 +45,8 @@ jobs:
       run: >
         sudo pip3 install conan;
         conan profile detect;
-        conan list openssl/3.1.1:* -r=remote;
-        conan list openssl/3.1.2:* -r=remote;
+        conan list openssl/3.1.1:* -r=*;
+        conan list openssl/3.1.2:* -r=*;
         conan install .. -pr:b=default -of=. ;
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
