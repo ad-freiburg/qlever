@@ -4,10 +4,10 @@
 
 #include <gtest/gtest.h>
 
+#include "./util/GTestHelpers.h"
 #include "index/StringSortComparator.h"
 using namespace std::literals;
-
-using namespace std::literals;
+using ad_utility::source_location;
 
 TEST(LocaleManagerTest, Levels) {
   using L = LocaleManager::Level;
@@ -112,70 +112,74 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
   auto comp = [&comparator](const auto& a, const auto& b) {
     return comparator(a, b, TripleComponentComparator::Level::TOTAL);
   };
-
-  // strange casings must not affect order
-  ASSERT_TRUE(comp("\"ALPHA\"", "\"beta\""));
-  ASSERT_TRUE(comp("\"alpha\"", "\"BETA\""));
-  ASSERT_TRUE(comp("\"AlPha\"", "\"bEtA\""));
-  ASSERT_TRUE(comp("\"AlP\"", "\"alPha\""));
-  ASSERT_TRUE(comp("\"alP\"", "\"ALPha\""));
-
-  // inverse tests for completeness
-  ASSERT_FALSE(comp("\"beta\"", "\"ALPHA\""));
-  ASSERT_FALSE(comp("\"BETA\"", "\"alpha\""));
-  ASSERT_FALSE(comp("\"bEtA\"", "\"AlPha\""));
-  ASSERT_FALSE(comp("\"alPha\"", "\"AlP\""));
-  ASSERT_FALSE(comp("\"ALPha\"", "\"alP\""));
-
-  // only if lowercased version is exactly the same we want to sort by the
-  // casing (lowercase comes first in the default en_US.utf8-locale
-  ASSERT_TRUE(comp("\"alpha\"", "\"ALPHA\""));
-  ASSERT_FALSE(comp("\"ALPHA\"", "\"alpha\""));
-
-  ASSERT_TRUE(comp("\"Hannibal\"@en", "\"Hannibal Hamlin\"@en"));
-
-  // language tags matter on the TOTAL level
-  ASSERT_TRUE(comp("\"Hannibal\"@af", "\"Hannibal\"@en"));
-  ASSERT_FALSE(comp("\"Hannibal\"@en", "\"Hannibal\"@af"));
-
-  ASSERT_TRUE(comp("\"Hannibal\"@en", "\"HanNibal\"@en"));
-
-  // something is not smaller thant itself
-  ASSERT_FALSE(comp("\"beta\"", "\"beta\""));
-
-  // Testing that latin and Hindi numbers mean exactly the same up to the
-  // Quarternary level
-  ASSERT_TRUE(comp("\"151\"", "\"१५१\""));
-  ASSERT_FALSE(comp("\"१५१\"", "\"151\""));
-
-  ASSERT_TRUE(comp("\"151\"@en", "\"१५१\""));
-  ASSERT_FALSE(comp("\"१५१\"", "\"151\"@en"));
-}
-
-TEST(StringSortComparatorTest,
-     TripleComponentComparatorTotalIgnorePunctuation) {
-  TripleComponentComparator comparator("en", "US", true);
-  auto compTotal = [&comparator](const auto& a, const auto& b) {
-    return comparator(a, b, TripleComponentComparator::Level::TOTAL);
-  };
-
   // Test that the comparison between `a` and  `b` always yields the same
   // result, no matter if it is done on the level of strings or on `SortKey`s.
-  auto assertConsistent = [&comparator, &compTotal](const auto& a,
-                                                    const auto& b) {
-    bool ab = compTotal(a, b);
-    bool ba = compTotal(b, a);
+  auto assertConsistent = [&comparator, &comp](
+                              const auto& a, const auto& b,
+                              source_location l = source_location::current()) {
+    auto tr = generateLocationTrace(l);
+    bool ab = comp(a, b);
+    bool ba = comp(b, a);
     auto aSplit = comparator.extractAndTransformComparable(
         a, TripleComponentComparator::Level::TOTAL);
     auto bSplit = comparator.extractAndTransformComparable(
         b, TripleComponentComparator::Level::TOTAL);
-    EXPECT_EQ(ab, compTotal(aSplit, bSplit));
-    EXPECT_EQ(ba, compTotal(bSplit, aSplit));
+    EXPECT_EQ(ab, comp(aSplit, bSplit));
+    EXPECT_EQ(ba, comp(bSplit, aSplit));
   };
 
-  assertConsistent("\"be.ta\"", "\beta\"");
-  assertConsistent("\"beta\\\"", "\beta\"");
-  // TODO<joka921> Add some of the previously warning entries that used to fail.
+  auto assertTrue = [&comp, &assertConsistent](
+                        const auto& a, const auto& b,
+                        source_location l = source_location::current()) {
+    auto tr = generateLocationTrace(l);
+    ASSERT_TRUE(comp(a, b));
+    assertConsistent(a, b);
+  };
+  auto assertFalse = [&comp, &assertConsistent](
+                         const auto& a, const auto& b,
+                         source_location l = source_location::current()) {
+    auto tr = generateLocationTrace(l);
+    ASSERT_FALSE(comp(a, b));
+    assertConsistent(a, b);
+  };
+
+  // strange casings must not affect order
+  assertTrue("\"ALPHA\"", "\"beta\"");
+  assertTrue("\"alpha\"", "\"BETA\"");
+  assertTrue("\"AlPha\"", "\"bEtA\"");
+  assertTrue("\"AlP\"", "\"alPha\"");
+  assertTrue("\"alP\"", "\"ALPha\"");
+
+  // inverse tests for completeness
+  assertFalse("\"beta\"", "\"ALPHA\"");
+  assertFalse("\"BETA\"", "\"alpha\"");
+  assertFalse("\"bEtA\"", "\"AlPha\"");
+  assertFalse("\"alPha\"", "\"AlP\"");
+  assertFalse("\"ALPha\"", "\"alP\"");
+
+  // only if lowercased version is exactly the same we want to sort by the
+  // casing (lowercase comes first in the default en_US.utf8-locale
+  assertTrue("\"alpha\"", "\"ALPHA\"");
+  assertFalse("\"ALPHA\"", "\"alpha\"");
+
+  assertTrue("\"Hannibal\"@en", "\"Hannibal Hamlin\"@en");
+
+  // language tags matter on the TOTAL level
+  assertTrue("\"Hannibal\"@af", "\"Hannibal\"@en");
+  assertFalse("\"Hannibal\"@en", "\"Hannibal\"@af");
+
+  assertTrue("\"Hannibal\"@en", "\"HanNibal\"@en");
+
+  // something is not smaller thant itself
+  assertFalse("\"beta\"", "\"beta\"");
+
+  // Testing that latin and Hindi numbers mean exactly the same up to the
+  // Quarternary level
+  assertTrue("\"151\"", "\"१५१\"");
+  assertFalse("\"१५१\"", "\"151\"");
+
+  assertTrue("\"151\"@en", "\"१५१\"");
+  assertFalse("\"१५१\"", "\"151\"@en");
 }
 
 // ______________________________________________________________________________________________
@@ -213,7 +217,7 @@ TEST(LocaleManager, PrefixSortKey) {
   LocaleManager locIgnorePunct = comp.getLocaleManager();
   LocaleManager locRespectPunct("en", "US", false);
 
-  auto print = []([[maybe_unused]] std::string_view s) {
+  auto print = []([[maybe_unused]] const auto& s) {
     // The following code can be used for convenient debug output.
     /*
     for (const auto& ch : s) {
@@ -235,7 +239,6 @@ TEST(LocaleManager, PrefixSortKey) {
       ASSERT_TRUE(complete.starts_with(partial.get()));
       print(partial.get());
     }
-    std::cout << std::endl;
   };
 
   auto testSortKeys = [&testSortKeysForLocale, &locIgnorePunct,
