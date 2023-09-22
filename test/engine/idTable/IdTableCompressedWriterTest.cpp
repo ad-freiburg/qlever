@@ -157,7 +157,7 @@ void testExternalCompressor(size_t numDynamicColumns, size_t numRows,
   using namespace ad_utility::memory_literals;
 
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  ad_utility::ExternalIdTableCompressor<NumStaticColumns> writer{
+  ad_utility::CompressedExternalIdTable<NumStaticColumns> writer{
       filename, numDynamicColumns, memoryToUse.getBytes(),
       ad_utility::testing::makeAllocator(), 5_kB};
 
@@ -184,7 +184,8 @@ TEST(ExternalIdTableCompressor, testRandomInput) {
   using namespace ad_utility::memory_literals;
   // Test for dynamic (<0>) and static(<3>) tables.
   // Test the case that there are multiple blocks to merge (many rows but a low
-  // memory limit), but also the case that there is a
+  // memory limit), but also the case that there is only a single block (few
+  // rows with a sufficiently large memory limit).
   testExternalCompressor<0>(3, 10'000, 10_kB);
   testExternalCompressor<0>(3, 1000, 1_MB);
   testExternalCompressor<3>(3, 10'000, 10_kB);

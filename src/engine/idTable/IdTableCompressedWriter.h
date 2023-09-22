@@ -156,7 +156,10 @@ class IdTableCompressedWriter {
 
   template <size_t N = 0>
   auto getGeneratorForAllRows() {
-    return std::views::join(ad_utility::OwningView{getAllRowGenerators<N>()});
+    // Note: We cannot write `std::views::join` because it is currently missing
+    // in libc++.
+    return std::ranges::join_view{
+        ad_utility::OwningView{getAllRowGenerators<N>()}};
   }
 
   // Clear the underlying file and completely reset the data structure s.t. it
@@ -250,7 +253,7 @@ class IdTableCompressedWriter {
 // the IdTable, and then there is one single call to `getRows` which yields a
 // generator that yields the rows that have previously been pushed.
 template <size_t NumStaticCols>
-class ExternalIdTableCompressor {
+class CompressedExternalIdTable {
  public:
   using value_type = IdTableStatic<NumStaticCols>::row_type;
   using reference = IdTableStatic<NumStaticCols>::row_reference;
@@ -279,7 +282,7 @@ class ExternalIdTableCompressor {
 
  public:
   // Constructor.
-  explicit ExternalIdTableCompressor(
+  explicit CompressedExternalIdTable(
       std::string filename, size_t numCols, size_t memoryInBytes,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = 4_MB)
@@ -294,11 +297,11 @@ class ExternalIdTableCompressor {
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
-  explicit ExternalIdTableCompressor(
+  explicit CompressedExternalIdTable(
       std::string filename, size_t memoryInBytes,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = 4_MB) requires(NumStaticCols > 0)
-      : ExternalIdTableCompressor(std::move(filename), NumStaticCols,
+      : CompressedExternalIdTable(std::move(filename), NumStaticCols,
                                   memoryInBytes, std::move(allocator),
                                   blocksizeCompression) {}
 
@@ -322,19 +325,28 @@ class ExternalIdTableCompressor {
   }
 
   // Return a lambda that takes a `ValueType` and calls `push` for that value.
-  // Note that `this` is captured by reference
   auto makePushCallback() {
     return [self = this](auto&& value) { self->push(AD_FWD(value)); };
   }
 
-  // Transition from the input phase, where `push()` can be called, to the
-  // output phase and return a generator that yields the sorted elements. This
-  // function must be called exactly once.
-  auto getRows() { return getBlocks(); }
+  // Transition from the input phase, where `push()` may be called, to the
+  // output phase and return a generator that yields the elements of the
+  // `IdTable in the order that they were `push`ed. This function may be called
+  // exactly once.
+  auto getRows() {
+    pushBlock(std::move(currentBlock_));
+    currentBlock_ =
+        IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
+    currentBlock_.setNumColumns(numColumns_);
+    if (compressAndWriteFuture_.valid()) {
+      compressAndWriteFuture_.get();
+    }
+    return writer_.getGeneratorForAllRows<NumStaticCols>();
+  }
 
-  // Delete the underlying file and reset the sorter. May only be called if no
-  // active `getBlocks()` generator that has not been fully iterated over is
-  // currently active, else the behavior is undefined.
+  // Clear the `IdTable`. This also deletes the contents of the underlying file.
+  // May only be called if no active `getBlocks()` generator that has not been
+  // fully iterated over is currently active, else the behavior is undefined.
   void clear() {
     currentBlock_ =
         IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
@@ -346,20 +358,6 @@ class ExternalIdTableCompressor {
   }
 
  private:
-  // Transition from the input phase, where `push()` may be called, to the
-  // output phase and return a generator that yields the sorted elements. This
-  // function may be called exactly once.
-  auto getBlocks() {
-    pushBlock(std::move(currentBlock_));
-    currentBlock_ =
-        IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
-    currentBlock_.setNumColumns(numColumns_);
-    if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
-    }
-    return writer_.getGeneratorForAllRows<NumStaticCols>();
-  }
-
   void pushBlock(IdTableStatic<NumStaticCols> block) {
     if (compressAndWriteFuture_.valid()) {
       compressAndWriteFuture_.get();
@@ -397,6 +395,7 @@ class ExternalIdTableSorter {
   IdTableStatic<NumStaticCols> currentBlock_;
   // For statistical reasons
   size_t numElementsPushed_ = 0;
+  size_t numBlocksPushed_ = 0;
   // The number of columns of the `IdTable`s to be sorted. Might be different
   // from `NumStaticCols` when dynamic tables (NumStaticCols == 0) are used;
   size_t numColumns_;
@@ -512,8 +511,13 @@ class ExternalIdTableSorter {
   // output phase and return a generator that yields the sorted elements. This
   // function may be called exactly once.
   cppcoro::generator<IdTableStatic<NumStaticCols>> sortedBlocks() {
-    // Optimization for very small inputs, just sort the input.
-    if (!sortAndWriteFuture_.valid()) {
+    // If we have pushed at least one (complete) block, then the last future
+    // from pushing a block is still in flight.
+    AD_CORRECTNESS_CHECK((numBlocksPushed_ == 0) !=
+                         sortAndWriteFuture_.valid());
+    // Optimization for inputs that are smaller than the blocksize, do not use
+    // the external file, but simply sort and return the single block.
+    if (numBlocksPushed_ == 0) {
       AD_CORRECTNESS_CHECK(numElementsPushed_ == currentBlock_.size());
       sortBlockInPlace(currentBlock_);
       co_yield currentBlock_;
@@ -615,6 +619,7 @@ class ExternalIdTableSorter {
     if (block.empty()) {
       return;
     }
+    ++numBlocksPushed_;
     // TODO<joka921> We probably need one thread for sorting and one for writing
     // for the maximal performance. But this requires more work for a general
     // synchronization framework.

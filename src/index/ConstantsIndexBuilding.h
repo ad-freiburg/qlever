@@ -63,11 +63,11 @@ static const std::string TMP_BASENAME_COMPRESSION =
 // unique elements of the vocabulary are identified via hash maps. Typically, 6
 // is a good value. On systems with very few CPUs, a lower value might be
 // beneficial.
-constexpr size_t NUM_PARALLEL_ITEM_MAPS = 12;
+constexpr size_t NUM_PARALLEL_ITEM_MAPS = 6;
 
 // The number of threads that are parsing in parallel, when the parallel Turtle
 // parser is used.
-constexpr size_t NUM_PARALLEL_PARSER_THREADS = 12;
+constexpr size_t NUM_PARALLEL_PARSER_THREADS = 5;
 
 // Increasing the following two constants increases the RAM usage without much
 // benefit to the performance.

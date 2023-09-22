@@ -20,7 +20,7 @@ using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
 using std::string;
 
-using TripleVec = ad_utility::ExternalIdTableCompressor<3>;
+using TripleVec = ad_utility::CompressedExternalIdTable<3>;
 
 /**
  * Class for merging the partial vocabularies. The main function is still in the
