@@ -186,6 +186,8 @@ include_directories(third_party/ctre/include)
 # ABSEIL
 ################################
 set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
+# For CMake 3.8 and up this will be the default in a future version of abseil
+set(ABSL_PROPAGATE_CXX_STD ON)
 add_subdirectory(third_party/abseil-cpp  EXCLUDE_FROM_ALL)
 include_directories(SYSTEM third_party/abseil-cpp/)
 
