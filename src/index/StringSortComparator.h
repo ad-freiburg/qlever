@@ -490,9 +490,11 @@ class TripleComponentComparator {
    * possibly converted to a format that is easier to compare
    *
    * @tparam InnerString either LocaleManager::SortKey or std::string_view.
-   * Since both variants differ greatly in their usage they are commented with
+   * Both variants differ greatly in their usage. Details can be found after the
+   * class definition, together with the explicit aliases `SplitVal` and
+   * `SplitValOwning` for the template instantiations that are actually used.
    * the template instantiations
-   * @tparam LanguageTag, FullString, either `std::string` or
+   * @tparam LanguageTag and FullString, either `std::string` or
    * `std::string_view`. They are used as deterministic tie breaks on the
    * `TOTAL` sort level.
    */
@@ -505,16 +507,16 @@ class TripleComponentComparator {
           transformedVal_(std::move(trans)),
           langtag_(std::move(l)),
           isExternalized_{externalized},
-          fullInput_{fullInputForTotalComparison} {}
+          fullInput_{std::move(fullInputForTotalComparison)} {}
 
     /// The first char of the original value, used to distinguish between
     /// different datatypes
     char firstOriginalChar_ = '\0';
-    InnerString transformedVal_;  /// The original inner value, possibly
-                                  /// transformed by a locale().
-    LanguageTag langtag_;         /// The language tag, possibly empty.
-    bool isExternalized_;         /// Does this word belong to the externalized
-                                  /// vocabulary.
+    InnerString transformedVal_;   /// The original inner value, possibly
+                                   /// transformed by a locale().
+    LanguageTag langtag_;          /// The language tag, possibly empty.
+    bool isExternalized_ = false;  /// Does this word belong to the externalized
+                                   /// vocabulary.
     FullString fullInput_;
   };
 
