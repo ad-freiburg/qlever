@@ -22,26 +22,8 @@ using ::testing::Pointee;
 // Hack to allow ASSERT_*() macros to work with ASYNC_TEST
 #define return co_return
 
-ASYNC_TEST(QueryToSocketDistributor, signalStartWorks) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
-  EXPECT_FALSE(co_await queryToSocketDistributor.signalStartIfNotStarted());
-  EXPECT_TRUE(co_await queryToSocketDistributor.signalStartIfNotStarted());
-  EXPECT_TRUE(co_await queryToSocketDistributor.signalStartIfNotStarted());
-}
-
-// _____________________________________________________________________________
-
-ASYNC_TEST(QueryToSocketDistributor, signalEndThrowsWhenNotStarted) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
-  EXPECT_THROW(co_await queryToSocketDistributor.signalEnd(),
-               ad_utility::Exception);
-}
-
-// _____________________________________________________________________________
-
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateThrowsWhenFinished) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
-  co_await queryToSocketDistributor.signalStartIfNotStarted();
   co_await queryToSocketDistributor.signalEnd();
   EXPECT_THROW(co_await queryToSocketDistributor.addQueryStatusUpdate("Abc"),
                ad_utility::Exception);
@@ -53,7 +35,6 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndRunsCleanup) {
   bool executed = false;
   QueryToSocketDistributor queryToSocketDistributor{ioContext,
                                                     [&]() { executed = true; }};
-  co_await queryToSocketDistributor.signalStartIfNotStarted();
   EXPECT_FALSE(executed);
   co_await queryToSocketDistributor.signalEnd();
   EXPECT_TRUE(executed);
@@ -77,7 +58,6 @@ ASYNC_TEST(QueryToSocketDistributor, destructorRunsCleanup) {
 
 ASYNC_TEST(QueryToSocketDistributor, doubleSignalEndThrowsError) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
-  co_await queryToSocketDistributor.signalStartIfNotStarted();
   co_await queryToSocketDistributor.signalEnd();
   EXPECT_THROW(co_await queryToSocketDistributor.signalEnd(),
                ad_utility::Exception);
@@ -88,7 +68,6 @@ ASYNC_TEST(QueryToSocketDistributor, doubleSignalEndThrowsError) {
 ASYNC_TEST(QueryToSocketDistributor, signalEndWakesUpListeners) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
   bool waiting = false;
-  co_await queryToSocketDistributor.signalStartIfNotStarted();
   auto listener = [&]() -> net::awaitable<void> {
     waiting = true;
     co_await queryToSocketDistributor.waitForNextDataPiece(0);
@@ -107,7 +86,6 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndWakesUpListeners) {
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateWakesUpListeners) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
   bool waiting = false;
-  co_await queryToSocketDistributor.signalStartIfNotStarted();
   auto listener = [&]() -> net::awaitable<void> {
     waiting = true;
     auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
@@ -136,7 +114,6 @@ ASYNC_TEST(QueryToSocketDistributor, listeningBeforeStartWorks) {
   auto broadcaster = [&]() -> net::awaitable<void> {
     // Ensure correct order of execution
     ASSERT_TRUE(waiting);
-    co_await queryToSocketDistributor.signalStartIfNotStarted();
     co_await queryToSocketDistributor.addQueryStatusUpdate("Abc");
   };
   co_await (listener() && broadcaster());
@@ -148,7 +125,6 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateBeforeListenersWorks) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
   bool waiting = false;
   bool doneAdding = false;
-  co_await queryToSocketDistributor.signalStartIfNotStarted();
 
   auto broadcaster = [&]() -> net::awaitable<void> {
     // Ensure correct order of execution
@@ -176,7 +152,6 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndDoesNotPreventConsumptionOfRest) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
   bool waiting = false;
   bool doneAdding = false;
-  co_await queryToSocketDistributor.signalStartIfNotStarted();
 
   auto broadcaster = [&]() -> net::awaitable<void> {
     // Ensure correct order of execution

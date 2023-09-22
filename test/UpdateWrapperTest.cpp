@@ -11,8 +11,9 @@
 #include "util/http/websocket/QueryHub.h"
 #include "util/http/websocket/UpdateWrapper.h"
 
+using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryHub;
-using ad_utility::websocket::QueryId;
+using ad_utility::websocket::QueryRegistry;
 using ad_utility::websocket::UpdateWrapper;
 
 using namespace boost::asio::experimental::awaitable_operators;
@@ -22,13 +23,14 @@ using ::testing::Pointee;
 using ::testing::VariantWith;
 
 ASYNC_TEST(UpdateWrapper, destructorCallsSignalEnd) {
-  QueryId queryId = QueryId::idFromString("1337");
+  QueryRegistry queryRegistry;
+  OwningQueryId queryId = queryRegistry.uniqueId();
   QueryHub queryHub{ioContext};
 
-  auto distributor =
-      co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
+  auto distributor = co_await queryHub.createOrAcquireDistributorForReceiving(
+      queryId.toQueryId());
 
-  co_await UpdateWrapper::create(queryId, queryHub);
+  co_await UpdateWrapper::create(std::move(queryId), queryHub);
 
   net::deadline_timer timer{ioContext, boost::posix_time::seconds(2)};
 
@@ -43,13 +45,15 @@ ASYNC_TEST(UpdateWrapper, destructorCallsSignalEnd) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(UpdateWrapper, callingOperatorBroadcastsPayload) {
-  QueryId queryId = QueryId::idFromString("1337");
+  QueryRegistry queryRegistry;
+  OwningQueryId queryId = queryRegistry.uniqueId();
   QueryHub queryHub{ioContext};
 
-  auto distributor =
-      co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
+  auto distributor = co_await queryHub.createOrAcquireDistributorForReceiving(
+      queryId.toQueryId());
 
-  auto updateWrapper = co_await UpdateWrapper::create(queryId, queryHub);
+  auto updateWrapper =
+      co_await UpdateWrapper::create(std::move(queryId), queryHub);
 
   updateWrapper("Still");
   updateWrapper("Dre");

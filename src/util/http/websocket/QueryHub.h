@@ -14,12 +14,6 @@
 namespace ad_utility::websocket {
 using StrandType = net::strand<net::any_io_executor>;
 
-// Workaround for gcc 11 bug to avoid compiler crash by making return
-// type "dependant" on template parameter:
-// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103868
-template <bool fakeCondition, typename Type>
-using second_t = std::conditional_t<fakeCondition, Type, Type>;
-
 /// Class that provides the functionality to create and/or acquire a
 /// `QueryToSocketDistributor`. All operations are synchronized on an exclusive
 /// strand for each instance. In the common case of this class being used
@@ -34,8 +28,7 @@ class QueryHub {
   absl::flat_hash_map<QueryId, PointerType> socketDistributors_{};
 
   /// Implementation of createOrAcquireDistributor
-  template <bool cond>
-  second_t<cond, net::awaitable<std::shared_ptr<QueryToSocketDistributor>>>
+  net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
       createOrAcquireDistributorInternal(QueryId);
 
  public:
@@ -49,7 +42,7 @@ class QueryHub {
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
       createOrAcquireDistributorForSending(QueryId);
 
-  net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+  net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
       createOrAcquireDistributorForReceiving(QueryId);
 };
 }  // namespace ad_utility::websocket

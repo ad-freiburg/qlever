@@ -19,7 +19,7 @@ class UpdateFetcher {
 
   QueryHub& queryHub_;
   QueryId queryId_;
-  std::shared_ptr<QueryToSocketDistributor> distributor_{nullptr};
+  std::shared_ptr<const QueryToSocketDistributor> distributor_{nullptr};
   // Counter to ensure sequential processing
   size_t nextIndex_ = 0;
 

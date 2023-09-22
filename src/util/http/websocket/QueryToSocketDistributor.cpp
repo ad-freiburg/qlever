@@ -11,7 +11,7 @@
 
 namespace ad_utility::websocket {
 
-net::awaitable<void> QueryToSocketDistributor::waitForUpdate() {
+net::awaitable<void> QueryToSocketDistributor::waitForUpdate() const {
   try {
     co_await infiniteTimer_.async_wait(net::use_awaitable);
     AD_THROW("Infinite timer expired. This should not happen");
@@ -48,7 +48,6 @@ net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
 
 net::awaitable<void> QueryToSocketDistributor::signalEnd() {
   co_await net::dispatch(strand_, net::use_awaitable);
-  AD_CONTRACT_CHECK(started_);
   AD_CONTRACT_CHECK(!finished_);
   finished_ = true;
   wakeUpWaitingListeners();
@@ -59,7 +58,7 @@ net::awaitable<void> QueryToSocketDistributor::signalEnd() {
 // _____________________________________________________________________________
 
 net::awaitable<std::shared_ptr<const std::string>>
-QueryToSocketDistributor::waitForNextDataPiece(size_t index) {
+QueryToSocketDistributor::waitForNextDataPiece(size_t index) const {
   co_await net::dispatch(strand_, net::use_awaitable);
 
   if (index < data_.size()) {
@@ -75,16 +74,5 @@ QueryToSocketDistributor::waitForNextDataPiece(size_t index) {
   } else {
     co_return nullptr;
   }
-}
-
-// _____________________________________________________________________________
-
-net::awaitable<bool> QueryToSocketDistributor::signalStartIfNotStarted() {
-  co_await net::dispatch(strand_, net::use_awaitable);
-  if (!started_) {
-    started_ = true;
-    co_return false;
-  }
-  co_return true;
 }
 }  // namespace ad_utility::websocket

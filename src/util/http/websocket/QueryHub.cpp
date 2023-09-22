@@ -18,19 +18,12 @@ bool equals(const std::weak_ptr<T>& t, const std::weak_ptr<U>& u) noexcept {
 
 // _____________________________________________________________________________
 
-template <bool isProvider>
-second_t<isProvider, net::awaitable<std::shared_ptr<QueryToSocketDistributor>>>
+net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
   co_await net::dispatch(globalStrand_, net::use_awaitable);
   if (socketDistributors_.contains(queryId)) {
     if (auto ptr = socketDistributors_.at(queryId).lock()) {
-      if constexpr (isProvider) {
-        if (!co_await sameExecutor(ptr->signalStartIfNotStarted())) {
-          co_return ptr;
-        }
-      } else {
-        co_return ptr;
-      }
+      co_return ptr;
     }
     // There's a scenario where the object has is about to be removed from the
     // list, but wasn't so far because of concurrency. In this case remove it
@@ -56,9 +49,6 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
       });
   *pointerHolder = distributor;
   socketDistributors_.emplace(queryId, distributor);
-  if constexpr (isProvider) {
-    co_await sameExecutor(distributor->signalStartIfNotStarted());
-  }
   co_return distributor;
 }
 
@@ -66,15 +56,15 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
 
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForSending(QueryId queryId) {
-  return sameExecutor(
-      createOrAcquireDistributorInternal<true>(std::move(queryId)));
+  return sameExecutor(createOrAcquireDistributorInternal(std::move(queryId)));
 }
 
 // _____________________________________________________________________________
 
-net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForReceiving(QueryId queryId) {
-  return sameExecutor(
-      createOrAcquireDistributorInternal<false>(std::move(queryId)));
+  auto result = co_await sameExecutor(
+      createOrAcquireDistributorInternal(std::move(queryId)));
+  co_return result;
 }
 }  // namespace ad_utility::websocket

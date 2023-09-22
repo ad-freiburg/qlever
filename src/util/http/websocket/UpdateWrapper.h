@@ -20,13 +20,23 @@ using unique_cleanup::UniqueCleanup;
 /// and provides a generic operator() interface to call addQueryStatusUpdate()
 /// from the non-asio world.
 class UpdateWrapper {
-  UniqueCleanup<std::shared_ptr<QueryToSocketDistributor>> distributor_;
+  /// Keep the OwningQueryId alive until distributor_->signalEnd() is called
+  struct DistributorWithFixedLifetime {
+    std::shared_ptr<QueryToSocketDistributor> distributor_;
+    OwningQueryId owningQueryId_;
+    
+    DistributorWithFixedLifetime(
+        std::shared_ptr<QueryToSocketDistributor> distributor,
+        OwningQueryId owningQueryId)
+        : distributor_{std::move(distributor)},
+          owningQueryId_{std::move(owningQueryId)} {}
+  };
+  UniqueCleanup<DistributorWithFixedLifetime> distributor_;
   net::any_io_executor executor_;
 
   // This constructor is private because this instance should only ever be
   // created asynchronously. Use the public factory function `create` instead.
-  UpdateWrapper(std::shared_ptr<QueryToSocketDistributor>,
-                net::any_io_executor);
+  UpdateWrapper(DistributorWithFixedLifetime, net::any_io_executor);
 
  public:
   UpdateWrapper(UpdateWrapper&&) noexcept = default;
@@ -35,7 +45,7 @@ class UpdateWrapper {
   /// Asynchronously creates an instance of this class. This is because because
   /// creating a distributor for this class needs to be done in a synchronized
   /// way.
-  static net::awaitable<UpdateWrapper> create(QueryId queryId,
+  static net::awaitable<UpdateWrapper> create(OwningQueryId owningQueryId,
                                               QueryHub& queryHub);
 
   /// Broadcast the string to all listeners of this query asynchronously.

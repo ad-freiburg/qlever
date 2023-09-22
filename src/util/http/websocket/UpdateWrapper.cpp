@@ -6,14 +6,13 @@
 
 namespace ad_utility::websocket {
 
-UpdateWrapper::UpdateWrapper(
-    std::shared_ptr<QueryToSocketDistributor> distributor,
-    net::any_io_executor executor)
+UpdateWrapper::UpdateWrapper(DistributorWithFixedLifetime distributor,
+                             net::any_io_executor executor)
     : distributor_{std::move(distributor),
                    [executor](auto&& distributor) {
                      auto coroutine =
                          [](auto distributor) -> net::awaitable<void> {
-                       co_await distributor->signalEnd();
+                       co_await distributor.distributor_->signalEnd();
                      };
                      net::co_spawn(executor, coroutine(AD_FWD(distributor)),
                                    net::detached);
@@ -22,11 +21,13 @@ UpdateWrapper::UpdateWrapper(
 
 // _____________________________________________________________________________
 
-net::awaitable<UpdateWrapper> UpdateWrapper::create(QueryId queryId,
+net::awaitable<UpdateWrapper> UpdateWrapper::create(OwningQueryId owningQueryId,
                                                     QueryHub& queryHub) {
   co_return UpdateWrapper{
-      co_await queryHub.createOrAcquireDistributorForSending(
-          std::move(queryId)),
+      DistributorWithFixedLifetime{
+          co_await queryHub.createOrAcquireDistributorForSending(
+              owningQueryId.toQueryId()),
+          std::move(owningQueryId)},
       co_await net::this_coro::executor};
 }
 
@@ -39,7 +40,7 @@ void UpdateWrapper::operator()(std::string json) const {
     // it is passed by value
     co_await distributor->addQueryStatusUpdate(std::move(json));
   };
-  net::co_spawn(executor_, lambda(*distributor_, std::move(json)),
+  net::co_spawn(executor_, lambda(distributor_->distributor_, std::move(json)),
                 net::detached);
 }
 }  // namespace ad_utility::websocket

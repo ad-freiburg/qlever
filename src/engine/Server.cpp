@@ -617,9 +617,8 @@ boost::asio::awaitable<void> Server::processQuery(
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
     AD_CORRECTNESS_CHECK(queryHub_ != nullptr);
-    auto owningQueryId = getQueryId(request);
     auto updateWrapper = co_await ad_utility::websocket::UpdateWrapper::create(
-        owningQueryId.toQueryId(), *queryHub_);
+        getQueryId(request), *queryHub_);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query. Start the shared `timeoutTimer` here
     // to also include the query planning.
