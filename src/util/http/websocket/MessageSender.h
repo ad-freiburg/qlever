@@ -20,6 +20,7 @@ using unique_cleanup::UniqueCleanup;
 /// and provides a generic operator() interface to call addQueryStatusUpdate()
 /// from the non-asio world.
 class MessageSender {
+ private:
   /// Keep the OwningQueryId alive until distributor_->signalEnd() is called
   struct DistributorWithFixedLifetime {
     std::shared_ptr<QueryToSocketDistributor> distributor_;

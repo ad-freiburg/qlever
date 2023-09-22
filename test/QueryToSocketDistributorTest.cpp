@@ -43,13 +43,13 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndRunsCleanup) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, destructorRunsCleanup) {
-  bool executed = false;
+  uint32_t counter = 0;
   {
-    QueryToSocketDistributor queryToSocketDistributor{
-        ioContext, [&]() { executed = true; }};
-    EXPECT_FALSE(executed);
+    QueryToSocketDistributor queryToSocketDistributor{ioContext,
+                                                      [&]() { counter++; }};
+    EXPECT_EQ(counter, 0);
   }
-  EXPECT_TRUE(executed);
+  EXPECT_EQ(counter, 1);
   // Make sure this is interpreted as a coroutine
   co_return;
 }
@@ -70,7 +70,8 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndWakesUpListeners) {
   bool waiting = false;
   auto listener = [&]() -> net::awaitable<void> {
     waiting = true;
-    co_await queryToSocketDistributor.waitForNextDataPiece(0);
+    EXPECT_EQ(nullptr,
+              co_await queryToSocketDistributor.waitForNextDataPiece(0));
   };
 
   auto broadcaster = [&]() -> net::awaitable<void> {

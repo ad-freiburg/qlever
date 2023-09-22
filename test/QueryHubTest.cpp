@@ -14,8 +14,10 @@ using ad_utility::websocket::QueryToSocketDistributor;
 ASYNC_TEST(QueryHub, simulateLifecycleWithoutListeners) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
-  std::weak_ptr<QueryToSocketDistributor> observer =
+  auto distributor =
       co_await queryHub.createOrAcquireDistributorForSending(queryId);
+  std::weak_ptr<QueryToSocketDistributor> observer = distributor;
+  distributor.reset();
   EXPECT_TRUE(observer.expired());
 }
 
@@ -32,6 +34,7 @@ ASYNC_TEST(QueryHub, simulateLifecycleWithExclusivelyListeners) {
         co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
     EXPECT_EQ(distributor1, distributor2);
     observer = distributor1;
+    // Shared pointers will be destroyed here
   }
   EXPECT_TRUE(observer.expired());
 }
@@ -53,6 +56,7 @@ ASYNC_TEST(QueryHub, simulateStandardLifecycle) {
     EXPECT_EQ(distributor2, distributor3);
 
     observer = distributor1;
+    // Shared pointers will be destroyed here
   }
   EXPECT_TRUE(observer.expired());
 }

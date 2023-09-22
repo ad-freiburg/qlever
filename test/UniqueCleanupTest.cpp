@@ -2,6 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -9,6 +10,8 @@
 #include "util/UniqueCleanup.h"
 
 using ad_utility::unique_cleanup::UniqueCleanup;
+using ::testing::Pointee;
+using namespace std::string_literals;
 
 TEST(UniqueCleanup, CorrectCallbackOnDestruction) {
   bool run = false;
