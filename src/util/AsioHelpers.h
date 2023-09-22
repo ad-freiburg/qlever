@@ -15,6 +15,8 @@ namespace net = boost::asio;
 
 /// Helper function that ensures that co_await resumes on the same
 /// executor it started with.
+/// IMPORTANT: If the inner awaitable throws, no guarantees are given. Make
+/// sure to keep that in mind when handling errors inside coroutines!
 template <typename T>
 inline net::awaitable<T> sameExecutor(net::awaitable<T> awaitable) {
   auto initialExecutor = co_await net::this_coro::executor;
