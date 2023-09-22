@@ -6,6 +6,7 @@
 
 #include <ranges>
 
+#include "absl/strings/str_cat.h"
 #include "parser/RdfEscaping.h"
 #include "util/http/MediaTypes.h"
 
@@ -391,6 +392,30 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
 using parsedQuery::SelectClause;
 
 // _____________________________________________________________________________
+ad_utility::streams::stream_generator
+ExportQueryExecutionTrees::selectQueryResultToStream(
+    const QueryExecutionTree& qet,
+    const parsedQuery::SelectClause& selectClause,
+    LimitOffsetClause limitAndOffset, ad_utility::MediaType format) {
+  switch (format) {
+    using enum ad_utility::MediaType;
+    case octetStream:
+      return selectQueryResultToCsvTsvOrBinary<octetStream>(qet, selectClause,
+                                                            limitAndOffset);
+    case csv:
+      return selectQueryResultToCsvTsvOrBinary<csv>(qet, selectClause,
+                                                    limitAndOffset);
+    case tsv:
+      return selectQueryResultToCsvTsvOrBinary<tsv>(qet, selectClause,
+                                                    limitAndOffset);
+    case sparqlXml:
+      return selectQueryResultToXML(qet, selectClause, limitAndOffset);
+    default:
+      AD_FAIL();
+  }
+}
+
+// _____________________________________________________________________________
 template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
 ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
@@ -398,7 +423,7 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset) {
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
-                format == MediaType::tsv);
+                format == MediaType::tsv || format == MediaType::sparqlXml);
 
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
@@ -461,6 +486,122 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
     }
   }
   LOG(DEBUG) << "Done creating readable result.\n";
+}
+
+// TODO<joka921> Comment or register in the header file.
+static std::string idToXMLBinding(std::string_view var, Id id,
+                                  const auto& index, const auto& localVocab) {
+  // Take a string from the vocabulary, deduce the type and
+  // return a json dict that describes the binding
+  using namespace std::string_view_literals;
+  using namespace std::string_literals;
+  const auto& optionalValue =
+      ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
+  if (!optionalValue.has_value()) {
+    return ""s;
+  }
+  const auto& [stringValue, xsdType] = optionalValue.value();
+  std::string result = absl::StrCat("\n  <binding name=\"", var, "\">");
+  auto append = [&](const auto&... values) {
+    absl::StrAppend(&result, values...);
+  };
+
+  auto strToBinding = [&result, &append](std::string_view entitystr) {
+    // The string is an IRI or literal.
+    if (entitystr.starts_with('<')) {
+      // Strip the <> surrounding the iri.
+      absl::StrAppend(&result, "<uri>"sv,
+                      entitystr.substr(1, entitystr.size() - 2), "</uri>");
+    } else if (entitystr.starts_with("_:")) {
+      absl::StrAppend(&result, "<bnode>"sv, entitystr.substr(2), "</bnode>");
+    } else {
+      size_t quote_pos = entitystr.rfind('"');
+      if (quote_pos == std::string::npos) {
+        absl::StrAppend(&result, "<literal>"sv, entitystr.substr(2),
+                        "</literal>");
+      } else {
+        std::string_view innerValue = entitystr.substr(1, quote_pos - 1);
+        // Look for a language tag or type.
+        if (quote_pos < entitystr.size() - 1 &&
+            entitystr[quote_pos + 1] == '@') {
+          std::string_view langtag = entitystr.substr(quote_pos + 2);
+          append("<literal xml:lang=\""sv, langtag, "\">"sv, innerValue,
+                 "</literal>");
+        } else if (quote_pos < entitystr.size() - 2 &&
+                   entitystr[quote_pos + 1] == '^') {
+          AD_CORRECTNESS_CHECK(entitystr[quote_pos + 2] == '^');
+          std::string_view datatype{entitystr};
+          // remove the < angledBrackets> around the datatype IRI
+          AD_CONTRACT_CHECK(datatype.size() >= quote_pos + 5);
+          datatype.remove_prefix(quote_pos + 4);
+          datatype.remove_suffix(1);
+          append("<literal datatype=\""sv, datatype, "\">"sv, innerValue,
+                 "</literal>");
+        } else {
+          // A plain literal that contains neither a language tag nor a datatype
+          append("<literal>"sv, innerValue, "</literal>");
+        }
+      }
+    }
+  };
+  if (!xsdType) {
+    // No xsdType, this means that `stringValue` is a plain string literal
+    // or entity.
+    strToBinding(stringValue);
+  } else {
+    append("<literal datatype=\""sv, xsdType, "\">"sv, stringValue,
+           "</literal>");
+  }
+  append("</binding>");
+  return result;
+}
+
+// _____________________________________________________________________________
+ad_utility::streams::stream_generator
+ExportQueryExecutionTrees::selectQueryResultToXML(
+    const QueryExecutionTree& qet,
+    const parsedQuery::SelectClause& selectClause,
+    LimitOffsetClause limitAndOffset) {
+  using namespace std::string_view_literals;
+  co_yield "<?xml version=\"1.0\"?>\n"
+      "<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">";
+
+  co_yield "\n<head>";
+  std::vector<std::string> variables =
+      selectClause.getSelectedVariablesAsStrings();
+  // This call triggers the possibly expensive computation of the query result
+  // unless the result is already cached.
+  shared_ptr<const ResultTable> resultTable = qet.getResult();
+
+  // In the XML format, the variables don't include the question mark.
+  auto varsWithoutQuestionMark = std::views::transform(
+      variables, [](std::string_view var) { return var.substr(1); });
+  for (std::string_view var : varsWithoutQuestionMark) {
+    co_yield absl::StrCat("\n<variable name=\""sv, var, "\"/>"sv);
+  }
+  co_yield "\n</head>";
+
+  co_yield "\n<results>";
+
+  resultTable->logResultSize();
+  const auto& idTable = resultTable->idTable();
+  auto selectedColumnIndices =
+      qet.selectedVariablesToColumnIndices(selectClause, false);
+  // TODO<joka921> we could prefilter for the nonexisting variables.
+  for (size_t i : getRowIndices(limitAndOffset, idTable)) {
+    co_yield "\n  <result>";
+    for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+      if (selectedColumnIndices[j].has_value()) {
+        const auto& val = selectedColumnIndices[j].value();
+        Id id = idTable(i, val._columnIndex);
+        co_yield idToXMLBinding(val._variable, id, qet.getQec()->getIndex(),
+                                resultTable->localVocab());
+      }
+    }
+    co_yield "\n  </result>";
+  }
+  co_yield "\n</results>";
+  co_yield "\n</sparql>";
 }
 
 // _____________________________________________________________________________
@@ -553,6 +694,12 @@ ad_utility::streams::stream_generator
 ExportQueryExecutionTrees::computeResultAsStream(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::MediaType mediaType) {
+  // TODO<joka921> Unify the interface by also implement CONSTRUCT export via
+  // XML.
+  if (parsedQuery.hasSelectClause()) {
+    return selectQueryResultToStream(qet, parsedQuery.selectClause(),
+                                     parsedQuery._limitOffset, mediaType);
+  }
   auto compute = [&]<MediaType format> {
     auto limitAndOffset = parsedQuery._limitOffset;
     return parsedQuery.hasSelectClause()

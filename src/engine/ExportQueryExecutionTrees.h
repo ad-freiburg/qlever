@@ -88,6 +88,12 @@ class ExportQueryExecutionTrees {
   static std::optional<std::pair<std::string, const char*>>
   idToStringAndTypeForEncodedValue(Id id);
 
+  // TODO<joka921> Comment and where to move it.
+  static ad_utility::streams::stream_generator selectQueryResultToXML(
+      const QueryExecutionTree& qet,
+      const parsedQuery::SelectClause& selectClause,
+      LimitOffsetClause limitAndOffset);
+
  private:
   // TODO<joka921> The following functions are all internally called by the
   // two public functions above. All the code has been inside QLever for a long
@@ -171,6 +177,12 @@ class ExportQueryExecutionTrees {
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset,
       std::shared_ptr<const ResultTable> resultTable);
+
+  // ___________________________________________________________________________
+  static ad_utility::streams::stream_generator selectQueryResultToStream(
+      const QueryExecutionTree& qet,
+      const parsedQuery::SelectClause& selectClause,
+      LimitOffsetClause limitAndOffset, ad_utility::MediaType format);
 
   // _____________________________________________________________________________
   template <MediaType format>
