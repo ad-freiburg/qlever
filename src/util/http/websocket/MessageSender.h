@@ -2,8 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef QLEVER_UPDATEWRAPPER_H
-#define QLEVER_UPDATEWRAPPER_H
+#ifndef QLEVER_MESSAGESENDER_H
+#define QLEVER_MESSAGESENDER_H
 
 #include <boost/asio/co_spawn.hpp>
 
@@ -19,12 +19,12 @@ using unique_cleanup::UniqueCleanup;
 /// `QueryToSocketDistributor` of the passed `QueryHub` reference
 /// and provides a generic operator() interface to call addQueryStatusUpdate()
 /// from the non-asio world.
-class UpdateWrapper {
+class MessageSender {
   /// Keep the OwningQueryId alive until distributor_->signalEnd() is called
   struct DistributorWithFixedLifetime {
     std::shared_ptr<QueryToSocketDistributor> distributor_;
     OwningQueryId owningQueryId_;
-    
+
     DistributorWithFixedLifetime(
         std::shared_ptr<QueryToSocketDistributor> distributor,
         OwningQueryId owningQueryId)
@@ -36,16 +36,16 @@ class UpdateWrapper {
 
   // This constructor is private because this instance should only ever be
   // created asynchronously. Use the public factory function `create` instead.
-  UpdateWrapper(DistributorWithFixedLifetime, net::any_io_executor);
+  MessageSender(DistributorWithFixedLifetime, net::any_io_executor);
 
  public:
-  UpdateWrapper(UpdateWrapper&&) noexcept = default;
-  UpdateWrapper& operator=(UpdateWrapper&&) noexcept = default;
+  MessageSender(MessageSender&&) noexcept = default;
+  MessageSender& operator=(MessageSender&&) noexcept = default;
 
   /// Asynchronously creates an instance of this class. This is because because
   /// creating a distributor for this class needs to be done in a synchronized
   /// way.
-  static net::awaitable<UpdateWrapper> create(OwningQueryId owningQueryId,
+  static net::awaitable<MessageSender> create(OwningQueryId owningQueryId,
                                               QueryHub& queryHub);
 
   /// Broadcast the string to all listeners of this query asynchronously.
@@ -54,4 +54,4 @@ class UpdateWrapper {
 
 }  // namespace ad_utility::websocket
 
-#endif  // QLEVER_UPDATEWRAPPER_H
+#endif  // QLEVER_MESSAGESENDER_H

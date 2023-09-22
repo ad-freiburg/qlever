@@ -366,4 +366,4 @@ addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
 
 addLinkAndDiscoverTest(UpdateFetcherTest http)
 
-addLinkAndDiscoverTest(UpdateWrapperTest http)
+addLinkAndDiscoverTest(MessageSenderTest http)

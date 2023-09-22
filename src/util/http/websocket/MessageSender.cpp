@@ -2,11 +2,11 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "util/http/websocket/UpdateWrapper.h"
+#include "util/http/websocket/MessageSender.h"
 
 namespace ad_utility::websocket {
 
-UpdateWrapper::UpdateWrapper(DistributorWithFixedLifetime distributor,
+MessageSender::MessageSender(DistributorWithFixedLifetime distributor,
                              net::any_io_executor executor)
     : distributor_{std::move(distributor),
                    [executor](auto&& distributor) {
@@ -21,9 +21,9 @@ UpdateWrapper::UpdateWrapper(DistributorWithFixedLifetime distributor,
 
 // _____________________________________________________________________________
 
-net::awaitable<UpdateWrapper> UpdateWrapper::create(OwningQueryId owningQueryId,
+net::awaitable<MessageSender> MessageSender::create(OwningQueryId owningQueryId,
                                                     QueryHub& queryHub) {
-  co_return UpdateWrapper{
+  co_return MessageSender{
       DistributorWithFixedLifetime{
           co_await queryHub.createOrAcquireDistributorForSending(
               owningQueryId.toQueryId()),
@@ -33,7 +33,7 @@ net::awaitable<UpdateWrapper> UpdateWrapper::create(OwningQueryId owningQueryId,
 
 // _____________________________________________________________________________
 
-void UpdateWrapper::operator()(std::string json) const {
+void MessageSender::operator()(std::string json) const {
   auto lambda = [](std::shared_ptr<QueryToSocketDistributor> distributor,
                    std::string json) mutable -> net::awaitable<void> {
     // It is important `distributor` is kept alive during this call, thus

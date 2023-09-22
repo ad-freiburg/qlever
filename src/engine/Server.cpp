@@ -15,7 +15,7 @@
 #include "engine/QueryPlanner.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
-#include "util/http/websocket/UpdateWrapper.h"
+#include "util/http/websocket/MessageSender.h"
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
@@ -617,7 +617,7 @@ boost::asio::awaitable<void> Server::processQuery(
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
     AD_CORRECTNESS_CHECK(queryHub_ != nullptr);
-    auto updateWrapper = co_await ad_utility::websocket::UpdateWrapper::create(
+    auto updateWrapper = co_await ad_utility::websocket::MessageSender::create(
         getQueryId(request), *queryHub_);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query. Start the shared `timeoutTimer` here

@@ -8,13 +8,13 @@
 #include <boost/asio/experimental/awaitable_operators.hpp>
 
 #include "util/AsyncTestHelpers.h"
+#include "util/http/websocket/MessageSender.h"
 #include "util/http/websocket/QueryHub.h"
-#include "util/http/websocket/UpdateWrapper.h"
 
+using ad_utility::websocket::MessageSender;
 using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryHub;
 using ad_utility::websocket::QueryRegistry;
-using ad_utility::websocket::UpdateWrapper;
 
 using namespace boost::asio::experimental::awaitable_operators;
 using namespace std::string_literals;
@@ -22,7 +22,7 @@ using namespace std::string_literals;
 using ::testing::Pointee;
 using ::testing::VariantWith;
 
-ASYNC_TEST(UpdateWrapper, destructorCallsSignalEnd) {
+ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
   QueryRegistry queryRegistry;
   OwningQueryId queryId = queryRegistry.uniqueId();
   QueryHub queryHub{ioContext};
@@ -30,7 +30,7 @@ ASYNC_TEST(UpdateWrapper, destructorCallsSignalEnd) {
   auto distributor = co_await queryHub.createOrAcquireDistributorForReceiving(
       queryId.toQueryId());
 
-  co_await UpdateWrapper::create(std::move(queryId), queryHub);
+  co_await MessageSender::create(std::move(queryId), queryHub);
 
   net::deadline_timer timer{ioContext, boost::posix_time::seconds(2)};
 
@@ -44,7 +44,7 @@ ASYNC_TEST(UpdateWrapper, destructorCallsSignalEnd) {
 
 // _____________________________________________________________________________
 
-ASYNC_TEST(UpdateWrapper, callingOperatorBroadcastsPayload) {
+ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
   QueryRegistry queryRegistry;
   OwningQueryId queryId = queryRegistry.uniqueId();
   QueryHub queryHub{ioContext};
@@ -53,7 +53,7 @@ ASYNC_TEST(UpdateWrapper, callingOperatorBroadcastsPayload) {
       queryId.toQueryId());
 
   auto updateWrapper =
-      co_await UpdateWrapper::create(std::move(queryId), queryHub);
+      co_await MessageSender::create(std::move(queryId), queryHub);
 
   updateWrapper("Still");
   updateWrapper("Dre");
