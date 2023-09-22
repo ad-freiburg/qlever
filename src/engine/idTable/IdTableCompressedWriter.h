@@ -512,7 +512,8 @@ class ExternalIdTableSorter {
   // function may be called exactly once.
   cppcoro::generator<IdTableStatic<NumStaticCols>> sortedBlocks() {
     // If we have pushed at least one (complete) block, then the last future
-    // from pushing a block is still in flight.
+    // from pushing a block is still in flight. If we have never pushed a block,
+    // then also the future cannot be valid.
     AD_CORRECTNESS_CHECK((numBlocksPushed_ == 0) !=
                          sortAndWriteFuture_.valid());
     // Optimization for inputs that are smaller than the blocksize, do not use
