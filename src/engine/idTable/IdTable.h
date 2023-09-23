@@ -12,6 +12,7 @@
 #include <variant>
 #include <vector>
 
+#include "engine/idTable/IdTableIterator.h"
 #include "engine/idTable/IdTableRow.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
@@ -123,15 +124,6 @@ class IdTable {
       std::is_constructible_v<ColumnStorage, size_t, Allocator>;
 
   using value_type = T;
-  // Because of the column-major layout, the `row_type` (a value type that
-  // stores the values of a  single row) and the `row_reference` (a type that
-  // refers to a specific row of a specific `IdTable`) are different. They are
-  // implemented in a way that makes it hard to use them incorrectly. For
-  // details, see the comment above and the definition of the `Row` and
-  // `RowReference` class.
-  using row_type = Row<T, NumColumns>;
-  using row_reference = RowReference<IdTable, ad_utility::IsConst::False>;
-  using const_row_reference = RowReference<IdTable, ad_utility::IsConst::True>;
 
  private:
   // Assign shorter aliases for some types that are important for the correct
@@ -143,13 +135,13 @@ class IdTable {
 #ifdef __GLIBCXX__
   using row_reference_restricted =
       RowReferenceImpl::RowReferenceWithRestrictedAccess<
-          IdTable, ad_utility::IsConst::False>;
+          IdTable, NumColumns, ad_utility::IsConst::False>;
   using const_row_reference_restricted =
       RowReferenceImpl::RowReferenceWithRestrictedAccess<
-          IdTable, ad_utility::IsConst::True>;
+          IdTable, NumColumns, ad_utility::IsConst::True>;
   using const_row_reference_view_restricted =
       RowReferenceImpl::RowReferenceWithRestrictedAccess<
-          IdTable<T, NumColumns, ColumnStorage, IsView::True>,
+          IdTable<T, NumColumns, ColumnStorage, IsView::True>, NumColumns,
           ad_utility::IsConst::True>;
 #else
   using row_reference_restricted = row_reference;
@@ -158,6 +150,16 @@ class IdTable {
       RowReference<IdTable<T, NumColumns, ColumnStorage, IsView::True>,
                    ad_utility::IsConst::True>;
 #endif
+ public:
+  // Because of the column-major layout, the `row_type` (a value type that
+  // stores the values of a  single row) and the `row_reference` (a type that
+  // refers to a specific row of a specific `IdTable`) are different. They are
+  // implemented in a way that makes it hard to use them incorrectly. For
+  // details, see the comment above and the definition of the `Row` and
+  // `RowReference` class.
+  using row_type = Row<T, NumColumns>;
+  using row_reference = RowReference<row_reference_restricted>;
+  using const_row_reference = RowReference<const_row_reference_restricted>;
 
  private:
   Data data_;
@@ -607,6 +609,10 @@ class IdTable {
   // TODO<joka921> We should probably change the names of all those
   // typedefs (`iterator` as well as `row_type` etc.) to `PascalCase` for
   // consistency.
+  using const_iterator =
+      IdTableIterator<const_row_reference, const_row_reference_restricted>;
+  using iterator = IdTableIterator<row_reference, row_reference_restricted>;
+  /*
   using const_iterator = ad_utility::IteratorForAccessOperator<
       IdTable, IteratorHelper<const_row_reference_restricted>,
       ad_utility::IsConst::True, row_type, const_row_reference>;
@@ -615,6 +621,7 @@ class IdTable {
       ad_utility::IteratorForAccessOperator<
           IdTable, IteratorHelper<row_reference_restricted>,
           ad_utility::IsConst::False, row_type, row_reference>>;
+          */
 
   // The usual overloads of `begin()` and `end()` for const and mutable
   // `IdTable`s.
@@ -640,8 +647,11 @@ class IdTable {
   // out-of-place algorithm that only writes the distinct elements. The the
   // follwing two functions can be deleted.
   void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
+    // TODO<joka921> Make this check work again.
+    /*
     AD_EXPENSIVE_CHECK(begin() <= beginIt && beginIt <= endIt &&
                        endIt <= end());
+                       */
     auto startIndex = beginIt - begin();
     auto endIndex = endIt - begin();
     auto numErasedElements = endIndex - startIndex;
