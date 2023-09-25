@@ -269,7 +269,7 @@ class ConfigManager {
   template <typename... ValidatorParameterTypes>
   void addValidator(
       Validator<ValidatorParameterTypes...> auto validatorFunction,
-      std::string_view errorMessage,
+      std::string errorMessage,
       ConstConfigOptionProxy<
           ValidatorParameterTypes>... configOptionsToBeChecked)
       requires(sizeof...(configOptionsToBeChecked) > 0) {
@@ -279,7 +279,7 @@ class ConfigManager {
           return opt.getConfigOption().template getValue<std::decay_t<T>>();
         },
         transformValidatorIntoExceptionValidator<ValidatorParameterTypes...>(
-            validatorFunction, errorMessage),
+            validatorFunction, std::move(errorMessage)),
         configOptionsToBeChecked...);
   }
 
@@ -328,7 +328,7 @@ class ConfigManager {
   */
   template <typename ValidatorT>
   void addOptionValidator(
-      ValidatorT validatorFunction, std::string_view errorMessage,
+      ValidatorT validatorFunction, std::string errorMessage,
       isInstantiation<ConstConfigOptionProxy> auto... configOptionsToBeChecked)
       requires(
           sizeof...(configOptionsToBeChecked) > 0 &&
@@ -341,7 +341,7 @@ class ConfigManager {
         },
         transformValidatorIntoExceptionValidator<
             decltype(configOptionsToBeChecked.getConfigOption())...>(
-            validatorFunction, errorMessage),
+            validatorFunction, std::move(errorMessage)),
         configOptionsToBeChecked...);
   }
 
@@ -506,9 +506,9 @@ class ConfigManager {
   template <typename... ValidatorParameterTypes>
   auto transformValidatorIntoExceptionValidator(
       Validator<ValidatorParameterTypes...> auto validatorFunction,
-      std::string_view errorMessage) {
+      std::string errorMessage) {
     // The whole 'transformation' is simply a wrapper.
-    return [validatorFunction, errorMessage = std::string(errorMessage)](
+    return [validatorFunction, errorMessage = std::move(errorMessage)](
                const ValidatorParameterTypes&... args)
                -> std::optional<ErrorMessage> {
       if (std::invoke(validatorFunction, args...)) {
