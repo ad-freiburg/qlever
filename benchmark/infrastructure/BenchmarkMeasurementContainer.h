@@ -35,8 +35,8 @@ template <std::invocable Function>
 static float measureTimeOfFunction(
     const Function& functionToMeasure,
     std::string_view measurementSubjectIdentifier) {
-  LOG(INFO) << "Running measurement \"" << measurementSubjectIdentifier << "\"."
-            << std::endl;
+  LOG(INFO) << "Running measurement \"" << measurementSubjectIdentifier
+            << "\" ..." << std::endl;
 
   // Measuring the time.
   ad_utility::timer::Timer benchmarkTimer(ad_utility::timer::Timer::Started);
@@ -47,8 +47,7 @@ static float measureTimeOfFunction(
   // precision.
   const auto measuredTime = static_cast<float>(
       ad_utility::timer::Timer::toSeconds(benchmarkTimer.value()));
-  LOG(INFO) << "Finished measurement \"" << measurementSubjectIdentifier
-            << "\" in " << measuredTime << " seconds." << std::endl;
+  LOG(INFO) << "Done in " << measuredTime << " seconds." << std::endl;
 
   return measuredTime;
 }
