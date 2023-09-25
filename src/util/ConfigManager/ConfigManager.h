@@ -56,12 +56,6 @@ struct ErrorMessage {
   // Constructor.
   explicit ErrorMessage(std::string message) : message_{std::move(message)} {}
 
-  // Default copy and move semantics.
-  ErrorMessage(const ErrorMessage&) = default;
-  ErrorMessage(ErrorMessage&&) = default;
-  ErrorMessage& operator=(const ErrorMessage&) = default;
-  ErrorMessage& operator=(ErrorMessage&&) = default;
-
   // Getter for the message.
   const std::string& getMessage() const;
 };
