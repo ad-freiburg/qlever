@@ -22,22 +22,25 @@ using unique_cleanup::UniqueCleanup;
 class MessageSender {
  private:
   /// Keep the OwningQueryId alive until distributor_->signalEnd() is called
-  struct DistributorWithFixedLifetime {
+  /// (see the constructor of `MessageSender` for details).
+  struct DistributorAndOwningQueryId {
     std::shared_ptr<QueryToSocketDistributor> distributor_;
     OwningQueryId owningQueryId_;
 
-    DistributorWithFixedLifetime(
+    // There seems to be a bug with gcc < 13 where aggregate-initializing
+    // this struct in combination with coroutines leads to segfaults
+    DistributorAndOwningQueryId(
         std::shared_ptr<QueryToSocketDistributor> distributor,
         OwningQueryId owningQueryId)
         : distributor_{std::move(distributor)},
           owningQueryId_{std::move(owningQueryId)} {}
   };
-  UniqueCleanup<DistributorWithFixedLifetime> distributor_;
+  UniqueCleanup<DistributorAndOwningQueryId> distributor_;
   net::any_io_executor executor_;
 
   // This constructor is private because this instance should only ever be
   // created asynchronously. Use the public factory function `create` instead.
-  MessageSender(DistributorWithFixedLifetime, net::any_io_executor);
+  MessageSender(DistributorAndOwningQueryId, net::any_io_executor);
 
  public:
   MessageSender(MessageSender&&) noexcept = default;

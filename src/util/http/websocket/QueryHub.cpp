@@ -22,14 +22,10 @@ net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
   co_await net::dispatch(globalStrand_, net::use_awaitable);
   if (socketDistributors_.contains(queryId)) {
-    if (auto ptr = socketDistributors_.at(queryId).lock()) {
-      co_return ptr;
-    }
-    // There's a scenario where the object has is about to be removed from the
-    // list, but wasn't so far because of concurrency. In this case remove it
-    // here and proceed to build a new instance. This is safe because the id is
-    // checked for "equality" before removal.
-    socketDistributors_.erase(queryId);
+    auto ptr = socketDistributors_.at(queryId).lock();
+    // Destructor must block until distributor is unregistered
+    AD_CORRECTNESS_CHECK(ptr);
+    co_return ptr;
   }
 
   auto pointerHolder =
@@ -45,7 +41,13 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
   };
   auto distributor = std::make_shared<QueryToSocketDistributor>(
       ioContext_, [this, cleanupAction = std::move(cleanupAction)]() mutable {
-        net::dispatch(globalStrand_, std::move(cleanupAction));
+        auto future =
+            net::dispatch(globalStrand_,
+                          std::packaged_task<void()>(std::move(cleanupAction)));
+        // Block until cleanup action is executed on different strand.
+        // This is ugly because it might block a worker thread that is supposed
+        // to handle other requests, but destructors can't be coroutines!
+        future.wait();
       });
   *pointerHolder = distributor;
   socketDistributors_.emplace(queryId, distributor);

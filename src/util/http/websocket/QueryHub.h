@@ -42,6 +42,8 @@ class QueryHub {
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
       createOrAcquireDistributorForSending(QueryId);
 
+  /// Similar to `createOrAcquireDistributorForSending` but returns a const
+  /// `QueryToSocketDistributor` that can only used for receiving instead.
   net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
       createOrAcquireDistributorForReceiving(QueryId);
 };

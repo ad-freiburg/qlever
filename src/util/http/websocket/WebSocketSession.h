@@ -28,7 +28,7 @@ class WebSocketSession {
   /// future version of Qlever.
   net::awaitable<void> handleClientCommands();
 
-  /// Wait for updates of the given query and sends them to the client when they
+  /// Wait for updates of the given query and send them to the client when they
   /// occur in a loop.
   net::awaitable<void> waitForServerEvents();
 

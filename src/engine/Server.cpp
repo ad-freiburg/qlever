@@ -617,7 +617,7 @@ boost::asio::awaitable<void> Server::processQuery(
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
     AD_CORRECTNESS_CHECK(queryHub_ != nullptr);
-    auto updateWrapper = co_await ad_utility::websocket::MessageSender::create(
+    auto messageSender = co_await ad_utility::websocket::MessageSender::create(
         getQueryId(request), *queryHub_);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query. Start the shared `timeoutTimer` here
@@ -629,7 +629,7 @@ boost::asio::awaitable<void> Server::processQuery(
     // certain media type is not supported.
     QueryExecutionContext qec(index_, &cache_, allocator_,
                               sortPerformanceEstimator_,
-                              std::ref(updateWrapper), pinSubtrees, pinResult);
+                              std::ref(messageSender), pinSubtrees, pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(enablePatternTrick_);
     queryExecutionTree = qp.createExecutionTree(pq);

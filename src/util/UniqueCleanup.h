@@ -49,7 +49,12 @@ class UniqueCleanup {
 
   /// Runs the cleanup call preemptively by moving out of this instance and
   /// immediately destructing the new instance
-  void invokeManuallyAndCancel() { auto self = std::move(*this); }
+  void invokeManuallyAndCancel() {
+    if (active_) {
+      std::invoke(function_, std::move(value_));
+      active_ = false;
+    }
+  }
 
   ~UniqueCleanup() {
     if (active_) {

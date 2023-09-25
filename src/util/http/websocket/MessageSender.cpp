@@ -6,12 +6,17 @@
 
 namespace ad_utility::websocket {
 
-MessageSender::MessageSender(DistributorWithFixedLifetime distributor,
+MessageSender::MessageSender(DistributorAndOwningQueryId distributor,
                              net::any_io_executor executor)
     : distributor_{std::move(distributor),
                    [executor](auto&& distributor) {
                      auto coroutine =
                          [](auto distributor) -> net::awaitable<void> {
+                       // signalEnd() removes the distributor from the QueryHub.
+                       // When the coroutine is destroyed afterwards the query
+                       // id is unregistered from the registry! This is the
+                       // reason why the OwningQueryId is part of the struct
+                       // but never actually accessed.
                        co_await distributor.distributor_->signalEnd();
                      };
                      net::co_spawn(executor, coroutine(AD_FWD(distributor)),
@@ -24,7 +29,7 @@ MessageSender::MessageSender(DistributorWithFixedLifetime distributor,
 net::awaitable<MessageSender> MessageSender::create(OwningQueryId owningQueryId,
                                                     QueryHub& queryHub) {
   co_return MessageSender{
-      DistributorWithFixedLifetime{
+      DistributorAndOwningQueryId{
           co_await queryHub.createOrAcquireDistributorForSending(
               owningQueryId.toQueryId()),
           std::move(owningQueryId)},
