@@ -630,7 +630,9 @@ class CompressedExternalIdTableSorter
 
       size_t blockSizeForOutput =
           blockSizeOutputMemory.getBytes() / (sizeof(Id) * this->numColumns_);
-      if (blockSizeForOutput <= 100) {
+      // If blocks are smaller than this, the performance will probably be poor
+      // because of the coroutine and vector resetting overhead.
+      if (blockSizeForOutput <= 10'000) {
         throwInsufficientMemory();
       }
       return blockSizeForOutput;

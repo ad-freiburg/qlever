@@ -20,8 +20,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # We need the -fexperimental-library flag to have `std::views::join` available in libc++16.
-        warnings: [  "-Wall -Wextra -O1 -fexperimental-library" ]
         # Debugging the Stxxl build
         build-type: [Release]
     runs-on: macos-12
@@ -41,7 +39,7 @@ jobs:
 
     - name: Install dependencies
       run:  |
-        brew install llvm@16
+        brew install llvm@17
         brew install conan@2
         echo 'export PATH="/usr/local/opt/llvm/bin:$PATH"' >> ~/.bash_profile
         echo PATH="/usr/local/opt/llvm/bin:$PATH" >> $GITHUB_ENV 
@@ -52,7 +50,7 @@ jobs:
     - name: Cache for conan
       uses: actions/cache@v3
       env:
-        cache-name: cache-conan-modules
+        cache-name: cache-conan-modules-clang-17
       with:
         path: ~/.conan2
         key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt') }}
@@ -61,11 +59,11 @@ jobs:
     - name: Install and run conan
       working-directory: ${{github.workspace}}/build
       run: >
-        conan install .. -pr:b=../conanprofiles/clang-16-macos -pr:h=../conanprofiles/clang-16-macos -of=. --build=missing;
+        conan install .. -pr:b=../conanprofiles/clang-17-macos -pr:h=../conanprofiles/clang-17-macos -of=. --build=missing;
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DCMAKE_CXX_FLAGS="${{matrix.warnings}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DCMAKE_CXX_COMPILER=clang++
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DCMAKE_CXX_COMPILER=clang++
 
     - name: Build
         # Build your program with the given configuration
