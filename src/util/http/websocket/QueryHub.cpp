@@ -44,10 +44,20 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
         auto future =
             net::dispatch(globalStrand_,
                           std::packaged_task<void()>(std::move(cleanupAction)));
-        // Block until cleanup action is executed on different strand.
-        // This is ugly because it might block a worker thread that is supposed
-        // to handle other requests, but destructors can't be coroutines!
-        future.wait();
+        // If we blocked until the cleanup action is executed on different
+        // strand, this could theoretically lead to deadlocks when globalStrand_
+        // is on a different execution context. This is currently not the case,
+        // but it might be in the future, resulting in deadlocks at distance
+        // which is bad. Unfortunately destructors can't be coroutines, which
+        // would just allow us to co_await execution without issues. To prevent
+        // deadlocks, we wait at most 1 second (arbitrarily chosen interval)
+        // for the cleanup to complete, otherwise we throw an exception.
+        auto status = future.wait_for(std::chrono::seconds(1));
+        if (status != std::future_status::ready) {
+          AD_THROW(
+              "Cleanup took longer than 1s to execute, avoiding deadlock"
+              "by throwing an exception instead!");
+        }
       });
   *pointerHolder = distributor;
   socketDistributors_.emplace(queryId, distributor);
