@@ -281,7 +281,6 @@ class CompressedExternalIdTableBase {
   std::future<void> compressAndWriteFuture_;
 
  public:
-  // TODO<joka921> Make stuff private.
   explicit CompressedExternalIdTableBase(
       std::string filename, size_t numCols, size_t memoryInBytes,
       ad_utility::AllocatorWithLimit<Id> allocator,
@@ -358,7 +357,7 @@ class CompressedExternalIdTableBase {
   }
 
   // If there is less than one complete block (meaning that the number of calls
-  // to `push` was `< blocksize_`, apply the transformation to `currentBlock_`
+  // to `push` was `< blocksize_`), apply the transformation to `currentBlock_`
   // and return `false`. Else, push the `currentBlock_` via `pushBlock_`, block
   // until the pushing is actually finished, and return `true`. Using this
   // function allows for an efficient usage of this class for very small inputs.
