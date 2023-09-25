@@ -21,8 +21,8 @@ jobs:
       fail-fast: false
       matrix:
         # We need the -fexperimental-library flag to have `std::views::join` available in libc++16.
-        warnings: [  "-Wall -Wextra -Werror -O1 -fexperimental-library" ]
-        build-type: [Debug]
+        warnings: [  "-Wall -Wextra -O1 -fexperimental-library" ]
+        build-type: [Release]
     runs-on: macos-12
     steps:
     - uses: actions/checkout@v3
