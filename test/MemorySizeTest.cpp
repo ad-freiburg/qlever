@@ -95,16 +95,16 @@ TEST(MemorySize, MemorySizeConstructor) {
   ad_utility::MemorySize m1;
   checkAllMemorySizeGetter(m1, AllMemoryUnitSizes{0uL, 0.0, 0.0, 0.0, 0.0});
 
-  // Factory functions for size_t overload.
-  checkAllMemorySizeGetter(ad_utility::MemorySize::bytes(1uL),
+  // Factory functions for integral overload.
+  checkAllMemorySizeGetter(ad_utility::MemorySize::bytes(1),
                            singleMemoryUnitSizes.at("B"));
-  checkAllMemorySizeGetter(ad_utility::MemorySize::kilobytes(1uL),
+  checkAllMemorySizeGetter(ad_utility::MemorySize::kilobytes(1),
                            singleMemoryUnitSizes.at("kB"));
-  checkAllMemorySizeGetter(ad_utility::MemorySize::megabytes(1uL),
+  checkAllMemorySizeGetter(ad_utility::MemorySize::megabytes(1),
                            singleMemoryUnitSizes.at("MB"));
-  checkAllMemorySizeGetter(ad_utility::MemorySize::gigabytes(1uL),
+  checkAllMemorySizeGetter(ad_utility::MemorySize::gigabytes(1),
                            singleMemoryUnitSizes.at("GB"));
-  checkAllMemorySizeGetter(ad_utility::MemorySize::terabytes(1uL),
+  checkAllMemorySizeGetter(ad_utility::MemorySize::terabytes(1),
                            singleMemoryUnitSizes.at("TB"));
 
   // Factory functions for double overload.
@@ -118,6 +118,11 @@ TEST(MemorySize, MemorySizeConstructor) {
                            singleMemoryUnitSizes.at("TB"));
 
   // Negative numbers are not allowed.
+  ASSERT_ANY_THROW(ad_utility::MemorySize::bytes(-1));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::kilobytes(-1));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::megabytes(-1));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::gigabytes(-1));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::terabytes(-1));
   ASSERT_ANY_THROW(ad_utility::MemorySize::kilobytes(-1.0));
   ASSERT_ANY_THROW(ad_utility::MemorySize::megabytes(-1.0));
   ASSERT_ANY_THROW(ad_utility::MemorySize::gigabytes(-1.0));
@@ -389,22 +394,22 @@ TEST(MemorySize, ArithmeticOperatorsOverAndUnderFlow) {
   // Floating point multiplication.
   ASSERT_THROW(ad_utility::MemorySize::bytes(ad_utility::size_t_max) * 1.5,
                std::overflow_error);
-  ASSERT_NO_THROW(ad_utility::MemorySize::bytes(
-                      static_cast<float>(ad_utility::size_t_max) / 2.3) *
+  ASSERT_NO_THROW(ad_utility::MemorySize::bytes(static_cast<size_t>(
+                      static_cast<float>(ad_utility::size_t_max) / 2.3)) *
                   2.3);
   ad_utility::MemorySize memFloatingPointMultiplication{
       ad_utility::MemorySize::bytes(ad_utility::size_t_max)};
   ASSERT_THROW(memFloatingPointMultiplication *= 1.487, std::overflow_error);
   memFloatingPointMultiplication = ad_utility::MemorySize::bytes(
-      static_cast<float>(ad_utility::size_t_max) / 4.73);
+      static_cast<size_t>(static_cast<float>(ad_utility::size_t_max) / 4.73));
   ASSERT_NO_THROW(memFloatingPointMultiplication *= 4.73);
 
   // Floating point division. We are checking for overflow via divisor, that
   // results in a quotient bigger than the dividend. For example: 1/(1/2) = 2
   ASSERT_THROW(100_GB / (1. / static_cast<float>(ad_utility::size_t_max)),
                std::overflow_error);
-  ASSERT_NO_THROW(ad_utility::MemorySize::bytes(
-                      static_cast<float>(ad_utility::size_t_max) / 2.4) /
+  ASSERT_NO_THROW(ad_utility::MemorySize::bytes(static_cast<size_t>(
+                      static_cast<float>(ad_utility::size_t_max) / 2.4)) /
                   (1. / 2.4));
   ad_utility::MemorySize memFloatingPointDivision{12_MB};
   ASSERT_THROW(memFloatingPointDivision /=
