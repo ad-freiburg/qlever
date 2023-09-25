@@ -899,6 +899,9 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
         }
       }
     }
+    if (newWidVec.empty()) {
+      newWidVec = {{}};
+    }
     resultWep.wids_ = std::move(newWidVec);
   } else {
     // Special case: Just one word to deal with.
