@@ -29,9 +29,9 @@
 #include <util/Forward.h>
 #include <util/HashMap.h>
 #include <util/MmapVector.h>
+#include <util/Rtree.h>
 #include <util/Timer.h>
 #include <util/json.h>
-#include <util/Rtree.h>
 
 #include <array>
 #include <fstream>

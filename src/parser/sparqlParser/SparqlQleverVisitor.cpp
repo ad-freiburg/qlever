@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "absl/strings/str_join.h"
+#include "engine/sparqlExpressions/ContainsExpression.h"
 #include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
@@ -22,7 +23,6 @@
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/StringUtils.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
-#include "engine/sparqlExpressions/ContainsExpression.h"
 
 using namespace ad_utility::sparql_types;
 using namespace sparqlExpression;
@@ -121,17 +121,11 @@ ExpressionPtr Visitor::processIriFunctionCall(
       checkNumArgs(1);
       return sparqlExpression::makeTanExpression(std::move(argList[0]));
     }
-  }
-
-  constexpr static std::string_view geoPrefixRtree =
-      "<http://qlever.cs.uni-freiburg.de/";
-  if (std::string_view iriView = iri; iriView.starts_with(geoPrefixRtree)) {
-    iriView.remove_prefix(geoPrefixRtree.size());
-    AD_CONTRACT_CHECK(iriView.ends_with('>'));
-    iriView.remove_suffix(1);
-    if (iriView == "boundingBoxContains") {
-      checkNumArgs("geoRtree:", iriView, 2);
-      return std::make_unique<ContainsExpression>(std::move(argList[0]), std::move(argList[1]));
+  } else if (checkPrefix(GEO_RTREE_PREFIX)) {
+    if (functionName == "boundingBoxContains") {
+      checkNumArgs(2);
+      return std::make_unique<ContainsExpression>(std::move(argList[0]),
+                                                  std::move(argList[1]));
     }
   }
 
@@ -1235,7 +1229,8 @@ ad_utility::sparql_types::Node Visitor::visit(Parser::TriplesNodeContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ad_utility::sparql_types::Node Visitor::visit(Parser::BlankNodePropertyListContext* ctx) {
+ad_utility::sparql_types::Node Visitor::visit(
+    Parser::BlankNodePropertyListContext* ctx) {
   VarOrTerm var{GraphTerm{newBlankNode()}};
   Triples triples;
   auto propertyList = visit(ctx->propertyListNotEmpty());

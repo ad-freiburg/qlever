@@ -5,29 +5,31 @@
 #pragma once
 
 #include <string>
+
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
 class BoundingBoxType;
 
 namespace sparqlExpression {
-    class ContainsExpression : public SparqlExpression {
-    private:
-        SparqlExpression::Ptr child_;
-        std::string boundingBoxAsString_;
-        BoundingBoxType* boundingBox_{};
+class ContainsExpression : public SparqlExpression {
+ private:
+  SparqlExpression::Ptr child_;
+  std::string boundingBoxAsString_;
+  BoundingBoxType* boundingBox_{};
 
-    public:
-        // `child` must be a `VariableExpression` and `boundingBox` must be a
-        // `LiteralExpression` that stores a string, else an exception will be thrown.
-        ContainsExpression(SparqlExpression::Ptr child, SparqlExpression::Ptr boundingBox);
+ public:
+  // `child` must be a `VariableExpression` and `boundingBox` must be a
+  // `LiteralExpression` that stores a string, else an exception will be thrown.
+  ContainsExpression(SparqlExpression::Ptr child,
+                     SparqlExpression::Ptr boundingBox);
 
-        ExpressionResult evaluate(EvaluationContext *context) const override;
+  ExpressionResult evaluate(EvaluationContext* context) const override;
 
-        std::span<SparqlExpression::Ptr> childrenImpl() override;
+  std::span<SparqlExpression::Ptr> childrenImpl() override;
 
-        // _________________________________________________________________________
-        [[nodiscard]] string getCacheKey(
-                const VariableToColumnMap &varColMap) const override;
-    };
-}
+  // _________________________________________________________________________
+  [[nodiscard]] string getCacheKey(
+      const VariableToColumnMap& varColMap) const override;
+};
+}  // namespace sparqlExpression

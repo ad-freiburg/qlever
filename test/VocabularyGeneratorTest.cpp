@@ -161,10 +161,12 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   {
     VocabularyMerger m;
     auto file = ad_utility::makeOfstream(_basePath + INTERNAL_VOCAB_SUFFIX);
-    auto internalVocabularyAction = [&file](const auto& word, [[maybe_unused]]const auto& index) {
-      file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
-    };
-    auto externalVocabularyAction = []([[maybe_unused]]const auto& word, [[maybe_unused]]const auto& index) {};
+    auto internalVocabularyAction =
+        [&file](const auto& word, [[maybe_unused]] const auto& index) {
+          file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
+        };
+    auto externalVocabularyAction = []([[maybe_unused]] const auto& word,
+                                       [[maybe_unused]] const auto& index) {};
     res = m.mergeVocabulary(_basePath, 2, TripleComponentComparator(),
                             internalVocabularyAction, externalVocabularyAction);
   }
@@ -207,11 +209,13 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     {
       VocabularyMerger m;
       auto file = ad_utility::makeOfstream(basename + INTERNAL_VOCAB_SUFFIX);
-      auto internalVocabularyAction = [&file](const auto& word, [[maybe_unused]]const auto& index) {
-        file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
-      };
+      auto internalVocabularyAction =
+          [&file](const auto& word, [[maybe_unused]] const auto& index) {
+            file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
+          };
 
-      auto externalVocabularyAction = []([[maybe_unused]]const auto& word, [[maybe_unused]]const auto& index) {};
+      auto externalVocabularyAction = []([[maybe_unused]] const auto& word,
+                                         [[maybe_unused]] const auto& index) {};
       m.mergeVocabulary(basename, 1, v.getCaseComparator(),
                         internalVocabularyAction, externalVocabularyAction);
     }
@@ -252,10 +256,12 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     {
       VocabularyMerger m;
       auto file = ad_utility::makeOfstream(basename + INTERNAL_VOCAB_SUFFIX);
-      auto internalVocabularyAction = [&file](const auto& word, [[maybe_unused]]const auto& index) {
-        file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
-      };
-      auto externalVocabularyAction = []([[maybe_unused]]const auto& word, [[maybe_unused]]const auto& index) {};
+      auto internalVocabularyAction =
+          [&file](const auto& word, [[maybe_unused]] const auto& index) {
+            file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
+          };
+      auto externalVocabularyAction = []([[maybe_unused]] const auto& word,
+                                         [[maybe_unused]] const auto& index) {};
       m.mergeVocabulary(basename, 1, v.getCaseComparator(),
                         internalVocabularyAction, externalVocabularyAction);
     }

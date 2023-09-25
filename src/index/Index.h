@@ -5,6 +5,8 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
 
+#include <util/Rtree.h>
+
 #include <array>
 #include <optional>
 #include <string>
@@ -16,7 +18,6 @@
 #include "index/StringSortComparator.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
-#include <util/Rtree.h>
 
 // Forward declarations.
 class IdTable;

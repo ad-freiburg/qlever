@@ -25,10 +25,12 @@
 #include "./VocabularyGenerator.h"
 
 // ___________________________________________________________________
-template <typename Comparator, typename InternalVocabularyAction, typename ExternalVocabularyAction>
+template <typename Comparator, typename InternalVocabularyAction,
+          typename ExternalVocabularyAction>
 VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, Comparator comparator,
-    InternalVocabularyAction& internalVocabularyAction, ExternalVocabularyAction& externalVocabularyAction) {
+    InternalVocabularyAction& internalVocabularyAction,
+    ExternalVocabularyAction& externalVocabularyAction) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal. All internal IRIs or literals come before all external ones.
   // TODO<joka921> Change this as soon as we have Interleaved Ids via the
@@ -102,8 +104,10 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
       // asynchronously write the next batch of sorted
       // queue words
       auto writeTask = [this, buf = std::move(sortedBuffer),
-                        &internalVocabularyAction, &externalVocabularyAction]() {
-        this->writeQueueWordsToIdVec(buf, internalVocabularyAction, externalVocabularyAction);
+                        &internalVocabularyAction,
+                        &externalVocabularyAction]() {
+        this->writeQueueWordsToIdVec(buf, internalVocabularyAction,
+                                     externalVocabularyAction);
       };
       sortedBuffer.clear();
       sortedBuffer.reserve(_bufferSize);
@@ -128,7 +132,8 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction, externalVocabularyAction);
+    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction,
+                           externalVocabularyAction);
   }
 
   auto metaData = std::move(metaData_);
@@ -165,9 +170,11 @@ void VocabularyMerger::writeQueueWordsToIdVec(
 
       // write the new word to the vocabulary
       if (!lastTripleComponent_.value().isExternal()) {
-        internalVocabularyAction(lastTripleComponent_.value().iriOrLiteral(), lastTripleComponent_.value()._index);
+        internalVocabularyAction(lastTripleComponent_.value().iriOrLiteral(),
+                                 lastTripleComponent_.value()._index);
       } else {
-        externalVocabularyAction(lastTripleComponent_.value().iriOrLiteral(), lastTripleComponent_.value()._index);
+        externalVocabularyAction(lastTripleComponent_.value().iriOrLiteral(),
+                                 lastTripleComponent_.value()._index);
         outfileExternal_ << RdfEscaping::escapeNewlinesAndBackslashes(
                                 lastTripleComponent_.value().iriOrLiteral())
                          << '\n';

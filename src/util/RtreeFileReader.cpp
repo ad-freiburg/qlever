@@ -9,9 +9,9 @@ FileReader::FileReader(const std::string& filePath) {
   this->filePath = filePath;
 
   this->file = std::ifstream(this->filePath, std::ios::binary);
-  this->file.seekg (0, std::ifstream::end);
+  this->file.seekg(0, std::ifstream::end);
   this->fileLength = this->file.tellg();
-  this->file.seekg (0, std::ifstream::beg);
+  this->file.seekg(0, std::ifstream::beg);
 }
 
 std::optional<RTreeValueWithOrderIndex> FileReader::GetNextElement() {
@@ -35,23 +35,21 @@ std::optional<RTreeValueWithOrderIndex> FileReader::GetNextElement() {
     Rtree::BoundingBox box = Rtree::createBoundingBox(minX, minY, maxX, maxY);
     RTreeValueWithOrderIndex element = {box, id, orderX, orderY};
 
-    return { element };
+    return {element};
   } else {
     return {};
   }
 }
 
-void FileReader::Close() {
-  this->file.close();
-}
+void FileReader::Close() { this->file.close(); }
 
 FileReaderWithoutIndex::FileReaderWithoutIndex(const std::string& filePath) {
   this->filePath = filePath;
 
   this->file = std::ifstream(this->filePath, std::ios::binary);
-  this->file.seekg (0, std::ifstream::end);
+  this->file.seekg(0, std::ifstream::end);
   this->fileLength = this->file.tellg();
-  this->file.seekg (0, std::ifstream::beg);
+  this->file.seekg(0, std::ifstream::beg);
 }
 
 std::optional<RTreeValue> FileReaderWithoutIndex::GetNextElement() {
@@ -71,12 +69,10 @@ std::optional<RTreeValue> FileReaderWithoutIndex::GetNextElement() {
     Rtree::BoundingBox box = Rtree::createBoundingBox(minX, minY, maxX, maxY);
     RTreeValue boxWithId = {box, id};
 
-    return { boxWithId };
+    return {boxWithId};
   } else {
     return {};
   }
 }
 
-void FileReaderWithoutIndex::Close() {
-  this->file.close();
-}
+void FileReaderWithoutIndex::Close() { this->file.close(); }

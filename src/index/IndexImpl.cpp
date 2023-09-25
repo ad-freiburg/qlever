@@ -352,17 +352,19 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto compressionOutfile = ad_utility::makeOfstream(
         onDiskBase_ + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyActionCompression =
-        [&compressionOutfile](const auto& word, [[maybe_unused]]const auto& index) {
+        [&compressionOutfile](const auto& word,
+                              [[maybe_unused]] const auto& index) {
           compressionOutfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
                              << '\n';
         };
     auto externalVocabularyActionCompression =
-            []([[maybe_unused]]const auto& word, [[maybe_unused]]const auto& index) {
-    };
+        []([[maybe_unused]] const auto& word,
+           [[maybe_unused]] const auto& index) {};
     m._noIdMapsAndIgnoreExternalVocab = true;
     auto mergeResult =
         m.mergeVocabulary(onDiskBase_ + TMP_BASENAME_COMPRESSION, numFiles,
-                          std::less<>(), internalVocabularyActionCompression, externalVocabularyActionCompression);
+                          std::less<>(), internalVocabularyActionCompression,
+                          externalVocabularyActionCompression);
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
@@ -389,24 +391,30 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto wordWriter =
         vocab_.makeUncompressingWordWriter(onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
 
-    std::ofstream convertOfs = std::ofstream(onDiskBase_ + ".vocabulary.boundingbox.tmp", std::ios::binary);
+    std::ofstream convertOfs = std::ofstream(
+        onDiskBase_ + ".vocabulary.boundingbox.tmp", std::ios::binary);
 
-    auto internalVocabularyAction = [&wordWriter, &convertOfs](const auto& word, const auto& index) {
+    auto internalVocabularyAction = [&wordWriter, &convertOfs](
+                                        const auto& word, const auto& index) {
       wordWriter.push(word.data(), word.size());
-      std::optional<Rtree::BoundingBox> boundingBox = Rtree::ConvertWordToRtreeEntry(word);
+      std::optional<Rtree::BoundingBox> boundingBox =
+          Rtree::ConvertWordToRtreeEntry(word);
       if (boundingBox) {
         Rtree::SaveEntry(boundingBox.value(), index, convertOfs);
       }
     };
-    auto externalVocabularyAction = [&convertOfs](const auto& word, const auto& index) {
-      std::optional<Rtree::BoundingBox> boundingBox = Rtree::ConvertWordToRtreeEntry(word);
+    auto externalVocabularyAction = [&convertOfs](const auto& word,
+                                                  const auto& index) {
+      std::optional<Rtree::BoundingBox> boundingBox =
+          Rtree::ConvertWordToRtreeEntry(word);
       if (boundingBox) {
         Rtree::SaveEntry(boundingBox.value(), index, convertOfs);
       }
     };
 
-    VocabularyMerger::VocabularyMetaData result = v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
-                             internalVocabularyAction, externalVocabularyAction);
+    VocabularyMerger::VocabularyMetaData result =
+        v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
+                          internalVocabularyAction, externalVocabularyAction);
 
     convertOfs.close();
 
@@ -425,7 +433,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     Rtree rtree = Rtree(1300000000000);
     rtree.BuildTree(onDiskBase_ + ".vocabulary", 16, "./rtree_build");
     LOG(INFO) << "Finished building the Rtree" << std::endl;
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     LOG(INFO) << e.what() << std::endl;
   }
 
