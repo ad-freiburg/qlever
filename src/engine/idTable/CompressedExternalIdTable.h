@@ -246,6 +246,9 @@ class CompressedExternalIdTableWriter {
   };
 };
 
+// The common base implementation of `CompressedExternalIdTable` and
+// `CompressedExternalIdTableSorter` (see below). It is implemented as a mixin
+// class.
 template <size_t NumStaticCols, typename Impl>
 class CompressedExternalIdTableBase {
  public:
@@ -303,6 +306,7 @@ class CompressedExternalIdTableBase {
     }
   }
 
+  // ___________________________________________________________________
   size_t size() const { return numElementsPushed_; }
 
   // Return a lambda that takes a `ValueType` and calls `push` for that value.
@@ -333,6 +337,10 @@ class CompressedExternalIdTableBase {
       currentBlock_.reserve(blocksize_);
     }
   }
+
+  // Asynchronously compress the `block` and write it to the underlying
+  // `writer_`. Before compressing, apply the transformation that is specified
+  // by the `Impl` via the `transformBlock` function.
   template <typename Transformation = std::identity>
   void pushBlock(IdTableStatic<NumStaticCols> block) {
     if (compressAndWriteFuture_.valid()) {
@@ -342,9 +350,6 @@ class CompressedExternalIdTableBase {
       return;
     }
     ++numBlocksPushed_;
-    // TODO<joka921> We probably need one thread for sorting and one for writing
-    // for the maximal performance. But this requires more work for a general
-    // synchronization framework.
     compressAndWriteFuture_ = std::async(
         std::launch::async, [block = std::move(block), this]() mutable {
           impl().transformBlock(block);
@@ -352,6 +357,11 @@ class CompressedExternalIdTableBase {
         });
   }
 
+  // If there is less than one complete block (meaning that the number of calls
+  // to `push` was `< blocksize_`, apply the transformation to `currentBlock_`
+  // and return `false`. Else, push the `currentBlock_` via `pushBlock_`, block
+  // until the pushing is actually finished, and return `true`. Using this
+  // function allows for an efficient usage of this class for very small inputs.
   bool transformAndPushLastBlock() {
     // If we have pushed at least one (complete) block, then the last future
     // from pushing a block is still in flight. If we have never pushed a block,
@@ -417,8 +427,21 @@ class CompressedExternalIdTable
   // `IdTable in the order that they were `push`ed. This function may be called
   // exactly once.
   auto getRows() {
-    // TODO<joka921> We should also incorporate the optimization for a single
-    // block in this class for the sake of completeness.
+    if (!this->transformAndPushLastBlock()) {
+      // For the case of only a single block we have to mimick the exact same
+      // return type as that of `writer_.getGeneratorForAllRows()`, that's why
+      // there are the seemingly redundant multiple calls to
+      // join(OwningView(vector(...))).
+      auto generator = [](const auto& block)
+          -> cppcoro::generator<const IdTableStatic<NumStaticCols>> {
+        co_yield block;
+      }(this->currentBlock_);
+      auto rowView =
+          std::views::join(ad_utility::OwningView{std::move(generator)});
+      std::vector<decltype(rowView)> vec;
+      vec.push_back(std::move(rowView));
+      return std::views::join(ad_utility::OwningView(std::move(vec)));
+    }
     this->pushBlock(std::move(this->currentBlock_));
     this->resetCurrentBlock(false);
     if (this->compressAndWriteFuture_.valid()) {
@@ -428,7 +451,8 @@ class CompressedExternalIdTable
   }
 
  private:
-  void transformBlock([[maybe_unused]] auto&& block) { /* no transformation */
+  // This function is expected by the mixin base class.
+  void transformBlock([[maybe_unused]] auto& block) { /* no transformation */
   }
 };
 
@@ -518,11 +542,8 @@ class CompressedExternalIdTableSorter
     auto rowGenerators =
         this->writer_.template getAllRowGenerators<NumStaticCols>();
 
-    auto requiredMemoryForInputBlocks = rowGenerators.size() *
-                                        this->numColumns_ *
-                                        this->writer_.blockSizeUncompressed();
-    const size_t blockSizeOutput = computeBlockSizeForMergePhase(
-        requiredMemoryForInputBlocks, rowGenerators.size());
+    const size_t blockSizeOutput =
+        computeBlockSizeForMergePhase(rowGenerators.size());
 
     using P = std::pair<decltype(rowGenerators[0].begin()),
                         decltype(rowGenerators[0].end())>;
@@ -568,6 +589,7 @@ class CompressedExternalIdTableSorter
     AD_CORRECTNESS_CHECK(numPopped == this->numElementsPushed_);
   }
 
+  // _____________________________________________________________
   void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
 #ifdef _PARALLEL_SORT
     ad_utility::parallel_sort(block.begin(), block.end(), comp_);
@@ -575,13 +597,19 @@ class CompressedExternalIdTableSorter
     std::ranges::sort(block, comp_);
 #endif
   }
+
+  // A function with this name is needed by the mixin base class.
   void transformBlock(IdTableStatic<NumStaticCols>& block) const {
     sortBlockInPlace(block);
   }
 
-  // TODO<joka921> Comment.
-  size_t computeBlockSizeForMergePhase(MemorySize requiredMemoryForInputBlocks,
-                                       size_t numBlocksToMerge) {
+  // Compute the size of the blocks that are yielded in the output phase. It is
+  // computed from the total memory limit and the amount of memory required to
+  // store one decompressed block from each presorted input.
+  size_t computeBlockSizeForMergePhase(size_t numBlocksToMerge) {
+    MemorySize requiredMemoryForInputBlocks =
+        numBlocksToMerge * this->numColumns_ *
+        this->writer_.blockSizeUncompressed();
     if (EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING) {
       // For unit tests, always yield 5 outputs at once.
       return 5;
