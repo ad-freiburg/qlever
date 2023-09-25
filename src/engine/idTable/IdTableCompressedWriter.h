@@ -176,8 +176,9 @@ class IdTableCompressedWriter {
   // Get the row generator for a single IdTable, specified by the `index`.
   template <size_t N = 0>
   auto makeGeneratorForRows(size_t index) {
-    return ad_utility::OwningView{makeGeneratorForIdTable<N>(index)} |
-           std::views::join;
+    return std::ranges::join_view {
+      ad_utility::OwningView { makeGeneratorForIdTable<N>(index) }
+    }
   }
 
   // Get the block generator for a single IdTable, specified by the `index`.
@@ -246,6 +247,138 @@ class IdTableCompressedWriter {
   }
 };
 
+template <size_t NumStaticCols, template <size_t N> typename ImplTemplate>
+class CompressedExternalIdTableBase {
+ public:
+  using value_type = IdTableStatic<NumStaticCols>::row_type;
+  using reference = IdTableStatic<NumStaticCols>::row_reference;
+  using const_reference = IdTableStatic<NumStaticCols>::const_row_reference;
+  using MemorySize = ad_utility::MemorySize;
+
+  using Impl = ImplTemplate<NumStaticCols>;
+  friend class ImplTemplate<NumStaticCols>;
+
+  Impl& impl() { return static_cast<Impl&>(*this); }
+
+ protected:
+  // Used to aggregate rows for the next block.
+  IdTableStatic<NumStaticCols> currentBlock_;
+  // For statistical reasons
+  size_t numElementsPushed_ = 0;
+  size_t numBlocksPushed_ = 0;
+  // The number of columns of the `IdTable`. Might be different
+  // from `NumStaticCols` when dynamic tables (NumStaticCols == 0) are used;
+  size_t numColumns_;
+
+  // The maximum amount of memory that this class can use.
+  MemorySize memory_;
+
+  // The number of rows per block in the first phase.
+  // The division by two is there because we store two blocks at the same time:
+  // One that is currently being sorted and written to disk in the background,
+  // and one that is used to collect rows in the calls to `push`.
+  size_t blocksize_{memory_.getBytes() / (numColumns_ * sizeof(Id) * 2)};
+  IdTableCompressedWriter writer_;
+  std::future<void> compressAndWriteFuture_;
+
+ public:
+  // TODO<joka921> Make stuff private.
+  explicit CompressedExternalIdTableBase(
+      std::string filename, size_t numCols, size_t memoryInBytes,
+      ad_utility::AllocatorWithLimit<Id> allocator,
+      MemorySize blocksizeCompression = 4_MB)
+      : currentBlock_{numCols, allocator},
+        numColumns_{numCols},
+        memory_{MemorySize::bytes(memoryInBytes)},
+        writer_{std::move(filename), numCols, allocator, blocksizeCompression} {
+    this->currentBlock_.reserve(blocksize_);
+    AD_CONTRACT_CHECK(NumStaticCols == 0 || NumStaticCols == numCols);
+  }
+  // Add a single row to the input. The type of `row` needs to be something that
+  // can be `push_back`ed to a `IdTable`.
+  void push(const auto& row) requires requires { currentBlock_.push_back(row); }
+  {
+    ++numElementsPushed_;
+    currentBlock_.push_back(row);
+    if (currentBlock_.size() >= blocksize_) {
+      // TODO<joka921> Also do this in parallel.
+      pushBlock(std::move(currentBlock_));
+      resetCurrentBlock(true);
+    }
+  }
+
+  size_t size() const { return numElementsPushed_; }
+
+  // Return a lambda that takes a `ValueType` and calls `push` for that value.
+  auto makePushCallback() {
+    return [self = this](auto&& value) { self->push(AD_FWD(value)); };
+  }
+
+  // Delete the underlying file and reset the sorter. May only be called if no
+  // active `getBlocks()` generator that has not been fully iterated over is
+  // currently active, else the behavior is undefined.
+  // TODO<joka921> Try to generically detect this case.
+  void clear() {
+    resetCurrentBlock(false);
+    numElementsPushed_ = 0;
+    if (compressAndWriteFuture_.valid()) {
+      compressAndWriteFuture_.get();
+    }
+    writer_.clear();
+  }
+
+ protected:
+  // Note: This method is currently needed, because the move semantics of the
+  // IdTable are not correct.
+  void resetCurrentBlock(bool reserve) {
+    currentBlock_ =
+        IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
+    if (reserve) {
+      currentBlock_.reserve(blocksize_);
+    }
+  }
+  template <typename Transformation = std::identity>
+  void pushBlock(IdTableStatic<NumStaticCols> block) {
+    if (compressAndWriteFuture_.valid()) {
+      compressAndWriteFuture_.get();
+    }
+    if (block.empty()) {
+      return;
+    }
+    ++numBlocksPushed_;
+    // TODO<joka921> We probably need one thread for sorting and one for writing
+    // for the maximal performance. But this requires more work for a general
+    // synchronization framework.
+    compressAndWriteFuture_ = std::async(
+        std::launch::async, [block = std::move(block), this]() mutable {
+          impl().transformBlock(block);
+          this->writer_.writeIdTable(std::move(block).toDynamic());
+        });
+  }
+
+  bool transformAndPushLastBlock() {
+    // If we have pushed at least one (complete) block, then the last future
+    // from pushing a block is still in flight. If we have never pushed a block,
+    // then also the future cannot be valid.
+    AD_CORRECTNESS_CHECK((numBlocksPushed_ == 0) !=
+                         compressAndWriteFuture_.valid());
+    // Optimization for inputs that are smaller than the blocksize, do not use
+    // the external file, but simply sort and return the single block.
+    if (numBlocksPushed_ == 0) {
+      AD_CORRECTNESS_CHECK(this->numElementsPushed_ ==
+                           this->currentBlock_.size());
+      impl().transformBlock(this->currentBlock_);
+      return false;
+    }
+    pushBlock(std::move(this->currentBlock_));
+    resetCurrentBlock(false);
+    if (compressAndWriteFuture_.valid()) {
+      compressAndWriteFuture_.get();
+    }
+    return true;
+  }
+};
+
 // This class allows the external and compressed storing of an `IdTable` that is
 // too large to be stored in RAM. `NumStaticCols == 0` means that the IdTable is
 // stored dynamically (see `IdTable.h` and `CallFixedSize.h` for details). The
@@ -253,32 +386,16 @@ class IdTableCompressedWriter {
 // the IdTable, and then there is one single call to `getRows` which yields a
 // generator that yields the rows that have previously been pushed.
 template <size_t NumStaticCols>
-class CompressedExternalIdTable {
- public:
-  using value_type = IdTableStatic<NumStaticCols>::row_type;
-  using reference = IdTableStatic<NumStaticCols>::row_reference;
-  using const_reference = IdTableStatic<NumStaticCols>::const_row_reference;
-
+class CompressedExternalIdTable
+    : public CompressedExternalIdTableBase<NumStaticCols,
+                                           CompressedExternalIdTable> {
  private:
+  using Base =
+      CompressedExternalIdTableBase<NumStaticCols, CompressedExternalIdTable>;
+  friend class CompressedExternalIdTableBase<NumStaticCols,
+                                             CompressedExternalIdTable>;
+
   using MemorySize = ad_utility::MemorySize;
-  // Used to aggregate rows for the next block.
-  IdTableStatic<NumStaticCols> currentBlock_;
-  // For statistical reasons
-  size_t numElementsPushed_ = 0;
-  // The number of columns of the `IdTable`. Might be different
-  // from `NumStaticCols` when dynamic tables (NumStaticCols == 0) are used;
-  size_t numColumns_;
-  // The maximum amount of memory that this class can use.
-  MemorySize memory_;
-  // The number of rows per block in the first phase.
-  // The division by two is there because we store two blocks at the same time:
-  // One that is currently being sorted and written to disk in the background,
-  // and one that is used to collect rows in the calls to `push`.
-  size_t blocksize_{memory_.getBytes() / (numColumns_ * sizeof(Id) * 2)};
-  IdTableCompressedWriter writer_;
-  // Used to compress and write a block on a background thread while we can
-  // already collect the rows for the next block.
-  std::future<void> compressAndWriteFuture_;
 
  public:
   // Constructor.
@@ -286,14 +403,8 @@ class CompressedExternalIdTable {
       std::string filename, size_t numCols, size_t memoryInBytes,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = 4_MB)
-      : currentBlock_{allocator},
-        numColumns_{numCols},
-        memory_{MemorySize::bytes(memoryInBytes)},
-        writer_{std::move(filename), numCols, allocator, blocksizeCompression} {
-    currentBlock_.setNumColumns(numCols);
-    currentBlock_.reserve(blocksize_);
-    AD_CONTRACT_CHECK(NumStaticCols == 0 || NumStaticCols == numCols);
-  }
+      : Base{std::move(filename), numCols, memoryInBytes, std::move(allocator),
+             blocksizeCompression} {}
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
@@ -305,73 +416,23 @@ class CompressedExternalIdTable {
                                   memoryInBytes, std::move(allocator),
                                   blocksizeCompression) {}
 
-  size_t size() const { return numElementsPushed_; }
-
-  // Add a single row to the input. The type of `row` needs to be something that
-  // can be `push_back`ed to a `IdTable`.
-  void push(const auto& row) requires requires { currentBlock_.push_back(row); }
-  {
-    ++numElementsPushed_;
-    currentBlock_.push_back(row);
-    if (currentBlock_.size() >= blocksize_) {
-      // TODO<joka921> Also do this in parallel.
-      pushBlock(std::move(currentBlock_));
-      // TODO<joka921> The move operations of the `IdTable` currently have wrong
-      // semantics as they don't restore the empty column vectors.
-      currentBlock_ =
-          IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
-      currentBlock_.reserve(blocksize_);
-    }
-  }
-
-  // Return a lambda that takes a `ValueType` and calls `push` for that value.
-  auto makePushCallback() {
-    return [self = this](auto&& value) { self->push(AD_FWD(value)); };
-  }
-
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return a generator that yields the elements of the
   // `IdTable in the order that they were `push`ed. This function may be called
   // exactly once.
   auto getRows() {
-    pushBlock(std::move(currentBlock_));
-    currentBlock_ =
-        IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
-    currentBlock_.setNumColumns(numColumns_);
-    if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
+    // TODO<joka921> We should also incorporate the optimization for a single
+    // block in this class for the sake of completeness.
+    this->pushBlock(std::move(this->currentBlock_));
+    this->resetCurrentBlock(false);
+    if (this->compressAndWriteFuture_.valid()) {
+      this->compressAndWriteFuture_.get();
     }
-    return writer_.getGeneratorForAllRows<NumStaticCols>();
-  }
-
-  // Clear the `IdTable`. This also deletes the contents of the underlying file.
-  // May only be called if no active `getBlocks()` generator that has not been
-  // fully iterated over is currently active, else the behavior is undefined.
-  void clear() {
-    currentBlock_ =
-        IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
-    numElementsPushed_ = 0;
-    if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
-    }
-    writer_.clear();
+    return this->writer_.template getGeneratorForAllRows<NumStaticCols>();
   }
 
  private:
-  void pushBlock(IdTableStatic<NumStaticCols> block) {
-    if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
-    }
-    if (block.empty()) {
-      return;
-    }
-    // TODO<joka921> We probably need one thread for sorting and one for writing
-    // for the maximal performance. But this requires more work for a general
-    // synchronization framework.
-    compressAndWriteFuture_ = std::async(
-        std::launch::async, [block = std::move(block), this]() mutable {
-          writer_.writeIdTable(std::move(block).toDynamic());
-        });
+  void transformBlock([[maybe_unused]] auto&& block) { /* no transformation */
   }
 };
 
@@ -388,30 +449,15 @@ class CompressedExternalIdTable {
 inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 template <typename Comparator, size_t NumStaticCols>
-class ExternalIdTableSorter {
+class ExternalIdTableSorter
+    : public CompressedExternalIdTableBase<NumStaticCols,
+                                           CompressedExternalIdTable> {
  private:
-  using MemorySize = ad_utility::MemorySize;
-  // Used to aggregate rows for the next block.
-  IdTableStatic<NumStaticCols> currentBlock_;
-  // For statistical reasons
-  size_t numElementsPushed_ = 0;
-  size_t numBlocksPushed_ = 0;
-  // The number of columns of the `IdTable`s to be sorted. Might be different
-  // from `NumStaticCols` when dynamic tables (NumStaticCols == 0) are used;
-  size_t numColumns_;
-  // The maximum amount of memory that this sorter can use.
-  MemorySize memory_;
-  // The number of rows per block in the first phase.
-  // The division by two is there because we store two blocks at the same time:
-  // One that is currently being sorted and written to disk in the background,
-  // and one that is used to collect rows in the calls to `push`.
-  size_t blocksize_{memory_.getBytes() / (numColumns_ * sizeof(Id) * 2)};
-  IdTableCompressedWriter writer_;
+  using Base =
+      CompressedExternalIdTableBase<NumStaticCols, CompressedExternalIdTable>;
+  friend class CompressedExternalIdTableBase<NumStaticCols,
+                                             CompressedExternalIdTable>;
   [[no_unique_address]] Comparator comp_{};
-  // Used to compress and write a block on a background thread while we can
-  // already collect the rows for the next block.
-  std::future<void> sortAndWriteFuture_;
-
   // Track if we are currently in the merging phase.
   std::atomic<bool> mergeIsActive_ = false;
 
@@ -427,14 +473,8 @@ class ExternalIdTableSorter {
                                  size_t memoryInBytes,
                                  ad_utility::AllocatorWithLimit<Id> allocator,
                                  MemorySize blocksizeCompression = 4_MB)
-      : currentBlock_{allocator},
-        numColumns_{numCols},
-        memory_{MemorySize::bytes(memoryInBytes)},
-        writer_{std::move(filename), numCols, allocator, blocksizeCompression} {
-    currentBlock_.setNumColumns(numCols);
-    currentBlock_.reserve(blocksize_);
-    AD_CONTRACT_CHECK(NumStaticCols == 0 || NumStaticCols == numCols);
-  }
+      : Base{std::move(filename), numCols, memoryInBytes, std::move(allocator),
+             blocksizeCompression} {}
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
@@ -444,29 +484,6 @@ class ExternalIdTableSorter {
       requires(NumStaticCols > 0)
       : ExternalIdTableSorter(std::move(filename), NumStaticCols, memoryInBytes,
                               std::move(allocator), blocksizeCompression) {}
-
-  // Add a single row to the input. The type of `row` needs to be something that
-  // can be `push_back`ed to a `IdTable`.
-  void push(const auto& row) requires requires { currentBlock_.push_back(row); }
-  {
-    ++numElementsPushed_;
-    currentBlock_.push_back(row);
-    if (currentBlock_.size() >= blocksize_) {
-      // TODO<joka921> Also do this in parallel.
-      pushBlock(std::move(currentBlock_));
-      // TODO<joka921> The move operations of the `IdTable` currently have wrong
-      // semantics as they don't restore the empty column vectors.
-      currentBlock_ =
-          IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
-      currentBlock_.reserve(blocksize_);
-    }
-  }
-
-  // Return a lambda that takes a `ValueType` and calls `push` for that value.
-  // Note that `this` is captured by reference
-  auto makePushCallback() {
-    return [self = this](auto&& value) { self->push(AD_FWD(value)); };
-  }
 
   // Transition from the input phase, where `push()` can be called, to the
   // output phase and return a generator that yields the sorted elements. This
@@ -484,26 +501,8 @@ class ExternalIdTableSorter {
         co_yield row;
       }
     }
-    AD_CORRECTNESS_CHECK(numYielded == numElementsPushed_);
+    AD_CORRECTNESS_CHECK(numYielded == this->numElementsPushed_);
     mergeIsActive_.store(false);
-  }
-
-  // Delete the underlying file and reset the sorter. May only be called if no
-  // active `getBlocks()` generator that has not been fully iterated over is
-  // currently active, else an exception will be thrown.
-  void clear() {
-    if (mergeIsActive_.load()) {
-      throw std::runtime_error{
-          "Calling `clear` on an an `ExternalIdTableSorter` that is currently "
-          "been iterated over is forbidden."};
-    }
-    currentBlock_ =
-        IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
-    numElementsPushed_ = 0;
-    if (sortAndWriteFuture_.valid()) {
-      sortAndWriteFuture_.get();
-    }
-    writer_.clear();
   }
 
  private:
@@ -511,56 +510,19 @@ class ExternalIdTableSorter {
   // output phase and return a generator that yields the sorted elements. This
   // function may be called exactly once.
   cppcoro::generator<IdTableStatic<NumStaticCols>> sortedBlocks() {
-    // If we have pushed at least one (complete) block, then the last future
-    // from pushing a block is still in flight. If we have never pushed a block,
-    // then also the future cannot be valid.
-    AD_CORRECTNESS_CHECK((numBlocksPushed_ == 0) !=
-                         sortAndWriteFuture_.valid());
-    // Optimization for inputs that are smaller than the blocksize, do not use
-    // the external file, but simply sort and return the single block.
-    if (numBlocksPushed_ == 0) {
-      AD_CORRECTNESS_CHECK(numElementsPushed_ == currentBlock_.size());
-      sortBlockInPlace(currentBlock_);
-      co_yield currentBlock_;
+    if (!this->transformAndPushLastBlock()) {
+      // There was only one block, return it.
+      co_yield this->currentBlock_;
       co_return;
     }
-    pushBlock(std::move(currentBlock_));
-    currentBlock_ =
-        IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
-    currentBlock_.setNumColumns(numColumns_);
-    if (sortAndWriteFuture_.valid()) {
-      sortAndWriteFuture_.get();
-    }
-    auto rowGenerators = writer_.getAllRowGenerators<NumStaticCols>();
+    auto rowGenerators =
+        this->writer_.template getAllRowGenerators<NumStaticCols>();
 
-    auto requiredMemoryForInputBlocks =
-        rowGenerators.size() * numColumns_ * writer_.blockSizeUncompressed();
-    const size_t blockSizeOutput = [&]() -> size_t {
-      if (EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING) {
-        // For unit tests, always yield 5 outputs at once.
-        return 5;
-      } else {
-        if (requiredMemoryForInputBlocks >= memory_) {
-          throw std::runtime_error{absl::StrCat(
-              "Insufficient memory for merging ", rowGenerators.size(),
-              " blocks. Please increase the memory settings")};
-        }
-        using namespace ad_utility::memory_literals;
-        // Don't use a too large output size.
-        auto blockSizeOutputMemory = std::min(
-            (memory_ - requiredMemoryForInputBlocks) / numBufferedOutputBlocks_,
-            maxOutputBlocksize_);
-
-        size_t blockSizeForOutput =
-            blockSizeOutputMemory.getBytes() / (sizeof(Id) * numColumns_);
-        if (blockSizeForOutput <= 100) {
-          throw std::runtime_error{absl::StrCat(
-              "Insufficient memory for merging ", rowGenerators.size(),
-              " blocks. Please increase the memory settings")};
-        }
-        return blockSizeForOutput;
-      }
-    }();
+    auto requiredMemoryForInputBlocks = rowGenerators.size() *
+                                        this->numColumns_ *
+                                        this->writer_.blockSizeUncompressed();
+    const size_t blockSizeOutput = computeBlockSizeForMergePhase(
+        requiredMemoryForInputBlocks, rowGenerators.size());
 
     using P = std::pair<decltype(rowGenerators[0].begin()),
                         decltype(rowGenerators[0].end())>;
@@ -578,8 +540,8 @@ class ExternalIdTableSorter {
       pq.emplace_back(gen.begin(), gen.end());
     }
     std::ranges::make_heap(pq, comp);
-    IdTableStatic<NumStaticCols> result(writer_.numColumns(),
-                                        writer_.allocator());
+    IdTableStatic<NumStaticCols> result(this->writer_.numColumns(),
+                                        this->writer_.allocator());
     result.reserve(blockSizeOutput);
     size_t numPopped = 0;
     while (!pq.empty()) {
@@ -596,14 +558,14 @@ class ExternalIdTableSorter {
         numPopped += result.numRows();
         co_yield result;
         // The `result` will be moved away, so we have to reset it again.
-        result = IdTableStatic<NumStaticCols>(writer_.numColumns(),
-                                              writer_.allocator());
+        result = IdTableStatic<NumStaticCols>(this->writer_.numColumns(),
+                                              this->writer_.allocator());
         result.reserve(blockSizeOutput);
       }
     }
     numPopped += result.numRows();
     co_yield result;
-    AD_CORRECTNESS_CHECK(numPopped == numElementsPushed_);
+    AD_CORRECTNESS_CHECK(numPopped == this->numElementsPushed_);
   }
 
   void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
@@ -613,23 +575,40 @@ class ExternalIdTableSorter {
     std::ranges::sort(block, comp_);
 #endif
   }
-  void pushBlock(IdTableStatic<NumStaticCols> block) {
-    if (sortAndWriteFuture_.valid()) {
-      sortAndWriteFuture_.get();
-    }
-    if (block.empty()) {
-      return;
-    }
-    ++numBlocksPushed_;
-    // TODO<joka921> We probably need one thread for sorting and one for writing
-    // for the maximal performance. But this requires more work for a general
-    // synchronization framework.
-    sortAndWriteFuture_ = std::async(
-        std::launch::async, [block = std::move(block), this]() mutable {
-          sortBlockInPlace(block);
-          writer_.writeIdTable(std::move(block).toDynamic());
-        });
+  void transformBlock(IdTableStatic<NumStaticCols>& block) const {
+    sortBlockInPlace(block);
   }
+
+  // TODO<joka921> Comment.
+  size_t computeBlockSizeForMergePhase(MemorySize requiredMemoryForInputBlocks,
+                                       size_t numBlocksToMerge) {
+    if (EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING) {
+      // For unit tests, always yield 5 outputs at once.
+      return 5;
+    } else {
+      auto throwInsufficientMemory = [numBlocksToMerge]() {
+        throw std::runtime_error{
+            absl::StrCat("Insufficient memory for merging ", numBlocksToMerge,
+                         " blocks. Please increase the memory settings")};
+      };
+      if (requiredMemoryForInputBlocks >= this->memory_) {
+        throwInsufficientMemory();
+      }
+      using namespace ad_utility::memory_literals;
+      // Don't use a too large output size.
+      auto blockSizeOutputMemory =
+          std::min((this->memory_ - requiredMemoryForInputBlocks) /
+                       numBufferedOutputBlocks_,
+                   maxOutputBlocksize_);
+
+      size_t blockSizeForOutput =
+          blockSizeOutputMemory.getBytes() / (sizeof(Id) * this->numColumns_);
+      if (blockSizeForOutput <= 100) {
+        throwInsufficientMemory();
+      }
+      return blockSizeForOutput;
+    }
+  };
 };
 }  // namespace ad_utility
 
