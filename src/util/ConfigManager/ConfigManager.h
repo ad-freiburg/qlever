@@ -508,13 +508,14 @@ class ConfigManager {
       Validator<ValidatorParameterTypes...> auto validatorFunction,
       std::string errorMessage) {
     // The whole 'transformation' is simply a wrapper.
-    return [validatorFunction, errorMessage = std::move(errorMessage)](
+    return [validatorFunction,
+            errorMessage = ErrorMessage{std::move(errorMessage)}](
                const ValidatorParameterTypes&... args)
                -> std::optional<ErrorMessage> {
       if (std::invoke(validatorFunction, args...)) {
         return std::nullopt;
       } else {
-        return std::make_optional<ErrorMessage>(errorMessage);
+        return errorMessage;
       }
     };
   }
