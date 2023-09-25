@@ -42,7 +42,7 @@
 #include <stxxl/vector>
 #include <vector>
 
-#include "engine/idTable/IdTableCompressedWriter.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
@@ -56,7 +56,8 @@ using std::vector;
 using json = nlohmann::json;
 
 template <typename Comparator>
-using ExternalSorter = ad_utility::ExternalIdTableSorter<Comparator, 3>;
+using ExternalSorter =
+    ad_utility::CompressedExternalIdTableSorter<Comparator, 3>;
 
 using PsoSorter = ExternalSorter<SortByPSO>;
 

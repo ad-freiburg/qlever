@@ -11,5 +11,5 @@ add_library(engine
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
         CartesianProductJoin.cpp
-        idTable/IdTableCompressedWriter.h)
+        idTable/CompressedExternalIdTable.h)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams)

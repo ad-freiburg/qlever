@@ -14,7 +14,7 @@
 #include "./ConstantsIndexBuilding.h"
 #include "./IndexBuilderTypes.h"
 #include "Vocabulary.h"
-#include "engine/idTable/IdTableCompressedWriter.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 
 using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;

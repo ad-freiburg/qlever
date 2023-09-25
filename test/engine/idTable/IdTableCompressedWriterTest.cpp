@@ -8,9 +8,12 @@
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
-#include "engine/idTable/IdTableCompressedWriter.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/StxxlSortFunctors.h"
 
+using ad_utility::source_location;
+
+namespace {
 // Implementation of a class that inherits from `IdTable` but is copyable
 // (convenient for testing).
 template <size_t N = 0>
@@ -62,11 +65,12 @@ auto idTableFromRowGenerator = [](auto& generator, size_t numColumns) {
   }
   return result;
 };
+}  // namespace
 
-TEST(IdTableCompressedWriter, compressedWriterTest) {
+TEST(CompressedExternalIdTableWriter, compressedWriterTest) {
   using namespace ad_utility::memory_literals;
   std::string filename = "idTableCompressedWriter.compressedWriterTest.dat";
-  ad_utility::IdTableCompressedWriter writer{
+  ad_utility::CompressedExternalIdTableWriter writer{
       filename, 3, ad_utility::testing::makeAllocator(), 48_B};
   std::vector<CopyableIdTable<0>> tables;
   tables.push_back(makeIdTableFromVector({{2, 4, 7}, {3, 6, 8}, {4, 3, 2}}));
@@ -89,14 +93,16 @@ TEST(IdTableCompressedWriter, compressedWriterTest) {
 
 template <size_t NumStaticColumns>
 void testExternalSorter(size_t numDynamicColumns, size_t numRows,
-                        ad_utility::MemorySize memoryToUse) {
+                        ad_utility::MemorySize memoryToUse,
+                        source_location l = source_location::current()) {
+  auto tr = generateLocationTrace(l);
   std::string filename = "idTableCompressedSorter.testExternalSorter.dat";
   using namespace ad_utility::memory_literals;
 
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  ad_utility::ExternalIdTableSorter<SortByOPS, NumStaticColumns> writer{
-      filename, numDynamicColumns, memoryToUse.getBytes(),
-      ad_utility::testing::makeAllocator(), 5_kB};
+  ad_utility::CompressedExternalIdTableSorter<SortByOPS, NumStaticColumns>
+      writer{filename, numDynamicColumns, memoryToUse.getBytes(),
+             ad_utility::testing::makeAllocator(), 5_kB};
 
   for (size_t i = 0; i < 2; ++i) {
     CopyableIdTable<NumStaticColumns> randomTable =
@@ -135,7 +141,7 @@ TEST(IdTableCompressedSorter, memoryLimit) {
 
   // only 100 bytes of memory, not sufficient for merging
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
-  ad_utility::ExternalIdTableSorter<SortByOPS, 0> writer{
+  ad_utility::CompressedExternalIdTableSorter<SortByOPS, 0> writer{
       filename, 3, 100, ad_utility::testing::makeAllocator()};
 
   CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100, 3);

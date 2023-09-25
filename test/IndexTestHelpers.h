@@ -7,7 +7,7 @@
 #include "./util/AllocatorTestHelpers.h"
 #include "absl/cleanup/cleanup.h"
 #include "engine/QueryExecutionContext.h"
-#include "engine/idTable/IdTableCompressedWriter.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
 

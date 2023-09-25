@@ -6,7 +6,7 @@
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../test/util/IdTableHelpers.h"
-#include "engine/idTable/IdTableCompressedWriter.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/StxxlSortFunctors.h"
 #include "util/BackgroundStxxlSorter.h"
 #include "util/Log.h"
@@ -40,7 +40,7 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
     [[maybe_unused]] auto firstCol = [](const auto& a, const auto& b) {
       return a[0] < b[0];
     };
-    ad_utility::ExternalIdTableSorter<SortByPSO, 3> writer{
+    ad_utility::CompressedExternalIdTableSorter<SortByPSO, 3> writer{
         filename, 3, memForStxxl, ad_utility::testing::makeAllocator()};
 
     auto runPush = [&writer, &numInputRows, &generateRandomRow]() {

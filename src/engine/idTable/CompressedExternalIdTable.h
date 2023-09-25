@@ -2,8 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_IDTABLECOMPRESSEDWRITER_H
-#define QLEVER_IDTABLECOMPRESSEDWRITER_H
+#ifndef QLEVER_COMPRESSEDEXTERNALIDTABLE_H
+#define QLEVER_COMPRESSEDEXTERNALIDTABLE_H
 
 #include <algorithm>
 #include <future>
@@ -31,7 +31,7 @@ using namespace ad_utility::memory_literals;
 // iterate (hence the smaller blocks for compression). These tables all have the
 // same number of columns, so they can be thought of as large blocks of a very
 // large `IdTable` which is formed by the concatenation of the single tables.
-class IdTableCompressedWriter {
+class CompressedExternalIdTableWriter {
  private:
   // Metadata for a compressed block of bytes. A block is a contiguous part of a
   // column of an `IdTable`.
@@ -66,7 +66,7 @@ class IdTableCompressedWriter {
  public:
   // Constructor. The file at `filename` will be overwritten. Each of the
   // `IdTables` that will be passed in has to have exactly `numCols` columns.
-  explicit IdTableCompressedWriter(
+  explicit CompressedExternalIdTableWriter(
       std::string filename, size_t numCols,
       ad_utility::AllocatorWithLimit<Id> allocator,
       ad_utility::MemorySize blockSizeUncompressed = 4_MB)
@@ -76,7 +76,7 @@ class IdTableCompressedWriter {
         blockSizeUncompressed_(blockSizeUncompressed) {}
 
   // Destructor. Deletes the stored file.
-  ~IdTableCompressedWriter() {
+  ~CompressedExternalIdTableWriter() {
     file_.wlock()->close();
     ad_utility::deleteFile(filename_);
   }
@@ -108,9 +108,8 @@ class IdTableCompressedWriter {
             for (size_t lower = 0; lower < column.size(); lower += blockSize) {
               size_t upper = std::min(lower + blockSize, column.size());
               auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
-              auto compressed =
-                  ZstdWrapper::compress(const_cast<Id*>(column.data()) + lower,
-                                        thisBlockSizeUncompressed);
+              auto compressed = ZstdWrapper::compress(
+                  column.data() + lower, thisBlockSizeUncompressed);
               size_t offset = 0;
               file_.withWriteLock(
                   [&offset, &compressed](ad_utility::File& file) {
@@ -176,9 +175,8 @@ class IdTableCompressedWriter {
   // Get the row generator for a single IdTable, specified by the `index`.
   template <size_t N = 0>
   auto makeGeneratorForRows(size_t index) {
-    return std::ranges::join_view {
-      ad_utility::OwningView { makeGeneratorForIdTable<N>(index) }
-    }
+    return std::ranges::join_view{
+        ad_utility::OwningView{makeGeneratorForIdTable<N>(index)}};
   }
 
   // Get the block generator for a single IdTable, specified by the `index`.
@@ -191,6 +189,7 @@ class IdTableCompressedWriter {
                          ? startOfSingleIdTables_.at(index + 1)
                          : blocksPerColumn_.at(0).size();
 
+    /*
     // Lambda that decompresses the block at the given `blockIdx`. The
     // individual columns are decompressed concurrently.
     auto readBlock = [this](size_t blockIdx) {
@@ -225,6 +224,7 @@ class IdTableCompressedWriter {
       }
       return block;
     };
+     */
 
     std::future<Table> fut;
 
@@ -235,7 +235,9 @@ class IdTableCompressedWriter {
       if (fut.valid()) {
         table = fut.get();
       }
-      fut = std::async(std::launch::async, readBlock, blockIdx);
+      fut = std::async(std::launch::async, [this, blockIdx]() {
+        return readBlock<NumCols>(blockIdx);
+      });
       if (table.has_value()) {
         co_yield table.value();
       }
@@ -245,18 +247,51 @@ class IdTableCompressedWriter {
     auto table = fut.get();
     co_yield table;
   }
+
+  // Decompresses the block at the given `blockIdx`. The
+  // individual columns are decompressed concurrently.
+  template <size_t NumCols = 0>
+  IdTableStatic<NumCols> readBlock(size_t blockIdx) {
+    IdTableStatic<NumCols> block{numColumns(), allocator_};
+    block.reserve(blockSizeUncompressed_.getBytes() / sizeof(Id));
+    size_t blockSize =
+        blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
+    block.resize(blockSize);
+    std::vector<std::future<void>> readColumnFutures;
+    for (auto i : std::views::iota(0u, numColumns())) {
+      readColumnFutures.push_back(
+          std::async(std::launch::async, [&block, this, i, blockIdx]() {
+            decltype(auto) col = block.getColumn(i);
+            const auto& metaData = blocksPerColumn_.at(i).at(blockIdx);
+            std::vector<char> compressed;
+            compressed.resize(metaData.compressedSize_);
+            auto numBytesRead =
+                file_.wlock()->read(compressed.data(), metaData.compressedSize_,
+                                    metaData.offsetInFile_);
+            AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
+                                 static_cast<size_t>(numBytesRead) ==
+                                     metaData.compressedSize_);
+            auto numBytesDecompressed = ZstdWrapper::decompressToBuffer(
+                compressed.data(), compressed.size(), col.data(),
+                metaData.uncompressedSize_);
+            AD_CORRECTNESS_CHECK(numBytesDecompressed ==
+                                 metaData.uncompressedSize_);
+          }));
+    }
+    for (auto& fut : readColumnFutures) {
+      fut.get();
+    }
+    return block;
+  };
 };
 
-template <size_t NumStaticCols, template <size_t N> typename ImplTemplate>
+template <size_t NumStaticCols, typename Impl>
 class CompressedExternalIdTableBase {
  public:
   using value_type = IdTableStatic<NumStaticCols>::row_type;
   using reference = IdTableStatic<NumStaticCols>::row_reference;
   using const_reference = IdTableStatic<NumStaticCols>::const_row_reference;
   using MemorySize = ad_utility::MemorySize;
-
-  using Impl = ImplTemplate<NumStaticCols>;
-  friend class ImplTemplate<NumStaticCols>;
 
   Impl& impl() { return static_cast<Impl&>(*this); }
 
@@ -278,7 +313,7 @@ class CompressedExternalIdTableBase {
   // One that is currently being sorted and written to disk in the background,
   // and one that is used to collect rows in the calls to `push`.
   size_t blocksize_{memory_.getBytes() / (numColumns_ * sizeof(Id) * 2)};
-  IdTableCompressedWriter writer_;
+  CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
 
  public:
@@ -387,8 +422,8 @@ class CompressedExternalIdTableBase {
 // generator that yields the rows that have previously been pushed.
 template <size_t NumStaticCols>
 class CompressedExternalIdTable
-    : public CompressedExternalIdTableBase<NumStaticCols,
-                                           CompressedExternalIdTable> {
+    : public CompressedExternalIdTableBase<
+          NumStaticCols, CompressedExternalIdTable<NumStaticCols>> {
  private:
   using Base =
       CompressedExternalIdTableBase<NumStaticCols, CompressedExternalIdTable>;
@@ -449,14 +484,17 @@ class CompressedExternalIdTable
 inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 template <typename Comparator, size_t NumStaticCols>
-class ExternalIdTableSorter
-    : public CompressedExternalIdTableBase<NumStaticCols,
-                                           CompressedExternalIdTable> {
+class CompressedExternalIdTableSorter
+    : public CompressedExternalIdTableBase<
+          NumStaticCols,
+          CompressedExternalIdTableSorter<Comparator, NumStaticCols>> {
  private:
-  using Base =
-      CompressedExternalIdTableBase<NumStaticCols, CompressedExternalIdTable>;
-  friend class CompressedExternalIdTableBase<NumStaticCols,
-                                             CompressedExternalIdTable>;
+  using Base = CompressedExternalIdTableBase<
+      NumStaticCols,
+      CompressedExternalIdTableSorter<Comparator, NumStaticCols>>;
+  friend class CompressedExternalIdTableBase<
+      NumStaticCols,
+      CompressedExternalIdTableSorter<Comparator, NumStaticCols>>;
   [[no_unique_address]] Comparator comp_{};
   // Track if we are currently in the merging phase.
   std::atomic<bool> mergeIsActive_ = false;
@@ -469,21 +507,22 @@ class ExternalIdTableSorter
 
  public:
   // Constructor.
-  explicit ExternalIdTableSorter(std::string filename, size_t numCols,
-                                 size_t memoryInBytes,
-                                 ad_utility::AllocatorWithLimit<Id> allocator,
-                                 MemorySize blocksizeCompression = 4_MB)
+  explicit CompressedExternalIdTableSorter(
+      std::string filename, size_t numCols, size_t memoryInBytes,
+      ad_utility::AllocatorWithLimit<Id> allocator,
+      MemorySize blocksizeCompression = 4_MB)
       : Base{std::move(filename), numCols, memoryInBytes, std::move(allocator),
              blocksizeCompression} {}
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
-  explicit ExternalIdTableSorter(std::string filename, size_t memoryInBytes,
-                                 ad_utility::AllocatorWithLimit<Id> allocator,
-                                 MemorySize blocksizeCompression = 4_MB)
-      requires(NumStaticCols > 0)
-      : ExternalIdTableSorter(std::move(filename), NumStaticCols, memoryInBytes,
-                              std::move(allocator), blocksizeCompression) {}
+  explicit CompressedExternalIdTableSorter(
+      std::string filename, size_t memoryInBytes,
+      ad_utility::AllocatorWithLimit<Id> allocator,
+      MemorySize blocksizeCompression = 4_MB) requires(NumStaticCols > 0)
+      : CompressedExternalIdTableSorter(std::move(filename), NumStaticCols,
+                                        memoryInBytes, std::move(allocator),
+                                        blocksizeCompression) {}
 
   // Transition from the input phase, where `push()` can be called, to the
   // output phase and return a generator that yields the sorted elements. This
@@ -612,4 +651,4 @@ class ExternalIdTableSorter
 };
 }  // namespace ad_utility
 
-#endif  // QLEVER_IDTABLECOMPRESSEDWRITER_H
+#endif  // QLEVER_COMPRESSEDEXTERNALIDTABLE_H
