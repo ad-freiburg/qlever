@@ -67,7 +67,7 @@ auto idTableFromRowGenerator = [](auto& generator, size_t numColumns) {
 };
 }  // namespace
 
-TEST(CompressedExternalIdTableWriter, compressedWriterTest) {
+TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
   using namespace ad_utility::memory_literals;
   std::string filename = "idTableCompressedWriter.compressedWriterTest.dat";
   ad_utility::CompressedExternalIdTableWriter writer{
@@ -125,7 +125,7 @@ void testExternalSorter(size_t numDynamicColumns, size_t numRows,
   }
 }
 
-TEST(IdTableCompressedSorter, testRandomInput) {
+TEST(CompressedExternalIdTable, sorterRandomInputs) {
   using namespace ad_utility::memory_literals;
   // Test for dynamic (<0>) and static(<3>) tables.
   // Test the case that there are multiple blocks to merge (many rows but a low
@@ -136,7 +136,7 @@ TEST(IdTableCompressedSorter, testRandomInput) {
   testExternalSorter<3>(3, 1000, 1_MB);
 }
 
-TEST(IdTableCompressedSorter, memoryLimit) {
+TEST(CompressedExternalIdTable, sorterMemoryLimit) {
   std::string filename = "idTableCompressedSorter.memoryLimit.dat";
 
   // only 100 bytes of memory, not sufficient for merging
@@ -186,7 +186,7 @@ void testExternalCompressor(size_t numDynamicColumns, size_t numRows,
   }
 }
 
-TEST(ExternalIdTableCompressor, testRandomInput) {
+TEST(CompressedExternalIdTable, compressorRandomInput) {
   using namespace ad_utility::memory_literals;
   // Test for dynamic (<0>) and static(<3>) tables.
   // Test the case that there are multiple blocks to merge (many rows but a low

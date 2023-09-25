@@ -155,10 +155,9 @@ class CompressedExternalIdTableWriter {
 
   template <size_t N = 0>
   auto getGeneratorForAllRows() {
-    // Note: We cannot write `std::views::join` because it is currently missing
-    // in libc++.
-    return std::ranges::join_view{
-        ad_utility::OwningView{getAllRowGenerators<N>()}};
+    // Note: As soon as we drop the support for GCC11 this can be
+    // `return getAllRowGenerators<N>() | std::views::join;
+    return std::views::join(ad_utility::OwningView{getAllRowGenerators<N>()});
   }
 
   // Clear the underlying file and completely reset the data structure s.t. it
@@ -175,8 +174,8 @@ class CompressedExternalIdTableWriter {
   // Get the row generator for a single IdTable, specified by the `index`.
   template <size_t N = 0>
   auto makeGeneratorForRows(size_t index) {
-    return std::ranges::join_view{
-        ad_utility::OwningView{makeGeneratorForIdTable<N>(index)}};
+    return std::views::join(
+        ad_utility::OwningView{makeGeneratorForIdTable<N>(index)});
   }
 
   // Get the block generator for a single IdTable, specified by the `index`.
@@ -188,44 +187,6 @@ class CompressedExternalIdTableWriter {
     auto lastBlock = index + 1 < startOfSingleIdTables_.size()
                          ? startOfSingleIdTables_.at(index + 1)
                          : blocksPerColumn_.at(0).size();
-
-    /*
-    // Lambda that decompresses the block at the given `blockIdx`. The
-    // individual columns are decompressed concurrently.
-    auto readBlock = [this](size_t blockIdx) {
-      Table block{numColumns(), allocator_};
-      block.reserve(blockSizeUncompressed_.getBytes() / sizeof(Id));
-      size_t blockSize =
-          blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
-      block.resize(blockSize);
-      std::vector<std::future<void>> readColumnFutures;
-      for (auto i : std::views::iota(0u, numColumns())) {
-        readColumnFutures.push_back(
-            std::async(std::launch::async, [&block, this, i, blockIdx]() {
-              decltype(auto) col = block.getColumn(i);
-              const auto& metaData = blocksPerColumn_.at(i).at(blockIdx);
-              std::vector<char> compressed;
-              compressed.resize(metaData.compressedSize_);
-              auto numBytesRead = file_.wlock()->read(compressed.data(),
-                                                      metaData.compressedSize_,
-                                                      metaData.offsetInFile_);
-              AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
-                                   static_cast<size_t>(numBytesRead) ==
-                                       metaData.compressedSize_);
-              auto numBytesDecompressed = ZstdWrapper::decompressToBuffer(
-                  compressed.data(), compressed.size(), col.data(),
-                  metaData.uncompressedSize_);
-              AD_CORRECTNESS_CHECK(numBytesDecompressed ==
-                                   metaData.uncompressedSize_);
-            }));
-      }
-      for (auto& fut : readColumnFutures) {
-        fut.get();
-      }
-      return block;
-    };
-     */
-
     std::future<Table> fut;
 
     // Yield one block after the other. While one block is yielded the next
