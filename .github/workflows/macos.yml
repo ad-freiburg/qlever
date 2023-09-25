@@ -22,7 +22,8 @@ jobs:
       matrix:
         # We need the -fexperimental-library flag to have `std::views::join` available in libc++16.
         warnings: [  "-Wall -Wextra -O1 -fexperimental-library" ]
-        build-type: [Release]
+        # Debugging the Stxxl build
+        build-type: [""]
     runs-on: macos-12
     steps:
     - uses: actions/checkout@v3
