@@ -295,8 +295,8 @@ class ConfigManager {
   configuration options are valid. Return an empty instance of
   `std::optional<ErrorMessage>` if valid. Otherwise, the `ErrorMessage` should
   contain the reason, why the values are none valid.
-  @param configOptionsToBeChecked Proxies for the configuration options, whos
-  values will be passed to the exception validator function as function
+  @param configOptionsToBeChecked Proxies for the configuration options, the
+  values of which will be passed to the exception validator function as function
   arguments. Will keep the same order.
   */
   template <typename... ExceptionValidatorParameterTypes>
