@@ -60,7 +60,7 @@ jobs:
       # The sed command adds clang-17 to the list of compilers that are supported by conan.
     - run: echo "$(conan config home)/settings.yml"
     - run: cat $(conan config home)/settings.yml
-    - run: sed  "s/\"15\", \"16\"]/\"15\", \"16\", \"17\"]/" $(conan config home)/settings.yml  > $(conan config home)/settings.yml
+    - run: sed  "s/\"15\", \"16\"]/\"15\", \"16\", \"17\"]/" $(conan config home)/settings.yml  > test.txt && cp test.txt $(conan config home)/settings.yml
     - run: cat $(conan config home)/settings.yml
     - name: Install and run conan
       working-directory: ${{github.workspace}}/build
