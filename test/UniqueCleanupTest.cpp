@@ -35,7 +35,7 @@ TEST(UniqueCleanup, CorrectCallbackOnInvokeManuallyAndCancel) {
                       counter++;
                     }};
     ASSERT_EQ(counter, 0) << "Callback was called too early";
-    a.invokeManuallyAndCancel();
+    std::move(a).invokeManuallyAndCancel();
     ASSERT_EQ(counter, 1)
         << "Callback was not called, or called too many times";
   }
