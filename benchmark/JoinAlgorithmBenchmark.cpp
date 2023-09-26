@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <ctime>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -643,37 +644,44 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     Is `maxMemory` big enough, to even allow for one row of the smaller
     table, bigger table, or the table resulting from joining the smaller and
     bigger table?`
+    If not, return an `ErrorMessage`.
     */
-    auto checkIfMaxMemoryBigEnoughForOneRow = [](const ad_utility::MemorySize
-                                                     maxMemory,
-                                                 const size_t amountOfColumns) {
+    auto checkIfMaxMemoryBigEnoughForOneRow =
+        [](const ad_utility::MemorySize maxMemory,
+           const std::string_view tableName, const size_t amountOfColumns)
+        -> std::optional<ad_utility::ErrorMessage> {
+      const ad_utility::MemorySize memoryNeededForOneRow =
+          approximateMemoryNeededByIdTable(1, amountOfColumns);
       // Remember: `0` is for unlimited memory.
       // TODO Use the normal comparison operator, once it got implemented
       // for `MemorySize`.
-      if (maxMemory.getBytes() == ad_utility::MemorySize::bytes(0).getBytes()) {
-        return true;
+      if (maxMemory.getBytes() == ad_utility::MemorySize::bytes(0).getBytes() ||
+          memoryNeededForOneRow.getBytes() <= maxMemory.getBytes()) {
+        return std::nullopt;
+      } else {
+        return std::make_optional<ad_utility::ErrorMessage>(
+            absl::StrCat("'maxMemory' (", maxMemory.asString(),
+                         ") must be big enough, for at least one row "
+                         "in the ",
+                         tableName, ", which requires at least ",
+                         memoryNeededForOneRow.asString(), "."));
       }
-
-      return approximateMemoryNeededByIdTable(1, amountOfColumns).getBytes() >=
-             maxMemory.getBytes();
     };
     config.addValidator(
         [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
                                              size_t smallerTableNumColumns) {
           return checkIfMaxMemoryBigEnoughForOneRow(
-              ad_utility::MemorySize::parse(maxMemory), smallerTableNumColumns);
+              ad_utility::MemorySize::parse(maxMemory), "smaller table",
+              smallerTableNumColumns);
         },
-        "'maxMemory' must be big enough, for at least one row in the the "
-        "smaller table.",
         maxMemoryInStringFormat, smallerTableAmountColumns);
     config.addValidator(
         [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
                                              size_t biggerTableNumColumns) {
           return checkIfMaxMemoryBigEnoughForOneRow(
-              ad_utility::MemorySize::parse(maxMemory), biggerTableNumColumns);
+              ad_utility::MemorySize::parse(maxMemory), "bigger table",
+              biggerTableNumColumns);
         },
-        "'maxMemory' must be big enough, for at least one row in the the "
-        "bigger table.",
         maxMemoryInStringFormat, biggerTableAmountColumns);
     config.addValidator(
         [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
@@ -681,10 +689,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                              size_t biggerTableNumColumns) {
           return checkIfMaxMemoryBigEnoughForOneRow(
               ad_utility::MemorySize::parse(maxMemory),
+              "result of joining the smaller and bigger table",
               smallerTableNumColumns + biggerTableNumColumns - 1);
         },
-        "'maxMemory' must be big enough, for at least one row in the the "
-        "result of joining the smaller and bigger table.",
         maxMemoryInStringFormat, smallerTableAmountColumns,
         biggerTableAmountColumns);
 
