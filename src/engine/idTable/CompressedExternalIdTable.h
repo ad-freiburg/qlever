@@ -476,6 +476,10 @@ struct BlockSorter {
 #endif
   }
 };
+// Deduction guide for the aggregate above.
+template <typename Comp>
+BlockSorter(Comp) -> BlockSorter<Comp>;
+
 template <typename Comparator, size_t NumStaticCols>
 class CompressedExternalIdTableSorter
     : public CompressedExternalIdTableBase<
