@@ -20,6 +20,7 @@
 #include "util/Timer.h"
 #include "util/http/HttpServer.h"
 #include "util/http/streamable_body.h"
+#include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
 
 using nlohmann::json;
@@ -58,8 +59,14 @@ class Server {
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
+  ad_utility::websocket::QueryRegistry queryRegistry_{};
 
   bool enablePatternTrick_;
+
+  // Because HttpServer is not a member of this class, we need to assign
+  // this pointer after HttpServer is instanced. It is also set back to
+  // nullptr once the object is destroyed which only happens on shutdown.
+  ad_utility::websocket::QueryHub* queryHub_ = nullptr;
 
   // Semaphore for the number of queries that can be processed at once.
   mutable std::counting_semaphore<std::numeric_limits<int>::max()>
@@ -110,4 +117,19 @@ class Server {
   // Returns an awaitable of the return value of `function`
   template <typename Function, typename T = std::invoke_result_t<Function>>
   Awaitable<T> computeInNewThread(Function function) const;
+
+  /// This method extracts a client-defined query id from the passed HTTP
+  /// request if it is present. If it is not present or empty, a new
+  /// pseudo-random id will be chosen by the server. Note that this id is not
+  /// communicated to the client in any way. It ensures that every query has a
+  /// unique id and therefore that the code doesn't need to check for an empty
+  /// case. In the case of conflict when using a manual id, a
+  /// `QueryAlreadyInUseError` exception is thrown.
+  ///
+  /// \param request The HTTP request to extract the id from.
+  ///
+  /// \return An OwningQueryId object. It removes itself from the registry
+  ///         on destruction.
+  ad_utility::websocket::OwningQueryId getQueryId(
+      const ad_utility::httpUtils::HttpRequest auto& request);
 };
