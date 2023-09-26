@@ -113,9 +113,7 @@ class HttpServer {
   }
 
   // Get the server port.
-  [[nodiscard]] auto getPort() const {
-    return acceptor_.local_endpoint().port();
-  }
+  auto getPort() const { return acceptor_.local_endpoint().port(); }
 
   // Is the server ready yet? We need this in `test/HttpTest.cpp` so that our
   // test can wait for the server to be ready and continue with its test

@@ -47,7 +47,7 @@ class TestHttpServer {
   }
 
   // Get port on which this server is running.
-  [[nodiscard]] auto getPort() const { return server_->getPort(); }
+  auto getPort() const { return server_->getPort(); }
 
   // Run the server in its own thread. Wait for 100ms until the server is up and
   // throw `std::runtime_error` if it's not (it should be up immediately).
