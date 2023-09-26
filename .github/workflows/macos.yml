@@ -39,7 +39,7 @@ jobs:
 
     - name: Install dependencies
       run:  |
-        brew install llvm@17
+        brew update && install llvm@17
         brew install conan@2
         echo 'export PATH="/usr/local/opt/llvm/bin:$PATH"' >> ~/.bash_profile
         echo PATH="/usr/local/opt/llvm/bin:$PATH" >> $GITHUB_ENV 
