@@ -68,9 +68,7 @@ class Server {
   // nullptr once the object is destroyed which only happens on shutdown.
   ad_utility::websocket::QueryHub* queryHub_ = nullptr;
 
-  // Semaphore for the number of queries that can be processed at once.
-  mutable std::counting_semaphore<std::numeric_limits<int>::max()>
-      queryProcessingSemaphore_;
+  mutable net::static_thread_pool threadPool_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
