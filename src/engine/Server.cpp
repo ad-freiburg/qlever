@@ -21,7 +21,7 @@ template <typename T>
 using Awaitable = Server::Awaitable<T>;
 
 // __________________________________________________________________________
-Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
+Server::Server(unsigned short port, size_t numThreads, size_t maxMemGB,
                std::string accessToken, bool usePatternTrick)
     : numThreads_(numThreads),
       port_(port),
@@ -37,7 +37,7 @@ Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.
-      threadPool_{static_cast<size_t>(numThreads)} {
+      threadPool_{numThreads} {
   // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
   // in the cache and the memory limit
   // Convert a number of gigabytes to the number of Ids that find in that
@@ -137,8 +137,8 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
-  auto httpServer =
-      HttpServer{port_, "0.0.0.0", numThreads_, std::move(httpSessionHandler)};
+  auto httpServer = HttpServer{port_, "0.0.0.0", static_cast<int>(numThreads_),
+                               std::move(httpSessionHandler)};
   queryHub_ = &httpServer.getQueryHub();
 
   // Initialize the index

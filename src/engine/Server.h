@@ -30,7 +30,7 @@ using std::vector;
 //! The HTTP Server used.
 class Server {
  public:
-  explicit Server(unsigned short port, int numThreads, size_t maxMemGB,
+  explicit Server(unsigned short port, size_t numThreads, size_t maxMemGB,
                   std::string accessToken, bool usePatternTrick = true);
 
   virtual ~Server() = default;
@@ -52,7 +52,7 @@ class Server {
   const Index& index() const { return index_; }
 
  private:
-  const int numThreads_;
+  const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
   QueryResultCache cache_;
