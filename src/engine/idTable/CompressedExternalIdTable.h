@@ -17,9 +17,9 @@
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/TransparentFunctors.h"
 #include "util/Views.h"
 #include "util/http/beast.h"
-#include "util/TransparentFunctors.h"
 
 namespace ad_utility {
 
@@ -250,7 +250,8 @@ class CompressedExternalIdTableWriter {
 // The common base implementation of `CompressedExternalIdTable` and
 // `CompressedExternalIdTableSorter` (see below). It is implemented as a mixin
 // class.
-template <size_t NumStaticCols, std::invocable<IdTableStatic<NumStaticCols>&> BlockTransformation = ad_utility::Noop>
+template <size_t NumStaticCols, std::invocable<IdTableStatic<NumStaticCols>&>
+                                    BlockTransformation = ad_utility::Noop>
 class CompressedExternalIdTableBase {
  public:
   using value_type = IdTableStatic<NumStaticCols>::row_type;
@@ -395,11 +396,9 @@ class CompressedExternalIdTableBase {
 // generator that yields the rows that have previously been pushed.
 template <size_t NumStaticCols>
 class CompressedExternalIdTable
-    : public CompressedExternalIdTableBase<
-          NumStaticCols> {
+    : public CompressedExternalIdTableBase<NumStaticCols> {
  private:
-  using Base =
-      CompressedExternalIdTableBase<NumStaticCols>;
+  using Base = CompressedExternalIdTableBase<NumStaticCols>;
 
   using MemorySize = ad_utility::MemorySize;
 
@@ -465,7 +464,7 @@ inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 
 // The implementation of sorting a single block
-template<typename Comp>
+template <typename Comp>
 struct BlockSorter {
   [[no_unique_address]] Comp comp_{};
   void operator()(auto& block) {
@@ -482,11 +481,11 @@ BlockSorter(Comp) -> BlockSorter<Comp>;
 
 template <typename Comparator, size_t NumStaticCols>
 class CompressedExternalIdTableSorter
-    : public CompressedExternalIdTableBase<
-          NumStaticCols, BlockSorter<Comparator>> {
+    : public CompressedExternalIdTableBase<NumStaticCols,
+                                           BlockSorter<Comparator>> {
  private:
-  using Base = CompressedExternalIdTableBase<
-      NumStaticCols, BlockSorter<Comparator>>;
+  using Base =
+      CompressedExternalIdTableBase<NumStaticCols, BlockSorter<Comparator>>;
   [[no_unique_address]] Comparator comp_{};
   // Track if we are currently in the merging phase.
   std::atomic<bool> mergeIsActive_ = false;
@@ -503,15 +502,18 @@ class CompressedExternalIdTableSorter
       std::string filename, size_t numCols, size_t memoryInBytes,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = 4_MB, Comparator comp = {})
-      : Base{std::move(filename), numCols, memoryInBytes, std::move(allocator),
-             blocksizeCompression, BlockSorter{comp}}, comp_{comp} {}
+      : Base{std::move(filename),  numCols,
+             memoryInBytes,        std::move(allocator),
+             blocksizeCompression, BlockSorter{comp}},
+        comp_{comp} {}
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
   explicit CompressedExternalIdTableSorter(
       std::string filename, size_t memoryInBytes,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      MemorySize blocksizeCompression = 4_MB, Comparator comp = {}) requires(NumStaticCols > 0)
+      MemorySize blocksizeCompression = 4_MB, Comparator comp = {})
+      requires(NumStaticCols > 0)
       : CompressedExternalIdTableSorter(std::move(filename), NumStaticCols,
                                         memoryInBytes, std::move(allocator),
                                         blocksizeCompression, comp) {}
