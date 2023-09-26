@@ -45,8 +45,6 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 template <typename HttpHandler>
 class HttpServer {
  private:
-  const net::ip::address ipAddress_;
-  const unsigned short port_;
   HttpHandler httpHandler_;
   int numServerThreads_;
   net::io_context ioContext_;
@@ -68,15 +66,13 @@ class HttpServer {
                       const std::string& ipAddress = "0.0.0.0",
                       int numServerThreads = 1,
                       HttpHandler handler = HttpHandler{})
-      : ipAddress_{net::ip::make_address(ipAddress)},
-        port_{port},
-        httpHandler_{std::move(handler)},
+      : httpHandler_{std::move(handler)},
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?
         numServerThreads_{std::max(2, numServerThreads)},
         ioContext_{numServerThreads_} {
     try {
-      tcp::endpoint endpoint{ipAddress_, port_};
+      tcp::endpoint endpoint{net::ip::make_address(ipAddress), port};
       // Open the acceptor.
       acceptor_.open(endpoint.protocol());
       boost::asio::socket_base::reuse_address option{true};
@@ -117,7 +113,7 @@ class HttpServer {
   }
 
   // Get the server port.
-  [[nodiscard]] unsigned short getPort() const { return port_; }
+  auto getPort() const { return acceptor_.local_endpoint().port(); }
 
   // Is the server ready yet? We need this in `test/HttpTest.cpp` so that our
   // test can wait for the server to be ready and continue with its test
