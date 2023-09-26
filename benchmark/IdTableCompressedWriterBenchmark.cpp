@@ -11,6 +11,10 @@
 #include "util/BackgroundStxxlSorter.h"
 #include "util/Log.h"
 
+// On macOS on GitHub actions we currently have trouble with STXXL in this
+// Benchmark.
+#ifndef __APPLE__
+
 namespace ad_benchmark {
 
 using A = std::array<Id, 3>;
@@ -100,3 +104,4 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
 };
 AD_REGISTER_BENCHMARK(IdTableCompressedWriterBenchmarks);
 }  // namespace ad_benchmark
+#endif
