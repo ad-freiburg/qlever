@@ -19,6 +19,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/Views.h"
 #include "util/http/beast.h"
+#include "util/TransparentFunctors.h"
 
 namespace ad_utility {
 
@@ -249,15 +250,13 @@ class CompressedExternalIdTableWriter {
 // The common base implementation of `CompressedExternalIdTable` and
 // `CompressedExternalIdTableSorter` (see below). It is implemented as a mixin
 // class.
-template <size_t NumStaticCols, typename Impl>
+template <size_t NumStaticCols, std::invocable<IdTableStatic<NumStaticCols>&> BlockTransformation = ad_utility::Noop>
 class CompressedExternalIdTableBase {
  public:
   using value_type = IdTableStatic<NumStaticCols>::row_type;
   using reference = IdTableStatic<NumStaticCols>::row_reference;
   using const_reference = IdTableStatic<NumStaticCols>::const_row_reference;
   using MemorySize = ad_utility::MemorySize;
-
-  Impl& impl() { return static_cast<Impl&>(*this); }
 
  protected:
   // Used to aggregate rows for the next block.
@@ -280,15 +279,19 @@ class CompressedExternalIdTableBase {
   CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
 
+  [[no_unique_address]] BlockTransformation blockTransformation_{};
+
  public:
   explicit CompressedExternalIdTableBase(
       std::string filename, size_t numCols, size_t memoryInBytes,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      MemorySize blocksizeCompression = 4_MB)
+      MemorySize blocksizeCompression = 4_MB,
+      BlockTransformation blockTransformation = {})
       : currentBlock_{numCols, allocator},
         numColumns_{numCols},
         memory_{MemorySize::bytes(memoryInBytes)},
-        writer_{std::move(filename), numCols, allocator, blocksizeCompression} {
+        writer_{std::move(filename), numCols, allocator, blocksizeCompression},
+        blockTransformation_{blockTransformation} {
     this->currentBlock_.reserve(blocksize_);
     AD_CONTRACT_CHECK(NumStaticCols == 0 || NumStaticCols == numCols);
   }
@@ -351,7 +354,7 @@ class CompressedExternalIdTableBase {
     ++numBlocksPushed_;
     compressAndWriteFuture_ = std::async(
         std::launch::async, [block = std::move(block), this]() mutable {
-          impl().transformBlock(block);
+          blockTransformation_(block);
           this->writer_.writeIdTable(std::move(block).toDynamic());
         });
   }
@@ -372,7 +375,7 @@ class CompressedExternalIdTableBase {
     if (numBlocksPushed_ == 0) {
       AD_CORRECTNESS_CHECK(this->numElementsPushed_ ==
                            this->currentBlock_.size());
-      impl().transformBlock(this->currentBlock_);
+      blockTransformation_(this->currentBlock_);
       return false;
     }
     pushBlock(std::move(this->currentBlock_));
@@ -393,12 +396,10 @@ class CompressedExternalIdTableBase {
 template <size_t NumStaticCols>
 class CompressedExternalIdTable
     : public CompressedExternalIdTableBase<
-          NumStaticCols, CompressedExternalIdTable<NumStaticCols>> {
+          NumStaticCols> {
  private:
   using Base =
-      CompressedExternalIdTableBase<NumStaticCols, CompressedExternalIdTable>;
-  friend class CompressedExternalIdTableBase<NumStaticCols,
-                                             CompressedExternalIdTable>;
+      CompressedExternalIdTableBase<NumStaticCols>;
 
   using MemorySize = ad_utility::MemorySize;
 
@@ -448,11 +449,6 @@ class CompressedExternalIdTable
     }
     return this->writer_.template getGeneratorForAllRows<NumStaticCols>();
   }
-
- private:
-  // This function is expected by the mixin base class.
-  void transformBlock([[maybe_unused]] auto& block) { /* no transformation */
-  }
 };
 
 // This class allows the external (on-disk) sorting of an `IdTable` that is too
@@ -467,18 +463,26 @@ class CompressedExternalIdTable
 // variable to `true` allows to disable the memory limit.
 inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
+
+// The implementation of sorting a single block
+template<typename Comp>
+struct BlockSorter {
+  [[no_unique_address]] Comp comp_{};
+  void operator()(auto& block) {
+#ifdef _PARALLEL_SORT
+    ad_utility::parallel_sort(block.begin(), block.end(), comp_);
+#else
+    std::ranges::sort(block, comp_);
+#endif
+  }
+};
 template <typename Comparator, size_t NumStaticCols>
 class CompressedExternalIdTableSorter
     : public CompressedExternalIdTableBase<
-          NumStaticCols,
-          CompressedExternalIdTableSorter<Comparator, NumStaticCols>> {
+          NumStaticCols, BlockSorter<Comparator>> {
  private:
   using Base = CompressedExternalIdTableBase<
-      NumStaticCols,
-      CompressedExternalIdTableSorter<Comparator, NumStaticCols>>;
-  friend class CompressedExternalIdTableBase<
-      NumStaticCols,
-      CompressedExternalIdTableSorter<Comparator, NumStaticCols>>;
+      NumStaticCols, BlockSorter<Comparator>>;
   [[no_unique_address]] Comparator comp_{};
   // Track if we are currently in the merging phase.
   std::atomic<bool> mergeIsActive_ = false;
@@ -494,19 +498,19 @@ class CompressedExternalIdTableSorter
   explicit CompressedExternalIdTableSorter(
       std::string filename, size_t numCols, size_t memoryInBytes,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      MemorySize blocksizeCompression = 4_MB)
+      MemorySize blocksizeCompression = 4_MB, Comparator comp = {})
       : Base{std::move(filename), numCols, memoryInBytes, std::move(allocator),
-             blocksizeCompression} {}
+             blocksizeCompression, BlockSorter{comp}}, comp_{comp} {}
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
   explicit CompressedExternalIdTableSorter(
       std::string filename, size_t memoryInBytes,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      MemorySize blocksizeCompression = 4_MB) requires(NumStaticCols > 0)
+      MemorySize blocksizeCompression = 4_MB, Comparator comp = {}) requires(NumStaticCols > 0)
       : CompressedExternalIdTableSorter(std::move(filename), NumStaticCols,
                                         memoryInBytes, std::move(allocator),
-                                        blocksizeCompression) {}
+                                        blocksizeCompression, comp) {}
 
   // Transition from the input phase, where `push()` can be called, to the
   // output phase and return a generator that yields the sorted elements. This
