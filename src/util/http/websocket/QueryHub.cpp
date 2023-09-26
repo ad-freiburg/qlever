@@ -23,7 +23,9 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
   co_await net::dispatch(globalStrand_, net::use_awaitable);
   if (socketDistributors_.contains(queryId)) {
     auto ptr = socketDistributors_.at(queryId).lock();
-    // Destructor must block until distributor is unregistered
+    // On all code paths a finished `socketDistributor` is first deleted from
+    // the `QueryHub` and only then destroyed.
+    // This is asserted by the following check.
     AD_CORRECTNESS_CHECK(ptr);
     co_return ptr;
   }
@@ -51,12 +53,23 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
         // which is bad. Unfortunately destructors can't be coroutines, which
         // would just allow us to co_await execution without issues. To prevent
         // deadlocks, we wait at most 1 second (arbitrarily chosen interval)
-        // for the cleanup to complete, otherwise we throw an exception.
+        // for the cleanup to complete, then print a warning, and wait for 9
+        // more seconds before we call std::terminate instead of running into
+        // a deadlock.
         auto status = future.wait_for(std::chrono::seconds(1));
         if (status != std::future_status::ready) {
-          AD_THROW(
-              "Cleanup took longer than 1s to execute, avoiding deadlock"
-              "by throwing an exception instead!");
+          LOG(WARN)
+              << "Distributor cleanup in the websocket module taking longer "
+                 "than usual. This might be due to heavy load or a deadlock."
+              << std::endl;
+        }
+        status = future.wait_for(std::chrono::seconds(9));
+        if (status != std::future_status::ready) {
+          LOG(FATAL)
+              << "Distributor cleanup in the websocket module taking longer "
+                 "than 10 seconds. Terminating to avoid potential deadlock."
+              << std::endl;
+          std::terminate();
         }
       });
   *pointerHolder = distributor;

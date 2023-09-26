@@ -14,9 +14,10 @@ MessageSender::MessageSender(DistributorAndOwningQueryId distributor,
                          [](auto distributor) -> net::awaitable<void> {
                        // signalEnd() removes the distributor from the QueryHub.
                        // When the coroutine is destroyed afterwards the query
-                       // id is unregistered from the registry! This is the
-                       // reason why the OwningQueryId is part of the struct
-                       // but never actually accessed.
+                       // id is unregistered from the registry by the destructor
+                       // of `OwningQueryId`! This is the reason why the
+                       // `OwningQueryId` is part of the struct but never
+                       // actually accessed.
                        co_await distributor.distributor_->signalEnd();
                      };
                      net::co_spawn(executor, coroutine(AD_FWD(distributor)),
