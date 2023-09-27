@@ -12,7 +12,6 @@
 #include "util/http/websocket/QueryToSocketDistributor.h"
 
 namespace ad_utility::websocket {
-using StrandType = net::strand<net::any_io_executor>;
 
 /// Class that provides the functionality to create and/or acquire a
 /// `QueryToSocketDistributor`. All operations are synchronized on an exclusive
@@ -24,7 +23,8 @@ class QueryHub {
   using PointerType = std::weak_ptr<QueryToSocketDistributor>;
 
   net::io_context& ioContext_;
-  StrandType globalStrand_;
+  /// Thread pool with single thread for synchronization
+  net::static_thread_pool singleThreadPool_{1};
   absl::flat_hash_map<QueryId, PointerType> socketDistributors_{};
 
   /// Implementation of createOrAcquireDistributor
@@ -32,8 +32,7 @@ class QueryHub {
       createOrAcquireDistributorInternal(QueryId);
 
  public:
-  explicit QueryHub(net::io_context& ioContext)
-      : ioContext_{ioContext}, globalStrand_{net::make_strand(ioContext)} {}
+  explicit QueryHub(net::io_context& ioContext) : ioContext_{ioContext} {}
 
   /// Creates a new `QueryToSocketDistributor` or returns the pre-existing
   /// for the provided query id if there already is one. The bool parameter
