@@ -18,7 +18,7 @@
 using namespace ad_utility::memory_literals;
 
 static const ad_utility::MemorySize DEFAULT_STXXL_MEMORY = 5_GB;
-static const ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1000_MB;
+static const ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
 static const size_t STXXL_DISK_SIZE_INDEX_TEST = 10;
 
 static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 4;
