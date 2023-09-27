@@ -393,39 +393,14 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
 using parsedQuery::SelectClause;
 
 // _____________________________________________________________________________
-ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::selectQueryResultToStream(
-    const QueryExecutionTree& qet,
-    const parsedQuery::SelectClause& selectClause,
-    LimitOffsetClause limitAndOffset, ad_utility::MediaType format) {
-  switch (format) {
-    using enum ad_utility::MediaType;
-    case octetStream:
-      return selectQueryResultToCsvTsvOrBinary<octetStream>(qet, selectClause,
-                                                            limitAndOffset);
-    case csv:
-      return selectQueryResultToCsvTsvOrBinary<csv>(qet, selectClause,
-                                                    limitAndOffset);
-    case tsv:
-      return selectQueryResultToCsvTsvOrBinary<tsv>(qet, selectClause,
-                                                    limitAndOffset);
-    case sparqlXml:
-      return selectQueryResultToXML(qet, selectClause, limitAndOffset);
-    default:
-      AD_FAIL();
-  }
-}
-
-// _____________________________________________________________________________
 template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
+ExportQueryExecutionTrees::selectQueryResultToStreamImpl(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset) {
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
-                format == MediaType::tsv || format == MediaType::sparqlXml ||
-                format == MediaType::turtle);
+                format == MediaType::tsv || format == MediaType::turtle);
 
   // TODO<joka921> Use a proper error message, or check that we get a more
   // reasonable error from upstream.
@@ -563,11 +538,12 @@ static std::string idToXMLBinding(std::string_view var, Id id,
 }
 
 // _____________________________________________________________________________
-ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::selectQueryResultToXML(
-    const QueryExecutionTree& qet,
-    const parsedQuery::SelectClause& selectClause,
-    LimitOffsetClause limitAndOffset) {
+template <>
+ad_utility::streams::stream_generator ExportQueryExecutionTrees::
+    selectQueryResultToStreamImpl<ad_utility::MediaType::sparqlXml>(
+        const QueryExecutionTree& qet,
+        const parsedQuery::SelectClause& selectClause,
+        LimitOffsetClause limitAndOffset) {
   using namespace std::string_view_literals;
   co_yield "<?xml version=\"1.0\"?>\n"
       "<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">";
@@ -621,9 +597,11 @@ ExportQueryExecutionTrees::constructQueryResultToTsvOrCsv(
     LimitOffsetClause limitAndOffset,
     std::shared_ptr<const ResultTable> resultTable) {
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
-                format == MediaType::tsv);
+                format == MediaType::tsv || format == MediaType::sparqlXml);
   if constexpr (format == MediaType::octetStream) {
     AD_THROW("Binary export is not supported for CONSTRUCT queries");
+  } else if constexpr (format == MediaType::sparqlXml) {
+    AD_THROW("XML export is currently not supported for CONSTRUCT queries");
   }
   resultTable->logResultSize();
   constexpr auto& escapeFunction = format == MediaType::tsv
@@ -712,16 +690,10 @@ ad_utility::streams::stream_generator
 ExportQueryExecutionTrees::computeResultAsStream(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::MediaType mediaType) {
-  // TODO<joka921> Unify the interface by also implement CONSTRUCT export via
-  // XML.
-  if (parsedQuery.hasSelectClause()) {
-    return selectQueryResultToStream(qet, parsedQuery.selectClause(),
-                                     parsedQuery._limitOffset, mediaType);
-  }
   auto compute = [&]<MediaType format> {
     auto limitAndOffset = parsedQuery._limitOffset;
     return parsedQuery.hasSelectClause()
-               ? ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary<
+               ? ExportQueryExecutionTrees::selectQueryResultToStreamImpl<
                      format>(qet, parsedQuery.selectClause(), limitAndOffset)
                : ExportQueryExecutionTrees::constructQueryResultToTsvOrCsv<
                      format>(qet, parsedQuery.constructClause().triples_,
@@ -729,21 +701,8 @@ ExportQueryExecutionTrees::computeResultAsStream(
   };
 
   using enum MediaType;
-  return ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle>(compute,
-                                                                    mediaType);
-  /*
-  // TODO<joka921> Clean this up by a "switch constexpr"-abstraction
-  if (mediaType == MediaType::csv) {
-    return compute.template operator()<MediaType::csv>();
-  } else if (mediaType == MediaType::tsv) {
-    return compute.template operator()<MediaType::tsv>();
-  } else if (mediaType == ad_utility::MediaType::octetStream) {
-    return compute.template operator()<MediaType::octetStream>();
-  } else if (mediaType == ad_utility::MediaType::turtle) {
-    return computeConstructQueryResultAsTurtle(parsedQuery, qet);
-  }
-  AD_FAIL();
-   */
+  return ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml>(
+      compute, mediaType);
 }
 
 // _____________________________________________________________________________

@@ -179,11 +179,37 @@ nlohmann::json makeExpectedSparqlJSON(
   return j;
 }
 
+// TODO<joka921> Comment those helpers
+static std::string makeXMLHeader(
+    std::vector<std::string> varsWithoutQuestionMark) {
+  std::string result = R"(<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+<head>)";
+  for (const auto& var : varsWithoutQuestionMark) {
+    absl::StrAppend(&result, "\n<variable name=\"", var, R"("/>)");
+  }
+  absl::StrAppend(&result, "\n</head>\n<results>");
+  return result;
+}
+
+static const std::string xmlTrailer = "\n</results>\n</sparql>";
+
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, Integers) {
   std::string kg =
       "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+  std::string expectedXml = makeXMLHeader({"o"}) +
+                            R"(
+  <result>
+  <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#int">-42019234865781</literal></binding>
+  </result>
+  <result>
+  <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#int">42</literal></binding>
+  </result>
+  <result>
+  <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#int">4012934858173560</literal></binding>
+  </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
       kg, query, 3,
       // TSV
@@ -206,7 +232,8 @@ TEST(ExportQueryExecutionTree, Integers) {
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#int", "literal",
                            "42"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#int", "literal",
-                           "4012934858173560")})};
+                           "4012934858173560")}),
+      expectedXml};
   runSelectQueryTestCase(testCase);
 
   TestCaseConstructQuery testCaseConstruct{
@@ -232,20 +259,6 @@ TEST(ExportQueryExecutionTree, Integers) {
       }()};
   runConstructQueryTestCase(testCaseConstruct);
 }
-
-static std::string makeXMLHeader(
-    std::vector<std::string> varsWithoutQuestionMark) {
-  std::string result = R"(<?xml version="1.0"?>
-<sparql xmlns="http://www.w3.org/2005/sparql-results#">
-<head>)";
-  for (const auto& var : varsWithoutQuestionMark) {
-    absl::StrAppend(&result, "\n<variable name=\"", var, R"("/>)");
-  }
-  absl::StrAppend(&result, "\n</head>\n<results>");
-  return result;
-}
-
-static const std::string xmlTrailer = "\n</results>\n</sparql>";
 
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, Bool) {
@@ -564,6 +577,11 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
 TEST(ExportQueryExecutionTree, LiteralWithDatatype) {
   std::string kg = "<s> <p> \"something\"^^<www.example.org/bim>";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+  std::string expectedXml = makeXMLHeader({"o"}) +
+                            R"(
+  <result>
+  <binding name="o"><literal datatype="www.example.org/bim">something</literal></binding>
+  </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
       kg, query, 1,
       // TSV
@@ -574,7 +592,8 @@ TEST(ExportQueryExecutionTree, LiteralWithDatatype) {
       "something\n",
       makeExpectedQLeverJSON({"\"something\"^^<www.example.org/bim>"s}),
       makeExpectedSparqlJSON(
-          {makeJSONBinding("www.example.org/bim", "literal", "something")})};
+          {makeJSONBinding("www.example.org/bim", "literal", "something")}),
+      expectedXml};
   runSelectQueryTestCase(testCase);
   testCase.kg = "<s> <x> <y>";
   testCase.query =
@@ -607,6 +626,10 @@ TEST(ExportQueryExecutionTree, UndefinedValues) {
   std::string kg = "<s> <p> <o>";
   std::string query =
       "SELECT ?o WHERE {?s <p> <o> OPTIONAL {?s <p2> ?o}} ORDER BY ?o";
+  std::string expectedXml = makeXMLHeader({"o"}) +
+                            R"(
+  <result>
+  </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
       kg,
       query,
@@ -619,7 +642,8 @@ TEST(ExportQueryExecutionTree, UndefinedValues) {
         j["head"]["vars"].push_back("o");
         j["results"]["bindings"].push_back(nullptr);
         return j;
-      }()};
+      }(),
+      expectedXml};
   runSelectQueryTestCase(testCase);
 
   // In CONSTRUCT queries, results with undefined values in the exported
@@ -640,17 +664,22 @@ TEST(ExportQueryExecutionTree, UndefinedValues) {
 TEST(ExportQueryExecutionTree, BlankNode) {
   std::string kg = "<s> <p> _:blank";
   std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o } ORDER BY ?o";
-  TestCaseSelectQuery testCaseBlankNode{
-      kg, objectQuery, 1,
-      // TSV
-      "?o\n"
-      "_:u_blank\n",
-      // CSV
-      "o\n"
-      "_:u_blank\n",
-      makeExpectedQLeverJSON({"_:u_blank"s}),
-      makeExpectedSparqlJSON(
-          {makeJSONBinding(std::nullopt, "bnode", "u_blank")})};
+  std::string expectedXml = makeXMLHeader({"o"}) +
+                            R"(
+  <result>
+  <binding name="o"><bnode>u_blank</bnode></binding>
+  </result>)" + xmlTrailer;
+  TestCaseSelectQuery testCaseBlankNode{kg, objectQuery, 1,
+                                        // TSV
+                                        "?o\n"
+                                        "_:u_blank\n",
+                                        // CSV
+                                        "o\n"
+                                        "_:u_blank\n",
+                                        makeExpectedQLeverJSON({"_:u_blank"s}),
+                                        makeExpectedSparqlJSON({makeJSONBinding(
+                                            std::nullopt, "bnode", "u_blank")}),
+                                        expectedXml};
   runSelectQueryTestCase(testCaseBlankNode);
   // Note: Blank nodes cannot be introduced in a `VALUES` clause, so they can
   // never be part of the local vocabulary. For this reason we don't need a
@@ -661,6 +690,12 @@ TEST(ExportQueryExecutionTree, BlankNode) {
 TEST(ExportQueryExecutionTree, MultipleVariables) {
   std::string kg = "<s> <p> <o>";
   std::string objectQuery = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
+  std::string expectedXml = makeXMLHeader({"p", "o"}) +
+                            R"(
+  <result>
+  <binding name="p"><uri>p</uri></binding>
+  <binding name="o"><uri>o</uri></binding>
+  </result>)" + xmlTrailer;
   TestCaseSelectQuery testCaseMultipleVariables{
       kg, objectQuery, 1,
       // TSV
@@ -683,7 +718,8 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
         bindings.back()["p"] = makeJSONBinding(std::nullopt, "uri", "p");
         bindings.back()["o"] = makeJSONBinding(std::nullopt, "uri", "o");
         return j;
-      }()};
+      }(),
+      expectedXml};
   runSelectQueryTestCase(testCaseMultipleVariables);
 }
 
