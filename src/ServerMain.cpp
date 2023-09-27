@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(
-        port, static_cast<int>(numSimultaneousQueries),
+        port, numSimultaneousQueries,
         ad_utility::MemorySize::gigabytes(static_cast<size_t>(memoryMaxSizeGb)),
         std::move(accessToken), !noPatternTrick);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);

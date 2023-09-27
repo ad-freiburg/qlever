@@ -31,7 +31,7 @@ using std::vector;
 //! The HTTP Server used.
 class Server {
  public:
-  explicit Server(unsigned short port, int numThreads,
+  explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
                   bool usePatternTrick = true);
 
@@ -54,7 +54,7 @@ class Server {
   const Index& index() const { return index_; }
 
  private:
-  const int numThreads_;
+  const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
   QueryResultCache cache_;
@@ -70,9 +70,7 @@ class Server {
   // nullptr once the object is destroyed which only happens on shutdown.
   ad_utility::websocket::QueryHub* queryHub_ = nullptr;
 
-  // Semaphore for the number of queries that can be processed at once.
-  mutable std::counting_semaphore<std::numeric_limits<int>::max()>
-      queryProcessingSemaphore_;
+  mutable net::static_thread_pool threadPool_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
