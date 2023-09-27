@@ -13,7 +13,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
-#include "util/BoostHelpers/AsyncWaitForFuture.h"
+#include "util/AsioHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/http/websocket/MessageSender.h"
 
@@ -21,7 +21,7 @@ template <typename T>
 using Awaitable = Server::Awaitable<T>;
 
 // __________________________________________________________________________
-Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
+Server::Server(unsigned short port, size_t numThreads, size_t maxMemGB,
                std::string accessToken, bool usePatternTrick)
     : numThreads_(numThreads),
       port_(port),
@@ -37,7 +37,7 @@ Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.
-      queryProcessingSemaphore_(numThreads) {
+      threadPool_{numThreads} {
   // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
   // in the cache and the memory limit
   // Convert a number of gigabytes to the number of Ids that find in that
@@ -137,8 +137,8 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
-  auto httpServer =
-      HttpServer{port_, "0.0.0.0", numThreads_, std::move(httpSessionHandler)};
+  auto httpServer = HttpServer{port_, "0.0.0.0", static_cast<int>(numThreads_),
+                               std::move(httpSessionHandler)};
   queryHub_ = &httpServer.getQueryHub();
 
   // Initialize the index
@@ -757,13 +757,10 @@ boost::asio::awaitable<void> Server::processQuery(
 // _____________________________________________________________________________
 template <typename Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function) const {
-  auto acquireComputeRelease = [this, function = std::move(function)] {
-    LOG(DEBUG) << "Acquiring new thread for query processing\n";
-    queryProcessingSemaphore_.acquire();
-    auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-        [this]() { queryProcessingSemaphore_.release(); });
-    return function();
+  auto runOnExecutor = [](auto executor, Function func) -> net::awaitable<T> {
+    co_await net::post(executor, net::use_awaitable);
+    co_return std::invoke(func);
   };
-  co_return co_await ad_utility::asio_helpers::async_on_external_thread(
-      std::move(acquireComputeRelease), boost::asio::use_awaitable);
+  return ad_utility::sameExecutor(
+      runOnExecutor(threadPool_.get_executor(), std::move(function)));
 }
