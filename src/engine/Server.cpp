@@ -15,6 +15,7 @@
 #include "engine/QueryPlanner.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/http/websocket/MessageSender.h"
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
@@ -138,12 +139,17 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
   // the "socket already in use" error appears quickly.
   auto httpServer =
       HttpServer{port_, "0.0.0.0", numThreads_, std::move(httpSessionHandler)};
+  queryHub_ = &httpServer.getQueryHub();
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations);
 
   // Start listening for connections on the server.
   httpServer.run();
+
+  // This will probably never be executed, but to ensure there will never
+  // be any dangling pointers, set it to zero after use.
+  queryHub_ = nullptr;
 }
 
 // _____________________________________________________________________________
@@ -470,6 +476,36 @@ nlohmann::json Server::composeCacheStatsJson() const {
   return result;
 }
 
+// _____________________________________________
+
+/// Special type of std::runtime_error used to indicate that there has been
+/// a collision of query ids. This will happen when a HTTP client chooses an
+/// explicit id that is currently already in use. In this case the server
+/// will respond with HTTP status 409 Conflict and the client is encouraged
+/// to re-submit their request with a different query id.
+class QueryAlreadyInUseError : public std::runtime_error {
+ public:
+  explicit QueryAlreadyInUseError(std::string_view proposedQueryId)
+      : std::runtime_error{"Query id '" + proposedQueryId +
+                           "' is already in use!"} {}
+};
+
+// _____________________________________________
+
+ad_utility::websocket::OwningQueryId Server::getQueryId(
+    const ad_utility::httpUtils::HttpRequest auto& request) {
+  using ad_utility::websocket::OwningQueryId;
+  std::string_view queryIdHeader = request.base()["Query-Id"];
+  if (queryIdHeader.empty()) {
+    return queryRegistry_.uniqueId();
+  }
+  auto queryId = queryRegistry_.uniqueIdFromString(std::string(queryIdHeader));
+  if (!queryId) {
+    throw QueryAlreadyInUseError{queryIdHeader};
+  }
+  return std::move(queryId.value());
+}
+
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
@@ -479,13 +515,15 @@ boost::asio::awaitable<void> Server::processQuery(
   const auto& query = params.at("query");
   AD_CONTRACT_CHECK(!query.empty());
 
-  auto sendJson = [&request, &send](
-                      const json& jsonString,
-                      http::status status =
-                          http::status::ok) -> boost::asio::awaitable<void> {
-    auto response = createJsonResponse(jsonString, request, status);
+  auto sendJson =
+      [&request, &send](
+          const json& jsonString,
+          http::status responseStatus) -> boost::asio::awaitable<void> {
+    auto response = createJsonResponse(jsonString, request, responseStatus);
     co_return co_await send(std::move(response));
   };
+
+  http::status responseStatus = http::status::ok;
 
   // Put the whole query processing in a try-catch block. If any exception
   // occurs, log the error message and send a JSON response with all the details
@@ -578,6 +616,9 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
+    AD_CORRECTNESS_CHECK(queryHub_ != nullptr);
+    auto messageSender = co_await ad_utility::websocket::MessageSender::create(
+        getQueryId(request), *queryHub_);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query. Start the shared `timeoutTimer` here
     // to also include the query planning.
@@ -587,8 +628,8 @@ boost::asio::awaitable<void> Server::processQuery(
     // do index scans) and then we get an error message afterwards that a
     // certain media type is not supported.
     QueryExecutionContext qec(index_, &cache_, allocator_,
-                              sortPerformanceEstimator_, pinSubtrees,
-                              pinResult);
+                              sortPerformanceEstimator_,
+                              std::ref(messageSender), pinSubtrees, pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(enablePatternTrick_);
     queryExecutionTree = qp.createExecutionTree(pq);
@@ -614,7 +655,7 @@ boost::asio::awaitable<void> Server::processQuery(
       });
 
       // The `streamable_body` that is used internally turns all exceptions that
-      // occur while generating the rults into "broken pipe". We store the
+      // occur while generating the results into "broken pipe". We store the
       // actual exceptions and manually rethrow them to propagate the correct
       // error messages to the user.
       // TODO<joka921> What happens, when part of the TSV export has already
@@ -649,7 +690,7 @@ boost::asio::awaitable<void> Server::processQuery(
           return ExportQueryExecutionTrees::computeResultAsJSON(
               pq, qet, requestTimer, maxSend, mediaType.value());
         });
-        co_await sendJson(std::move(responseString));
+        co_await sendJson(std::move(responseString), responseStatus);
       } break;
       default:
         // This should never happen, because we have carefully restricted the
@@ -674,9 +715,14 @@ boost::asio::awaitable<void> Server::processQuery(
                << qet.getRootOperation()->getRuntimeInfo().toString()
                << std::endl;
   } catch (const ParseException& e) {
+    responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
+  } catch (const QueryAlreadyInUseError& e) {
+    responseStatus = http::status::conflict;
+    exceptionErrorMsg = e.what();
   } catch (const std::exception& e) {
+    responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
@@ -704,7 +750,7 @@ boost::asio::awaitable<void> Server::processQuery(
       errorResponseJson["runtimeInformation"] = nlohmann::ordered_json(
           queryExecutionTree->getRootOperation()->getRuntimeInfo());
     }
-    co_return co_await sendJson(errorResponseJson, http::status::bad_request);
+    co_return co_await sendJson(errorResponseJson, responseStatus);
   }
 }
 

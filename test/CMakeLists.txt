@@ -308,7 +308,7 @@ addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
 addLinkAndDiscoverTest(ExceptionHandlingTest)
 
-addLinkAndDiscoverTest(SparqlExpressionTypesTest util)
+addLinkAndDiscoverTest(SparqlExpressionTypesTest sparqlExpressions util)
 
 addLinkAndDiscoverTest(LimitOffsetClauseTest)
 
@@ -332,9 +332,9 @@ addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 
-addLinkAndDiscoverTest(FindUndefRangesTest)
+addLinkAndDiscoverTest(FindUndefRangesTest engine)
 
-addLinkAndDiscoverTest(AddCombinedRowToTableTest util)
+addLinkAndDiscoverTest(AddCombinedRowToTableTest engine util)
 
 addLinkAndDiscoverTest(CtreHelpersTest)
 
@@ -351,3 +351,19 @@ addLinkAndDiscoverTest(MemorySizeTest memorySize)
 addLinkAndDiscoverTest(JsonUtilTest)
 
 addLinkAndDiscoverTest(JoinAlgorithmsTest)
+
+addLinkAndDiscoverTest(AsioHelpersTest)
+
+addLinkAndDiscoverTest(UniqueCleanupTest)
+
+addLinkAndDiscoverTest(WebSocketSessionTest http)
+
+addLinkAndDiscoverTest(QueryIdTest)
+
+addLinkAndDiscoverTest(QueryHubTest http)
+
+addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
+
+addLinkAndDiscoverTest(UpdateFetcherTest http)
+
+addLinkAndDiscoverTest(MessageSenderTest http)
