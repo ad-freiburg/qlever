@@ -33,13 +33,19 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
   // or literal. All internal IRIs or literals come before all external ones.
   // TODO<joka921> Change this as soon as we have Interleaved Ids via the
   // MilestoneIdManager
-  // TODO<joka921> Split up the actual comparison of QueueWords and the
-  // "inversion" because of `std::priority_queue`
-  auto queueCompare = [&comparator](const QueueWord& p1, const QueueWord& p2) {
-    if (p1.isExternal() != p2.isExternal()) {
-      return p1.isExternal();
+  auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
+                                const TripleComponentWithIndex& t2) {
+    if (t1.isExternal() != t2.isExternal()) {
+      return t2.isExternal();
     }
-    return comparator(p2.iriOrLiteral(), p1.iriOrLiteral());
+    return comparator(t1._iriOrLiteral, t2._iriOrLiteral);
+  };
+
+  // For the priority queue we have to invert the comparison, because
+  // `std::priority_queue` sorts descending by default.
+  auto greaterThanForQueue = [&lessThan](const QueueWord& p1,
+                                         const QueueWord& p2) {
+    return lessThan(p2._entry, p1._entry);
   };
 
   std::vector<ad_utility::serialization::FileReadSerializer> infiles;
@@ -52,8 +58,9 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
   std::vector<bool> endOfFile(numFiles, false);
 
   // Priority queue for the k-way merge
-  std::priority_queue<QueueWord, std::vector<QueueWord>, decltype(queueCompare)>
-      queue(queueCompare);
+  std::priority_queue<QueueWord, std::vector<QueueWord>,
+                      decltype(greaterThanForQueue)>
+      queue(greaterThanForQueue);
 
   auto pushWordFromPartialVocabularyToQueue = [&](size_t i) {
     if (numWordsLeftInPartialVocabulary[i] > 0) {
@@ -102,8 +109,8 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
       // asynchronously write the next batch of sorted
       // queue words
       auto writeTask = [this, buf = std::move(sortedBuffer),
-                        &internalVocabularyAction]() {
-        this->writeQueueWordsToIdVec(buf, internalVocabularyAction);
+                        &internalVocabularyAction, &lessThan]() {
+        this->writeQueueWordsToIdVec(buf, internalVocabularyAction, lessThan);
       };
       sortedBuffer.clear();
       sortedBuffer.reserve(_bufferSize);
@@ -128,7 +135,7 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction);
+    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction, lessThan);
   }
 
   auto metaData = std::move(metaData_);
@@ -141,7 +148,7 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 template <typename InternalVocabularyAction>
 void VocabularyMerger::writeQueueWordsToIdVec(
     const std::vector<QueueWord>& buffer,
-    InternalVocabularyAction& internalVocabularyAction) {
+    InternalVocabularyAction& internalVocabularyAction, const auto& lessThan) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
   // smaller grained buffer for the actual inner write
@@ -153,6 +160,12 @@ void VocabularyMerger::writeQueueWordsToIdVec(
   for (auto& top : buffer) {
     if (!lastTripleComponent_.has_value() ||
         top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
+      if (lastTripleComponent_.has_value() &&
+          !lessThan(lastTripleComponent_.value(), top._entry)) {
+        LOG(WARN) << "Total vocabulary order violated for "
+                  << lastTripleComponent_->iriOrLiteral() << " and "
+                  << top.iriOrLiteral() << std::endl;
+      }
       // TODO<joka921> Once we have interleaved IDs using the MilestoneIdManager
       // we have to compute the correct Ids here.
       lastTripleComponent_ = TripleComponentWithIndex{
@@ -281,7 +294,7 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
     const auto& [id, splitVal] = idAndSplitVal;
-    TripleComponentWithIndex entry{word, splitVal.isExternalized, id};
+    TripleComponentWithIndex entry{word, splitVal.isExternalized_, id};
     serializer << entry;
   }
   serializer.close();

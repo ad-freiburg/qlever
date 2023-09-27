@@ -1135,7 +1135,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       LOG(TIMING) << "Remove externalized words from prefix compression"
                   << std::endl;
       std::erase_if(vec, [](const auto& a) {
-        return a.second.m_splitVal.isExternalized;
+        return a.second.m_splitVal.isExternalized_;
       });
       writePartialVocabularyToFile(vec, partialCompressionFilename);
     }
