@@ -126,15 +126,21 @@ include_directories(${Boost_INCLUDE_DIR})
 find_package(OpenSSL REQUIRED)
 
 ##############################################
-# Define a set of common third-party libraries that are used almost as
-# frequently as the standard library or as a  drop-in replacement for
-# some of its functionality.To enable the usage in all parts of QLever,
-# call the following function `qlever_target_link_libraries` for all
-# libraries and executables. It is a drop-in replacement for
-# `target_link_libraries` that additionally links against the common
-# libraries.
+# Define a set of common third-party and self made libraries that are used almost
+# as frequently as the standard library or as a  drop-in replacement for some of
+# its functionality.To enable the usage in all parts of QLever, call the following
+# function `qlever_target_link_libraries` for all libraries and executables. It
+# is a drop-in replacement for `target_link_libraries` that additionally links
+# against the common libraries.
 function (qlever_target_link_libraries target)
-    target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings absl::str_format ICU::uc ICU::i18n)
+    target_link_libraries(${target} ${ARGN} absl::flat_hash_map
+        absl::flat_hash_set absl::strings absl::str_format ICU::uc
+        ICU::i18n)
+
+    # memorySize is a utility library for defining memory sizes.
+    if (NOT ${target} STREQUAL "memorySize")
+        target_link_libraries(${target} memorySize)
+    endif()
 endfunction()
 
 

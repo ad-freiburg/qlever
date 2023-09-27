@@ -6,6 +6,7 @@
 
 #include "../src/util/Parameters.h"
 using namespace ad_utility;
+using namespace memory_literals;
 
 using namespace detail::parameterShortNames;
 
@@ -39,4 +40,43 @@ TEST(Parameters, First) {
   ASSERT_EQ("134", map.at("SizeT"));
   ASSERT_EQ("42.000000", map.at("Float"));
   ASSERT_EQ("16.200000", map.at("Double"));
+}
+
+// Basic test, if the parameter for `MemorySize` works.
+TEST(Parameters, MemorySizeParameter) {
+  // Compare a given `MemorySizeParameter` with a given `MemorySize`.
+  auto compareWithMemorySize = [](const auto& parameter,
+                                  const MemorySize& expectedValue) {
+    ASSERT_EQ(expectedValue.getBytes(), parameter.get().getBytes());
+    ASSERT_STREQ(expectedValue.asString().c_str(),
+                 parameter.toString().c_str());
+  };
+
+  MemorySizeParameter<"Memory"> m(6_GB);
+  compareWithMemorySize(m, 6_GB);
+  m.set(6_MB);
+  compareWithMemorySize(m, 6_MB);
+  m.setFromString("6 TB");
+  compareWithMemorySize(m, 6_TB);
+
+  // Test, if it works with `Parameters`.
+  Parameters pack(Float<"Float">{2.0f}, SizeT<"SizeT">{3ull},
+                  Double<"Double">{42.1}, MemorySizeParameter<"Memory">{6_GB});
+  ASSERT_EQ(pack.get<"Memory">().getBytes(), (6_GB).getBytes());
+  pack.set("Memory", "6 MB");
+  ASSERT_EQ(pack.get<"Memory">().getBytes(), (6_MB).getBytes());
+}
+
+// Basic test, if the concept works.
+TEST(Parameters, ParameterConcept) {
+  // Test the parameter short names.
+  static_assert(IsParameter<Float<"Float">>);
+  static_assert(IsParameter<Double<"Double">>);
+  static_assert(IsParameter<SizeT<"SizeT">>);
+  static_assert(IsParameter<String<"String">>);
+  static_assert(IsParameter<MemorySizeParameter<"MemorySizeParameter">>);
+
+  // Test some other random types.
+  static_assert(!IsParameter<std::string>);
+  static_assert(!IsParameter<ParameterName>);
 }
