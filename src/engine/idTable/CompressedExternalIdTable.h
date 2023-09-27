@@ -199,17 +199,18 @@ class CompressedExternalIdTableWriter {
   template <size_t NumCols = 0>
   cppcoro::generator<const IdTableStatic<NumCols>> makeGeneratorForIdTable(
       size_t index) {
-    // We eagerly also disallow generators that have been created, but not yet
+    // The following line has the effect, that `writeIdTable` and `clear` also
+    // throw an exception, when a generator has been created, but not yet
     // started.
     ++numActiveGenerators_;
-    return makeGeneratorForIdTableImpl<NumCols>(index);
+    return makeGeneratorForIdTableImpl<NumCols>(
+        index, absl::Cleanup{[this] { --numActiveGenerators_; }});
   }
 
   // The actual implementation of `makeGeneratorForIdTable` above.
   template <size_t NumCols = 0>
   cppcoro::generator<const IdTableStatic<NumCols>> makeGeneratorForIdTableImpl(
-      size_t index) {
-    auto cleanup = absl::Cleanup{[this] { --numActiveGenerators_; }};
+      size_t index, auto cleanup) {
     using Table = IdTableStatic<NumCols>;
     auto firstBlock = startOfSingleIdTables_.at(index);
     auto lastBlock = index + 1 < startOfSingleIdTables_.size()
@@ -491,20 +492,22 @@ inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 
 // The implementation of sorting a single block
-template <typename Comp>
+template <typename Comparator>
 struct BlockSorter {
-  [[no_unique_address]] Comp comp_{};
+  [[no_unique_address]] Comparator comparator_{};
   void operator()(auto& block) {
 #ifdef _PARALLEL_SORT
-    ad_utility::parallel_sort(std::begin(block), std::end(block), comp_);
+    ad_utility::parallel_sort(std::begin(block), std::end(block), comparator_);
 #else
-    std::ranges::sort(block, comp_);
+    std::ranges::sort(block, comparator_);
 #endif
   }
 };
-// Deduction guide for the aggregate above.
-template <typename Comp>
-BlockSorter(Comp) -> BlockSorter<Comp>;
+// Deduction guide for the implicit aggregate initializtion (its  "constructor")
+// in the aggregate above. Is actually not needed in C++20, but GCC 11 requires
+// it.
+template <typename Comparator>
+BlockSorter(Comparator) -> BlockSorter<Comparator>;
 
 template <typename Comparator, size_t NumStaticCols>
 class CompressedExternalIdTableSorter
@@ -513,7 +516,7 @@ class CompressedExternalIdTableSorter
  private:
   using Base =
       CompressedExternalIdTableBase<NumStaticCols, BlockSorter<Comparator>>;
-  [[no_unique_address]] Comparator comp_{};
+  [[no_unique_address]] Comparator comparator_{};
   // Track if we are currently in the merging phase.
   std::atomic<bool> mergeIsActive_ = false;
 
@@ -528,14 +531,14 @@ class CompressedExternalIdTableSorter
   explicit CompressedExternalIdTableSorter(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      MemorySize blocksizeCompression = 4_MB, Comparator comp = {})
+      MemorySize blocksizeCompression = 4_MB, Comparator comparator = {})
       : Base{std::move(filename),
              numCols,
              memory,
              std::move(allocator),
              blocksizeCompression,
-             BlockSorter{comp}},
-        comp_{comp} {}
+             BlockSorter{comparator}},
+        comparator_{comparator} {}
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
@@ -592,7 +595,7 @@ class CompressedExternalIdTableSorter
     // NOTE: We have to switch the arguments, because the heap operations by
     // default order descending...
     auto comp = [&, this](const auto& a, const auto& b) {
-      return comp_(projection(b), projection(a));
+      return comparator_(projection(b), projection(a));
     };
     std::vector<P> pq;
 
@@ -631,9 +634,9 @@ class CompressedExternalIdTableSorter
   // _____________________________________________________________
   void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
 #ifdef _PARALLEL_SORT
-    ad_utility::parallel_sort(block.begin(), block.end(), comp_);
+    ad_utility::parallel_sort(block.begin(), block.end(), comparator_);
 #else
-    std::ranges::sort(block, comp_);
+    std::ranges::sort(block, comparator_);
 #endif
   }
 

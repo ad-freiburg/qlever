@@ -216,6 +216,11 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
   };
   ASSERT_NO_THROW(pushAll());
 
+  // Only creating and then destroying a generator again does not prevent
+  // pushing.
+  { [[maybe_unused]] auto generator = writer.getRows(); }
+  ASSERT_NO_THROW(pushAll());
+
   auto generator = writer.getRows();
   // We have obtained a generator, but have not yet started it, but pushing is
   // already disabled to make the two-phase interface more consistent.
@@ -232,7 +237,7 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
   for (; it != generator.end(); ++it) {
   }
 
-  // All generators have ended, we should be able to push and clear and clear.
+  // All generators have ended, we should be able to push and clear.
   ASSERT_NO_THROW(pushAll());
   ASSERT_NO_THROW(writer.clear());
 }

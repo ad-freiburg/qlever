@@ -50,8 +50,8 @@ RegexExpression makeRegexExpression(
 }
 }  // namespace
 
-// Test that the expression `leftValue Comp rightValue`, when evaluated on the
-// `TestContext` (see above), yields the `expected` result.
+// Test that the expression `leftValue Comparator rightValue`, when evaluated on
+// the `TestContext` (see above), yields the `expected` result.
 void testWithExplicitResult(const SparqlExpression& expression,
                             std::vector<Id> expected,
                             source_location l = source_location::current()) {

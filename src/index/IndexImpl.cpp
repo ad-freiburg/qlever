@@ -29,6 +29,12 @@
 using std::array;
 using namespace ad_utility::memory_literals;
 
+// During the index building we typically have two permutation sortings present
+// at the same time, as we directly push the triples from the first sorting to
+// the second sorting. We therefore have to adjust the amount of memory per
+// external sorter.
+static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
+
 // _____________________________________________________________________________
 IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
     : allocator_{std::move(allocator)} {};
@@ -171,7 +177,9 @@ void IndexImpl::createFromFile(const string& filename) {
 
   ExternalSorter<SortBySPO> spoSorter{
       onDiskBase_ + ".spo-sorter.dat",
-      ad_utility::MemorySize::bytes(stxxlMemoryInBytes()) / 2, allocator_};
+      ad_utility::MemorySize::bytes(stxxlMemoryInBytes()) /
+          NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
+      allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
   auto uniqueSorter = ad_utility::uniqueView<decltype(psoSorter.sortedView()),
@@ -191,7 +199,9 @@ void IndexImpl::createFromFile(const string& filename) {
     // After the SPO permutation, create patterns if so desired.
     ExternalSorter<SortByOSP> ospSorter{
         onDiskBase_ + ".osp-sorter.dat",
-        ad_utility::MemorySize::bytes(stxxlMemoryInBytes()) / 2, allocator_};
+        ad_utility::MemorySize::bytes(stxxlMemoryInBytes()) /
+            NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
+        allocator_};
     size_t numSubjectsNormal = 0;
     auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
     if (usePatterns_) {
@@ -433,7 +443,9 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
   // Iterate over all partial vocabularies.
   auto resultPtr = std::make_unique<PsoSorter>(
       onDiskBase_ + ".pso-sorter.dat",
-      ad_utility::MemorySize::bytes(stxxlMemoryInBytes()) / 2, allocator_);
+      ad_utility::MemorySize::bytes(stxxlMemoryInBytes()) /
+          NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
+      allocator_);
   auto& result = *resultPtr;
   size_t i = 0;
   auto triplesGenerator = data.getRows();
