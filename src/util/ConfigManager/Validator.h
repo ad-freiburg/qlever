@@ -160,6 +160,36 @@ class ConfigOptionValidatorManager {
   }
 
   /*
+  @brief Create a `ConfigOptionValidatorManager`, which will call the given
+  validator function with the given `ConfigOption`s, after translating
+  them via the translator function.
+
+  @param validatorFunction Checks, if the transformed configuration options are
+  valid. Should return true, if they are valid.
+  @param errorMessage The error message, that will be shown, when the validator
+  returns false.
+  @param configOptionsToBeChecked Proxies for the configuration options, who
+  will be passed to the exception validator function as function arguments,
+  after being transformed. Will keep the same order.
+  */
+  template <typename TranslationFunction, typename ValidatorFunc,
+            isInstantiation<ConstConfigOptionProxy>... ValidatorParameterTypes>
+  requires(std::invocable<TranslationFunction, const ValidatorParameterTypes> &&
+           ...) &&
+          ValidatorFunction<ValidatorFunc,
+                            std::invoke_result_t<TranslationFunction,
+                                                 ValidatorParameterTypes>...> &&
+          (sizeof...(ValidatorParameterTypes) > 0) ConfigOptionValidatorManager(
+      ValidatorFunc validatorFunction, std::string errorMessage,
+      TranslationFunction translationFunction,
+      const ValidatorParameterTypes... configOptionsToBeChecked)
+      : ConfigOptionValidatorManager(
+            transformValidatorIntoExceptionValidator<std::invoke_result_t<
+                TranslationFunction, ValidatorParameterTypes>...>(
+                std::move(validatorFunction), std::move(errorMessage)),
+            std::move(translationFunction), configOptionsToBeChecked...) {}
+
+  /*
   @brief Call the saved validator function with the references given at
   construction and throws an exception, if the validator returns a value, that
   signals, that the given arguments weren't valid.
