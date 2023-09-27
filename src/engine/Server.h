@@ -16,6 +16,7 @@
 #include "index/Index.h"
 #include "parser/SparqlParser.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
 #include "util/Timer.h"
 #include "util/http/HttpServer.h"
@@ -30,8 +31,9 @@ using std::vector;
 //! The HTTP Server used.
 class Server {
  public:
-  explicit Server(unsigned short port, size_t numThreads, size_t maxMemGB,
-                  std::string accessToken, bool usePatternTrick = true);
+  explicit Server(unsigned short port, size_t numThreads,
+                  ad_utility::MemorySize maxMem, std::string accessToken,
+                  bool usePatternTrick = true);
 
   virtual ~Server() = default;
 

@@ -177,7 +177,7 @@ void IndexImpl::createFromFile(const string& filename) {
 
   ExternalSorter<SortBySPO> spoSorter{
       onDiskBase_ + ".spo-sorter.dat",
-      ad_utility::MemorySize::bytes(stxxlMemoryInBytes()) /
+      stxxlMemory() /
           NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
       allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
@@ -199,7 +199,7 @@ void IndexImpl::createFromFile(const string& filename) {
     // After the SPO permutation, create patterns if so desired.
     ExternalSorter<SortByOSP> ospSorter{
         onDiskBase_ + ".osp-sorter.dat",
-        ad_utility::MemorySize::bytes(stxxlMemoryInBytes()) /
+        stxxlMemory() /
             NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
         allocator_};
     size_t numSubjectsNormal = 0;
@@ -443,7 +443,7 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
   // Iterate over all partial vocabularies.
   auto resultPtr = std::make_unique<PsoSorter>(
       onDiskBase_ + ".pso-sorter.dat",
-      ad_utility::MemorySize::bytes(stxxlMemoryInBytes()) /
+      stxxlMemory() /
           NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
       allocator_);
   auto& result = *resultPtr;

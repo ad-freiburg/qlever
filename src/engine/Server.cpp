@@ -14,6 +14,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "util/AsioHelpers.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/http/websocket/MessageSender.h"
 
@@ -21,18 +22,19 @@ template <typename T>
 using Awaitable = Server::Awaitable<T>;
 
 // __________________________________________________________________________
-Server::Server(unsigned short port, size_t numThreads, size_t maxMemGB,
-               std::string accessToken, bool usePatternTrick)
+Server::Server(unsigned short port, size_t numThreads,
+               ad_utility::MemorySize maxMem, std::string accessToken,
+               bool usePatternTrick)
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
-      allocator_{
-          ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMemGB *
-                                                               (1ULL << 30U)),
-          [this](size_t numBytesToAllocate) {
-            cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
-                                            numBytesToAllocate / sizeof(Id));
-          }},
+      allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+                     maxMem.getBytes()),
+                 [this](size_t numBytesToAllocate) {
+                   cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
+                                                   numBytesToAllocate /
+                                                   sizeof(Id));
+                 }},
       index_{allocator_},
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries

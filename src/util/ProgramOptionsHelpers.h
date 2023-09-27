@@ -33,8 +33,8 @@ Stream& operator<<(Stream& stream, NN&& nonNegative) {
 // This function is required  to use the `NonNegative` class in the
 // `boost::program_options`. It throws an exception when parsing a negative
 // value.
-void validate(boost::any& v, const std::vector<std::string>& values,
-              NonNegative*, int) {
+inline void validate(boost::any& v, const std::vector<std::string>& values,
+                     NonNegative*, int) {
   using namespace boost::program_options;
   validators::check_first_occurrence(v);
 
