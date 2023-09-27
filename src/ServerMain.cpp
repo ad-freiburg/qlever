@@ -126,8 +126,8 @@ int main(int argc, char** argv) {
             << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
 
   try {
-    Server server(port, static_cast<int>(numSimultaneousQueries),
-                  memoryMaxSizeGb, std::move(accessToken), !noPatternTrick);
+    Server server(port, numSimultaneousQueries, memoryMaxSizeGb,
+                  std::move(accessToken), !noPatternTrick);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
