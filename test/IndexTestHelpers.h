@@ -21,7 +21,7 @@ namespace ad_utility::testing {
 inline Index makeIndexWithTestSettings() {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
-  index.stxxlMemoryInBytes() = 1024ul * 1024ul * 50;
+  index.stxxlMemory() = MemorySize::bytes(1024ul * 1024ul * 50ul);
   return index;
 }
 

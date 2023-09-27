@@ -17,6 +17,7 @@
 #include "parser/Tokenizer.h"
 #include "parser/TurtleParser.h"
 #include "util/File.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFact.h"
 
@@ -152,8 +153,8 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
   if (stxxlMemoryGB.has_value()) {
-    index.stxxlMemoryInBytes() =
-        1024ul * 1024ul * 1024ul * stxxlMemoryGB.value();
+    index.stxxlMemory() = ad_utility::MemorySize::gigabytes(
+        static_cast<size_t>(stxxlMemoryGB.value()));
   }
 
   // If no text index name was specified, take the part of the wordsfile after

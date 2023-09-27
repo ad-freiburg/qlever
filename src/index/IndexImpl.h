@@ -114,7 +114,7 @@ class IndexImpl {
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
   bool keepTempFiles_ = false;
-  uint64_t stxxlMemoryInBytes_ = DEFAULT_STXXL_MEMORY_IN_BYTES;
+  ad_utility::MemorySize stxxlMemory_ = DEFAULT_STXXL_MEMORY;
   uint64_t blocksizePermutationInBytes_ = BLOCKSIZE_COMPRESSED_METADATA;
   json configurationJson_;
   Index::Vocab vocab_;
@@ -355,8 +355,8 @@ class IndexImpl {
 
   void setKeepTempFiles(bool keepTempFiles);
 
-  uint64_t& stxxlMemoryInBytes() { return stxxlMemoryInBytes_; }
-  const uint64_t& stxxlMemoryInBytes() const { return stxxlMemoryInBytes_; }
+  ad_utility::MemorySize& stxxlMemory() { return stxxlMemory_; }
+  const ad_utility::MemorySize& stxxlMemory() const { return stxxlMemory_; }
 
   uint64_t& blocksizePermutationInBytes() {
     return blocksizePermutationInBytes_;
