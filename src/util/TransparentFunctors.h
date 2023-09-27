@@ -116,7 +116,7 @@ struct Noop {
     // comment here).
   }
 };
-[[maybe_unused]] static inline auto noop = Noop{};
+[[maybe_unused]] static constexpr Noop noop{};
 
 }  // namespace ad_utility
 

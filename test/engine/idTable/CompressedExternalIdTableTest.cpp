@@ -12,6 +12,7 @@
 #include "index/StxxlSortFunctors.h"
 
 using ad_utility::source_location;
+using namespace ad_utility::memory_literals;
 
 namespace {
 // Implementation of a class that inherits from `IdTable` but is copyable
@@ -101,7 +102,7 @@ void testExternalSorter(size_t numDynamicColumns, size_t numRows,
 
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   ad_utility::CompressedExternalIdTableSorter<SortByOPS, NumStaticColumns>
-      writer{filename, numDynamicColumns, memoryToUse.getBytes(),
+      writer{filename, numDynamicColumns, memoryToUse,
              ad_utility::testing::makeAllocator(), 5_kB};
 
   for (size_t i = 0; i < 2; ++i) {
@@ -142,7 +143,7 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
   // only 100 bytes of memory, not sufficient for merging
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
   ad_utility::CompressedExternalIdTableSorter<SortByOPS, 0> writer{
-      filename, 3, 100, ad_utility::testing::makeAllocator()};
+      filename, 3, 100_B, ad_utility::testing::makeAllocator()};
 
   CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100, 3);
 
@@ -164,7 +165,7 @@ void testExternalCompressor(size_t numDynamicColumns, size_t numRows,
 
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   ad_utility::CompressedExternalIdTable<NumStaticColumns> writer{
-      filename, numDynamicColumns, memoryToUse.getBytes(),
+      filename, numDynamicColumns, memoryToUse,
       ad_utility::testing::makeAllocator(), 5_kB};
 
   for (size_t i = 0; i < 2; ++i) {
@@ -196,4 +197,42 @@ TEST(CompressedExternalIdTable, compressorRandomInput) {
   testExternalCompressor<0>(3, 1000, 1_MB);
   testExternalCompressor<3>(3, 10'000, 10_kB);
   testExternalCompressor<3>(3, 1000, 1_MB);
+}
+
+TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
+  std::string filename = "idTableCompressor.exceptionsWhenWritingTest.dat";
+  using namespace ad_utility::memory_literals;
+
+  ad_utility::CompressedExternalIdTable<3> writer{
+      filename, 3, 10_B, ad_utility::testing::makeAllocator()};
+
+  CopyableIdTable<3> randomTable =
+      createRandomlyFilledIdTable(1000, 3).toStatic<3>();
+
+  auto pushAll = [&randomTable, &writer] {
+    for (const auto& row : randomTable) {
+      writer.push(row);
+    }
+  };
+  ASSERT_NO_THROW(pushAll());
+
+  auto generator = writer.getRows();
+  // We have obtained a generator, but have not yet started it, but pushing is
+  // already disabled to make the two-phase interface more consistent.
+
+  ASSERT_ANY_THROW(writer.clear());
+
+  auto it = generator.begin();
+  // TODO<joka921> check the exception message;
+  // TODO<joka921> To also be able to call `pushAll` here we need the correct
+  // move semantics for the `IdTable` class.
+  // ASSERT_ANY_THROW(pushAll());
+  ASSERT_ANY_THROW(writer.clear());
+
+  for (; it != generator.end(); ++it) {
+  }
+
+  // All generators have ended, we should be able to push and clear and clear.
+  ASSERT_NO_THROW(pushAll());
+  ASSERT_NO_THROW(writer.clear());
 }

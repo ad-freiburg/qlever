@@ -27,6 +27,7 @@
 #include "util/TupleHelpers.h"
 
 using std::array;
+using namespace ad_utility::memory_literals;
 
 // _____________________________________________________________________________
 IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
@@ -168,8 +169,9 @@ void IndexImpl::createFromFile(const string& filename) {
     numTriplesNormal += !std::ranges::any_of(triple, isInternalId);
   };
 
-  ExternalSorter<SortBySPO> spoSorter{onDiskBase_ + ".spo-sorter.dat",
-                                      stxxlMemoryInBytes() / 2, allocator_};
+  ExternalSorter<SortBySPO> spoSorter{
+      onDiskBase_ + ".spo-sorter.dat",
+      ad_utility::MemorySize::bytes(stxxlMemoryInBytes()) / 2, allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
   auto uniqueSorter = ad_utility::uniqueView<decltype(psoSorter.sortedView()),
@@ -187,8 +189,9 @@ void IndexImpl::createFromFile(const string& filename) {
 
   if (loadAllPermutations_) {
     // After the SPO permutation, create patterns if so desired.
-    ExternalSorter<SortByOSP> ospSorter{onDiskBase_ + ".osp-sorter.dat",
-                                        stxxlMemoryInBytes() / 2, allocator_};
+    ExternalSorter<SortByOSP> ospSorter{
+        onDiskBase_ + ".osp-sorter.dat",
+        ad_utility::MemorySize::bytes(stxxlMemoryInBytes()) / 2, allocator_};
     size_t numSubjectsNormal = 0;
     auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
     if (usePatterns_) {
@@ -240,8 +243,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
-      std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat",
-                                  1'000'000'000, allocator_));
+      std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat", 1_GB,
+                                  allocator_));
   bool parserExhausted = false;
 
   size_t i = 0;
@@ -429,7 +432,8 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
 
   // Iterate over all partial vocabularies.
   auto resultPtr = std::make_unique<PsoSorter>(
-      onDiskBase_ + ".pso-sorter.dat", stxxlMemoryInBytes() / 2, allocator_);
+      onDiskBase_ + ".pso-sorter.dat",
+      ad_utility::MemorySize::bytes(stxxlMemoryInBytes()) / 2, allocator_);
   auto& result = *resultPtr;
   size_t i = 0;
   auto triplesGenerator = data.getRows();

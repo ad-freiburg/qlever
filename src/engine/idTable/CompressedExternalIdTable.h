@@ -64,6 +64,11 @@ class CompressedExternalIdTableWriter {
   // the used compression algorithm work well.
   ad_utility::MemorySize blockSizeUncompressed_ = 4_MB;
 
+  // Keep track of the number of active output generators to detect whether we
+  // are currently reading from the file and it is thus unsafe to add to the
+  // contents.
+  size_t numActiveGenerators_ = 0;
+
  public:
   // Constructor. The file at `filename` will be overwritten. Each of the
   // `IdTables` that will be passed in has to have exactly `numCols` columns.
@@ -91,6 +96,12 @@ class CompressedExternalIdTableWriter {
 
   // Store an `idTable`.
   void writeIdTable(const IdTable& table) {
+    if (numActiveGenerators_ != 0) {
+      AD_THROW(
+          "Trying to call `writeIdTable` on an "
+          "`CompressedExternalIdTableWriter` that is currently being iterated "
+          "over");
+    }
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
     size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
     AD_CONTRACT_CHECK(blockSize > 0);
@@ -164,6 +175,12 @@ class CompressedExternalIdTableWriter {
   // Clear the underlying file and completely reset the data structure s.t. it
   // can be reused.
   void clear() {
+    if (numActiveGenerators_ > 0) {
+      AD_THROW(
+          "Trying to call `writeIdTable` on an "
+          "`CompressedExternalIdTableWriter` that is currently being iterated "
+          "over");
+    }
     file_.wlock()->close();
     ad_utility::deleteFile(filename_);
     file_.wlock()->open(filename_, "w+");
@@ -178,11 +195,21 @@ class CompressedExternalIdTableWriter {
     return std::views::join(
         ad_utility::OwningView{makeGeneratorForIdTable<N>(index)});
   }
-
   // Get the block generator for a single IdTable, specified by the `index`.
   template <size_t NumCols = 0>
   cppcoro::generator<const IdTableStatic<NumCols>> makeGeneratorForIdTable(
       size_t index) {
+    // We eagerly also disallow generators that have been created, but not yet
+    // started.
+    ++numActiveGenerators_;
+    return makeGeneratorForIdTableImpl<NumCols>(index);
+  }
+
+  // The actual implementation of `makeGeneratorForIdTable` above.
+  template <size_t NumCols = 0>
+  cppcoro::generator<const IdTableStatic<NumCols>> makeGeneratorForIdTableImpl(
+      size_t index) {
+    auto cleanup = absl::Cleanup{[this] { --numActiveGenerators_; }};
     using Table = IdTableStatic<NumCols>;
     auto firstBlock = startOfSingleIdTables_.at(index);
     auto lastBlock = index + 1 < startOfSingleIdTables_.size()
@@ -208,6 +235,8 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(fut.valid());
     auto table = fut.get();
     co_yield table;
+    --numActiveGenerators_;
+    std::move(cleanup).Cancel();
   }
 
   // Decompresses the block at the given `blockIdx`. The
@@ -284,13 +313,13 @@ class CompressedExternalIdTableBase {
 
  public:
   explicit CompressedExternalIdTableBase(
-      std::string filename, size_t numCols, size_t memoryInBytes,
+      std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = 4_MB,
       BlockTransformation blockTransformation = {})
       : currentBlock_{numCols, allocator},
         numColumns_{numCols},
-        memory_{MemorySize::bytes(memoryInBytes)},
+        memory_{memory},
         writer_{std::move(filename), numCols, allocator, blocksizeCompression},
         blockTransformation_{blockTransformation} {
     this->currentBlock_.reserve(blocksize_);
@@ -303,7 +332,6 @@ class CompressedExternalIdTableBase {
     ++numElementsPushed_;
     currentBlock_.push_back(row);
     if (currentBlock_.size() >= blocksize_) {
-      // TODO<joka921> Also do this in parallel.
       pushBlock(std::move(currentBlock_));
       resetCurrentBlock(true);
     }
@@ -319,8 +347,8 @@ class CompressedExternalIdTableBase {
 
   // Delete the underlying file and reset the sorter. May only be called if no
   // active `getBlocks()` generator that has not been fully iterated over is
-  // currently active, else the behavior is undefined.
-  // TODO<joka921> Try to generically detect this case.
+  // currently active, else an exception is thrown by the underlying
+  // `CompressedExternalIdTable`.
   void clear() {
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
@@ -405,21 +433,20 @@ class CompressedExternalIdTable
  public:
   // Constructor.
   explicit CompressedExternalIdTable(
-      std::string filename, size_t numCols, size_t memoryInBytes,
+      std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = 4_MB)
-      : Base{std::move(filename), numCols, memoryInBytes, std::move(allocator),
+      : Base{std::move(filename), numCols, memory, std::move(allocator),
              blocksizeCompression} {}
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
   explicit CompressedExternalIdTable(
-      std::string filename, size_t memoryInBytes,
+      std::string filename, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = 4_MB) requires(NumStaticCols > 0)
-      : CompressedExternalIdTable(std::move(filename), NumStaticCols,
-                                  memoryInBytes, std::move(allocator),
-                                  blocksizeCompression) {}
+      : CompressedExternalIdTable(std::move(filename), NumStaticCols, memory,
+                                  std::move(allocator), blocksizeCompression) {}
 
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return a generator that yields the elements of the
@@ -469,7 +496,7 @@ struct BlockSorter {
   [[no_unique_address]] Comp comp_{};
   void operator()(auto& block) {
 #ifdef _PARALLEL_SORT
-    ad_utility::parallel_sort(block.begin(), block.end(), comp_);
+    ad_utility::parallel_sort(std::begin(block), std::end(block), comp_);
 #else
     std::ranges::sort(block, comp_);
 #endif
@@ -499,23 +526,26 @@ class CompressedExternalIdTableSorter
  public:
   // Constructor.
   explicit CompressedExternalIdTableSorter(
-      std::string filename, size_t numCols, size_t memoryInBytes,
+      std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = 4_MB, Comparator comp = {})
-      : Base{std::move(filename),  numCols,
-             memoryInBytes,        std::move(allocator),
-             blocksizeCompression, BlockSorter{comp}},
+      : Base{std::move(filename),
+             numCols,
+             memory,
+             std::move(allocator),
+             blocksizeCompression,
+             BlockSorter{comp}},
         comp_{comp} {}
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
   explicit CompressedExternalIdTableSorter(
-      std::string filename, size_t memoryInBytes,
+      std::string filename, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = 4_MB, Comparator comp = {})
       requires(NumStaticCols > 0)
       : CompressedExternalIdTableSorter(std::move(filename), NumStaticCols,
-                                        memoryInBytes, std::move(allocator),
+                                        memory, std::move(allocator),
                                         blocksizeCompression, comp) {}
 
   // Transition from the input phase, where `push()` can be called, to the
