@@ -9,6 +9,8 @@
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include "util/Exception.h"
+
 namespace ad_utility {
 
 namespace net = boost::asio;
