@@ -42,6 +42,8 @@
 #include <stxxl/vector>
 #include <vector>
 
+#include "engine/idTable/CompressedExternalIdTable.h"
+
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
 using ad_utility::MmapVectorView;
@@ -54,10 +56,10 @@ using std::vector;
 using json = nlohmann::json;
 
 template <typename Comparator>
-using StxxlSorter =
-    ad_utility::BackgroundStxxlSorter<std::array<Id, 3>, Comparator>;
+using ExternalSorter =
+    ad_utility::CompressedExternalIdTableSorter<Comparator, 3>;
 
-using PsoSorter = StxxlSorter<SortByPSO>;
+using PsoSorter = ExternalSorter<SortByPSO>;
 
 // Several data that are passed along between different phases of the
 // index builder.
@@ -70,7 +72,7 @@ struct IndexBuilderDataBase {
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
 // triples.
 struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
-  using TripleVec = stxxl::vector<array<Id, 3>>;
+  using TripleVec = ad_utility::CompressedExternalIdTable<3>;
   // All the triples as Ids.
   std::unique_ptr<TripleVec> idTriples;
   // The number of triples for each partial vocabulary. This also depends on the
@@ -78,10 +80,10 @@ struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
   std::vector<size_t> actualPartialSizes;
 };
 
-// All the data from IndexBuilderDataBase and a StxxlSorter that stores all ID
-// triples sorted by the PSO permutation.
+// All the data from IndexBuilderDataBase and a ExternalSorter that stores all
+// ID triples sorted by the PSO permutation.
 struct IndexBuilderDataAsPsoSorter : IndexBuilderDataBase {
-  using SorterPtr = std::unique_ptr<StxxlSorter<SortByPSO>>;
+  using SorterPtr = std::unique_ptr<ExternalSorter<SortByPSO>>;
   SorterPtr psoSorter;
   IndexBuilderDataAsPsoSorter(const IndexBuilderDataBase& base,
                               SorterPtr sorter)
@@ -91,7 +93,7 @@ struct IndexBuilderDataAsPsoSorter : IndexBuilderDataBase {
 
 class IndexImpl {
  public:
-  using TripleVec = stxxl::vector<array<Id, 3>>;
+  using TripleVec = ad_utility::CompressedExternalIdTable<3>;
   // Block Id, Context Id, Word Id, Score, entity
   using TextVec = stxxl::vector<
       tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
@@ -439,9 +441,9 @@ class IndexImpl {
   std::future<void> writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
       std::unique_ptr<ItemMapArray> items, auto localIds,
-      ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr);
+      ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
 
-  std::unique_ptr<StxxlSorter<SortByPSO>> convertPartialToGlobalIds(
+  std::unique_ptr<ExternalSorter<SortByPSO>> convertPartialToGlobalIds(
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial);
 

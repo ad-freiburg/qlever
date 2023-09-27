@@ -7,6 +7,7 @@
 #include "./util/AllocatorTestHelpers.h"
 #include "absl/cleanup/cleanup.h"
 #include "engine/QueryExecutionContext.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
 
@@ -21,6 +22,7 @@ namespace ad_utility::testing {
 inline Index makeIndexWithTestSettings() {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
+  EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   index.stxxlMemory() = 50_MB;
   return index;
 }

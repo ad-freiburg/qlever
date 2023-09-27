@@ -259,8 +259,8 @@ inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
 // ________________________________________________________________________________________________________
 inline void writeMappedIdsToExtVec(
     const auto& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
-    TripleVec::bufwriter_type* writePtr) {
-  auto& writer = *writePtr;
+    std::unique_ptr<TripleVec>* writePtr) {
+  auto& vec = *(*writePtr);
   for (const auto& curTriple : input) {
     std::array<Id, 3> mappedTriple;
     // for all triple elements find their mapping from partial to global ids
@@ -278,7 +278,7 @@ inline void writeMappedIdsToExtVec(
       mappedTriple[k] =
           Id::makeFromVocabIndex(VocabIndex::make(iterator->second));
     }
-    writer << mappedTriple;
+    vec.push(mappedTriple);
   }
 }
 

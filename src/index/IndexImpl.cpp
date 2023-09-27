@@ -27,6 +27,13 @@
 #include "util/TupleHelpers.h"
 
 using std::array;
+using namespace ad_utility::memory_literals;
+
+// During the index building we typically have two permutation sortings present
+// at the same time, as we directly push the triples from the first sorting to
+// the second sorting. We therefore have to adjust the amount of memory per
+// external sorter.
+static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // _____________________________________________________________________________
 IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
@@ -69,7 +76,7 @@ void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
   PatternCreator patternCreator{filename};
   for (const auto& triple : spoTriplesView) {
     if (!std::ranges::any_of(triple, isInternalId)) {
-      patternCreator.processTriple(triple);
+      patternCreator.processTriple(static_cast<std::array<Id, 3>>(triple));
     }
   }
   patternCreator.finish();
@@ -168,10 +175,14 @@ void IndexImpl::createFromFile(const string& filename) {
     numTriplesNormal += !std::ranges::any_of(triple, isInternalId);
   };
 
-  StxxlSorter<SortBySPO> spoSorter{stxxlMemory().getBytes() / 5};
+  ExternalSorter<SortBySPO> spoSorter{
+      onDiskBase_ + ".spo-sorter.dat",
+      stxxlMemory() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME, allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
-  auto uniqueSorter = ad_utility::uniqueView(psoSorter.sortedView());
+  auto uniqueSorter = ad_utility::uniqueView<decltype(psoSorter.sortedView()),
+                                             IdTableStatic<3>::row_type>(
+      psoSorter.sortedView());
 
   size_t numPredicatesNormal = 0;
   createPermutationPair(
@@ -184,7 +195,9 @@ void IndexImpl::createFromFile(const string& filename) {
 
   if (loadAllPermutations_) {
     // After the SPO permutation, create patterns if so desired.
-    StxxlSorter<SortByOSP> ospSorter{stxxlMemory().getBytes() / 5};
+    ExternalSorter<SortByOSP> ospSorter{
+        onDiskBase_ + ".osp-sorter.dat",
+        stxxlMemory() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME, allocator_};
     size_t numSubjectsNormal = 0;
     auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
     if (usePatterns_) {
@@ -192,7 +205,7 @@ void IndexImpl::createFromFile(const string& filename) {
       auto pushTripleToPatterns = [&patternCreator,
                                    &isInternalId](const auto& triple) {
         if (!std::ranges::any_of(triple, isInternalId)) {
-          patternCreator.processTriple(triple);
+          patternCreator.processTriple(static_cast<std::array<Id, 3>>(triple));
         }
       };
       createPermutationPair(spoSorter.sortedView(), spo_, sop_,
@@ -235,8 +248,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial) {
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
-  std::unique_ptr<TripleVec> idTriples(new TripleVec());
-  ad_utility::Synchronized<TripleVec::bufwriter_type> writer(*idTriples);
+  ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
+      std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat", 1_GB,
+                                  allocator_));
   bool parserExhausted = false;
 
   size_t i = 0;
@@ -324,7 +338,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
         writeNextPartialVocabulary(i, numFiles, actualCurrentPartialSize,
                                    std::move(oldItemPtr),
-                                   std::move(localWriter), &writer);
+                                   std::move(localWriter), &idTriples);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually
     // deals with we will use this later for mapping from partial to global
@@ -336,11 +350,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       future.get();
     }
   }
-  writer.wlock()->finish();
   LOG(INFO) << "Done, total number of triples read: " << i
             << " [may contain duplicates]" << std::endl;
   LOG(INFO) << "Number of QLever-internal triples created: "
-            << (idTriples->size() - i) << " [may contain duplicates]"
+            << ((*idTriples.wlock())->size() - i) << " [may contain duplicates]"
             << std::endl;
 
   size_t sizeInternalVocabulary = 0;
@@ -399,7 +412,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
             << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
             << std::endl;
 
-  res.idTriples = std::move(idTriples);
+  res.idTriples = std::move(*idTriples.wlock());
   res.actualPartialSizes = std::move(actualPartialSizes);
 
   LOG(INFO) << "Removing temporary files ..." << std::endl;
@@ -424,10 +437,13 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
              << std::endl;
 
   // Iterate over all partial vocabularies.
-  TripleVec::bufreader_type reader(data);
-  auto resultPtr = std::make_unique<PsoSorter>(stxxlMemory().getBytes() / 5);
+  auto resultPtr = std::make_unique<PsoSorter>(
+      onDiskBase_ + ".pso-sorter.dat",
+      stxxlMemory() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME, allocator_);
   auto& result = *resultPtr;
   size_t i = 0;
+  auto triplesGenerator = data.getRows();
+  auto it = triplesGenerator.begin();
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
        partialNum++) {
     std::string mmapFilename =
@@ -440,8 +456,8 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
     // update the triples for which this partial vocabulary was responsible
     for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[partialNum];
          ++tmpNum) {
-      std::array<Id, 3> curTriple = *reader;
-      ++reader;
+      typename TripleVec::value_type curTriple = *it;
+      ++it;
 
       // For all triple elements find their mapping from partial to global ids.
       for (size_t k = 0; k < 3; ++k) {
@@ -515,7 +531,7 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     metaData1.add(md1);
     metaData2.add(md2);
   };
-  for (auto triple : AD_FWD(sortedTriples)) {
+  for (const auto& triple : AD_FWD(sortedTriples)) {
     if (!currentRel.has_value()) {
       currentRel = triple[c0];
     }
@@ -556,9 +572,11 @@ CompressedRelationMetadata IndexImpl::writeSwitchedRel(
   for (BufferedIdTable::row_reference row : buffer) {
     std::swap(row[0], row[1]);
   }
-  std::ranges::sort(buffer, [](const auto& a, const auto& b) {
-    return std::ranges::lexicographical_compare(a, b);
-  });
+  // std::ranges::sort(buffer, [](const auto& a, const auto& b) {
+  std::ranges::sort(buffer.begin(), buffer.end(),
+                    [](const auto& a, const auto& b) {
+                      return std::ranges::lexicographical_compare(a, b);
+                    });
   Id lastLhs = std::numeric_limits<Id>::max();
 
   size_t distinctC1 = 0;
@@ -1078,7 +1096,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 std::future<void> IndexImpl::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
     std::unique_ptr<ItemMapArray> items, auto localIds,
-    ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr) {
+    ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr) {
   LOG(DEBUG) << "Input triples read in this section: " << numLines << std::endl;
   LOG(DEBUG)
       << "Triples processed, also counting internal triples added by QLever: "

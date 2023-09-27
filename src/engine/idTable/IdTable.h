@@ -254,9 +254,9 @@ class IdTable {
  public:
   // For an empty and dynamic (`NumColumns == 0`) `IdTable`, specify the
   // number of columns.
-  void setNumColumns(size_t numColumns)
-      requires(isDynamic && columnsAreAllocatable) {
+  void setNumColumns(size_t numColumns) requires columnsAreAllocatable {
     AD_CONTRACT_CHECK(empty());
+    AD_CONTRACT_CHECK(isDynamic || numColumns == NumColumns);
     numColumns_ = numColumns;
     data().resize(numColumns, ColumnStorage{allocator_});
   }
@@ -438,7 +438,7 @@ class IdTable {
   // complicated.
   template <typename RowT>
   requires ad_utility::isTypeContainedIn<
-      RowT, std::tuple<row_reference, const_row_reference,
+      RowT, std::tuple<row_type, row_reference, const_row_reference,
                        row_reference_restricted, const_row_reference_restricted,
                        const_row_reference_view_restricted>>
   void push_back(const RowT& newRow) requires(!isView) {
