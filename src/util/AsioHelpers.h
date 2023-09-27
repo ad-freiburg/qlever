@@ -32,9 +32,8 @@ inline net::awaitable<T> sameExecutor(net::awaitable<T> awaitable) {
   if (cancellationState.cancelled() == net::cancellation_type::none) {
     co_await net::dispatch(initialExecutor, net::use_awaitable);
   }
-  if (exceptionPtr) {
-    std::rethrow_exception(exceptionPtr);
-  }
+  AD_CORRECTNESS_CHECK(exceptionPtr);
+  std::rethrow_exception(exceptionPtr);
 }
 
 // _____________________________________________________________________________
