@@ -57,7 +57,8 @@ ResultTable& ResultGroup::addTable(
     const std::string& descriptor, const std::vector<std::string>& rowNames,
     const std::vector<std::string>& columnNames) {
   resultTables_.push_back(ad_utility::make_copyable_unique<ResultTable>(
-      descriptor, rowNames, columnNames));
+      descriptor, absl::StrCat(descriptor, " of group ", descriptor_), rowNames,
+      columnNames));
   return (*resultTables_.back());
 }
 
@@ -107,12 +108,10 @@ void to_json(nlohmann::json& j, const ResultGroup& resultGroup) {
 }
 
 // ____________________________________________________________________________
-ResultTable::ResultTable(const std::string& descriptor,
-                         const std::vector<std::string>& rowNames,
-                         const std::vector<std::string>& columnNames)
-    : descriptor_{descriptor},
-      columnNames_{columnNames},
-      entries_(rowNames.size(), std::vector<EntryType>(columnNames.size())) {
+void ResultTable::init(const std::string& descriptor,
+                       std::string descriptorForLog,
+                       const std::vector<std::string>& rowNames,
+                       const std::vector<std::string>& columnNames) {
   // Having a table without any columns makes no sense.
   if (columnNames.empty()) {
     throw ad_utility::Exception(
@@ -121,10 +120,32 @@ ResultTable::ResultTable(const std::string& descriptor,
                      descriptor, "' has ", columnNames.size(), " columns"));
   }
 
+  // Setting the member variables.
+  descriptor_ = descriptor;
+  descriptorForLog_ = std::move(descriptorForLog);
+  columnNames_ = columnNames;
+  entries_.resize(rowNames.size());
+  std::ranges::fill(entries_, std::vector<EntryType>(columnNames.size()));
+
   // Setting the row names.
   for (size_t row = 0; row < rowNames.size(); row++) {
     setEntry(row, 0, rowNames.at(row));
   }
+}
+
+// ____________________________________________________________________________
+ResultTable::ResultTable(const std::string& descriptor,
+                         const std::vector<std::string>& rowNames,
+                         const std::vector<std::string>& columnNames) {
+  init(descriptor, descriptor, rowNames, columnNames);
+}
+
+// ____________________________________________________________________________
+ResultTable::ResultTable(const std::string& descriptor,
+                         std::string descriptorForLog,
+                         const std::vector<std::string>& rowNames,
+                         const std::vector<std::string>& columnNames) {
+  init(descriptor, std::move(descriptorForLog), rowNames, columnNames);
 }
 
 // ____________________________________________________________________________
