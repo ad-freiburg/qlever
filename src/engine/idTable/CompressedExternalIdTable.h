@@ -199,8 +199,8 @@ class CompressedExternalIdTableWriter {
   template <size_t NumCols = 0>
   cppcoro::generator<const IdTableStatic<NumCols>> makeGeneratorForIdTable(
       size_t index) {
-    // The following line has the effect, that `writeIdTable` and `clear` also
-    // throw an exception, when a generator has been created, but not yet
+    // The following line has the effect that `writeIdTable` and `clear` also
+    // throw an exception if a generator has been created but not yet
     // started.
     ++numActiveGenerators_;
     return makeGeneratorForIdTableImpl<NumCols>(
