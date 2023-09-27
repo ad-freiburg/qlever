@@ -46,6 +46,18 @@ void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
   ((loopBody.template operator()<ForLoopIndexes>()), ...);
 }
 
+// A constexpr switch (todo comment).
+template <auto FirstCase, auto... Cases>
+decltype(auto) ConstexprSwitch(auto&& function, const auto& value) {
+  if (value == FirstCase) {
+    return AD_FWD(function).template operator()<FirstCase>();
+  } else if constexpr (sizeof...(Cases) > 0) {
+    return ConstexprSwitch<Cases...>(AD_FWD(function), value);
+  } else {
+    AD_FAIL();
+  }
+}
+
 /*
  * @brief 'Converts' a run time value of `size_t` to a compile time value and
  * then calls `function.template operator()<value>()`. `value < MaxValue` must

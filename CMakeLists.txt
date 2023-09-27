@@ -63,6 +63,12 @@ add_subdirectory(third_party/antlr4/runtime/Cpp EXCLUDE_FROM_ALL )
 target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-unqualified-std-cast-call -Wno-error -Wno-deprecated-declarations)
 include_directories(SYSTEM third_party/antlr4/runtime/Cpp/runtime/src )
 
+###############################
+# TINYXML FOR TESTING THE XML OUTPUT
+###############################
+add_subdirectory(third_party/tinyxml2)
+include_directories(SYSTEM third_party/tinyxml2)
+
 ################################
 # Threading
 ################################

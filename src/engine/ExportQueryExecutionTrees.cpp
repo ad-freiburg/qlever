@@ -8,6 +8,7 @@
 
 #include "absl/strings/str_cat.h"
 #include "parser/RdfEscaping.h"
+#include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"
 
 // __________________________________________________________________________
@@ -423,7 +424,12 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset) {
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
-                format == MediaType::tsv || format == MediaType::sparqlXml);
+                format == MediaType::tsv || format == MediaType::sparqlXml ||
+                format == MediaType::turtle);
+
+  // TODO<joka921> Use a proper error message, or check that we get a more
+  // reasonable error from upstream.
+  AD_CONTRACT_CHECK(format != MediaType::turtle);
 
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
@@ -635,6 +641,18 @@ ExportQueryExecutionTrees::constructQueryResultToTsvOrCsv(
     co_yield "\n";
   }
 }
+// _____________________________________________________________________________
+template <>
+ad_utility::streams::stream_generator ExportQueryExecutionTrees::
+    constructQueryResultToTsvOrCsv<ad_utility::MediaType::turtle>(
+        const QueryExecutionTree& qet,
+        const ad_utility::sparql_types::Triples& constructTriples,
+        LimitOffsetClause limitAndOffset,
+        std::shared_ptr<const ResultTable> resultTable) {
+  // TODO<joka921> Rename the involved functions to unify the hierarchy
+  return constructQueryResultToTurtle(qet, constructTriples, limitAndOffset,
+                                      resultTable);
+}
 
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
@@ -709,6 +727,11 @@ ExportQueryExecutionTrees::computeResultAsStream(
                      format>(qet, parsedQuery.constructClause().triples_,
                              limitAndOffset, qet.getResult());
   };
+
+  using enum MediaType;
+  return ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle>(compute,
+                                                                    mediaType);
+  /*
   // TODO<joka921> Clean this up by a "switch constexpr"-abstraction
   if (mediaType == MediaType::csv) {
     return compute.template operator()<MediaType::csv>();
@@ -720,6 +743,7 @@ ExportQueryExecutionTrees::computeResultAsStream(
     return computeConstructQueryResultAsTurtle(parsedQuery, qet);
   }
   AD_FAIL();
+   */
 }
 
 // _____________________________________________________________________________
