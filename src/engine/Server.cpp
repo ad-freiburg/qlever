@@ -4,8 +4,6 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "engine/Server.h"
-
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -13,6 +11,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
+#include "engine/Server.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -23,13 +22,13 @@ using Awaitable = Server::Awaitable<T>;
 
 // __________________________________________________________________________
 Server::Server(unsigned short port, int numThreads,
-               ad_utility::MemorySize maxMemGB, std::string accessToken,
+               ad_utility::MemorySize maxMem, std::string accessToken,
                bool usePatternTrick)
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
       allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-                     maxMemGB.getBytes()),
+                     maxMem.getBytes()),
                  [this](size_t numBytesToAllocate) {
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                                    numBytesToAllocate /
