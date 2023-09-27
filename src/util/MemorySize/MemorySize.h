@@ -56,6 +56,9 @@ class MemorySize {
   constexpr MemorySize& operator=(const MemorySize&) = default;
   constexpr MemorySize& operator=(MemorySize&&) = default;
 
+  // Default comparison operator.
+  constexpr auto operator<=>(const MemorySize&) const = default;
+
   /*
   Factory functions for creating an instance of this class with the wanted
   memory size saved internally. Always requries the exact memory size unit and

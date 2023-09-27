@@ -217,9 +217,8 @@ TEST(MemorySize, Parse) {
   // Parse the given string and compare to the expected instance of
   // `MemorySize`.
   auto doTest = [](const MemorySizeAndStringRepresentation& testCase) {
-    ASSERT_EQ(ad_utility::MemorySize::parse(testCase.stringRepresentation_)
-                  .getBytes(),
-              testCase.memorySize_.getBytes());
+    ASSERT_EQ(ad_utility::MemorySize::parse(testCase.stringRepresentation_),
+              testCase.memorySize_);
   };
 
   // Check, if parsing the given string causes an exception.
@@ -444,6 +443,22 @@ TEST(MemorySize, ConstEval) {
   static_assert(ad_utility::MemorySize::gigabytes(4.2).getGigabytes() == 4.2);
   static_assert(ad_utility::MemorySize::terabytes(42uL).getTerabytes() == 42);
   static_assert(ad_utility::MemorySize::terabytes(4.2).getTerabytes() == 4.2);
+
+  // Comparison operators.
+  static_assert(42_B == 42_B);
+  static_assert(42_B != 41_B);
+  static_assert(42_B < 43_B);
+  static_assert(42_B <= 42_B);
+  static_assert(42_B <= 43_B);
+  static_assert(42_B > 41_B);
+  static_assert(42_B >= 42_B);
+  static_assert(42_B >= 41_B);
+  static_assert(!(42_B == 41_B));
+  static_assert(!(42_B != 42_B));
+  static_assert(!(42_B < 42_B));
+  static_assert(!(42_B <= 41_B));
+  static_assert(!(42_B > 43_B));
+  static_assert(!(42_B >= 43_B));
 
   // Addition.
   static_assert((20_TB).getBytes() ==
