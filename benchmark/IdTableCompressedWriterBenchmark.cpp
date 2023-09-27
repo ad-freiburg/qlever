@@ -45,7 +45,8 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
       return a[0] < b[0];
     };
     ad_utility::CompressedExternalIdTableSorter<SortByPSO, 3> writer{
-        filename, 3, memForStxxl, ad_utility::testing::makeAllocator()};
+        filename, 3, ad_utility::MemorySize::bytes(memForStxxl),
+        ad_utility::testing::makeAllocator()};
 
     auto runPush = [&writer, &numInputRows, &generateRandomRow]() {
       for (auto i : std::views::iota(0UL, numInputRows)) {
