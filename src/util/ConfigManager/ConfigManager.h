@@ -24,6 +24,7 @@
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConfigManager/ConfigUtil.h"
+#include "util/ConfigManager/Validator.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -33,45 +34,6 @@
 #include "util/json.h"
 
 namespace ad_utility {
-
-/*
-A validator function is any invocable object, who takes the given parameter
-types, in the same order and transformed to `const type&`, and returns a
-bool.
-
-This concept is used for `ConfigManager::addValidator`.
-*/
-template <typename Func, typename... ParameterTypes>
-concept Validator =
-    std::regular_invocable<Func, const ParameterTypes&...> &&
-    std::same_as<std::invoke_result_t<Func, const ParameterTypes&...>, bool>;
-
-// Simple struct, that holds an error message. For use as the return type of
-// invocable object, that fullfill `ExceptionValidator`.
-struct ErrorMessage {
- private:
-  std::string message_;
-
- public:
-  // Constructor.
-  explicit ErrorMessage(std::string message) : message_{std::move(message)} {}
-
-  // Getter for the message.
-  const std::string& getMessage() const;
-};
-
-/*
-An exception validator function is any invocable object, who takes the given
-parameter types, in the same order and transformed to `const type&`, and returns
-an instance of `std::optional<ErrorMessage>`.
-
-This concept is used for `ConfigManager::addValidator`.
-*/
-template <typename Func, typename... ParameterTypes>
-concept ExceptionValidator =
-    std::regular_invocable<Func, const ParameterTypes&...> &&
-    std::same_as<std::invoke_result_t<Func, const ParameterTypes&...>,
-                 std::optional<ErrorMessage>>;
 
 /*
 Manages a bunch of `ConfigOption`s.
@@ -98,7 +60,7 @@ class ConfigManager {
   the new values are valid.
   If the new value isn't valid, it throws an exception.
   */
-  std::vector<std::function<void(void)>> validators_;
+  std::vector<ConfigOptionValidatorManager> validators_;
 
  public:
   /*
@@ -268,7 +230,7 @@ class ConfigManager {
   */
   template <typename... ValidatorParameterTypes>
   void addValidator(
-      Validator<ValidatorParameterTypes...> auto validatorFunction,
+      ValidatorFunction<ValidatorParameterTypes...> auto validatorFunction,
       std::string errorMessage,
       ConstConfigOptionProxy<
           ValidatorParameterTypes>... configOptionsToBeChecked)
@@ -301,7 +263,7 @@ class ConfigManager {
   */
   template <typename... ExceptionValidatorParameterTypes>
   void addValidator(
-      ExceptionValidator<ExceptionValidatorParameterTypes...> auto
+      ExceptionValidatorFunction<ExceptionValidatorParameterTypes...> auto
           exceptionValidatorFunction,
       ConstConfigOptionProxy<
           ExceptionValidatorParameterTypes>... configOptionsToBeChecked)
@@ -332,8 +294,8 @@ class ConfigManager {
       isInstantiation<ConstConfigOptionProxy> auto... configOptionsToBeChecked)
       requires(
           sizeof...(configOptionsToBeChecked) > 0 &&
-          Validator<ValidatorT,
-                    decltype(configOptionsToBeChecked.getConfigOption())...>) {
+          ValidatorFunction<ValidatorT, decltype(configOptionsToBeChecked
+                                                     .getConfigOption())...>) {
     addValidatorImpl(
         "addOptionValidator",
         []<typename T>(ConstConfigOptionProxy<T> opt) {
@@ -362,7 +324,7 @@ class ConfigManager {
       ExceptionValidatorT exceptionValidatorFunction,
       isInstantiation<ConstConfigOptionProxy> auto... configOptionsToBeChecked)
       requires(sizeof...(configOptionsToBeChecked) > 0 &&
-               ExceptionValidator<
+               ExceptionValidatorFunction<
                    ExceptionValidatorT,
                    decltype(configOptionsToBeChecked.getConfigOption())...>) {
     addValidatorImpl(
@@ -497,30 +459,6 @@ class ConfigManager {
   bool containsOption(const ConfigOption& opt) const;
 
   /*
-  @brief Transform a validator function into an exception validator function.
-  That is, instead of returning `bool`, it now returns
-  `std::optional<ErrorMessage>`.
-
-  @param errorMessage Content for `ErrorMessage`.
-  */
-  template <typename... ValidatorParameterTypes>
-  auto transformValidatorIntoExceptionValidator(
-      Validator<ValidatorParameterTypes...> auto validatorFunction,
-      std::string errorMessage) {
-    // The whole 'transformation' is simply a wrapper.
-    return [validatorFunction,
-            errorMessage = ErrorMessage{std::move(errorMessage)}](
-               const ValidatorParameterTypes&... args)
-               -> std::optional<ErrorMessage> {
-      if (std::invoke(validatorFunction, args...)) {
-        return std::nullopt;
-      } else {
-        return errorMessage;
-      }
-    };
-  }
-
-  /*
   @brief The implementation of `addValidator` and `addOptionValidator`. Note:
   Normal validator functions must first be transformed in to an exception
   validator function via `transformValidatorIntoExceptionValidator`.
@@ -529,7 +467,7 @@ class ConfigManager {
   implementation. So that people can easier identify them.
   @param translationFunction Transforms the given `ConstConfigOptionProxy` in
   the value form for the exception validator function.
-  @param exceptionValidatorFunction Should return an empty
+  @param exceptionValidatorFunc Should return an empty
   `std::optional<ErrorMessage>`, if the transformed `ConstConfigOptionProxy`
   represent valid values. Otherwise, it should return an error message.
   For example: There configuration options were all set at run time, or contain
@@ -539,20 +477,13 @@ class ConfigManager {
   after being transformed. Will keep the same order.
   */
   template <
-      typename TranslationFunction, typename ExceptionValidatorFunction,
+      typename TranslationFunction, typename ExceptionValidatorFunc,
       isInstantiation<ConstConfigOptionProxy>... ExceptionValidatorParameter>
-  requires(std::invocable<TranslationFunction,
-                          const ExceptionValidatorParameter> &&
-           ...) &&
-          ExceptionValidator<
-              ExceptionValidatorFunction,
-              std::invoke_result_t<TranslationFunction,
-                                   ExceptionValidatorParameter>...> &&
-          (sizeof...(ExceptionValidatorParameter) > 0) void addValidatorImpl(
+  void addValidatorImpl(
       std::string_view addValidatorFunctionName,
       TranslationFunction translationFunction,
-      ExceptionValidatorFunction exceptionValidatorFunction,
-      const ExceptionValidatorParameter... configOptionsToBeChecked) {
+      ExceptionValidatorFunc exceptionValidatorFunction,
+      ExceptionValidatorParameter... configOptionsToBeChecked) {
     // Check, if we contain all the configuration options, that were given us.
     auto checkIfContainOption = [this, &addValidatorFunctionName]<typename T>(
                                     ConstConfigOptionProxy<T> opt) {
@@ -567,39 +498,9 @@ class ConfigManager {
     };
     (checkIfContainOption(configOptionsToBeChecked), ...);
 
-    /*
-    Add a function wrapper to our list of validators, that calls the
-    `exceptionValidatorFunction` with the config options and throws an
-    exception, if the `exceptionValidatorFunction` returns a `ErrorMessage`.
-    */
-    validators_.emplace_back([translationFunction, exceptionValidatorFunction,
-                              configOptionsToBeChecked...]() {
-      if (const auto errorMessage = std::invoke(
-              exceptionValidatorFunction,
-              std::invoke(translationFunction, configOptionsToBeChecked)...);
-          errorMessage.has_value()) {
-        // Create the error message prefix.
-        auto generateConfigOptionIdentifierWithValueString =
-            [](const ConfigOption& c) {
-              // Is there a value, we can show together with the identifier?
-              const bool wasSet = c.wasSet();
-              return absl::StrCat(
-                  "'", c.getIdentifier(), "' (With ",
-                  wasSet ? absl::StrCat("value '", c.getValueAsString(), "'")
-                         : "no value",
-                  ".)");
-            };
-        const std::array optionNamesWithValues{
-            generateConfigOptionIdentifierWithValueString(
-                configOptionsToBeChecked.getConfigOption())...};
-        std::string errorMessagePrefix =
-            absl::StrCat("Validity check of configuration options ",
-                         lazyStrJoin(optionNamesWithValues, ", "), " failed: ");
-
-        throw std::runtime_error(absl::StrCat(
-            errorMessagePrefix, errorMessage.value().getMessage()));
-      }
-    });
+    validators_.emplace_back(std::move(exceptionValidatorFunction),
+                             std::move(translationFunction),
+                             std::move(configOptionsToBeChecked)...);
   }
 };
 }  // namespace ad_utility

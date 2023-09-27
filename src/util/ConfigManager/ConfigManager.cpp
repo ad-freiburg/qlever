@@ -564,7 +564,7 @@ void ConfigManager::verifyWithValidators() const {
 
   // Check all validators, that were directly registered.
   std::ranges::for_each(validators_,
-                        [](auto& validator) { std::invoke(validator); });
+                        [](auto& validator) { validator.checkValidator(); });
 };
 
 // ____________________________________________________________________________
@@ -577,6 +577,4 @@ bool ConfigManager::containsOption(const ConfigOption& opt) const {
       &opt);
 }
 
-// ____________________________________________________________________________
-const std::string& ErrorMessage::getMessage() const { return message_; }
 }  // namespace ad_utility

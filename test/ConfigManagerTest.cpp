@@ -21,6 +21,7 @@
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
+#include "util/ConfigManager/Validator.h"
 #include "util/CtreHelpers.h"
 #include "util/json.h"
 
@@ -1171,28 +1172,6 @@ std::string generateValidatorName(size_t id) {
 };
 
 /*
-@brief Transform a validator function into an exception validator function.
-That is, instead of returning `bool`, it now returns
-`std::optional<ErrorMessage>`.
-
-@param errorMessage Content for `ErrorMessage`.
-*/
-template <typename... ValidatorParameterTypes>
-auto transformNonExceptionValidatorIntoExceptionValidator(
-    Validator<ValidatorParameterTypes...> auto validatorFunction,
-    std::string errorMessage) {
-  // The whole 'transformation' is simply a wrapper.
-  return [validatorFunction, errorMessage = std::move(errorMessage)](
-             const ValidatorParameterTypes&... args)
-             -> std::optional<ErrorMessage> {
-    if (std::invoke(validatorFunction, args...)) {
-      return std::nullopt;
-    } else {
-      return std::make_optional<ErrorMessage>(errorMessage);
-    }
-  };
-}
-/*
 @brief The test for adding a validator to a config manager.
 
 @param addValidatorFunction A function, that adds a validator function to a
@@ -1789,7 +1768,7 @@ TEST(ConfigManagerTest, AddExceptionValidator) {
                                      ConfigManager& m,
                                      ConstConfigOptionProxy<Ts>... optProxy) {
     m.addValidator(
-        transformNonExceptionValidatorIntoExceptionValidator<Ts...>(
+        transformValidatorIntoExceptionValidator<Ts...>(
             generateDummyNonExceptionValidatorFunction<Ts...>(variant),
             std::move(validatorExceptionMessage)),
         optProxy...);
@@ -2065,7 +2044,7 @@ TEST(ConfigManagerTest, AddOptionExceptionValidator) {
                          std::string validatorExceptionMessage,
                          ConfigManager& m, ConstConfigOptionProxy<Ts>... args) {
         m.addOptionValidator(
-            transformNonExceptionValidatorIntoExceptionValidator<
+            transformValidatorIntoExceptionValidator<
                 decltype(args.getConfigOption())...>(
                 validatorFunction, std::move(validatorExceptionMessage)),
             args...);
@@ -2317,49 +2296,54 @@ TEST(ConfigManagerTest, ValidatorConcept) {
       decltype([](const int&, const int&) { return true; });
 
   // Valid function.
-  static_assert(ad_utility::Validator<SingleIntValidatorFunction, int>);
-  static_assert(ad_utility::Validator<DoubleIntValidatorFunction, int, int>);
+  static_assert(ad_utility::ValidatorFunction<SingleIntValidatorFunction, int>);
+  static_assert(
+      ad_utility::ValidatorFunction<DoubleIntValidatorFunction, int, int>);
 
   // The number of parameter types is wrong.
-  static_assert(!ad_utility::Validator<SingleIntValidatorFunction>);
-  static_assert(!ad_utility::Validator<SingleIntValidatorFunction, int, int>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction>);
+  static_assert(!ad_utility::ValidatorFunction<SingleIntValidatorFunction>);
   static_assert(
-      !ad_utility::Validator<DoubleIntValidatorFunction, int, int, int, int>);
+      !ad_utility::ValidatorFunction<SingleIntValidatorFunction, int, int>);
+  static_assert(!ad_utility::ValidatorFunction<DoubleIntValidatorFunction>);
+  static_assert(!ad_utility::ValidatorFunction<DoubleIntValidatorFunction, int,
+                                               int, int, int>);
 
   // Function is valid, but the parameter types are of the wrong object type.
+  static_assert(!ad_utility::ValidatorFunction<SingleIntValidatorFunction,
+                                               std::vector<bool>>);
   static_assert(
-      !ad_utility::Validator<SingleIntValidatorFunction, std::vector<bool>>);
+      !ad_utility::ValidatorFunction<SingleIntValidatorFunction, std::string>);
+  static_assert(!ad_utility::ValidatorFunction<DoubleIntValidatorFunction,
+                                               std::vector<bool>, int>);
+  static_assert(!ad_utility::ValidatorFunction<DoubleIntValidatorFunction, int,
+                                               std::vector<bool>>);
   static_assert(
-      !ad_utility::Validator<SingleIntValidatorFunction, std::string>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction,
-                                       std::vector<bool>, int>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, int,
-                                       std::vector<bool>>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction,
-                                       std::vector<bool>, std::vector<bool>>);
-  static_assert(
-      !ad_utility::Validator<DoubleIntValidatorFunction, std::string, int>);
-  static_assert(
-      !ad_utility::Validator<DoubleIntValidatorFunction, int, std::string>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, std::string,
-                                       std::string>);
+      !ad_utility::ValidatorFunction<DoubleIntValidatorFunction,
+                                     std::vector<bool>, std::vector<bool>>);
+  static_assert(!ad_utility::ValidatorFunction<DoubleIntValidatorFunction,
+                                               std::string, int>);
+  static_assert(!ad_utility::ValidatorFunction<DoubleIntValidatorFunction, int,
+                                               std::string>);
+  static_assert(!ad_utility::ValidatorFunction<DoubleIntValidatorFunction,
+                                               std::string, std::string>);
 
   // The given function is not valid.
 
   // The parameter types of the function are wrong, but the return type is
   // correct.
   static_assert(
-      !ad_utility::Validator<decltype([](int&) { return true; }), int>);
+      !ad_utility::ValidatorFunction<decltype([](int&) { return true; }), int>);
   static_assert(
-      !ad_utility::Validator<decltype([](int&&) { return true; }), int>);
+      !ad_utility::ValidatorFunction<decltype([](int&&) { return true; }),
+                                     int>);
   static_assert(
-      !ad_utility::Validator<decltype([](const int&&) { return true; }), int>);
+      !ad_utility::ValidatorFunction<decltype([](const int&&) { return true; }),
+                                     int>);
 
   auto validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper =
       []<typename FirstParameter, typename SecondParameter>() {
         static_assert(
-            !ad_utility::Validator<
+            !ad_utility::ValidatorFunction<
                 decltype([](FirstParameter, SecondParameter) { return true; }),
                 int, int>);
       };
@@ -2369,18 +2353,21 @@ TEST(ConfigManagerTest, ValidatorConcept) {
       validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper);
 
   // Parameter types are correct, but return type is wrong.
-  static_assert(!ad_utility::Validator<decltype([](int n) { return n; }), int>);
   static_assert(
-      !ad_utility::Validator<decltype([](const int n) { return n; }), int>);
+      !ad_utility::ValidatorFunction<decltype([](int n) { return n; }), int>);
   static_assert(
-      !ad_utility::Validator<decltype([](const int& n) { return n; }), int>);
+      !ad_utility::ValidatorFunction<decltype([](const int n) { return n; }),
+                                     int>);
+  static_assert(
+      !ad_utility::ValidatorFunction<decltype([](const int& n) { return n; }),
+                                     int>);
 
   auto validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper =
       []<typename FirstParameter, typename SecondParameter>() {
         static_assert(
-            !ad_utility::Validator<decltype([](FirstParameter n,
-                                               SecondParameter) { return n; }),
-                                   int, int>);
+            !ad_utility::ValidatorFunction<
+                decltype([](FirstParameter n, SecondParameter) { return n; }),
+                int, int>);
       };
   passCartesianPorductToLambda<
       decltype(validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper),
@@ -2389,18 +2376,19 @@ TEST(ConfigManagerTest, ValidatorConcept) {
 
   // Both the parameter types and the return type is wrong.
   static_assert(
-      !ad_utility::Validator<decltype([](int& n) { return n; }), int>);
+      !ad_utility::ValidatorFunction<decltype([](int& n) { return n; }), int>);
   static_assert(
-      !ad_utility::Validator<decltype([](int&& n) { return n; }), int>);
+      !ad_utility::ValidatorFunction<decltype([](int&& n) { return n; }), int>);
   static_assert(
-      !ad_utility::Validator<decltype([](const int&& n) { return n; }), int>);
+      !ad_utility::ValidatorFunction<decltype([](const int&& n) { return n; }),
+                                     int>);
 
   auto validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper =
       []<typename FirstParameter, typename SecondParameter>() {
         static_assert(
-            !ad_utility::Validator<decltype([](FirstParameter n,
-                                               SecondParameter) { return n; }),
-                                   int, int>);
+            !ad_utility::ValidatorFunction<
+                decltype([](FirstParameter n, SecondParameter) { return n; }),
+                int, int>);
       };
   passCartesianPorductToLambda<
       decltype(validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper),
@@ -2418,69 +2406,58 @@ TEST(ConfigManagerTest, ExceptionValidatorConcept) {
       });
 
   // Valid function.
-  static_assert(
-      ad_utility::ExceptionValidator<SingleIntExceptionValidatorFunction, int>);
-  static_assert(
-      ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction, int,
-                                     int>);
+  static_assert(ad_utility::ExceptionValidatorFunction<
+                SingleIntExceptionValidatorFunction, int>);
+  static_assert(ad_utility::ExceptionValidatorFunction<
+                DoubleIntExceptionValidatorFunction, int, int>);
 
   // The number of parameter types is wrong.
-  static_assert(
-      !ad_utility::ExceptionValidator<SingleIntExceptionValidatorFunction>);
-  static_assert(
-      !ad_utility::ExceptionValidator<SingleIntExceptionValidatorFunction, int,
-                                      int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction, int,
-                                      int, int, int>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                SingleIntExceptionValidatorFunction>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                SingleIntExceptionValidatorFunction, int, int>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                DoubleIntExceptionValidatorFunction>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                DoubleIntExceptionValidatorFunction, int, int, int, int>);
 
   // Function is valid, but the parameter types are of the wrong object type.
-  static_assert(
-      !ad_utility::ExceptionValidator<SingleIntExceptionValidatorFunction,
-                                      std::vector<bool>>);
-  static_assert(
-      !ad_utility::ExceptionValidator<SingleIntExceptionValidatorFunction,
-                                      std::string>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction,
-                                      std::vector<bool>, int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction, int,
-                                      std::vector<bool>>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction,
-                                      std::vector<bool>, std::vector<bool>>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction,
-                                      std::string, int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction, int,
-                                      std::string>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction,
-                                      std::string, std::string>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                SingleIntExceptionValidatorFunction, std::vector<bool>>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                SingleIntExceptionValidatorFunction, std::string>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                DoubleIntExceptionValidatorFunction, std::vector<bool>, int>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                DoubleIntExceptionValidatorFunction, int, std::vector<bool>>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                DoubleIntExceptionValidatorFunction, std::vector<bool>,
+                std::vector<bool>>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                DoubleIntExceptionValidatorFunction, std::string, int>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                DoubleIntExceptionValidatorFunction, int, std::string>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                DoubleIntExceptionValidatorFunction, std::string, std::string>);
 
   // The given function is not valid.
 
   // The parameter types of the function are wrong, but the return type is
   // correct.
   static_assert(
-      !ad_utility::ExceptionValidator<
+      !ad_utility::ExceptionValidatorFunction<
           decltype([](int&) { return std::optional<ErrorMessage>{}; }), int>);
   static_assert(
-      !ad_utility::ExceptionValidator<
+      !ad_utility::ExceptionValidatorFunction<
           decltype([](int&&) { return std::optional<ErrorMessage>{}; }), int>);
   static_assert(
-      !ad_utility::ExceptionValidator<decltype([](const int&&) {
-                                        return std::optional<ErrorMessage>{};
-                                      }),
-                                      int>);
+      !ad_utility::ExceptionValidatorFunction<
+          decltype([](const int&&) { return std::optional<ErrorMessage>{}; }),
+          int>);
 
   auto validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper =
       []<typename FirstParameter, typename SecondParameter>() {
-        static_assert(!ad_utility::ExceptionValidator<
+        static_assert(!ad_utility::ExceptionValidatorFunction<
                       decltype([](FirstParameter, SecondParameter) {
                         return std::optional<ErrorMessage>{};
                       }),
@@ -2493,18 +2470,17 @@ TEST(ConfigManagerTest, ExceptionValidatorConcept) {
 
   // Parameter types are correct, but return type is wrong.
   static_assert(
-      !ad_utility::ExceptionValidator<decltype([](int n) { return n; }), int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<decltype([](const int n) { return n; }),
-                                      int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<decltype([](const int& n) { return n; }),
-                                      int>);
+      !ad_utility::ExceptionValidatorFunction<decltype([](int n) { return n; }),
+                                              int>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                decltype([](const int n) { return n; }), int>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                decltype([](const int& n) { return n; }), int>);
 
   auto validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper =
       []<typename FirstParameter, typename SecondParameter>() {
         static_assert(
-            !ad_utility::ExceptionValidator<
+            !ad_utility::ExceptionValidatorFunction<
                 decltype([](FirstParameter n, SecondParameter) { return n; }),
                 int, int>);
       };
@@ -2514,21 +2490,19 @@ TEST(ConfigManagerTest, ExceptionValidatorConcept) {
       validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper);
 
   // Both the parameter types and the return type is wrong.
-  static_assert(
-      !ad_utility::ExceptionValidator<decltype([](int& n) { return n; }), int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<decltype([](int&& n) { return n; }),
-                                      int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<decltype([](const int&& n) { return n; }),
-                                      int>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                decltype([](int& n) { return n; }), int>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                decltype([](int&& n) { return n; }), int>);
+  static_assert(!ad_utility::ExceptionValidatorFunction<
+                decltype([](const int&& n) { return n; }), int>);
 
   auto validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper =
       []<typename FirstParameter, typename SecondParameter>() {
         static_assert(
-            !ad_utility::Validator<decltype([](FirstParameter n,
-                                               SecondParameter) { return n; }),
-                                   int, int>);
+            !ad_utility::ValidatorFunction<
+                decltype([](FirstParameter n, SecondParameter) { return n; }),
+                int, int>);
       };
   passCartesianPorductToLambda<
       decltype(validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper),
