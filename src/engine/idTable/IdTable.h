@@ -102,6 +102,32 @@ namespace columnBasedIdTable {
 // TODO<joka921> The NumColumns should be `size_t` but that requires several
 // additional changes in the rest of the code.
 //
+template <typename T>
+struct ResizeWhenMoveVector : public std::vector<T> {
+  using Base = std::vector<T>;
+  using Base::Base;
+  ResizeWhenMoveVector(const ResizeWhenMoveVector&) = default;
+  ResizeWhenMoveVector& operator=(const ResizeWhenMoveVector&) = default;
+  // TODO<joka921> The `noexcept` should catch the bad_alloc etc.
+  ResizeWhenMoveVector(ResizeWhenMoveVector&& other) noexcept
+      : Base{static_cast<Base&&>(other)} {
+    if (!this->empty()) {
+      auto empty = T{this->front().get_allocator()};
+      other.resize(this->size(), empty);
+    }
+  }
+  // TODO<joka921> The `noexcept` should catch the bad_alloc etc.
+  ResizeWhenMoveVector& operator=(ResizeWhenMoveVector&& other) noexcept {
+    static_cast<Base&>(*this) = static_cast<Base&&>(other);
+    if (!this->empty()) {
+      auto empty = T{this->front().get_allocator()};
+      other.resize(this->size(), empty);
+    }
+    return *this;
+  }
+
+  ResizeWhenMoveVector(Base&& b) noexcept : Base{std::move(b)} {}
+};
 template <typename T = Id, int NumColumns = 0,
           typename ColumnStorage = std::vector<
               T, ad_utility::default_init_allocator<T, std::allocator<T>>>,
@@ -114,7 +140,8 @@ class IdTable {
   static constexpr int numStaticColumns = NumColumns;
   // The actual storage is a plain 1D vector with the logical columns
   // concatenated.
-  using Storage = std::vector<ColumnStorage>;
+  // using Storage = std::vector<ColumnStorage>;
+  using Storage = ResizeWhenMoveVector<ColumnStorage>;
   using ViewSpans = std::vector<std::span<const T>>;
   using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
@@ -223,8 +250,12 @@ class IdTable {
   IdTable& operator=(const IdTable&) requires isView = default;
 
   // `IdTable`s are movable
-  IdTable(IdTable&& other) noexcept requires(!isView) = default;
-  IdTable& operator=(IdTable&& other) noexcept requires(!isView) = default;
+  IdTable(IdTable&& other) noexcept
+      requires(!isView && std::is_move_constructible_v<Data>)
+      = default;
+  IdTable& operator=(IdTable&& other) noexcept
+      requires(!isView && std::is_move_assignable_v<Data>)
+      = default;
 
  private:
   // Make the other instantiations of `IdTable` friends to allow for conversion
@@ -238,6 +269,20 @@ class IdTable {
   // to implement the conversion functions `toStatic`, `toDynamic` and
   // `asStaticView` below.
   IdTable(Data data, size_t numColumns, size_t numRows, Allocator allocator)
+      : data_{std::move(data)},
+        numColumns_{numColumns},
+        numRows_{numRows},
+        allocator_{std::move(allocator)} {
+    if constexpr (!isDynamic) {
+      AD_CORRECTNESS_CHECK(numColumns == NumColumns);
+    }
+    AD_CORRECTNESS_CHECK(this->data().size() == numColumns_);
+    AD_CORRECTNESS_CHECK(std::ranges::all_of(
+        this->data(),
+        [this](const auto& column) { return column.size() == numRows_; }));
+  }
+  IdTable(std::vector<ColumnStorage> data, size_t numColumns, size_t numRows,
+          Allocator allocator) requires(!isView)
       : data_{std::move(data)},
         numColumns_{numColumns},
         numRows_{numRows},
@@ -475,7 +520,7 @@ class IdTable {
       std::vector<ColumnStorage> newColumns, Allocator allocator = {}) const
       requires(!std::is_copy_constructible_v<ColumnStorage>) {
     AD_CONTRACT_CHECK(newColumns.size() >= numColumns());
-    Storage newStorage(
+    std::vector<ColumnStorage> newStorage(
         std::make_move_iterator(newColumns.begin()),
         std::make_move_iterator(newColumns.begin() + numColumns()));
     for (size_t i = 0; i < numColumns(); ++i) {
