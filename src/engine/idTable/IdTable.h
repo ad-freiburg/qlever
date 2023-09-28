@@ -102,31 +102,37 @@ namespace columnBasedIdTable {
 // TODO<joka921> The NumColumns should be `size_t` but that requires several
 // additional changes in the rest of the code.
 //
+
 template <typename T>
 struct ResizeWhenMoveVector : public std::vector<T> {
   using Base = std::vector<T>;
   using Base::Base;
   ResizeWhenMoveVector(const ResizeWhenMoveVector&) = default;
   ResizeWhenMoveVector& operator=(const ResizeWhenMoveVector&) = default;
-  // TODO<joka921> The `noexcept` should catch the bad_alloc etc.
+  static constexpr bool movePreservesNumEntries = requires (T& t) {T{t.get_allocator()};};
   ResizeWhenMoveVector(ResizeWhenMoveVector&& other) noexcept
       : Base{static_cast<Base&&>(other)} {
     if (!this->empty()) {
-      auto empty = T{this->front().get_allocator()};
-      other.resize(this->size(), empty);
+      if constexpr (movePreservesNumEntries) {
+        auto empty = T{this->front().get_allocator()};
+        other.resize(this->size(), empty);
+      }
     }
   }
+
   // TODO<joka921> The `noexcept` should catch the bad_alloc etc.
-  ResizeWhenMoveVector& operator=(ResizeWhenMoveVector&& other) noexcept {
+  ResizeWhenMoveVector& operator=(ResizeWhenMoveVector&& other) noexcept{
     static_cast<Base&>(*this) = static_cast<Base&&>(other);
     if (!this->empty()) {
-      auto empty = T{this->front().get_allocator()};
-      other.resize(this->size(), empty);
+        if constexpr (movePreservesNumEntries) {
+        auto empty = T{this->front().get_allocator()};
+        other.resize(this->size(), empty);
+      }
     }
     return *this;
   }
 
-  ResizeWhenMoveVector(Base&& b) noexcept : Base{std::move(b)} {}
+  //ResizeWhenMoveVector(Base&& b) noexcept : Base{std::move(b)} {}
 };
 template <typename T = Id, int NumColumns = 0,
           typename ColumnStorage = std::vector<
@@ -281,20 +287,6 @@ class IdTable {
         this->data(),
         [this](const auto& column) { return column.size() == numRows_; }));
   }
-  IdTable(std::vector<ColumnStorage> data, size_t numColumns, size_t numRows,
-          Allocator allocator) requires(!isView)
-      : data_{std::move(data)},
-        numColumns_{numColumns},
-        numRows_{numRows},
-        allocator_{std::move(allocator)} {
-    if constexpr (!isDynamic) {
-      AD_CORRECTNESS_CHECK(numColumns == NumColumns);
-    }
-    AD_CORRECTNESS_CHECK(this->data().size() == numColumns_);
-    AD_CORRECTNESS_CHECK(std::ranges::all_of(
-        this->data(),
-        [this](const auto& column) { return column.size() == numRows_; }));
-  }
 
  public:
   // For an empty and dynamic (`NumColumns == 0`) `IdTable`, specify the
@@ -392,6 +384,7 @@ class IdTable {
   // Note: The semantics of this function is similar to `std::vector::resize`.
   // To set the capacity, use the `reserve` function.
   void resize(size_t numRows) requires(!isView) {
+    checkNumCols();
     std::ranges::for_each(data(),
                           [numRows](auto& column) { column.resize(numRows); });
     numRows_ = numRows;
@@ -412,6 +405,7 @@ class IdTable {
   // stays the same). Runs in O(1) time. To also free the allocated memory, call
   // `shrinkToFit()` after calling `clear()` .
   void clear() requires(!isView) {
+    checkNumCols();
     numRows_ = 0;
     std::ranges::for_each(data(), [](auto& column) { column.clear(); });
   }
@@ -431,6 +425,7 @@ class IdTable {
 
   // Insert a new uninitialized row at the end.
   void emplace_back() requires(!isView) {
+    checkNumCols();
     std::ranges::for_each(data(), [](auto& column) { column.emplace_back(); });
     ++numRows_;
   }
@@ -446,6 +441,7 @@ class IdTable {
   // undefined behavior which is caught by an `assert` in Debug builds.
   void push_back(const std::initializer_list<T>& newRow) requires(!isView) {
     AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
+      checkNumCols();
     ++numRows_;
     for (size_t i = 0; i < numColumns(); ++i) {
       data()[i].push_back(*(newRow.begin() + i));
@@ -454,6 +450,7 @@ class IdTable {
 
   void push_back(std::span<const T> newRow) requires(!isView) {
     AD_CONTRACT_CHECK(newRow.size() == numColumns());
+      checkNumCols();
     ++numRows_;
     for (size_t i = 0; i < numColumns(); ++i) {
       data()[i].push_back(*(newRow.begin() + i));
@@ -469,6 +466,7 @@ class IdTable {
     if constexpr (isDynamic) {
       AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     }
+      checkNumCols();
     ++numRows_;
     for (size_t i = 0; i < numColumns(); ++i) {
       data()[i].push_back(*(newRow.begin() + i));
@@ -490,6 +488,7 @@ class IdTable {
     if constexpr (isDynamic) {
       AD_EXPENSIVE_CHECK(newRow.numColumns() == numColumns());
     }
+      checkNumCols();
     ++numRows_;
     for (size_t i = 0; i < numColumns(); ++i) {
       data()[i].push_back(newRow[i]);
@@ -520,7 +519,7 @@ class IdTable {
       std::vector<ColumnStorage> newColumns, Allocator allocator = {}) const
       requires(!std::is_copy_constructible_v<ColumnStorage>) {
     AD_CONTRACT_CHECK(newColumns.size() >= numColumns());
-    std::vector<ColumnStorage> newStorage(
+    Data newStorage(
         std::make_move_iterator(newColumns.begin()),
         std::make_move_iterator(newColumns.begin() + numColumns()));
     for (size_t i = 0; i < numColumns(); ++i) {
@@ -687,6 +686,7 @@ class IdTable {
   void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
     AD_EXPENSIVE_CHECK(begin() <= beginIt && beginIt <= endIt &&
                        endIt <= end());
+      checkNumCols();
     auto startIndex = beginIt - begin();
     auto endIndex = endIt - begin();
     auto numErasedElements = endIndex - startIndex;
@@ -772,6 +772,19 @@ class IdTable {
         columns[i] = self.getColumn(i);
       }
       return columns;
+    }
+  }
+
+  // After having moved from an IdTable, it sometimes is invalid because we cannot simply reinstate the number of columns.
+  // This function detects this behavior when changing the rows
+  void checkNumCols() {
+    if constexpr (!isView) {
+      if constexpr (!Data::movePreservesNumEntries) {
+        if (numRows_ == 0) {
+          // TODO<joka921> Add a proper exception message
+          AD_CONTRACT_CHECK(numColumns_ == data().size());
+        }
+      }
     }
   }
 };
