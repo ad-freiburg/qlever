@@ -166,18 +166,35 @@ class AllocatorWithLimit {
   AllocatorWithLimit(const AllocatorWithLimit<U>& other)
       : memoryLeft_(other.getMemoryLeft()){};
 
-  // Defaulted copies.
+  // Defaulted copy operations.
   AllocatorWithLimit(const AllocatorWithLimit&) = default;
   AllocatorWithLimit& operator=(const AllocatorWithLimit&) = default;
-  // We deliberately delete the move assignment, because when a `vector<...,
-  // AllocatorWithLimit>` is moved from, we still want the moved from vector to
-  // have a valid allocator that uses the same memory limit.
-  // TODO<joka921> Comment and make it exception safe (catch the theoretical
-  // exceptions).
-  AllocatorWithLimit(AllocatorWithLimit&& other) noexcept
-      : AllocatorWithLimit(static_cast<const AllocatorWithLimit&>(other)) {}
+
+  // We deliberately let the move assignment call the copy assignment, because
+  // when a `vector<..., AllocatorWithLimit>` is moved from, we still want the
+  // moved from vector to have a valid allocator that uses the same memory
+  // limit. Note: We could also implicitly  leave out the move operators, then
+  // the copy operators would be called implicitly, but
+  // 1. It is hard to reason about things that are implicitly not there.
+  // 2. This would inhibit move semantics from `std::vector` unless the copy
+  // operations are also `noexcept`, so we need
+  //    some extra code anyway.
+  AllocatorWithLimit(AllocatorWithLimit&& other) noexcept try
+      : AllocatorWithLimit(static_cast<const AllocatorWithLimit&>(other)) {
+  } catch (const std::exception& e) {
+    LOG(ERROR) << "The move constructor of `AllocatorWithLimit` threw an "
+                  "exception with message "
+               << e.what() << " .This should never happen, terminating"
+               << std::endl;
+    std::terminate();
+  }
   AllocatorWithLimit& operator=(AllocatorWithLimit&& other) noexcept {
-    *this = static_cast<const AllocatorWithLimit&>(other);
+    ad_utility::terminateIfThrows(
+        [self = this, &other] {
+          *self = static_cast<const AllocatorWithLimit&>(other);
+        },
+        "The move assignment operator of `AllocatorWithLimit` should never "
+        "throw in practice.");
     return *this;
   }
 
