@@ -24,7 +24,7 @@ class QueryHub {
 
   net::io_context& ioContext_;
   /// Thread pool with single thread for synchronization
-  net::static_thread_pool singleThreadPool_{1};
+  net::strand<net::any_io_executor> globalStrand_;
   absl::flat_hash_map<QueryId, PointerType> socketDistributors_{};
 
   /// Implementation of createOrAcquireDistributor
@@ -32,7 +32,8 @@ class QueryHub {
       createOrAcquireDistributorInternal(QueryId);
 
  public:
-  explicit QueryHub(net::io_context& ioContext) : ioContext_{ioContext} {}
+  explicit QueryHub(net::io_context& ioContext)
+      : ioContext_{ioContext}, globalStrand_{net::make_strand(ioContext_)} {}
 
   /// Creates a new `QueryToSocketDistributor` or returns the pre-existing
   /// for the provided query id if there already is one. The bool parameter
