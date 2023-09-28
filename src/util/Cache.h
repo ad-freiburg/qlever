@@ -355,8 +355,7 @@ class FlexibleCache {
     }
 
     // Used to distinguish between > and >= below.
-    const size_t needToAddNewElement =
-        sizeToMakeRoomFor.getBytes() != 0 ? 1 : 0;
+    const size_t needToAddNewElement = sizeToMakeRoomFor != 0_B ? 1 : 0;
 
     while (!_entries.empty() &&
            (_entries.size() + _pinnedMap.size() + needToAddNewElement >
