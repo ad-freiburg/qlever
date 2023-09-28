@@ -312,6 +312,8 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
       b["value"] = entitystr.substr(2);
       b["type"] = "bnode";
     } else {
+      // TODO<joka921> This is probably not quite correct in the corener case
+      // that there are datatype IRIs which contain quotes.
       size_t quote_pos = entitystr.rfind('"');
       if (quote_pos == std::string::npos) {
         // TEXT entries are currently not surrounded by quotes
@@ -502,7 +504,7 @@ static std::string idToXMLBinding(std::string_view var, Id id,
     } else {
       size_t quote_pos = entitystr.rfind('"');
       if (quote_pos == std::string::npos) {
-        absl::StrAppend(&result, "<literal>"sv, escape(entitystr.substr(2)),
+        absl::StrAppend(&result, "<literal>"sv, escape(entitystr),
                         "</literal>");
       } else {
         std::string_view innerValue = entitystr.substr(1, quote_pos - 1);
