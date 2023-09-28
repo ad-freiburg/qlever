@@ -37,33 +37,17 @@ class TestHttpServer {
   std::atomic<bool> hasBeenShutDown_ = false;
 
  public:
-  // Create server on localhost. Try out 10 different ports, if connection
-  // to all of them fail, throw `std::runtime_error`.
-  //
-  // TODO: Is there a more robust way to find a free port?
-  TestHttpServer(HttpHandler httpHandler) {
-    std::vector<short unsigned int> ports(10);
-    std::generate(ports.begin(), ports.end(),
-                  []() { return 1024 + std::rand() % (65535 - 1024); });
+  // Create server on localhost. Port 0 instructs the operating system to choose
+  // a free port of its choice.
+  explicit TestHttpServer(HttpHandler httpHandler) {
     const std::string& ipAddress = "0.0.0.0";
     int numServerThreads = 1;
-    for (const short unsigned int port : ports) {
-      try {
-        server_ = std::make_shared<HttpServer<HttpHandler>>(
-            port, ipAddress, numServerThreads, std::move(httpHandler));
-        return;
-      } catch (const boost::system::system_error& b) {
-        LOG(INFO) << "Starting test HTTP server on port " << port
-                  << " failed, trying next port ..." << std::endl;
-      }
-    }
-    AD_THROW(
-        absl::StrCat("Could not start test HTTP server on any of these ports: ",
-                     absl::StrJoin(ports, ", ")));
+    server_ = std::make_shared<HttpServer<HttpHandler>>(
+        0, ipAddress, numServerThreads, std::move(httpHandler));
   }
 
-  // Get the port on which this server is running.
-  short unsigned int getPort() const { return server_->getPort(); }
+  // Get port on which this server is running.
+  auto getPort() const { return server_->getPort(); }
 
   // Run the server in its own thread. Wait for 100ms until the server is up and
   // throw `std::runtime_error` if it's not (it should be up immediately).
