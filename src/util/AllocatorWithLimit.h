@@ -162,8 +162,23 @@ class AllocatorWithLimit {
   AllocatorWithLimit() = delete;
 
   template <typename U>
+  requires(!std::same_as<U, T>)
   AllocatorWithLimit(const AllocatorWithLimit<U>& other)
       : memoryLeft_(other.getMemoryLeft()){};
+
+  // Defaulted copies.
+  AllocatorWithLimit(const AllocatorWithLimit&) = default;
+  AllocatorWithLimit& operator=(const AllocatorWithLimit&) = default;
+  // We deliberately delete the move assignment, because when a `vector<...,
+  // AllocatorWithLimit>` is moved from, we still want the moved from vector to
+  // have a valid allocator that uses the same memory limit.
+  // TODO<joka921> Comment and make it exception safe (catch the theoretical
+  // exceptions).
+  AllocatorWithLimit(AllocatorWithLimit&& other) noexcept
+      : AllocatorWithLimit(static_cast<const AllocatorWithLimit&>(other)) {}
+  AllocatorWithLimit& operator=(AllocatorWithLimit&& other) noexcept {
+    return *this = static_cast<const AllocatorWithLimit&>(other);
+  }
 
   // An allocator must have a function "allocate" with exactly this signature.
   // TODO<C++20> : the exact signature of allocate changes

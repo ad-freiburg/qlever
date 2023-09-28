@@ -417,9 +417,6 @@ TEST(IdTable, reserve_and_resize) {
                               "idTableTest.reserveAndResize");
 }
 
-// TODO<joka921> The copyAndMoveTest can currently not be run for the
-// `BufferedVector` case, as this `IdTable` is not even movable.
-/*
 TEST(IdTable, copyAndMove) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
@@ -475,7 +472,6 @@ TEST(IdTable, copyAndMove) {
 
   runTestForDifferentTypes<6>(runTestForIdTable, "idTableTest.copyAndMove");
 }
- */
 
 TEST(IdTable, erase) {
   constexpr size_t NUM_ROWS = 12;
@@ -743,6 +739,45 @@ TEST(IdTableStaticTest, copyAndMove) {
     ASSERT_EQ(V(i + 1), t3(i / NUM_COLS, i % NUM_COLS));
     ASSERT_EQ(V(i + 1), t4(i / NUM_COLS, i % NUM_COLS));
     ASSERT_EQ(V(i + 1), t5(i / NUM_COLS, i % NUM_COLS));
+  }
+}
+
+TEST(IdTableTest, statusAfterMove) {
+  {
+    IdTableStatic<3> t1{makeAllocator()};
+    t1.push_back(std::array{V(1), V(42), V(2304)});
+
+    auto t2 = std::move(t1);
+    // `t1` is valid and empty after being moved from. In particular, the vector
+    // that contains the vector with the columns has been refilled.
+    ASSERT_EQ(3, t1.numColumns());
+    ASSERT_EQ(0, t1.numRows());
+    ASSERT_NO_THROW(t1.push_back(std::array{V(4), V(16), V(23)}));
+    ASSERT_EQ(1, t1.numRows());
+    ASSERT_EQ((static_cast<std::array<Id, 3>>(t1[0])),
+              (std::array{V(4), V(16), V(23)}));
+  }
+  {
+    using Buffer = ad_utility::BufferedVector<Id>;
+    Buffer buffer(0, "IdTableTest.statusAfterMove.dat");
+    using BufferedTable = columnBasedIdTable::IdTable<Id, 1, Buffer>;
+    BufferedTable table{1, std::array{std::move(buffer)}};
+    table.push_back(std::array{V(19)});
+    auto t2 = std::move(table);
+    // The `table` has been moved from and is invalid, because we don't have a
+    // file anymore where we could write the contents. This means that all
+    // operations that would have to change the size of the IdTable throw until
+    // we have reinstated the column vector by explicitly assigning a newly
+    // constructed table
+    // TODO<joka921> proper exception message
+    ASSERT_ANY_THROW(table.push_back(std::array{V(4)}));
+    ASSERT_ANY_THROW(table.resize(42));
+    table = BufferedTable{
+        1, std::array{Buffer{0, "IdTableTest.statusAfterMove2.dat"}}};
+    ASSERT_NO_THROW(table.push_back(std::array{V(4)}));
+    ASSERT_NO_THROW(table.resize(42));
+    ASSERT_EQ(table.size(), 42u);
+    ASSERT_EQ(table(0, 0), V(4));
   }
 }
 
