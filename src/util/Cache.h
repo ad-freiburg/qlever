@@ -263,8 +263,7 @@ class FlexibleCache {
     // adapt the sizes of the pinned and non-pinned part of the cache
     auto sz = _valueSizeGetter(*valuePtr);
     _totalSizeNonPinned -= sz;
-    _totalSizePinned =
-        MemorySize::bytes(_totalSizePinned.getBytes() + sz.getBytes());
+    _totalSizePinned += sz;
     // Move the entry to the _pinnedMap and remove it from the non-pinned data
     // structures
     _pinnedMap[key] = std::move(valuePtr);
@@ -289,9 +288,7 @@ class FlexibleCache {
       return;
     }
     // the entry exists in the non-pinned part of the cache, erase it.
-    _totalSizeNonPinned =
-        MemorySize::bytes(_totalSizeNonPinned.getBytes() -
-                          _valueSizeGetter(*mapIt->second).getBytes());
+    _totalSizeNonPinned -= _valueSizeGetter(*mapIt->second);
     _entries.erase(std::move(mapIt->second));
     _accessMap.erase(mapIt);
   }
