@@ -108,6 +108,38 @@ std::istringstream HttpClientImpl<StreamType>::sendRequest(
   return responseBody;
 }
 
+// ____________________________________________________________________________
+template <typename StreamType>
+http::response<http::string_body>
+HttpClientImpl<StreamType>::sendWebSocketHandshake(
+    const boost::beast::http::verb& method, std::string_view host,
+    std::string_view target) {
+  // Check that we have a stream (created in the constructor).
+  AD_CORRECTNESS_CHECK(stream_);
+
+  // Set up the request.
+  http::request<http::string_body> request;
+  request.method(method);
+  request.target(target);
+  // See
+  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Protocol_upgrade_mechanism
+  // for more information on the websocket handshake mechanism.
+  request.set(http::field::host, host);
+  request.set(http::field::upgrade, "websocket");
+  request.set(http::field::connection, "Upgrade");
+  request.set(http::field::sec_websocket_version, "13");
+  request.set(http::field::sec_websocket_key, "8J+koQ==");
+
+  http::write(*stream_, request);
+
+  http::response<http::string_body> response;
+
+  beast::flat_buffer buffer;
+  http::read(*stream_, buffer, response);
+
+  return response;
+}
+
 // Explicit instantiations for HTTP and HTTPS, see the bottom of `HttpClient.h`.
 template class HttpClientImpl<beast::tcp_stream>;
 template class HttpClientImpl<ssl::stream<tcp::socket>>;

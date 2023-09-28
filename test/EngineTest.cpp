@@ -74,11 +74,11 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
   }
 
   {
-    std::vector<Variable> varsLeft;
+    std::vector<std::optional<Variable>> varsLeft;
     for (size_t i = 0; i < inputA.numColumns(); ++i) {
       varsLeft.emplace_back(absl::StrCat("?left_", i));
     }
-    std::vector<Variable> varsRight;
+    std::vector<std::optional<Variable>> varsRight;
     for (size_t i = 0; i < inputB.numColumns(); ++i) {
       varsRight.emplace_back(absl::StrCat("?right_", i));
     }

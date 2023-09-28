@@ -230,7 +230,7 @@ uint64_t& Index::blocksizePermutationsInBytes() {
 }
 
 // ____________________________________________________________________________
-const ad_utility::MemorySize& Index::stxxlMemoryInBytes() const {
+const ad_utility::MemorySize& Index::stxxlMemory() const {
   return pimpl_->stxxlMemory();
 }
 

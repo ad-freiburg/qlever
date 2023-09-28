@@ -257,6 +257,14 @@ class RowReferenceImpl {
       return result;
     }
 
+    // Convert from a static `RowReference` to a `std::array` (makes a copy).
+    explicit operator std::array<T, numStaticColumns>() const
+        requires(numStaticColumns != 0) {
+      std::array<T, numStaticColumns> result;
+      std::ranges::copy(*this, result.begin());
+      return result;
+    }
+
    protected:
     // Internal implementation of the assignment from a `Row` as well as a
     // `RowReference`. This assignment actually writes to the underlying table.

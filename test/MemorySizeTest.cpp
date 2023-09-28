@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <ranges>
 #include <sstream>
+#include <stdexcept>
 #include <vector>
 
 #include "./util/GTestHelpers.h"
@@ -94,16 +95,16 @@ TEST(MemorySize, MemorySizeConstructor) {
   ad_utility::MemorySize m1;
   checkAllMemorySizeGetter(m1, AllMemoryUnitSizes{0uL, 0.0, 0.0, 0.0, 0.0});
 
-  // Factory functions for size_t overload.
-  checkAllMemorySizeGetter(ad_utility::MemorySize::bytes(1uL),
+  // Factory functions for integral overload.
+  checkAllMemorySizeGetter(ad_utility::MemorySize::bytes(1),
                            singleMemoryUnitSizes.at("B"));
-  checkAllMemorySizeGetter(ad_utility::MemorySize::kilobytes(1uL),
+  checkAllMemorySizeGetter(ad_utility::MemorySize::kilobytes(1),
                            singleMemoryUnitSizes.at("kB"));
-  checkAllMemorySizeGetter(ad_utility::MemorySize::megabytes(1uL),
+  checkAllMemorySizeGetter(ad_utility::MemorySize::megabytes(1),
                            singleMemoryUnitSizes.at("MB"));
-  checkAllMemorySizeGetter(ad_utility::MemorySize::gigabytes(1uL),
+  checkAllMemorySizeGetter(ad_utility::MemorySize::gigabytes(1),
                            singleMemoryUnitSizes.at("GB"));
-  checkAllMemorySizeGetter(ad_utility::MemorySize::terabytes(1uL),
+  checkAllMemorySizeGetter(ad_utility::MemorySize::terabytes(1),
                            singleMemoryUnitSizes.at("TB"));
 
   // Factory functions for double overload.
@@ -117,6 +118,11 @@ TEST(MemorySize, MemorySizeConstructor) {
                            singleMemoryUnitSizes.at("TB"));
 
   // Negative numbers are not allowed.
+  ASSERT_ANY_THROW(ad_utility::MemorySize::bytes(-1));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::kilobytes(-1));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::megabytes(-1));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::gigabytes(-1));
+  ASSERT_ANY_THROW(ad_utility::MemorySize::terabytes(-1));
   ASSERT_ANY_THROW(ad_utility::MemorySize::kilobytes(-1.0));
   ASSERT_ANY_THROW(ad_utility::MemorySize::megabytes(-1.0));
   ASSERT_ANY_THROW(ad_utility::MemorySize::gigabytes(-1.0));
@@ -341,6 +347,76 @@ TEST(MemorySize, ArithmeticOperators) {
   ASSERT_EQ((40_MB).getBytes(), memFloatingPointDivision.getBytes());
   ASSERT_ANY_THROW(1_GB / -2.48);
   ASSERT_ANY_THROW(1_GB / 0.);
+}
+
+// For checking, if the operators throw errors, when we have over-, or
+// underflow.
+TEST(MemorySize, ArithmeticOperatorsOverAndUnderFlow) {
+  // Addition.
+  ASSERT_THROW(
+      100_GB + ad_utility::MemorySize::bytes(ad_utility::size_t_max - 400),
+      std::overflow_error);
+  ASSERT_NO_THROW(ad_utility::MemorySize::bytes(400) +
+                  ad_utility::MemorySize::bytes(ad_utility::size_t_max - 400));
+  ad_utility::MemorySize memAddition{4_MB};
+  ASSERT_THROW(memAddition +=
+               ad_utility::MemorySize::bytes(ad_utility::size_t_max - 400),
+               std::overflow_error);
+  memAddition = ad_utility::MemorySize::bytes(10);
+  ASSERT_NO_THROW(memAddition +=
+                  ad_utility::MemorySize::bytes(ad_utility::size_t_max - 10));
+
+  // Subtraction.
+  ASSERT_THROW(
+      100_GB - ad_utility::MemorySize::bytes(ad_utility::size_t_max - 400),
+      std::underflow_error);
+  ASSERT_NO_THROW(ad_utility::MemorySize::bytes(400) -
+                  ad_utility::MemorySize::bytes(400));
+  ad_utility::MemorySize memSubtraction{40_MB};
+  ASSERT_THROW(memSubtraction -=
+               ad_utility::MemorySize::bytes(ad_utility::size_t_max - 400),
+               std::underflow_error);
+  memSubtraction = ad_utility::MemorySize::bytes(10);
+  ASSERT_NO_THROW(memSubtraction -= ad_utility::MemorySize::bytes(10));
+
+  // Whole number multiplication.
+  ASSERT_THROW(100_GB * ad_utility::size_t_max, std::overflow_error);
+  ASSERT_NO_THROW(ad_utility::MemorySize::bytes(ad_utility::size_t_max / 2UL) *
+                  2UL);
+  ad_utility::MemorySize memWholeMultiplication{40_MB};
+  ASSERT_THROW(memWholeMultiplication *= ad_utility::size_t_max,
+               std::overflow_error);
+  memWholeMultiplication =
+      ad_utility::MemorySize::bytes(ad_utility::size_t_max);
+  ASSERT_NO_THROW(memWholeMultiplication *= 1);
+
+  // Floating point multiplication.
+  ASSERT_THROW(ad_utility::MemorySize::bytes(ad_utility::size_t_max) * 1.5,
+               std::overflow_error);
+  ASSERT_NO_THROW(ad_utility::MemorySize::bytes(static_cast<size_t>(
+                      static_cast<float>(ad_utility::size_t_max) / 2.3)) *
+                  2.3);
+  ad_utility::MemorySize memFloatingPointMultiplication{
+      ad_utility::MemorySize::bytes(ad_utility::size_t_max)};
+  ASSERT_THROW(memFloatingPointMultiplication *= 1.487, std::overflow_error);
+  memFloatingPointMultiplication = ad_utility::MemorySize::bytes(
+      static_cast<size_t>(static_cast<float>(ad_utility::size_t_max) / 4.73));
+  ASSERT_NO_THROW(memFloatingPointMultiplication *= 4.73);
+
+  // Floating point division. We are checking for overflow via divisor, that
+  // results in a quotient bigger than the dividend. For example: 1/(1/2) = 2
+  ASSERT_THROW(100_GB / (1. / static_cast<float>(ad_utility::size_t_max)),
+               std::overflow_error);
+  ASSERT_NO_THROW(ad_utility::MemorySize::bytes(static_cast<size_t>(
+                      static_cast<float>(ad_utility::size_t_max) / 2.4)) /
+                  (1. / 2.4));
+  ad_utility::MemorySize memFloatingPointDivision{12_MB};
+  ASSERT_THROW(memFloatingPointDivision /=
+               (1. / static_cast<float>(ad_utility::size_t_max)),
+               std::overflow_error);
+  memFloatingPointDivision =
+      ad_utility::MemorySize::bytes(ad_utility::size_t_max);
+  ASSERT_NO_THROW(memFloatingPointDivision /= 7.80);
 }
 
 // Checks, if all the constexpr functions can actually be evaluated at compile
