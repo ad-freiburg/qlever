@@ -183,12 +183,6 @@ class LocaleManager {
     // since this is a c-api we still have a trailing '\0'. Trimming this is
     // necessary for the prefix range to work correct.
     res.resize(res.size() - 1);
-    if (level == Level::TOTAL) {
-      // on the total Level, also concatenate with the actual bytes.
-      // might be a waste of space, but is only possibly used while building the
-      // index.
-      res += s;
-    }
     return finalRes;
   }
 
@@ -495,27 +489,35 @@ class TripleComponentComparator {
    * @brief An entry of the Vocabulary, split up into its components and
    * possibly converted to a format that is easier to compare
    *
-   * @tparam ST either LocaleManager::SortKey or std::string_view. Since both
-   * variants differ greatly in their usage they are commented with the template
-   * instantiations
+   * @tparam InnerString either LocaleManager::SortKey or std::string_view.
+   * Both variants differ greatly in their usage. Details can be found after the
+   * class definition, together with the explicit aliases `SplitVal` and
+   * `SplitValOwning` for the template instantiations that are actually used.
+   * the template instantiations
+   * @tparam LanguageTag and FullString, either `std::string` or
+   * `std::string_view`. They are used as deterministic tie breaks on the
+   * `TOTAL` sort level.
    */
-  template <class InnerString, class LanguageTag>
+  template <class InnerString, class LanguageTag, class FullString>
   struct SplitValBase {
     SplitValBase() = default;
-    SplitValBase(char fst, InnerString trans, LanguageTag l, bool externalized)
-        : firstOriginalChar(fst),
-          transformedVal(std::move(trans)),
-          langtag(std::move(l)),
-          isExternalized{externalized} {}
+    SplitValBase(char fst, InnerString trans, LanguageTag l, bool externalized,
+                 FullString fullInputForTotalComparison)
+        : firstOriginalChar_(fst),
+          transformedVal_(std::move(trans)),
+          langtag_(std::move(l)),
+          isExternalized_{externalized},
+          fullInput_{std::move(fullInputForTotalComparison)} {}
 
     /// The first char of the original value, used to distinguish between
     /// different datatypes
-    char firstOriginalChar = '\0';
-    InnerString transformedVal;  /// The original inner value, possibly
-                                 /// transformed by a locale().
-    LanguageTag langtag;         /// The language tag, possibly empty.
-    bool isExternalized;         /// Does this word belong to the externalized
-                                 /// vocabulary.
+    char firstOriginalChar_ = '\0';
+    InnerString transformedVal_;   /// The original inner value, possibly
+                                   /// transformed by a locale().
+    LanguageTag langtag_;          /// The language tag, possibly empty.
+    bool isExternalized_ = false;  /// Does this word belong to the externalized
+                                   /// vocabulary.
+    FullString fullInput_;
   };
 
   /**
@@ -524,13 +526,15 @@ class TripleComponentComparator {
    * held Locale. This is used to transform the inner value and to safely pass
    * it around, e.g. when performing prefix comparisons in the vocabulary
    */
-  using SplitVal = SplitValBase<LocaleManager::SortKey, std::string>;
+  using SplitVal =
+      SplitValBase<LocaleManager::SortKey, std::string, std::string>;
 
   /**
    * This only holds string_views to substrings of a string.
    * Currently we only use this inside this class
    */
-  using SplitValNonOwning = SplitValBase<std::string_view, std::string_view>;
+  using SplitValNonOwning =
+      SplitValBase<std::string_view, std::string_view, std::string_view>;
 
   /**
    * \brief Compare two elements from the Vocabulary.
@@ -585,22 +589,23 @@ class TripleComponentComparator {
   /**
    * @brief the inner comparison logic
    *
-   * First compares the datatypes by the firstOriginalChar, then the inner value
-   * and then the language tags
+   * First compares the datatypes by the firstOriginalChar_, then the inner
+   * value and then the language tags
    * @return <0 iff a<b, 0 iff a==b, >0 iff a>b
    */
-  template <class A, class B>
-  [[nodiscard]] int compare(const SplitValBase<A, B>& a,
-                            const SplitValBase<A, B>& b,
+  template <class A, class B, typename C>
+  [[nodiscard]] int compare(const SplitValBase<A, B, C>& a,
+                            const SplitValBase<A, B, C>& b,
                             const Level level) const {
     // Currently all internal words stand before all external words.
     // TODO<joka921> This has to be changed once we have the IDs interleaved
     // via the MilestoneIdManager.
-    if (a.isExternalized != b.isExternalized) {
-      return a.isExternalized ? 1 : -1;
+    if (a.isExternalized_ != b.isExternalized_) {
+      return a.isExternalized_ ? 1 : -1;
     }
 
-    if (auto res = std::strncmp(&a.firstOriginalChar, &b.firstOriginalChar, 1);
+    if (auto res =
+            std::strncmp(&a.firstOriginalChar_, &b.firstOriginalChar_, 1);
         res != 0) {
       return res;  // different data types, decide on the datatype
     }
@@ -608,19 +613,19 @@ class TripleComponentComparator {
     if (int res =
             // this correctly dispatches between SortKeys (already transformed)
             // and string_views (not-transformed, perform unicode collation)
-        _locManager.compare(a.transformedVal, b.transformedVal, level);
+        _locManager.compare(a.transformedVal_, b.transformedVal_, level);
         res != 0 || level != Level::TOTAL) {
       return res;  // actual value differs
     }
 
-    // if everything else matches and we are on the TOTAL level, we sort by the
-    // langtag
-    if (int res = a.langtag.compare(b.langtag); res != 0) {
+    // On the TOTAL level we then compare on the level of bytes.
+    if (int res = a.fullInput_.compare(b.fullInput_); res != 0) {
       return res;
     }
 
-    // TOTAL level and even the langtags match, sort by bytes
-    return a.transformedVal.compare(b.transformedVal);
+    // Only if two literals are bytewise equal, we compare by the langtag or
+    // datatype.
+    return a.langtag_.compare(b.langtag_);
   }
 
   /**
@@ -644,18 +649,18 @@ class TripleComponentComparator {
       std::string_view s, const Level level) const {
     AD_CONTRACT_CHECK(level == Level::PRIMARY);
     auto transformed = extractAndTransformComparable(s, Level::PRIMARY, false);
-    // The `firstOriginalChar` is either " or < or @
+    // The `firstOriginalChar_` is either " or < or @
     AD_CONTRACT_CHECK(
-        static_cast<unsigned char>(transformed.firstOriginalChar) <
+        static_cast<unsigned char>(transformed.firstOriginalChar_) <
         std::numeric_limits<unsigned char>::max());
-    if (transformed.transformedVal.get().empty()) {
-      transformed.firstOriginalChar += 1;
+    if (transformed.transformedVal_.get().empty()) {
+      transformed.firstOriginalChar_ += 1;
     } else {
-      unsigned char last = transformed.transformedVal.get().back();
+      unsigned char last = transformed.transformedVal_.get().back();
       if (last < std::numeric_limits<unsigned char>::max()) {
-        transformed.transformedVal.get().back() += 1;
+        transformed.transformedVal_.get().back() += 1;
       } else {
-        transformed.transformedVal.get().push_back('\1');
+        transformed.transformedVal_.get().push_back('\1');
       }
     }
     return transformed;
@@ -712,9 +717,9 @@ class TripleComponentComparator {
     }
     if constexpr (std::is_same_v<SplitValType, SplitVal>) {
       return {first, _locManager.getSortKey(res, level), std::string(langtag),
-              isExternal};
+              isExternal, std::string{a}};
     } else if constexpr (std::is_same_v<SplitValType, SplitValNonOwning>) {
-      return {first, res, langtag, isExternal};
+      return {first, res, langtag, isExternal, a};
     } else {
       static_assert(ad_utility::alwaysFalse<SplitValType>);
     }

@@ -14,19 +14,9 @@
 #include "util/Generator.h"
 #include "util/JoinAlgorithms/FindUndefRanges.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
+#include "util/TransparentFunctors.h"
 
 namespace ad_utility {
-
-// A function that takes an arbitrary number of arguments by reference and does
-// nothing. This is used below when certain customization points of the join
-// algorithms don't have to do anything.
-struct Noop {
-  void operator()(const auto&...) const {
-    // This function deliberately does nothing (static analysis expects a
-    // comment here).
-  }
-};
-[[maybe_unused]] static inline auto noop = Noop{};
 
 // Some helper concepts.
 

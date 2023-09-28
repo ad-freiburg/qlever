@@ -10,5 +10,6 @@ add_library(engine
         Union.cpp MultiColumnJoin.cpp TransitivePath.cpp Service.cpp
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
-        CartesianProductJoin.cpp)
+        CartesianProductJoin.cpp
+        idTable/CompressedExternalIdTable.h)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams)

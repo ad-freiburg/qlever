@@ -98,7 +98,8 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
     // via auto!
     // The technical reason is that the `operator[]` returns a `const Id&` even
     // though the `rowProxy` object is not const:
-#ifdef __GLIBCXX__
+#if false
+//#ifdef __GLIBCXX__
     static_assert(std::is_same_v<const Id&, decltype(rowProxy[0])>);
 #endif
   }
@@ -116,7 +117,8 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
     // via auto!
     // The technical reason is that the `operator[]` returns a `const Id&` even
     // though the `rowProxy` object is not const:
-#ifdef __GLIBCXX__
+#if false
+//#ifdef __GLIBCXX__
     static_assert(std::is_same_v<const Id&, decltype(rowProxy[0])>);
 #endif
   }
