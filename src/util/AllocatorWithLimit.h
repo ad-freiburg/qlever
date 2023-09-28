@@ -181,11 +181,17 @@ class AllocatorWithLimit {
   //    some extra code anyway.
   AllocatorWithLimit(AllocatorWithLimit&& other) noexcept try
       : AllocatorWithLimit(static_cast<const AllocatorWithLimit&>(other)) {
+    // Empty body, because all the logic is done by the delegated constructor
+    // and the catch block.
   } catch (const std::exception& e) {
-    LOG(ERROR) << "The move constructor of `AllocatorWithLimit` threw an "
-                  "exception with message "
-               << e.what() << " .This should never happen, terminating"
-               << std::endl;
+    auto log = [&e](auto& stream) {
+      stream << "The move constructor of `AllocatorWithLimit` threw an "
+                "exception with message "
+             << e.what() << " .This should never happen, terminating"
+             << std::endl;
+    };
+    log(ad_utility::Log::getLog<ERROR>());
+    log(std::cerr);
     std::terminate();
   }
   AllocatorWithLimit& operator=(AllocatorWithLimit&& other) noexcept {

@@ -37,6 +37,8 @@ struct ResizeWhenMoveVector : public std::vector<T> {
     moveImpl(std::move(other));
     return *this;
   }
+  // Nothing changes for the destructors, but we obey the rule of 5.
+  ~ResizeWhenMoveVector() = default;
 
  private:
   // The common implementation, move the elements of `other` into `this`.

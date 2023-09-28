@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "./util/AllocatorTestHelpers.h"
+#include "./util/GTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
@@ -768,10 +769,16 @@ TEST(IdTableTest, statusAfterMove) {
     // file anymore where we could write the contents. This means that all
     // operations that would have to change the size of the IdTable throw until
     // we have reinstated the column vector by explicitly assigning a newly
-    // constructed table
-    // TODO<joka921> proper exception message
-    ASSERT_ANY_THROW(table.push_back(std::array{V(4)}));
-    ASSERT_ANY_THROW(table.resize(42));
+    // constructed table. The exceptions that are thrown are from the
+    // `BufferedVector` class which throws when it is being accessed after being
+    // moved from. In other words, the `IdTable` class needs no special code to
+    // handle the case of the columns being stored in a `BufferedVector`.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        table.push_back(std::array{V(4)}),
+        ::testing::ContainsRegex("Tried to access a DiskBasedArray"));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        table.resize(42),
+        ::testing::ContainsRegex("Tried to access a DiskBasedArray"));
     table = BufferedTable{
         1, std::array{Buffer{0, "IdTableTest.statusAfterMove2.dat"}}};
     ASSERT_NO_THROW(table.push_back(std::array{V(4)}));

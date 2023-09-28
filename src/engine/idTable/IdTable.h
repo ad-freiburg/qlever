@@ -21,6 +21,7 @@
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
 #include "util/UninitializedAllocator.h"
+#include "util/Views.h"
 
 namespace columnBasedIdTable {
 // The `IdTable` class is QLever's central data structure. It is used to store
@@ -405,9 +406,10 @@ class IdTable {
   void push_back(const RowLike& newRow) requires(!isView) {
     AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     ++numRows_;
-    for (size_t i = 0; i < numColumns(); ++i) {
-      data()[i].push_back(*(newRow.begin() + i));
-    }
+    std::ranges::for_each(ad_utility::integerRange(numColumns()),
+                          [this, &newRow](auto i) {
+                            data()[i].push_back(*(std::begin(newRow) + i));
+                          });
   }
 
   void push_back(const std::initializer_list<T>& newRow) requires(!isView) {
@@ -440,10 +442,11 @@ class IdTable {
     AD_CONTRACT_CHECK(newColumns.size() >= numColumns());
     Data newStorage(std::make_move_iterator(newColumns.begin()),
                     std::make_move_iterator(newColumns.begin() + numColumns()));
-    for (size_t i = 0; i < numColumns(); ++i) {
-      newStorage[i].insert(newStorage[i].end(), data()[i].begin(),
-                           data()[i].end());
-    }
+    std::ranges::for_each(
+        ad_utility::integerRange(numColumns()), [this, &newStorage](auto i) {
+          newStorage[i].insert(newStorage[i].end(), data()[i].begin(),
+                               data()[i].end());
+        });
     return IdTable<T, NumColumns, ColumnStorage, IsView::False>{
         std::move(newStorage), numColumns_, numRows_, allocator};
   }
