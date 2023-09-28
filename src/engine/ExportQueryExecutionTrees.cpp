@@ -48,12 +48,13 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
 }
 
 // _____________________________________________________________________________
-ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::constructQueryResultToTurtle(
-    const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples,
-    LimitOffsetClause limitAndOffset,
-    std::shared_ptr<const ResultTable> resultTable) {
+template <>
+ad_utility::streams::stream_generator ExportQueryExecutionTrees::
+    constructQueryResultToStream<ad_utility::MediaType::turtle>(
+        const QueryExecutionTree& qet,
+        const ad_utility::sparql_types::Triples& constructTriples,
+        LimitOffsetClause limitAndOffset,
+        std::shared_ptr<const ResultTable> resultTable) {
   resultTable->logResultSize();
   auto generator = ExportQueryExecutionTrees::constructQueryResultToTriples(
       qet, constructTriples, limitAndOffset, resultTable);
@@ -395,7 +396,7 @@ using parsedQuery::SelectClause;
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::selectQueryResultToStreamImpl(
+ExportQueryExecutionTrees::selectQueryResultToStream(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset) {
@@ -543,7 +544,7 @@ static std::string idToXMLBinding(std::string_view var, Id id,
 // _____________________________________________________________________________
 template <>
 ad_utility::streams::stream_generator ExportQueryExecutionTrees::
-    selectQueryResultToStreamImpl<ad_utility::MediaType::sparqlXml>(
+    selectQueryResultToStream<ad_utility::MediaType::sparqlXml>(
         const QueryExecutionTree& qet,
         const parsedQuery::SelectClause& selectClause,
         LimitOffsetClause limitAndOffset) {
@@ -594,7 +595,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::constructQueryResultToTsvOrCsv(
+ExportQueryExecutionTrees::constructQueryResultToStream(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset,
@@ -621,18 +622,6 @@ ExportQueryExecutionTrees::constructQueryResultToTsvOrCsv(
     co_yield escapeFunction(std::move(triple._object));
     co_yield "\n";
   }
-}
-// _____________________________________________________________________________
-template <>
-ad_utility::streams::stream_generator ExportQueryExecutionTrees::
-    constructQueryResultToTsvOrCsv<ad_utility::MediaType::turtle>(
-        const QueryExecutionTree& qet,
-        const ad_utility::sparql_types::Triples& constructTriples,
-        LimitOffsetClause limitAndOffset,
-        std::shared_ptr<const ResultTable> resultTable) {
-  // TODO<joka921> Rename the involved functions to unify the hierarchy
-  return constructQueryResultToTurtle(qet, constructTriples, limitAndOffset,
-                                      resultTable);
 }
 
 // _____________________________________________________________________________
@@ -696,9 +685,9 @@ ExportQueryExecutionTrees::computeResultAsStream(
   auto compute = [&]<MediaType format> {
     auto limitAndOffset = parsedQuery._limitOffset;
     return parsedQuery.hasSelectClause()
-               ? ExportQueryExecutionTrees::selectQueryResultToStreamImpl<
-                     format>(qet, parsedQuery.selectClause(), limitAndOffset)
-               : ExportQueryExecutionTrees::constructQueryResultToTsvOrCsv<
+               ? ExportQueryExecutionTrees::selectQueryResultToStream<format>(
+                     qet, parsedQuery.selectClause(), limitAndOffset)
+               : ExportQueryExecutionTrees::constructQueryResultToStream<
                      format>(qet, parsedQuery.constructClause().triples_,
                              limitAndOffset, qet.getResult());
   };
@@ -708,19 +697,6 @@ ExportQueryExecutionTrees::computeResultAsStream(
       compute, mediaType);
 }
 
-// _____________________________________________________________________________
-ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::computeConstructQueryResultAsTurtle(
-    const ParsedQuery& query, const QueryExecutionTree& qet) {
-  if (!query.hasConstructClause()) {
-    AD_THROW(
-        "RDF Turtle as an export format is only supported for CONSTRUCT "
-        "queries");
-  }
-  return ExportQueryExecutionTrees::constructQueryResultToTurtle(
-      qet, query.constructClause().triples_, query._limitOffset,
-      qet.getResult());
-}
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::computeSelectQueryResultAsSparqlJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,

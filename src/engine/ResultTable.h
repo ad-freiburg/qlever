@@ -121,7 +121,7 @@ class ResultTable {
   //
   // ExportQueryExecutionTrees::idTableToQLeverJSONArray (idToStringAndType)
   // ExportQueryExecutionTrees::selectQueryResultToSparqlJSON (dito)
-  // ExportQueryExecutionTrees::selectQueryResultToStreamImpl (dito)
+  // ExportQueryExecutionTrees::selectQueryResultToStream (dito)
   // Filter::computeFilterImpl (evaluationContext)
   // Variable::evaluate (idToStringAndType)
   //
