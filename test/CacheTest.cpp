@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "../src/util/Cache.h"
+#include "util/Cache.h"
 
 using std::string;
 

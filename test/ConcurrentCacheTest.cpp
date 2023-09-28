@@ -9,9 +9,9 @@
 #include <string>
 #include <thread>
 
-#include "../../src/util/Cache.h"
-#include "../../src/util/ConcurrentCache.h"
-#include "../../src/util/Timer.h"
+#include "util/Cache.h"
+#include "util/ConcurrentCache.h"
+#include "util/Timer.h"
 
 using namespace std::literals;
 
