@@ -421,7 +421,7 @@ constexpr MemorySize MemorySize::operator/(const T c) const {
   */
   if (std::floating_point<T> &&
       static_cast<double>(memoryInBytes_) >
-          static_cast<double>(detail::size_t_max) * c) {
+          static_cast<double>(detail::size_t_max) * static_cast<double>(c)) {
     throw std::overflow_error(
         "Overflow error: Division of the given 'MemorySize' with the given "
         "constant is not possible. It would result in a size_t overflow.");
