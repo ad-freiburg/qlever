@@ -103,33 +103,47 @@ namespace columnBasedIdTable {
 // additional changes in the rest of the code.
 //
 
+namespace detail {
 // Disclaimer: This class is an implementation detail of the column based ID
 // tables. Its semantics are very particular, so we don't expect it to have a
 // use case outside of the `IdTable` module.
-// A class that inherits from a `vector<VectorLike>`, where `VectorLike` is a
-// type that behaves like a `std::vector` and has methods like `resize` and
-// `get_allocator`. This class changes the move operators of the underlying
-// `vector` as follows: TODO<joka921> complete comment once we have fixed the
-// implementation to something simpler.
-template <typename VectorLike>
-struct ResizeWhenMoveVector : public std::vector<VectorLike> {
-  using Base = std::vector<VectorLike>;
+// A class that inherits from a `vector<T>`, where `T`.
+// This class changes the move operators of the underlying
+// `vector` as follows: Instead of moving the vector as a whole, only the
+// indidual elements are moved. This is used for the column based `IdTables`
+// where we move the indivdual columns, but still want a moved from table to
+// have the same number of columns as before, but with the columns now being
+// empty.
+template <typename T>
+struct ResizeWhenMoveVector : public std::vector<T> {
+  using Base = std::vector<T>;
   using Base::Base;
+  // Defaulted copy operations
   ResizeWhenMoveVector(const ResizeWhenMoveVector&) = default;
   ResizeWhenMoveVector& operator=(const ResizeWhenMoveVector&) = default;
-  ResizeWhenMoveVector(ResizeWhenMoveVector&& other) noexcept {
-    this->insert(this->begin(), std::make_move_iterator(other.begin()),
-                 std::make_move_iterator(other.end()));
-  }
 
-  // TODO<joka921> The `noexcept` should catch the bad_alloc etc.
+  // Move operations with the specified semantics.
+  ResizeWhenMoveVector(ResizeWhenMoveVector&& other) noexcept {
+    moveImpl(std::move(other));
+  }
   ResizeWhenMoveVector& operator=(ResizeWhenMoveVector&& other) noexcept {
     this->clear();
-    this->insert(this->begin(), std::make_move_iterator(other.begin()),
-                 std::make_move_iterator(other.end()));
+    moveImpl(std::move(other));
     return *this;
   }
+
+ private:
+  // The common implementation, move the elements of `other` into `this`. Terminate with a readable error message in the unlikely case of `std::bad_alloc`.
+  void moveImpl(ResizeWhenMoveVector&& other) noexcept {
+    ad_utility::terminateIfThrows(
+        [&other, self = this] {
+          self->insert(self->end(), std::make_move_iterator(other.begin()),
+                       std::make_move_iterator(other.end()));
+        },
+        "Error happened during the move construction or move assignment of an IdTable");
+  }
 };
+}
 template <typename T = Id, int NumColumns = 0,
           typename ColumnStorage = std::vector<
               T, ad_utility::default_init_allocator<T, std::allocator<T>>>,
@@ -143,7 +157,7 @@ class IdTable {
   // The actual storage is a plain 1D vector with the logical columns
   // concatenated.
   // using Storage = std::vector<ColumnStorage>;
-  using Storage = ResizeWhenMoveVector<ColumnStorage>;
+  using Storage = detail::ResizeWhenMoveVector<ColumnStorage>;
   using ViewSpans = std::vector<std::span<const T>>;
   using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());

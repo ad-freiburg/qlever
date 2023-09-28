@@ -177,7 +177,8 @@ class AllocatorWithLimit {
   AllocatorWithLimit(AllocatorWithLimit&& other) noexcept
       : AllocatorWithLimit(static_cast<const AllocatorWithLimit&>(other)) {}
   AllocatorWithLimit& operator=(AllocatorWithLimit&& other) noexcept {
-    return *this = static_cast<const AllocatorWithLimit&>(other);
+    *this = static_cast<const AllocatorWithLimit&>(other);
+    return *this;
   }
 
   // An allocator must have a function "allocate" with exactly this signature.
