@@ -80,11 +80,11 @@ auto getGenerators(S1 value1, S2 value2, size_t targetSize,
   }
 }
 
-// Efficiently (using binary search) computes the result of `aVal Comp valueId`
-// for each `ValueId` that the Variable `variable` is bound to. This only works,
-// if the input (as stored in the `context`) is sorted by the Variable
-// `variable`. If `valueIdUpper` is nullopt, we only have a single `valueId`,
-// otherwise we have a range, [`valueId`, `valueIdUpper`).
+// Efficiently (using binary search) computes the result of `aVal Comparator
+// valueId` for each `ValueId` that the Variable `variable` is bound to. This
+// only works, if the input (as stored in the `context`) is sorted by the
+// Variable `variable`. If `valueIdUpper` is nullopt, we only have a single
+// `valueId`, otherwise we have a range, [`valueId`, `valueIdUpper`).
 template <Comparison Comp>
 ad_utility::SetOfIntervals evaluateWithBinarySearch(
     const Variable& variable, ValueId valueId,

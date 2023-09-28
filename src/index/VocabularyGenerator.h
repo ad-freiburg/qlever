@@ -14,12 +14,13 @@
 #include "./ConstantsIndexBuilding.h"
 #include "./IndexBuilderTypes.h"
 #include "Vocabulary.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 
 using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
 using std::string;
 
-using TripleVec = stxxl::vector<std::array<Id, 3>>;
+using TripleVec = ad_utility::CompressedExternalIdTable<3>;
 
 /**
  * Class for merging the partial vocabularies. The main function is still in the
@@ -135,7 +136,7 @@ class VocabularyMerger {
   template <typename InternalVocabularyAction>
   void writeQueueWordsToIdVec(
       const std::vector<QueueWord>& buffer,
-      InternalVocabularyAction& internalVocabularyAction);
+      InternalVocabularyAction& internalVocabularyAction, const auto& lessThan);
 
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
@@ -183,7 +184,7 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* els);
  */
 void writeMappedIdsToExtVec(const auto& input,
                             const ad_utility::HashMap<Id, Id>& map,
-                            TripleVec::bufwriter_type* writePtr);
+                            std::unique_ptr<TripleVec>* writePtr);
 
 /**
  * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file

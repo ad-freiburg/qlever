@@ -177,7 +177,6 @@ using String = Parameter<std::string, std::identity, std::identity, Name>;
 template <ParameterName Name>
 using MemorySizeParameter =
     Parameter<MemorySize, MemorySizeFromString, MemorySizeToString, Name>;
-
 }  // namespace detail::parameterShortNames
 
 /// A container class that stores several `Parameters`. The reading (via

@@ -1,0 +1,1 @@
+addLinkAndDiscoverTest(CompressedExternalIdTableTest engine index testUtil)

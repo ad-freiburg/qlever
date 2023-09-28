@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <string>
@@ -73,4 +74,38 @@ TEST(Views, UniqueView) {
   ints.erase(it, ints.end());
   ASSERT_EQ(ints.size(), result.size());
   ASSERT_EQ(ints, result);
+}
+
+TEST(Views, owningView) {
+  using namespace ad_utility;
+  // Static asserts for the desired concepts.
+  static_assert(std::ranges::input_range<OwningView<cppcoro::generator<int>>>);
+  static_assert(
+      !std::ranges::forward_range<OwningView<cppcoro::generator<int>>>);
+  static_assert(std::ranges::random_access_range<OwningView<std::vector<int>>>);
+
+  auto toVec = [](auto& range) {
+    std::vector<std::string> result;
+    std::ranges::copy(range, std::back_inserter(result));
+    return result;
+  };
+
+  // check the functionality and the ownership.
+  auto vecView = OwningView{std::vector<std::string>{
+      "4", "fourhundredseventythousandBlimbambum", "3", "1"}};
+  ASSERT_THAT(toVec(vecView),
+              ::testing::ElementsAre(
+                  "4", "fourhundredseventythousandBlimbambum", "3", "1"));
+
+  auto generator = []() -> cppcoro::generator<std::string> {
+    co_yield "4";
+    co_yield "fourhundredseventythousandBlimbambum";
+    co_yield "3";
+    co_yield "1";
+  };
+
+  auto genView = OwningView{generator()};
+  ASSERT_THAT(toVec(genView),
+              ::testing::ElementsAre(
+                  "4", "fourhundredseventythousandBlimbambum", "3", "1"));
 }

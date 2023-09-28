@@ -18,7 +18,7 @@ namespace {
 
 // Create a `Sort` operation that sorts the `input` by the `sortColumns`.
 Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns) {
-  std::vector<Variable> vars;
+  std::vector<std::optional<Variable>> vars;
   auto qec = ad_utility::testing::getQec();
   for (ColumnIndex i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));

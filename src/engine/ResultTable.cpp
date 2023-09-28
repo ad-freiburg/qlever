@@ -26,15 +26,8 @@ string ResultTable::asDebugString() const {
 auto ResultTable::getSharedLocalVocabFromNonEmptyOf(
     const ResultTable& resultTable1, const ResultTable& resultTable2)
     -> SharedLocalVocabWrapper {
-  const auto& localVocab1 = resultTable1.localVocab_;
-  const auto& localVocab2 = resultTable2.localVocab_;
-  if (!localVocab1->empty() && !localVocab2->empty()) {
-    throw std::runtime_error(
-        "Merging of two non-empty local vocabularies is currently not "
-        "supported, please contact the developers");
-  }
-  return SharedLocalVocabWrapper{localVocab2->empty() ? localVocab1
-                                                      : localVocab2};
+  return getSharedLocalVocabFromNonEmptyOf(
+      std::array{std::cref(resultTable1), std::cref(resultTable2)});
 }
 
 // _____________________________________________________________________________
