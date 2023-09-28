@@ -188,7 +188,6 @@ static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Double;
-  using ad_utility::detail::parameterShortNames::MemorySizeParameter;
   using ad_utility::detail::parameterShortNames::SizeT;
   // NOTE: It is important that the value of the static variable is created by
   // an immediately invoked lambda, otherwise we get really strange segfaults on
