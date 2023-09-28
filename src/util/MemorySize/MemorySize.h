@@ -71,6 +71,9 @@ class MemorySize {
   constexpr static MemorySize gigabytes(Arithmetic auto numGigabytes);
   constexpr static MemorySize terabytes(Arithmetic auto numTerabytes);
 
+  // Factory for max size instance.
+  constexpr static MemorySize max();
+
   /*
   Return the internal memory amount in the wanted memory unit format.
   For example: If the internal memory amount is 1000 bytes, than `kilobytes()`
@@ -304,6 +307,9 @@ constexpr MemorySize MemorySize::gigabytes(Arithmetic auto numGigabytes) {
 constexpr MemorySize MemorySize::terabytes(Arithmetic auto numTerabytes) {
   return MemorySize{detail::convertMemoryUnitsToBytes(numTerabytes, "TB")};
 }
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::max() { return MemorySize{size_t_max}; }
 
 // _____________________________________________________________________________
 constexpr size_t MemorySize::getBytes() const { return memoryInBytes_; }
