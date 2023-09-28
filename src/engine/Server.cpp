@@ -760,7 +760,7 @@ boost::asio::awaitable<void> Server::processQuery(
 template <typename Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function) const {
   auto runOnExecutor = [](auto executor, Function func) -> net::awaitable<T> {
-    co_await net::post(executor, net::use_awaitable);
+    co_await net::post(net::bind_executor(executor, net::use_awaitable));
     co_return std::invoke(func);
   };
   return ad_utility::sameExecutor(
