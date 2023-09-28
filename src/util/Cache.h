@@ -318,18 +318,17 @@ class FlexibleCache {
   /// Return the total size of the pinned entries
   [[nodiscard]] MemorySize pinnedSize() const {
     return std::accumulate(
-        _pinnedMap.begin(), _pinnedMap.end(), MemorySize::bytes(0),
+        _pinnedMap.begin(), _pinnedMap.end(), 0_B,
         [this](const MemorySize& x, const auto& el) {
           // entries of the pinned Map are shared_ptrs
-          return x + (el.second ? _valueSizeGetter(*el.second)
-                                : MemorySize::bytes(0));
+          return x + (el.second ? _valueSizeGetter(*el.second) : 0_B);
         });
   }
 
   /// Return the total size of the non-pinned cache entries
   [[nodiscard]] MemorySize nonPinnedSize() const {
     return std::accumulate(
-        _accessMap.begin(), _accessMap.end(), MemorySize::bytes(0),
+        _accessMap.begin(), _accessMap.end(), 0_B,
         [this](const MemorySize& x, const auto& el) {
           // entries of the accessMap are shared_ptrs
           return x + _valueSizeGetter(*el.second.value().value());
