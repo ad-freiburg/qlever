@@ -46,14 +46,16 @@ class CacheValue {
 
   const RuntimeInformation& runtimeInfo() const { return _runtimeInfo; }
 
-  [[nodiscard]] size_t size() const {
-    return _resultTable ? _resultTable->size() * _resultTable->width() : 0;
-  }
-
   // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
-      return ad_utility::MemorySize::bytes(cacheValue.size() * sizeof(Id));
+      if (const auto& tablePtr = cacheValue._resultTable; tablePtr) {
+        return ad_utility::MemorySize::bytes(tablePtr->size() *
+                                             tablePtr->width() * sizeof(Id));
+      } else {
+        // The default initialization of `MemorySize` is `0B`.
+        return {};
+      }
     }
   };
 };
