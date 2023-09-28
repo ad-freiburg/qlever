@@ -482,23 +482,26 @@ static std::string idToXMLBinding(std::string_view var, Id id,
     return ""s;
   }
   const auto& [stringValue, xsdType] = optionalValue.value();
-  std::string result = absl::StrCat("\n  <binding name=\"", var, "\">");
+  std::string result = absl::StrCat("\n    <binding name=\"", var, "\">");
   auto append = [&](const auto&... values) {
     absl::StrAppend(&result, values...);
   };
 
-  auto strToBinding = [&result, &append](std::string_view entitystr) {
+  auto escape = [](std::string_view sv) {
+    return RdfEscaping::escapeForXml(std::string{sv});
+  };
+  auto strToBinding = [&result, &append, &escape](std::string_view entitystr) {
     // The string is an IRI or literal.
     if (entitystr.starts_with('<')) {
       // Strip the <> surrounding the iri.
-      absl::StrAppend(&result, "<uri>"sv,
-                      entitystr.substr(1, entitystr.size() - 2), "</uri>");
+      append("<uri>"sv, escape(entitystr.substr(1, entitystr.size() - 2)),
+             "</uri>");
     } else if (entitystr.starts_with("_:")) {
-      absl::StrAppend(&result, "<bnode>"sv, entitystr.substr(2), "</bnode>");
+      append("<bnode>"sv, entitystr.substr(2), "</bnode>");
     } else {
       size_t quote_pos = entitystr.rfind('"');
       if (quote_pos == std::string::npos) {
-        absl::StrAppend(&result, "<literal>"sv, entitystr.substr(2),
+        absl::StrAppend(&result, "<literal>"sv, escape(entitystr.substr(2)),
                         "</literal>");
       } else {
         std::string_view innerValue = entitystr.substr(1, quote_pos - 1);
@@ -506,7 +509,7 @@ static std::string idToXMLBinding(std::string_view var, Id id,
         if (quote_pos < entitystr.size() - 1 &&
             entitystr[quote_pos + 1] == '@') {
           std::string_view langtag = entitystr.substr(quote_pos + 2);
-          append("<literal xml:lang=\""sv, langtag, "\">"sv, innerValue,
+          append("<literal xml:lang=\""sv, langtag, "\">"sv, escape(innerValue),
                  "</literal>");
         } else if (quote_pos < entitystr.size() - 2 &&
                    entitystr[quote_pos + 1] == '^') {
@@ -516,11 +519,11 @@ static std::string idToXMLBinding(std::string_view var, Id id,
           AD_CONTRACT_CHECK(datatype.size() >= quote_pos + 5);
           datatype.remove_prefix(quote_pos + 4);
           datatype.remove_suffix(1);
-          append("<literal datatype=\""sv, datatype, "\">"sv, innerValue,
-                 "</literal>");
+          append("<literal datatype=\""sv, escape(datatype), "\">"sv,
+                 escape(innerValue), "</literal>");
         } else {
           // A plain literal that contains neither a language tag nor a datatype
-          append("<literal>"sv, innerValue, "</literal>");
+          append("<literal>"sv, escape(innerValue), "</literal>");
         }
       }
     }
@@ -559,7 +562,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   auto varsWithoutQuestionMark = std::views::transform(
       variables, [](std::string_view var) { return var.substr(1); });
   for (std::string_view var : varsWithoutQuestionMark) {
-    co_yield absl::StrCat("\n<variable name=\""sv, var, "\"/>"sv);
+    co_yield absl::StrCat("\n  <variable name=\""sv, var, "\"/>"sv);
   }
   co_yield "\n</head>";
 

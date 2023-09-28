@@ -186,7 +186,7 @@ static std::string makeXMLHeader(
 <sparql xmlns="http://www.w3.org/2005/sparql-results#">
 <head>)";
   for (const auto& var : varsWithoutQuestionMark) {
-    absl::StrAppend(&result, "\n<variable name=\"", var, R"("/>)");
+    absl::StrAppend(&result, "\n  <variable name=\"", var, R"("/>)");
   }
   absl::StrAppend(&result, "\n</head>\n<results>");
   return result;
@@ -202,13 +202,13 @@ TEST(ExportQueryExecutionTree, Integers) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-  <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#int">-42019234865781</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#int">-42019234865781</literal></binding>
   </result>
   <result>
-  <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#int">42</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#int">42</literal></binding>
   </result>
   <result>
-  <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#int">4012934858173560</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#int">4012934858173560</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
       kg, query, 3,
@@ -268,10 +268,10 @@ TEST(ExportQueryExecutionTree, Bool) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-  <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">false</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">false</literal></binding>
   </result>
   <result>
-  <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">true</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">true</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
       kg, query, 2,
@@ -360,13 +360,13 @@ TEST(ExportQueryExecutionTree, Floats) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-  <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">-42019234865780982022144</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">-42019234865780982022144</literal></binding>
   </result>
   <result>
-  <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">4.01293e-12</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">4.01293e-12</literal></binding>
   </result>
   <result>
-  <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">42.2</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">42.2</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCaseFloat{
       kg, query, 3,
@@ -427,7 +427,7 @@ TEST(ExportQueryExecutionTree, Dates) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-  <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#dateTime">1950-01-01T00:00:00</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#dateTime">1950-01-01T00:00:00</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
       kg, query, 1,
@@ -484,7 +484,7 @@ TEST(ExportQueryExecutionTree, Entities) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-  <binding name="o"><uri>http://qlever.com/o</uri></binding>
+    <binding name="o"><uri>http://qlever.com/o</uri></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
       kg, query, 1,
@@ -531,7 +531,7 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-  <binding name="o"><literal xml:lang="en-ca">Some"Where)" +
+    <binding name="o"><literal xml:lang="en-ca">Some&quot;Where)" +
                             "\t" + R"(Over,</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
@@ -580,7 +580,7 @@ TEST(ExportQueryExecutionTree, LiteralWithDatatype) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-  <binding name="o"><literal datatype="www.example.org/bim">something</literal></binding>
+    <binding name="o"><literal datatype="www.example.org/bim">something</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
       kg, query, 1,
@@ -667,7 +667,7 @@ TEST(ExportQueryExecutionTree, BlankNode) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-  <binding name="o"><bnode>u_blank</bnode></binding>
+    <binding name="o"><bnode>u_blank</bnode></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCaseBlankNode{kg, objectQuery, 1,
                                         // TSV
@@ -693,8 +693,8 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
   std::string expectedXml = makeXMLHeader({"p", "o"}) +
                             R"(
   <result>
-  <binding name="p"><uri>p</uri></binding>
-  <binding name="o"><uri>o</uri></binding>
+    <binding name="p"><uri>p</uri></binding>
+    <binding name="o"><uri>o</uri></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCaseMultipleVariables{
       kg, objectQuery, 1,
