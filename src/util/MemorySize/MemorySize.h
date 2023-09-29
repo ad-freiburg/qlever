@@ -311,7 +311,9 @@ constexpr MemorySize MemorySize::terabytes(Arithmetic auto numTerabytes) {
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::max() { return MemorySize{size_t_max}; }
+constexpr MemorySize MemorySize::max() {
+  return MemorySize{detail::size_t_max};
+}
 
 // _____________________________________________________________________________
 constexpr size_t MemorySize::getBytes() const { return memoryInBytes_; }
