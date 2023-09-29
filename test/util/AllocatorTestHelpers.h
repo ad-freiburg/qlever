@@ -12,8 +12,7 @@ namespace ad_utility::testing {
 // Create an unlimited allocator.
 inline ad_utility::AllocatorWithLimit<Id>& makeAllocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          MemorySize::bytes(std::numeric_limits<size_t>::max()))};
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(MemorySize::max())};
   return a;
 }
 }  // namespace ad_utility::testing

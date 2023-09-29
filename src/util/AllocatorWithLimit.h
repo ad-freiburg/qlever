@@ -234,8 +234,7 @@ AllocatorWithLimit<T> makeAllocatorWithLimit(MemorySize limit) {
 // Return a new allocator with the maximal possible limit.
 template <typename T>
 AllocatorWithLimit<T> makeUnlimitedAllocator() {
-  return makeAllocatorWithLimit<T>(
-      MemorySize::bytes(std::numeric_limits<size_t>::max()));
+  return makeAllocatorWithLimit<T>(MemorySize::max());
 }
 
 }  // namespace ad_utility
