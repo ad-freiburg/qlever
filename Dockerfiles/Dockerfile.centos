@@ -1,0 +1,36 @@
+FROM centos:7.9.2009
+LABEL maintainer="Hannah Bast <bast@cs.uni-freiburg.de>"
+
+# General prerequisites
+RUN yum update -y && yum clean all
+RUN yum install -y git gcc gcc-c++ make wget bzip2 epel-release python3-pip 
+RUN pip3 install conan
+RUN pip3 install scikit-build
+RUN pip3 install "cmake<3.23"
+RUN echo $PATH && echo $LD_LIBRARY_PATH
+RUN conan --version
+RUN cmake --version
+RUN gcc --version
+
+# Compile g++ 11.3.0
+RUN wget https://ftp.gnu.org/gnu/gcc/gcc-11.3.0/gcc-11.3.0.tar.gz
+RUN tar -xf gcc-11.3.0.tar.gz
+WORKDIR /gcc-11.3.0
+RUN ./contrib/download_prerequisites
+WORKDIR /gcc-11.3.0/build
+RUN ls -ltr .. && ../configure --enable-languages=c,c++ --disable-multilib
+RUN make -j
+RUN make install
+ENV PATH=/usr/local/bin:$PATH
+ENV LD_LIBRARY_PATH=/usr/local/lib64:$LD_LIBRARY_PATH
+
+# Compile QLever
+COPY . /qlever
+WORKDIR /qlever
+WORKDIR /qlever/build
+RUN conan profile detect
+RUN ls -l .. && conan install .. -of=.
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" -DUSE_PARALLEL=true -DCMAKE_CXX_COMPILER=g++ ..
+RUN make -j engine
+RUN make -j index
+# RUN make ServerMain IndexBuilderMain

@@ -1,6 +1,7 @@
 *
 !.clang-format
 !CMakeLists.txt
+!conanfile.txt
 !CompilationInfo.cmake
 !.git
 !LICENSE
