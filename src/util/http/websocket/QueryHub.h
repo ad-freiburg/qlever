@@ -33,7 +33,7 @@ class QueryHub {
 
  public:
   explicit QueryHub(net::io_context& ioContext)
-      : ioContext_{ioContext}, globalStrand_{net::make_strand(ioContext_)} {}
+      : ioContext_{ioContext}, globalStrand_{net::make_strand(ioContext)} {}
 
   /// Creates a new `QueryToSocketDistributor` or returns the pre-existing
   /// for the provided query id if there already is one. The bool parameter
@@ -47,7 +47,7 @@ class QueryHub {
   net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
       createOrAcquireDistributorForReceiving(QueryId);
   /// Expose strand for testing
-  net::strand<net::any_io_executor> getStrand() { return globalStrand_; }
+  auto getStrand() { return globalStrand_; }
 };
 }  // namespace ad_utility::websocket
 
