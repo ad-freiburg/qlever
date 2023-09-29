@@ -53,8 +53,7 @@ class CacheValue {
         return ad_utility::MemorySize::bytes(tablePtr->size() *
                                              tablePtr->width() * sizeof(Id));
       } else {
-        // The default initialization of `MemorySize` is `0B`.
-        return {};
+        return 0_B;
       }
     }
   };
