@@ -117,6 +117,11 @@ TEST(MemorySize, MemorySizeConstructor) {
   checkAllMemorySizeGetter(ad_utility::MemorySize::terabytes(1.0),
                            singleMemoryUnitSizes.at("TB"));
 
+  // The factory function for a max size instance, should be the same as calling
+  // `ad_utility::MemorySize::bytes(size_t_max)`.
+  ASSERT_EQ(ad_utility::MemorySize::bytes(ad_utility::size_t_max),
+            ad_utility::MemorySize::max());
+
   // Negative numbers are not allowed.
   ASSERT_ANY_THROW(ad_utility::MemorySize::bytes(-1));
   ASSERT_ANY_THROW(ad_utility::MemorySize::kilobytes(-1));
@@ -386,18 +391,16 @@ TEST(MemorySize, ArithmeticOperatorsOverAndUnderFlow) {
   ad_utility::MemorySize memWholeMultiplication{40_MB};
   ASSERT_THROW(memWholeMultiplication *= ad_utility::size_t_max,
                std::overflow_error);
-  memWholeMultiplication =
-      ad_utility::MemorySize::bytes(ad_utility::size_t_max);
+  memWholeMultiplication = ad_utility::MemorySize::max();
   ASSERT_NO_THROW(memWholeMultiplication *= 1);
 
   // Floating point multiplication.
-  ASSERT_THROW(ad_utility::MemorySize::bytes(ad_utility::size_t_max) * 1.5,
-               std::overflow_error);
+  ASSERT_THROW(ad_utility::MemorySize::max() * 1.5, std::overflow_error);
   ASSERT_NO_THROW(ad_utility::MemorySize::bytes(static_cast<size_t>(
                       static_cast<float>(ad_utility::size_t_max) / 2.3)) *
                   2.3);
   ad_utility::MemorySize memFloatingPointMultiplication{
-      ad_utility::MemorySize::bytes(ad_utility::size_t_max)};
+      ad_utility::MemorySize::max()};
   ASSERT_THROW(memFloatingPointMultiplication *= 1.487, std::overflow_error);
   memFloatingPointMultiplication = ad_utility::MemorySize::bytes(
       static_cast<size_t>(static_cast<float>(ad_utility::size_t_max) / 4.73));
@@ -414,8 +417,7 @@ TEST(MemorySize, ArithmeticOperatorsOverAndUnderFlow) {
   ASSERT_THROW(memFloatingPointDivision /=
                (1. / static_cast<float>(ad_utility::size_t_max)),
                std::overflow_error);
-  memFloatingPointDivision =
-      ad_utility::MemorySize::bytes(ad_utility::size_t_max);
+  memFloatingPointDivision = ad_utility::MemorySize::max();
   ASSERT_NO_THROW(memFloatingPointDivision /= 7.80);
 }
 
@@ -443,6 +445,8 @@ TEST(MemorySize, ConstEval) {
   static_assert(ad_utility::MemorySize::gigabytes(4.2).getGigabytes() == 4.2);
   static_assert(ad_utility::MemorySize::terabytes(42uL).getTerabytes() == 42);
   static_assert(ad_utility::MemorySize::terabytes(4.2).getTerabytes() == 4.2);
+  static_assert(ad_utility::MemorySize::max().getBytes() ==
+                ad_utility::size_t_max);
 
   // Comparison operators.
   static_assert(42_B == 42_B);
