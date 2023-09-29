@@ -5,6 +5,7 @@
 #include "util/http/websocket/QueryToSocketDistributor.h"
 
 #include <boost/asio/as_tuple.hpp>
+#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include "util/Log.h"
@@ -23,7 +24,7 @@ net::awaitable<void> QueryToSocketDistributor::waitForUpdate() const {
   // Clear cancellation flag if set, and wake up to allow the caller
   // to return no-data and gracefully end this
   co_await net::this_coro::reset_cancellation_state();
-  co_await net::dispatch(strand_, net::use_awaitable);
+  co_await net::dispatch(net::bind_executor(strand_, net::use_awaitable));
 }
 
 // _____________________________________________________________________________
@@ -38,7 +39,7 @@ void QueryToSocketDistributor::wakeUpWaitingListeners() {
 net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
     std::string payload) {
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
-  co_await net::dispatch(strand_, net::use_awaitable);
+  co_await net::dispatch(net::bind_executor(strand_, net::use_awaitable));
   AD_CONTRACT_CHECK(!finished_);
   data_.push_back(std::move(sharedPayload));
   wakeUpWaitingListeners();
@@ -47,7 +48,7 @@ net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
 // _____________________________________________________________________________
 
 net::awaitable<void> QueryToSocketDistributor::signalEnd() {
-  co_await net::dispatch(strand_, net::use_awaitable);
+  co_await net::dispatch(net::bind_executor(strand_, net::use_awaitable));
   AD_CONTRACT_CHECK(!finished_);
   finished_ = true;
   wakeUpWaitingListeners();
@@ -59,7 +60,7 @@ net::awaitable<void> QueryToSocketDistributor::signalEnd() {
 
 net::awaitable<std::shared_ptr<const std::string>>
 QueryToSocketDistributor::waitForNextDataPiece(size_t index) const {
-  co_await net::dispatch(strand_, net::use_awaitable);
+  co_await net::dispatch(net::bind_executor(strand_, net::use_awaitable));
 
   if (index < data_.size()) {
     co_return data_.at(index);
