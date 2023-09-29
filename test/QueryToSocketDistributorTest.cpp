@@ -176,3 +176,20 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndDoesNotPreventConsumptionOfRest) {
   };
   co_await (broadcaster() && listener());
 }
+
+// _____________________________________________________________________________
+
+ASYNC_TEST(QueryToSocketDistributor, fullConsumptionAfterSignalEndWorks) {
+  QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
+
+  co_await queryToSocketDistributor.addQueryStatusUpdate("Abc");
+  co_await queryToSocketDistributor.addQueryStatusUpdate("Def");
+  co_await queryToSocketDistributor.signalEnd();
+
+  auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
+  EXPECT_THAT(result, Pointee("Abc"s));
+  result = co_await queryToSocketDistributor.waitForNextDataPiece(1);
+  EXPECT_THAT(result, Pointee("Def"s));
+  result = co_await queryToSocketDistributor.waitForNextDataPiece(2);
+  EXPECT_FALSE(result);
+}

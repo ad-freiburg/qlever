@@ -71,6 +71,9 @@ class QueryToSocketDistributor {
   /// for the websocket. co_returns a nullptr if no more data is available
   net::awaitable<std::shared_ptr<const std::string>> waitForNextDataPiece(
       size_t index) const;
+
+  /// Query the finished flag asynchronously. Set by `signalEnd()`
+  net::awaitable<bool> isFinished() const;
 };
 }  // namespace ad_utility::websocket
 

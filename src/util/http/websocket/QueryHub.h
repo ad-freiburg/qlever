@@ -46,6 +46,8 @@ class QueryHub {
   /// `QueryToSocketDistributor` that can only used for receiving instead.
   net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
       createOrAcquireDistributorForReceiving(QueryId);
+  /// Expose strand for testing
+  net::strand<net::any_io_executor> getStrand() { return globalStrand_; }
 };
 }  // namespace ad_utility::websocket
 

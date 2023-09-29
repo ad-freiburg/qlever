@@ -13,7 +13,14 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
   co_await net::dispatch(net::bind_executor(globalStrand_, net::use_awaitable));
   while (socketDistributors_.contains(queryId)) {
     if (auto ptr = socketDistributors_.at(queryId).lock()) {
-      co_return ptr;
+      // Currently we don't make a difference between acquiring a receiving
+      // or a sending distributor. For sending distributors we need to wait
+      // until the entry has been removed from the map. For receiving
+      // distributors just picking up the instance is equally justifiable and
+      // tests ensure it's also correct. For now, it will be kept simple.
+      if (!(co_await ptr->isFinished())) {
+        co_return ptr;
+      }
     }
     // There's the unlikely case where the reference counter reached zero and
     // the weak pointer can no longer create a shared pointer, but the
@@ -32,7 +39,7 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
         // until the task is executed
         while (future.wait_for(std::chrono::seconds(0)) !=
                std::future_status::ready) {
-          ioContext_.run_one();
+          ioContext_.poll_one();
         }
       });
   socketDistributors_.emplace(queryId, distributor);
