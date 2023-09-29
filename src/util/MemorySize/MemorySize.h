@@ -17,7 +17,6 @@
 #include <string>
 #include <type_traits>
 
-#include "util/Cache.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
@@ -181,6 +180,9 @@ constexpr static double sizeTDivision(const size_t dividend,
          static_cast<double>(dividend % divisor) / static_cast<double>(divisor);
 }
 
+// Max value for a size_t.
+static constexpr size_t size_t_max = std::numeric_limits<size_t>::max();
+
 // The maximal amount of a memory unit, that a `MemorySize` can remember.
 constexpr ConstexprMap<std::string_view, double, 5> maxAmountOfUnit(
     {std::pair{"B", sizeTDivision(size_t_max, numBytesPerUnit.at("B"))},
@@ -309,7 +311,9 @@ constexpr MemorySize MemorySize::terabytes(Arithmetic auto numTerabytes) {
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::max() { return MemorySize{size_t_max}; }
+constexpr MemorySize MemorySize::max() {
+  return MemorySize{detail::size_t_max};
+}
 
 // _____________________________________________________________________________
 constexpr size_t MemorySize::getBytes() const { return memoryInBytes_; }
@@ -341,7 +345,7 @@ constexpr double MemorySize::getTerabytes() const {
 // _____________________________________________________________________________
 constexpr MemorySize MemorySize::operator+(const MemorySize& m) const {
   // Check for overflow.
-  if (memoryInBytes_ > size_t_max - m.memoryInBytes_) {
+  if (memoryInBytes_ > detail::size_t_max - m.memoryInBytes_) {
     throw std::overflow_error(
         "Overflow error: Addition of the two given 'MemorySize's is not "
         "possible. "
@@ -383,7 +387,7 @@ constexpr MemorySize MemorySize::operator*(const T c) const {
 
   // Check for overflow.
   if (static_cast<double>(c) >
-      detail::sizeTDivision(size_t_max, memoryInBytes_)) {
+      detail::sizeTDivision(detail::size_t_max, memoryInBytes_)) {
     throw std::overflow_error(
         "Overflow error: Multiplicaton of the given 'MemorySize' with the "
         "given constant is not possible. It would result in a size_t "
@@ -423,8 +427,9 @@ constexpr MemorySize MemorySize::operator/(const T c) const {
   point number.
   For example: 1/(1/2) = 2
   */
-  if (std::floating_point<T> && static_cast<double>(memoryInBytes_) >
-                                    static_cast<double>(size_t_max) * c) {
+  if (std::floating_point<T> &&
+      static_cast<double>(memoryInBytes_) >
+          static_cast<double>(detail::size_t_max) * static_cast<double>(c)) {
     throw std::overflow_error(
         "Overflow error: Division of the given 'MemorySize' with the given "
         "constant is not possible. It would result in a size_t overflow.");

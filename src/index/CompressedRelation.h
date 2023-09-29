@@ -44,6 +44,15 @@ using SmallRelationsBuffer = columnBasedIdTable::IdTable<Id, NumColumns>;
 // to use a dynamic `IdTable`.
 using DecompressedBlock = IdTable;
 
+// To be able to use `DecompressedBlock` with `Caches`, we need a function for
+// calculating the memory used for it.
+struct DecompressedBlockSizeGetter {
+  ad_utility::MemorySize operator()(const DecompressedBlock& block) const {
+    return ad_utility::MemorySize::bytes(block.numColumns() * block.numRows() *
+                                         sizeof(Id));
+  }
+};
+
 // After compression the columns have different sizes, so we cannot use an
 // `IdTable`.
 using CompressedBlock = std::vector<std::vector<char>>;
@@ -262,8 +271,8 @@ class CompressedRelationReader {
   // Note: The cache is thread-safe and using it does not change the semantics
   // of this class, so it is safe to mark it as `mutable` to make the `scan`
   // functions below `const`.
-  mutable ad_utility::ConcurrentCache<
-      ad_utility::HeapBasedLRUCache<off_t, DecompressedBlock>>
+  mutable ad_utility::ConcurrentCache<ad_utility::HeapBasedLRUCache<
+      off_t, DecompressedBlock, DecompressedBlockSizeGetter>>
       blockCache_{20ul};
 
   // The allocator used to allocate intermediate buffers.

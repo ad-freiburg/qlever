@@ -8,80 +8,71 @@
 
 #include <assert.h>
 
+#include <concepts>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <type_traits>
 #include <utility>
 
 #include "./HashMap.h"
 #include "PriorityQueue.h"
+#include "util/ConstexprUtils.h"
+#include "util/MemorySize/MemorySize.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
 
 using std::make_shared;
 using std::pair;
 using std::shared_ptr;
+using namespace ad_utility::memory_literals;
 
 static constexpr auto size_t_max = std::numeric_limits<size_t>::max();
 
-/**
- * Has operator()(const Value&)
- * If Value has a .size() Member function, this is called
- * Else, returns sizeof(Value)
- * @tparam Value
- */
-template <typename Value>
-struct DefaultSizeGetter {
-  template <typename V, typename = void>
-  struct HasSizeMember : std::false_type {};
+/*
+Concept for `ValueSizeGetter`. Must be default initializable, regular invocable
+with the given value type as const l-value reference and return a `MemorySize`.
+*/
+template <typename T, typename ValueType>
+concept ValueSizeGetter =
+    std::default_initializable<T> &&
+    std::regular_invocable<T, const ValueType&> &&
+    ad_utility::isSimilar<std::invoke_result_t<T, const ValueType&>,
+                          MemorySize>;
 
-  template <typename V>
-  struct HasSizeMember<V, std::void_t<decltype(std::declval<V>().size())>>
-      : std::true_type {};
+/*
+ @brief Associative array for almost arbitrary keys and values that acts as a
+ cache with fixed memory capacity.
 
-  auto operator()([[maybe_unused]] const Value& value) const {
-    if constexpr (HasSizeMember<Value>::value) {
-      return value.size();
-    } else {
-      return sizeof(Value);
-    }
-  }
-};
-
-/**
- * @brief Associative array for almost arbitrary keys and values that acts as a
- * cache with fixed capacity.
- *
- * The strategy that is used to determine which entry is removed once the
- * capacity is exceeded can be customized (see documentation of the template
- * parameters). The capacity can be limited wrt the number of entries as well
- * as their actual size (which can be configured with a callable of type
- * ValueSizeGetter in the constructor below). NOTE: THIS IMPLEMENTATION IS NO
- * LONGER THREADSAFE. It used to be. If you require thread-safety, you should
- * wrap the FlexibleCache object within ad_utility::Synchronized; see class
- * ConcurrentCache. This implementation uses shared_ptr pointers to ensure that
- * delete operations do not free memory that is still in use.
- * @tparam PriorityQueue Container template for a priority queue with an
- * updateKey method. The templates from PrioityQueue.h are suitable
- * @tparam Key The key type for lookup. Must be hashable TODO<joka921>::if
- * needed in future, add hash as optional template parameter
- * @tparam Value Value type. Must be default constructible
- * @tparam Score A type that is used to determine which entry is deleted next
- * from the cache (the lowest entry according to ScoreComparator)
- * @tparam ScoreComparator function of (Score, Score) -> bool that returns true
- * if the first argument is to be deleted before the second
- * @tparam AccessUpdater function (Score, Value) -> Score. Each time a value is
- * accessed, its previous score and the value are used to calculate a new score.
- * @tparam ScoreCalculator function Value -> Score to determine the Score of a a
- * newly inserted entry
- * @tparam ValueSizeGetter function Value -> size_t to determine the actual
- * "size" of a value for statistics
+ The strategy that is used to determine which entry is removed once the capacity
+ is exceeded can be customized (see documentation of the template parameters).
+ NOTE: THIS IMPLEMENTATION IS NO LONGER THREADSAFE. It used to be. If you
+ require thread-safety, you should wrap the FlexibleCache object within
+ ad_utility::Synchronized; see class ConcurrentCache. This implementation uses
+ shared_ptr pointers to ensure that delete operations do not free memory that is
+ still in use.
+ @tparam PriorityQueue Container template for a priority queue with an
+ updateKey method. The templates from PrioityQueue.h are suitable
+ @tparam Key The key type for lookup. Must be hashable TODO<joka921>::if
+ needed in future, add hash as optional template parameter
+ @tparam Value Value type. Must be default constructible.
+ @tparam Score A type that is used to determine which entry is deleted next
+ from the cache (the lowest entry according to ScoreComparator)
+ @tparam ScoreComparator function of (Score, Score) -> bool that returns true
+ if the first argument is to be deleted before the second
+ @tparam AccessUpdater function (Score, Value) -> Score. Each time a value is
+ accessed, its previous score and the value are used to calculate a new score.
+ @tparam ScoreCalculator function Value -> Score to determine the Score of a a
+ newly inserted entry
+ @tparam ValueSizeGetter function Value -> MemorySize to determine the actual
+ size of a value for statistics
  */
 template <template <typename Sc, typename Val, typename Comp>
           class PriorityQueue,
           class Key, class Value, typename Score, typename ScoreComparator,
           typename AccessUpdater, typename ScoreCalculator,
-          typename ValueSizeGetter = DefaultSizeGetter<Value>>
+          ValueSizeGetter<Value> ValueSizeGetter>
 class FlexibleCache {
  public:
   // For easier interaction with the STL, which often uses key_type and
@@ -122,12 +113,10 @@ class FlexibleCache {
 
   using TryEmplaceResult = pair<EmplacedValue, ValuePtr>;
 
-  using EntrySizeType = std::invoke_result_t<ValueSizeGetter, const Value&>;
-
  public:
   //! Typical constructor. A default value may be added in time.
-  explicit FlexibleCache(size_t maxNumEntries, size_t maxSize,
-                         size_t maxSizeSingleEntry,
+  explicit FlexibleCache(size_t maxNumEntries, MemorySize maxSize,
+                         MemorySize maxSizeSingleEntry,
                          ScoreComparator scoreComparator,
                          AccessUpdater accessUpdater,
                          ScoreCalculator scoreCalculator,
@@ -231,17 +220,17 @@ class FlexibleCache {
   //! Set or change the maximum number of entries
   void setMaxNumEntries(const size_t maxNumEntries) {
     _maxNumEntries = maxNumEntries;
-    makeRoomIfFits(0);
+    makeRoomIfFits(0_B);
   }
 
   //! Set or change the maximum total size of the cache
-  void setMaxSize(const size_t maxSize) {
+  void setMaxSize(const MemorySize maxSize) {
     _maxSize = maxSize;
-    makeRoomIfFits(0);
+    makeRoomIfFits(0_B);
   }
 
   //! Set or change the maximum size of a single Entry
-  void setMaxSizeSingleEntry(const size_t maxSizeSingleEntry) {
+  void setMaxSizeSingleEntry(const MemorySize maxSizeSingleEntry) {
     _maxSizeSingleEntry = maxSizeSingleEntry;
     // We currently do not delete entries that are now too big
     // after the update.
@@ -311,7 +300,7 @@ class FlexibleCache {
     // shared_ptr
     _entries.clear();
     _accessMap.clear();
-    _totalSizeNonPinned = 0;
+    _totalSizeNonPinned = 0_B;
   }
 
   /// Clear the cache AND the pinned entries
@@ -322,26 +311,25 @@ class FlexibleCache {
     _entries.clear();
     _pinnedMap.clear();
     _accessMap.clear();
-    _totalSizeNonPinned = 0;
-    _totalSizePinned = 0;
+    _totalSizeNonPinned = 0_B;
+    _totalSizePinned = 0_B;
   }
 
   /// Return the total size of the pinned entries
-  [[nodiscard]] EntrySizeType pinnedSize() const {
+  [[nodiscard]] MemorySize pinnedSize() const {
     return std::accumulate(
-        _pinnedMap.begin(), _pinnedMap.end(), EntrySizeType{},
-        [this](const EntrySizeType& x, const auto& el) {
+        _pinnedMap.begin(), _pinnedMap.end(), 0_B,
+        [this](const MemorySize& x, const auto& el) {
           // entries of the pinned Map are shared_ptrs
-          return x +
-                 (el.second ? _valueSizeGetter(*el.second) : EntrySizeType{});
+          return x + (el.second ? _valueSizeGetter(*el.second) : 0_B);
         });
   }
 
   /// Return the total size of the non-pinned cache entries
-  [[nodiscard]] EntrySizeType nonPinnedSize() const {
+  [[nodiscard]] MemorySize nonPinnedSize() const {
     return std::accumulate(
-        _accessMap.begin(), _accessMap.end(), EntrySizeType{},
-        [this](const EntrySizeType& x, const auto& el) {
+        _accessMap.begin(), _accessMap.end(), 0_B,
+        [this](const MemorySize& x, const auto& el) {
           // entries of the accessMap are shared_ptrs
           return x + _valueSizeGetter(*el.second.value().value());
         });
@@ -355,19 +343,19 @@ class FlexibleCache {
 
   // Delete cache entries from the non-pinned area, until an element of size
   // `sizeToMakeRoomFor` can be inserted into the cache.
-  // The special case `sizeToMakeRoomFor == 0`  means, that we do not need to
+  // The special case `sizeToMakeRoomFor == 0_B`  means, that we do not need to
   // insert a new element, but just want to shrink back the cache to its allowed
   // size, for example after a change of capacity
   //
   // Returns: true iff if the procedure succeeded. It may fail if
   // `sizeToMakeRoomFor` is larger than the _maxSize - _totalSizePinned;
-  bool makeRoomIfFits(size_t sizeToMakeRoomFor) {
+  bool makeRoomIfFits(MemorySize sizeToMakeRoomFor) {
     if (_maxSize - _totalSizePinned < sizeToMakeRoomFor) {
       return false;
     }
 
     // Used to distinguish between > and >= below.
-    const size_t needToAddNewElement = sizeToMakeRoomFor ? 1 : 0;
+    const size_t needToAddNewElement = (sizeToMakeRoomFor != 0_B) ? 1 : 0;
 
     while (!_entries.empty() &&
            (_entries.size() + _pinnedMap.size() + needToAddNewElement >
@@ -389,12 +377,12 @@ class FlexibleCache {
   // cache. If this is not possible, the cache is cleared (only unpinned
   // elements), and false is returned. This possibly results in some freed
   // space, but less than requested.
-  bool makeRoomAsMuchAsPossible(size_t sizeToMakeRoomFor) {
+  bool makeRoomAsMuchAsPossible(MemorySize sizeToMakeRoomFor) {
     if (sizeToMakeRoomFor > _totalSizeNonPinned) {
       clearUnpinnedOnly();
       return false;
     }
-    size_t targetSize = _totalSizeNonPinned - sizeToMakeRoomFor;
+    MemorySize targetSize = _totalSizeNonPinned - sizeToMakeRoomFor;
     while (!_entries.empty() && _totalSizeNonPinned > targetSize) {
       removeOneEntry();
     }
@@ -407,15 +395,16 @@ class FlexibleCache {
   void removeOneEntry() {
     AD_CONTRACT_CHECK(!_entries.empty());
     auto handle = _entries.pop();
-    _totalSizeNonPinned -= _valueSizeGetter(*handle.value().value());
+    _totalSizeNonPinned =
+        _totalSizeNonPinned - _valueSizeGetter(*handle.value().value());
     _accessMap.erase(handle.value().key());
   }
   size_t _maxNumEntries;
-  size_t _maxSize;
-  size_t _maxSizeSingleEntry;
-  size_t _totalSizeNonPinned =
-      0;  // the size in terms of the ValueSizeGetter, NOT Number of entries
-  size_t _totalSizePinned = 0;
+  MemorySize _maxSize;
+  MemorySize _maxSizeSingleEntry;
+  MemorySize _totalSizeNonPinned;  // the size in terms of the ValueSizeGetter,
+                                   // NOT Number of entries
+  MemorySize _totalSizePinned;
 
   EntryList _entries;
   AccessUpdater _accessUpdater;
@@ -429,7 +418,7 @@ class FlexibleCache {
 // from ad_utility::HeapBasedPQ
 template <class Key, class Value, typename Score, typename ScoreComparator,
           typename AccessUpdater, typename ScoreCalculator,
-          typename ValueSizeGetter = DefaultSizeGetter<Value>>
+          ValueSizeGetter<Value> ValueSizeGetter>
 using HeapBasedCache =
     ad_utility::FlexibleCache<HeapBasedPQ, Key, Value, Score, ScoreComparator,
                               AccessUpdater, ScoreCalculator, ValueSizeGetter>;
@@ -438,7 +427,7 @@ using HeapBasedCache =
 // from ad_utility::TreeBasedPQ
 template <class Key, class Value, typename Score, typename ScoreComparator,
           typename AccessUpdater, typename ScoreCalculator,
-          typename ValueSizeGetter = DefaultSizeGetter<Value>>
+          ValueSizeGetter<Value> ValueSizeGetter>
 using TreeBasedCache =
     ad_utility::FlexibleCache<TreeBasedPQ, Key, Value, Score, ScoreComparator,
                               AccessUpdater, ScoreCalculator, ValueSizeGetter>;
@@ -465,8 +454,7 @@ struct timeUpdater {
 }  // namespace detail
 
 /// A LRU cache using the HeapBasedCache
-template <typename Key, typename Value,
-          typename ValueSizeGetter = DefaultSizeGetter<Value>>
+template <typename Key, typename Value, ValueSizeGetter<Value> ValueSizeGetter>
 class HeapBasedLRUCache
     : public HeapBasedCache<Key, Value, detail::TimePoint, std::less<>,
                             detail::timeUpdater, detail::timeAsScore,
@@ -477,15 +465,14 @@ class HeapBasedLRUCache
 
  public:
   explicit HeapBasedLRUCache(size_t capacityNumEls = size_t_max,
-                             size_t capacitySize = size_t_max,
-                             size_t maxSizeSingleEl = size_t_max)
+                             MemorySize capacitySize = MemorySize::max(),
+                             MemorySize maxSizeSingleEl = MemorySize::max())
       : Base(capacityNumEls, capacitySize, maxSizeSingleEl, std::less<>(),
              detail::timeUpdater{}, detail::timeAsScore{}, ValueSizeGetter{}) {}
 };
 
 /// A LRU cache using the TreeBasedCache
-template <typename Key, typename Value,
-          typename ValueSizeGetter = DefaultSizeGetter<Value>>
+template <typename Key, typename Value, ValueSizeGetter<Value> ValueSizeGetter>
 class TreeBasedLRUCache
     : public ad_utility::TreeBasedCache<Key, Value, detail::TimePoint,
                                         std::less<>, detail::timeUpdater,
@@ -503,12 +490,10 @@ class TreeBasedLRUCache
 /// typedef for the simple name LRUCache that is fixed to one of the possible
 /// implementations at compiletime
 #ifdef _QLEVER_USE_TREE_BASED_CACHE
-template <typename Key, typename Value,
-          typename ValueSizeGetter = DefaultSizeGetter<Value>>
+template <typename Key, typename Value, ValueSizeGetter<Value> ValueSizeGetter>
 using LRUCache = TreeBasedLRUCache<Key, Value, ValueSizeGetter>;
 #else
-template <typename Key, typename Value,
-          typename ValueSizeGetter = DefaultSizeGetter<Value>>
+template <typename Key, typename Value, ValueSizeGetter<Value> ValueSizeGetter>
 using LRUCache = HeapBasedLRUCache<Key, Value, ValueSizeGetter>;
 #endif
 

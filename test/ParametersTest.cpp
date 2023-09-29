@@ -10,6 +10,7 @@ using namespace ad_utility;
 using namespace memory_literals;
 
 using namespace detail::parameterShortNames;
+using namespace memory_literals;
 
 TEST(Parameters, First) {
   using FloatParameter = Float<"Float">;
