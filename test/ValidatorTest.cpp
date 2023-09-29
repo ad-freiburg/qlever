@@ -5,9 +5,11 @@
 
 #include <gtest/gtest.h>
 
+#include <concepts>
 #include <functional>
 #include <optional>
 
+#include "../test/util/GTestHelpers.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConfigManager/Validator.h"
@@ -243,7 +245,22 @@ TEST(ExceptionValidatorConceptTest, ExceptionValidatorConcept) {
       validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper);
 }
 
-TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
+/*
+@brief Does the test for the constructors.
+
+@param addAlwaysValidValidatorFunction A function, that generates a
+`ConfigOptionValidatorManager` for the given `ConstConfigOptionProxy<bool>`,
+which manages a validator, that implements the logical `and` on those bools and
+whose error message is the given error message. The function signature should
+look like this: `void func(std::string errorMessage,
+std::same_as<ConstConfigOptionProxy<bool>> auto... args)`.
+*/
+void doConstructorTest(
+    auto generateValidatorManager,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{generateLocationTrace(l, "doConstructorTest")};
+
   // Options for the validators.
   bool bool1;
   bool bool2;
@@ -253,80 +270,68 @@ TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
   ConstConfigOptionProxy<bool> proxy2(opt2);
 
   // Single argument validator.
-  ConfigOptionValidatorManager singleArgumentValidatorManager(
-      [](const bool& b) -> std::optional<ErrorMessage> {
-        if (b) {
-          return std::nullopt;
-        } else {
-          return ErrorMessage{""};
-        };
-      },
-      [](ConstConfigOptionProxy<bool> p) {
-        return p.getConfigOption().getValue<bool>();
-      },
-      proxy1);
+  ConfigOptionValidatorManager singleArgumentValidatorManager{
+      generateValidatorManager("singleArgumentValidator", proxy1)};
   ASSERT_NO_THROW(singleArgumentValidatorManager.checkValidator());
   opt1.setValue(false);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      singleArgumentValidatorManager.checkValidator(),
+      ::testing::ContainsRegex("singleArgumentValidator"));
   ASSERT_ANY_THROW(singleArgumentValidatorManager.checkValidator());
 
   // Double argument validator.
-  ConfigOptionValidatorManager doubleArgumentValidatorManager(
-      [](const bool& b1, const bool& b2) -> std::optional<ErrorMessage> {
-        if (b1 && b2) {
-          return std::nullopt;
-        } else {
-          return ErrorMessage{""};
-        };
-      },
-      [](ConstConfigOptionProxy<bool> p) {
-        return p.getConfigOption().getValue<bool>();
-      },
-      proxy1, proxy2);
+  ConfigOptionValidatorManager doubleArgumentValidatorManager{
+      generateValidatorManager("doubleArgumentValidatorManager", proxy1,
+                               proxy2)};
   opt1.setValue(true);
   ASSERT_NO_THROW(doubleArgumentValidatorManager.checkValidator());
   opt1.setValue(false);
-  ASSERT_ANY_THROW(doubleArgumentValidatorManager.checkValidator());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      doubleArgumentValidatorManager.checkValidator(),
+      ::testing::ContainsRegex("doubleArgumentValidator"));
   opt2.setValue(false);
-  ASSERT_ANY_THROW(doubleArgumentValidatorManager.checkValidator());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      doubleArgumentValidatorManager.checkValidator(),
+      ::testing::ContainsRegex("doubleArgumentValidator"));
   opt1.setValue(true);
-  ASSERT_ANY_THROW(doubleArgumentValidatorManager.checkValidator());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      doubleArgumentValidatorManager.checkValidator(),
+      ::testing::ContainsRegex("doubleArgumentValidator"));
+}
+
+TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
+  doConstructorTest(
+      [](std::string errorMessage,
+         std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
+        return ConfigOptionValidatorManager(
+            [errorMessage =
+                 std::move(errorMessage)](const std::same_as<bool> auto... b)
+                -> std::optional<ErrorMessage> {
+              if ((b && ...)) {
+                return std::nullopt;
+              } else {
+                return ErrorMessage{errorMessage};
+              };
+            },
+            [](ConstConfigOptionProxy<bool> p) {
+              return p.getConfigOption().getValue<bool>();
+            },
+            args...);
+      });
 }
 
 TEST(ConfigOptionValidatorManagerTest, ValidatorConstructor) {
-  // Options for the validators.
-  bool bool1;
-  bool bool2;
-  ConfigOption opt1("Option1", "", &bool1, std::make_optional(true));
-  ConfigOption opt2("Option2", "", &bool2, std::make_optional(true));
-  ConstConfigOptionProxy<bool> proxy1(opt1);
-  ConstConfigOptionProxy<bool> proxy2(opt2);
-
-  // Single argument validator.
-  ConfigOptionValidatorManager singleArgumentValidatorManager(
-      std::identity{}, "",
-      [](ConstConfigOptionProxy<bool> p) {
-        return p.getConfigOption().getValue<bool>();
-      },
-      proxy1);
-  ASSERT_NO_THROW(singleArgumentValidatorManager.checkValidator());
-  opt1.setValue(false);
-  ASSERT_ANY_THROW(singleArgumentValidatorManager.checkValidator());
-
-  // Double argument validator.
-  ConfigOptionValidatorManager doubleArgumentValidatorManager(
-      std::logical_and<bool>{}, "",
-      [](ConstConfigOptionProxy<bool> p) {
-        return p.getConfigOption().getValue<bool>();
-      },
-      proxy1, proxy2);
-  opt1.setValue(true);
-  ASSERT_NO_THROW(doubleArgumentValidatorManager.checkValidator());
-  opt1.setValue(false);
-  ASSERT_ANY_THROW(doubleArgumentValidatorManager.checkValidator());
-  opt2.setValue(false);
-  ASSERT_ANY_THROW(doubleArgumentValidatorManager.checkValidator());
-  opt1.setValue(true);
-  ASSERT_ANY_THROW(doubleArgumentValidatorManager.checkValidator());
+  doConstructorTest(
+      [](std::string errorMessage,
+         std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
+        return ConfigOptionValidatorManager(
+            [](const std::same_as<bool> auto... b) { return (b && ...); },
+            std::move(errorMessage),
+            [](ConstConfigOptionProxy<bool> p) {
+              return p.getConfigOption().getValue<bool>();
+            },
+            args...);
+      });
 }
 
 }  // namespace ad_utility
