@@ -10,6 +10,7 @@
 
 #include <boost/program_options.hpp>
 #include <vector>
+
 namespace ad_utility {
 
 // An implicit wrapper that can be implicitly converted to and from `size_t`.

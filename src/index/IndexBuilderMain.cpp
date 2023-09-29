@@ -21,10 +21,6 @@
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFact.h"
 
-using std::cerr;
-using std::cout;
-using std::endl;
-using std::flush;
 using std::string;
 
 #define EMPH_ON "\033[1m"

@@ -10,6 +10,7 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
+#include "util/MemorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
 // `QueryExecutionContext` that store a small example knowledge graph. Those can

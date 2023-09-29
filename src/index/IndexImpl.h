@@ -43,6 +43,7 @@
 #include <vector>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "util/MemorySize/MemorySize.h"
 
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
