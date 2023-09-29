@@ -12,6 +12,7 @@
 #include <string>
 
 #include "util/ConfigManager/ConfigOptionProxy.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
 /*
@@ -22,7 +23,7 @@ bool.
 template <typename Func, typename... ParameterTypes>
 concept ValidatorFunction =
     std::regular_invocable<Func, const ParameterTypes&...> &&
-    std::same_as<std::invoke_result_t<Func, const ParameterTypes&...>, bool>;
+    isSimilar<std::invoke_result_t<Func, const ParameterTypes&...>, bool>;
 
 // Simple struct, that holds an error message. For use as the return type of
 // invocable object, that fullfill `ExceptionValidator`.
@@ -46,8 +47,8 @@ an instance of `std::optional<ErrorMessage>`.
 template <typename Func, typename... ParameterTypes>
 concept ExceptionValidatorFunction =
     std::regular_invocable<Func, const ParameterTypes&...> &&
-    std::same_as<std::invoke_result_t<Func, const ParameterTypes&...>,
-                 std::optional<ErrorMessage>>;
+    isSimilar<std::invoke_result_t<Func, const ParameterTypes&...>,
+              std::optional<ErrorMessage>>;
 
 /*
 @brief Transform a validator function into an exception validator function.
