@@ -464,10 +464,9 @@ class HeapBasedLRUCache
                      detail::timeUpdater, detail::timeAsScore, ValueSizeGetter>;
 
  public:
-  explicit HeapBasedLRUCache(
-      size_t capacityNumEls = size_t_max,
-      MemorySize capacitySize = MemorySize::bytes(size_t_max),
-      MemorySize maxSizeSingleEl = MemorySize::bytes(size_t_max))
+  explicit HeapBasedLRUCache(size_t capacityNumEls = size_t_max,
+                             MemorySize capacitySize = MemorySize::max(),
+                             MemorySize maxSizeSingleEl = MemorySize::max())
       : Base(capacityNumEls, capacitySize, maxSizeSingleEl, std::less<>(),
              detail::timeUpdater{}, detail::timeAsScore{}, ValueSizeGetter{}) {}
 };
