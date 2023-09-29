@@ -4,7 +4,6 @@
 
 #include <gtest/gtest.h>
 
-#include <chrono>
 #include <thread>
 
 #include "./HttpTestHelpers.h"
@@ -61,6 +60,24 @@ TEST(HttpServer, HttpTest) {
         httpClient.sendRequest(verb::post, "localhost", "target2", "body2")
             .str(),
         "POST\ntarget2\nbody2");
+  }
+
+  // Test if websocket is correctly opened and closed
+  {
+    HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
+    auto response = httpClient.sendWebSocketHandshake(verb::get, "localhost",
+                                                      "/watch/some-id");
+    // verify request is upgraded
+    ASSERT_EQ(response.base().result(), http::status::switching_protocols);
+  }
+
+  // Test if websocket is denied on wrong paths
+  {
+    HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
+    auto response = httpClient.sendWebSocketHandshake(verb::get, "localhost",
+                                                      "/other-path");
+    // Check for not found error
+    ASSERT_EQ(response.base().result(), http::status::not_found);
   }
 
   // Also test the convenience function `sendHttpOrHttpsRequest` (which creates

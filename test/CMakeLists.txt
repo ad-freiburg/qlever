@@ -7,7 +7,7 @@ add_subdirectory(util)
 # general test utilities and all libraries that are specified as additional
 # arguments.
 function (linkTest basename)
-    qlever_target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(${basename} ${ARGN} gtest gmock_main ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
 
 # Add the exectutable ${basename} that is compiled from the source file
@@ -40,7 +40,7 @@ endfunction()
 if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
     add_executable(QLeverAllUnitTestsMain)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
     gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
             TRUE)
 else()
@@ -308,7 +308,7 @@ addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
 addLinkAndDiscoverTest(ExceptionHandlingTest)
 
-addLinkAndDiscoverTest(SparqlExpressionTypesTest util)
+addLinkAndDiscoverTest(SparqlExpressionTypesTest sparqlExpressions util)
 
 addLinkAndDiscoverTest(LimitOffsetClauseTest)
 
@@ -334,9 +334,9 @@ addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 
-addLinkAndDiscoverTest(FindUndefRangesTest)
+addLinkAndDiscoverTest(FindUndefRangesTest engine)
 
-addLinkAndDiscoverTest(AddCombinedRowToTableTest util)
+addLinkAndDiscoverTest(AddCombinedRowToTableTest engine util)
 
 addLinkAndDiscoverTest(CtreHelpersTest)
 
@@ -353,3 +353,19 @@ addLinkAndDiscoverTest(MemorySizeTest memorySize)
 addLinkAndDiscoverTest(JsonUtilTest)
 
 addLinkAndDiscoverTest(JoinAlgorithmsTest)
+
+addLinkAndDiscoverTest(AsioHelpersTest)
+
+addLinkAndDiscoverTest(UniqueCleanupTest)
+
+addLinkAndDiscoverTest(WebSocketSessionTest http)
+
+addLinkAndDiscoverTest(QueryIdTest)
+
+addLinkAndDiscoverTest(QueryHubTest http)
+
+addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
+
+addLinkAndDiscoverTest(UpdateFetcherTest http)
+
+addLinkAndDiscoverTest(MessageSenderTest http)
