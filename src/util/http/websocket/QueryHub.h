@@ -47,7 +47,7 @@ class QueryHub {
   net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
       createOrAcquireDistributorForReceiving(QueryId);
   /// Expose strand for testing
-  auto getStrand() { return globalStrand_; }
+  auto getStrand() const { return globalStrand_; }
 };
 }  // namespace ad_utility::websocket
 
