@@ -116,12 +116,13 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnSignalEnd, 3) {
   auto future =
       net::co_spawn(ioContext, distributor1->signalEnd(), net::use_future);
 
+  // Wait until signalEnd() blocks, increase time if tests sporadically fail
   std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
   auto distributor2 =
       co_await queryHub.createOrAcquireDistributorForSending(queryId);
   EXPECT_NE(distributor1, distributor2);
-  co_await net::post(net::use_awaitable);
+
   future.wait();
 }
 
