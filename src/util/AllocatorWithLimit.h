@@ -193,8 +193,6 @@ class AllocatorWithLimit {
     // Update the amount of memory left.
     memoryLeft_.ptr()->wlock()->increase(MemorySize::bytes(n * sizeof(T)));
   }
-  // Overload for use with `MemorySize`.
-  void deallocate(T* p, MemorySize n) { deallocate(p, n.getBytes()); }
 
   /// Return the number of bytes, that this allocator and all of its copies
   /// currently have available
