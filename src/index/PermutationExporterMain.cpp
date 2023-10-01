@@ -12,7 +12,7 @@ template <typename Permutation>
 void dumpToStdout(const Permutation& permutation) {
   ad_utility::AllocatorWithLimit<Id> allocator{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          ad_utility::MemorySize::bytes(std::numeric_limits<uint64_t>::max()))};
+          ad_utility::MemorySize::max())};
   auto triples = TriplesView(permutation);
   size_t i = 0;
   for (auto triple : triples) {
