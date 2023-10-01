@@ -174,14 +174,13 @@ class AllocatorWithLimit {
   T* allocate(std::size_t n) {
     // Subtract the amount of memory we want to allocate from the amount of
     // memory left. This will throw an exception if not enough memory is left.
-    const auto bytesNeeded = n * sizeof(T);
+    const auto bytesNeeded = MemorySize::bytes(n * sizeof(T));
     const bool wasEnoughLeft =
         memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
-            MemorySize::bytes(bytesNeeded));
+            bytesNeeded);
     if (!wasEnoughLeft) {
       clearOnAllocation_(n);
-      memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(
-          MemorySize::bytes(bytesNeeded));
+      memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(bytesNeeded);
     }
     // the actual allocation
     return allocator_.allocate(n);
