@@ -771,6 +771,10 @@ TEST(ExportQueryExecutionTree, CornerCases) {
   ASSERT_THROW(
       runJSONQuery(kg, constructQuery, ad_utility::MediaType::sparqlJson),
       ad_utility::Exception);
+  // XML is currently not supported for construct queries.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+            runQueryStreamableResult(kg, constructQuery, ad_utility::MediaType::sparqlXml),
+            ::testing::ContainsRegex("XML export is currently not supported for CONSTRUCT"));
 
   // Binary export is not supported for CONSTRUCT queries.
   ASSERT_THROW(runQueryStreamableResult(kg, constructQuery,

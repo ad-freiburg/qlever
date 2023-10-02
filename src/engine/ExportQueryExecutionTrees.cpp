@@ -314,25 +314,25 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
     } else {
       // TODO<joka921> This is probably not quite correct in the corener case
       // that there are datatype IRIs which contain quotes.
-      size_t quote_pos = entitystr.rfind('"');
-      if (quote_pos == std::string::npos) {
+      size_t quotePos = entitystr.rfind('"');
+      if (quotePos == std::string::npos) {
         // TEXT entries are currently not surrounded by quotes
         b["value"] = entitystr;
         b["type"] = "literal";
       } else {
-        b["value"] = entitystr.substr(1, quote_pos - 1);
+        b["value"] = entitystr.substr(1, quotePos - 1);
         b["type"] = "literal";
         // Look for a language tag or type.
-        if (quote_pos < entitystr.size() - 1 &&
-            entitystr[quote_pos + 1] == '@') {
-          b["xml:lang"] = entitystr.substr(quote_pos + 2);
-        } else if (quote_pos < entitystr.size() - 2 &&
-                   entitystr[quote_pos + 1] == '^') {
-          AD_CONTRACT_CHECK(entitystr[quote_pos + 2] == '^');
+        if (quotePos < entitystr.size() - 1 &&
+            entitystr[quotePos + 1] == '@') {
+          b["xml:lang"] = entitystr.substr(quotePos + 2);
+        } else if (quotePos < entitystr.size() - 2 &&
+                   entitystr[quotePos + 1] == '^') {
+          AD_CONTRACT_CHECK(entitystr[quotePos + 2] == '^');
           std::string_view datatype{entitystr};
           // remove the < angledBrackets> around the datatype IRI
-          AD_CONTRACT_CHECK(datatype.size() >= quote_pos + 5);
-          datatype.remove_prefix(quote_pos + 4);
+          AD_CONTRACT_CHECK(datatype.size() >= quotePos + 5);
+          datatype.remove_prefix(quotePos + 4);
           datatype.remove_suffix(1);
           b["datatype"] = datatype;
           ;
@@ -502,25 +502,25 @@ static std::string idToXMLBinding(std::string_view var, Id id,
     } else if (entitystr.starts_with("_:")) {
       append("<bnode>"sv, entitystr.substr(2), "</bnode>");
     } else {
-      size_t quote_pos = entitystr.rfind('"');
-      if (quote_pos == std::string::npos) {
+      size_t quotePos = entitystr.rfind('"');
+      if (quotePos == std::string::npos) {
         absl::StrAppend(&result, "<literal>"sv, escape(entitystr),
                         "</literal>");
       } else {
-        std::string_view innerValue = entitystr.substr(1, quote_pos - 1);
+        std::string_view innerValue = entitystr.substr(1, quotePos - 1);
         // Look for a language tag or type.
-        if (quote_pos < entitystr.size() - 1 &&
-            entitystr[quote_pos + 1] == '@') {
-          std::string_view langtag = entitystr.substr(quote_pos + 2);
+        if (quotePos < entitystr.size() - 1 &&
+            entitystr[quotePos + 1] == '@') {
+          std::string_view langtag = entitystr.substr(quotePos + 2);
           append("<literal xml:lang=\""sv, langtag, "\">"sv, escape(innerValue),
                  "</literal>");
-        } else if (quote_pos < entitystr.size() - 2 &&
-                   entitystr[quote_pos + 1] == '^') {
-          AD_CORRECTNESS_CHECK(entitystr[quote_pos + 2] == '^');
+        } else if (quotePos < entitystr.size() - 2 &&
+                   entitystr[quotePos + 1] == '^') {
+          AD_CORRECTNESS_CHECK(entitystr[quotePos + 2] == '^');
           std::string_view datatype{entitystr};
           // remove the < angledBrackets> around the datatype IRI
-          AD_CONTRACT_CHECK(datatype.size() >= quote_pos + 5);
-          datatype.remove_prefix(quote_pos + 4);
+          AD_CONTRACT_CHECK(datatype.size() >= quotePos + 5);
+          datatype.remove_prefix(quotePos + 4);
           datatype.remove_suffix(1);
           append("<literal datatype=\""sv, escape(datatype), "\">"sv,
                  escape(innerValue), "</literal>");
