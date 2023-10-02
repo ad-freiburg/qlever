@@ -20,7 +20,7 @@ namespace net = boost::asio;
 /// IMPORTANT: If the coroutine is cancelled, no guarantees are given. Make
 /// sure to keep that in mind when handling cancellation errors!
 template <typename T>
-inline net::awaitable<T> sameExecutor(net::awaitable<T> awaitable) {
+inline net::awaitable<T> originalExecutor(net::awaitable<T> awaitable) {
   std::exception_ptr exceptionPtr;
   try {
     T result = co_await std::move(awaitable);
@@ -41,7 +41,7 @@ inline net::awaitable<T> sameExecutor(net::awaitable<T> awaitable) {
 
 /// Helper function that ensures that co_await resumes on the executor
 /// this coroutine was started on. Overload for void.
-inline net::awaitable<void> sameExecutor(net::awaitable<void> awaitable) {
+inline net::awaitable<void> originalExecutor(net::awaitable<void> awaitable) {
   std::exception_ptr exceptionPtr;
   try {
     co_await std::move(awaitable);

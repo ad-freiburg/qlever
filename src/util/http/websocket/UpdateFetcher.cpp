@@ -15,7 +15,7 @@ net::awaitable<UpdateFetcher::PayloadType> UpdateFetcher::waitForEvent() {
   }
 
   auto data =
-      co_await sameExecutor(distributor_->waitForNextDataPiece(nextIndex_));
+      co_await originalExecutor(distributor_->waitForNextDataPiece(nextIndex_));
   if (data) {
     nextIndex_++;
   }
