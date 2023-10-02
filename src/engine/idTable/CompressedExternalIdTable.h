@@ -24,6 +24,10 @@
 namespace ad_utility {
 
 using namespace ad_utility::memory_literals;
+
+// The default size for compressed blocks in the following classes.
+static constexpr ad_utility::MemorySize DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE =
+    500_kB;
 // A class that stores a sequence of `IdTable`s in a file. Each `IdTable` is
 // compressed blockwise. Typically, the blocksize is much smaller than the size
 // of a single IdTable, such that there are multiple blocks per IdTable. This is
@@ -62,7 +66,8 @@ class CompressedExternalIdTableWriter {
   // then separately compressed and stored. Has to be chosen s.t. it is much
   // smaller than the size of the single `IdTables` and  large enough to make
   // the used compression algorithm work well.
-  ad_utility::MemorySize blockSizeUncompressed_ = 4_MB;
+  ad_utility::MemorySize blockSizeUncompressed_ =
+      DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE;
 
   // Keep track of the number of active output generators to detect whether we
   // are currently reading from the file and it is thus unsafe to add to the
@@ -75,7 +80,8 @@ class CompressedExternalIdTableWriter {
   explicit CompressedExternalIdTableWriter(
       std::string filename, size_t numCols,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      ad_utility::MemorySize blockSizeUncompressed = 4_MB)
+      ad_utility::MemorySize blockSizeUncompressed =
+          DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)
       : filename_{std::move(filename)},
         blocksPerColumn_(numCols),
         allocator_{std::move(allocator)},
@@ -316,7 +322,7 @@ class CompressedExternalIdTableBase {
   explicit CompressedExternalIdTableBase(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      MemorySize blocksizeCompression = 4_MB,
+      MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
       BlockTransformation blockTransformation = {})
       : currentBlock_{numCols, allocator},
         numColumns_{numCols},
@@ -435,7 +441,7 @@ class CompressedExternalIdTable
   explicit CompressedExternalIdTable(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      MemorySize blocksizeCompression = 4_MB)
+      MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)
       : Base{std::move(filename), numCols, memory, std::move(allocator),
              blocksizeCompression} {}
 
@@ -444,7 +450,8 @@ class CompressedExternalIdTable
   explicit CompressedExternalIdTable(
       std::string filename, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      MemorySize blocksizeCompression = 4_MB) requires(NumStaticCols > 0)
+      MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)
+      requires(NumStaticCols > 0)
       : CompressedExternalIdTable(std::move(filename), NumStaticCols, memory,
                                   std::move(allocator), blocksizeCompression) {}
 
@@ -530,7 +537,8 @@ class CompressedExternalIdTableSorter
   explicit CompressedExternalIdTableSorter(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      MemorySize blocksizeCompression = 4_MB, Comparator comparator = {})
+      MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+      Comparator comparator = {})
       : Base{std::move(filename),
              numCols,
              memory,
@@ -544,8 +552,8 @@ class CompressedExternalIdTableSorter
   explicit CompressedExternalIdTableSorter(
       std::string filename, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      MemorySize blocksizeCompression = 4_MB, Comparator comp = {})
-      requires(NumStaticCols > 0)
+      MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+      Comparator comp = {}) requires(NumStaticCols > 0)
       : CompressedExternalIdTableSorter(std::move(filename), NumStaticCols,
                                         memory, std::move(allocator),
                                         blocksizeCompression, comp) {}
