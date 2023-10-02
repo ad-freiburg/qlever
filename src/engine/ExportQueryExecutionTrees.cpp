@@ -298,7 +298,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
   }
 
   // Take a string from the vocabulary, deduce the type and
-  // return a json dict that describes the binding
+  // return a JSON dict that describes the binding.
   auto stringToBinding = [](std::string_view entitystr) -> nlohmann::json {
     nlohmann::ordered_json b;
     // The string is an IRI or literal.
