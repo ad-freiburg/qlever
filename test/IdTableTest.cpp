@@ -985,21 +985,22 @@ TEST(IdTable, shrinkToFit) {
   // necessary to change them if one of our used standard libraries has a
   // different behavior, but this is unlikely due to ABI stability goals between
   // library versions.
-  auto memory = ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000);
+  auto memory = ad_utility::makeAllocationMemoryLeftThreadsafeObject(1_kB);
   IdTable table{2, ad_utility::AllocatorWithLimit<Id>{memory}};
-  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 1000);
+  using namespace ad_utility::memory_literals;
+  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 1_kB);
   table.reserve(20);
   ASSERT_TRUE(table.empty());
   // 20 rows * 2 columns * 8 bytes per ID were allocated.
-  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 680);
+  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 680_B);
   table.emplace_back();
   table.emplace_back();
   ASSERT_EQ(table.numRows(), 2u);
-  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 680);
+  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 680_B);
   table.shrinkToFit();
   ASSERT_EQ(table.numRows(), 2u);
   // Now only 2 rows * 2 columns * 8 bytes were allocated.
-  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 968);
+  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 968_B);
 }
 
 TEST(IdTable, staticAsserts) {

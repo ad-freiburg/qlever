@@ -1,15 +1,18 @@
-//
-// Created by johannes on 27.04.20.
-//
+// Copyright 2020, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach (April of 2020,
+// kalmbach@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_ALLOCATORWITHLIMIT_H
-#define QLEVER_ALLOCATORWITHLIMIT_H
+#pragma once
+
+#include <absl/strings/str_cat.h>
 
 #include <atomic>
 #include <functional>
 #include <memory>
 
-#include "Synchronized.h"
+#include "util/MemorySize/MemorySize.h"
+#include "util/Synchronized.h"
 
 namespace ad_utility {
 
@@ -19,12 +22,12 @@ namespace detail {
 // specified as a limit
 class AllocationExceedsLimitException : public std::exception {
  public:
-  AllocationExceedsLimitException(size_t requestedBytes, size_t freeBytes)
-      : _message{"Tried to allocate " + std::to_string(requestedBytes >> 20) +
-                 "MB, but only " + std::to_string(freeBytes >> 20) +
-                 "MB were available. " +
-                 "Clear the cache or allow more memory for QLever during "
-                 "startup"} {};
+  AllocationExceedsLimitException(MemorySize requestedMemory,
+                                  MemorySize freeMemory)
+      : _message{absl::StrCat("Tried to allocate ", requestedMemory.asString(),
+                              ", but only ", freeMemory.asString(),
+                              " were available. Clear the cache or allow more "
+                              "memory for QLever during startup")} {};
 
   const char* what() const noexcept override { return _message.c_str(); }
 
@@ -38,13 +41,14 @@ class AllocationExceedsLimitException : public std::exception {
 // objects at the same time (hence the wrapper class and the synchronization
 // below).
 class AllocationMemoryLeft {
-  size_t free_;  // the number of free bytes
-                 // throw AllocationExceedsLimitException on failure
+  // Remaining free memory.
+  MemorySize free_;
+
  public:
-  AllocationMemoryLeft(size_t n) : free_(n) {}
+  AllocationMemoryLeft(MemorySize n) : free_(n) {}
 
   // Called before memory is allocated.
-  bool decrease_if_enough_left_or_return_false(size_t n) noexcept {
+  bool decrease_if_enough_left_or_return_false(MemorySize n) noexcept {
     if (n <= free_) {
       free_ -= n;
       return true;
@@ -54,15 +58,15 @@ class AllocationMemoryLeft {
   }
 
   // Called before memory is allocated.
-  void decrease_if_enough_left_or_throw(size_t n) {
+  void decrease_if_enough_left_or_throw(MemorySize n) {
     if (!decrease_if_enough_left_or_return_false(n)) {
       throw AllocationExceedsLimitException{n, free_};
     }
   }
 
   // Called after memory is deallocated.
-  void increase(size_t n) { free_ += n; }
-  [[nodiscard]] size_t numFreeBytes() const { return free_; }
+  void increase(MemorySize n) { free_ += n; }
+  [[nodiscard]] MemorySize amountMemoryLeft() const { return free_; }
 };
 
 /*
@@ -92,15 +96,24 @@ class AllocationMemoryLeftThreadsafe {
 // setup a shared Allocation state. For the usage see documentation of the
 // Limited Allocator class
 inline detail::AllocationMemoryLeftThreadsafe
-makeAllocationMemoryLeftThreadsafeObject(size_t n) {
+makeAllocationMemoryLeftThreadsafeObject(MemorySize n) {
   return detail::AllocationMemoryLeftThreadsafe{std::make_shared<
       ad_utility::Synchronized<detail::AllocationMemoryLeft, SpinLock>>(n)};
 }
 
+/*
+A lambda for use with `AllocatorWithLimit`.
+
+Called, when there is not enough memory left for an allocation and is supposed
+to try to free the given amount of memory.
+
+The lambda is given at construction.
+*/
+using ClearOnAllocation = std::function<void(MemorySize)>;
+
 /// A Noop lambda that will be used as a template default parameter
 /// in the `AllocatorWithLimit` class.
-using ClearOnAllocation = std::function<void(size_t)>;
-inline ClearOnAllocation noClearOnAllocation = [](size_t) {};
+inline ClearOnAllocation noClearOnAllocation = [](MemorySize) {};
 
 /**
  * @brief Class to concurrently allocate memory up to a specified limit on the
@@ -170,12 +183,12 @@ class AllocatorWithLimit {
   T* allocate(std::size_t n) {
     // Subtract the amount of memory we want to allocate from the amount of
     // memory left. This will throw an exception if not enough memory is left.
-    const auto bytesNeeded = n * sizeof(T);
+    const auto bytesNeeded = MemorySize::bytes(n * sizeof(T));
     const bool wasEnoughLeft =
         memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
             bytesNeeded);
     if (!wasEnoughLeft) {
-      clearOnAllocation_(n);
+      clearOnAllocation_(bytesNeeded);
       memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(bytesNeeded);
     }
     // the actual allocation
@@ -187,18 +200,18 @@ class AllocatorWithLimit {
     // free the memory
     allocator_.deallocate(p, n);
     // Update the amount of memory left.
-    memoryLeft_.ptr()->wlock()->increase(n * sizeof(T));
+    memoryLeft_.ptr()->wlock()->increase(MemorySize::bytes(n * sizeof(T)));
   }
 
   /// Return the number of bytes, that this allocator and all of its copies
   /// currently have available
-  [[nodiscard]] size_t numFreeBytes() const {
+  [[nodiscard]] MemorySize amountMemoryLeft() const {
     // casting is ok, because the actual numFreeBytes call
     // is const, and everything else is locking
     return const_cast<AllocatorWithLimit*>(this)
         ->memoryLeft_.ptr()
         ->wlock()
-        ->numFreeBytes();
+        ->amountMemoryLeft();
   }
 
   const auto& getMemoryLeft() const { return memoryLeft_; }
@@ -218,16 +231,14 @@ class AllocatorWithLimit {
 
 // Return a new allocator with the specified limit.
 template <typename T>
-AllocatorWithLimit<T> makeAllocatorWithLimit(size_t limit) {
+AllocatorWithLimit<T> makeAllocatorWithLimit(MemorySize limit) {
   return AllocatorWithLimit<T>{makeAllocationMemoryLeftThreadsafeObject(limit)};
 }
 
 // Return a new allocator with the maximal possible limit.
 template <typename T>
 AllocatorWithLimit<T> makeUnlimitedAllocator() {
-  return makeAllocatorWithLimit<T>(std::numeric_limits<size_t>::max());
+  return makeAllocatorWithLimit<T>(MemorySize::max());
 }
 
 }  // namespace ad_utility
-
-#endif  // QLEVER_ALLOCATORWITHLIMIT_H
