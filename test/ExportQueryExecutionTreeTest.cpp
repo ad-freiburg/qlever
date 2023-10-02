@@ -179,7 +179,8 @@ nlohmann::json makeExpectedSparqlJSON(
   return j;
 }
 
-// TODO<joka921> Comment those helpers
+// Return a header of a SPARQL XML export including the given variables until
+// the opening `<results>` tag.
 static std::string makeXMLHeader(
     std::vector<std::string> varsWithoutQuestionMark) {
   std::string result = R"(<?xml version="1.0"?>
@@ -192,6 +193,7 @@ static std::string makeXMLHeader(
   return result;
 }
 
+// The end of a SPARQL XML export.
 static const std::string xmlTrailer = "\n</results>\n</sparql>";
 
 // ____________________________________________________________________________

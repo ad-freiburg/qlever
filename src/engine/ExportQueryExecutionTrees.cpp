@@ -312,7 +312,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
       b["value"] = entitystr.substr(2);
       b["type"] = "bnode";
     } else {
-      // TODO<joka921> This is probably not quite correct in the corener case
+      // TODO<joka921> This is probably not quite correct in the corner case
       // that there are datatype IRIs which contain quotes.
       size_t quotePos = entitystr.rfind('"');
       if (quotePos == std::string::npos) {
@@ -329,7 +329,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
                    entitystr[quotePos + 1] == '^') {
           AD_CONTRACT_CHECK(entitystr[quotePos + 2] == '^');
           std::string_view datatype{entitystr};
-          // remove the < angledBrackets> around the datatype IRI
+          // remove the <angledBrackets> around the datatype IRI
           AD_CONTRACT_CHECK(datatype.size() >= quotePos + 5);
           datatype.remove_prefix(quotePos + 4);
           datatype.remove_suffix(1);
@@ -471,11 +471,9 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
   LOG(DEBUG) << "Done creating readable result.\n";
 }
 
-// TODO<joka921> Comment or register in the header file.
-static std::string idToXMLBinding(std::string_view var, Id id,
+// Convert a single ID to an XML binding of the given `variable`.
+static std::string idToXMLBinding(std::string_view variable, Id id,
                                   const auto& index, const auto& localVocab) {
-  // Take a string from the vocabulary, deduce the type and
-  // return a json dict that describes the binding
   using namespace std::string_view_literals;
   using namespace std::string_literals;
   const auto& optionalValue =
@@ -484,7 +482,7 @@ static std::string idToXMLBinding(std::string_view var, Id id,
     return ""s;
   }
   const auto& [stringValue, xsdType] = optionalValue.value();
-  std::string result = absl::StrCat("\n    <binding name=\"", var, "\">");
+  std::string result = absl::StrCat("\n    <binding name=\"", variable, "\">");
   auto append = [&](const auto&... values) {
     absl::StrAppend(&result, values...);
   };
@@ -492,39 +490,41 @@ static std::string idToXMLBinding(std::string_view var, Id id,
   auto escape = [](std::string_view sv) {
     return RdfEscaping::escapeForXml(std::string{sv});
   };
+  // Lambda that creates the inner content of the binding for the various
+  // datatypes.
   auto strToBinding = [&result, &append, &escape](std::string_view entitystr) {
     // The string is an IRI or literal.
     if (entitystr.starts_with('<')) {
       // Strip the <> surrounding the iri.
       append("<uri>"sv, escape(entitystr.substr(1, entitystr.size() - 2)),
-             "</uri>");
+             "</uri>"sv);
     } else if (entitystr.starts_with("_:")) {
-      append("<bnode>"sv, entitystr.substr(2), "</bnode>");
+      append("<bnode>"sv, entitystr.substr(2), "</bnode>"sv);
     } else {
       size_t quotePos = entitystr.rfind('"');
       if (quotePos == std::string::npos) {
         absl::StrAppend(&result, "<literal>"sv, escape(entitystr),
-                        "</literal>");
+                        "</literal>"sv);
       } else {
         std::string_view innerValue = entitystr.substr(1, quotePos - 1);
         // Look for a language tag or type.
         if (quotePos < entitystr.size() - 1 && entitystr[quotePos + 1] == '@') {
           std::string_view langtag = entitystr.substr(quotePos + 2);
           append("<literal xml:lang=\""sv, langtag, "\">"sv, escape(innerValue),
-                 "</literal>");
+                 "</literal>"sv);
         } else if (quotePos < entitystr.size() - 2 &&
                    entitystr[quotePos + 1] == '^') {
           AD_CORRECTNESS_CHECK(entitystr[quotePos + 2] == '^');
           std::string_view datatype{entitystr};
-          // remove the < angledBrackets> around the datatype IRI
+          // remove the <angledBrackets> around the datatype IRI
           AD_CONTRACT_CHECK(datatype.size() >= quotePos + 5);
           datatype.remove_prefix(quotePos + 4);
           datatype.remove_suffix(1);
           append("<literal datatype=\""sv, escape(datatype), "\">"sv,
-                 escape(innerValue), "</literal>");
+                 escape(innerValue), "</literal>"sv);
         } else {
           // A plain literal that contains neither a language tag nor a datatype
-          append("<literal>"sv, escape(innerValue), "</literal>");
+          append("<literal>"sv, escape(innerValue), "</literal>sv");
         }
       }
     }
