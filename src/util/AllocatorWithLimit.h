@@ -175,8 +175,47 @@ class AllocatorWithLimit {
   AllocatorWithLimit() = delete;
 
   template <typename U>
+  requires(!std::same_as<U, T>)
   AllocatorWithLimit(const AllocatorWithLimit<U>& other)
       : memoryLeft_(other.getMemoryLeft()){};
+
+  // Defaulted copy operations.
+  AllocatorWithLimit(const AllocatorWithLimit&) = default;
+  AllocatorWithLimit& operator=(const AllocatorWithLimit&) = default;
+
+  // We deliberately let the move assignment call the copy assignment, because
+  // when a `vector<..., AllocatorWithLimit>` is moved from, we still want the
+  // vector that was moved from to have a valid allocator that uses the same
+  // memory limit. Note: We could also implicitly leave out the move operators,
+  // then the copy operators would be called implicitly, but
+  // 1. It is hard to reason about things that are implicitly not there.
+  // 2. This would inhibit move semantics from `std::vector` unless the copy
+  // operations are also `noexcept`, so we need
+  //    some extra code anyway.
+  AllocatorWithLimit(AllocatorWithLimit&& other) noexcept try
+      : AllocatorWithLimit(static_cast<const AllocatorWithLimit&>(other)) {
+    // Empty body, because all the logic is done by the delegated constructor
+    // and the catch block.
+  } catch (const std::exception& e) {
+    auto log = [&e](auto& stream) {
+      stream << "The move constructor of `AllocatorWithLimit` threw an "
+                "exception with message "
+             << e.what() << " .This should never happen, terminating"
+             << std::endl;
+    };
+    log(ad_utility::Log::getLog<ERROR>());
+    log(std::cerr);
+    std::terminate();
+  }
+  AllocatorWithLimit& operator=(AllocatorWithLimit&& other) noexcept {
+    ad_utility::terminateIfThrows(
+        [self = this, &other] {
+          *self = static_cast<const AllocatorWithLimit&>(other);
+        },
+        "The move assignment operator of `AllocatorWithLimit` should never "
+        "throw in practice.");
+    return *this;
+  }
 
   // An allocator must have a function "allocate" with exactly this signature.
   // TODO<C++20> : the exact signature of allocate changes

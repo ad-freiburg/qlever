@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "./util/AllocatorTestHelpers.h"
+#include "./util/GTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
@@ -739,6 +740,51 @@ TEST(IdTableStaticTest, copyAndMove) {
     ASSERT_EQ(V(i + 1), t3(i / NUM_COLS, i % NUM_COLS));
     ASSERT_EQ(V(i + 1), t4(i / NUM_COLS, i % NUM_COLS));
     ASSERT_EQ(V(i + 1), t5(i / NUM_COLS, i % NUM_COLS));
+  }
+}
+
+TEST(IdTableTest, statusAfterMove) {
+  {
+    IdTableStatic<3> t1{makeAllocator()};
+    t1.push_back(std::array{V(1), V(42), V(2304)});
+
+    auto t2 = std::move(t1);
+    // `t1` is valid and still has the same number of columns, but they now are
+    // empty.
+    ASSERT_EQ(3, t1.numColumns());
+    ASSERT_EQ(0, t1.numRows());
+    ASSERT_NO_THROW(t1.push_back(std::array{V(4), V(16), V(23)}));
+    ASSERT_EQ(1, t1.numRows());
+    ASSERT_EQ((static_cast<std::array<Id, 3>>(t1[0])),
+              (std::array{V(4), V(16), V(23)}));
+  }
+  {
+    using Buffer = ad_utility::BufferedVector<Id>;
+    Buffer buffer(0, "IdTableTest.statusAfterMove.dat");
+    using BufferedTable = columnBasedIdTable::IdTable<Id, 1, Buffer>;
+    BufferedTable table{1, std::array{std::move(buffer)}};
+    table.push_back(std::array{V(19)});
+    auto t2 = std::move(table);
+    // The `table` has been moved from and is invalid, because we don't have a
+    // file anymore where we could write the contents. This means that all
+    // operations that would have to change the size of the IdTable throw until
+    // we have reinstated the column vector by explicitly assigning a newly
+    // constructed table. The exceptions that are thrown are from the
+    // `BufferedVector` class which throws when it is being accessed after being
+    // moved from. In other words, the `IdTable` class needs no special code to
+    // handle the case of the columns being stored in a `BufferedVector`.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        table.push_back(std::array{V(4)}),
+        ::testing::ContainsRegex("Tried to access a DiskBasedArray"));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        table.resize(42),
+        ::testing::ContainsRegex("Tried to access a DiskBasedArray"));
+    table = BufferedTable{
+        1, std::array{Buffer{0, "IdTableTest.statusAfterMove2.dat"}}};
+    ASSERT_NO_THROW(table.push_back(std::array{V(4)}));
+    ASSERT_NO_THROW(table.resize(42));
+    ASSERT_EQ(table.size(), 42u);
+    ASSERT_EQ(table(0, 0), V(4));
   }
 }
 

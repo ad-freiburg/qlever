@@ -360,11 +360,10 @@ class CompressedExternalIdTableBase {
   }
 
  protected:
-  // Note: This method is currently needed, because the move semantics of the
-  // IdTable are not correct.
+  // Clear the current block. If `reserve` is `true`, we subsequently also
+  // reserve the `blocksize_`.
   void resetCurrentBlock(bool reserve) {
-    currentBlock_ =
-        IdTableStatic<NumStaticCols>(numColumns_, writer_.allocator());
+    currentBlock_.clear();
     if (reserve) {
       currentBlock_.reserve(blocksize_);
     }

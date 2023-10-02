@@ -68,3 +68,40 @@ TEST(AllocatorWithLimit, equality) {
   ASSERT_EQ(a2, a2);
   ASSERT_NE(a1, a2);
 }
+
+TEST(AllocatorWithLimit, unlikelyExceptionsDuringCopyingAndMoving) {
+  struct ThrowOnCopy {
+    ThrowOnCopy() = default;
+    ThrowOnCopy& operator=(const ThrowOnCopy&) {
+      throw std::runtime_error("unexpected copy assign");
+    }
+    ThrowOnCopy(const ThrowOnCopy&) {
+      throw std::runtime_error("unexpected copy construct");
+    }
+    ThrowOnCopy& operator=(ThrowOnCopy&&) noexcept = default;
+    ThrowOnCopy(ThrowOnCopy&&) noexcept = default;
+    void operator()(ad_utility::MemorySize) const {}
+  };
+  AllocatorWithLimit<int> a1{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(20_B),
+      ThrowOnCopy{}};
+  auto copy = [&a1]() { [[maybe_unused]] auto a2 = a1; };
+  auto copyAssign = [&a1]() {
+    AllocatorWithLimit<int> a2{
+        ad_utility::makeAllocationMemoryLeftThreadsafeObject(20_B)};
+    a2 = a1;
+  };
+  ASSERT_THROW(copy(), std::runtime_error);
+  ASSERT_THROW(copyAssign(), std::runtime_error);
+  auto move = [&a1]() { auto a2 = std::move(a1); };
+  auto moveAssign = [&a1]() {
+    AllocatorWithLimit<int> a2{
+        ad_utility::makeAllocationMemoryLeftThreadsafeObject(20_B)};
+    a2 = std::move(a1);
+  };
+  // The move operations call the copy operations which throw, but are declared
+  // `noexcept`, so the program dies when they are called.
+  ASSERT_DEATH(move(), "The move constructor of `AllocatorWithLimit`");
+  ASSERT_DEATH(moveAssign(),
+               "The move assignment operator of `AllocatorWithLimit`");
+}

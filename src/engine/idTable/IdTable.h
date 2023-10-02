@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "engine/idTable/IdTableRow.h"
+#include "engine/idTable/VectorWithElementwiseMove.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
@@ -20,6 +21,7 @@
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
 #include "util/UninitializedAllocator.h"
+#include "util/Views.h"
 
 namespace columnBasedIdTable {
 // The `IdTable` class is QLever's central data structure. It is used to store
@@ -114,7 +116,7 @@ class IdTable {
   static constexpr int numStaticColumns = NumColumns;
   // The actual storage is a plain 1D vector with the logical columns
   // concatenated.
-  using Storage = std::vector<ColumnStorage>;
+  using Storage = detail::VectorWithElementwiseMove<ColumnStorage>;
   using ViewSpans = std::vector<std::span<const T>>;
   using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
@@ -392,63 +394,21 @@ class IdTable {
 
   // Add the `newRow` at the end. Requires that `newRow.size() == numColumns()`,
   // otherwise the behavior is undefined (in Release mode) or an assertion will
-  // fail (in Debug mode).
-  //
-  // Note: This behavior is the same for all the overloads of `push_back`. The
-  // correct size of `newRow` will be checked at compile time if possible (when
-  // both the size of `newRow` and `numColumns()` are known at compile time. If
-  // this check cannot be performed, a wrong size of `newRow` will lead to
-  // undefined behavior which is caught by an `assert` in Debug builds.
-  void push_back(const std::initializer_list<T>& newRow) requires(!isView) {
+  // fail (in Debug mode). The `newRow` can be any random access range that
+  // stores the right type and has the right size.
+  template <std::ranges::random_access_range RowLike>
+  requires std::same_as<std::ranges::range_value_t<RowLike>, T>
+  void push_back(const RowLike& newRow) requires(!isView) {
     AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     ++numRows_;
-    for (size_t i = 0; i < numColumns(); ++i) {
-      data()[i].push_back(*(newRow.begin() + i));
-    }
+    std::ranges::for_each(ad_utility::integerRange(numColumns()),
+                          [this, &newRow](auto i) {
+                            data()[i].push_back(*(std::begin(newRow) + i));
+                          });
   }
 
-  void push_back(std::span<const T> newRow) requires(!isView) {
-    AD_CONTRACT_CHECK(newRow.size() == numColumns());
-    ++numRows_;
-    for (size_t i = 0; i < numColumns(); ++i) {
-      data()[i].push_back(*(newRow.begin() + i));
-    }
-  }
-
-  // Overload of `push_back` for `std:array`. If this IdTable is static
-  // (`NumColumns != 0`), then this is a safe interface, as the correct size of
-  // `newRow` can be statically checked.
-  template <size_t N>
-  void push_back(const std::array<T, N>& newRow)
-      requires(!isView && (isDynamic || NumColumns == N)) {
-    if constexpr (isDynamic) {
-      AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
-    }
-    ++numRows_;
-    for (size_t i = 0; i < numColumns(); ++i) {
-      data()[i].push_back(*(newRow.begin() + i));
-    }
-  }
-
-  // Overload of `push_back` for all kinds of `(const_)row_reference(_proxy)`
-  // types that are compatible with this `IdTable`.
-  // Note: This currently excludes rows from `IdTables` with the correct number
-  // of columns, but with a different allocator. If this should ever be needed,
-  // we would have to reformulate the `requires()` clause here a little more
-  // complicated.
-  template <typename RowT>
-  requires ad_utility::isTypeContainedIn<
-      RowT, std::tuple<row_type, row_reference, const_row_reference,
-                       row_reference_restricted, const_row_reference_restricted,
-                       const_row_reference_view_restricted>>
-  void push_back(const RowT& newRow) requires(!isView) {
-    if constexpr (isDynamic) {
-      AD_EXPENSIVE_CHECK(newRow.numColumns() == numColumns());
-    }
-    ++numRows_;
-    for (size_t i = 0; i < numColumns(); ++i) {
-      data()[i].push_back(newRow[i]);
-    }
+  void push_back(const std::initializer_list<T>& newRow) requires(!isView) {
+    push_back(std::ranges::ref_view{newRow});
   }
 
   // Create a deep copy of this `IdTable` that owns its memory. In most cases
@@ -475,13 +435,13 @@ class IdTable {
       std::vector<ColumnStorage> newColumns, Allocator allocator = {}) const
       requires(!std::is_copy_constructible_v<ColumnStorage>) {
     AD_CONTRACT_CHECK(newColumns.size() >= numColumns());
-    Storage newStorage(
-        std::make_move_iterator(newColumns.begin()),
-        std::make_move_iterator(newColumns.begin() + numColumns()));
-    for (size_t i = 0; i < numColumns(); ++i) {
-      newStorage[i].insert(newStorage[i].end(), data()[i].begin(),
-                           data()[i].end());
-    }
+    Data newStorage(std::make_move_iterator(newColumns.begin()),
+                    std::make_move_iterator(newColumns.begin() + numColumns()));
+    std::ranges::for_each(
+        ad_utility::integerRange(numColumns()), [this, &newStorage](auto i) {
+          newStorage[i].insert(newStorage[i].end(), data()[i].begin(),
+                               data()[i].end());
+        });
     return IdTable<T, NumColumns, ColumnStorage, IsView::False>{
         std::move(newStorage), numColumns_, numRows_, allocator};
   }
