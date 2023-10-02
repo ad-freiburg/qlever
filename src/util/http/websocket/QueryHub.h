@@ -52,14 +52,14 @@ class QueryHub {
 
   /// Create a new `QueryToSocketDistributor` or return a pre-existing one for
   /// the provided query id if there already is one. This can only ever be
-  /// called once per session, otherwise there will be an exception. There
+  /// called once per query session, otherwise there will be an exception. There
   /// can only ever be one sender.
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
       createOrAcquireDistributorForSending(QueryId);
 
   /// Returns a const `QueryToSocketDistributor` that can only used to receive
-  /// messages. I contrast to `createOrAcquireDistributorForSending` this can be
-  /// called arbitrarily often during the lifetime of a single query session.
+  /// messages. In contrast to `createOrAcquireDistributorForSending` this can
+  /// be called arbitrarily often during the lifetime of a single query session.
   net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
       createOrAcquireDistributorForReceiving(QueryId);
 

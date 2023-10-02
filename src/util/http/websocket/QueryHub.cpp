@@ -26,7 +26,8 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
     // There's the unlikely case where the reference counter reached zero and
     // the weak pointer can no longer create a shared pointer, but the
     // destructor is waiting for execution on `globalStrand_`. In this case
-    // re-schedule this coroutine to be executed after destruction.
+    // re-schedule this coroutine to be executed after destruction. So it is
+    // crucial to use post over dispatch here.
     co_await net::post(net::bind_executor(globalStrand_, net::use_awaitable));
   }
 
@@ -34,7 +35,8 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
       std::make_shared<QueryToSocketDistributor>(ioContext_, [this, queryId]() {
         auto future = net::dispatch(net::bind_executor(
             globalStrand_, std::packaged_task<void()>([this, &queryId]() {
-              AD_CORRECTNESS_CHECK(socketDistributors_.erase(queryId));
+              bool wasErased = socketDistributors_.erase(queryId);
+              AD_CORRECTNESS_CHECK(wasErased);
             })));
         // Make sure we never block, just run some tasks on the `ioContext_`
         // until the task is executed
