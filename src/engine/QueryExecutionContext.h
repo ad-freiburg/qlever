@@ -17,6 +17,7 @@
 #include "engine/RuntimeInformation.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "global/Constants.h"
+#include "global/Id.h"
 #include "index/Index.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
@@ -45,16 +46,24 @@ class CacheValue {
 
   const RuntimeInformation& runtimeInfo() const { return _runtimeInfo; }
 
-  [[nodiscard]] size_t size() const {
-    return _resultTable ? _resultTable->size() * _resultTable->width() : 0;
-  }
+  // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
+  struct SizeGetter {
+    ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
+      if (const auto& tablePtr = cacheValue._resultTable; tablePtr) {
+        return ad_utility::MemorySize::bytes(tablePtr->size() *
+                                             tablePtr->width() * sizeof(Id));
+      } else {
+        return 0_B;
+      }
+    }
+  };
 };
 
 // Threadsafe LRU cache for (partial) query results, that
 // checks on insertion, if the result is currently being computed
 // by another query.
-using ConcurrentLruCache =
-    ad_utility::ConcurrentCache<ad_utility::LRUCache<string, CacheValue>>;
+using ConcurrentLruCache = ad_utility::ConcurrentCache<
+    ad_utility::LRUCache<string, CacheValue, CacheValue::SizeGetter>>;
 using PinnedSizes =
     ad_utility::Synchronized<ad_utility::HashMap<std::string, size_t>,
                              std::shared_mutex>;

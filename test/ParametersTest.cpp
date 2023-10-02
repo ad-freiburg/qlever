@@ -5,10 +5,12 @@
 #include <gtest/gtest.h>
 
 #include "../src/util/Parameters.h"
+#include "util/MemorySize/MemorySize.h"
 using namespace ad_utility;
 using namespace memory_literals;
 
 using namespace detail::parameterShortNames;
+using namespace memory_literals;
 
 TEST(Parameters, First) {
   using FloatParameter = Float<"Float">;
