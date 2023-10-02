@@ -4,8 +4,6 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "engine/Server.h"
-
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -13,6 +11,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
+#include "engine/Server.h"
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -30,9 +29,9 @@ Server::Server(unsigned short port, size_t numThreads,
       accessToken_(std::move(accessToken)),
       allocator_{
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
-          [this](size_t numBytesToAllocate) {
+          [this](size_t numIdToAllocate) {
             cache_.makeRoomAsMuchAsPossible(ad_utility::MemorySize::bytes(
-                MAKE_ROOM_SLACK_FACTOR * numBytesToAllocate / sizeof(Id)));
+                MAKE_ROOM_SLACK_FACTOR * numIdToAllocate * sizeof(Id)));
           }},
       index_{allocator_},
       enablePatternTrick_(usePatternTrick),
