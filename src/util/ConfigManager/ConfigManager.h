@@ -224,6 +224,8 @@ class ConfigManager {
   options are valid. Should return true, if they are valid.
   @param errorMessage A `std::runtime_error` with this as an error message will
   get thrown, if the `validatorFunction` returns false.
+  @param validatorDescriptor A description of the invariant, that
+  `validatorFunction` imposes.
   @param configOptionsToBeChecked Proxies for the configuration options, whos
   values will be passed to the validator function as function arguments. Will
   keep the same order.
@@ -231,7 +233,7 @@ class ConfigManager {
   template <typename... ValidatorParameterTypes>
   void addValidator(
       ValidatorFunction<ValidatorParameterTypes...> auto validatorFunction,
-      std::string errorMessage,
+      std::string errorMessage, std::string validatorDescriptor,
       ConstConfigOptionProxy<
           ValidatorParameterTypes>... configOptionsToBeChecked)
       requires(sizeof...(configOptionsToBeChecked) > 0) {
@@ -242,7 +244,7 @@ class ConfigManager {
         },
         transformValidatorIntoExceptionValidator<ValidatorParameterTypes...>(
             validatorFunction, std::move(errorMessage)),
-        configOptionsToBeChecked...);
+        std::move(validatorDescriptor), configOptionsToBeChecked...);
   }
 
   /*
@@ -257,6 +259,8 @@ class ConfigManager {
   configuration options are valid. Return an empty instance of
   `std::optional<ErrorMessage>` if valid. Otherwise, the `ErrorMessage` should
   contain the reason, why the values are none valid.
+  @param exceptionValidatorDescriptor A description of the invariant, that
+  `exceptionValidatorFunction` imposes.
   @param configOptionsToBeChecked Proxies for the configuration options, the
   values of which will be passed to the exception validator function as function
   arguments. Will keep the same order.
@@ -265,6 +269,7 @@ class ConfigManager {
   void addValidator(
       ExceptionValidatorFunction<ExceptionValidatorParameterTypes...> auto
           exceptionValidatorFunction,
+      std::string exceptionValidatorDescriptor,
       ConstConfigOptionProxy<
           ExceptionValidatorParameterTypes>... configOptionsToBeChecked)
       requires(sizeof...(configOptionsToBeChecked) > 0) {
@@ -273,7 +278,8 @@ class ConfigManager {
         []<typename T>(ConstConfigOptionProxy<T> opt) {
           return opt.getConfigOption().template getValue<std::decay_t<T>>();
         },
-        exceptionValidatorFunction, configOptionsToBeChecked...);
+        exceptionValidatorFunction, std::move(exceptionValidatorDescriptor),
+        configOptionsToBeChecked...);
   }
 
   /*
@@ -284,6 +290,8 @@ class ConfigManager {
   Should return true, if they are valid.
   @param errorMessage A `std::runtime_error` with this as an error message will
   get thrown, if the `validatorFunction` returns false.
+  @param validatorDescriptor A description of the invariant, that
+  `validatorFunction` imposes.
   @param configOptionsToBeChecked Proxies for the configuration options, who
   will be passed to the validator function as function arguments. Will keep the
   same order.
@@ -291,6 +299,7 @@ class ConfigManager {
   template <typename ValidatorT>
   void addOptionValidator(
       ValidatorT validatorFunction, std::string errorMessage,
+      std::string validatorDescriptor,
       isInstantiation<ConstConfigOptionProxy> auto... configOptionsToBeChecked)
       requires(
           sizeof...(configOptionsToBeChecked) > 0 &&
@@ -304,7 +313,7 @@ class ConfigManager {
         transformValidatorIntoExceptionValidator<
             decltype(configOptionsToBeChecked.getConfigOption())...>(
             validatorFunction, std::move(errorMessage)),
-        configOptionsToBeChecked...);
+        std::move(validatorDescriptor), configOptionsToBeChecked...);
   }
 
   /*
@@ -315,6 +324,8 @@ class ConfigManager {
   are valid. Return an empty instance of `std::optional<ErrorMessage>` if valid.
   Otherwise, the `ErrorMessage` should contain the reason, why the options are
   none valid.
+  @param exceptionValidatorDescriptor A description of the invariant, that
+  `exceptionValidatorFunction` imposes.
   @param configOptionsToBeChecked Proxies for the configuration options, who
   will be passed to the validator function as function arguments. Will keep the
   same order.
@@ -322,6 +333,7 @@ class ConfigManager {
   template <typename ExceptionValidatorT>
   void addOptionValidator(
       ExceptionValidatorT exceptionValidatorFunction,
+      std::string exceptionValidatorDescriptor,
       isInstantiation<ConstConfigOptionProxy> auto... configOptionsToBeChecked)
       requires(sizeof...(configOptionsToBeChecked) > 0 &&
                ExceptionValidatorFunction<
@@ -332,7 +344,8 @@ class ConfigManager {
         []<typename T>(ConstConfigOptionProxy<T> opt) {
           return opt.getConfigOption();
         },
-        exceptionValidatorFunction, configOptionsToBeChecked...);
+        exceptionValidatorFunction, std::move(exceptionValidatorDescriptor),
+        configOptionsToBeChecked...);
   }
 
  private:
@@ -472,6 +485,8 @@ class ConfigManager {
   represent valid values. Otherwise, it should return an error message.
   For example: There configuration options were all set at run time, or contain
   numbers bigger than 10.
+  @param exceptionValidatorDescriptor A description of the invariant, that
+  `exceptionValidatorFunc` imposes.
   @param configOptionsToBeChecked Proxies for the configuration options, who
   will be passed to the exception validator function as function arguments,
   after being transformed. Will keep the same order.
@@ -483,6 +498,7 @@ class ConfigManager {
       std::string_view addValidatorFunctionName,
       TranslationFunction translationFunction,
       ExceptionValidatorFunc exceptionValidatorFunction,
+      std::string exceptionValidatorDescriptor,
       ExceptionValidatorParameter... configOptionsToBeChecked) {
     // Check, if we contain all the configuration options, that were given us.
     auto checkIfContainOption = [this, &addValidatorFunctionName]<typename T>(
@@ -499,6 +515,7 @@ class ConfigManager {
     (checkIfContainOption(configOptionsToBeChecked), ...);
 
     validators_.emplace_back(std::move(exceptionValidatorFunction),
+                             std::move(exceptionValidatorDescriptor),
                              std::move(translationFunction),
                              std::move(configOptionsToBeChecked)...);
   }

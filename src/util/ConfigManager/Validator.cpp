@@ -3,10 +3,9 @@
 // Author: Andre Schlegel (September of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/Validator.h"
-
 #include <functional>
 
+#include "util/ConfigManager/Validator.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
@@ -20,5 +19,10 @@ void ConfigOptionValidatorManager::checkValidator() const {
 
   // All the behavior is defined via a wrapper, so we only have to invoke it.
   std::invoke(wrappedValidatorFunction_);
+}
+
+// ____________________________________________________________________________
+std::string_view ConfigOptionValidatorManager::getDescription() const {
+  return descriptor_;
 }
 }  // namespace ad_utility

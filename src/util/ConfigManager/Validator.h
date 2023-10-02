@@ -97,6 +97,9 @@ class ConfigOptionValidatorManager {
   */
   std::function<void(void)> wrappedValidatorFunction_;
 
+  // A descripton of the invariant, this validator imposes.
+  std::string descriptor_;
+
  public:
   /*
   @brief Create a `ConfigOptionValidatorManager`, which will call the given
@@ -108,6 +111,8 @@ class ConfigOptionValidatorManager {
   represent valid values. Otherwise, it should return an error message. For
   example: There configuration options were all set at run time, or contain
   numbers bigger than 10.
+  @param descriptor A description of the invariant, that exception validator
+  function imposes.
   @param configOptionsToBeChecked Proxies for the configuration options, who
   will be passed to the exception validator function as function arguments,
   after being transformed. Will keep the same order.
@@ -124,9 +129,10 @@ class ConfigOptionValidatorManager {
                                    ExceptionValidatorParameterTypes>...> &&
           (sizeof...(ExceptionValidatorParameterTypes) > 0)
   ConfigOptionValidatorManager(
-      ExceptionValidatorFunc exceptionValidatorFunction,
+      ExceptionValidatorFunc exceptionValidatorFunction, std::string descriptor,
       TranslationFunction translationFunction,
-      const ExceptionValidatorParameterTypes... configOptionsToBeChecked) {
+      const ExceptionValidatorParameterTypes... configOptionsToBeChecked)
+      : descriptor_{std::move(descriptor)} {
     wrappedValidatorFunction_ = [translationFunction =
                                      std::move(translationFunction),
                                  exceptionValidatorFunction =
@@ -169,6 +175,8 @@ class ConfigOptionValidatorManager {
   valid. Should return true, if they are valid.
   @param errorMessage The error message, that will be shown, when the validator
   returns false.
+  @param descriptor A description of the invariant, that validator function
+  imposes.
   @param configOptionsToBeChecked Proxies for the configuration options, who
   will be passed to the exception validator function as function arguments,
   after being transformed. Will keep the same order.
@@ -182,13 +190,14 @@ class ConfigOptionValidatorManager {
                                                  ValidatorParameterTypes>...> &&
           (sizeof...(ValidatorParameterTypes) > 0) ConfigOptionValidatorManager(
       ValidatorFunc validatorFunction, std::string errorMessage,
-      TranslationFunction translationFunction,
+      std::string descriptor, TranslationFunction translationFunction,
       const ValidatorParameterTypes... configOptionsToBeChecked)
       : ConfigOptionValidatorManager(
             transformValidatorIntoExceptionValidator<std::invoke_result_t<
                 TranslationFunction, ValidatorParameterTypes>...>(
                 std::move(validatorFunction), std::move(errorMessage)),
-            std::move(translationFunction), configOptionsToBeChecked...) {}
+            std::move(descriptor), std::move(translationFunction),
+            configOptionsToBeChecked...) {}
 
   /*
   @brief Call the saved validator function with the references given at
@@ -196,6 +205,12 @@ class ConfigOptionValidatorManager {
   signals, that the given arguments weren't valid.
   */
   void checkValidator() const;
+
+  /*
+  @brief Return a user written description of the invariant, that the internally
+  saved validator function, imposes upon the configuration options.
+  */
+  std::string_view getDescription() const;
 };
 
 }  // namespace ad_utility

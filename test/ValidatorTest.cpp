@@ -313,6 +313,7 @@ TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
                 return ErrorMessage{errorMessage};
               };
             },
+            "",
             [](ConstConfigOptionProxy<bool> p) {
               return p.getConfigOption().getValue<bool>();
             },
@@ -326,7 +327,7 @@ TEST(ConfigOptionValidatorManagerTest, ValidatorConstructor) {
          std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
         return ConfigOptionValidatorManager(
             [](const std::same_as<bool> auto... b) { return (b && ...); },
-            std::move(errorMessage),
+            std::move(errorMessage), "",
             [](ConstConfigOptionProxy<bool> p) {
               return p.getConfigOption().getValue<bool>();
             },
