@@ -44,7 +44,9 @@ class WebSocketSession {
   /// The main interface for this class. The HTTP server is supposed to check
   /// if an HTTP request is a websocket upgrade request and delegate further
   /// handling to this method if it is the case. It then accepts the websocket
-  /// connection and "blocks" for the lifetime of it.
+  /// connection and "blocks" for the lifetime of it. Make sure to call this
+  /// coroutine on an explicit strand, and make sure the passed socket's
+  /// executor is that same strand, otherwise there may be race conditions.
   static net::awaitable<void> handleSession(
       QueryHub& queryHub, const http::request<http::string_body>& request,
       tcp::socket socket);

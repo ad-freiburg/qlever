@@ -70,10 +70,6 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
 
     co_await ws_.async_accept(request, boost::asio::use_awaitable);
 
-    auto strand = net::make_strand(ws_.get_executor());
-
-    co_await net::dispatch(strand, net::use_awaitable);
-
     // Experimental operators, see
     // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html
     // for more information

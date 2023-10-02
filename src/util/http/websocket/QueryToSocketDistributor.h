@@ -47,6 +47,8 @@ class QueryToSocketDistributor {
   /// update to the data.
   net::awaitable<void> waitForUpdate() const;
 
+  auto useStrandedAwaitable() const;
+
  public:
   /// Constructor that builds a new strand from the provided io context.
   explicit QueryToSocketDistributor(net::io_context& ioContext,
