@@ -28,12 +28,11 @@ Server::Server(unsigned short port, size_t numThreads,
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
-      allocator_{
-          ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
-          [this](size_t numIdToAllocate) {
-            cache_.makeRoomAsMuchAsPossible(ad_utility::MemorySize::bytes(
-                MAKE_ROOM_SLACK_FACTOR * numIdToAllocate * sizeof(Id)));
-          }},
+      allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
+                 [this](ad_utility::MemorySize numMemoryToAllocate) {
+                   cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
+                                                   numMemoryToAllocate);
+                 }},
       index_{allocator_},
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries

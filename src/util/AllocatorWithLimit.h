@@ -101,10 +101,19 @@ makeAllocationMemoryLeftThreadsafeObject(MemorySize n) {
       ad_utility::Synchronized<detail::AllocationMemoryLeft, SpinLock>>(n)};
 }
 
+/*
+A lambda for use with `AllocatorWithLimit`.
+
+Called, when there is not enough memory left for an allocation and is supposed
+to try to free the given amount of memory.
+
+The lambda is given at construction.
+*/
+using ClearOnAllocation = std::function<void(MemorySize)>;
+
 /// A Noop lambda that will be used as a template default parameter
 /// in the `AllocatorWithLimit` class.
-using ClearOnAllocation = std::function<void(size_t)>;
-inline ClearOnAllocation noClearOnAllocation = [](size_t) {};
+inline ClearOnAllocation noClearOnAllocation = [](MemorySize) {};
 
 /**
  * @brief Class to concurrently allocate memory up to a specified limit on the
@@ -179,7 +188,7 @@ class AllocatorWithLimit {
         memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
             bytesNeeded);
     if (!wasEnoughLeft) {
-      clearOnAllocation_(n);
+      clearOnAllocation_(bytesNeeded);
       memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(bytesNeeded);
     }
     // the actual allocation
