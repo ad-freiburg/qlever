@@ -250,9 +250,10 @@ TEST(ExceptionValidatorConceptTest, ExceptionValidatorConcept) {
 
 @param addAlwaysValidValidatorFunction A function, that generates a
 `ConfigOptionValidatorManager` for the given `ConstConfigOptionProxy<bool>`,
-which manages a validator, that implements the logical `and` on those bools and
-whose error message is the given error message. The function signature should
-look like this: `void func(std::string errorMessage,
+which manages a validator, that implements the logical `and` on those bools,
+whose error message is the given error message and whose description is the
+given description. The function signature should look like this: `void
+func(std::string errorMessage, std::string descriptor,
 std::same_as<ConstConfigOptionProxy<bool>> auto... args)`.
 */
 void doConstructorTest(
@@ -270,8 +271,13 @@ void doConstructorTest(
   ConstConfigOptionProxy<bool> proxy2(opt2);
 
   // Single argument validator.
+  const std::string singleArgumentValidatorDescriptor =
+      "This is the validator with a single argument.";
   ConfigOptionValidatorManager singleArgumentValidatorManager{
-      generateValidatorManager("singleArgumentValidator", proxy1)};
+      generateValidatorManager("singleArgumentValidator",
+                               singleArgumentValidatorDescriptor, proxy1)};
+  ASSERT_STREQ(singleArgumentValidatorDescriptor.data(),
+               singleArgumentValidatorManager.getDescription().data());
   ASSERT_NO_THROW(singleArgumentValidatorManager.checkValidator());
   opt1.setValue(false);
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -280,9 +286,14 @@ void doConstructorTest(
   ASSERT_ANY_THROW(singleArgumentValidatorManager.checkValidator());
 
   // Double argument validator.
+  const std::string doubleArgumentValidatorDescriptor =
+      "This is the validator with two arguments.";
   ConfigOptionValidatorManager doubleArgumentValidatorManager{
-      generateValidatorManager("doubleArgumentValidatorManager", proxy1,
+      generateValidatorManager("doubleArgumentValidatorManager",
+                               doubleArgumentValidatorDescriptor, proxy1,
                                proxy2)};
+  ASSERT_STREQ(doubleArgumentValidatorDescriptor.data(),
+               doubleArgumentValidatorManager.getDescription().data());
   opt1.setValue(true);
   ASSERT_NO_THROW(doubleArgumentValidatorManager.checkValidator());
   opt1.setValue(false);
@@ -301,7 +312,7 @@ void doConstructorTest(
 
 TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
   doConstructorTest(
-      [](std::string errorMessage,
+      [](std::string errorMessage, std::string descriptor,
          std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
         return ConfigOptionValidatorManager(
             [errorMessage =
@@ -313,7 +324,7 @@ TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
                 return ErrorMessage{errorMessage};
               };
             },
-            "",
+            std::move(descriptor),
             [](ConstConfigOptionProxy<bool> p) {
               return p.getConfigOption().getValue<bool>();
             },
@@ -323,11 +334,11 @@ TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
 
 TEST(ConfigOptionValidatorManagerTest, ValidatorConstructor) {
   doConstructorTest(
-      [](std::string errorMessage,
+      [](std::string errorMessage, std::string descriptor,
          std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
         return ConfigOptionValidatorManager(
             [](const std::same_as<bool> auto... b) { return (b && ...); },
-            std::move(errorMessage), "",
+            std::move(errorMessage), std::move(descriptor),
             [](ConstConfigOptionProxy<bool> p) {
               return p.getConfigOption().getValue<bool>();
             },
