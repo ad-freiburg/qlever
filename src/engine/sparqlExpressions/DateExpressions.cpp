@@ -41,7 +41,7 @@ inline auto extractDay = [](std::optional<DateOrLargeYear> d) {
 };
 
 inline auto extractHours = [](std::optional<DateOrLargeYear> d) {
-  if (!d.has_value() || !d->isDate()) {
+  if (!d.has_value() || d->getType() != DateOrLargeYear::Type::DateTime) {
     return Id::makeUndefined();
   }
   auto hours = d.value().getDate().getHour();
@@ -52,7 +52,7 @@ inline auto extractHours = [](std::optional<DateOrLargeYear> d) {
 };
 
 inline auto extractMinutes = [](std::optional<DateOrLargeYear> d) {
-  if (!d.has_value() || !d->isDate()) {
+  if (!d.has_value() || d->getType() != DateOrLargeYear::Type::DateTime) {
     return Id::makeUndefined();
   }
   auto minutes = d.value().getDate().getMinute();
@@ -60,7 +60,7 @@ inline auto extractMinutes = [](std::optional<DateOrLargeYear> d) {
 };
 
 inline auto extractSeconds = [](std::optional<DateOrLargeYear> d) {
-  if (!d.has_value() || !d->isDate()) {
+  if (!d.has_value() || d->getType() != DateOrLargeYear::Type::DateTime) {
     return Id::makeUndefined();
   }
   auto seconds = d.value().getDate().getSecond();

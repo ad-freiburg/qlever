@@ -398,17 +398,26 @@ auto testUnaryExpression =
                          liftVector(operand));
     };
 
-// Test `YearExpression`, `MonthExpression`, and `DayExpression`.
+// Test `YearExpression`, `MonthExpression`, `DayExpression`,
+//  `HoursExpression`, `MinutesExpression`, and `SecondsExpression`.
 TEST(SparqlExpression, dateOperators) {
   // Helper function that asserts that the date operators give the expected
   // result on the given date.
   auto checkYear = std::bind_front(testUnaryExpression, &makeYearExpression);
   auto checkMonth = std::bind_front(testUnaryExpression, &makeMonthExpression);
   auto checkDay = std::bind_front(testUnaryExpression, &makeDayExpression);
-  auto check = [&checkYear, &checkMonth, &checkDay](
-                   const DateOrLargeYear& date, std::optional<int> expectedYear,
+  auto checkHours = std::bind_front(testUnaryExpression, &makeHoursExpression);
+  auto checkMinutes = std::bind_front(testUnaryExpression, &makeMinutesExpression);
+  auto checkSeconds = std::bind_front(testUnaryExpression, &makeSecondsExpression);
+  auto check =
+      [&checkYear, &checkMonth, &checkDay, &checkHours, &checkMinutes, &checkSeconds](
+                   const DateOrLargeYear& date,
+                   std::optional<int> expectedYear,
                    std::optional<int> expectedMonth,
                    std::optional<int> expectedDay,
+                   std::optional<int> expectedHours,
+                   std::optional<int> expectedMinutes,
+                   std::optional<double> expectedSeconds,
                    std::source_location l = std::source_location::current()) {
     auto trace = generateLocationTrace(l);
     auto optToId = [](const auto& opt) {
@@ -418,35 +427,56 @@ TEST(SparqlExpression, dateOperators) {
         return Id::makeUndefined();
       }
     };
+    auto optToIdDouble = [](const auto& opt) {
+      if (opt.has_value()) {
+        return Id::makeFromDouble(opt.value());
+      } else {
+        return Id::makeUndefined();
+      }
+    };
     checkYear(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedYear)});
     checkMonth(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedMonth)});
     checkDay(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedDay)});
+    checkHours(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedHours)});
+    checkMinutes(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedMinutes)});
+    checkSeconds(Ids{Id::makeFromDate(date)}, Ids{optToIdDouble(expectedSeconds)});
+
   };
 
   using D = DateOrLargeYear;
   // Now the checks for dates with varying level of detail.
-  check(D::parseXsdDatetime("1970-04-22T11:53:00"), 1970, 4, 22);
-  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
-  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
-  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
-  check(D::parseXsdDate("0042-12-24"), 42, 12, 24);
-  check(D::parseXsdDate("-0099-07-01"), -99, 7, 1);
-  check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt);
-  check(D::parseXsdDate("0321-07-01"), 321, 7, 1);
-  check(D::parseXsdDate("2321-07-01"), 2321, 7, 1);
+  check(D::parseXsdDatetime("1970-04-22T11:53:42.25"), 1970, 4,
+        22, 11, 53, 42.25);
+  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22,
+        std::nullopt,std::nullopt,std::nullopt);
+  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22,
+        std::nullopt,0,0.0);
+  check(D::parseXsdDate("0042-12-24"), 42, 12, 24,
+        std::nullopt,0,0.0);
+  check(D::parseXsdDate("-0099-07-01"), -99, 7,1,
+        std::nullopt,0,0.0);
+  check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt,
+        std::nullopt,0,0.0);
+  check(D::parseXsdDate("0321-07-01"), 321, 7, 1,
+        std::nullopt,0,0.0);
+  check(D::parseXsdDate("2321-07-01"), 2321, 7, 1,
+        std::nullopt,0,0.0);
 
   // Test behavior of the `largeYear` representation that doesn't store the
   // actual date.
-  check(D::parseGYear("123456"), 123456, std::nullopt, std::nullopt);
-  check(D::parseGYearMonth("-12345-01"), -12345, 1, std::nullopt);
-  check(D::parseGYearMonth("-12345-03"), -12345, 1, std::nullopt);
-  check(D::parseXsdDate("-12345-01-01"), -12345, 1, 1);
-  check(D::parseXsdDate("-12345-03-04"), -12345, 1, 1);
+  check(D::parseGYear("123456"), 123456, std::nullopt, std::nullopt, std::nullopt,std::nullopt,std::nullopt);
+  check(D::parseGYearMonth("-12345-01"), -12345, 1, std::nullopt, std::nullopt,std::nullopt,std::nullopt);
+  check(D::parseGYearMonth("-12345-03"), -12345, 1, std::nullopt, std::nullopt,std::nullopt,std::nullopt);
+  check(D::parseXsdDate("-12345-01-01"), -12345, 1, 1, std::nullopt,std::nullopt,std::nullopt);
+  check(D::parseXsdDate("-12345-03-04"), -12345, 1, 1, std::nullopt,std::nullopt,std::nullopt);
 
   // Invalid inputs for date expressions.
   checkYear(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
   checkMonth(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
   checkDay(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
+  checkHours(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
+  checkMinutes(Ids{Id::makeFromInt(84)}, Ids{Id::makeUndefined()});
+  checkSeconds(Ids{Id::makeFromDouble(120.0123)}, Ids{Id::makeUndefined()});
   auto testYear = std::bind_front(testUnaryExpression, &makeYearExpression);
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
