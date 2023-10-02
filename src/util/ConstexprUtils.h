@@ -7,6 +7,7 @@
 #include <ranges>
 
 #include "util/Exception.h"
+#include "util/Forward.h"
 
 // Various helper functions for compile-time programming.
 
@@ -45,6 +46,28 @@ void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
                       const Function& loopBody) {
   ((loopBody.template operator()<ForLoopIndexes>()), ...);
 }
+
+// A `constexpr` switch statement. Chooses the `MatchingCase` in `FirstCase,
+// Cases...` that is equal to `value` and then calls
+// `function.operator()<MatchingCase>(args...)`.
+template <auto FirstCase, std::same_as<decltype(FirstCase)> auto... Cases>
+auto ConstexprSwitch =
+    [](auto&& function,
+       const std::equality_comparable_with<decltype(FirstCase)> auto& value,
+       auto&&... args) -> decltype(auto) requires(requires {
+  AD_FWD(function).template operator()<FirstCase>(AD_FWD(args)...);
+} && (... &&
+      requires {
+        AD_FWD(function).template operator()<Cases>(AD_FWD(args)...);
+      })) {
+  if (value == FirstCase) {
+    return AD_FWD(function).template operator()<FirstCase>(AD_FWD(args)...);
+  } else if constexpr (sizeof...(Cases) > 0) {
+    return ConstexprSwitch<Cases...>(AD_FWD(function), value, AD_FWD(args)...);
+  } else {
+    AD_FAIL();
+  }
+};
 
 /*
  * @brief 'Converts' a run time value of `size_t` to a compile time value and
