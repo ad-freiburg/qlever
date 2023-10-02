@@ -172,9 +172,9 @@ class AllocatorWithLimit {
 
   // We deliberately let the move assignment call the copy assignment, because
   // when a `vector<..., AllocatorWithLimit>` is moved from, we still want the
-  // moved from vector to have a valid allocator that uses the same memory
-  // limit. Note: We could also implicitly  leave out the move operators, then
-  // the copy operators would be called implicitly, but
+  // vector that was moved from to have a valid allocator that uses the same
+  // memory limit. Note: We could also implicitly leave out the move operators,
+  // then the copy operators would be called implicitly, but
   // 1. It is hard to reason about things that are implicitly not there.
   // 2. This would inhibit move semantics from `std::vector` unless the copy
   // operations are also `noexcept`, so we need

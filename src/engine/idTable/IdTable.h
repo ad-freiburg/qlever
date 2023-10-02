@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "engine/idTable/IdTableRow.h"
-#include "engine/idTable/ResizeWhenMoveVector.h"
+#include "engine/idTable/VectorWithElementwiseMove.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
@@ -116,8 +116,7 @@ class IdTable {
   static constexpr int numStaticColumns = NumColumns;
   // The actual storage is a plain 1D vector with the logical columns
   // concatenated.
-  // using Storage = std::vector<ColumnStorage>;
-  using Storage = detail::ResizeWhenMoveVector<ColumnStorage>;
+  using Storage = detail::VectorWithElementwiseMove<ColumnStorage>;
   using ViewSpans = std::vector<std::span<const T>>;
   using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
@@ -226,12 +225,8 @@ class IdTable {
   IdTable& operator=(const IdTable&) requires isView = default;
 
   // `IdTable`s are movable
-  IdTable(IdTable&& other) noexcept
-      requires(!isView && std::is_move_constructible_v<Data>)
-      = default;
-  IdTable& operator=(IdTable&& other) noexcept
-      requires(!isView && std::is_move_assignable_v<Data>)
-      = default;
+  IdTable(IdTable&& other) noexcept requires(!isView) = default;
+  IdTable& operator=(IdTable&& other) noexcept requires(!isView) = default;
 
  private:
   // Make the other instantiations of `IdTable` friends to allow for conversion

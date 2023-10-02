@@ -749,8 +749,8 @@ TEST(IdTableTest, statusAfterMove) {
     t1.push_back(std::array{V(1), V(42), V(2304)});
 
     auto t2 = std::move(t1);
-    // `t1` is valid and empty after being moved from. In particular, the vector
-    // that contains the vector with the columns has been refilled.
+    // `t1` is valid and still has the same number of columns, but they now are
+    // empty.
     ASSERT_EQ(3, t1.numColumns());
     ASSERT_EQ(0, t1.numRows());
     ASSERT_NO_THROW(t1.push_back(std::array{V(4), V(16), V(23)}));

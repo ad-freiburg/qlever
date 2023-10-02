@@ -100,6 +100,8 @@ TEST(AllocatorWithLimit, unlikelyExceptionsDuringCopyingAndMoving) {
         ad_utility::makeAllocationMemoryLeftThreadsafeObject(20)};
     a2 = std::move(a1);
   };
+  // The move operations call the copy operations which throw, but are declared
+  // `noexcept`, so the program dies when they are called.
   ASSERT_DEATH(move(), "The move constructor of `AllocatorWithLimit`");
   ASSERT_DEATH(moveAssign(),
                "The move assignment operator of `AllocatorWithLimit`");
