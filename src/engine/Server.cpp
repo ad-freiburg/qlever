@@ -4,6 +4,8 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include "engine/Server.h"
+
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -11,7 +13,6 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
-#include "engine/Server.h"
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
