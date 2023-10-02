@@ -323,8 +323,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
         b["value"] = entitystr.substr(1, quotePos - 1);
         b["type"] = "literal";
         // Look for a language tag or type.
-        if (quotePos < entitystr.size() - 1 &&
-            entitystr[quotePos + 1] == '@') {
+        if (quotePos < entitystr.size() - 1 && entitystr[quotePos + 1] == '@') {
           b["xml:lang"] = entitystr.substr(quotePos + 2);
         } else if (quotePos < entitystr.size() - 2 &&
                    entitystr[quotePos + 1] == '^') {
@@ -509,8 +508,7 @@ static std::string idToXMLBinding(std::string_view var, Id id,
       } else {
         std::string_view innerValue = entitystr.substr(1, quotePos - 1);
         // Look for a language tag or type.
-        if (quotePos < entitystr.size() - 1 &&
-            entitystr[quotePos + 1] == '@') {
+        if (quotePos < entitystr.size() - 1 && entitystr[quotePos + 1] == '@') {
           std::string_view langtag = entitystr.substr(quotePos + 2);
           append("<literal xml:lang=\""sv, langtag, "\">"sv, escape(innerValue),
                  "</literal>");
