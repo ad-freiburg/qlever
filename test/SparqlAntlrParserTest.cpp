@@ -200,7 +200,6 @@ TEST(SparqlExpressionParser, First) {
   auto resultAsExpression = std::move(resultofParse.resultOfParse_);
 
   VariableToColumnMap map;
-  using namespace ad_utility::memory_literals;
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::testing::makeAllocator()};
   IdTable table{alloc};
