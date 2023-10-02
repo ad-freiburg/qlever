@@ -11,8 +11,8 @@
 #include <functional>
 #include <memory>
 
-#include "Synchronized.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Synchronized.h"
 
 namespace ad_utility {
 
