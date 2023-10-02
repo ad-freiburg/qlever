@@ -46,11 +46,13 @@ void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
   ((loopBody.template operator()<ForLoopIndexes>()), ...);
 }
 
-// A constexpr switch (todo comment).
-template <auto FirstCase, auto... Cases>
-decltype(auto) ConstexprSwitch(auto&& function, const auto& value) {
+// A `constexpr` switch statement. Chooses the `MatchingCase` in `FirstCase,
+// Cases...` that is equal to `value` and then calls
+// `function.operator()<MatchingCase>(args...)`.
+template <auto FirstCase, auto... Cases> requires (... && std::equality_comparable_with<decltype(FirstCase), decltype(Cases)> )
+decltype(auto) ConstexprSwitch(auto&& function, const decltype(FirstCase)& value, auto&&...args) {
   if (value == FirstCase) {
-    return AD_FWD(function).template operator()<FirstCase>();
+    return AD_FWD(function).template operator()<FirstCase>(AD_FWD(args)...);
   } else if constexpr (sizeof...(Cases) > 0) {
     return ConstexprSwitch<Cases...>(AD_FWD(function), value);
   } else {
