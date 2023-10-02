@@ -777,6 +777,42 @@ TEST(SparqlExpression, concatExpression) {
                              ::testing::ContainsRegex("<bim>, <bam>)")));
 }
 
+TEST(SparqlExpression, ReplaceExpression) {
+  auto checkReplace =
+      std::bind_front(testNaryExpressionVec, makeReplaceExpression);
+  // A simple replace( no regexes involved).
+  checkReplace(IdOrStrings{"null", "Eins", "zwEi", "drEi", U, U},
+               std::tuple{IdOrStrings{"null", "eins", "zwei", "drei", U, U},
+                          IdOrString{"e"}, IdOrString{"E"}});
+  // A somewhat more involved regex
+  checkReplace(IdOrStrings{"null", "Xs", "zwei", "drei", U, U},
+               std::tuple{IdOrStrings{"null", "eins", "zwei", "drei", U, U},
+                          IdOrString{"e.[a-z]"}, IdOrString{"X"}});
+
+  // Case-insensitive matching using the hack for google regex:
+  checkReplace(IdOrStrings{"null", "xxns", "zwxx", "drxx"},
+               std::tuple{IdOrStrings{"null", "eIns", "zwEi", "drei"},
+                          IdOrString{"(?i)[ei]"}, IdOrString{"x"}});
+
+  // Multiple matches withing the same string
+  checkReplace(
+      IdOrString{"wEeDEflE"},
+      std::tuple{IdOrString{"weeeDeeflee"}, IdOrString{"ee"}, IdOrString{"E"}});
+
+  // Illegal regex.
+  checkReplace(IdOrStrings{U, U, U, U, U, U},
+               std::tuple{IdOrStrings{"null", "Xs", "zwei", "drei", U, U},
+                          IdOrString{"e.[a-z"}, IdOrString{"X"}});
+  // Undefined regex
+  checkReplace(IdOrStrings{U, U, U, U, U, U},
+               std::tuple{IdOrStrings{"null", "Xs", "zwei", "drei", U, U}, U,
+                          IdOrString{"X"}});
+  // Illegal replacement.
+  checkReplace(IdOrStrings{U, U, U, U, U, U},
+               std::tuple{IdOrStrings{"null", "Xs", "zwei", "drei", U, U},
+                          IdOrString{"e"}, Id::makeUndefined()});
+}
+
 TEST(SparqlExpression, literalExpression) {
   TestContext ctx;
   StringLiteralExpression expr{TripleComponent::Literal{

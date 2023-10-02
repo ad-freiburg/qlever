@@ -252,6 +252,28 @@ using StrBeforeExpression =
     StringExpressionImpl<2, LiftStringFunction<decltype(strBefore)>,
                          StringValueGetter>;
 
+[[maybe_unused]] auto replaceImpl =
+    [](std::optional<std::string> input,
+       const std::unique_ptr<re2::RE2>& pattern,
+       const std::optional<std::string>& replacement) -> IdOrString {
+  if (!input.has_value() || !pattern || !replacement.has_value()) {
+    return Id::makeUndefined();
+  }
+  auto& in = input.value();
+  const auto& pat = *pattern;
+  // Check for invalid regexes.
+  if (!pat.ok()) {
+    return Id::makeUndefined();
+  }
+  const auto& repl = replacement.value();
+  re2::RE2::GlobalReplace(&in, pat, repl);
+  return std::move(in);
+};
+
+using ReplaceExpression =
+    StringExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
+                         StringValueGetter>;
+
 // CONCAT
 class ConcatExpression : public detail::VariadicExpression {
  public:
@@ -377,6 +399,10 @@ Expr makeStrAfterExpression(Expr child1, Expr child2) {
 }
 Expr makeStrBeforeExpression(Expr child1, Expr child2) {
   return make<StrBeforeExpression>(child1, child2);
+}
+
+Expr makeReplaceExpression(Expr input, Expr pattern, Expr repl) {
+  return make<ReplaceExpression>(input, pattern, repl);
 }
 Expr makeContainsExpression(Expr child1, Expr child2) {
   return make<ContainsExpression>(child1, child2);

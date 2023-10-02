@@ -167,3 +167,9 @@ IdTable createRandomlyFilledIdTable(
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::vector<JoinColumnAndBounds>& joinColumnsAndBounds);
+
+inline IdTable createRandomlyFilledIdTable(const size_t numberRows,
+                                           const size_t numberColumns) {
+  return createRandomlyFilledIdTable(numberRows, numberColumns,
+                                     std::vector<JoinColumnAndBounds>{});
+}

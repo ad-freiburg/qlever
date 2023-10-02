@@ -50,6 +50,11 @@ class HttpClientImpl {
       std::string_view contentTypeHeader = "text/plain",
       std::string_view acceptHeader = "text/plain");
 
+  // Simple way to establish a websocket connection
+  boost::beast::http::response<boost::beast::http::string_body>
+  sendWebSocketHandshake(const boost::beast::http::verb& method,
+                         std::string_view host, std::string_view target);
+
  private:
   // The connection stream and associated objects. See the implementation of
   // `openStream` for why we need all of them, and not just `stream_`.

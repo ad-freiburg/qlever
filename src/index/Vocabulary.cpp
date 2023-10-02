@@ -100,12 +100,15 @@ bool Vocabulary<S, C, I>::shouldBeExternalized(const string& word) const {
 // ___________________________________________________________________
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldEntityBeExternalized(const string& word) const {
-  for (const auto& p : _externalizedPrefixes) {
-    if (word.starts_with(p)) {
-      return true;
-    }
+  // Never externalize the internal URIs as they are sometimes added before or
+  // after the externalization happens and we thus get inconsistent behavior
+  // etc. for `ql:langtag`.
+  if (word.starts_with(INTERNAL_ENTITIES_URI_PREFIX)) {
+    return false;
   }
-  return false;
+  return std::ranges::any_of(_externalizedPrefixes, [&word](const auto& p) {
+    return word.starts_with(p);
+  });
 }
 
 // ___________________________________________________________________

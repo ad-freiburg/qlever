@@ -5,6 +5,8 @@
 #ifndef QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H
 #define QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H
 
+#include <re2/re2.h>
+
 #include "../../global/Id.h"
 #include "../ResultTable.h"
 #include "./SparqlExpressionTypes.h"
@@ -165,6 +167,21 @@ struct LiteralFromIdGetter {
                                    const EvaluationContext* ctx) const {
     return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
                       std::move(s));
+  }
+};
+
+// Convert the input into a `unique_ptr<RE2>`. Return nullptr if the input is
+// not convertible to a string.
+struct RegexValueGetter {
+  template <SingleExpressionResult S>
+  requires std::invocable<StringValueGetter, S&&, const EvaluationContext*>
+  std::unique_ptr<re2::RE2> operator()(S&& input,
+                                       const EvaluationContext* context) const {
+    auto str = StringValueGetter{}(AD_FWD(input), context);
+    if (!str.has_value()) {
+      return nullptr;
+    }
+    return std::make_unique<re2::RE2>(str.value(), re2::RE2::Quiet);
   }
 };
 
