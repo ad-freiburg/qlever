@@ -8,23 +8,24 @@
 
 namespace ad_utility::websocket {
 
-net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+template <bool isSender>
+net::awaitable<std::shared_ptr<
+    QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
 QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
   co_await net::dispatch(net::bind_executor(globalStrand_, net::use_awaitable));
   while (socketDistributors_.contains(queryId)) {
-    if (auto ptr = socketDistributors_.at(queryId).lock()) {
-      // Currently we don't make a difference between acquiring a receiving
-      // or a sending distributor. For sending distributors we need to wait
-      // until the entry has been removed from the map. For receiving
-      // distributors just picking up the instance is equally justifiable and
-      // tests ensure it's also correct. For now, it will be kept simple.
-      if (!(co_await ptr->isFinished())) {
-        co_return ptr;
+    auto& reference = socketDistributors_.at(queryId);
+    if (auto ptr = reference.pointer_.lock()) {
+      if constexpr (isSender) {
+        // Ensure only single sender reference is acquired for a single session
+        AD_CONTRACT_CHECK(!reference.started_);
+        reference.started_ = true;
       }
+      co_return ptr;
     }
     // There's the unlikely case where the reference counter reached zero and
     // the weak pointer can no longer create a shared pointer, but the
-    // destructor is waiting for execution on `singleThreadPool_`. In this case
+    // destructor is waiting for execution on `globalStrand_`. In this case
     // re-schedule this coroutine to be executed after destruction.
     co_await net::post(net::bind_executor(globalStrand_, net::use_awaitable));
   }
@@ -42,7 +43,8 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
           ioContext_.poll_one();
         }
       });
-  socketDistributors_.emplace(queryId, distributor);
+  socketDistributors_.emplace(queryId,
+                              WeakReferenceHolder{distributor, isSender});
   co_return distributor;
 }
 
@@ -50,15 +52,15 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
 
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForSending(QueryId queryId) {
-  return sameExecutor(createOrAcquireDistributorInternal(std::move(queryId)));
+  return sameExecutor(
+      createOrAcquireDistributorInternal<true>(std::move(queryId)));
 }
 
 // _____________________________________________________________________________
 
 net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForReceiving(QueryId queryId) {
-  auto result = co_await sameExecutor(
-      createOrAcquireDistributorInternal(std::move(queryId)));
-  co_return result;
+  return sameExecutor(
+      createOrAcquireDistributorInternal<false>(std::move(queryId)));
 }
 }  // namespace ad_utility::websocket

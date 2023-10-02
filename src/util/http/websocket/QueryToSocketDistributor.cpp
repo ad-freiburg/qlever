@@ -76,12 +76,4 @@ QueryToSocketDistributor::waitForNextDataPiece(size_t index) const {
     co_return nullptr;
   }
 }
-
-// _____________________________________________________________________________
-
-net::awaitable<bool> QueryToSocketDistributor::isFinished() const {
-  co_await net::dispatch(net::bind_executor(strand_, net::use_awaitable));
-  co_return finished_;
-}
-
 }  // namespace ad_utility::websocket

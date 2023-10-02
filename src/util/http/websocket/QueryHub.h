@@ -20,15 +20,29 @@ namespace ad_utility::websocket {
 /// used once and from then onwards only the `QueryToSocketDistributor` instance
 /// is used.
 class QueryHub {
-  using PointerType = std::weak_ptr<QueryToSocketDistributor>;
+  /// Helper type to make type T const if B is false
+  template <bool B, typename T>
+  using ConditionalConst = std::conditional_t<B, T, const T>;
+
+  /// Stores a weak pointer and tracks if it was handed out for sending.
+  struct WeakReferenceHolder {
+    std::weak_ptr<QueryToSocketDistributor> pointer_;
+    bool started_ = false;
+
+    WeakReferenceHolder(std::weak_ptr<QueryToSocketDistributor> pointer,
+                        bool started)
+        : pointer_{std::move(pointer)}, started_{started} {}
+  };
 
   net::io_context& ioContext_;
   /// Thread pool with single thread for synchronization
   net::strand<net::any_io_executor> globalStrand_;
-  absl::flat_hash_map<QueryId, PointerType> socketDistributors_{};
+  absl::flat_hash_map<QueryId, WeakReferenceHolder> socketDistributors_{};
 
   /// Implementation of createOrAcquireDistributor
-  net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+  template <bool isSender>
+  net::awaitable<
+      std::shared_ptr<ConditionalConst<isSender, QueryToSocketDistributor>>>
       createOrAcquireDistributorInternal(QueryId);
 
  public:
