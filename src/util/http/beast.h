@@ -18,11 +18,17 @@
 #include "util/Coroutines.h"
 
 // libc++ needs <experimental/coroutine>, libstdc++ needs <coroutine>
+#ifndef BOOST_ASIO_HAS_CO_AWAIT
 #define BOOST_ASIO_HAS_CO_AWAIT
+#endif
+#ifndef BOOST_ASIO_HAS_STD_COROUTINE
 #define BOOST_ASIO_HAS_STD_COROUTINE
+#endif
 
 // Needed for libc++ in C++20 mode, because std::result_of was removed.
+#ifndef BOOST_ASIO_HAS_STD_INVOKE_RESULT
 #define BOOST_ASIO_HAS_STD_INVOKE_RESULT
+#endif
 
 #include <boost/beast/version.hpp>
 

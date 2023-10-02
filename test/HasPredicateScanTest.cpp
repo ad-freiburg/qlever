@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <cstdio>
 
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTestHelpers.h"

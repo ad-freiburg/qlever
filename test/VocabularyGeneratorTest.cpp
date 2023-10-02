@@ -193,15 +193,19 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     ItemMapArray arr;
     auto& s = arr[0];
     s["A"] = {5, dummy};
-    s["a"] = {6, dummy};
-    s["Ba"] = {7, dummy};
-    s["car"] = {8, dummy};
+    s["acb"] = {6, dummy};
+    s["b"] = {7, dummy};
+    s["Ba"] = {8, dummy};
+    s["car"] = {9, dummy};
     TextVocabulary v;
     std::string basename = "_tmp_testidx";
     auto ptr = std::make_shared<const ItemMapArray>(std::move(arr));
     writePartialIdMapToBinaryFileForMerging(
         ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
-        [](const auto& a, const auto& b) { return a.first < b.first; }, false);
+        [&v](const auto& a, const auto& b) {
+          return v.getCaseComparator()(a.first, b.first);
+        },
+        false);
 
     {
       VocabularyMerger m;
@@ -213,10 +217,11 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
                         internalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-    ASSERT_EQ(V(0), idMap[V(5)]);
-    ASSERT_EQ(V(1), idMap[V(7)]);
-    ASSERT_EQ(V(2), idMap[V(6)]);
-    ASSERT_EQ(V(3), idMap[V(8)]);
+    EXPECT_EQ(V(0), idMap[V(5)]);
+    EXPECT_EQ(V(1), idMap[V(6)]);
+    EXPECT_EQ(V(2), idMap[V(7)]);
+    EXPECT_EQ(V(3), idMap[V(8)]);
+    EXPECT_EQ(V(4), idMap[V(9)]);
     auto res = system("rm _tmp_testidx*");
     (void)res;
   }

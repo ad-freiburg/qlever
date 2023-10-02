@@ -7,8 +7,10 @@
 #include "./util/AllocatorTestHelpers.h"
 #include "absl/cleanup/cleanup.h"
 #include "engine/QueryExecutionContext.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
+#include "util/MemorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
 // `QueryExecutionContext` that store a small example knowledge graph. Those can
@@ -21,7 +23,8 @@ namespace ad_utility::testing {
 inline Index makeIndexWithTestSettings() {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
-  index.stxxlMemoryInBytes() = 1024ul * 1024ul * 50;
+  EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  index.stxxlMemory() = 50_MB;
   return index;
 }
 
