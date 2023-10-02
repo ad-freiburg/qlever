@@ -7,6 +7,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/GTestHelpers.h"
 
 using ad_utility::AllocatorWithLimit;
 using ad_utility::makeAllocationMemoryLeftThreadsafeObject;
@@ -20,14 +21,10 @@ TEST(AllocatorWithLimit, initial) {
   [[maybe_unused]] auto ptr = all.allocate(250'000);
   ASSERT_EQ(all.amountMemoryLeft(), 1_MB);
   ASSERT_EQ(std::as_const(all).amountMemoryLeft(), 1_MB);
-  try {
-    all.allocate(500'000);
-    FAIL() << "Should have thrown";
-  } catch (const ad_utility::detail::AllocationExceedsLimitException& e) {
-    ASSERT_THAT(e.what(),
-                ::testing::StartsWith(
-                    "Tried to allocate 2 MB, but only 1 MB were available."));
-  }
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      all.allocate(500'000),
+      ::testing::StartsWith(
+          "Tried to allocate 2 MB, but only 1 MB were available."));
   all.deallocate(ptr, 250'000);
 }
 

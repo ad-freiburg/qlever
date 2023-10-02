@@ -10,12 +10,13 @@
 #include "./util/IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Minus.h"
+#include "util/AllocatorTestHelpers.h"
 
 namespace {
 auto table(size_t cols) {
   using namespace ad_utility::memory_literals;
   ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1_MB)};
+      ad_utility::testing::makeAllocator()};
   return IdTable(cols, std::move(alloc));
 }
 auto V = ad_utility::testing::VocabId;

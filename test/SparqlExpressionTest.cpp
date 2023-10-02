@@ -14,6 +14,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
 
 namespace {
@@ -98,7 +99,7 @@ auto testNaryExpression = [](auto&& makeExpression,
                              SingleExpressionResult auto&&... operands) {
   using namespace ad_utility::memory_literals;
   ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1_kB)};
+      ad_utility::testing::makeAllocator()};
   VariableToColumnMap map;
   LocalVocab localVocab;
   IdTable table{alloc};
