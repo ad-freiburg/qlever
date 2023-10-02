@@ -80,14 +80,15 @@ TEST(AllocatorWithLimit, unlikelyExceptionsDuringCopyingAndMoving) {
     }
     ThrowOnCopy& operator=(ThrowOnCopy&&) noexcept = default;
     ThrowOnCopy(ThrowOnCopy&&) noexcept = default;
-    void operator()(size_t) const {}
+    void operator()(ad_utility::MemorySize) const {}
   };
   AllocatorWithLimit<int> a1{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(20), ThrowOnCopy{}};
-  auto copy = [&a1]() { auto a2 = a1; };
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(20_B),
+      ThrowOnCopy{}};
+  auto copy = [&a1]() { [[maybe_unused]] auto a2 = a1; };
   auto copyAssign = [&a1]() {
     AllocatorWithLimit<int> a2{
-        ad_utility::makeAllocationMemoryLeftThreadsafeObject(20)};
+        ad_utility::makeAllocationMemoryLeftThreadsafeObject(20_B)};
     a2 = a1;
   };
   ASSERT_THROW(copy(), std::runtime_error);
@@ -95,7 +96,7 @@ TEST(AllocatorWithLimit, unlikelyExceptionsDuringCopyingAndMoving) {
   auto move = [&a1]() { auto a2 = std::move(a1); };
   auto moveAssign = [&a1]() {
     AllocatorWithLimit<int> a2{
-        ad_utility::makeAllocationMemoryLeftThreadsafeObject(20)};
+        ad_utility::makeAllocationMemoryLeftThreadsafeObject(20_B)};
     a2 = std::move(a1);
   };
   // The move operations call the copy operations which throw, but are declared
