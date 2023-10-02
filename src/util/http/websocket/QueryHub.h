@@ -53,6 +53,7 @@ class QueryHub {
   /// for the provided query id if there already is one. The bool parameter
   /// should be set to true if the caller of this methods intends to use
   /// the distributor object to send data, rather than just receiving it.
+  /// This will ensure there can only ever be one sender for a single query!
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
       createOrAcquireDistributorForSending(QueryId);
 
@@ -60,6 +61,7 @@ class QueryHub {
   /// `QueryToSocketDistributor` that can only used for receiving instead.
   net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
       createOrAcquireDistributorForReceiving(QueryId);
+
   /// Expose strand for testing
   auto getStrand() const { return globalStrand_; }
 };

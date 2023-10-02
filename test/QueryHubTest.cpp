@@ -151,3 +151,15 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
   EXPECT_FALSE(!comparison.owner_before(distributor) &&
                !distributor.owner_before(comparison));
 }
+
+// _____________________________________________________________________________
+
+ASYNC_TEST(QueryHub, ensureOnlyOneSenderCanExist) {
+  QueryHub queryHub{ioContext};
+  QueryId queryId = QueryId::idFromString("abc");
+
+  [[maybe_unused]] auto distributor =
+      co_await queryHub.createOrAcquireDistributorForSending(queryId);
+  EXPECT_THROW(co_await queryHub.createOrAcquireDistributorForSending(queryId),
+               ad_utility::Exception);
+}
