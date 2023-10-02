@@ -35,11 +35,12 @@ class QueryHub {
   };
 
   net::io_context& ioContext_;
-  /// Thread pool with single thread for synchronization
+  /// Strand for synchronization
   net::strand<net::any_io_executor> globalStrand_;
   absl::flat_hash_map<QueryId, WeakReferenceHolder> socketDistributors_{};
 
-  /// Implementation of createOrAcquireDistributor
+  /// Implementation of createOrAcquireDistributorForSending and
+  /// createOrAcquireDistributorForReceiving
   template <bool isSender>
   net::awaitable<
       std::shared_ptr<ConditionalConst<isSender, QueryToSocketDistributor>>>
@@ -49,16 +50,16 @@ class QueryHub {
   explicit QueryHub(net::io_context& ioContext)
       : ioContext_{ioContext}, globalStrand_{net::make_strand(ioContext)} {}
 
-  /// Creates a new `QueryToSocketDistributor` or returns the pre-existing
-  /// for the provided query id if there already is one. The bool parameter
-  /// should be set to true if the caller of this methods intends to use
-  /// the distributor object to send data, rather than just receiving it.
-  /// This will ensure there can only ever be one sender for a single query!
+  /// Create a new `QueryToSocketDistributor` or return a pre-existing one for
+  /// the provided query id if there already is one. This can only ever be
+  /// called once per session, otherwise there will be an exception. There
+  /// can only ever be one sender.
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
       createOrAcquireDistributorForSending(QueryId);
 
-  /// Similar to `createOrAcquireDistributorForSending` but returns a const
-  /// `QueryToSocketDistributor` that can only used for receiving instead.
+  /// Returns a const `QueryToSocketDistributor` that can only used to receive
+  /// messages. I contrast to `createOrAcquireDistributorForSending` this can be
+  /// called arbitrarily often during the lifetime of a single query session.
   net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
       createOrAcquireDistributorForReceiving(QueryId);
 
