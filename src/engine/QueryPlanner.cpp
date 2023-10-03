@@ -857,12 +857,12 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
       return seedFromIri(left, path, right);
     case PropertyPath::Operation::SEQUENCE:
       return seedFromSequence(left, path, right);
-    case PropertyPath::Operation::TRANSITIVE:
-      return seedFromTransitive(left, path, right);
-    case PropertyPath::Operation::TRANSITIVE_MAX:
-      return seedFromTransitiveMax(left, path, right);
-    case PropertyPath::Operation::TRANSITIVE_MIN:
-      return seedFromTransitiveMin(left, path, right);
+    case PropertyPath::Operation::ZERO_OR_MORE:
+      return seedFromZeroOrMore(left, path, right);
+    case PropertyPath::Operation::ONE_OR_MORE:
+      return seedFromOneOrMore(left, path, right);
+    case PropertyPath::Operation::ZERO_OR_ONE:
+      return seedFromZeroOrOne(left, path, right);
   }
   AD_FAIL();
 }
@@ -1050,7 +1050,51 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
+std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromZeroOrMore(
+    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& right) {
+  Variable innerLeft = generateUniqueVarName();
+  Variable innerRight = generateUniqueVarName();
+  std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
+      seedFromPropertyPath(innerLeft, path._children[0], innerRight);
+  std::shared_ptr<ParsedQuery::GraphPattern> p =
+      std::make_shared<ParsedQuery::GraphPattern>();
+  p::TransPath transPath;
+  transPath._left = left;
+  transPath._right = right;
+  transPath._innerLeft = innerLeft;
+  transPath._innerRight = innerRight;
+  transPath._min = 0;
+  transPath._max = std::numeric_limits<size_t>::max();
+  transPath._childGraphPattern = *childPlan;
+  p->_graphPatterns.emplace_back(std::move(transPath));
+  return p;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromZeroOrOne(
+    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& right) {
+  Variable innerLeft = generateUniqueVarName();
+  Variable innerRight = generateUniqueVarName();
+  std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
+      seedFromPropertyPath(innerLeft, path._children[0], innerRight);
+  std::shared_ptr<ParsedQuery::GraphPattern> p =
+      std::make_shared<ParsedQuery::GraphPattern>();
+  p::TransPath transPath;
+  transPath._left = left;
+  transPath._right = right;
+  transPath._innerLeft = innerLeft;
+  transPath._innerRight = innerRight;
+  transPath._min = 0;
+  transPath._max = 1;
+  transPath._childGraphPattern = *childPlan;
+  p->_graphPatterns.emplace_back(std::move(transPath));
+  return p;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromOneOrMore(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   Variable innerLeft = generateUniqueVarName();
@@ -1066,50 +1110,6 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
   transPath._innerRight = innerRight;
   transPath._min = 1;
   transPath._max = std::numeric_limits<size_t>::max();
-  transPath._childGraphPattern = *childPlan;
-  p->_graphPatterns.emplace_back(std::move(transPath));
-  return p;
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
-    const TripleComponent& left, const PropertyPath& path,
-    const TripleComponent& right) {
-  Variable innerLeft = generateUniqueVarName();
-  Variable innerRight = generateUniqueVarName();
-  std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
-      seedFromPropertyPath(innerLeft, path._children[0], innerRight);
-  std::shared_ptr<ParsedQuery::GraphPattern> p =
-      std::make_shared<ParsedQuery::GraphPattern>();
-  p::TransPath transPath;
-  transPath._left = left;
-  transPath._right = right;
-  transPath._innerLeft = innerLeft;
-  transPath._innerRight = innerRight;
-  transPath._min = std::max(uint_fast16_t(1), path._limit);
-  transPath._max = std::numeric_limits<size_t>::max();
-  transPath._childGraphPattern = *childPlan;
-  p->_graphPatterns.emplace_back(std::move(transPath));
-  return p;
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
-    const TripleComponent& left, const PropertyPath& path,
-    const TripleComponent& right) {
-  Variable innerLeft = generateUniqueVarName();
-  Variable innerRight = generateUniqueVarName();
-  std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
-      seedFromPropertyPath(innerLeft, path._children[0], innerRight);
-  std::shared_ptr<ParsedQuery::GraphPattern> p =
-      std::make_shared<ParsedQuery::GraphPattern>();
-  p::TransPath transPath;
-  transPath._left = left;
-  transPath._right = right;
-  transPath._innerLeft = innerLeft;
-  transPath._innerRight = innerRight;
-  transPath._min = 1;
-  transPath._max = path._limit;
   transPath._childGraphPattern = *childPlan;
   p->_graphPatterns.emplace_back(std::move(transPath));
   return p;
