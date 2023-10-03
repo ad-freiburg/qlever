@@ -105,11 +105,6 @@ class ExportQueryExecutionTrees {
       ad_utility::Timer& requestTimer, uint64_t maxSend);
 
   // ___________________________________________________________________________
-  static ad_utility::streams::stream_generator
-  computeConstructQueryResultAsTurtle(const ParsedQuery& query,
-                                      const QueryExecutionTree& qet);
-
-  // ___________________________________________________________________________
   static nlohmann::json selectQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
@@ -151,13 +146,6 @@ class ExportQueryExecutionTrees {
       LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res);
 
   // ___________________________________________________________________________
-  static ad_utility::streams::stream_generator constructQueryResultToTurtle(
-      const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples,
-      LimitOffsetClause limitAndOffset,
-      std::shared_ptr<const ResultTable> resultTable);
-
-  // ___________________________________________________________________________
   static nlohmann::json selectQueryResultToSparqlJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
@@ -166,7 +154,7 @@ class ExportQueryExecutionTrees {
 
   // ___________________________________________________________________________
   template <MediaType format>
-  static ad_utility::streams::stream_generator constructQueryResultToTsvOrCsv(
+  static ad_utility::streams::stream_generator constructQueryResultToStream(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset,
@@ -174,8 +162,7 @@ class ExportQueryExecutionTrees {
 
   // _____________________________________________________________________________
   template <MediaType format>
-  static ad_utility::streams::stream_generator
-  selectQueryResultToCsvTsvOrBinary(
+  static ad_utility::streams::stream_generator selectQueryResultToStream(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       LimitOffsetClause limitAndOffset);

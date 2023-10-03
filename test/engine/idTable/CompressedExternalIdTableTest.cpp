@@ -225,14 +225,17 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
   // We have obtained a generator, but have not yet started it, but pushing is
   // already disabled to make the two-phase interface more consistent.
 
-  ASSERT_ANY_THROW(writer.clear());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      pushAll(), ::testing::ContainsRegex("currently being iterated"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writer.clear(), ::testing::ContainsRegex("currently being iterated"));
 
   auto it = generator.begin();
   // TODO<joka921> check the exception message;
-  // TODO<joka921> To also be able to call `pushAll` here we need the correct
-  // move semantics for the `IdTable` class.
-  // ASSERT_ANY_THROW(pushAll());
-  ASSERT_ANY_THROW(writer.clear());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      pushAll(), ::testing::ContainsRegex("currently being iterated"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writer.clear(), ::testing::ContainsRegex("currently being iterated"));
 
   for (; it != generator.end(); ++it) {
   }

@@ -42,3 +42,9 @@ TEST(RdfEscapingTest, normalizedContentFromLiteralOrIri) {
   ASSERT_EQ(f("\"bimm\"@en"), "bimm");
   ASSERT_EQ(f("\"bumm\"^^<http://www.mycustomiris.com/sometype>"), "bumm");
 }
+
+// ___________________________________________________________________________
+TEST(RdfEscapingTest, escapeForXml) {
+  ASSERT_EQ(escapeForXml("abc\n\t;"), "abc\n\t;");
+  ASSERT_EQ(escapeForXml("a&b\"'c<d>"), "a&amp;b&quot;&apos;c&lt;d&gt;");
+}

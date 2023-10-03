@@ -23,6 +23,7 @@
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "util/AllocatorTestHelpers.h"
 #include "util/SourceLocation.h"
 
 using namespace sparqlParserHelpers;
@@ -200,7 +201,7 @@ TEST(SparqlExpressionParser, First) {
 
   VariableToColumnMap map;
   ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+      ad_utility::testing::makeAllocator()};
   IdTable table{alloc};
   LocalVocab localVocab;
   sparqlExpression::EvaluationContext input{*ad_utility::testing::getQec(), map,
