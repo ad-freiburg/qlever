@@ -51,14 +51,14 @@ class UniqueCleanup {
   /// immediately destructing the new instance
   void invokeManuallyAndCancel() && {
     if (active_) {
-      std::invoke(function_, std::move(value_));
+      std::invoke(std::move(function_), std::move(value_));
       active_ = false;
     }
   }
 
   ~UniqueCleanup() {
     if (active_) {
-      std::invoke(function_, std::move(value_));
+      std::invoke(std::move(function_), std::move(value_));
     }
   }
 };

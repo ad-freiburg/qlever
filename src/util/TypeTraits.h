@@ -10,6 +10,8 @@
 #include <variant>
 #include <vector>
 
+#include "util/Forward.h"
+
 namespace ad_utility {
 
 namespace detail {
