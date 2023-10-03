@@ -70,7 +70,7 @@ class SparqlTriple {
 
   SparqlTriple(TripleComponent s, const std::string& p_iri, TripleComponent o)
       : _s(std::move(s)),
-        _p(PropertyPath::Operation::IRI, 0, p_iri, {}),
+        _p(PropertyPath::fromIri(p_iri)),
         _o(std::move(o)) {}
 
   bool operator==(const SparqlTriple& other) const {
