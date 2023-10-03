@@ -80,6 +80,7 @@ class Row {
   const_iterator end() const { return {this, numColumns()}; };
 
   size_t numColumns() const { return data_.size(); }
+  size_t size() const { return numColumns(); }
 
   friend void swap(Row& a, Row& b) { std::swap(a.data_, b.data_); }
 

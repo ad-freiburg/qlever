@@ -12,7 +12,6 @@
 #include "util/http/websocket/QueryToSocketDistributor.h"
 
 namespace ad_utility::websocket {
-using StrandType = net::strand<net::any_io_executor>;
 
 /// Class that provides the functionality to create and/or acquire a
 /// `QueryToSocketDistributor`. All operations are synchronized on an exclusive
@@ -21,31 +20,51 @@ using StrandType = net::strand<net::any_io_executor>;
 /// used once and from then onwards only the `QueryToSocketDistributor` instance
 /// is used.
 class QueryHub {
-  using PointerType = std::weak_ptr<QueryToSocketDistributor>;
+  /// Helper type to make type T const if B is false
+  template <bool B, typename T>
+  using ConditionalConst = std::conditional_t<B, T, const T>;
+
+  /// Stores a weak pointer and tracks if it was handed out for sending.
+  struct WeakReferenceHolder {
+    std::weak_ptr<QueryToSocketDistributor> pointer_;
+    bool started_ = false;
+
+    WeakReferenceHolder(std::weak_ptr<QueryToSocketDistributor> pointer,
+                        bool started)
+        : pointer_{std::move(pointer)}, started_{started} {}
+  };
 
   net::io_context& ioContext_;
-  StrandType globalStrand_;
-  absl::flat_hash_map<QueryId, PointerType> socketDistributors_{};
+  /// Strand for synchronization
+  net::strand<net::any_io_executor> globalStrand_;
+  absl::flat_hash_map<QueryId, WeakReferenceHolder> socketDistributors_{};
 
-  /// Implementation of createOrAcquireDistributor
-  net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+  /// Implementation of createOrAcquireDistributorForSending and
+  /// createOrAcquireDistributorForReceiving
+  template <bool isSender>
+  net::awaitable<
+      std::shared_ptr<ConditionalConst<isSender, QueryToSocketDistributor>>>
       createOrAcquireDistributorInternal(QueryId);
 
  public:
   explicit QueryHub(net::io_context& ioContext)
       : ioContext_{ioContext}, globalStrand_{net::make_strand(ioContext)} {}
 
-  /// Creates a new `QueryToSocketDistributor` or returns the pre-existing
-  /// for the provided query id if there already is one. The bool parameter
-  /// should be set to true if the caller of this methods intends to use
-  /// the distributor object to send data, rather than just receiving it.
+  /// Create a new `QueryToSocketDistributor` or return a pre-existing one for
+  /// the provided query id if there already is one. This can only ever be
+  /// called once per query session, otherwise there will be an exception. There
+  /// can only ever be one sender.
   net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
       createOrAcquireDistributorForSending(QueryId);
 
-  /// Similar to `createOrAcquireDistributorForSending` but returns a const
-  /// `QueryToSocketDistributor` that can only used for receiving instead.
+  /// Returns a const `QueryToSocketDistributor` that can only used to receive
+  /// messages. In contrast to `createOrAcquireDistributorForSending` this can
+  /// be called arbitrarily often during the lifetime of a single query session.
   net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
       createOrAcquireDistributorForReceiving(QueryId);
+
+  /// Expose strand for testing
+  auto getStrand() const { return globalStrand_; }
 };
 }  // namespace ad_utility::websocket
 

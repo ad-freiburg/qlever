@@ -9,12 +9,15 @@
 
 #include "engine/SortPerformanceEstimator.h"
 #include "util/Log.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
+
+using namespace ad_utility::memory_literals;
 
 TEST(SortPerformanceEstimator, TestManyEstimates) {
   // only allow the test to use 1 Gig of RAM
   auto allocator = ad_utility::AllocatorWithLimit<Id>{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1ull << 30ul)};
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1_GB)};
   auto t =
       SortPerformanceEstimator{allocator, std::numeric_limits<size_t>::max()};
 

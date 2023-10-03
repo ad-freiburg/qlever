@@ -101,3 +101,65 @@ ASYNC_TEST(QueryHub, simulateLifecycleWithDifferentQueryIds) {
   EXPECT_EQ(distributor2, distributor4);
   EXPECT_NE(distributor3, distributor4);
 }
+
+// _____________________________________________________________________________
+
+ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnSignalEnd, 3) {
+  QueryHub queryHub{ioContext};
+  QueryId queryId = QueryId::idFromString("abc");
+
+  auto distributor1 =
+      co_await queryHub.createOrAcquireDistributorForSending(queryId);
+
+  co_await net::dispatch(
+      net::bind_executor(queryHub.getStrand(), net::use_awaitable));
+  auto future =
+      net::co_spawn(ioContext, distributor1->signalEnd(), net::use_future);
+
+  // Wait until signalEnd() blocks, increase time if tests sporadically fail
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+  auto distributor2 =
+      co_await queryHub.createOrAcquireDistributorForSending(queryId);
+  EXPECT_NE(distributor1, distributor2);
+
+  future.wait();
+}
+
+// _____________________________________________________________________________
+
+ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
+  QueryHub queryHub{ioContext};
+  QueryId queryId = QueryId::idFromString("abc");
+
+  auto distributor =
+      co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
+  std::weak_ptr<const QueryToSocketDistributor> comparison = distributor;
+
+  co_await net::dispatch(
+      net::bind_executor(queryHub.getStrand(), net::use_awaitable));
+  net::post(ioContext, [distributor = std::move(distributor)]() mutable {
+    // Invoke destructor while the strand of queryHub is still in use
+    distributor.reset();
+  });
+
+  // Wait until destructor of distributor blocks, increase time if tests
+  // sporadically fail
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  distributor =
+      co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
+  EXPECT_FALSE(!comparison.owner_before(distributor) &&
+               !distributor.owner_before(comparison));
+}
+
+// _____________________________________________________________________________
+
+ASYNC_TEST(QueryHub, ensureOnlyOneSenderCanExist) {
+  QueryHub queryHub{ioContext};
+  QueryId queryId = QueryId::idFromString("abc");
+
+  [[maybe_unused]] auto distributor =
+      co_await queryHub.createOrAcquireDistributorForSending(queryId);
+  EXPECT_THROW(co_await queryHub.createOrAcquireDistributorForSending(queryId),
+               ad_utility::Exception);
+}
