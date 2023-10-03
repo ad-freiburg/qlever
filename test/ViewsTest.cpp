@@ -109,3 +109,14 @@ TEST(Views, owningView) {
               ::testing::ElementsAre(
                   "4", "fourhundredseventythousandBlimbambum", "3", "1"));
 }
+
+TEST(Views, integerRange) {
+  std::vector<size_t> expected;
+  for (size_t i = 0; i < 42; ++i) {
+    expected.push_back(i);
+  }
+
+  std::vector<size_t> actual;
+  std::ranges::copy(ad_utility::integerRange(42u), std::back_inserter(actual));
+  ASSERT_THAT(actual, ::testing::ElementsAreArray(expected));
+}

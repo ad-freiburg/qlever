@@ -28,6 +28,7 @@ enum class MediaType {
   json,
   sparqlJson,
   qleverJson,
+  sparqlXml,
   xml,
   flash,
   flv,
