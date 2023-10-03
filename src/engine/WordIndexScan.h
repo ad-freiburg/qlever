@@ -4,6 +4,8 @@
 
 #include "./Operation.h"
 
+// This operation filters all entries of a text-variable out that do not contain
+// a certain word or a certain prefix.
 class WordIndexScan : public Operation {
  public:
   using SetOfVariables = ad_utility::HashSet<Variable>;
@@ -40,6 +42,8 @@ class WordIndexScan : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
+  // Returns a ResultTable containing an IdTable with the columns being
+  // the text-varibale and the completed word (if it was prefixed)
   ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;

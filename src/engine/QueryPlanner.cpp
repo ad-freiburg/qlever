@@ -4,35 +4,36 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <engine/Bind.h>
-#include <engine/CartesianProductJoin.h>
-#include <engine/CheckUsePatternTrick.h>
-#include <engine/CountAvailablePredicates.h>
-#include <engine/Distinct.h>
-#include <engine/Filter.h>
-#include <engine/GroupBy.h>
-#include <engine/HasPredicateScan.h>
-#include <engine/IndexScan.h>
-#include <engine/Join.h>
-#include <engine/Minus.h>
-#include <engine/MultiColumnJoin.h>
-#include <engine/NeutralElementOperation.h>
-#include <engine/OptionalJoin.h>
-#include <engine/OrderBy.h>
-#include <engine/QueryPlanner.h>
-#include <engine/Service.h>
-#include <engine/Sort.h>
-#include <engine/TextOperationWithFilter.h>
-#include <engine/TextOperationWithoutFilter.h>
-#include <engine/TransitivePath.h>
-#include <engine/Union.h>
-#include <engine/Values.h>
-#include <engine/WordIndexScan.h>
-#include <parser/Alias.h>
-#include <parser/SparqlParserHelpers.h>
+#include "engine/QueryPlanner.h"
 
 #include <algorithm>
 #include <ctime>
+
+#include "engine/Bind.h"
+#include "engine/CartesianProductJoin.h"
+#include "engine/CheckUsePatternTrick.h"
+#include "engine/CountAvailablePredicates.h"
+#include "engine/Distinct.h"
+#include "engine/Filter.h"
+#include "engine/GroupBy.h"
+#include "engine/HasPredicateScan.h"
+#include "engine/IndexScan.h"
+#include "engine/Join.h"
+#include "engine/Minus.h"
+#include "engine/MultiColumnJoin.h"
+#include "engine/NeutralElementOperation.h"
+#include "engine/OptionalJoin.h"
+#include "engine/OrderBy.h"
+#include "engine/Service.h"
+#include "engine/Sort.h"
+#include "engine/TextOperationWithFilter.h"
+#include "engine/TextOperationWithoutFilter.h"
+#include "engine/TransitivePath.h"
+#include "engine/Union.h"
+#include "engine/Values.h"
+#include "engine/WordIndexScan.h"
+#include "parser/Alias.h"
+#include "parser/SparqlParserHelpers.h"
 
 namespace p = parsedQuery;
 namespace {
@@ -723,7 +724,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
 
     using enum Permutation::Enum;
 
-    if (node._cvar.has_value()) {
+    if (node.isTextNode()) {
       vector<SubtreePlan> plans = getTextLeafPlan(node);
       seeds.insert(seeds.end(), plans.begin(), plans.end());
       continue;
@@ -1166,13 +1167,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getTextLeafPlan(
   vector<SubtreePlan> vecPlans;
   AD_CONTRACT_CHECK(node._wordPart.has_value());
   for (string word : node._wordPart.value()) {
-    SubtreePlan plan(_qec);
+    SubtreePlan plan = makeSubtreePlan<WordIndexScan>(_qec, node._variables,
+                                                      node._cvar.value(), word);
     plan._idsOfIncludedNodes |= (size_t(1) << node._id);
-    auto& tree = *plan._qet;
-    auto textOp = std::make_shared<WordIndexScan>(_qec, node._variables,
-                                                  node._cvar.value(), word);
-    tree.setOperation(QueryExecutionTree::OperationType::WORD_INDEX_SCAN,
-                      textOp);
     vecPlans.push_back(plan);
   }
   return vecPlans;

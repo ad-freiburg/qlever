@@ -1058,7 +1058,6 @@ vector<TripleWithPropertyPath> Visitor::visit(
                 var->getMatchingWordVariable(s.substr(0, s.size() - 1)));
           }
         } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
-          // addVisibleVariable(var->getTextScoreVariable());
           addVisibleVariable(var->getScoreVariable());
         }
       }

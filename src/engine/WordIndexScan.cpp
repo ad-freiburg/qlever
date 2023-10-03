@@ -7,17 +7,13 @@ WordIndexScan::WordIndexScan(QueryExecutionContext* qec,
     : Operation(qec),
       variables_(std::move(variables)),
       cvar_(std::move(cvar)),
-      word_(word) {
-  if (word_.ends_with('*')) {
-    isPrefix_ = true;
-  }
-}
+      word_(std::move(word)),
+      isPrefix_(word_.ends_with('*')) {}
 
 // _____________________________________________________________________________
 ResultTable WordIndexScan::computeResult() {
-  LOG(INFO) << "words compute: " << word_ << endl;
   IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(1 + variables_.size() + isPrefix_);
+  idTable.setNumColumns(getResultWidth());
   Index::WordEntityPostings wep =
       getExecutionContext()->getIndex().getEntityPostingsForTerm(word_);
   idTable.resize(wep.cids_.size());

@@ -94,6 +94,7 @@ inline Index makeTestIndex(
     index.setUsePatterns(usePatterns);
     index.setPrefixCompression(usePrefixCompression);
     index.createFromFile(inputFilename);
+    index.addTextFromContextFile("", true);
   }
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setUsePatterns(usePatterns);

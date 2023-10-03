@@ -85,6 +85,8 @@ class QueryPlanner {
                _wordPart == other._wordPart && _variables == other._variables;
       }
 
+      bool isTextNode() const { return _cvar.has_value(); }
+
       friend std::ostream& operator<<(std::ostream& out, const Node& n) {
         out << "id: " << n._id << " triple: " << n._triple.asString()
             << " vars_ ";
