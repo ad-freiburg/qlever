@@ -40,32 +40,21 @@ inline auto extractDay = [](std::optional<DateOrLargeYear> d) {
   return Id::makeFromInt(optionalDay.value());
 };
 
-inline auto extractHours = [](std::optional<DateOrLargeYear> d) {
-  if (!d.has_value() || d->getType() != DateOrLargeYear::Type::DateTime) {
+template <auto dateMember, auto makeId>
+inline auto extractTimeComponentImpl = [](std::optional<DateOrLargeYear> d) {
+  if (!d.has_value() || !d->isDate()) {
     return Id::makeUndefined();
   }
-  auto hours = d.value().getDate().getHour();
-  if (hours == -1 ) {
+  Date date = d.value().getDate();
+  if (!date.hasTime()) {
     return Id::makeUndefined();
   }
-  return Id::makeFromInt(hours);
+  return std::invoke(makeId, std::invoke(dateMember, date));
 };
 
-inline auto extractMinutes = [](std::optional<DateOrLargeYear> d) {
-  if (!d.has_value() || d->getType() != DateOrLargeYear::Type::DateTime) {
-    return Id::makeUndefined();
-  }
-  auto minutes = d.value().getDate().getMinute();
-  return Id::makeFromInt(minutes);
-};
-
-inline auto extractSeconds = [](std::optional<DateOrLargeYear> d) {
-  if (!d.has_value() || d->getType() != DateOrLargeYear::Type::DateTime) {
-    return Id::makeUndefined();
-  }
-  auto seconds = d.value().getDate().getSecond();
-  return Id::makeFromDouble(seconds);
-};
+inline auto extractHours = extractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>;
+inline auto extractMinutes = extractTimeComponentImpl<&Date::getMinute, &Id::makeFromInt>;
+inline auto extractSeconds = extractTimeComponentImpl<&Date::getSecond, &Id::makeFromDouble>;
 
 NARY_EXPRESSION(YearExpression, 1, FV<decltype(extractYear), DateValueGetter>);
 NARY_EXPRESSION(MonthExpression, 1,
