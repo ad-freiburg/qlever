@@ -450,7 +450,7 @@ TEST(SparqlExpression, dateOperators) {
   check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
   check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
   check(D::parseXsdDate("0042-12-24"), 42, 12, 24);
-  check(D::parseXsdDate("-0099-07-01"), -99, 7,1);
+  check(D::parseXsdDate("-0099-07-01"), -99, 7, 1);
   check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt);
   check(D::parseXsdDate("0321-07-01"), 321, 7, 1);
   check(D::parseXsdDate("2321-07-01"), 2321, 7, 1);
