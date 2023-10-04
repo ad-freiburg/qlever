@@ -34,23 +34,32 @@ RUN make -j && make install
 RUN ld --version
 RUN ls -ltr /usr/local/bin
 
+# Compile mold linker.
+ RUN yum groupinstall -y "Development Tools"
+ RUN yum install -y libzstd-devel # zlib zlib-devel
+ RUN git clone https://github.com/rui314/mold.git
+ WORKDIR mold/build
+ RUN git checkout v2.2.0
+ RUN cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++
+ RUN make -j && make install
+
 # Compile QLever
 COPY . /qlever
 WORKDIR /qlever
 WORKDIR /qlever/build
 RUN conan profile detect
 RUN ls -l .. && conan install .. -of=.
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" -DUSE_PARALLEL=true -DCMAKE_CXX_COMPILER=g++ -DCMAKE_LINKER=/usr/local/bin/ld -DCMAKE_CXX_LINK_EXECUTABLE="<CMAKE_LINKER> <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> <LINK_LIBRARIES>" -DCMAKE_EXE_LINKER_FLAGS="-Wl,-m,elf_x86_64" ..
-RUN make -j engine
-RUN make -j index
+RUN /usr/local/libexec/mold/ld --version
+RUN cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" -DUSE_PARALLEL=true -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_FLAGS="-B/usr/local/libexec/mold" -DCMAKE_EXE_LINKER_FLAGS="-B/usr/local/libexec/mold" -DCMAKE_SHARED_LINKER_FLAGS="-B/usr/local/libexec/mold"..
+RUN make -j engine 
+RUN make -j index 
+RUN make -j parser
 RUN make ServerMain IndexBuilderMain VERBOSE=1
 
-# Compile mold linker.
-# RUN sudo yum groupinstall -y "Development Tools"
-# RUN yum install -y libzstd-devel # zlib zlib-devel
-# RUN git clone https://github.com/rui314/mold.git
-# WORKDIR mold/build
-# RUN git checkout v2.2.0
-# RUN yum install -y tbb tbb-devel
-# RUN cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DMOLD_USE_SYSTEM_TBB=ON ..
-# RUN make -j && make install
+# Run the e2e/e2e.sh script (which calls `querit.py`, hence the Python libraries).
+WORKDIR /qlever
+RUN yum install -y which libicu libicu-devel python3-devel
+RUN pip3 install pyaml pyicu
+RUN source build/conanrun.sh && e2e/e2e.sh
+
+ENTRYPOINT bash
