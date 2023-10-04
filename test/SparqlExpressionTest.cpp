@@ -420,7 +420,7 @@ TEST(SparqlExpression, dateOperators) {
                    std::optional<double> expectedSeconds,
                    std::source_location l = std::source_location::current()) {
     auto trace = generateLocationTrace(l);
-    auto optToId = [](const auto& opt) {
+    auto optToIdInt = [](const auto& opt) {
       if (opt.has_value()) {
         return Id::makeFromInt(opt.value());
       } else {
@@ -434,11 +434,11 @@ TEST(SparqlExpression, dateOperators) {
         return Id::makeUndefined();
       }
     };
-    checkYear(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedYear)});
-    checkMonth(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedMonth)});
-    checkDay(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedDay)});
-    checkHours(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedHours)});
-    checkMinutes(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedMinutes)});
+    checkYear(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedYear)});
+    checkMonth(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedMonth)});
+    checkDay(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedDay)});
+    checkHours(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedHours)});
+    checkMinutes(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedMinutes)});
     checkSeconds(Ids{Id::makeFromDate(date)}, Ids{optToIdDouble(expectedSeconds)});
 
   };
@@ -448,7 +448,7 @@ TEST(SparqlExpression, dateOperators) {
   check(D::parseXsdDatetime("1970-04-22T11:53:42.25"), 1970, 4,
         22, 11, 53, 42.25);
   check(D::parseXsdDate("1970-04-22"), 1970, 4, 22,
-        std::nullopt,std::nullopt,std::nullopt);
+        std::nullopt,0,0.0);
   check(D::parseXsdDate("1970-04-22"), 1970, 4, 22,
         std::nullopt,0,0.0);
   check(D::parseXsdDate("0042-12-24"), 42, 12, 24,
