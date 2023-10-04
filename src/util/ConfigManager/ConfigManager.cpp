@@ -484,6 +484,16 @@ std::string ConfigManager::printConfigurationDoc(
                             }),
       "\n\n");
 
+  // List of the validators.
+  const std::string& listOfAllValidators = ad_utility::lazyStrJoin(
+      ad_utility::transform(
+          validators(),
+          [](const std::reference_wrapper<const ConfigOptionValidatorManager>&
+                 validator) {
+            return absl::StrCat("- ", validator.get().getDescription());
+          }),
+      "\n\n");
+
   return absl::StrCat(
       "Locations of available configuration options with",
       (printCurrentJsonConfiguration ? " their current values"
@@ -493,6 +503,11 @@ std::string ConfigManager::printConfigurationDoc(
                                  "    "),
       "\n\nAvailable configuration options:\n",
       ad_utility::addIndentation(listOfConfigurationOptions, "    "),
+      "\n\nRequired invariants on the configuration options:",
+      listOfAllValidators.empty()
+          ? " None."
+          : absl::StrCat(
+                "\n", ad_utility::addIndentation(listOfAllValidators, "    ")),
       "\n\nConfiguration options, that kept their default values:\n",
       ad_utility::addIndentation(
           getListOfNotChangedConfigOptionsWithDefaultValuesAsString(), "    "));
