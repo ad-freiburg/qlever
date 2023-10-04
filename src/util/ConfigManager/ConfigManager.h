@@ -11,6 +11,7 @@
 
 #include <any>
 #include <concepts>
+#include <functional>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -445,6 +446,16 @@ class ConfigManager {
   configurationOptions() const;
 
   /*
+  @brief Return all `ConfigOptionValidatorManager` held by this manager and its
+  sub managers.
+
+  @param patPrefix Prefix for the paths in the exception message. Needed, so
+  that a sub manager can include its own path in the error messages.
+  */
+  std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
+  validators(std::string_view pathPrefix = "") const;
+
+  /*
   @brief The implementation for `configurationOptions`.
 
   @tparam ReturnReference Should be either `ConfigOption&`, or `const
@@ -519,5 +530,15 @@ class ConfigManager {
                              std::move(translationFunction),
                              std::move(configOptionsToBeChecked)...);
   }
+
+  /*
+  @brief Throw an exception, if the given entry of `configurationOptions_` is a
+  null pointer, or contains an empty sub manager, which would point to a logic
+  error.
+
+  @param jsonPathToEntry For a better exception message.
+  */
+  static void verifyHashMapEntry(std::string_view jsonPathToEntry,
+                                 const HashMapEntry& entry);
 };
 }  // namespace ad_utility

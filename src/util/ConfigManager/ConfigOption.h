@@ -254,7 +254,7 @@ class ConfigOption {
 
   // This is a test helper function.
   template <typename... Ts>
-  friend std::string generateValidatorName(size_t id);
+  friend std::string generateValidatorName(std::optional<size_t> id);
 
   /*
   @brief Return the string representation/name of the type, of the currently
