@@ -1115,8 +1115,15 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
 
 // ___________________________________________________________________________
 TEST(QueryPlanner, CountAvailabelPredicates) {
-  h::expect("SELECT ?p (COUNT(DISTINCT ?s) as ?cnt) WHERE { ?s ?p ?o} GROUP BY ?p",
-            h::CountAvailablePredicates(0, Var{"?p"}, Var{"?cnt"}, h::IndexScanFromStrings("?s", HAS_PATTERN_PREDICATE, "?p")));
-  h::expect("SELECT ?p (COUNT(DISTINCT ?s) as ?cnt) WHERE { ?s ql:has-predicate ?p} GROUP BY ?p",
-            h::CountAvailablePredicates(0, Var{"?p"}, Var{"?cnt"}, h::IndexScanFromStrings("?s", HAS_PATTERN_PREDICATE, "?p")));
+  h::expect(
+      "SELECT ?p (COUNT(DISTINCT ?s) as ?cnt) WHERE { ?s ?p ?o} GROUP BY ?p",
+      h::CountAvailablePredicates(
+          0, Var{"?p"}, Var{"?cnt"},
+          h::IndexScanFromStrings("?s", HAS_PATTERN_PREDICATE, "?p")));
+  h::expect(
+      "SELECT ?p (COUNT(DISTINCT ?s) as ?cnt) WHERE { ?s ql:has-predicate ?p} "
+      "GROUP BY ?p",
+      h::CountAvailablePredicates(
+          0, Var{"?p"}, Var{"?cnt"},
+          h::IndexScanFromStrings("?s", HAS_PATTERN_PREDICATE, "?p")));
 }

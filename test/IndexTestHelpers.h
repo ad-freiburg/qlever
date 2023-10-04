@@ -71,7 +71,7 @@ inline Index makeTestIndex(
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
-  ad_utility::setGlobalLoggingStream(&ignoreLogStream);
+  // ad_utility::setGlobalLoggingStream(&ignoreLogStream);
   std::string inputFilename = indexBasename + ".ttl";
   if (!turtleInput.has_value()) {
     turtleInput =

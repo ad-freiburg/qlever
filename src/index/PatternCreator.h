@@ -10,11 +10,11 @@
 #ifndef QLEVER_PATTERNCREATOR_H
 #define QLEVER_PATTERNCREATOR_H
 
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/Pattern.h"
 #include "index/StxxlSortFunctors.h"
-#include "engine/idTable/CompressedExternalIdTable.h"
 #include "util/ExceptionHandling.h"
 #include "util/MmapVector.h"
 #include "util/Serializer/SerializeVector.h"
@@ -70,8 +70,9 @@ struct PatternStatistics {
 /// these predicates.
 class PatternCreator {
  public:
-  using PSOSorter =
-      ad_utility::CompressedExternalIdTableSorter<SortByPSO, 3>;
+  using PSOSorter = ad_utility::CompressedExternalIdTableSorter<SortByPSO, 3>;
+  using PSOSorter4Cols =
+      ad_utility::CompressedExternalIdTableSorter<SortByPSO, 4>;
 
  private:
   // The file to which the patterns will be written.
@@ -98,7 +99,10 @@ class PatternCreator {
 
   // Store the additional triples that are created by the pattern mechanism for
   // the `has-pattern` and `has-predicate` predicates.
+  // TODO<joka921> Use something buffered for this.
+  std::vector<std::array<Id, 3>> _tripleBuffer;
   PSOSorter _additionalTriplesPsoSorter;
+  PSOSorter4Cols _fullPsoSorter;
 
   // The predicates which have already occured in one of the patterns. Needed to
   // count the number of distinct predicates.
@@ -114,17 +118,22 @@ class PatternCreator {
  public:
   /// The patterns will be written to `filename` as well as to other filenames
   /// which have `filename` as a prefix.
-  explicit PatternCreator(const string& filename, ad_utility::MemorySize memoryForStxxl)
+  explicit PatternCreator(const string& filename,
+                          ad_utility::MemorySize memoryForStxxl)
       : _filename{filename},
         _patternSerializer{{filename}},
-        _additionalTriplesPsoSorter{ filename + "additionalTriples.pso.dat", memoryForStxxl, ad_utility::makeUnlimitedAllocator<Id>()} {
+        _additionalTriplesPsoSorter{filename + "additionalTriples.pso.dat",
+                                    memoryForStxxl / 2,
+                                    ad_utility::makeUnlimitedAllocator<Id>()},
+        _fullPsoSorter{filename + "withPatterns.pso.dat", memoryForStxxl / 2,
+                       ad_utility::makeUnlimitedAllocator<Id>()} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 
   /// This function has to be called for all the triples in the SPO permutation
   /// \param triple Must be >= all previously pushed triples wrt the SPO
   /// permutation.
-  void processTriple(std::array<Id, 3> triple);
+  void processTriple(std::array<Id, 3> triple, bool ignoreForPatterns);
 
   /// Write the patterns to disk after all triples have been pushed. Calls to
   /// `processTriple` after calling `finish` lead to undefined behavior. Note
@@ -155,6 +164,10 @@ class PatternCreator {
   PSOSorter&& getHasPatternSortedByPSO() && {
     finish();
     return std::move(_additionalTriplesPsoSorter);
+  }
+  PSOSorter4Cols&& getAllTriplesWithPatternSortedByPSO() && {
+    finish();
+    return std::move(_fullPsoSorter);
   }
 
  private:

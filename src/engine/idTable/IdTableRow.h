@@ -85,6 +85,13 @@ class Row {
   friend void swap(Row& a, Row& b) { std::swap(a.data_, b.data_); }
 
   bool operator==(const Row& other) const = default;
+  // Convert from a static `RowReference` to a `std::array` (makes a copy).
+  explicit operator std::array<T, numStaticColumns>() const
+      requires(numStaticColumns != 0) {
+    std::array<T, numStaticColumns> result;
+    std::ranges::copy(*this, result.begin());
+    return result;
+  }
 };
 
 // The following two classes store a reference to a row in the underlying

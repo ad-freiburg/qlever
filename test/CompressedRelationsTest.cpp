@@ -71,7 +71,8 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
   std::string filename = testCaseName + ".dat";
 
   // First create the on-disk permutation.
-  CompressedRelationWriter writer{2, ad_utility::File{filename, "w"}, blocksize};
+  CompressedRelationWriter writer{2, ad_utility::File{filename, "w"},
+                                  blocksize};
   vector<CompressedRelationMetadata> metaData;
   {
     size_t i = 0;

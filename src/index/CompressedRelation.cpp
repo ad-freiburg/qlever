@@ -686,7 +686,8 @@ CompressedRelationMetadata CompressedRelationWriter::addRelation(
 // _____________________________________________________________________________
 void CompressedRelationWriter::writeRelationToExclusiveBlocks(
     Id col0Id, const BufferedIdTable& data) {
-  const size_t numRowsPerBlock = numBytesPerBlock_ / (numColumns() * sizeof(Id));
+  const size_t numRowsPerBlock =
+      numBytesPerBlock_ / (numColumns() * sizeof(Id));
   AD_CORRECTNESS_CHECK(numRowsPerBlock > 0);
   AD_CORRECTNESS_CHECK(data.numColumns() == numColumns());
   const auto totalSize = data.numRows();
@@ -740,8 +741,9 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
 CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
     const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
     std::optional<std::vector<size_t>> columnIndices) {
-  // If we have no column indices specified, we read only the two first columns, which always represent
-  // the "default" contents of a full scan without any additional columns like patterns etc.
+  // If we have no column indices specified, we read only the two first columns,
+  // which always represent the "default" contents of a full scan without any
+  // additional columns like patterns etc.
   // TODO<joka921> This should be some kind of `smallVector` for performance
   // reasons.
   static constexpr size_t NumColumns = 2;

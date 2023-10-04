@@ -59,6 +59,9 @@ using json = nlohmann::json;
 template <typename Comparator>
 using ExternalSorter =
     ad_utility::CompressedExternalIdTableSorter<Comparator, 3>;
+template <typename Comparator>
+using ExternalSorter4 =
+    ad_utility::CompressedExternalIdTableSorter<Comparator, 4>;
 
 using PsoSorter = ExternalSorter<SortByPSO>;
 
@@ -84,7 +87,7 @@ struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
 // All the data from IndexBuilderDataBase and a ExternalSorter that stores all
 // ID triples sorted by the PSO permutation.
 struct IndexBuilderDataAsPsoSorter : IndexBuilderDataBase {
-  using SorterPtr = std::unique_ptr<ExternalSorter<SortByPSO>>;
+  using SorterPtr = std::unique_ptr<ExternalSorter<SortBySPO>>;
   SorterPtr psoSorter;
   IndexBuilderDataAsPsoSorter(const IndexBuilderDataBase& base,
                               SorterPtr sorter)
@@ -441,7 +444,7 @@ class IndexImpl {
       std::unique_ptr<ItemMapArray> items, auto localIds,
       ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
 
-  std::unique_ptr<ExternalSorter<SortByPSO>> convertPartialToGlobalIds(
+  std::unique_ptr<ExternalSorter<SortBySPO>> convertPartialToGlobalIds(
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial);
 

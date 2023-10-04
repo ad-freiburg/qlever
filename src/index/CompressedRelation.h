@@ -29,7 +29,7 @@ class IdTable;
 // Currently our indexes have two columns (the first column of a triple
 // is stored in the respective metadata). This might change in the future when
 // we add a column for patterns or functional relations like rdf:type.
-//static constexpr int NumColumns = 0;
+// static constexpr int NumColumns = 0;
 // Two columns of IDs that are buffered in a file if they become too large.
 // This is the format in which the raw two-column data for a single relation is
 // passed around during the index building.
@@ -164,8 +164,11 @@ class CompressedRelationWriter {
 
  public:
   /// Create using a filename, to which the relation data will be written.
-  explicit CompressedRelationWriter(size_t numColumns, ad_utility::File f, size_t numBytesPerBlock)
-      : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock}, numColumns_{numColumns} {}
+  explicit CompressedRelationWriter(size_t numColumns, ad_utility::File f,
+                                    size_t numBytesPerBlock)
+      : outfile_{std::move(f)},
+        numBytesPerBlock_{numBytesPerBlock},
+        numColumns_{numColumns} {}
 
   /**
    * Add a complete (single) relation.
@@ -226,7 +229,7 @@ class CompressedRelationWriter {
   // size of the compressed column in the `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
       std::span<const Id> column);
-  size_t numColumns() const {return numColumns_;}
+  size_t numColumns() const { return numColumns_; }
 };
 
 /// Manage the reading of relations from disk that have been previously written

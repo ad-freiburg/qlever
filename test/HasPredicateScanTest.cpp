@@ -33,8 +33,8 @@ TEST(CountAvailablePredicate, fullPatternTrick) {
   auto expected =
       makeIdTableFromVector({{id("<p1>"), I(1)}, {id("<p2>"), I(1)}});
 
-  // TODO<joka921> This fails spuriously because the order of the patterns is not deterministic, we should order the query.
-  EXPECT_EQ(table, expected);
+  // TODO<joka921> This fails spuriously because the order of the patterns is
+not deterministic, we should order the query. EXPECT_EQ(table, expected);
 }
 
 TEST(CountAvailablePredicate, PatternTrickWithJoin) {
@@ -55,8 +55,8 @@ TEST(CountAvailablePredicate, PatternTrickWithJoin) {
   auto expected =
       makeIdTableFromVector({{id("<p1>"), I(1)}, {id("<p2>"), I(1)}});
 
-    // TODO<joka921> This fails spuriously because the order of the patterns is not deterministic, we should order the query.
-  EXPECT_EQ(table, expected);
+    // TODO<joka921> This fails spuriously because the order of the patterns is
+not deterministic, we should order the query. EXPECT_EQ(table, expected);
 }
  */
 

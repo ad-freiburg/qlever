@@ -10,7 +10,12 @@ static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
 static const Id hasPredicateId = qlever::specialIds.at(HAS_PREDICATE_PREDICATE);
 
 // _________________________________________________________________________
-void PatternCreator::processTriple(std::array<Id, 3> triple) {
+void PatternCreator::processTriple(std::array<Id, 3> triple,
+                                   bool ignoreForPatterns) {
+  _tripleBuffer.push_back(triple);
+  if (ignoreForPatterns) {
+    return;
+  }
   if (!_currentSubjectIndex.has_value()) {
     // This is the first triple
     _currentSubjectIndex = triple[0].getVocabIndex();
@@ -56,6 +61,11 @@ void PatternCreator::finishSubject(VocabIndex subjectIndex,
   _additionalTriplesPsoSorter.push(
       std::array{Id::makeFromVocabIndex(subjectIndex), hasPatternId,
                  Id::makeFromInt(patternId)});
+  std::ranges::for_each(_tripleBuffer, [this, patternId](const auto& t) {
+    _fullPsoSorter.push(
+        std::array{t[0], t[1], t[2], Id::makeFromInt(patternId)});
+  });
+  _tripleBuffer.clear();
 }
 
 // ____________________________________________________________________________

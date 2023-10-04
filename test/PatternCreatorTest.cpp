@@ -52,15 +52,15 @@ TEST(PatternStatistics, Serialization) {
 
 // Create patterns from a small SPO-sorted sequence of triples.
 void createExamplePatterns(PatternCreator& creator) {
-  creator.processTriple({V(0), V(10), V(20)});
-  creator.processTriple({V(0), V(10), V(21)});
-  creator.processTriple({V(0), V(11), V(18)});
-  creator.processTriple({V(1), V(10), V(18)});
-  creator.processTriple({V(1), V(12), V(18)});
-  creator.processTriple({V(1), V(13), V(18)});
-  creator.processTriple({V(3), V(10), V(28)});
-  creator.processTriple({V(3), V(11), V(29)});
-  creator.processTriple({V(3), V(11), V(45)});
+  creator.processTriple({V(0), V(10), V(20)}, false);
+  creator.processTriple({V(0), V(10), V(21)}, false);
+  creator.processTriple({V(0), V(11), V(18)}, false);
+  creator.processTriple({V(1), V(10), V(18)}, false);
+  creator.processTriple({V(1), V(12), V(18)}, false);
+  creator.processTriple({V(1), V(13), V(18)}, false);
+  creator.processTriple({V(3), V(10), V(28)}, false);
+  creator.processTriple({V(3), V(11), V(29)}, false);
+  creator.processTriple({V(3), V(11), V(45)}, false);
 }
 
 // Assert that the contents of patterns read from `filename` match the triples
