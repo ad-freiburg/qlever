@@ -517,7 +517,6 @@ using the `ConfigManager`.
 measurements were taken.
 */
 class GeneralInterfaceImplementation : public BenchmarkInterface {
-  // TODO Can we get rid of the getter? I mean, it's just an implicit converter.
   /*
   The max time for a single measurement and the max memory, that a single
   `IdTable` is allowed to take up.
@@ -653,10 +652,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       const ad_utility::MemorySize memoryNeededForOneRow =
           approximateMemoryNeededByIdTable(1, amountOfColumns);
       // Remember: `0` is for unlimited memory.
-      // TODO Use the normal comparison operator, once it got implemented
-      // for `MemorySize`.
-      if (maxMemory.getBytes() == ad_utility::MemorySize::bytes(0).getBytes() ||
-          memoryNeededForOneRow.getBytes() <= maxMemory.getBytes()) {
+      if (maxMemory == 0_B || memoryNeededForOneRow <= maxMemory) {
         return std::nullopt;
       } else {
         return std::make_optional<ad_utility::ErrorMessage>(
@@ -812,9 +808,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   std::optional<ad_utility::MemorySize> maxMemory() const {
     ad_utility::MemorySize maxMemory{
         ad_utility::MemorySize::parse(configVariableMaxMemory_)};
-    // TODO Use normal comparison, once the branch with the `MemorySize`
-    // comparison operator has been merged.
-    if (maxMemory.getBytes() != 0UL) {
+    if (maxMemory != 0_B) {
       return {std::move(maxMemory)};
     } else {
       return {std::nullopt};
@@ -887,11 +881,9 @@ auto createDefaultStoppingLambda(
            invocableWithReturnType<ad_utility::MemorySize, const size_t&> auto
                memorySizeFunction,
            const std::optional<ad_utility::MemorySize> maxMemory) {
-          // TODO Use normal comparison, once the branch with the `MemorySize`
-          // comparison operator has been merged.
           return maxMemory.has_value()
-                     ? memorySizeFunction(benchmarkTableRowNumber).getBytes() <=
-                           maxMemory.value().getBytes()
+                     ? memorySizeFunction(benchmarkTableRowNumber) <=
+                           maxMemory.value()
                      : true;
         };
 
