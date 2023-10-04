@@ -686,9 +686,9 @@ CompressedRelationMetadata CompressedRelationWriter::addRelation(
 // _____________________________________________________________________________
 void CompressedRelationWriter::writeRelationToExclusiveBlocks(
     Id col0Id, const BufferedIdTable& data) {
-  const size_t numRowsPerBlock = numBytesPerBlock_ / (NumColumns * sizeof(Id));
+  const size_t numRowsPerBlock = numBytesPerBlock_ / (numColumns() * sizeof(Id));
   AD_CORRECTNESS_CHECK(numRowsPerBlock > 0);
-  AD_CORRECTNESS_CHECK(data.numColumns() == NumColumns);
+  AD_CORRECTNESS_CHECK(data.numColumns() == numColumns());
   const auto totalSize = data.numRows();
   for (size_t i = 0; i < totalSize; i += numRowsPerBlock) {
     size_t actualNumRowsPerBlock = std::min(numRowsPerBlock, totalSize - i);
@@ -714,7 +714,7 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
     return;
   }
 
-  AD_CORRECTNESS_CHECK(buffer_.numColumns() == NumColumns);
+  AD_CORRECTNESS_CHECK(buffer_.numColumns() == numColumns());
   // Convert from bytes to number of ID pairs.
   size_t numRows = buffer_.numRows();
 
@@ -740,9 +740,11 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
 CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
     const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
     std::optional<std::vector<size_t>> columnIndices) {
-  // If we have no column indices specified, we read all the columns.
+  // If we have no column indices specified, we read only the two first columns, which always represent
+  // the "default" contents of a full scan without any additional columns like patterns etc.
   // TODO<joka921> This should be some kind of `smallVector` for performance
   // reasons.
+  static constexpr size_t NumColumns = 2;
   if (!columnIndices.has_value()) {
     columnIndices.emplace();
     // TODO<joka921, C++23> this is ranges::to<vector>(std::iota).

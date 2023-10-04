@@ -29,16 +29,16 @@ class IdTable;
 // Currently our indexes have two columns (the first column of a triple
 // is stored in the respective metadata). This might change in the future when
 // we add a column for patterns or functional relations like rdf:type.
-static constexpr int NumColumns = 2;
+//static constexpr int NumColumns = 0;
 // Two columns of IDs that are buffered in a file if they become too large.
 // This is the format in which the raw two-column data for a single relation is
 // passed around during the index building.
 using BufferedIdTable =
-    columnBasedIdTable::IdTable<Id, NumColumns, ad_utility::BufferedVector<Id>>;
+    columnBasedIdTable::IdTable<Id, 0, ad_utility::BufferedVector<Id>>;
 
 // This type is used to buffer small relations that will be stored in the same
 // block.
-using SmallRelationsBuffer = columnBasedIdTable::IdTable<Id, NumColumns>;
+using SmallRelationsBuffer = columnBasedIdTable::IdTable<Id, 0>;
 
 // Sometimes we do not read/decompress  all the columns of a block, so we have
 // to use a dynamic `IdTable`.
@@ -158,13 +158,14 @@ class CompressedRelationWriter {
   ad_utility::File outfile_;
   std::vector<CompressedBlockMetadata> blockBuffer_;
   CompressedBlockMetadata currentBlockData_;
-  SmallRelationsBuffer buffer_;
   size_t numBytesPerBlock_;
+  size_t numColumns_;
+  SmallRelationsBuffer buffer_{numColumns_};
 
  public:
   /// Create using a filename, to which the relation data will be written.
-  explicit CompressedRelationWriter(ad_utility::File f, size_t numBytesPerBlock)
-      : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock} {}
+  explicit CompressedRelationWriter(size_t numColumns, ad_utility::File f, size_t numBytesPerBlock)
+      : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock}, numColumns_{numColumns} {}
 
   /**
    * Add a complete (single) relation.
@@ -225,6 +226,7 @@ class CompressedRelationWriter {
   // size of the compressed column in the `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
       std::span<const Id> column);
+  size_t numColumns() const {return numColumns_;}
 };
 
 /// Manage the reading of relations from disk that have been previously written

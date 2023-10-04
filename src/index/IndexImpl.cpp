@@ -72,7 +72,7 @@ IndexBuilderDataAsPsoSorter IndexImpl::createIdTriplesAndVocab(
 // input-spoTriplesView and yield SPO-sorted triples of IDs.
 void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
                                       const std::string& filename,
-                                      auto&& isInternalId, size_t memForStxxl) {
+                                      auto&& isInternalId, ad_utility::MemorySize memForStxxl) {
   PatternCreator patternCreator{filename, memForStxxl / 5};
   for (const auto& triple : spoTriplesView) {
     if (!std::ranges::any_of(triple, isInternalId)) {
@@ -202,7 +202,7 @@ void IndexImpl::createFromFile(const string& filename) {
     auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
     if (usePatterns_) {
       PatternCreator patternCreator{onDiskBase_ + ".index.patterns",
-                                    stxxlMemoryInBytes() / 5};
+                                    stxxlMemory() / 5};
       auto pushTripleToPatterns = [&patternCreator,
                                    &isInternalId](const auto& triple) {
         if (!std::ranges::any_of(triple, isInternalId)) {
@@ -221,7 +221,7 @@ void IndexImpl::createFromFile(const string& filename) {
       createPermutationPair(spoSorter.sortedView(), spo_, sop_,
                             ospSorter.makePushCallback(), numSubjectCounter);
         makeIndexFromAdditionalTriples(
-                PsoSorter{100'000'000});
+                PsoSorter{onDiskBase_ + ".dummySorter.dat", 1_MB, ad_utility::makeUnlimitedAllocator<Id>()});
     }
     spoSorter.clear();
     configurationJson_["num-subjects-normal"] = numSubjectsNormal;
@@ -238,11 +238,11 @@ void IndexImpl::createFromFile(const string& filename) {
     // TODO<joka921> For the case that there is no second permutation, but the patterns are loaded, this is currently
     // wrong, but we'll get rid of this anyway.
       makeIndexFromAdditionalTriples(
-              PsoSorter{100'000'000});
+              PsoSorter{onDiskBase_ + ".dummySorter.dat", 1_MB, ad_utility::makeUnlimitedAllocator<Id>()});
       if (usePatterns_) {
       createPatternsFromSpoTriplesView(spoSorter.sortedView(),
                                        onDiskBase_ + ".index.patterns",
-                                       isInternalId, stxxlMemoryInBytes());
+                                       isInternalId, stxxlMemory());
     }
     configurationJson_["has-all-permutations"] = false;
   }
@@ -512,9 +512,9 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   }
 
-  CompressedRelationWriter writer1{ad_utility::File(fileName1, "w"),
+  CompressedRelationWriter writer1{2, ad_utility::File(fileName1, "w"),
                                    blocksizePermutationInBytes_};
-  CompressedRelationWriter writer2{ad_utility::File(fileName2, "w"),
+  CompressedRelationWriter writer2{2, ad_utility::File(fileName2, "w"),
                                    blocksizePermutationInBytes_};
 
   // Iterate over the vector and identify "relation" boundaries, where a
@@ -1366,7 +1366,7 @@ void IndexImpl::deleteTemporaryFile(const string& path) {
 
 // _____________________________________________________________________________
 void IndexImpl::makeIndexFromAdditionalTriples(
-    StxxlSorter<SortByPSO>&& additionalTriples) {
+    ExternalSorter<SortByPSO>&& additionalTriples) {
   auto onDiskBaseCpy = onDiskBase_;
   onDiskBase_ += ADDITIONAL_TRIPLES_SUFFIX;
   createPermutationPair(std::move(additionalTriples).sortedView(), pso_, pos_);

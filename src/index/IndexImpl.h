@@ -692,5 +692,5 @@ class IndexImpl {
   // `additionalTriples`. The created files will be stored at `onDiskBase_ +
   // ADDITIONAL_TRIPLES_PREFIX`.
   void makeIndexFromAdditionalTriples(
-      StxxlSorter<SortByPSO>&& additionalTriples);
+      ExternalSorter<SortByPSO>&& additionalTriples);
 };

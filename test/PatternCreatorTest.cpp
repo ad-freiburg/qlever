@@ -14,15 +14,15 @@
 namespace {
 auto V = ad_utility::testing::VocabId;
 auto I = ad_utility::testing::IntId;
-size_t memForStxxl = 10'000'000;
+ad_utility::MemorySize memForStxxl = 10_MB;
 
 using TripleVec = std::vector<std::array<Id, 3>>;
 
 // Convert a PSOSorter to a vector of triples for easier handling
 TripleVec getVectorFromSorter(PatternCreator::PSOSorter&& sorter) {
   TripleVec triples;
-  for (auto triple : sorter.sortedView()) {
-    triples.push_back(triple);
+  for (const auto& triple : sorter.sortedView()) {
+    triples.push_back(static_cast<std::array<Id, 3>>(triple));
   }
   return triples;
 }

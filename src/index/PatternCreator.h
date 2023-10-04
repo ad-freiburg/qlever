@@ -14,7 +14,7 @@
 #include "global/Id.h"
 #include "global/Pattern.h"
 #include "index/StxxlSortFunctors.h"
-#include "util/BackgroundStxxlSorter.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "util/ExceptionHandling.h"
 #include "util/MmapVector.h"
 #include "util/Serializer/SerializeVector.h"
@@ -71,7 +71,7 @@ struct PatternStatistics {
 class PatternCreator {
  public:
   using PSOSorter =
-      ad_utility::BackgroundStxxlSorter<std::array<Id, 3>, SortByPSO>;
+      ad_utility::CompressedExternalIdTableSorter<SortByPSO, 3>;
 
  private:
   // The file to which the patterns will be written.
@@ -114,10 +114,10 @@ class PatternCreator {
  public:
   /// The patterns will be written to `filename` as well as to other filenames
   /// which have `filename` as a prefix.
-  explicit PatternCreator(const string& filename, size_t memoryForStxxl)
+  explicit PatternCreator(const string& filename, ad_utility::MemorySize memoryForStxxl)
       : _filename{filename},
         _patternSerializer{{filename}},
-        _additionalTriplesPsoSorter{memoryForStxxl} {
+        _additionalTriplesPsoSorter{ filename + "additionalTriples.pso.dat", memoryForStxxl, ad_utility::makeUnlimitedAllocator<Id>()} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 
