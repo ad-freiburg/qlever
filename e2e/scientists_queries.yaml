@@ -133,6 +133,29 @@ queries:
         - "algorithm"
       - order_numeric: {"dir": "DESC", "var" : "?ql_textscore_t"}
 
+  - query: algorithm-hermann-start-female-born-before-1940
+    type: text
+    sparql: |
+      PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+      SELECT ?x ?date ?t ?ql_textscore_t WHERE {
+        ?x <is-a> <Scientist> .
+        ?x <Date_of_birth> ?date .
+        ?x <Gender> <Female> .
+        ?t ql:contains-entity ?x .
+        ?t ql:contains-word "algorithm hermann" .
+        FILTER (?date < "1940-01-01"^^xsd:date)
+      }
+      ORDER BY DESC(?ql_textscore_t)
+    checks:
+      - num_cols: 4
+      - num_rows: 1
+      - contains_row:
+        - "<Grete_Hermann>"
+        - "1901-03-02"
+        - "Hermann's algorithm for primary decomposition is still in use now."
+        - null
+      - order_numeric: {"dir": "DESC", "var" : "?ql_textscore_t"}
+
   - query: people-born-in-1901
     type: no-text
     sparql: |

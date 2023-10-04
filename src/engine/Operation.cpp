@@ -243,6 +243,9 @@ void Operation::updateRuntimeInformationOnSuccess(
           child->getRootOperation()->getRuntimeInfo());
     }
   }
+  if (_executionContext) {
+    _executionContext->signalQueryUpdate(_runtimeInfo);
+  }
 }
 
 // ____________________________________________________________________________________________________________________
@@ -269,6 +272,10 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
                          std::views::transform(&RuntimeInformation::totalTime_);
   _runtimeInfo.totalTime_ =
       std::accumulate(timesOfChildren.begin(), timesOfChildren.end(), 0.0);
+
+  if (_executionContext) {
+    _executionContext->signalQueryUpdate(_runtimeInfo);
+  }
 }
 
 // _____________________________________________________________________________
@@ -283,6 +290,10 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
     }
   };
   setStatus(_runtimeInfo, setStatus);
+
+  if (_executionContext) {
+    _executionContext->signalQueryUpdate(_runtimeInfo);
+  }
 }
 
 // _______________________________________________________________________
@@ -294,6 +305,10 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
 
   _runtimeInfo.totalTime_ = timeInMilliseconds;
   _runtimeInfo.status_ = RuntimeInformation::Status::failed;
+
+  if (_executionContext) {
+    _executionContext->signalQueryUpdate(_runtimeInfo);
+  }
 }
 
 // __________________________________________________________________
@@ -330,6 +345,10 @@ void Operation::createRuntimeInfoFromEstimates() {
     _runtimeInfo.numRows_ = rtiFromCache.numRows_;
     _runtimeInfo.originalTotalTime_ = rtiFromCache.totalTime_;
     _runtimeInfo.originalOperationTime_ = rtiFromCache.getOperationTime();
+  }
+
+  if (_executionContext) {
+    _executionContext->signalQueryUpdate(_runtimeInfo);
   }
 }
 

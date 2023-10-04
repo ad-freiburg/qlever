@@ -15,7 +15,7 @@ template <int i0, int i1, int i2>
 struct SortTriple {
   using T = std::array<Id, 3>;
   // comparison function
-  bool operator()(const T& a, const T& b) const {
+  bool operator()(const auto& a, const auto& b) const {
     if (a[i0] == b[i0]) {
       if (a[i1] == b[i1]) {
         return a[i2] < b[i2];

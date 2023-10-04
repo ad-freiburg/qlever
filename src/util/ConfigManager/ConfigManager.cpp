@@ -576,4 +576,7 @@ bool ConfigManager::containsOption(const ConfigOption& opt) const {
               [](const ConfigOption& option) { return &option; }),
       &opt);
 }
+
+// ____________________________________________________________________________
+const std::string& ErrorMessage::getMessage() const { return message_; }
 }  // namespace ad_utility

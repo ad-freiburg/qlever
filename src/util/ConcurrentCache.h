@@ -13,6 +13,7 @@
 #include "util/Forward.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
 
 namespace ad_utility {
@@ -209,7 +210,7 @@ class ConcurrentCache {
 
   /// Delete elements from the unpinned part of the cache of total size
   /// at least `size`;
-  bool makeRoomAsMuchAsPossible(size_t size) {
+  bool makeRoomAsMuchAsPossible(MemorySize size) {
     return _cacheAndInProgressMap.wlock()->_cache.makeRoomAsMuchAsPossible(
         size);
   }
@@ -259,13 +260,13 @@ class ConcurrentCache {
   }
 
   // These functions set the different capacity/size settings of the cache
-  void setMaxSize(size_t maxSize) {
+  void setMaxSize(MemorySize maxSize) {
     _cacheAndInProgressMap.wlock()->_cache.setMaxSize(maxSize);
   }
   void setMaxNumEntries(size_t maxNumEntries) {
     _cacheAndInProgressMap.wlock()->_cache.setMaxNumEntries(maxNumEntries);
   }
-  void setMaxSizeSingleEntry(size_t maxSize) {
+  void setMaxSizeSingleEntry(MemorySize maxSize) {
     _cacheAndInProgressMap.wlock()->_cache.setMaxSizeSingleEntry(maxSize);
   }
 

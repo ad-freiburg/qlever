@@ -249,9 +249,12 @@ class ConfigOption {
   }
 
  private:
-  FRIEND_TEST(ConfigOptionTest, AddValidator);
-  FRIEND_TEST(ConfigOptionTest, AddValidatorExceptions);
-  FRIEND_TEST(ConfigManagerTest, AddValidator);
+  // Needed for testing.
+  FRIEND_TEST(ConfigManagerTest, AddNonExceptionValidator);
+
+  // This is a test helper function.
+  template <typename... Ts>
+  friend std::string generateValidatorName(size_t id);
 
   /*
   @brief Return the string representation/name of the type, of the currently

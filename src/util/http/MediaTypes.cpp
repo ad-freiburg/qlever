@@ -48,6 +48,7 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
     add(csv, "text", "csv", {".csv"});
     add(defaultType, "application", "text", {""});
     add(sparqlJson, "application", "sparql-results+json", {});
+    add(sparqlXml, "application", "sparql-results+xml", {});
     add(qleverJson, "application", "qlever-results+json", {});
     add(turtle, "text", "turtle", {".ttl"});
     add(octetStream, "application", "octet-stream", {});

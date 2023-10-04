@@ -5,10 +5,14 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <string_view>
 
-#include "../src/util/Cache.h"
+#include "util/Cache.h"
+#include "util/DefaultValueSizeGetter.h"
+#include "util/MemorySize/MemorySize.h"
 
 using std::string;
+using namespace ad_utility::memory_literals;
 
 // first some simple Tests for the general cache interface
 TEST(FlexibleCacheTest, Simple) {
@@ -18,8 +22,15 @@ TEST(FlexibleCacheTest, Simple) {
   auto scoreCalculator = [](const auto& v) { return v; };
   auto scoreComparator = std::less<>();
   ad_utility::HeapBasedCache<string, int, int, decltype(scoreComparator),
-                             decltype(accessUpdater), decltype(scoreCalculator)>
-      cache{3, 10000, 10000, scoreComparator, accessUpdater, scoreCalculator};
+                             decltype(accessUpdater), decltype(scoreCalculator),
+                             ad_utility::SizeOfSizeGetter>
+      cache{3,
+            10_kB,
+            10_kB,
+            scoreComparator,
+            accessUpdater,
+            scoreCalculator,
+            ad_utility::SizeOfSizeGetter{}};
   cache.insert("24", 24);
   cache.insert("2", 2);
   cache.insert("8", 8);
@@ -30,7 +41,8 @@ TEST(FlexibleCacheTest, Simple) {
   ASSERT_FALSE(cache.contains("2"));
 }
 TEST(FlexibleCacheTest, LRUSimple) {
-  ad_utility::HeapBasedLRUCache<string, int> cache(3, 10000, 10000);
+  ad_utility::HeapBasedLRUCache<string, int, ad_utility::SizeOfSizeGetter>
+      cache(3, 10_kB, 10_kB);
   cache.insert("24", 24);
   cache.insert("2", 2);
   cache.insert("8", 8);
@@ -43,7 +55,7 @@ TEST(FlexibleCacheTest, LRUSimple) {
 namespace ad_utility {
 // _____________________________________________________________________________
 TEST(LRUCacheTest, testSimpleMapUsage) {
-  LRUCache<string, string> cache(5, 10000, 10000);
+  LRUCache<string, string, StringSizeGetter<string>> cache(5, 10_kB, 10_kB);
   cache.insert("1", "x");
   cache.insert("2", "xx");
   cache.insert("3", "xxx");
@@ -61,7 +73,7 @@ TEST(LRUCacheTest, testSimpleMapUsage) {
 }
 // _____________________________________________________________________________
 TEST(LRUCacheTest, testSimpleMapUsageWithDrop) {
-  LRUCache<string, string> cache(3);
+  LRUCache<string, string, StringSizeGetter<string>> cache(3);
   cache.insert("1", "x");
   cache.insert("2", "xx");
   cache.insert("3", "xxx");
@@ -82,7 +94,7 @@ TEST(LRUCacheTest, testSimpleMapUsageWithDrop) {
 
 // _____________________________________________________________________________
 TEST(LRUCacheTest, testIncreasingCapacity) {
-  LRUCache<string, string> cache(5);
+  LRUCache<string, string, StringSizeGetter<string>> cache(5);
   cache.insert("1", "1x");
   cache.insert("2", "2x");
   cache.insert("3", "3x");
@@ -107,7 +119,7 @@ TEST(LRUCacheTest, testIncreasingCapacity) {
 
 // _____________________________________________________________________________
 TEST(LRUCacheTest, testDecreasingCapacity) {
-  LRUCache<string, string> cache(10);
+  LRUCache<string, string, StringSizeGetter<string>> cache(10);
   cache.insert("1", "x");
   cache.insert("2", "xx");
   cache.insert("3", "xxx");
