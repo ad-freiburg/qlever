@@ -252,11 +252,12 @@ TEST(ExceptionValidatorConceptTest, ExceptionValidatorConcept) {
 
 @param addAlwaysValidValidatorFunction A function, that generates a
 `ConfigOptionValidatorManager` for the given `ConstConfigOptionProxy<bool>`,
-which manages a validator, that implements the logical `and` on those bools,
-whose error message is the given error message and whose description is the
-given description. The function signature should look like this: `void
-func(std::string errorMessage, std::string descriptor,
-std::same_as<ConstConfigOptionProxy<bool>> auto... args)`.
+which manages a validator, that implements the logical `and` on the transformed
+`ConstConfigOptionProxy<bool>`, whose error message is the given error message
+and whose description is the given description. The function signature should
+look like this: `void func(std::string errorMessage, std::string descriptor,
+auto translationFunction, std::same_as<ConstConfigOptionProxy<bool>> auto...
+args)`.
 */
 void doConstructorTest(
     auto generateValidatorManager,
@@ -264,57 +265,125 @@ void doConstructorTest(
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doConstructorTest")};
 
+  // This translation function returns the internal value of the configuration
+  // option.
+  auto getValueTranslation = [](ConstConfigOptionProxy<bool> p) {
+    return p.getConfigOption().getValue<bool>();
+  };
+
+  // This translation function returns true, iff., the given configuration
+  // option was set.
+  auto wasSetTranslation = [](ConstConfigOptionProxy<bool> p) {
+    return p.getConfigOption().wasSet();
+  };
+
   // Options for the validators.
   bool bool1;
   bool bool2;
-  ConfigOption opt1("Option1", "", &bool1, std::make_optional(true));
-  ConfigOption opt2("Option2", "", &bool2, std::make_optional(true));
+  ConfigOption opt1("Option1", "", &bool1);
+  ConfigOption opt2("Option2", "", &bool2);
   ConstConfigOptionProxy<bool> proxy1(opt1);
   ConstConfigOptionProxy<bool> proxy2(opt2);
 
-  // Single argument validator.
   const std::string singleArgumentValidatorDescriptor =
       "This is the validator with a single argument.";
-  ConfigOptionValidatorManager singleArgumentValidatorManager{
-      generateValidatorManager("singleArgumentValidator",
-                               singleArgumentValidatorDescriptor, proxy1)};
-  ASSERT_STREQ(singleArgumentValidatorDescriptor.data(),
-               singleArgumentValidatorManager.getDescription().data());
-  ASSERT_NO_THROW(singleArgumentValidatorManager.checkValidator());
+  // Single argument validator with `wasSetTranslation`.
+  ConfigOptionValidatorManager
+      singleArgumentValidatorWithWasSetTranslatorManager{
+          generateValidatorManager(
+              "singleArgumentValidatorWithwasSetTranslation",
+              singleArgumentValidatorDescriptor, wasSetTranslation, proxy1)};
+
+  // Single argument validator with `getValueTranslation`.
+  ConfigOptionValidatorManager
+      singleArgumentValidatorWithGetValueTranslatorManager{
+          generateValidatorManager(
+              "singleArgumentValidatorWithgetValueTranslation",
+              singleArgumentValidatorDescriptor, getValueTranslation, proxy1)};
+
+  // Check the single argument validators.
+  ASSERT_STREQ(
+      singleArgumentValidatorDescriptor.data(),
+      singleArgumentValidatorWithWasSetTranslatorManager.getDescription()
+          .data());
+  ASSERT_STREQ(
+      singleArgumentValidatorDescriptor.data(),
+      singleArgumentValidatorWithGetValueTranslatorManager.getDescription()
+          .data());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      singleArgumentValidatorWithWasSetTranslatorManager.checkValidator(),
+      ::testing::ContainsRegex("singleArgumentValidatorWithwasSetTranslation"));
+  opt1.setValue(true);
+  ASSERT_NO_THROW(
+      singleArgumentValidatorWithGetValueTranslatorManager.checkValidator());
+  ASSERT_NO_THROW(
+      singleArgumentValidatorWithWasSetTranslatorManager.checkValidator());
   opt1.setValue(false);
   AD_EXPECT_THROW_WITH_MESSAGE(
-      singleArgumentValidatorManager.checkValidator(),
-      ::testing::ContainsRegex("singleArgumentValidator"));
-  ASSERT_ANY_THROW(singleArgumentValidatorManager.checkValidator());
+      singleArgumentValidatorWithGetValueTranslatorManager.checkValidator(),
+      ::testing::ContainsRegex(
+          "singleArgumentValidatorWithgetValueTranslation"));
+  ASSERT_NO_THROW(
+      singleArgumentValidatorWithWasSetTranslatorManager.checkValidator());
 
-  // Double argument validator.
   const std::string doubleArgumentValidatorDescriptor =
       "This is the validator with two arguments.";
-  ConfigOptionValidatorManager doubleArgumentValidatorManager{
-      generateValidatorManager("doubleArgumentValidatorManager",
-                               doubleArgumentValidatorDescriptor, proxy1,
-                               proxy2)};
-  ASSERT_STREQ(doubleArgumentValidatorDescriptor.data(),
-               doubleArgumentValidatorManager.getDescription().data());
+  // Double argument validator with `wasSetTranslation`
+  ConfigOptionValidatorManager
+      doubleArgumentValidatorWithWasSetTranlatorManager{
+          generateValidatorManager(
+              "doubleArgumentValidatorManagerWithwasSetTranslation",
+              doubleArgumentValidatorDescriptor, wasSetTranslation, proxy1,
+              proxy2)};
+
+  // Double argument validator with `getValueTranslation`
+  ConfigOptionValidatorManager
+      doubleArgumentValidatorWithGetValueTranslatorManager{
+          generateValidatorManager(
+              "doubleArgumentValidatorManagerWithgetValueTranslation",
+              doubleArgumentValidatorDescriptor, getValueTranslation, proxy1,
+              proxy2)};
+
+  // Check the double argument validators.
+  ASSERT_STREQ(
+      doubleArgumentValidatorDescriptor.data(),
+      doubleArgumentValidatorWithGetValueTranslatorManager.getDescription()
+          .data());
+  ASSERT_STREQ(
+      doubleArgumentValidatorDescriptor.data(),
+      doubleArgumentValidatorWithWasSetTranlatorManager.getDescription()
+          .data());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      doubleArgumentValidatorWithWasSetTranlatorManager.checkValidator(),
+      ::testing::ContainsRegex(
+          "doubleArgumentValidatorManagerWithwasSetTranslation"));
   opt1.setValue(true);
-  ASSERT_NO_THROW(doubleArgumentValidatorManager.checkValidator());
+  opt2.setValue(true);
+  ASSERT_NO_THROW(
+      doubleArgumentValidatorWithGetValueTranslatorManager.checkValidator());
+  ASSERT_NO_THROW(
+      doubleArgumentValidatorWithWasSetTranlatorManager.checkValidator());
   opt1.setValue(false);
   AD_EXPECT_THROW_WITH_MESSAGE(
-      doubleArgumentValidatorManager.checkValidator(),
-      ::testing::ContainsRegex("doubleArgumentValidator"));
+      doubleArgumentValidatorWithGetValueTranslatorManager.checkValidator(),
+      ::testing::ContainsRegex(
+          "doubleArgumentValidatorManagerWithgetValueTranslation"));
   opt2.setValue(false);
   AD_EXPECT_THROW_WITH_MESSAGE(
-      doubleArgumentValidatorManager.checkValidator(),
-      ::testing::ContainsRegex("doubleArgumentValidator"));
+      doubleArgumentValidatorWithGetValueTranslatorManager.checkValidator(),
+      ::testing::ContainsRegex(
+          "doubleArgumentValidatorManagerWithgetValueTranslation"));
   opt1.setValue(true);
   AD_EXPECT_THROW_WITH_MESSAGE(
-      doubleArgumentValidatorManager.checkValidator(),
-      ::testing::ContainsRegex("doubleArgumentValidator"));
+      doubleArgumentValidatorWithGetValueTranslatorManager.checkValidator(),
+      ::testing::ContainsRegex(
+          "doubleArgumentValidatorManagerWithgetValueTranslation"));
 }
 
 TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
   doConstructorTest(
       [](std::string errorMessage, std::string descriptor,
+         const auto& translationFunction,
          std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
         return ConfigOptionValidatorManager(
             [errorMessage =
@@ -326,24 +395,18 @@ TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
                 return ErrorMessage{errorMessage};
               };
             },
-            std::move(descriptor),
-            [](ConstConfigOptionProxy<bool> p) {
-              return p.getConfigOption().getValue<bool>();
-            },
-            args...);
+            std::move(descriptor), translationFunction, args...);
       });
 }
 
 TEST(ConfigOptionValidatorManagerTest, ValidatorConstructor) {
   doConstructorTest(
       [](std::string errorMessage, std::string descriptor,
+         const auto& translationFunction,
          std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
         return ConfigOptionValidatorManager(
             [](const std::same_as<bool> auto... b) { return (b && ...); },
-            std::move(errorMessage), std::move(descriptor),
-            [](ConstConfigOptionProxy<bool> p) {
-              return p.getConfigOption().getValue<bool>();
-            },
+            std::move(errorMessage), std::move(descriptor), translationFunction,
             args...);
       });
 }
