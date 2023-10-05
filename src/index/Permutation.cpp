@@ -64,10 +64,10 @@ IdTable Permutation::scan(Id col0Id, std::optional<Id> col1Id,
   const auto& metaData = meta_.getMetaData(col0Id);
 
   if (col1Id.has_value()) {
-    return reader_.scan(metaData, col1Id.value(), meta_.blockData(), file_,
+    return reader_.scan(metaData, col1Id.value(), meta_.blockData(), file_, {},
                         timer);
   } else {
-    return reader_.scan(metaData, meta_.blockData(), file_, timer);
+    return reader_.scan(metaData, meta_.blockData(), file_, {}, timer);
   }
 }
 
@@ -171,9 +171,9 @@ Permutation::IdTableGenerator Permutation::lazyScan(
   }
   if (col1Id.has_value()) {
     return reader_.lazyScan(meta_.getMetaData(col0Id), col1Id.value(),
-                            std::move(blocks.value()), file_, timer);
+                            std::move(blocks.value()), file_, {}, timer);
   } else {
     return reader_.lazyScan(meta_.getMetaData(col0Id),
-                            std::move(blocks.value()), file_, timer);
+                            std::move(blocks.value()), file_, {}, timer);
   }
 }

@@ -488,10 +488,8 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   }
 
-  CompressedRelationWriter writer1{2, ad_utility::File(fileName1, "w"),
-                                   blocksizePermutationInBytes_};
-  CompressedRelationWriter writer2{2, ad_utility::File(fileName2, "w"),
-                                   blocksizePermutationInBytes_};
+  std::optional<CompressedRelationWriter> writer1;
+  std::optional<CompressedRelationWriter> writer2;
 
   // Iterate over the vector and identify "relation" boundaries, where a
   // "relation" is the sequence of sortedTriples equal first component. For PSO
@@ -499,20 +497,29 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
   std::optional<Id> currentRel;
-  BufferedIdTable buffer{
-      2,
-      std::array{
-          ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                         fileName1 + ".tmp.mmap-buffer-col0"},
-          ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                         fileName1 + ".tmp.mmap-buffer-col1"}}};
+  std::optional<BufferedIdTable> buffer;
+  auto setupBuffersAndWriters = [&](size_t numColumns) {
+    std::vector<ad_utility::BufferedVector<Id>> columnBuffers;
+    for (auto i : ad_utility::integerRange(numColumns)) {
+      columnBuffers.emplace_back(
+          THRESHOLD_RELATION_CREATION,
+          fileName1 + ".tmp.mmap-buffer-col" + std::to_string(i));
+    }
+    buffer.emplace(numColumns, std::move(columnBuffers));
+    writer1.emplace(numColumns, ad_utility::File(fileName1, "w"),
+                    blocksizePermutationInBytes_);
+    writer2.emplace(numColumns, ad_utility::File(fileName2, "w"),
+                    blocksizePermutationInBytes_);
+  };
   size_t distinctCol1 = 0;
   Id lastLhs = ID_NO_VALUE;
   uint64_t totalNumTriples = 0;
   auto addCurrentRelation = [&metaData1, &metaData2, &writer1, &writer2,
                              &currentRel, &buffer, &distinctCol1]() {
-    auto md1 = writer1.addRelation(currentRel.value(), buffer, distinctCol1);
-    auto md2 = writeSwitchedRel(&writer2, currentRel.value(), &buffer);
+    auto md1 =
+        writer1->addRelation(currentRel.value(), buffer.value(), distinctCol1);
+    auto md2 =
+        writeSwitchedRel(&writer2.value(), currentRel.value(), &buffer.value());
     md1.setCol2Multiplicity(md2.getCol1Multiplicity());
     md2.setCol2Multiplicity(md1.getCol1Multiplicity());
     metaData1.add(md1);
@@ -521,27 +528,40 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   for (const auto& triple : AD_FWD(sortedTriples)) {
     if (!currentRel.has_value()) {
       currentRel = triple[c0];
+      setupBuffersAndWriters(triple.size() - 1);
     }
     // Call each of the `perTripleCallbacks` for the current triple
     (..., perTripleCallbacks(triple));
     ++totalNumTriples;
     if (triple[c0] != currentRel) {
       addCurrentRelation();
-      buffer.clear();
+      buffer->clear();
       distinctCol1 = 1;
       currentRel = triple[c0];
     } else {
       distinctCol1 += triple[c1] != lastLhs;
     }
-    buffer.push_back(std::array{triple[c1], triple[c2]});
+    // TODO<joka921> make this static and less cluttered.
+    buffer->emplace_back();
+    BufferedIdTable::row_reference row = buffer->back();
+    row[0] = triple[c1];
+    row[1] = triple[c2];
+    std::copy(triple.begin() + 3, triple.end(), row.begin() + 2);
     lastLhs = triple[c1];
   }
   if (from < totalNumTriples) {
     addCurrentRelation();
   }
 
-  metaData1.blockData() = std::move(writer1).getFinishedBlocks();
-  metaData2.blockData() = std::move(writer2).getFinishedBlocks();
+  // Handle the corner case of an empty index.
+  if (!currentRel.has_value()) {
+    setupBuffersAndWriters(2);
+  }
+
+  if (writer1.has_value()) {
+    metaData1.blockData() = std::move(writer1.value()).getFinishedBlocks();
+    metaData2.blockData() = std::move(writer2.value()).getFinishedBlocks();
+  }
 
   return std::make_pair(std::move(metaData1), std::move(metaData2));
 }
@@ -555,7 +575,7 @@ CompressedRelationMetadata IndexImpl::writeSwitchedRel(
   // the switched relations directly.
   auto& buffer = *bufPtr;
 
-  AD_CONTRACT_CHECK(buffer.numColumns() == 2);
+  AD_CONTRACT_CHECK(buffer.numColumns() >= 2);
   for (BufferedIdTable::row_reference row : buffer) {
     std::swap(row[0], row[1]);
   }
