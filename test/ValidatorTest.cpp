@@ -8,11 +8,13 @@
 #include <concepts>
 #include <functional>
 #include <optional>
+#include <tuple>
 
 #include "../test/util/GTestHelpers.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConfigManager/Validator.h"
+#include "util/ValidatorHelpers.h"
 
 namespace ad_utility {
 
@@ -346,4 +348,52 @@ TEST(ConfigOptionValidatorManagerTest, ValidatorConstructor) {
       });
 }
 
+// Rather basic test, if things behave as wanted with the helper function.
+TEST(ValidatorConceptTest, TransformValidatorIntoExceptionValidator) {
+  // Helper function, that check, if a given validator behaves as
+  // wanted, before and after being transformed into an exception validator.
+  auto checkValidator = []<typename... ParameterTypes>(
+                            ValidatorFunction<ParameterTypes...> auto func,
+                            const std::tuple<ParameterTypes...>& validValues,
+                            const std::tuple<ParameterTypes...>& nonValidValues,
+                            ad_utility::source_location l =
+                                ad_utility::source_location::current()) {
+    // For generating better messages, when failing a test.
+    auto trace{generateLocationTrace(l, "checkValidator")};
+
+    ASSERT_TRUE(std::apply(func, validValues));
+    ASSERT_FALSE(std::apply(func, nonValidValues));
+
+    // Transform and check.
+    auto transformedFunc =
+        transformValidatorIntoExceptionValidator<ParameterTypes...>(func,
+                                                                    "test");
+    static_assert(ExceptionValidatorFunction<decltype(transformedFunc),
+                                             ParameterTypes...>);
+    ASSERT_STREQ(std::apply(transformedFunc, nonValidValues)
+                     .value_or(ErrorMessage{""})
+                     .getMessage()
+                     .c_str(),
+                 "test");
+    ASSERT_FALSE(std::apply(transformedFunc, validValues).has_value());
+  };
+
+  // Test with a few generated validators..
+  checkValidator(generateDummyNonExceptionValidatorFunction<bool>(0),
+                 std::make_tuple(false), std::make_tuple(true));
+  checkValidator(generateDummyNonExceptionValidatorFunction<int>(0),
+                 std::make_tuple(createDummyValueForValidator<int>(1)),
+                 std::make_tuple(createDummyValueForValidator<int>(0)));
+  checkValidator(
+      generateDummyNonExceptionValidatorFunction<float, size_t,
+                                                 std::vector<std::string>>(0),
+      std::make_tuple(
+          createDummyValueForValidator<float>(1),
+          createDummyValueForValidator<size_t>(1),
+          createDummyValueForValidator<std::vector<std::string>>(1)),
+      std::make_tuple(
+          createDummyValueForValidator<float>(0),
+          createDummyValueForValidator<size_t>(0),
+          createDummyValueForValidator<std::vector<std::string>>(0)));
+}
 }  // namespace ad_utility

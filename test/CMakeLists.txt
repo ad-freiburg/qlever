@@ -322,11 +322,11 @@ addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
 addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
 
-addLinkAndDiscoverTest(ConfigManagerTest configManager)
+addLinkAndDiscoverTest(ConfigManagerTest configManager testUtil)
 
 addLinkAndDiscoverTest(ConfigOptionTest configManager)
 
-addLinkAndDiscoverTest(ValidatorTest configManager)
+addLinkAndDiscoverTest(ValidatorTest configManager testUtil)
 
 addLinkAndDiscoverTest(ConfigOptionProxyTest configManager)
 
