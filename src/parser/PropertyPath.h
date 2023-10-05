@@ -108,6 +108,7 @@ class PropertyPath {
   // ASSERT that this property path consists of a single IRI and return that
   // IRI.
   [[nodiscard]] const std::string& getIri() const;
+  bool isIri() const;
 
   Operation _operation;
   // For the limited transitive operations
