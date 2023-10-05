@@ -21,28 +21,32 @@ Permutation::Permutation(Enum permutation, Allocator allocator,
 }
 
 // _____________________________________________________________________
-void Permutation::loadFromDisk(const std::string& onDiskBase) {
-  if constexpr (MetaData::_isMmapBased) {
-    meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
-                ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
+void Permutation::loadFromDisk(const std::string& onDiskBase,
+                               bool onlyLoadAdditional) {
+  if (!onlyLoadAdditional) {
+    if constexpr (MetaData::_isMmapBased) {
+      meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
+                  ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
+    }
+    auto filename = string(onDiskBase + ".index" + fileSuffix_);
+    try {
+      file_.open(filename, "r");
+    } catch (const std::runtime_error& e) {
+      AD_THROW(
+          "Could not open the index file " + filename +
+          " for reading. Please check that you have read access to "
+          "this file. If it does not exist, your index is broken. The error "
+          "message was: " +
+          e.what());
+    }
+    meta_.readFromFile(&file_);
+    LOG(INFO) << "Registered " << readableName_
+              << " permutation: " << meta_.statistics() << std::endl;
+    isLoaded_ = true;
   }
-  auto filename = string(onDiskBase + ".index" + fileSuffix_);
-  try {
-    file_.open(filename, "r");
-  } catch (const std::runtime_error& e) {
-    AD_THROW("Could not open the index file " + filename +
-             " for reading. Please check that you have read access to "
-             "this file. If it does not exist, your index is broken. The error "
-             "message was: " +
-             e.what());
-  }
-  meta_.readFromFile(&file_);
-  LOG(INFO) << "Registered " << readableName_
-            << " permutation: " << meta_.statistics() << std::endl;
-  isLoaded_ = true;
   if (additionalPermutation_) {
-    additionalPermutation_->loadFromDisk(onDiskBase +
-                                         ADDITIONAL_TRIPLES_SUFFIX);
+    additionalPermutation_->loadFromDisk(onDiskBase + ADDITIONAL_TRIPLES_SUFFIX,
+                                         false);
   }
 }
 

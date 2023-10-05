@@ -71,8 +71,8 @@ struct PatternStatistics {
 class PatternCreator {
  public:
   using PSOSorter = ad_utility::CompressedExternalIdTableSorter<SortByPSO, 3>;
-  using PSOSorter4Cols =
-      ad_utility::CompressedExternalIdTableSorter<SortByPSO, 4>;
+  using OSPSorter4Cols =
+      ad_utility::CompressedExternalIdTableSorter<SortByOSP, 4>;
 
  private:
   // The file to which the patterns will be written.
@@ -102,7 +102,7 @@ class PatternCreator {
   // TODO<joka921> Use something buffered for this.
   std::vector<std::array<Id, 3>> _tripleBuffer;
   PSOSorter _additionalTriplesPsoSorter;
-  PSOSorter4Cols _fullPsoSorter;
+  OSPSorter4Cols _fullPsoSorter;
 
   // The predicates which have already occured in one of the patterns. Needed to
   // count the number of distinct predicates.
@@ -165,7 +165,7 @@ class PatternCreator {
     finish();
     return std::move(_additionalTriplesPsoSorter);
   }
-  PSOSorter4Cols&& getAllTriplesWithPatternSortedByPSO() && {
+  OSPSorter4Cols&& getAllTriplesWithPatternSortedByOSP() && {
     finish();
     return std::move(_fullPsoSorter);
   }

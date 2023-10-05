@@ -15,6 +15,7 @@
 
 #include "CompilationInfo.h"
 #include "absl/strings/str_join.h"
+#include "engine/AddCombinedRowToTable.h"
 #include "index/IndexFormatVersion.h"
 #include "index/PrefixHeuristic.h"
 #include "index/TriplesView.h"
@@ -23,7 +24,9 @@
 #include "util/BatchedPipeline.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/Serializer/FileSerializer.h"
+#include "util/ThreadSafeQueue.h"
 #include "util/TupleHelpers.h"
 
 using std::array;
@@ -169,19 +172,13 @@ void IndexImpl::createFromFile(const string& filename) {
     };
   };
 
-  size_t numTriplesNormal = 0;
-  auto countActualTriples = [&numTriplesNormal,
-                             &isInternalId](const auto& triple) mutable {
-    numTriplesNormal += !std::ranges::any_of(triple, isInternalId);
-  };
-
-  auto& psoSorter = *indexBuilderData.psoSorter;
+  auto& spoSorterWithDuplicates = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
-  auto uniqueSorter = ad_utility::uniqueView<decltype(psoSorter.sortedView()),
-                                             IdTableStatic<3>::row_type>(
-      psoSorter.sortedView());
+  auto uniqueSorter =
+      ad_utility::uniqueView<decltype(spoSorterWithDuplicates.sortedView()),
+                             IdTableStatic<3>::row_type>(
+          spoSorterWithDuplicates.sortedView());
 
-  size_t numPredicatesNormal = 0;
   PatternCreator patternCreator{onDiskBase_ + ".index.patterns",
                                 stxxlMemory() / 5};
   auto pushTripleToPatterns = [&patternCreator,
@@ -201,26 +198,87 @@ void IndexImpl::createFromFile(const string& filename) {
   // ql:has-predicate.
   makeIndexFromAdditionalTriples(
       std::move(patternCreator).getHasPatternSortedByPSO());
-  auto&& spoSorter =
-      std::move(patternCreator).getAllTriplesWithPatternSortedByPSO();
-  ExternalSorter4<SortByOSP> ospSorter{
-      onDiskBase_ + ".osp-sorter.dat",
+  auto&& ospSorterWithPatterns =
+      std::move(patternCreator).getAllTriplesWithPatternSortedByOSP();
+
+  Permutation tempPSOForPatterns{Permutation::PSO,
+                                 ad_utility::makeUnlimitedAllocator<Id>(),
+                                 Permutation::HasAdditionalTriples::True};
+  tempPSOForPatterns.loadFromDisk(onDiskBase_, true);
+  auto lazyPatternScan =
+      tempPSOForPatterns.lazyScan(qlever::specialIds.at(HAS_PATTERN_PREDICATE),
+                                  std::nullopt, std::nullopt, {});
+
+  ad_utility::data_structures::ThreadSafeQueue<IdTable> queue{4};
+  ad_utility::JThread joinWithPatternThread{[&] {
+    auto ospAsblocks = ospSorterWithPatterns.sortedViewAsBlocks();
+    auto ospAsBlocksTransformed =
+        ospAsblocks |
+        std::views::transform([](auto& idTable) -> decltype(auto) {
+          idTable.setColumnSubset(std::array<ColumnIndex, 4>{2, 1, 0, 3});
+          return idTable;
+        });
+    auto projection = [](const auto& row) -> Id { return row[0]; };
+    auto compareProjection = []<typename T>(const T& row) {
+      if constexpr (ad_utility::SimilarTo<T, Id>) {
+        return row;
+      } else {
+        return row[0];
+      }
+    };
+    auto comparator = [&compareProjection](const auto& l, const auto& r) {
+      return compareProjection(l) < compareProjection(r);
+    };
+    auto pushToQueue = [&](IdTable& table) {
+      queue.push(std::move(table));
+      table.clear();
+    };
+    IdTable outputTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
+    auto rowAdder = ad_utility::AddCombinedRowToIdTable<decltype(pushToQueue)>{
+        1, std::move(outputTable), 100'000, pushToQueue};
+    ad_utility::zipperJoinForBlocksWithoutUndef(
+        ospAsBlocksTransformed, lazyPatternScan, comparator, rowAdder,
+        projection, projection);
+    rowAdder.flush();
+    queue.finish();
+  }};
+
+  auto blockGenerator = [&]() -> cppcoro::generator<IdTable> {
+    while (auto block = queue.pop()) {
+      block.value().setColumnSubset(std::array<ColumnIndex, 5>{2, 1, 0, 3, 4});
+      co_yield block.value();
+    }
+  }();
+
+  auto opsViewWithBothPatternColumns = std::views::join(blockGenerator);
+
+  // For the last pair of permutations we don't need a next sorter, so we have
+  // no fourth argument.
+  ExternalSorter5<SortByPSO> psoSorter{
+      onDiskBase_ + ".lastPermutation-sorter.dat",
       stxxlMemory() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME, allocator_};
-  createPermutationPair(std::move(spoSorter).sortedView(), pso_, pos_,
-                        ospSorter.makePushCallback(),
+  size_t numObjectsNormal = 0;
+  createPermutationPair(opsViewWithBothPatternColumns, osp_, ops_,
+                        makeNumEntitiesCounter(numObjectsNormal, 2),
+                        psoSorter.makePushCallback());
+  configurationJson_["num-objects-normal"] = numObjectsNormal;
+
+  // Last permutation:: PSO and POS
+  size_t numPredicatesNormal = 0;
+  size_t numTriplesNormal = 0;
+  auto countActualTriples = [&numTriplesNormal,
+                             &isInternalId](const auto& triple) mutable {
+    numTriplesNormal += !std::ranges::any_of(triple, isInternalId);
+  };
+
+  createPermutationPair(psoSorter.sortedView(), pso_, pos_,
                         makeNumEntitiesCounter(numPredicatesNormal, 1),
                         countActualTriples);
   configurationJson_["num-predicates-normal"] = numPredicatesNormal;
   configurationJson_["num-triples-normal"] = numTriplesNormal;
   writeConfiguration();
-  psoSorter.clear();
+  spoSorterWithDuplicates.clear();
 
-  // For the last pair of permutations we don't need a next sorter, so we have
-  // no fourth argument.
-  size_t numObjectsNormal = 0;
-  createPermutationPair(ospSorter.sortedView(), osp_, ops_,
-                        makeNumEntitiesCounter(numObjectsNormal, 2));
-  configurationJson_["num-objects-normal"] = numObjectsNormal;
   configurationJson_["has-all-permutations"] = true;
   LOG(DEBUG) << "Finished writing permutations" << std::endl;
 

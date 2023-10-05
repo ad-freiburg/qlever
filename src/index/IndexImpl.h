@@ -63,6 +63,10 @@ template <typename Comparator>
 using ExternalSorter4 =
     ad_utility::CompressedExternalIdTableSorter<Comparator, 4>;
 
+template <typename Comparator>
+using ExternalSorter5 =
+    ad_utility::CompressedExternalIdTableSorter<Comparator, 5>;
+
 using PsoSorter = ExternalSorter<SortByPSO>;
 
 // Several data that are passed along between different phases of the

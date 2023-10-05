@@ -578,6 +578,18 @@ class CompressedExternalIdTableSorter
     mergeIsActive_.store(false);
   }
 
+  cppcoro::generator<IdTableStatic<NumStaticCols>> sortedViewAsBlocks() {
+    size_t numYielded = 0;
+    mergeIsActive_.store(true);
+    for (auto& block : ad_utility::streams::runStreamAsync(
+             sortedBlocks(), std::max(1, numBufferedOutputBlocks_ - 2))) {
+      numYielded += block.numRows();
+      co_yield block;
+    }
+    AD_CORRECTNESS_CHECK(numYielded == this->numElementsPushed_);
+    mergeIsActive_.store(false);
+  }
+
  private:
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return a generator that yields the sorted elements. This

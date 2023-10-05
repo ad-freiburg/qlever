@@ -489,7 +489,7 @@ class IdTable {
   // creates a dynamic view from a dynamic table. This makes generic code that
   // is templated on the number of columns easier to write.
   template <size_t NewNumColumns>
-  requires isDynamic
+  requires(isDynamic || NewNumColumns == 0)
   IdTable<T, NewNumColumns, ColumnStorage, IsView::True> asStaticView() const {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     ViewSpans viewSpans(data().begin(), data().end());
@@ -524,9 +524,10 @@ class IdTable {
   // numColumns()` implies that the function applies a permutation to the table.
   // For example `setColumnSubset({1, 2, 0})` rotates the columns of a table
   // with three columns left by one element.
-  void setColumnSubset(std::span<const ColumnIndex> subset) requires isDynamic {
+  void setColumnSubset(std::span<const ColumnIndex> subset) {
     // First check that the `subset` is indeed a subset of the column
     // indices.
+    AD_CONTRACT_CHECK(isDynamic || subset.size() == NumColumns);
     std::vector<ColumnIndex> check{subset.begin(), subset.end()};
     std::ranges::sort(check);
     AD_CONTRACT_CHECK(std::unique(check.begin(), check.end()) == check.end());
