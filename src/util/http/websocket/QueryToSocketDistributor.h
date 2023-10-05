@@ -47,7 +47,9 @@ class QueryToSocketDistributor {
   /// update to the data.
   net::awaitable<void> waitForUpdate() const;
 
-  auto useStrandedAwaitable() const;
+  /// Schedule a coroutine onto the strand of this instance.
+  /// Make sure to co_await this before accessing any member of this class.
+  net::awaitable<void> dispatchToStrand() const;
 
  public:
   /// Constructor that builds a new strand from the provided io context.

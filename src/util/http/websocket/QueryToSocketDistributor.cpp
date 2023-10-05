@@ -12,13 +12,15 @@
 
 namespace ad_utility::websocket {
 
-auto QueryToSocketDistributor::useStrandedAwaitable() const {
-  return net::bind_executor(strand_, net::use_awaitable);
+net::awaitable<void> QueryToSocketDistributor::dispatchToStrand() const {
+  return net::dispatch(net::bind_executor(strand_, net::use_awaitable));
 }
 
+// _____________________________________________________________________________
+
 net::awaitable<void> QueryToSocketDistributor::waitForUpdate() const {
-  auto [error] =
-      co_await infiniteTimer_.async_wait(net::as_tuple(useStrandedAwaitable()));
+  auto [error] = co_await infiniteTimer_.async_wait(
+      net::bind_executor(strand_, net::as_tuple(net::use_awaitable)));
   // If this fails this means the infinite timer expired or aborted with an
   // unexpected error code. This should not happen at all
   AD_CORRECTNESS_CHECK(error == net::error::operation_aborted);
@@ -40,7 +42,7 @@ void QueryToSocketDistributor::wakeUpWaitingListeners() {
 net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
     std::string payload) {
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
-  co_await net::dispatch(useStrandedAwaitable());
+  co_await dispatchToStrand();
   AD_CONTRACT_CHECK(!finished_);
   data_.push_back(std::move(sharedPayload));
   wakeUpWaitingListeners();
@@ -49,7 +51,7 @@ net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
 // _____________________________________________________________________________
 
 net::awaitable<void> QueryToSocketDistributor::signalEnd() {
-  co_await net::dispatch(useStrandedAwaitable());
+  co_await dispatchToStrand();
   AD_CONTRACT_CHECK(!finished_);
   finished_ = true;
   wakeUpWaitingListeners();
@@ -61,7 +63,7 @@ net::awaitable<void> QueryToSocketDistributor::signalEnd() {
 
 net::awaitable<std::shared_ptr<const std::string>>
 QueryToSocketDistributor::waitForNextDataPiece(size_t index) const {
-  co_await net::dispatch(useStrandedAwaitable());
+  co_await dispatchToStrand();
 
   if (index < data_.size()) {
     co_return data_.at(index);
