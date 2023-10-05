@@ -38,14 +38,15 @@
 
 namespace ad_utility {
 // ____________________________________________________________________________
-void ConfigManager::verifyHashMapEntry(std::string_view jsonPathToEntry,
-                                       const HashMapEntry& entry) {
+void ConfigManager::verifyHashMapEntry(
+    std::string_view jsonPathToEntry,
+    const HashMapEntry::pointer entryPointer) {
   // Make sure, that it is not a null pointer.
-  AD_CORRECTNESS_CHECK(entry != nullptr);
+  AD_CORRECTNESS_CHECK(entryPointer != nullptr);
 
   // An empty sub manager tends to point to a logic error on the user
   // side.
-  if (const ConfigManager* ptr = std::get_if<ConfigManager>(entry.get());
+  if (const ConfigManager* ptr = std::get_if<ConfigManager>(entryPointer);
       ptr != nullptr && ptr->configurationOptions_.empty()) {
     throw std::runtime_error(
         absl::StrCat("The sub manager at '", jsonPathToEntry,
@@ -70,7 +71,8 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
     const auto& [jsonPath, pointerToVariant] = pair;
 
     // Check the hash map entry.
-    verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath), pointerToVariant);
+    verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath),
+                       pointerToVariant.get());
 
     // Return a dereferenced reference.
     return std::tie(jsonPath, *pointerToVariant);
@@ -577,7 +579,8 @@ ConfigManager::validators(std::string_view pathPrefix) const {
 
     // Is the entry not a null pointer? If yes, and if it's a `ConfigManager`,
     // is the `ConfigManager` not empty?
-    verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath), pointerToVariant);
+    verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath),
+                       pointerToVariant.get());
 
     return std::holds_alternative<ConfigManager>(*pointerToVariant);
   };

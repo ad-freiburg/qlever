@@ -537,8 +537,10 @@ class ConfigManager {
   error.
 
   @param jsonPathToEntry For a better exception message.
+  @param entryPointer Pointer to the object managed by the pointer in the hash
+  map.
   */
   static void verifyHashMapEntry(std::string_view jsonPathToEntry,
-                                 const HashMapEntry& entry);
+                                 const HashMapEntry::pointer entryPointer);
 };
 }  // namespace ad_utility
