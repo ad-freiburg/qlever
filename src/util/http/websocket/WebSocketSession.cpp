@@ -68,11 +68,7 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
     ws_.set_option(beast::websocket::stream_base::timeout::suggested(
         beast::role_type::server));
 
-    co_await ws_.async_accept(request, boost::asio::use_awaitable);
-
-    auto strand = net::make_strand(ws_.get_executor());
-
-    co_await net::dispatch(strand, net::use_awaitable);
+    co_await ws_.async_accept(request, net::use_awaitable);
 
     // Experimental operators, see
     // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html
@@ -95,6 +91,12 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
 net::awaitable<void> WebSocketSession::handleSession(
     QueryHub& queryHub, const http::request<http::string_body>& request,
     tcp::socket socket) {
+  // Make sure access to new websocket is on a strand and therefore thread safe
+  auto executor = co_await net::this_coro::executor;
+  AD_CONTRACT_CHECK(
+      executor.target<net::strand<net::io_context::executor_type>>());
+  co_await net::dispatch(net::use_awaitable);
+
   auto queryIdString = extractQueryId(request.target());
   AD_CORRECTNESS_CHECK(!queryIdString.empty());
   UpdateFetcher fetcher{queryHub, QueryId::idFromString(queryIdString)};

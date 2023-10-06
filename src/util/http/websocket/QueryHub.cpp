@@ -54,7 +54,7 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
 
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForSending(QueryId queryId) {
-  return sameExecutor(
+  return resumeOnOriginalExecutor(
       createOrAcquireDistributorInternal<true>(std::move(queryId)));
 }
 
@@ -62,7 +62,7 @@ QueryHub::createOrAcquireDistributorForSending(QueryId queryId) {
 
 net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForReceiving(QueryId queryId) {
-  return sameExecutor(
+  return resumeOnOriginalExecutor(
       createOrAcquireDistributorInternal<false>(std::move(queryId)));
 }
 }  // namespace ad_utility::websocket
