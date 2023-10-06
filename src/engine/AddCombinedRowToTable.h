@@ -134,6 +134,26 @@ class AddCombinedRowToIdTable {
     checkNumColumns();
   }
 
+  void setLeftInput(const auto& inputLeft) {
+    auto toView = []<typename T>(const T& table) {
+      if constexpr (requires { table.template asStaticView<0>(); }) {
+        return table.template asStaticView<0>();
+      } else {
+        return table;
+      }
+    };
+    if (nextIndex_ != 0) {
+      AD_CORRECTNESS_CHECK(inputs_.has_value());
+      flush();
+    }
+    // TODO<joka921> This is rather unsafe, we should think of something better.
+    inputs_ = std::array{
+        toView(inputLeft),
+        IdTableView<0>{resultTable_.numColumns() -
+                           toView(inputLeft).numColumns() + numJoinColumns_,
+                       ad_utility::makeUnlimitedAllocator<Id>()}};
+  }
+
   // The next free row in the output will be created from
   // `inputLeft_[rowIndexA]`. The columns from `inputRight_` will all be set to
   // UNDEF

@@ -173,7 +173,7 @@ class IdTable {
   // Then the argument `numColumns` and `NumColumns` (the static and the
   // dynamic number of columns) must be equal, else a runtime check fails.
   explicit IdTable(size_t numColumns, Allocator allocator = {})
-      requires(!isView && columnsAreAllocatable)
+      requires(columnsAreAllocatable)
       : numColumns_{numColumns}, allocator_{std::move(allocator)} {
     if constexpr (!isDynamic) {
       AD_CONTRACT_CHECK(NumColumns == numColumns);

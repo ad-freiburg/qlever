@@ -647,13 +647,16 @@ class BlockAndSubrange {
  */
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename LeftProjection = std::identity,
-          typename RightProjection = std::identity>
+          typename RightProjection = std::identity,
+          typename DoOptionalJoinTag = std::false_type>
 void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
                                      RightBlocks&& rightBlocks,
                                      const LessThan& lessThan,
                                      auto& compatibleRowAction,
                                      LeftProjection leftProjection = {},
-                                     RightProjection rightProjection = {}) {
+                                     RightProjection rightProjection = {},
+                                     DoOptionalJoinTag = {}) {
+  static constexpr bool DoOptionalJoin = DoOptionalJoinTag::value;
   // Type aliases for a single block from the left/right input
   using LeftBlock =
       typename std::ranges::range_value_t<std::decay_t<LeftBlocks>>;
@@ -736,9 +739,10 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
       // so we suppress the warning about `lessThan` being unused.
       (void)lessThan;
       while (targetBuffer.empty() && it != end) {
-        if ((*it).empty()) {
-          AD_EXPENSIVE_CHECK(std::ranges::is_sorted(*it, lessThan));
-          targetBuffer.emplace_back(std::move(*it));
+        auto& el = *it;
+        if (!el.empty()) {
+          AD_CORRECTNESS_CHECK(std::ranges::is_sorted(el, lessThan));
+          targetBuffer.emplace_back(std::move(el));
         }
         ++it;
       }
@@ -755,7 +759,13 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     auto fillEqualToMinimum = [minEl = getMinEl(), &lessThan, &eq](
                                   auto& targetBuffer, auto& it,
                                   const auto& end) {
-      while (it != end && eq((*it)[0], minEl)) {
+      for (; it != end; ++it) {
+        if (std::ranges::empty(*it)) {
+          continue;
+        }
+        if (!eq((*it)[0], minEl)) {
+          break;
+        }
         AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it, lessThan));
         targetBuffer.emplace_back(std::move(*it));
         ++it;
@@ -769,6 +779,20 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   // product of the blocks in `blocksLeft` and `blocksRight`.
   auto addAll = [&compatibleRowAction](const auto& blocksLeft,
                                        const auto& blocksRight) {
+    if constexpr (DoOptionalJoin) {
+      if (std::ranges::all_of(
+              blocksRight | std::views::transform(
+                                [](const auto& inp) { return inp.subrange(); }),
+              std::ranges::empty)) {
+        for (const auto& lBlock : blocksLeft) {
+          compatibleRowAction.setLeftInput(lBlock.fullBlock());
+          for (size_t i : std::views::iota(lBlock.getIndices().first,
+                                           lBlock.getIndices().second)) {
+            compatibleRowAction.addOptionalRow(i);
+          }
+        }
+      }
+    }
     // TODO<C++23> use `std::views::cartesian_product`.
     for (const auto& lBlock : blocksLeft) {
       for (const auto& rBlock : blocksRight) {
@@ -781,9 +805,9 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
             compatibleRowAction.addRow(i, j);
           }
         }
-        compatibleRowAction.flush();
       }
     }
+    compatibleRowAction.flush();
   };
 
   // Join the first block in `sameBlocksLeft` with the first block in
@@ -817,10 +841,21 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
       compatibleRowAction.addRow(itFromL - begL, itFromR - begR);
     };
 
+    auto addNotFoundRowIndex = [&]() {
+      if constexpr (DoOptionalJoin) {
+        return [begL = fullBlockLeft.get().begin(),
+                &compatibleRowAction](auto itFromL) {
+          compatibleRowAction.addOptionalRow(itFromL - begL);
+        };
+
+      } else {
+        return ad_utility::noop;
+      }
+    }();
     [[maybe_unused]] auto res = zipperJoinWithUndef(
         std::ranges::subrange{subrangeLeft.begin(), minElItL},
         std::ranges::subrange{subrangeRight.begin(), minElItR}, lessThan,
-        addRowIndex, noop, noop);
+        addRowIndex, noop, noop, addNotFoundRowIndex);
     compatibleRowAction.flush();
 
     // Remove the joined elements.
@@ -883,6 +918,25 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   while (true) {
     fillBuffer();
     if (sameBlocksLeft.empty() || sameBlocksRight.empty()) {
+      if constexpr (DoOptionalJoin) {
+        for (auto& block : sameBlocksLeft) {
+          compatibleRowAction.setLeftInput(block.fullBlock());
+
+          for (size_t idx : std::views::iota(block.getIndices().first,
+                                             block.getIndices().second)) {
+            compatibleRowAction.addOptionalRow(idx);
+          }
+        }
+        while (it1 != end1) {
+          auto& block = *it1;
+          compatibleRowAction.setLeftInput(block);
+          for (size_t idx : ad_utility::integerRange(block.size())) {
+            compatibleRowAction.addOptionalRow(idx);
+          }
+          ++it1;
+        }
+        compatibleRowAction.flush();
+      }
       return;
     }
     joinBuffers();

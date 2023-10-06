@@ -124,14 +124,25 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(
       // TODO<joka921> Also add the column for the object triple.
       auto tripleBackup = std::move(*it);
       triples.erase(it);
-      auto matchingTrip =
+      // TODO<joka921> Code duplication
+      auto matchingTripSubject =
           std::ranges::find_if(triples, [&subAndPred](const SparqlTriple& t) {
             return t._s == subAndPred.subject_ && t._p.isIri() &&
                    !isVariable(t._p);
           });
-      if (matchingTrip != triples.end()) {
-        matchingTrip->_additionalScanColumns.emplace_back(
+      if (matchingTripSubject != triples.end()) {
+        matchingTripSubject->_additionalScanColumns.emplace_back(
             2, subAndPred.predicate_);
+        return patternTrickTuple;
+      }
+      auto matchingTripObject =
+          std::ranges::find_if(triples, [&subAndPred](const SparqlTriple& t) {
+            return t._o == subAndPred.subject_ && t._p.isIri() &&
+                   !isVariable(t._p);
+          });
+      if (matchingTripObject != triples.end()) {
+        matchingTripObject->_additionalScanColumns.emplace_back(
+            3, subAndPred.predicate_);
         return patternTrickTuple;
       }
       // For the three variable triples we have to make the predicate the

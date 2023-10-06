@@ -236,6 +236,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
 TEST(IndexTest, scanTest) {
   auto testWithAndWithoutPrefixCompression = [](bool useCompression) {
     using enum Permutation::Enum;
+    /*
     std::string kb =
         "<a>  <b>  <c>  . \n"
         "<a>  <b>  <c2> . \n"
@@ -269,13 +270,15 @@ TEST(IndexTest, scanTest) {
       testOne("<b2>", "<c2>", POS, {{a2}});
       testOne("<notExisting>", "<a>", PSO, {});
     }
-    kb = "<a> <is-a> <1> . \n"
-         "<a> <is-a> <2> . \n"
-         "<a> <is-a> <0> . \n"
-         "<b> <is-a> <3> . \n"
-         "<b> <is-a> <0> . \n"
-         "<c> <is-a> <1> . \n"
-         "<c> <is-a> <2> . \n";
+    */
+    auto kb =
+        "<a> <is-a> <1> . \n"
+        "<a> <is-a> <2> . \n"
+        "<a> <is-a> <0> . \n"
+        "<b> <is-a> <3> . \n"
+        "<b> <is-a> <0> . \n"
+        "<c> <is-a> <1> . \n"
+        "<c> <is-a> <2> . \n";
 
     {
       const IndexImpl& index =

@@ -209,15 +209,31 @@ void IndexImpl::createFromFile(const string& filename) {
       tempPSOForPatterns.lazyScan(qlever::specialIds.at(HAS_PATTERN_PREDICATE),
                                   std::nullopt, std::nullopt, {});
 
+  auto makePtrAndBool = [](auto range)
+      -> cppcoro::generator<
+          std::pair<decltype(std::addressof(*range.begin())), bool>> {
+    for (auto& el : range) {
+      auto pair = std::pair{std::addressof(el), false};
+      co_yield pair;
+    }
+  };
   ad_utility::data_structures::ThreadSafeQueue<IdTable> queue{4};
   ad_utility::JThread joinWithPatternThread{[&] {
-    auto ospAsblocks = ospSorterWithPatterns.sortedViewAsBlocks();
+    auto ospAsblocks =
+        makePtrAndBool(ospSorterWithPatterns.sortedViewAsBlocks());
+
     auto ospAsBlocksTransformed =
         ospAsblocks |
-        std::views::transform([](auto& idTable) -> decltype(auto) {
-          idTable.setColumnSubset(std::array<ColumnIndex, 4>{2, 1, 0, 3});
-          return idTable;
-        });
+        std::views::transform(
+            [](auto& idTableAndBool) mutable -> decltype(auto) {
+              auto& idTable = *idTableAndBool.first;
+              if (idTableAndBool.second) {
+                return idTable;
+              }
+              idTableAndBool.second = true;
+              idTable.setColumnSubset(std::array<ColumnIndex, 4>{2, 1, 0, 3});
+              return idTable;
+            });
     auto projection = [](const auto& row) -> Id { return row[0]; };
     auto compareProjection = []<typename T>(const T& row) {
       if constexpr (ad_utility::SimilarTo<T, Id>) {
@@ -238,17 +254,17 @@ void IndexImpl::createFromFile(const string& filename) {
         1, std::move(outputTable), 100'000, pushToQueue};
     ad_utility::zipperJoinForBlocksWithoutUndef(
         ospAsBlocksTransformed, lazyPatternScan, comparator, rowAdder,
-        projection, projection);
+        projection, projection, std::true_type{});
     rowAdder.flush();
     queue.finish();
   }};
 
-  auto blockGenerator = [&]() -> cppcoro::generator<IdTable> {
+  auto blockGenerator = [](auto& queue) -> cppcoro::generator<IdTable> {
     while (auto block = queue.pop()) {
       block.value().setColumnSubset(std::array<ColumnIndex, 5>{2, 1, 0, 3, 4});
       co_yield block.value();
     }
-  }();
+  }(queue);
 
   auto opsViewWithBothPatternColumns = std::views::join(blockGenerator);
 

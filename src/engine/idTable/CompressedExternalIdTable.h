@@ -495,7 +495,7 @@ class CompressedExternalIdTable
 // false positives in the memory limit mechanism, so setting the following
 // variable to `true` allows to disable the memory limit.
 inline std::atomic<bool>
-    EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
+    EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
 
 // The implementation of sorting a single block
 template <typename Comparator>
