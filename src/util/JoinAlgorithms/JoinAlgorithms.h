@@ -768,7 +768,6 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
         }
         AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it, lessThan));
         targetBuffer.emplace_back(std::move(*it));
-        ++it;
       }
     };
     fillEqualToMinimum(sameBlocksLeft, it1, end1);
