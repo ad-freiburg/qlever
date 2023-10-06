@@ -488,12 +488,11 @@ std::string ConfigManager::printConfigurationDoc(
 
   // List of the validators.
   const std::string& listOfAllValidators = ad_utility::lazyStrJoin(
-      ad_utility::transform(
-          validators(),
-          [](const std::reference_wrapper<const ConfigOptionValidatorManager>&
-                 validator) {
-            return absl::StrCat("- ", validator.get().getDescription());
-          }),
+      ad_utility::transform(validators(),
+                            [](const ConfigOptionValidatorManager& validator) {
+                              return absl::StrCat("- ",
+                                                  validator.getDescription());
+                            }),
       "\n\n");
 
   return absl::StrCat(
