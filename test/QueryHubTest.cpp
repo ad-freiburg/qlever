@@ -153,6 +153,7 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
       co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
   EXPECT_FALSE(!comparison.owner_before(distributor) &&
                !distributor.owner_before(comparison));
+  co_await net::post(net::use_awaitable);
   future.wait();
 }
 
