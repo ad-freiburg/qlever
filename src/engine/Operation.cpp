@@ -65,7 +65,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
 
   if (isRoot) {
     // Start with an estimated runtime info which will be updated as we go.
-    createRuntimeInfoFromEstimates();
+    createRuntimeInfoFromEstimates(std::make_shared<RuntimeInformation>());
   }
   auto& cache = _executionContext->getQueryTreeCache();
   const string cacheKey = asString();
@@ -93,6 +93,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       }
     });
   }
+
+  AD_CORRECTNESS_CHECK(_runtimeInfo);
 
   try {
     // In case of an exception, create the correct runtime info, no matter which
@@ -131,13 +133,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
             ". This timeout was not caught inside the actual computation, "
             "which indicates insufficient timeout functionality.");
       }
-      // Make sure that the results that are written to the cache have the
-      // correct runtimeInfo. The children of the runtime info are already set
-      // correctly because the result was computed, so we can pass `nullopt` as
-      // the last argument.
-      updateRuntimeInformationOnSuccess(result,
-                                        ad_utility::CacheStatus::computed,
-                                        timer.msecs(), std::nullopt);
+      _runtimeInfo->originalTotalTime_ = timer.msecs();
       // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
       // already perform it. An example for an operation that directly computes
       // the Limit is a full index scan with three variables.
@@ -146,12 +142,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
         // Note: both of the following calls have no effect and negligible
         // runtime if neither a LIMIT nor an OFFSET were specified.
         result.applyLimitOffset(_limit);
-        _runtimeInfo.addLimitOffsetRow(_limit, limitTimer.msecs(), true);
+        _runtimeInfo->addLimitOffsetRow(_limit, limitTimer.msecs(), true);
       } else {
         AD_CONTRACT_CHECK(result.idTable().numRows() ==
                           _limit.actualSize(result.idTable().numRows()));
       }
-      return CacheValue{std::move(result), getRuntimeInfo()};
+      return CacheValue{std::move(result)};
     };
 
     auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda,
@@ -164,7 +160,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       return nullptr;
     }
 
-    updateRuntimeInformationOnSuccess(result, timer.msecs());
+    updateRuntimeInformationOnSuccess(*result._resultPointer->resultTable(),
+                                      result._cacheStatus, timer.msecs());
     auto resultNumRows = result._resultPointer->resultTable()->size();
     auto resultNumCols = result._resultPointer->resultTable()->width();
     LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
@@ -172,7 +169,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
     return result._resultPointer->resultTable();
   } catch (const ad_utility::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
-    _runtimeInfo.status_ = RuntimeInformation::Status::failedBecauseChildFailed;
+    _runtimeInfo->status_ =
+        RuntimeInformation::Status::failedBecauseChildFailed;
     throw;
   } catch (const ad_utility::WaitedForResultWhichThenFailedException& e) {
     // Here and in the following, show the detailed information (it's the
@@ -211,144 +209,92 @@ void Operation::checkTimeout() const {
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
     const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
-    size_t timeInMilliseconds, std::optional<RuntimeInformation> runtimeInfo) {
-  _runtimeInfo.totalTime_ = timeInMilliseconds;
-  _runtimeInfo.numRows_ = resultTable.size();
-  _runtimeInfo.cacheStatus_ = cacheStatus;
+    size_t timeInMilliseconds) {
+  _runtimeInfo->totalTime_ = timeInMilliseconds;
+  _runtimeInfo->numRows_ = resultTable.size();
+  _runtimeInfo->cacheStatus_ = cacheStatus;
 
-  _runtimeInfo.status_ = RuntimeInformation::Status::fullyMaterialized;
+  _runtimeInfo->status_ = RuntimeInformation::Status::fullyMaterialized;
 
   bool wasCached = cacheStatus != ad_utility::CacheStatus::computed;
-  // If the result was read from the cache, then we need the additional
-  // runtime info for the correct child information etc.
-  AD_CONTRACT_CHECK(!wasCached || runtimeInfo.has_value());
 
-  if (runtimeInfo.has_value()) {
-    if (wasCached) {
-      _runtimeInfo.originalTotalTime_ = runtimeInfo->totalTime_;
-      _runtimeInfo.originalOperationTime_ = runtimeInfo->getOperationTime();
-      _runtimeInfo.details_ = std::move(runtimeInfo->details_);
-    }
-    // Only the result that was actually computed (or read from cache) knows
-    // the correct information about the children computations.
-    _runtimeInfo.children_ = std::move(runtimeInfo->children_);
-  } else {
-    // The result was computed by this operation (not read from the cache).
-    // Therefore, for each child of this operation the correct runtime is
-    // available.
-    _runtimeInfo.children_.clear();
-    for (auto* child : getChildren()) {
-      AD_CONTRACT_CHECK(child);
-      _runtimeInfo.children_.push_back(
-          child->getRootOperation()->getRuntimeInfo());
-    }
+  if (wasCached) {
+    _runtimeInfo->originalOperationTime_ = _runtimeInfo->getOperationTime();
   }
   if (_executionContext) {
-    _executionContext->signalQueryUpdate(_runtimeInfo);
+    _executionContext->signalQueryUpdate(*_runtimeInfo);
   }
-}
-
-// ____________________________________________________________________________________________________________________
-void Operation::updateRuntimeInformationOnSuccess(
-    const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
-    size_t timeInMilliseconds) {
-  updateRuntimeInformationOnSuccess(
-      *resultAndCacheStatus._resultPointer->resultTable(),
-      resultAndCacheStatus._cacheStatus, timeInMilliseconds,
-      resultAndCacheStatus._resultPointer->runtimeInfo());
 }
 
 // _____________________________________________________________________________
 void Operation::updateRuntimeInformationWhenOptimizedOut(
-    std::vector<RuntimeInformation> children,
     RuntimeInformation::Status status) {
-  _runtimeInfo.status_ = status;
-  _runtimeInfo.children_ = std::move(children);
+  _runtimeInfo->status_ = status;
   // This operation was optimized out, so its operation time is zero.
   // The operation time is computed as
   // `totalTime_ - #sum of childrens' total time#` in `getOperationTime()`.
   // To set it to zero we thus have to set the `totalTime_` to that sum.
-  auto timesOfChildren = _runtimeInfo.children_ |
+  auto timesOfChildren = _runtimeInfo->children_ |
                          std::views::transform(&RuntimeInformation::totalTime_);
-  _runtimeInfo.totalTime_ =
+  _runtimeInfo->totalTime_ =
       std::accumulate(timesOfChildren.begin(), timesOfChildren.end(), 0.0);
 
   if (_executionContext) {
-    _executionContext->signalQueryUpdate(_runtimeInfo);
-  }
-}
-
-// _____________________________________________________________________________
-void Operation::updateRuntimeInformationWhenOptimizedOut(
-    RuntimeInformation::Status status) {
-  auto setStatus = [&status](RuntimeInformation& rti,
-                             const auto& self) -> void {
-    rti.status_ = status;
-    rti.totalTime_ = 0;
-    for (auto& child : rti.children_) {
-      self(child, self);
-    }
-  };
-  setStatus(_runtimeInfo, setStatus);
-
-  if (_executionContext) {
-    _executionContext->signalQueryUpdate(_runtimeInfo);
+    _executionContext->signalQueryUpdate(*_runtimeInfo);
   }
 }
 
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
-  _runtimeInfo.children_.clear();
-  for (auto child : getChildren()) {
-    _runtimeInfo.children_.push_back(child->getRootOperation()->_runtimeInfo);
-  }
-
-  _runtimeInfo.totalTime_ = timeInMilliseconds;
-  _runtimeInfo.status_ = RuntimeInformation::Status::failed;
+  _runtimeInfo->totalTime_ = timeInMilliseconds;
+  _runtimeInfo->status_ = RuntimeInformation::Status::failed;
 
   if (_executionContext) {
-    _executionContext->signalQueryUpdate(_runtimeInfo);
+    _executionContext->signalQueryUpdate(*_runtimeInfo);
   }
 }
 
 // __________________________________________________________________
-void Operation::createRuntimeInfoFromEstimates() {
-  _runtimeInfo.setColumnNames(getInternallyVisibleVariableColumns());
+void Operation::createRuntimeInfoFromEstimates(
+    std::shared_ptr<RuntimeInformation> runtimeInformation) {
+  _runtimeInfo = std::move(runtimeInformation);
+  _runtimeInfo->setColumnNames(getInternallyVisibleVariableColumns());
   const auto numCols = getResultWidth();
-  _runtimeInfo.numCols_ = numCols;
-  _runtimeInfo.descriptor_ = getDescriptor();
+  _runtimeInfo->numCols_ = numCols;
+  _runtimeInfo->descriptor_ = getDescriptor();
 
-  for (const auto& child : getChildren()) {
+  AD_CONTRACT_CHECK(_runtimeInfo->children_.empty());
+  auto children = getChildren();
+  // Make sure emplace_back() never allocates new memory, therefore ensuring
+  // the reference is always valid for the lifetime of the shared pointer
+  _runtimeInfo->children_.reserve(children.size());
+  for (const auto& child : children) {
     AD_CONTRACT_CHECK(child);
-    child->getRootOperation()->createRuntimeInfoFromEstimates();
-    _runtimeInfo.children_.push_back(
-        child->getRootOperation()->getRuntimeInfo());
+    auto& childRuntimeInfo = _runtimeInfo->children_.emplace_back();
+    child->getRootOperation()->createRuntimeInfoFromEstimates(
+        std::shared_ptr<RuntimeInformation>(_runtimeInfo, &childRuntimeInfo));
   }
 
-  _runtimeInfo.costEstimate_ = getCostEstimate();
-  _runtimeInfo.sizeEstimate_ = getSizeEstimateBeforeLimit();
+  _runtimeInfo->costEstimate_ = getCostEstimate();
+  _runtimeInfo->sizeEstimate_ = getSizeEstimateBeforeLimit();
 
   std::vector<float> multiplicityEstimates;
   multiplicityEstimates.reserve(numCols);
   for (size_t i = 0; i < numCols; ++i) {
     multiplicityEstimates.push_back(getMultiplicity(i));
   }
-  _runtimeInfo.multiplicityEstimates_ = multiplicityEstimates;
+  _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
 
   auto cachedResult =
       _executionContext->getQueryTreeCache().getIfContained(asString());
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
-    _runtimeInfo.cacheStatus_ = cacheStatus;
-    const auto& rtiFromCache = resultPointer->runtimeInfo();
-
-    _runtimeInfo.numRows_ = rtiFromCache.numRows_;
-    _runtimeInfo.originalTotalTime_ = rtiFromCache.totalTime_;
-    _runtimeInfo.originalOperationTime_ = rtiFromCache.getOperationTime();
+    _runtimeInfo->cacheStatus_ = cacheStatus;
+    _runtimeInfo->originalOperationTime_ = _runtimeInfo->getOperationTime();
   }
 
   if (_executionContext) {
-    _executionContext->signalQueryUpdate(_runtimeInfo);
+    _executionContext->signalQueryUpdate(*_runtimeInfo);
   }
 }
 

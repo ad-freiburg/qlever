@@ -33,6 +33,6 @@ TEST(ValuesForTesting, valuesForTesting) {
   ASSERT_TRUE(v.resultSortedOn().empty());
   ASSERT_TRUE(v.getChildren().empty());
 
-  auto result = v.getResult();
+  auto result = v.getResult(true);
   ASSERT_EQ(result->idTable(), table);
 }

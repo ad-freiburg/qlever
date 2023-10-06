@@ -64,6 +64,8 @@ TEST(Values, computeResult) {
   auto testQec = ad_utility::testing::getQec("<x> <x> <x> .");
   ValuesComponents values{{TC{12}, TC{"<x>"}}, {TC::UNDEF{}, TC{"<y>"}}};
   Values valuesOperation(testQec, {{Variable{"?x"}, Variable{"?y"}}, values});
+  valuesOperation.createRuntimeInfoFromEstimates(
+      std::make_shared<RuntimeInformation>());
   auto result = valuesOperation.getResult();
   const auto& table = result->idTable();
   Id x;

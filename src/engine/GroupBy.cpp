@@ -614,12 +614,10 @@ bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
       optimizedAggregateData.value();
 
   auto subresult = subtree.getResult();
-  threeVarSubtree.getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-      {});
+  threeVarSubtree.getRootOperation()
+      ->updateRuntimeInformationWhenOptimizedOut();
 
-  join->updateRuntimeInformationWhenOptimizedOut(
-      {subtree.getRootOperation()->getRuntimeInfo(),
-       threeVarSubtree.getRootOperation()->getRuntimeInfo()});
+  join->updateRuntimeInformationWhenOptimizedOut();
   result->setNumColumns(2);
   if (subresult->idTable().size() == 0) {
     return true;

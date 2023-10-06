@@ -227,6 +227,7 @@ using ExpectedColumns = ad_utility::HashMap<
 
 // Test that the result of the `join` matches the `expected` outcome.
 void testJoinOperation(Join& join, const ExpectedColumns& expected) {
+  join.createRuntimeInfoFromEstimates(std::make_shared<RuntimeInformation>());
   auto res = join.getResult();
   const auto& varToCols = join.getExternallyVisibleVariableColumns();
   EXPECT_EQ(varToCols.size(), expected.size());

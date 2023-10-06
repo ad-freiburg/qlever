@@ -252,6 +252,7 @@ TEST(HasPredicateScan, subtreeS) {
   // create the subtree operation
   std::shared_ptr<QueryExecutionTree> subtree =
       std::make_shared<QueryExecutionTree>(&ctx);
+  subtree->isRoot() = true;
   std::shared_ptr<Operation> operation = std::make_shared<DummyOperation>(&ctx);
 
   subtree->setOperation(QueryExecutionTree::OperationType::HAS_PREDICATE_SCAN,

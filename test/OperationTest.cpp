@@ -39,6 +39,7 @@ TEST(OperationTest, getResultOnlyCached) {
 
   // This "ordinary" call to `getResult` also stores the result in the cache.
   NeutralElementOperation n2{qec};
+  n2.createRuntimeInfoFromEstimates(std::make_shared<RuntimeInformation>());
   auto result = n2.getResult();
   EXPECT_NE(result, nullptr);
   EXPECT_EQ(n2.getRuntimeInfo().status_,

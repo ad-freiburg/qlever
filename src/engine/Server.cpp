@@ -631,7 +631,6 @@ boost::asio::awaitable<void> Server::processQuery(
     auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
     qet.recursivelySetTimeoutTimer(timeoutTimer);
-    qet.getRootOperation()->createRuntimeInfoFromEstimates();
     size_t timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
         qet.getRootOperation()->getRuntimeInfoWholeQuery();
