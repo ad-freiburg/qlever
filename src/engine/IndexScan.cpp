@@ -249,7 +249,12 @@ void IndexScan::determineMultiplicities() {
       multiplicity_.emplace_back(1);
     }
   }
-  assert(multiplicity_.size() >= 1 || multiplicity_.size() <= 3);
+  for ([[maybe_unused]] size_t i :
+       std::views::iota(multiplicity_.size(), getResultWidth())) {
+    multiplicity_.emplace_back(1);
+  }
+  AD_CONTRACT_CHECK(multiplicity_.size() == getResultWidth());
+  // assert(multiplicity_.size() >= 1 || multiplicity_.size() <= 3);
 }
 
 // ________________________________________________________________________

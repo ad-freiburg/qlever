@@ -79,7 +79,7 @@ class IndexScan : public Operation {
     if (multiplicity_.empty()) {
       determineMultiplicities();
     }
-    assert(col < multiplicity_.size());
+    AD_CORRECTNESS_CHECK(col < multiplicity_.size());
     return multiplicity_[col];
   }
 

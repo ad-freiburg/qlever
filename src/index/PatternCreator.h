@@ -100,7 +100,7 @@ class PatternCreator {
   // Store the additional triples that are created by the pattern mechanism for
   // the `has-pattern` and `has-predicate` predicates.
   // TODO<joka921> Use something buffered for this.
-  std::vector<std::array<Id, 3>> _tripleBuffer;
+  std::vector<std::pair<std::array<Id, 3>, bool>> _tripleBuffer;
   PSOSorter _additionalTriplesPsoSorter;
   OSPSorter4Cols _fullPsoSorter;
 

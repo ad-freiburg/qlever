@@ -262,6 +262,9 @@ void IndexImpl::createFromFile(const string& filename) {
   auto blockGenerator = [](auto& queue) -> cppcoro::generator<IdTable> {
     while (auto block = queue.pop()) {
       block.value().setColumnSubset(std::array<ColumnIndex, 5>{2, 1, 0, 3, 4});
+      std::ranges::for_each(block.value().getColumn(4), [](Id& id) {
+        id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id;
+      });
       co_yield block.value();
     }
   }(queue);

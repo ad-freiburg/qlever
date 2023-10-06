@@ -275,6 +275,10 @@ void CountAvailablePredicates::computePatternTrick(
     // versions of clang.
     for (size_t i = 0; i != patternVec.size(); ++i) {
       auto [patternIndex, patternCount] = patternVec[i];
+      if (patternIndex == NO_PATTERN) {
+        continue;
+      }
+      AD_EXPENSIVE_CHECK(patternIndex < patterns.size());
       const auto& pattern = patterns[patternIndex];
       numPatternPredicates += pattern.size();
       for (const auto& predicate : pattern) {

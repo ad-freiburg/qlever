@@ -12,7 +12,7 @@ static const Id hasPredicateId = qlever::specialIds.at(HAS_PREDICATE_PREDICATE);
 // _________________________________________________________________________
 void PatternCreator::processTriple(std::array<Id, 3> triple,
                                    bool ignoreForPatterns) {
-  _tripleBuffer.push_back(triple);
+  _tripleBuffer.emplace_back(triple, ignoreForPatterns);
   if (ignoreForPatterns) {
     return;
   }
@@ -28,9 +28,13 @@ void PatternCreator::processTriple(std::array<Id, 3> triple,
   // Don't list predicates twice in the same pattern.
   if (_currentPattern.empty() || _currentPattern.back() != triple[1]) {
     _currentPattern.push_back(triple[1]);
+    // This is wasteful and currently not needed. If we use those lines, then we
+    // get a fully materialized `has-predicate` relation.
+    /*
     _additionalTriplesPsoSorter.push(
         std::array{Id::makeFromVocabIndex(_currentSubjectIndex.value()),
                    hasPredicateId, triple[1]});
+                   */
   }
 }
 
@@ -62,8 +66,9 @@ void PatternCreator::finishSubject(VocabIndex subjectIndex,
       std::array{Id::makeFromVocabIndex(subjectIndex), hasPatternId,
                  Id::makeFromInt(patternId)});
   std::ranges::for_each(_tripleBuffer, [this, patternId](const auto& t) {
-    _fullPsoSorter.push(
-        std::array{t[0], t[1], t[2], Id::makeFromInt(patternId)});
+    const auto& [s, p, o] = t.first;
+    _fullPsoSorter.push(std::array{
+        s, p, o, Id::makeFromInt(t.second ? NO_PATTERN : patternId)});
   });
   _tripleBuffer.clear();
 }
