@@ -504,7 +504,7 @@ std::string ConfigManager::printConfigurationDoc(
                                  "    "),
       "\n\nAvailable configuration options:\n",
       ad_utility::addIndentation(listOfConfigurationOptions, "    "),
-      "\n\nRequired invariants on the configuration options:",
+      "\n\nRequired invariants of the configuration options:",
       listOfAllValidators.empty()
           ? " None."
           : absl::StrCat(
