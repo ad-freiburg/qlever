@@ -155,7 +155,17 @@ class Operation {
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
   virtual void createRuntimeInfoFromEstimates(
-      std::shared_ptr<RuntimeInformation> runtimeInformation) final;
+      std::shared_ptr<RuntimeInformation> runtimeInformation,
+      std::shared_ptr<RuntimeInformation> rootRuntimeInformation) final;
+
+  // Overload for cases where the root is identical
+  virtual void createRuntimeInfoFromEstimates(
+      std::shared_ptr<RuntimeInformation> runtimeInformation) final {
+    // In C++ the order of evalution is unspecified, so we can't safely
+    // move the shared pointer into any of these arguments.
+    // See https://en.cppreference.com/w/cpp/language/eval_order
+    createRuntimeInfoFromEstimates(runtimeInformation, runtimeInformation);
+  }
 
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
@@ -273,6 +283,7 @@ class Operation {
   void forAllDescendants(F f) const;
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo = nullptr;
+  std::shared_ptr<RuntimeInformation> _rootRuntimeInfo = nullptr;
   RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 
   // Collect all the warnings that were created during the creation or

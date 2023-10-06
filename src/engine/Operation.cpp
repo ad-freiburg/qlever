@@ -222,7 +222,7 @@ void Operation::updateRuntimeInformationOnSuccess(
     _runtimeInfo->originalOperationTime_ = _runtimeInfo->getOperationTime();
   }
   if (_executionContext) {
-    _executionContext->signalQueryUpdate(*_runtimeInfo);
+    _executionContext->signalQueryUpdate(*_rootRuntimeInfo);
   }
 }
 
@@ -240,7 +240,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
       std::accumulate(timesOfChildren.begin(), timesOfChildren.end(), 0.0);
 
   if (_executionContext) {
-    _executionContext->signalQueryUpdate(*_runtimeInfo);
+    _executionContext->signalQueryUpdate(*_rootRuntimeInfo);
   }
 }
 
@@ -250,13 +250,15 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
   _runtimeInfo->status_ = RuntimeInformation::Status::failed;
 
   if (_executionContext) {
-    _executionContext->signalQueryUpdate(*_runtimeInfo);
+    _executionContext->signalQueryUpdate(*_rootRuntimeInfo);
   }
 }
 
 // __________________________________________________________________
 void Operation::createRuntimeInfoFromEstimates(
-    std::shared_ptr<RuntimeInformation> runtimeInformation) {
+    std::shared_ptr<RuntimeInformation> runtimeInformation,
+    std::shared_ptr<RuntimeInformation> rootRuntimeInformation) {
+  _rootRuntimeInfo = std::move(rootRuntimeInformation);
   _runtimeInfo = std::move(runtimeInformation);
   _runtimeInfo->setColumnNames(getInternallyVisibleVariableColumns());
   const auto numCols = getResultWidth();
@@ -272,7 +274,8 @@ void Operation::createRuntimeInfoFromEstimates(
     AD_CONTRACT_CHECK(child);
     auto& childRuntimeInfo = _runtimeInfo->children_.emplace_back();
     child->getRootOperation()->createRuntimeInfoFromEstimates(
-        std::shared_ptr<RuntimeInformation>(_runtimeInfo, &childRuntimeInfo));
+        std::shared_ptr<RuntimeInformation>(_runtimeInfo, &childRuntimeInfo),
+        _rootRuntimeInfo);
   }
 
   _runtimeInfo->costEstimate_ = getCostEstimate();
@@ -294,7 +297,7 @@ void Operation::createRuntimeInfoFromEstimates(
   }
 
   if (_executionContext) {
-    _executionContext->signalQueryUpdate(*_runtimeInfo);
+    _executionContext->signalQueryUpdate(*_rootRuntimeInfo);
   }
 }
 
