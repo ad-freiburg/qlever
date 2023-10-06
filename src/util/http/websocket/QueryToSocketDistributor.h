@@ -23,7 +23,7 @@ namespace net = boost::asio;
 /// It also provides its own strand so operations on this class do not need
 /// to be synchronized globally. The public API is thread-safe, but you
 /// will end up on a different executor when awaiting it, so make sure
-/// to use a wrapper like `sameExecutor()` to stay on your executor!
+/// to use a wrapper like `resumeOnOriginalExecutor()` to stay on your executor!
 class QueryToSocketDistributor {
   /// Strand to synchronize all operations on this class
   net::strand<net::any_io_executor> strand_;
@@ -46,6 +46,10 @@ class QueryToSocketDistributor {
   /// Function that can be used to "block" in boost asio until there's a new
   /// update to the data.
   net::awaitable<void> waitForUpdate() const;
+
+  /// Schedule a coroutine onto the strand of this instance.
+  /// Make sure to co_await this before accessing any member of this class.
+  net::awaitable<void> dispatchToStrand() const;
 
  public:
   /// Constructor that builds a new strand from the provided io context.

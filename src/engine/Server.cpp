@@ -757,6 +757,6 @@ Awaitable<T> Server::computeInNewThread(Function function) const {
     co_await net::post(net::bind_executor(executor, net::use_awaitable));
     co_return std::invoke(func);
   };
-  return ad_utility::sameExecutor(
+  return ad_utility::resumeOnOriginalExecutor(
       runOnExecutor(threadPool_.get_executor(), std::move(function)));
 }
