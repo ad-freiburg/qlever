@@ -305,9 +305,7 @@ class Date {
 
   // True iff Date object has set time values (hours, minutes, seconds) (i.e
   //  "This is a `xsd:dateTime`")
-  [[nodiscard]] bool hasTime() const {
-    return getHour() != -1;
-  }
+  [[nodiscard]] bool hasTime() const { return getHour() != -1; }
 
   // Correctly format the time zone according to the `xsd` standard. This is a
   // helper function for `toStringAndType` below.

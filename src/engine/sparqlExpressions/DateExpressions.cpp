@@ -52,17 +52,23 @@ inline auto extractTimeComponentImpl = [](std::optional<DateOrLargeYear> d) {
   return std::invoke(makeId, std::invoke(dateMember, date));
 };
 
-inline auto extractHours = extractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>;
-inline auto extractMinutes = extractTimeComponentImpl<&Date::getMinute, &Id::makeFromInt>;
-inline auto extractSeconds = extractTimeComponentImpl<&Date::getSecond, &Id::makeFromDouble>;
+inline auto extractHours =
+    extractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>;
+inline auto extractMinutes =
+    extractTimeComponentImpl<&Date::getMinute, &Id::makeFromInt>;
+inline auto extractSeconds =
+    extractTimeComponentImpl<&Date::getSecond, &Id::makeFromDouble>;
 
 NARY_EXPRESSION(YearExpression, 1, FV<decltype(extractYear), DateValueGetter>);
 NARY_EXPRESSION(MonthExpression, 1,
                 FV<decltype(extractMonth), DateValueGetter>);
 NARY_EXPRESSION(DayExpression, 1, FV<decltype(extractDay), DateValueGetter>);
-NARY_EXPRESSION(HoursExpression, 1, FV<decltype(extractHours), DateValueGetter>);
-NARY_EXPRESSION(MinutesExpression, 1, FV<decltype(extractMinutes), DateValueGetter>);
-NARY_EXPRESSION(SecondsExpression, 1, FV<decltype(extractSeconds), DateValueGetter>);
+NARY_EXPRESSION(HoursExpression, 1,
+                FV<decltype(extractHours), DateValueGetter>);
+NARY_EXPRESSION(MinutesExpression, 1,
+                FV<decltype(extractMinutes), DateValueGetter>);
+NARY_EXPRESSION(SecondsExpression, 1,
+                FV<decltype(extractSeconds), DateValueGetter>);
 
 }  // namespace detail
 using namespace detail;

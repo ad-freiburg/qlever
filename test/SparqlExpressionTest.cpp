@@ -407,12 +407,13 @@ TEST(SparqlExpression, dateOperators) {
   auto checkMonth = std::bind_front(testUnaryExpression, &makeMonthExpression);
   auto checkDay = std::bind_front(testUnaryExpression, &makeDayExpression);
   auto checkHours = std::bind_front(testUnaryExpression, &makeHoursExpression);
-  auto checkMinutes = std::bind_front(testUnaryExpression, &makeMinutesExpression);
-  auto checkSeconds = std::bind_front(testUnaryExpression, &makeSecondsExpression);
-  auto check =
-      [&checkYear, &checkMonth, &checkDay, &checkHours, &checkMinutes, &checkSeconds](
-                   const DateOrLargeYear& date,
-                   std::optional<int> expectedYear,
+  auto checkMinutes =
+      std::bind_front(testUnaryExpression, &makeMinutesExpression);
+  auto checkSeconds =
+      std::bind_front(testUnaryExpression, &makeSecondsExpression);
+  auto check = [&checkYear, &checkMonth, &checkDay, &checkHours, &checkMinutes,
+                &checkSeconds](
+                   const DateOrLargeYear& date, std::optional<int> expectedYear,
                    std::optional<int> expectedMonth,
                    std::optional<int> expectedDay,
                    std::optional<int> expectedHours = std::nullopt,
@@ -439,14 +440,14 @@ TEST(SparqlExpression, dateOperators) {
     checkDay(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedDay)});
     checkHours(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedHours)});
     checkMinutes(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedMinutes)});
-    checkSeconds(Ids{Id::makeFromDate(date)}, Ids{optToIdDouble(expectedSeconds)});
-
+    checkSeconds(Ids{Id::makeFromDate(date)},
+                 Ids{optToIdDouble(expectedSeconds)});
   };
 
   using D = DateOrLargeYear;
   // Now the checks for dates with varying level of detail.
-  check(D::parseXsdDatetime("1970-04-22T11:53:42.25"), 1970, 4,
-        22, 11, 53, 42.25);
+  check(D::parseXsdDatetime("1970-04-22T11:53:42.25"), 1970, 4, 22, 11, 53,
+        42.25);
   check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
   check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
   check(D::parseXsdDate("0042-12-24"), 42, 12, 24);
