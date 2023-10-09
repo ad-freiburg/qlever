@@ -24,6 +24,8 @@ IdTable CompressedRelationReader::scan(
     std::span<const CompressedBlockMetadata> blockMetadata,
     ad_utility::File& file, std::span<const ColumnIndex> additionalColumns,
     const TimeoutTimer& timer) const {
+  // We always return the first two columns (the col1 and col2 of the
+  // permutation), additional payload columns manually have to be specified.
   IdTable result(2 + additionalColumns.size(), allocator_);
   std::vector<ColumnIndex> columnIndices{0, 1};
   std::ranges::copy(additionalColumns, std::back_inserter(columnIndices));
@@ -185,6 +187,9 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   if (beginBlock == endBlock) {
     co_return;
   }
+
+  // TODO<joka921> This pattern appears multiple times, factor it into a
+  // function.
   std::vector<ColumnIndex> columnIndices{0, 1};
   std::ranges::copy(additionalColumns, std::back_inserter(columnIndices));
 
@@ -229,6 +234,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     AD_CORRECTNESS_CHECK(endBlock - beginBlock <= 1);
   }
 
+  // TODO<joka921> remove code duplication.
   std::vector<ColumnIndex> columnIndices{1};
   std::ranges::copy(additionalColumns, std::back_inserter(columnIndices));
 
@@ -417,6 +423,7 @@ IdTable CompressedRelationReader::scan(
     std::span<const ColumnIndex> additionalColumns,
     const TimeoutTimer& timer) const {
   IdTable result(1 + additionalColumns.size(), allocator_);
+  // TODO<joka921> Remove code duplication.
   std::vector<ColumnIndex> columnIndices{1};
   std::ranges::copy(additionalColumns, std::back_inserter(columnIndices));
 
@@ -471,19 +478,25 @@ IdTable CompressedRelationReader::scan(
   result.resize(totalResultSize);
 
   size_t rowIndexOfNextBlockStart = 0;
-  // Insert the first block into the result;
-  auto addIncompleteBlock = [&rowIndexOfNextBlockStart,
-                             &result](const auto& incompleteBlock) mutable {
-    AD_CORRECTNESS_CHECK(incompleteBlock.numColumns() == result.numColumns());
-    for (auto i : ad_utility::integerRange(result.numColumns())) {
-      std::ranges::copy(incompleteBlock.getColumn(i),
-                        result.getColumn(i).data() + rowIndexOfNextBlockStart);
-    }
-    rowIndexOfNextBlockStart += incompleteBlock.numRows();
-  };
-  if (firstBlockResult.has_value()) {
-    addIncompleteBlock(firstBlockResult.value());
-  }
+  // Lambda that adds a possibly incomplete block (the first or last block) at
+  // the current position.
+  auto addIncompleteBlockIfExists =
+      [&rowIndexOfNextBlockStart, &result](
+          const std::optional<DecompressedBlock>& incompleteBlock) mutable {
+        if (!incompleteBlock.has_value()) {
+          return;
+        }
+        AD_CORRECTNESS_CHECK(incompleteBlock->numColumns() ==
+                             result.numColumns());
+        for (auto i : ad_utility::integerRange(result.numColumns())) {
+          std::ranges::copy(
+              incompleteBlock->getColumn(i),
+              result.getColumn(i).data() + rowIndexOfNextBlockStart);
+        }
+        rowIndexOfNextBlockStart += incompleteBlock->numRows();
+      };
+
+  addIncompleteBlockIfExists(firstBlockResult);
 
   // Insert the complete blocks from the middle in parallel
   if (beginBlock < endBlock) {
@@ -522,9 +535,7 @@ IdTable CompressedRelationReader::scan(
     }  // end of parallel region
   }
   // Add the last block.
-  if (lastBlockResult.has_value()) {
-    addIncompleteBlock(lastBlockResult.value());
-  }
+  addIncompleteBlockIfExists(lastBlockResult);
   AD_CORRECTNESS_CHECK(rowIndexOfNextBlockStart == result.size());
   return result;
 }
@@ -595,9 +606,7 @@ size_t CompressedRelationReader::getResultSizeOfScan(
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blocks);
   auto beginBlock = relevantBlocks.begin();
   auto endBlock = relevantBlocks.end();
-  // TODO<joka921> Centrally store the `allColumns` vector by specifying the
-  // number of columns.
-  std::array<ColumnIndex, 1> dummyColumnsForExport{0u};
+  std::array<ColumnIndex, 1> columnIndices{0u};
 
   // The first and the last block might be incomplete (that is, only
   // a part of these blocks is actually part of the result,
@@ -605,7 +614,7 @@ size_t CompressedRelationReader::getResultSizeOfScan(
   // the size of the result.
   auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
     return readPossiblyIncompleteBlock(metadata, col1Id, file, block,
-                                       std::nullopt, dummyColumnsForExport)
+                                       std::nullopt, columnIndices)
         .numRows();
   };
 
@@ -660,14 +669,10 @@ CompressedRelationMetadata CompressedRelationWriter::addRelation(
   // Determine the number of bytes the IDs stored in an IdTable consume.
   // The return type is double because we use the result to compare it with
   // other doubles below.
-  /*
-  auto sizeInBytes = [](const auto& table) {
-    return static_cast<double>(table.numRows() * table.numColumns() *
-                               sizeof(Id));
-  };
-   */
   // TODO<joka921> This is currently hardcoded to only consider the first two
   // columns, as it otherwise breaks hardcoded tests for now.
+  // TODO<joka921> Discuss with Hannah: can we set this to a blocksize PER
+  // COLUMN as we do in the compressed sorting?
   auto sizeInBytes = [](const auto& table) {
     return static_cast<double>(table.numRows() * 2 * sizeof(Id));
   };
@@ -716,6 +721,7 @@ void CompressedRelationWriter::writeRelationToExclusiveBlocks(
   // TODO<joka921> We have currently hardcoded this calculation to only consider
   // the "actual" permutation columns to not let unit tests fail.
   /*
+// TODO<joka921> Same discussion with Hannah as above.
   const size_t numRowsPerBlock =
       numBytesPerBlock_ / (numColumns() * sizeof(Id));
       */

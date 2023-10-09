@@ -29,10 +29,11 @@ class IdTable;
 // Currently our indexes have two columns (the first column of a triple
 // is stored in the respective metadata). This might change in the future when
 // we add a column for patterns or functional relations like rdf:type.
-// static constexpr int NumColumns = 0;
-// Two columns of IDs that are buffered in a file if they become too large.
-// This is the format in which the raw two-column data for a single relation is
-// passed around during the index building.
+
+// N - 1 (where N is the total number of columns in a permutation) columns of
+// IDs that are buffered in a file if they become too large. This is the format
+// in which the raw two-column data for a single relation is passed around
+// during the index building.
 using BufferedIdTable =
     columnBasedIdTable::IdTable<Id, 0, ad_utility::BufferedVector<Id>>;
 
@@ -159,6 +160,8 @@ class CompressedRelationWriter {
   std::vector<CompressedBlockMetadata> blockBuffer_;
   CompressedBlockMetadata currentBlockData_;
   size_t numBytesPerBlock_;
+  // The actual number of columns that is stored by this writer. Is 2 if there
+  // are no additional special payloads.
   size_t numColumns_;
   SmallRelationsBuffer buffer_{numColumns_};
 
@@ -229,6 +232,8 @@ class CompressedRelationWriter {
   // size of the compressed column in the `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
       std::span<const Id> column);
+
+  // Return the number of columns that is stored inside the blocks.
   size_t numColumns() const { return numColumns_; }
 };
 
@@ -293,6 +298,8 @@ class CompressedRelationReader {
    * @param blockMetadata The metadata of the on-disk blocks for the given
    * permutation.
    * @param file The file in which the permutation is stored.
+   * @param additionalColumns specify the additional payload columns that will
+   * be returned by the scan.
    * @param timer If specified (!= nullptr) a `TimeoutException` will be thrown
    *          if the timer runs out during the exeuction of this function.
    *
@@ -403,8 +410,7 @@ class CompressedRelationReader {
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
-  // If `columnIndices` is `nullopt`, then all columns of the block are read,
-  // else only the specified columns are read.
+  // Only the columns specified by `columnIndices` are read.
   static CompressedBlock readCompressedBlockFromFile(
       const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
       std::span<const ColumnIndex> columnIndices);
@@ -433,9 +439,8 @@ class CompressedRelationReader {
                                size_t numRowsToRead, Iterator iterator);
 
   // Read the block that is identified by the `blockMetaData` from the `file`,
-  // decompress and return it.
-  // If `columnIndices` is `nullopt`, then all columns of the block are read,
-  // else only the specified columns are read.
+  // decompress and return it. Only the columns specified by the `columnIndices`
+  // are returned.
   DecompressedBlock readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
       std::span<const ColumnIndex> columnIndices) const;
@@ -445,7 +450,8 @@ class CompressedRelationReader {
   // ID / relation ID does not correspond with the `relationMetadata`, or where
   // the `col1Id` doesn't match. For this to work, the block has to be one of
   // the blocks that actually store triples from the given `relationMetadata`'s
-  // relation, else the behavior is undefined.
+  // relation, else the behavior is undefined. Only return the columns specified
+  // by the `columnIndices`.
   DecompressedBlock readPossiblyIncompleteBlock(
       const CompressedRelationMetadata& relationMetadata,
       std::optional<Id> col1Id, ad_utility::File& file,
@@ -472,3 +478,14 @@ class CompressedRelationReader {
 };
 
 #endif  // QLEVER_COMPRESSEDRELATION_H
+
+// TODO<joka921>
+/*
+ * 1. Also let the compressedRelationReader know about the underlying file and
+ * the number of columns etc. to make the permutation class a thinner wrapper.
+ * 2. Then add assertions that we only get valid column indices specified.
+ * 3. Store meta information about the additional columns AND THEIR SEMANTICS
+ * somewhere (preferably in the CompressedRelationReader or the permutation
+ * class.
+ * 4. Also add a typedef in this .h file for `std::span<const ColumnIndex>`.
+ */
