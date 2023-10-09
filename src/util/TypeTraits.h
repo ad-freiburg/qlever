@@ -215,4 +215,47 @@ template <typename... Ts>
 requires(sizeof...(Ts) > 0)
 using First = typename detail::FirstWrapper<Ts...>::type;
 
+/*
+@brief Require `Fn` to be invocable with `Args...` and the return type to be
+`isSimilar` with `Ret`.
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept InvocableWithSimilarReturnType =
+    std::invocable<Fn, Args...> &&
+    isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
+
+/*
+@brief Require `Fn` to be invocable with `Args...` and the return type to be
+ `Ret`.
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept InvocableWithExactReturnType =
+    std::invocable<Fn, Args...> &&
+    std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
+
+/*
+@brief Require `Fn` to be regular invocable with `Args...` and the return type
+to be `isSimilar` with `Ret`.
+
+Note: Currently, the difference between invocable and regular invocable is
+purely semantic. In other words, we can not, currently, actually check, if an
+invocable type is regular invocable, or not.
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept RegularInvocableWithSimilarReturnType =
+    std::regular_invocable<Fn, Args...> &&
+    isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
+
+/*
+@brief Require `Fn` to be regular invocable with `Args...` and the return type
+to be `Ret`.
+
+Note: Currently, the difference between invocable and regular invocable is
+purely semantic. In other words, we can not, currently, actually check, if an
+invocable type is regular invocable, or not.
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept RegularInvocableWithExactReturnType =
+    std::regular_invocable<Fn, Args...> &&
+    std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
 }  // namespace ad_utility

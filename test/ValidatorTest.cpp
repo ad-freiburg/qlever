@@ -11,27 +11,13 @@
 #include <tuple>
 
 #include "../test/util/GTestHelpers.h"
+#include "../test/util/TypeTraitsTestHelpers.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConfigManager/Validator.h"
 #include "util/ValidatorHelpers.h"
 
 namespace ad_utility {
-
-/*
-@brief Call the given template function with the cartesian product of the
-parameter type list with itself, as template parameters. For example: If given
-`<int, const int>`, then the function will be called as `Func<int, int>`,
-`Func<int, const int>`, `Func<const int, int>` and `Func<const int, const int>`.
-*/
-template <typename Func, typename... Parameter>
-constexpr void passCartesianPorductToLambda(Func func) {
-  (
-      [&func]<typename T>() {
-        (func.template operator()<T, Parameter>(), ...);
-      }.template operator()<Parameter>(),
-      ...);
-}
 
 TEST(ValidatorConceptTest, ValidatorConcept) {
   // Lambda function types for easier test creation.
