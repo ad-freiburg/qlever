@@ -65,7 +65,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
 
   if (isRoot) {
     // Start with an estimated runtime info which will be updated as we go.
-    createRuntimeInfoFromEstimates();
+    createRuntimeInfoFromEstimates(_runtimeInfo);
   }
   auto& cache = _executionContext->getQueryTreeCache();
   const string cacheKey = asString();
@@ -305,7 +305,9 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
 }
 
 // __________________________________________________________________
-void Operation::createRuntimeInfoFromEstimates() {
+void Operation::createRuntimeInfoFromEstimates(
+    std::shared_ptr<RuntimeInformation> root) {
+  _rootRuntimeInfo = root;
   _runtimeInfo->setColumnNames(getInternallyVisibleVariableColumns());
   const auto numCols = getResultWidth();
   _runtimeInfo->numCols_ = numCols;
@@ -313,7 +315,7 @@ void Operation::createRuntimeInfoFromEstimates() {
 
   for (const auto& child : getChildren()) {
     AD_CONTRACT_CHECK(child);
-    child->getRootOperation()->createRuntimeInfoFromEstimates();
+    child->getRootOperation()->createRuntimeInfoFromEstimates(root);
     _runtimeInfo->children_.push_back(
         child->getRootOperation()->getRuntimeInfo());
   }

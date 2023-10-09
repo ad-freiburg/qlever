@@ -156,7 +156,8 @@ class Operation {
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
-  virtual void createRuntimeInfoFromEstimates() final;
+  virtual void createRuntimeInfoFromEstimates(
+      std::shared_ptr<RuntimeInformation> root) final;
 
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
