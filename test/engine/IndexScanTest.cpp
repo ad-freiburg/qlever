@@ -73,9 +73,7 @@ void testLazyScanForJoinOfTwoScans(
   auto t = generateLocationTrace(l);
   auto qec = getQec(kgTurtle, true, true, true, blocksizePermutationsInBytes);
   IndexScan s1{qec, Permutation::PSO, tripleLeft};
-  s1.createRuntimeInfoFromEstimates(std::make_shared<RuntimeInformation>());
   IndexScan s2{qec, Permutation::PSO, tripleRight};
-  s2.createRuntimeInfoFromEstimates(std::make_shared<RuntimeInformation>());
   auto implForSwitch = [](IndexScan& l, IndexScan& r, const auto& expectedL,
                           const auto& expectedR) {
     auto [scan1, scan2] = (IndexScan::lazyScanForJoinOfTwoScans(l, r));
@@ -110,7 +108,6 @@ void testLazyScanForJoinWithColumn(
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan scan{qec, Permutation::PSO, scanTriple};
-  scan.createRuntimeInfoFromEstimates(std::make_shared<RuntimeInformation>());
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
     column.push_back(

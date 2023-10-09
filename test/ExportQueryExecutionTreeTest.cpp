@@ -26,7 +26,6 @@ std::string runQueryStreamableResult(const std::string& kg,
   QueryPlanner qp{qec};
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
-  qet.isRoot() = true;
   auto tsvGenerator =
       ExportQueryExecutionTrees::computeResultAsStream(pq, qet, mediaType);
   std::string result;
@@ -47,7 +46,6 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   QueryPlanner qp{qec};
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
-  qet.isRoot() = true;
   ad_utility::Timer timer{ad_utility::Timer::Started};
   return ExportQueryExecutionTrees::computeResultAsJSON(pq, qet, timer, 200,
                                                         mediaType);

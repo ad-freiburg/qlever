@@ -148,8 +148,6 @@ TEST(LocalVocab, propagation) {
   // not `const`.
   auto checkLocalVocab = [&](Operation& operation,
                              std::vector<std::string> expectedWords) -> void {
-    operation.createRuntimeInfoFromEstimates(
-        std::make_shared<RuntimeInformation>());
     std::shared_ptr<const ResultTable> resultTable = operation.getResult();
     ASSERT_TRUE(resultTable)
         << "Operation: " << operation.getDescriptor() << std::endl;
@@ -164,8 +162,6 @@ TEST(LocalVocab, propagation) {
 
   // Lambda that checks that `computeResult` throws an exception.
   auto checkThrow = [&](Operation& operation) -> void {
-    operation.createRuntimeInfoFromEstimates(
-        std::make_shared<RuntimeInformation>());
     ASSERT_THROW(operation.getResult(), ad_utility::AbortException)
         << "Operation: " << operation.getDescriptor() << std::endl;
   };

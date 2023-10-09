@@ -74,7 +74,6 @@ void testOrderBy(IdTable input, const IdTable& expected,
     for (size_t i = 0; i < 5; ++i) {
       randomShuffle(permutedInput.begin(), permutedInput.end());
       OrderBy s = makeOrderBy(permutedInput.clone(), sortColumns);
-      s.createRuntimeInfoFromEstimates(std::make_shared<RuntimeInformation>());
       auto result = s.getResult();
       const auto& resultTable = result->idTable();
       ASSERT_EQ(resultTable, permutedExpected);

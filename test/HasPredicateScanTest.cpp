@@ -252,7 +252,6 @@ TEST(HasPredicateScan, subtreeS) {
   // create the subtree operation
   std::shared_ptr<QueryExecutionTree> subtree =
       std::make_shared<QueryExecutionTree>(&ctx);
-  subtree->isRoot() = true;
   std::shared_ptr<Operation> operation = std::make_shared<DummyOperation>(&ctx);
 
   subtree->setOperation(QueryExecutionTree::OperationType::HAS_PREDICATE_SCAN,
@@ -332,11 +331,11 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
   CompactVectorOfStrings<Id> patterns(patternsSrc);
 
-  RuntimeInformation runtimeInfo;
+  auto runtimeInfo = std::make_shared<RuntimeInformation>();
   try {
-    CALL_FIXED_SIZE(
-        input.numColumns(), CountAvailablePredicates::computePatternTrick,
-        input, &result, hasPattern, hasRelation, patterns, 0, &runtimeInfo);
+    CALL_FIXED_SIZE(input.numColumns(),
+                    CountAvailablePredicates::computePatternTrick, input,
+                    &result, hasPattern, hasRelation, patterns, 0, runtimeInfo);
   } catch (const std::runtime_error& e) {
     // More verbose output in the case of an exception occuring.
     std::cout << e.what() << std::endl;

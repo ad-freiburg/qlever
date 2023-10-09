@@ -116,7 +116,7 @@ ResultTable CountAvailablePredicates::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(2);
 
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  auto runtimeInfo = getRuntimeInfo();
 
   const std::vector<PatternID>& hasPattern =
       _executionContext->getIndex().getHasPattern();
@@ -138,7 +138,7 @@ ResultTable CountAvailablePredicates::computeResult() {
     size_t width = subresult->idTable().numColumns();
     CALL_FIXED_SIZE(width, &computePatternTrick, subresult->idTable(), &idTable,
                     hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-                    &runtimeInfo);
+                    runtimeInfo);
     return {std::move(idTable), resultSortedOn(),
             subresult->getSharedLocalVocab()};
   }
@@ -210,7 +210,7 @@ void CountAvailablePredicates::computePatternTrick(
     const vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns, const size_t subjectColumn,
-    RuntimeInformation* runtimeInfo) {
+    std::shared_ptr<RuntimeInformation> runtimeInfo) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   LOG(DEBUG) << "For " << input.size() << " entities in column "

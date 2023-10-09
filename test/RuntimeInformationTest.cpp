@@ -21,13 +21,14 @@ TEST(RuntimeInformation, addLimitOffsetRow) {
 
   ASSERT_EQ(rti.children_.size(), 1u);
   const auto& child = rti.children_.at(0);
-  EXPECT_EQ(child.descriptor_, "BaseOperation");
-  EXPECT_EQ(child.totalTime_, 4.0);
-  EXPECT_EQ(child.getOperationTime(), 4.0);
-  EXPECT_TRUE(child.details_.at("not-written-to-cache-because-child-of-limit"));
+  EXPECT_EQ(child->descriptor_, "BaseOperation");
+  EXPECT_EQ(child->totalTime_, 4.0);
+  EXPECT_EQ(child->getOperationTime(), 4.0);
+  EXPECT_TRUE(
+      child->details_.at("not-written-to-cache-because-child-of-limit"));
 
   rti.addLimitOffsetRow(LimitOffsetClause{std::nullopt, 1, 17}, 15, false);
-  EXPECT_FALSE(rti.children_.at(0).details_.at(
+  EXPECT_FALSE(rti.children_.at(0)->details_.at(
       "not-written-to-cache-because-child-of-limit"));
   EXPECT_EQ(rti.descriptor_, "OFFSET 17");
 
@@ -48,8 +49,8 @@ TEST(RuntimeInformation, getOperationTimeAndCostEstimate) {
   parent.totalTime_ = 10.0;
   parent.costEstimate_ = 100;
 
-  parent.children_.push_back(child1);
-  parent.children_.push_back(child2);
+  parent.children_.push_back(std::make_shared<RuntimeInformation>(child1));
+  parent.children_.push_back(std::make_shared<RuntimeInformation>(child2));
 
   // 2.5 == 10.0 - 4.5 - 3.0
   ASSERT_DOUBLE_EQ(parent.getOperationTime(), 2.5);
@@ -138,7 +139,7 @@ TEST(RuntimeInformation, toStringAndJson) {
   parent.cacheStatus_ = ad_utility::CacheStatus::computed;
   parent.status_ = RuntimeInformation::Status::fullyMaterialized;
 
-  parent.children_.push_back(child);
+  parent.children_.push_back(std::make_shared<RuntimeInformation>(child));
 
   auto str = parent.toString();
   ASSERT_EQ(str,

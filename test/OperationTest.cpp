@@ -32,19 +32,19 @@ TEST(OperationTest, getResultOnlyCached) {
   // The second `true` means "only read the result if it was cached".
   // We have just cleared the cache, and so this should return `nullptr`.
   EXPECT_EQ(n.getResult(true, true), nullptr);
-  EXPECT_EQ(n.getRuntimeInfo().status_, RuntimeInformation::Status::notStarted);
+  EXPECT_EQ(n.getRuntimeInfo()->status_,
+            RuntimeInformation::Status::notStarted);
   // Nothing has been stored in the cache by this call.
   EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
   EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 0);
 
   // This "ordinary" call to `getResult` also stores the result in the cache.
   NeutralElementOperation n2{qec};
-  n2.createRuntimeInfoFromEstimates(std::make_shared<RuntimeInformation>());
   auto result = n2.getResult();
   EXPECT_NE(result, nullptr);
-  EXPECT_EQ(n2.getRuntimeInfo().status_,
+  EXPECT_EQ(n2.getRuntimeInfo()->status_,
             RuntimeInformation::Status::fullyMaterialized);
-  EXPECT_EQ(n2.getRuntimeInfo().cacheStatus_,
+  EXPECT_EQ(n2.getRuntimeInfo()->cacheStatus_,
             ad_utility::CacheStatus::computed);
   EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 1);
   EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 0);
@@ -53,7 +53,7 @@ TEST(OperationTest, getResultOnlyCached) {
   // get exactly the same `shared_ptr` as with the previous call.
   NeutralElementOperation n3{qec};
   EXPECT_EQ(n3.getResult(true, true), result);
-  EXPECT_EQ(n3.getRuntimeInfo().cacheStatus_,
+  EXPECT_EQ(n3.getRuntimeInfo()->cacheStatus_,
             ad_utility::CacheStatus::cachedNotPinned);
 
   // We can even use the `onlyReadFromCache` case to upgrade a non-pinned
@@ -65,7 +65,7 @@ TEST(OperationTest, getResultOnlyCached) {
 
   // The cache status is `cachedNotPinned` because we found the element cached
   // but not pinned (it does reflect the status BEFORE the operation).
-  EXPECT_EQ(n4.getRuntimeInfo().cacheStatus_,
+  EXPECT_EQ(n4.getRuntimeInfo()->cacheStatus_,
             ad_utility::CacheStatus::cachedNotPinned);
   EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
   EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 1);
@@ -74,7 +74,7 @@ TEST(OperationTest, getResultOnlyCached) {
   // result.
   qecCopy._pinResult = false;
   EXPECT_EQ(n4.getResult(true, true), result);
-  EXPECT_EQ(n4.getRuntimeInfo().cacheStatus_,
+  EXPECT_EQ(n4.getRuntimeInfo()->cacheStatus_,
             ad_utility::CacheStatus::cachedPinned);
 
   // Clear the (global) cache again to not possibly interfere with other unit

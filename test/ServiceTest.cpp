@@ -127,8 +127,6 @@ TEST_F(ServiceTest, computeResult) {
   Service serviceOperation1{
       testQec, parsedServiceClause,
       getTsvFunctionFactory(expectedUrl, expectedSparqlQuery, "")};
-  serviceOperation1.createRuntimeInfoFromEstimates(
-      std::make_shared<RuntimeInformation>());
   ASSERT_ANY_THROW(serviceOperation1.getResult());
 
   // CHECK 2: Header row of returned TSV is wrong (variables in wrong order) ->
@@ -138,8 +136,6 @@ TEST_F(ServiceTest, computeResult) {
       getTsvFunctionFactory(
           expectedUrl, expectedSparqlQuery,
           "?y\t?x\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n")};
-  serviceOperation2.createRuntimeInfoFromEstimates(
-      std::make_shared<RuntimeInformation>());
   ASSERT_ANY_THROW(serviceOperation2.getResult());
 
   // CHECK 3: In one of the rows with the values, there is a different number of
@@ -149,8 +145,6 @@ TEST_F(ServiceTest, computeResult) {
       getTsvFunctionFactory(
           expectedUrl, expectedSparqlQuery,
           "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\n<bli>\t<blu>\n")};
-  serviceOperation3.createRuntimeInfoFromEstimates(
-      std::make_shared<RuntimeInformation>());
   ASSERT_ANY_THROW(serviceOperation3.getResult());
 
   // CHECK 4: Returned TSV has correct format matching the query -> check that
@@ -161,8 +155,6 @@ TEST_F(ServiceTest, computeResult) {
       getTsvFunctionFactory(
           expectedUrl, expectedSparqlQuery,
           "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n")};
-  serviceOperation4.createRuntimeInfoFromEstimates(
-      std::make_shared<RuntimeInformation>());
   std::shared_ptr<const ResultTable> result = serviceOperation4.getResult();
 
   // Check that `<x>` and `<y>` were contained in the original vocabulary and

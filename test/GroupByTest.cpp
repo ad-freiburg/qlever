@@ -471,6 +471,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForJoinWithFullScan) {
     GroupBy invalidGroupBy2{qec, variablesOnlyX, emptyAliases, xScan};
     ASSERT_FALSE(invalidGroupBy2.computeGroupByForJoinWithFullScan(&result));
     AD_CONTRACT_CHECK(result.empty());
+    ;
   }
 
   // `chooseInterface == true` means "use the dedicated
@@ -495,8 +496,6 @@ TEST_F(GroupBySpecialCount, computeGroupByForJoinWithFullScan) {
     IdTable result(qec->getAllocator());
     auto join = makeExecutionTree<Join>(qec, values, xyzScanSortedByX, 0, 0);
     GroupBy validForOptimization{qec, variablesOnlyX, aliasesCountX, join};
-    validForOptimization.createRuntimeInfoFromEstimates(
-        std::make_shared<RuntimeInformation>());
     if (chooseInterface) {
       ASSERT_TRUE(
           validForOptimization.computeGroupByForJoinWithFullScan(&result));
@@ -528,8 +527,6 @@ TEST_F(GroupBySpecialCount, computeGroupByForJoinWithFullScan) {
         makeExecutionTree<Join>(qec, xScanEmptyResult, xyzScanSortedByX, 0, 0);
     IdTable result{qec->getAllocator()};
     GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, join};
-    groupBy.createRuntimeInfoFromEstimates(
-        std::make_shared<RuntimeInformation>());
     ASSERT_TRUE(groupBy.computeGroupByForJoinWithFullScan(&result));
     ASSERT_EQ(result.numColumns(), 2u);
     ASSERT_EQ(result.size(), 0u);
@@ -637,8 +634,6 @@ TEST_F(GroupBySpecialCount, computeGroupByForFullIndexScan) {
         includeCount
             ? GroupBy{qec, variablesOnlyX, aliasesCountX, xyzScanSortedByX}
             : GroupBy{qec, variablesOnlyX, emptyAliases, xyzScanSortedByX};
-    groupBy.createRuntimeInfoFromEstimates(
-        std::make_shared<RuntimeInformation>());
     if (chooseInterface) {
       ASSERT_TRUE(groupBy.computeGroupByForFullIndexScan(&result));
     } else {
@@ -731,8 +726,6 @@ TEST(GroupBy, GroupedVariableInExpressions) {
                   {Variable{"?a"}},
                   {std::move(alias1), std::move(alias2)},
                   std::move(values)};
-  groupBy.createRuntimeInfoFromEstimates(
-      std::make_shared<RuntimeInformation>());
   auto result = groupBy.getResult();
   const auto& table = result->idTable();
 
@@ -795,8 +788,6 @@ TEST(GroupBy, AliasResultReused) {
                   {Variable{"?a"}},
                   {std::move(alias1), std::move(alias2)},
                   std::move(values)};
-  groupBy.createRuntimeInfoFromEstimates(
-      std::make_shared<RuntimeInformation>());
   auto result = groupBy.getResult();
   const auto& table = result->idTable();
 
@@ -826,7 +817,6 @@ TEST(GroupBy, AddedHavingRows) {
   auto pq = SparqlParser::parseQuery(query);
   QueryPlanner qp{ad_utility::testing::getQec()};
   auto tree = qp.createExecutionTree(pq);
-  tree.isRoot() = true;
 
   auto res = tree.getResult();
 

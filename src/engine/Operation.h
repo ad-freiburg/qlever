@@ -112,13 +112,15 @@ class Operation {
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
 
-  RuntimeInformation& getRuntimeInfo() {
-    AD_CONTRACT_CHECK(_runtimeInfo);
-    return *_runtimeInfo;
+  std::shared_ptr<RuntimeInformation> getRuntimeInfo() const {
+    return _runtimeInfo;
   }
+
   RuntimeInformationWholeQuery& getRuntimeInfoWholeQuery() {
     return _runtimeInfoWholeQuery;
   }
+
+  void signalQueryUpdate() const;
 
   /**
    * @brief Get the result for the subtree rooted at this element. Use existing
@@ -154,18 +156,7 @@ class Operation {
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
-  virtual void createRuntimeInfoFromEstimates(
-      std::shared_ptr<RuntimeInformation> runtimeInformation,
-      std::shared_ptr<RuntimeInformation> rootRuntimeInformation) final;
-
-  // Overload for cases where the root is identical
-  virtual void createRuntimeInfoFromEstimates(
-      std::shared_ptr<RuntimeInformation> runtimeInformation) final {
-    // In C++ the order of evalution is unspecified, so we can't safely
-    // move the shared pointer into any of these arguments.
-    // See https://en.cppreference.com/w/cpp/language/eval_order
-    createRuntimeInfoFromEstimates(runtimeInformation, runtimeInformation);
-  }
+  virtual void createRuntimeInfoFromEstimates() final;
 
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
@@ -181,7 +172,6 @@ class Operation {
   // testing, otherwise the `getResult()` function should be used which also
   // sets the runtime info and uses the cache.
   virtual ResultTable computeResultOnlyForTesting() final {
-    createRuntimeInfoFromEstimates(std::make_shared<RuntimeInformation>());
     return computeResult();
   }
 
@@ -243,6 +233,12 @@ class Operation {
   //! Compute the result of the query-subtree rooted at this element..
   virtual ResultTable computeResult() = 0;
 
+  // Create and store the complete runtime information for this operation after
+  // it has either been succesfully computed or read from the cache.
+  virtual void updateRuntimeInformationOnSuccess(
+      const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
+      size_t timeInMilliseconds) final;
+
   // Similar to the function above, but the components are specified manually.
   // If nullopt is specified for the last argument, then the `_runtimeInfo` is
   // expected to already have the correct children information. This is only
@@ -250,7 +246,8 @@ class Operation {
   // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
       const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
-      size_t timeInMilliseconds) final;
+      size_t timeInMilliseconds,
+      std::optional<RuntimeInformation> runtimeInfo) final;
 
  public:
   // This function has to be called when this `Operation` was not executed,
@@ -261,6 +258,16 @@ class Operation {
   // This is useful in case this operation was optimized out, but some of the
   // children were evaluated nevertheless. For an example usage of this feature
   // see `GroupBy.cpp`
+  virtual void updateRuntimeInformationWhenOptimizedOut(
+      std::vector<std::shared_ptr<RuntimeInformation>> children,
+      RuntimeInformation::Status status =
+          RuntimeInformation::Status::optimizedOut);
+
+  // Use the already stored runtime info for the children,
+  // but set all of them to `optimizedOut`. This can be used, when a complete
+  // tree was optimized out. For example when one child of a JOIN operation is
+  // empty, the result will be empty, and it is not necessary to evaluate the
+  // other child.
   virtual void updateRuntimeInformationWhenOptimizedOut(
       RuntimeInformation::Status status =
           RuntimeInformation::Status::optimizedOut);
@@ -282,8 +289,9 @@ class Operation {
   template <typename F>
   void forAllDescendants(F f) const;
 
-  std::shared_ptr<RuntimeInformation> _runtimeInfo = nullptr;
-  std::shared_ptr<RuntimeInformation> _rootRuntimeInfo = nullptr;
+  std::shared_ptr<RuntimeInformation> _runtimeInfo =
+      std::make_shared<RuntimeInformation>();
+  std::shared_ptr<RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
   RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 
   // Collect all the warnings that were created during the creation or

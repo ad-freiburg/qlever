@@ -707,7 +707,7 @@ boost::asio::awaitable<void> Server::processQuery(
               << ", total time was " << requestTimer.msecs() << " ms"
               << std::endl;
     LOG(DEBUG) << "Runtime Info:\n"
-               << qet.getRootOperation()->getRuntimeInfo().toString()
+               << qet.getRootOperation()->getRuntimeInfo()->toString()
                << std::endl;
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
@@ -743,7 +743,7 @@ boost::asio::awaitable<void> Server::processQuery(
         query, exceptionErrorMsg.value(), requestTimer, metadata);
     if (queryExecutionTree) {
       errorResponseJson["runtimeInformation"] = nlohmann::ordered_json(
-          queryExecutionTree->getRootOperation()->getRuntimeInfo());
+          *queryExecutionTree->getRootOperation()->getRuntimeInfo());
     }
     co_return co_await sendJson(errorResponseJson, responseStatus);
   }
