@@ -22,8 +22,7 @@ bool.
 */
 template <typename Func, typename... ParameterTypes>
 concept ValidatorFunction =
-    std::regular_invocable<Func, const ParameterTypes&...> &&
-    isSimilar<std::invoke_result_t<Func, const ParameterTypes&...>, bool>;
+    RegularInvocableWithSimilarReturnType<Func, bool, const ParameterTypes&...>;
 
 // Simple struct, that holds an error message. For use as the return type of
 // invocable object, that fullfill `ExceptionValidator`.
@@ -46,9 +45,8 @@ an instance of `std::optional<ErrorMessage>`.
 */
 template <typename Func, typename... ParameterTypes>
 concept ExceptionValidatorFunction =
-    std::regular_invocable<Func, const ParameterTypes&...> &&
-    isSimilar<std::invoke_result_t<Func, const ParameterTypes&...>,
-              std::optional<ErrorMessage>>;
+    RegularInvocableWithSimilarReturnType<Func, std::optional<ErrorMessage>,
+                                          const ParameterTypes&...>;
 
 /*
 @brief Transform a validator function into an exception validator function.
