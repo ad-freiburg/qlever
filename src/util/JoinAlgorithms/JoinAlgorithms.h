@@ -701,6 +701,35 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     return std::min(leftProjection(sameBlocksLeft.front().back()),
                     rightProjection(sameBlocksRight.front().back()), lessThan);
   };
+  // TODO<joka921> comment...
+  // Add the remaining blocks such that condition 3 from above is fulfilled.
+  auto fillEqualToMinimum = [&lessThan, &eq](
+      auto& targetBuffer, auto& it,
+      const auto& end, const auto& minEl) -> bool {
+    size_t numBlocksRead = 0;
+    for (; it != end; ++it) {
+      if (std::ranges::empty(*it)) {
+        continue;
+      }
+      if (!eq((*it)[0], minEl)) {
+        return true;
+      }
+      AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it, lessThan));
+      targetBuffer.emplace_back(std::move(*it));
+      ++numBlocksRead;
+      if (numBlocksRead >= 3) {
+        break;
+      }
+    }
+    return it == end;
+  };
+
+  enum struct BlockStatus {
+    leftMissing, rightMissing, allFilled
+  };
+
+  std::optional<BlockStatus> blockStatus_;
+  std::optional<ProjectedEl> currentMinEl_;
 
   // Read the minimal number of unread blocks from `leftBlocks` into
   // `sameBlocksLeft` and from `rightBlocks` into `sameBlocksRight` s.t. at
@@ -756,22 +785,21 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     }
 
     // Add the remaining blocks such that condition 3 from above is fulfilled.
-    auto fillEqualToMinimum = [minEl = getMinEl(), &lessThan, &eq](
-                                  auto& targetBuffer, auto& it,
-                                  const auto& end) {
-      for (; it != end; ++it) {
-        if (std::ranges::empty(*it)) {
-          continue;
-        }
-        if (!eq((*it)[0], minEl)) {
-          break;
-        }
-        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it, lessThan));
-        targetBuffer.emplace_back(std::move(*it));
-      }
-    };
-    fillEqualToMinimum(sameBlocksLeft, it1, end1);
-    fillEqualToMinimum(sameBlocksRight, it2, end2);
+    auto minEl = getMinEl();
+    bool allBlocksFromLeft = false;
+    bool allBlocksFromRight = false;
+    while (! (allBlocksFromLeft || allBlocksFromRight)) {
+      allBlocksFromLeft = fillEqualToMinimum(sameBlocksLeft, it1, end1, minEl);
+      allBlocksFromRight = fillEqualToMinimum(sameBlocksRight, it2, end2, minEl);
+    }
+    currentMinEl_ = getMinEl();
+    if (!allBlocksFromRight) {
+      blockStatus_ = BlockStatus::rightMissing;
+    } else if (!allBlocksFromLeft) {
+      blockStatus_ = BlockStatus::leftMissing;
+    } else {
+      blockStatus_ = BlockStatus::allFilled;
+    }
   };
 
   // Call `compatibleRowAction` for all pairs of elements in the cartesian
@@ -909,9 +937,37 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     };
     auto l = pushRelevantSubranges(sameBlocksLeft);
     auto r = pushRelevantSubranges(sameBlocksRight);
-    addAll(l, r);
-    removeAllButUnjoined(sameBlocksLeft, minEl);
-    removeAllButUnjoined(sameBlocksRight, minEl);
+    while (true) {
+      addAll(l, r);
+      switch (blockStatus_.value()) {
+        case BlockStatus::allFilled: {
+          removeAllButUnjoined(sameBlocksLeft, minEl);
+          removeAllButUnjoined(sameBlocksRight, minEl);
+          return;
+        }
+        case BlockStatus::rightMissing: {
+          removeAllButUnjoined(sameBlocksRight, minEl);
+          bool allBlocksFromRight =
+              fillEqualToMinimum(sameBlocksRight, it2, end2, minEl);
+          r = pushRelevantSubranges(sameBlocksRight);
+          if (allBlocksFromRight) {
+            blockStatus_ = BlockStatus::allFilled;
+          }
+          continue;
+        }
+        case BlockStatus::leftMissing: {
+          removeAllButUnjoined(sameBlocksLeft, minEl);
+          bool allBlocksFromLeft =
+              fillEqualToMinimum(sameBlocksLeft, it1, end1, minEl);
+          l = pushRelevantSubranges(sameBlocksLeft);
+          if (allBlocksFromLeft) {
+            blockStatus_ = BlockStatus::allFilled;
+          }
+        }
+          continue;
+      }
+      AD_FAIL();
+    }
   };
 
   while (true) {

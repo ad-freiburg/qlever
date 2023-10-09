@@ -244,7 +244,9 @@ void IndexScan::determineMultiplicities() {
     }
   } else {
     multiplicity_.emplace_back(1);
-    multiplicity_.emplace_back(1);
+    if (numVariables_ == 2) {
+      multiplicity_.emplace_back(1);
+    }
     if (numVariables_ == 3) {
       multiplicity_.emplace_back(1);
     }
