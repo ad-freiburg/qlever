@@ -152,6 +152,8 @@ int main(int argc, char** argv) {
     index.stxxlMemory() = ad_utility::MemorySize::gigabytes(
         static_cast<size_t>(stxxlMemoryGB.value()));
   }
+  // TODO<joka921> remove this...
+  // index.stxxlMemory() = 20_MB;
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.

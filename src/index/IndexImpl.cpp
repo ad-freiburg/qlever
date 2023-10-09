@@ -245,21 +245,21 @@ void IndexImpl::createFromFile(const string& filename) {
     auto comparator = [&compareProjection](const auto& l, const auto& r) {
       return compareProjection(l) < compareProjection(r);
     };
-      IdTable outputBufferTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
+    IdTable outputBufferTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
     auto pushToQueue = [&](IdTable& table) {
-        if (table.numRows() >= 50000) {
-          if (!outputBufferTable.empty()) {
-            queue.push(std::move(outputBufferTable));
-            outputBufferTable.clear();
-          }
-          queue.push(std::move(table));
-        } else {
-          outputBufferTable.insertAtEnd(table.begin(), table.end());
-          if (outputBufferTable.size() >= 50'000) {
-            queue.push(std::move(outputBufferTable));
-          }
+      if (table.numRows() >= 50000) {
+        if (!outputBufferTable.empty()) {
+          queue.push(std::move(outputBufferTable));
           outputBufferTable.clear();
         }
+        queue.push(std::move(table));
+      } else {
+        outputBufferTable.insertAtEnd(table.begin(), table.end());
+        if (outputBufferTable.size() >= 50'000) {
+          queue.push(std::move(outputBufferTable));
+          outputBufferTable.clear();
+        }
+      }
       table.clear();
     };
     IdTable outputTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
@@ -268,12 +268,12 @@ void IndexImpl::createFromFile(const string& filename) {
     ad_utility::zipperJoinForBlocksWithoutUndef(
         ospAsBlocksTransformed, lazyPatternScan, comparator, rowAdder,
         projection, projection, std::true_type{});
-      rowAdder.flush();
-      if (!outputBufferTable.empty()) {
-          queue.push(std::move(outputBufferTable));
-          outputBufferTable.clear();
-      }
-      queue.finish();
+    rowAdder.flush();
+    if (!outputBufferTable.empty()) {
+      queue.push(std::move(outputBufferTable));
+      outputBufferTable.clear();
+    }
+    queue.finish();
   }};
 
   auto blockGenerator = [](auto& queue) -> cppcoro::generator<IdTable> {
