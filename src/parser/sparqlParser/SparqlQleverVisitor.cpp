@@ -1674,11 +1674,11 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeMonthExpression);
   } else if (functionName == "day") {
     return createUnary(&makeDayExpression);
-  } else if(functionName == "hours") {
+  } else if (functionName == "hours") {
     return createUnary(&makeHoursExpression);
-  } else if(functionName == "minutes") {
+  } else if (functionName == "minutes") {
     return createUnary(&makeMinutesExpression);
-  } else if(functionName == "seconds") {
+  } else if (functionName == "seconds") {
     return createUnary(&makeSecondsExpression);
   } else if (functionName == "rand") {
     AD_CONTRACT_CHECK(argList.empty());

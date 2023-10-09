@@ -414,8 +414,8 @@ TEST(SparqlExpression, dateOperators) {
   auto check = [&checkYear, &checkMonth, &checkDay, &checkHours, &checkMinutes,
                 &checkSeconds](
                    const DateOrLargeYear& date, std::optional<int> expectedYear,
-                   std::optional<int> expectedMonth,
-                   std::optional<int> expectedDay,
+                   std::optional<int> expectedMonth = std::nullopt,
+                   std::optional<int> expectedDay = std::nullopt,
                    std::optional<int> expectedHours = std::nullopt,
                    std::optional<int> expectedMinutes = std::nullopt,
                    std::optional<double> expectedSeconds = std::nullopt,
@@ -458,9 +458,9 @@ TEST(SparqlExpression, dateOperators) {
 
   // Test behavior of the `largeYear` representation that doesn't store the
   // actual date.
-  check(D::parseGYear("123456"), 123456, std::nullopt, std::nullopt);
-  check(D::parseGYearMonth("-12345-01"), -12345, 1, std::nullopt);
-  check(D::parseGYearMonth("-12345-03"), -12345, 1, std::nullopt);
+  check(D::parseGYear("123456"), 123456);
+  check(D::parseGYearMonth("-12345-01"), -12345, 1);
+  check(D::parseGYearMonth("-12345-03"), -12345, 1);
   check(D::parseXsdDate("-12345-01-01"), -12345, 1, 1);
   check(D::parseXsdDate("-12345-03-04"), -12345, 1, 1);
 

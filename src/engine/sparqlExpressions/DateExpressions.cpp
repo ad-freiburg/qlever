@@ -52,11 +52,11 @@ inline auto extractTimeComponentImpl = [](std::optional<DateOrLargeYear> d) {
   return std::invoke(makeId, std::invoke(dateMember, date));
 };
 
-inline auto extractHours =
+constexpr auto extractHours =
     extractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>;
-inline auto extractMinutes =
+constexpr auto extractMinutes =
     extractTimeComponentImpl<&Date::getMinute, &Id::makeFromInt>;
-inline auto extractSeconds =
+constexpr auto extractSeconds =
     extractTimeComponentImpl<&Date::getSecond, &Id::makeFromDouble>;
 
 NARY_EXPRESSION(YearExpression, 1, FV<decltype(extractYear), DateValueGetter>);
