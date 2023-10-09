@@ -66,6 +66,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
   if (isRoot) {
     // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates(_runtimeInfo);
+    signalQueryUpdate();
   }
   auto& cache = _executionContext->getQueryTreeCache();
   const string cacheKey = asString();
@@ -341,8 +342,6 @@ void Operation::createRuntimeInfoFromEstimates(
     _runtimeInfo->originalTotalTime_ = rtiFromCache.totalTime_;
     _runtimeInfo->originalOperationTime_ = rtiFromCache.getOperationTime();
   }
-
-  signalQueryUpdate();
 }
 
 // ___________________________________________________________________________
