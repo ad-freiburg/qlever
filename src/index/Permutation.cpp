@@ -38,6 +38,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
 
 // _____________________________________________________________________
 IdTable Permutation::scan(Id col0Id, std::optional<Id> col1Id,
+                          ColumnIndices additionalColumns,
                           const TimeoutTimer& timer) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
@@ -52,9 +53,10 @@ IdTable Permutation::scan(Id col0Id, std::optional<Id> col1Id,
 
   if (col1Id.has_value()) {
     return reader_.scan(metaData, col1Id.value(), meta_.blockData(), file_,
-                        timer);
+                        additionalColumns, timer);
   } else {
-    return reader_.scan(metaData, meta_.blockData(), file_, timer);
+    return reader_.scan(metaData, meta_.blockData(), file_, additionalColumns,
+                        timer);
   }
 }
 
@@ -131,7 +133,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
 Permutation::IdTableGenerator Permutation::lazyScan(
     Id col0Id, std::optional<Id> col1Id,
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
-    const TimeoutTimer& timer) const {
+    ColumnIndices additionalColumns, const TimeoutTimer& timer) const {
   if (!meta_.col0IdExists(col0Id)) {
     return {};
   }
@@ -143,9 +145,11 @@ Permutation::IdTableGenerator Permutation::lazyScan(
   }
   if (col1Id.has_value()) {
     return reader_.lazyScan(meta_.getMetaData(col0Id), col1Id.value(),
-                            std::move(blocks.value()), file_, timer);
+                            std::move(blocks.value()), file_, additionalColumns,
+                            timer);
   } else {
     return reader_.lazyScan(meta_.getMetaData(col0Id),
-                            std::move(blocks.value()), file_, timer);
+                            std::move(blocks.value()), file_, additionalColumns,
+                            timer);
   }
 }

@@ -21,7 +21,13 @@ class IndexScan : public Operation {
   size_t sizeEstimate_;
   vector<float> multiplicity_;
 
+  std::vector<ColumnIndex> additionalColumns_;
+  std::vector<Variable> additionalVariables_;
+
  public:
+  const std::vector<ColumnIndex>& additionalColumns() const {
+    return additionalColumns_;
+  }
   string getDescriptor() const override;
 
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
@@ -73,7 +79,7 @@ class IndexScan : public Operation {
     if (multiplicity_.empty()) {
       determineMultiplicities();
     }
-    assert(col < multiplicity_.size());
+    AD_CORRECTNESS_CHECK(col < multiplicity_.size());
     return multiplicity_[col];
   }
 

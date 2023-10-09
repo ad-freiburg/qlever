@@ -79,6 +79,8 @@ class SparqlTriple {
   TripleComponent _s;
   PropertyPath _p;
   TripleComponent _o;
+  // TODO<joka921> Comment, and not make this `ColumnIndex`, but predicates etc.
+  std::vector<std::pair<ColumnIndex, Variable>> _additionalScanColumns;
 
   [[nodiscard]] string asString() const;
 };

@@ -33,6 +33,7 @@ class Permutation {
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using TimeoutTimer = ad_utility::SharedConcurrentTimeoutTimer;
+  using ColumnIndices = std::span<const ColumnIndex>;
 
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
@@ -52,6 +53,7 @@ class Permutation {
   // additionally have the specified col1. .This is just a thin wrapper around
   // `CompressedRelationMetaData::scan`.
   IdTable scan(Id col0Id, std::optional<Id> col1Id,
+               ColumnIndices additionalColumns = {},
                const TimeoutTimer& timer = nullptr) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
@@ -74,6 +76,7 @@ class Permutation {
   IdTableGenerator lazyScan(
       Id col0Id, std::optional<Id> col1Id,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
+      ColumnIndices additionalColumns,
       const TimeoutTimer& timer = nullptr) const;
 
   // Return the metadata for the relation specified by the `col0Id`

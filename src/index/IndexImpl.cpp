@@ -501,9 +501,10 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   }
 
-  CompressedRelationWriter writer1{ad_utility::File(fileName1, "w"),
+  static constexpr size_t NumColumns = 2;
+  CompressedRelationWriter writer1{NumColumns, ad_utility::File(fileName1, "w"),
                                    blocksizePermutationInBytes_};
-  CompressedRelationWriter writer2{ad_utility::File(fileName2, "w"),
+  CompressedRelationWriter writer2{NumColumns, ad_utility::File(fileName2, "w"),
                                    blocksizePermutationInBytes_};
 
   // Iterate over the vector and identify "relation" boundaries, where a
@@ -1331,6 +1332,7 @@ IdTable IndexImpl::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
     const Permutation::Enum& permutation,
+    Permutation::ColumnIndices additionalColumns,
     ad_utility::SharedConcurrentTimeoutTimer timer) const {
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
   std::optional<Id> col1Id =
@@ -1340,13 +1342,14 @@ IdTable IndexImpl::scan(
     size_t numColumns = col1String.has_value() ? 1 : 2;
     return IdTable{numColumns, allocator_};
   }
-  return scan(col0Id.value(), col1Id, permutation, timer);
+  return scan(col0Id.value(), col1Id, permutation, additionalColumns, timer);
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(Id col0Id, std::optional<Id> col1Id,
                         Permutation::Enum p,
+                        Permutation::ColumnIndices additionalColumns,
                         ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return getPermutation(p).scan(col0Id, col1Id, timer);
+  return getPermutation(p).scan(col0Id, col1Id, additionalColumns, timer);
 }
 
 // _____________________________________________________________________________
