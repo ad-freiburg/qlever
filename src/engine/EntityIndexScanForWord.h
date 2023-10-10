@@ -4,18 +4,17 @@
 
 #include "./Operation.h"
 
-// This operation filters all entries of a text-variable out that do not contain
-// a certain word or a certain prefix.
-class WordIndexScan : public Operation {
+class EntityIndexScanForWord : public Operation {
  private:
   const Variable cvar_;
+  const Variable evar_;
   const string word_;
-  bool isPrefix_ = false;
 
  public:
-  WordIndexScan(QueryExecutionContext* qec, Variable cvar, string word);
+  EntityIndexScanForWord(QueryExecutionContext* qec, Variable cvar,
+                         Variable evar, string word);
 
-  virtual ~WordIndexScan() = default;
+  virtual ~EntityIndexScanForWord() = default;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
@@ -37,8 +36,6 @@ class WordIndexScan : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
-  // Returns a ResultTable containing an IdTable with the columns being
-  // the text-varibale and the completed word (if it was prefixed)
   ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;

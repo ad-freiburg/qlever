@@ -189,6 +189,11 @@ class Index {
 
   WordEntityPostings getEntityPostingsForTerm(const std::string& term) const;
 
+  Index::WordEntityPostings getUnadjustedEntityPostingsForTerm(
+      const string& term) const;
+
+  size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
+
   [[nodiscard]] std::string getTextExcerpt(TextRecordIndex cid) const;
 
   // Only for debug reasons and external encoding tests.

@@ -48,29 +48,24 @@ class QueryPlanner {
         }
       }
 
-      Node(size_t id, const Variable& cvar, std::vector<std::string> words,
-           const vector<SparqlTriple>& trips)
+      Node(size_t id, const Variable& cvar, const std::string& word,
+           SparqlTriple t)
           : _id(id),
             // TODO<joka921> What is this triple used for? If it is just a
             // dummy, then we can replace it by a `variant<Triple,
             // TextNodeData>`.
-            _triple(cvar,
-                    PropertyPath(PropertyPath::Operation::IRI, 0,
-                                 INTERNAL_TEXT_MATCH_PREDICATE, {}),
-                    TripleComponent::UNDEF{}),
+            _triple(std::move(t)),
             _cvar(cvar),
-            _wordPart(std::move(words)) {
+            _wordPart({word}) {
         _variables.insert(cvar);
-        for (const auto& t : trips) {
-          if (isVariable(t._s)) {
-            _variables.insert(t._s.getVariable());
-          }
-          if (isVariable(t._p)) {
-            _variables.insert(Variable{t._p._iri});
-          }
-          if (isVariable(t._o)) {
-            _variables.insert(t._o.getVariable());
-          }
+        if (isVariable(_triple._s)) {
+          _variables.insert(_triple._s.getVariable());
+        }
+        if (isVariable(_triple._p)) {
+          _variables.insert(Variable{_triple._p._iri});
+        }
+        if (isVariable(_triple._o)) {
+          _variables.insert(_triple._o.getVariable());
         }
       }
 
@@ -127,8 +122,6 @@ class QueryPlanner {
 
     vector<size_t> bfsLeaveOut(size_t startNode,
                                ad_utility::HashSet<size_t> leaveOut) const;
-
-    void collapseTextCliques();
 
    private:
     vector<std::pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
@@ -222,6 +215,8 @@ class QueryPlanner {
 
   [[nodiscard]] TripleGraph createTripleGraph(
       const parsedQuery::BasicGraphPattern* pattern) const;
+
+  void addNodeToTripleGraph(const TripleGraph::Node&, TripleGraph&) const;
 
   void setEnablePatternTrick(bool enablePatternTrick);
 
@@ -440,7 +435,7 @@ class QueryPlanner {
       std::vector<SubtreePlan> connectedComponent,
       const vector<SparqlFilter>& filters, const TripleGraph& tg) const;
 
-  [[nodiscard]] vector<SubtreePlan> getTextLeafPlan(
+  [[nodiscard]] SubtreePlan getTextLeafPlan(
       const TripleGraph::Node& node) const;
 
   /**

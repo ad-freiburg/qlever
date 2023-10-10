@@ -329,6 +329,11 @@ class IndexImpl {
 
   Index::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
 
+  Index::WordEntityPostings getUnadjustedEntityPostingsForTerm(
+      const string& term) const;
+
+  size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
+
   Index::WordEntityPostings readWordCl(const TextBlockMetaData& tbmd) const;
 
   Index::WordEntityPostings readWordEntityCl(
@@ -519,8 +524,6 @@ class IndexImpl {
   vector<T> readFreqComprList(
       size_t nofElements, off_t from, size_t nofBytes,
       MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;
-
-  size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
   // Get the metadata for the block from the text index that contains the
   // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like

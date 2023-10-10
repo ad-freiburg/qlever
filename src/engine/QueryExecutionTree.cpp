@@ -16,6 +16,7 @@
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Distinct.h"
+#include "engine/EntityIndexScanForWord.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
@@ -213,6 +214,8 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     _type = TEXT_WITH_FILTER;
   } else if constexpr (std::is_same_v<Op, WordIndexScan>) {
     _type = WORD_INDEX_SCAN;
+  } else if constexpr (std::is_same_v<Op, EntityIndexScanForWord>) {
+    _type = ENTITY_INDEX_SCAN_FOR_WORD;
   } else if constexpr (std::is_same_v<Op, CountAvailablePredicates>) {
     _type = COUNT_AVAILABLE_PREDICATES;
   } else if constexpr (std::is_same_v<Op, Minus>) {
@@ -252,6 +255,8 @@ template void QueryExecutionTree::setOperation(std::shared_ptr<Join>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<TextOperationWithFilter>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<WordIndexScan>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<EntityIndexScanForWord>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<CountAvailablePredicates>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Minus>);

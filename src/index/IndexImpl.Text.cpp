@@ -1034,6 +1034,20 @@ Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
 }
 
 // _____________________________________________________________________________
+Index::WordEntityPostings IndexImpl::getUnadjustedEntityPostingsForTerm(
+    const string& term) const {
+  LOG(DEBUG) << "Getting unadjusted entity postings for term: " << term << '\n';
+  Index::WordEntityPostings resultWep;
+  auto optTbmd = getTextBlockMetadataForWordOrPrefix(term);
+  if (!optTbmd.has_value()) {
+    return resultWep;
+  }
+  const auto& tbmd = optTbmd.value().tbmd_;
+  resultWep = readWordEntityCl(tbmd);
+  return resultWep;
+}
+
+// _____________________________________________________________________________
 template <typename T, typename MakeFromUint64t>
 vector<T> IndexImpl::readGapComprList(size_t nofElements, off_t from,
                                       size_t nofBytes,

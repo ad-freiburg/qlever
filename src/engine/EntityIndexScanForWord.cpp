@@ -1,35 +1,34 @@
-#include "engine/WordIndexScan.h"
+#include "engine/EntityIndexScanForWord.h"
 
 // _____________________________________________________________________________
-WordIndexScan::WordIndexScan(QueryExecutionContext* qec, Variable cvar,
-                             string word)
+EntityIndexScanForWord::EntityIndexScanForWord(QueryExecutionContext* qec,
+                                               Variable cvar, Variable evar,
+                                               string word)
     : Operation(qec),
       cvar_(std::move(cvar)),
-      word_(std::move(word)),
-      isPrefix_(word_.ends_with('*')) {}
+      evar_(std::move(evar)),
+      word_(std::move(word)) {}
 
 // _____________________________________________________________________________
-ResultTable WordIndexScan::computeResult() {
+ResultTable EntityIndexScanForWord::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
   Index::WordEntityPostings wep =
-      getExecutionContext()->getIndex().getWordPostingsForTerm(word_);
+      getExecutionContext()->getIndex().getUnadjustedEntityPostingsForTerm(
+          word_);
+
   idTable.resize(wep.cids_.size());
   decltype(auto) cidColumn = idTable.getColumn(0);
   std::ranges::transform(wep.cids_, cidColumn.begin(),
                          &Id::makeFromTextRecordIndex);
-  if (isPrefix_) {
-    decltype(auto) widColumn = idTable.getColumn(1);
-    std::ranges::transform(wep.wids_[0], widColumn.begin(), [](WordIndex id) {
-      return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
-    });
-  }
+  decltype(auto) eidColumn = idTable.getColumn(1);
+  std::ranges::copy(wep.eids_.begin(), wep.eids_.end(), eidColumn.begin());
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
 
 // _____________________________________________________________________________
-VariableToColumnMap WordIndexScan::computeVariableToColumnMap() const {
+VariableToColumnMap EntityIndexScanForWord::computeVariableToColumnMap() const {
   VariableToColumnMap vcmap;
   auto addDefinedVar = [&vcmap,
                         index = ColumnIndex{0}](const Variable& var) mutable {
@@ -37,35 +36,33 @@ VariableToColumnMap WordIndexScan::computeVariableToColumnMap() const {
     ++index;
   };
   addDefinedVar(cvar_);
-  if (isPrefix_) {
-    addDefinedVar(
-        cvar_.getMatchingWordVariable(word_.substr(0, word_.size() - 1)));
-  }
+  addDefinedVar(evar_);
   return vcmap;
 }
 
 // _____________________________________________________________________________
-size_t WordIndexScan::getResultWidth() const { return 1 + isPrefix_; }
+size_t EntityIndexScanForWord::getResultWidth() const { return 2; }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> WordIndexScan::resultSortedOn() const {
+vector<ColumnIndex> EntityIndexScanForWord::resultSortedOn() const {
   return {ColumnIndex(0)};
 }
 
 // _____________________________________________________________________________
-string WordIndexScan::getDescriptor() const {
-  return "WordIndexScan on " + cvar_.name() + " with word " + word_;
+string EntityIndexScanForWord::getDescriptor() const {
+  return "EntityIndexScanForWord on text-variable " + cvar_.name() +
+         " and entity-variable " + evar_.name() + " with word " + word_;
 }
 
 // _____________________________________________________________________________
-string WordIndexScan::asStringImpl(size_t indent) const {
+string EntityIndexScanForWord::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << "WORD INDEX SCAN: "
-     << " with word: \"" << word_ << "\" and variable: \"" << cvar_.name()
-     << " \"";
+  os << "ENTITY INDEX SCAN FOR WORD: "
+     << " with word: \"" << word_ << "\" and text-variable: \"" << cvar_.name()
+     << "\" and entity-variable: \"" << evar_.name() << " \"";
   ;
   return std::move(os).str();
 }
