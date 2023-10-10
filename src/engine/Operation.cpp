@@ -147,12 +147,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
         // Note: both of the following calls have no effect and negligible
         // runtime if neither a LIMIT nor an OFFSET were specified.
         result.applyLimitOffset(_limit);
-        _runtimeInfo->addLimitOffsetRow(_limit, limitTimer.msecs(), true);
+        runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
       } else {
         AD_CONTRACT_CHECK(result.idTable().numRows() ==
                           _limit.actualSize(result.idTable().numRows()));
       }
-      return CacheValue{std::move(result), *getRuntimeInfo()};
+      return CacheValue{std::move(result), runtimeInfo()};
     };
 
     auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda,
@@ -173,7 +173,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
     return result._resultPointer->resultTable();
   } catch (const ad_utility::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
-    _runtimeInfo->status_ =
+    runtimeInfo().status_ =
         RuntimeInformation::Status::failedBecauseChildFailed;
     throw;
   } catch (const ad_utility::WaitedForResultWhichThenFailedException& e) {
@@ -242,7 +242,7 @@ void Operation::updateRuntimeInformationOnSuccess(
     for (auto* child : getChildren()) {
       AD_CONTRACT_CHECK(child);
       _runtimeInfo->children_.push_back(
-          child->getRootOperation()->getRuntimeInfo());
+          child->getRootOperation()->getRuntimeInfoPointer());
     }
   }
   signalQueryUpdate();
@@ -307,7 +307,7 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
 
 // __________________________________________________________________
 void Operation::createRuntimeInfoFromEstimates(
-    std::shared_ptr<RuntimeInformation> root) {
+    std::shared_ptr<const RuntimeInformation> root) {
   _rootRuntimeInfo = root;
   _runtimeInfo->setColumnNames(getInternallyVisibleVariableColumns());
   const auto numCols = getResultWidth();
@@ -318,7 +318,7 @@ void Operation::createRuntimeInfoFromEstimates(
     AD_CONTRACT_CHECK(child);
     child->getRootOperation()->createRuntimeInfoFromEstimates(root);
     _runtimeInfo->children_.push_back(
-        child->getRootOperation()->getRuntimeInfo());
+        child->getRootOperation()->getRuntimeInfoPointer());
   }
 
   _runtimeInfo->costEstimate_ = getCostEstimate();

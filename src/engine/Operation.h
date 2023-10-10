@@ -112,7 +112,9 @@ class Operation {
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
 
-  std::shared_ptr<RuntimeInformation> getRuntimeInfo() const {
+  RuntimeInformation& runtimeInfo() const { return *_runtimeInfo; }
+
+  std::shared_ptr<RuntimeInformation> getRuntimeInfoPointer() const {
     return _runtimeInfo;
   }
 
@@ -157,7 +159,7 @@ class Operation {
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
   virtual void createRuntimeInfoFromEstimates(
-      std::shared_ptr<RuntimeInformation> root) final;
+      std::shared_ptr<const RuntimeInformation> root) final;
 
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
@@ -292,7 +294,7 @@ class Operation {
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo =
       std::make_shared<RuntimeInformation>();
-  std::shared_ptr<RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
+  std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
   RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 
   // Collect all the warnings that were created during the creation or

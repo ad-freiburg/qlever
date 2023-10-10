@@ -20,12 +20,11 @@ TEST(RuntimeInformation, addLimitOffsetRow) {
   EXPECT_EQ(rti.getOperationTime(), 20.0);
 
   ASSERT_EQ(rti.children_.size(), 1u);
-  const auto& child = rti.children_.at(0);
-  EXPECT_EQ(child->descriptor_, "BaseOperation");
-  EXPECT_EQ(child->totalTime_, 4.0);
-  EXPECT_EQ(child->getOperationTime(), 4.0);
-  EXPECT_TRUE(
-      child->details_.at("not-written-to-cache-because-child-of-limit"));
+  auto& child = *rti.children_.at(0);
+  EXPECT_EQ(child.descriptor_, "BaseOperation");
+  EXPECT_EQ(child.totalTime_, 4.0);
+  EXPECT_EQ(child.getOperationTime(), 4.0);
+  EXPECT_TRUE(child.details_.at("not-written-to-cache-because-child-of-limit"));
 
   rti.addLimitOffsetRow(LimitOffsetClause{std::nullopt, 1, 17}, 15, false);
   EXPECT_FALSE(rti.children_.at(0)->details_.at(

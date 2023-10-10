@@ -331,7 +331,7 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
   CompactVectorOfStrings<Id> patterns(patternsSrc);
 
-  auto runtimeInfo = std::make_shared<RuntimeInformation>();
+  RuntimeInformation runtimeInfo{};
   try {
     CALL_FIXED_SIZE(input.numColumns(),
                     CountAvailablePredicates::computePatternTrick, input,

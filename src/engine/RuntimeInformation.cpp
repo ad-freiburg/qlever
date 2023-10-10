@@ -158,6 +158,7 @@ std::string_view RuntimeInformation::toString(Status status) {
 // ________________________________________________________________________________________________________________
 void to_json(nlohmann::ordered_json& j,
              const std::shared_ptr<RuntimeInformation>& rti) {
+  AD_CONTRACT_CHECK(rti);
   to_json(j, *rti);
 }
 
