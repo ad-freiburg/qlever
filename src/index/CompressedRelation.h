@@ -230,6 +230,13 @@ class CompressedRelationWriter {
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
       std::span<const Id> column);
 
+  // _____________________________________________________________________________
+  static std::vector<char> compressColumn(std::span<const Id> column);
+
+  // _____________________________________________________________________________
+  CompressedBlockMetadata::OffsetAndCompressedSize writeCompressedColumn(
+      std::vector<char> compressedBlock);
+
   // Return the number of columns that is stored inside the blocks.
   size_t numColumns() const { return numColumns_; }
 };

@@ -713,9 +713,16 @@ void CompressedRelationWriter::writeRelationToExclusiveBlocks(
     size_t actualNumRowsPerBlock = std::min(numRowsPerBlock, totalSize - i);
 
     std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
-    for (const auto& column : data.getColumns()) {
-      offsets.push_back(compressAndWriteColumn(
-          {column.begin() + i, column.begin() + i + actualNumRowsPerBlock}));
+    std::vector<std::future<std::vector<char>>> futures;
+    for (std::span<const Id> column : data.getColumns()) {
+      futures.push_back(
+          std::async(std::launch::async, [column, i, actualNumRowsPerBlock] {
+            return compressColumn({column.begin() + i,
+                                   column.begin() + i + actualNumRowsPerBlock});
+          }));
+    }
+    for (auto& fut : futures) {
+      offsets.push_back(writeCompressedColumn(fut.get()));
     }
 
     blockBuffer_.push_back(
@@ -740,11 +747,22 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   // TODO<joka921, C++23> This is
   // `ranges::to<vector>(ranges::transform_view(buffer_.getColumns(),
   // compressAndWriteColumn))`;
+  /*
   std::ranges::for_each(buffer_.getColumns(),
                         [this](const auto& column) mutable {
                           currentBlockData_.offsetsAndCompressedSize_.push_back(
                               compressAndWriteColumn(column));
                         });
+                        */
+  std::vector<std::future<std::vector<char>>> futures;
+  for (std::span<const Id> column : buffer_.getColumns()) {
+    futures.push_back(std::async(std::launch::async,
+                                 [column] { return compressColumn(column); }));
+  }
+  for (auto& fut : futures) {
+    currentBlockData_.offsetsAndCompressedSize_.push_back(
+        writeCompressedColumn(fut.get()));
+  }
 
   currentBlockData_.numRows_ = numRows;
   // The `firstId` and `lastId` of `currentBlockData_` were already set
@@ -823,8 +841,20 @@ DecompressedBlock CompressedRelationReader::readAndDecompressBlock(
 // _____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
 CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
-  std::vector<char> compressedBlock = ZstdWrapper::compress(
-      (void*)(column.data()), column.size() * sizeof(column[0]));
+  return writeCompressedColumn(compressColumn(column));
+};
+
+// _____________________________________________________________________________
+std::vector<char> CompressedRelationWriter::compressColumn(
+    std::span<const Id> column) {
+  return ZstdWrapper::compress((void*)(column.data()),
+                               column.size() * sizeof(column[0]));
+};
+
+// _____________________________________________________________________________
+CompressedBlockMetadata::OffsetAndCompressedSize
+CompressedRelationWriter::writeCompressedColumn(
+    std::vector<char> compressedBlock) {
   auto offsetInFile = outfile_.tell();
   auto compressedSize = compressedBlock.size();
   outfile_.write(compressedBlock.data(), compressedBlock.size());
