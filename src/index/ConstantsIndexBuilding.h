@@ -79,12 +79,10 @@ constexpr size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
 // time
 constexpr size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
 
-// The uncompressed size in bytes of a block of the permutations.
-//
-// NOTE: This used to be `1 << 23` (over 8M), which is fairly large (we always
-// need to decompress at least one whole block, even when reading only few
-// triples). With 100K, the total space for all the `CompressedBlockMetadata` is
-// still small compared to the rest of the index. However, with 100K, and single
-// block is just 10K compresse, which might result in sub-optimal IO-efficiency
-// when reading many blocks. We take 500K as a compromise.
-constexpr size_t BLOCKSIZE_COMPRESSED_METADATA = 500'000;
+// The uncompressed size in bytes of a block of a single column of the
+// permutations. If chosen too large, then we lose performance for very small
+// index scans which always have to read a complete block. If chosen too small,
+// the overhead of the metadata that has to be stored per block becomes
+// infeasible. 250K seems to be a reasonable tradeoff here.
+constexpr ad_utility::MemorySize
+    UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN = 250_kB;

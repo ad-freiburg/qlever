@@ -22,13 +22,11 @@ using namespace std::chrono_literals;
 IdTable CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata,
     std::span<const CompressedBlockMetadata> blockMetadata,
-    ad_utility::File& file, std::span<const ColumnIndex> additionalColumns,
-    const TimeoutTimer& timer) const {
-  // We always return the first two columns (the col1 and col2 of the
-  // permutation), additional payload columns manually have to be specified.
-  IdTable result(2 + additionalColumns.size(), allocator_);
-  std::vector<ColumnIndex> columnIndices{0, 1};
-  std::ranges::copy(additionalColumns, std::back_inserter(columnIndices));
+    ColumnIndices additionalColumns, const TimeoutTimer& timer) const {
+  // We always return the first two columns (the `col1` and `col2` of the
+  // permutation), additional payload columns have to be specified manually.
+  auto columnIndices = prepareColumnIndices({0, 1}, additionalColumns);
+  IdTable result(columnIndices.size(), allocator_);
 
   auto relevantBlocks =
       getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
@@ -50,7 +48,7 @@ IdTable CompressedRelationReader::scan(
   // the result.
   auto readIncompleteBlock = [&](const auto& block) mutable {
     auto trimmedBlock = readPossiblyIncompleteBlock(
-        metadata, std::nullopt, file, block, std::nullopt, columnIndices);
+        metadata, std::nullopt, block, std::nullopt, columnIndices);
     for (size_t i = 0; i < trimmedBlock.numColumns(); ++i) {
       const auto& inputCol = trimmedBlock.getColumn(i);
       auto resultColumn = result.getColumn(i);
@@ -76,7 +74,7 @@ IdTable CompressedRelationReader::scan(
         // Read a block from disk (serially).
 
         CompressedBlock compressedBuffer =
-            readCompressedBlockFromFile(block, file, columnIndices);
+            readCompressedBlockFromFile(block, columnIndices);
 
         // This lambda decompresses the block that was just read to the
         // correct position in the result.
@@ -111,8 +109,8 @@ IdTable CompressedRelationReader::scan(
 // ____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
-    auto beginBlock, auto endBlock, ad_utility::File& file,
-    std::span<const ColumnIndex> columnIndices, TimeoutTimer timer) const {
+    auto beginBlock, auto endBlock, ColumnIndices columnIndices,
+    TimeoutTimer timer) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
     co_return;
@@ -142,7 +140,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     // file. On a fast SSD we could possibly change this, but this has to be
     // investigated.
     CompressedBlock compressedBlock =
-        readCompressedBlockFromFile(block, file, columnIndices);
+        readCompressedBlockFromFile(block, columnIndices);
     lock.unlock();
     return std::pair{myIndex, decompressBlock(compressedBlock, block.numRows_)};
   };
@@ -174,8 +172,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata,
-    std::vector<CompressedBlockMetadata> blockMetadata, ad_utility::File& file,
-    std::span<const ColumnIndex> additionalColumns, TimeoutTimer timer) const {
+    std::vector<CompressedBlockMetadata> blockMetadata,
+    ColumnIndices additionalColumns, TimeoutTimer timer) const {
   auto relevantBlocks =
       getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
   const auto beginBlock = relevantBlocks.begin();
@@ -188,20 +186,16 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     co_return;
   }
 
-  // TODO<joka921> This pattern appears multiple times, factor it into a
-  // function.
-  std::vector<ColumnIndex> columnIndices{0, 1};
-  std::ranges::copy(additionalColumns, std::back_inserter(columnIndices));
+  auto columnIndices = prepareColumnIndices({0, 1}, additionalColumns);
 
   // Read the first block, it might be incomplete
-  auto firstBlock =
-      readPossiblyIncompleteBlock(metadata, std::nullopt, file, *beginBlock,
-                                  std::ref(details), columnIndices);
+  auto firstBlock = readPossiblyIncompleteBlock(
+      metadata, std::nullopt, *beginBlock, std::ref(details), columnIndices);
   co_yield firstBlock;
   checkTimeout(timer);
 
   auto blockGenerator = asyncParallelBlockGenerator(beginBlock + 1, endBlock,
-                                                    file, columnIndices, timer);
+                                                    columnIndices, timer);
   blockGenerator.setDetailsPointer(&details);
   for (auto& block : blockGenerator) {
     co_yield block;
@@ -212,8 +206,8 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata, Id col1Id,
-    std::vector<CompressedBlockMetadata> blockMetadata, ad_utility::File& file,
-    std::span<const ColumnIndex> additionalColumns, TimeoutTimer timer) const {
+    std::vector<CompressedBlockMetadata> blockMetadata,
+    ColumnIndices additionalColumns, TimeoutTimer timer) const {
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
   auto beginBlock = relevantBlocks.begin();
   auto endBlock = relevantBlocks.end();
@@ -234,12 +228,10 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     AD_CORRECTNESS_CHECK(endBlock - beginBlock <= 1);
   }
 
-  // TODO<joka921> remove code duplication.
-  std::vector<ColumnIndex> columnIndices{1};
-  std::ranges::copy(additionalColumns, std::back_inserter(columnIndices));
+  auto columnIndices = prepareColumnIndices({1}, additionalColumns);
 
   auto getIncompleteBlock = [&](auto it) {
-    auto result = readPossiblyIncompleteBlock(metadata, col1Id, file, *it,
+    auto result = readPossiblyIncompleteBlock(metadata, col1Id, *it,
                                               std::ref(details), columnIndices);
     checkTimeout(timer);
     return result;
@@ -252,7 +244,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 
   if (beginBlock + 1 < endBlock) {
     auto blockGenerator = asyncParallelBlockGenerator(
-        beginBlock + 1, endBlock - 1, file, columnIndices, timer);
+        beginBlock + 1, endBlock - 1, columnIndices, timer);
     blockGenerator.setDetailsPointer(&details);
     for (auto& block : blockGenerator) {
       co_yield block;
@@ -419,13 +411,10 @@ CompressedRelationReader::getBlocksForJoin(
 // _____________________________________________________________________________
 IdTable CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata, Id col1Id,
-    std::span<const CompressedBlockMetadata> blocks, ad_utility::File& file,
-    std::span<const ColumnIndex> additionalColumns,
-    const TimeoutTimer& timer) const {
-  IdTable result(1 + additionalColumns.size(), allocator_);
-  // TODO<joka921> Remove code duplication.
-  std::vector<ColumnIndex> columnIndices{1};
-  std::ranges::copy(additionalColumns, std::back_inserter(columnIndices));
+    std::span<const CompressedBlockMetadata> blocks,
+    ColumnIndices additionalColumns, const TimeoutTimer& timer) const {
+  auto columnIndices = prepareColumnIndices({1}, additionalColumns);
+  IdTable result(columnIndices.size(), allocator_);
 
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
@@ -447,8 +436,8 @@ IdTable CompressedRelationReader::scan(
   // set up a lambda which allows us to read these blocks, and returns
   // the result as a vector.
   auto readIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(metadata, col1Id, file, block,
-                                       std::nullopt, columnIndices);
+    return readPossiblyIncompleteBlock(metadata, col1Id, block, std::nullopt,
+                                       columnIndices);
   };
 
   // The first and the last block might be incomplete, compute
@@ -508,7 +497,7 @@ IdTable CompressedRelationReader::scan(
       // Read the block serially, only read the second column.
       AD_CORRECTNESS_CHECK(block.offsetsAndCompressedSize_.size() >= 2);
       CompressedBlock compressedBuffer =
-          readCompressedBlockFromFile(block, file, columnIndices);
+          readCompressedBlockFromFile(block, columnIndices);
 
       // A lambda that owns the compressed block decompresses it to the
       // correct position in the result. It may safely be run in parallel
@@ -543,24 +532,22 @@ IdTable CompressedRelationReader::scan(
 // _____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     const CompressedRelationMetadata& relationMetadata,
-    std::optional<Id> col1Id, ad_utility::File& file,
-    const CompressedBlockMetadata& blockMetadata,
+    std::optional<Id> col1Id, const CompressedBlockMetadata& blockMetadata,
     std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
-    std::span<const ColumnIndex> columnIndices) const {
+    ColumnIndices columnIndices) const {
   std::vector<ColumnIndex> allColumns;
   std::ranges::copy(
       ad_utility::integerRange(blockMetadata.offsetsAndCompressedSize_.size()),
       std::back_inserter(allColumns));
   // A block is uniquely identified by its start position in the file.
   auto cacheKey = blockMetadata.offsetsAndCompressedSize_.at(0).offsetInFile_;
-  DecompressedBlock block =
-      blockCache_
-          .computeOnce(cacheKey,
-                       [&]() {
-                         return readAndDecompressBlock(blockMetadata, file,
-                                                       allColumns);
-                       })
-          ._resultPointer->clone();
+  DecompressedBlock block = blockCache_
+                                .computeOnce(cacheKey,
+                                             [&]() {
+                                               return readAndDecompressBlock(
+                                                   blockMetadata, allColumns);
+                                             })
+                                ._resultPointer->clone();
   const auto& col1Column = block.getColumn(0);
 
   // Find the range in the blockMetadata, that belongs to the same relation
@@ -599,8 +586,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
 // _____________________________________________________________________________
 size_t CompressedRelationReader::getResultSizeOfScan(
     const CompressedRelationMetadata& metadata, Id col1Id,
-    const vector<CompressedBlockMetadata>& blocks,
-    ad_utility::File& file) const {
+    const vector<CompressedBlockMetadata>& blocks) const {
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blocks);
@@ -613,8 +599,8 @@ size_t CompressedRelationReader::getResultSizeOfScan(
   // set up a lambda which allows us to read these blocks, and returns
   // the size of the result.
   auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(metadata, col1Id, file, block,
-                                       std::nullopt, columnIndices)
+    return readPossiblyIncompleteBlock(metadata, col1Id, block, std::nullopt,
+                                       columnIndices)
         .numRows();
   };
 
@@ -674,17 +660,17 @@ CompressedRelationMetadata CompressedRelationWriter::addRelation(
   // TODO<joka921> Discuss with Hannah: can we set this to a blocksize PER
   // COLUMN as we do in the compressed sorting?
   auto sizeInBytes = [](const auto& table) {
-    return static_cast<double>(table.numRows() * 2 * sizeof(Id));
+    return ad_utility::MemorySize::bytes(table.numRows() * sizeof(Id));
   };
 
   // If this is a large relation, or the currrently buffered relations +
   // this relation are too large, we will write the buffered relations to file
   // and start a new block.
   bool relationHasExclusiveBlocks =
-      sizeInBytes(col1And2Ids) > 0.8 * static_cast<double>(numBytesPerBlock_);
+      sizeInBytes(col1And2Ids) > 0.8 * uncompressedBlocksizePerColumn_;
   if (relationHasExclusiveBlocks ||
       sizeInBytes(col1And2Ids) + sizeInBytes(buffer_) >
-          static_cast<double>(numBytesPerBlock_) * 1.5) {
+          uncompressedBlocksizePerColumn_ * 1.5) {
     writeBufferedRelationsToSingleBlock();
   }
 
@@ -718,14 +704,8 @@ CompressedRelationMetadata CompressedRelationWriter::addRelation(
 // _____________________________________________________________________________
 void CompressedRelationWriter::writeRelationToExclusiveBlocks(
     Id col0Id, const BufferedIdTable& data) {
-  // TODO<joka921> We have currently hardcoded this calculation to only consider
-  // the "actual" permutation columns to not let unit tests fail.
-  /*
-// TODO<joka921> Same discussion with Hannah as above.
   const size_t numRowsPerBlock =
-      numBytesPerBlock_ / (numColumns() * sizeof(Id));
-      */
-  const size_t numRowsPerBlock = numBytesPerBlock_ / (2 * sizeof(Id));
+      uncompressedBlocksizePerColumn_.getBytes() / sizeof(Id);
   AD_CORRECTNESS_CHECK(numRowsPerBlock > 0);
   AD_CORRECTNESS_CHECK(data.numColumns() == numColumns());
   const auto totalSize = data.numRows();
@@ -777,8 +757,8 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
 
 // _____________________________________________________________________________
 CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
-    const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
-    std::span<const ColumnIndex> columnIndices) {
+    const CompressedBlockMetadata& blockMetaData,
+    ColumnIndices columnIndices) const {
   CompressedBlock compressedBuffer;
   compressedBuffer.resize(columnIndices.size());
   // TODO<C++23> Use `std::views::zip`
@@ -787,7 +767,7 @@ CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
         blockMetaData.offsetsAndCompressedSize_.at(columnIndices[i]);
     auto& currentCol = compressedBuffer[i];
     currentCol.resize(offset.compressedSize_);
-    file.read(currentCol.data(), offset.compressedSize_, offset.offsetInFile_);
+    file_.read(currentCol.data(), offset.compressedSize_, offset.offsetInFile_);
   }
   return compressedBuffer;
 }
@@ -832,10 +812,10 @@ void CompressedRelationReader::decompressColumn(
 
 // _____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::readAndDecompressBlock(
-    const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
-    std::span<const ColumnIndex> columnIndices) const {
+    const CompressedBlockMetadata& blockMetaData,
+    ColumnIndices columnIndices) const {
   CompressedBlock compressedColumns =
-      readCompressedBlockFromFile(blockMetaData, file, columnIndices);
+      readCompressedBlockFromFile(blockMetaData, columnIndices);
   const auto numRowsToRead = blockMetaData.numRows_;
   return decompressBlock(compressedColumns, numRowsToRead);
 }
@@ -916,8 +896,8 @@ CompressedRelationReader::getBlocksFromMetadata(
 
 // _____________________________________________________________________________
 auto CompressedRelationReader::getFirstAndLastTriple(
-    const CompressedRelationReader::MetadataAndBlocks& metadataAndBlocks,
-    ad_utility::File& file) const -> MetadataAndBlocks::FirstAndLastTriple {
+    const CompressedRelationReader::MetadataAndBlocks& metadataAndBlocks) const
+    -> MetadataAndBlocks::FirstAndLastTriple {
   auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
   AD_CONTRACT_CHECK(!relevantBlocks.empty());
 
@@ -925,8 +905,8 @@ auto CompressedRelationReader::getFirstAndLastTriple(
     // Note: the following call only returns the part of the block that actually
     // matches the col0 and col1.
     return readPossiblyIncompleteBlock(
-        metadataAndBlocks.relationMetadata_, metadataAndBlocks.col1Id_, file,
-        block, std::nullopt, std::array<const ColumnIndex, 2>{0, 1});
+        metadataAndBlocks.relationMetadata_, metadataAndBlocks.col1Id_, block,
+        std::nullopt, std::array<const ColumnIndex, 2>{0, 1});
   };
 
   auto rowToTriple =
@@ -939,4 +919,15 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   AD_CORRECTNESS_CHECK(!firstBlock.empty());
   AD_CORRECTNESS_CHECK(!lastBlock.empty());
   return {rowToTriple(firstBlock.front()), rowToTriple(lastBlock.back())};
+}
+
+// ____________________________________________________________________________
+std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
+    std::initializer_list<ColumnIndex> baseColumns,
+    ColumnIndices additionalColumns) {
+  std::vector<ColumnIndex> result;
+  result.reserve(baseColumns.size() + additionalColumns.size());
+  std::ranges::copy(baseColumns, std::back_inserter(result));
+  std::ranges::copy(additionalColumns, std::back_inserter(result));
+  return result;
 }

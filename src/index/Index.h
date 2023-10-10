@@ -213,7 +213,7 @@ class Index {
   ad_utility::MemorySize& stxxlMemory();
   const ad_utility::MemorySize& stxxlMemory() const;
 
-  uint64_t& blocksizePermutationsInBytes();
+  ad_utility::MemorySize& blocksizePermutationsPerColumn();
 
   void setOnDiskBase(const std::string& onDiskBase);
 

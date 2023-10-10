@@ -225,8 +225,8 @@ void Index::setKeepTempFiles(bool keepTempFiles) {
 ad_utility::MemorySize& Index::stxxlMemory() { return pimpl_->stxxlMemory(); }
 
 // ____________________________________________________________________________
-uint64_t& Index::blocksizePermutationsInBytes() {
-  return pimpl_->blocksizePermutationInBytes();
+ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
+  return pimpl_->blocksizePermutationPerColumn();
 }
 
 // ____________________________________________________________________________

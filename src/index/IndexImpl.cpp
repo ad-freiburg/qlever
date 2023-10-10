@@ -503,9 +503,9 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
 
   static constexpr size_t NumColumns = 2;
   CompressedRelationWriter writer1{NumColumns, ad_utility::File(fileName1, "w"),
-                                   blocksizePermutationInBytes_};
+                                   blocksizePermutationPerColumn_};
   CompressedRelationWriter writer2{NumColumns, ad_utility::File(fileName2, "w"),
-                                   blocksizePermutationInBytes_};
+                                   blocksizePermutationPerColumn_};
 
   // Iterate over the vector and identify "relation" boundaries, where a
   // "relation" is the sequence of sortedTriples equal first component. For PSO

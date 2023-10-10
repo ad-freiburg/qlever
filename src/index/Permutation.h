@@ -93,6 +93,8 @@ class Permutation {
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }
 
+  const CompressedRelationReader& reader() const { return reader_.value(); }
+
   // for Log output, e.g. "POS"
   const std::string readableName_;
   // e.g. ".pos"
@@ -104,9 +106,8 @@ class Permutation {
   const MetaData& metaData() const { return meta_; }
   MetaData meta_;
 
-  mutable ad_utility::File file_;
-
-  CompressedRelationReader reader_;
+  std::optional<CompressedRelationReader> reader_;
+  Allocator allocator_;
 
   bool isLoaded_ = false;
 };

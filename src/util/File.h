@@ -201,7 +201,7 @@ class File {
   //! Returns the number of bytes read or the error returned by pread()
   //! which is < 0
   ssize_t read(void* targetBuffer, size_t nofBytesToRead, off_t offset,
-               ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) {
+               ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
     assert(_file);
     const int fd = fileno(_file);
     size_t bytesRead = 0;
