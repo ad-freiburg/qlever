@@ -119,7 +119,7 @@ class File {
 
   // read from current file pointer position
   // returns the number of bytes read
-  size_t readFromBeginning(void* targetBuffer, size_t nofBytesToRead) {
+  size_t readFromBeginning(void* targetBuffer, size_t nofBytesToRead) const {
     return read(targetBuffer, nofBytesToRead, (off_t)0);
   }
 

@@ -109,7 +109,7 @@ IdTable CompressedRelationReader::scan(
 // ____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
-    auto beginBlock, auto endBlock, ColumnIndices columnIndices,
+    auto beginBlock, auto endBlock, OwningColumnIndices columnIndices,
     TimeoutTimer timer) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
@@ -173,7 +173,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata,
     std::vector<CompressedBlockMetadata> blockMetadata,
-    ColumnIndices additionalColumns, TimeoutTimer timer) const {
+    OwningColumnIndices additionalColumns, TimeoutTimer timer) const {
   auto relevantBlocks =
       getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
   const auto beginBlock = relevantBlocks.begin();
@@ -207,7 +207,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata, Id col1Id,
     std::vector<CompressedBlockMetadata> blockMetadata,
-    ColumnIndices additionalColumns, TimeoutTimer timer) const {
+    OwningColumnIndices additionalColumns, TimeoutTimer timer) const {
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
   auto beginBlock = relevantBlocks.begin();
   auto endBlock = relevantBlocks.end();
@@ -652,14 +652,9 @@ CompressedRelationMetadata CompressedRelationWriter::addRelation(
   CompressedRelationMetadata metadata{col0Id, col1And2Ids.numRows(), multC1,
                                       multC2};
 
-  // Determine the number of bytes the IDs stored in an IdTable consume.
-  // The return type is double because we use the result to compare it with
-  // other doubles below.
-  // TODO<joka921> This is currently hardcoded to only consider the first two
-  // columns, as it otherwise breaks hardcoded tests for now.
-  // TODO<joka921> Discuss with Hannah: can we set this to a blocksize PER
-  // COLUMN as we do in the compressed sorting?
-  auto sizeInBytes = [](const auto& table) {
+  // Determine the number of bytes the IDs stored in an IdTable consume per
+  // column.
+  auto sizeInBytesPerColumn = [](const auto& table) {
     return ad_utility::MemorySize::bytes(table.numRows() * sizeof(Id));
   };
 
@@ -667,9 +662,9 @@ CompressedRelationMetadata CompressedRelationWriter::addRelation(
   // this relation are too large, we will write the buffered relations to file
   // and start a new block.
   bool relationHasExclusiveBlocks =
-      sizeInBytes(col1And2Ids) > 0.8 * uncompressedBlocksizePerColumn_;
+      sizeInBytesPerColumn(col1And2Ids) > 0.8 * uncompressedBlocksizePerColumn_;
   if (relationHasExclusiveBlocks ||
-      sizeInBytes(col1And2Ids) + sizeInBytes(buffer_) >
+      sizeInBytesPerColumn(col1And2Ids) + sizeInBytesPerColumn(buffer_) >
           uncompressedBlocksizePerColumn_ * 1.5) {
     writeBufferedRelationsToSingleBlock();
   }
@@ -713,16 +708,9 @@ void CompressedRelationWriter::writeRelationToExclusiveBlocks(
     size_t actualNumRowsPerBlock = std::min(numRowsPerBlock, totalSize - i);
 
     std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
-    std::vector<std::future<std::vector<char>>> futures;
-    for (std::span<const Id> column : data.getColumns()) {
-      futures.push_back(
-          std::async(std::launch::async, [column, i, actualNumRowsPerBlock] {
-            return compressColumn({column.begin() + i,
-                                   column.begin() + i + actualNumRowsPerBlock});
-          }));
-    }
-    for (auto& fut : futures) {
-      offsets.push_back(writeCompressedColumn(fut.get()));
+    for (const auto& column : data.getColumns()) {
+      offsets.push_back(compressAndWriteColumn(
+          {column.begin() + i, column.begin() + i + actualNumRowsPerBlock}));
     }
 
     blockBuffer_.push_back(
@@ -747,23 +735,11 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   // TODO<joka921, C++23> This is
   // `ranges::to<vector>(ranges::transform_view(buffer_.getColumns(),
   // compressAndWriteColumn))`;
-  /*
   std::ranges::for_each(buffer_.getColumns(),
                         [this](const auto& column) mutable {
                           currentBlockData_.offsetsAndCompressedSize_.push_back(
                               compressAndWriteColumn(column));
                         });
-                        */
-  std::vector<std::future<std::vector<char>>> futures;
-  for (std::span<const Id> column : buffer_.getColumns()) {
-    futures.push_back(std::async(std::launch::async,
-                                 [column] { return compressColumn(column); }));
-  }
-  for (auto& fut : futures) {
-    currentBlockData_.offsetsAndCompressedSize_.push_back(
-        writeCompressedColumn(fut.get()));
-  }
-
   currentBlockData_.numRows_ = numRows;
   // The `firstId` and `lastId` of `currentBlockData_` were already set
   // correctly by `addRelation()`.

@@ -248,6 +248,7 @@ class CompressedRelationReader {
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using TimeoutTimer = ad_utility::SharedConcurrentTimeoutTimer;
   using ColumnIndices = std::span<const ColumnIndex>;
+  using OwningColumnIndices = std::vector<ColumnIndex>;
 
   // The metadata of a single relation together with a subset of its
   // blocks and possibly a `col1Id` for additional filtering. This is used as
@@ -324,7 +325,7 @@ class CompressedRelationReader {
   // The blocks are guaranteed to be in order.
   IdTableGenerator lazyScan(CompressedRelationMetadata metadata,
                             std::vector<CompressedBlockMetadata> blockMetadata,
-                            ColumnIndices additionalColumns,
+                            OwningColumnIndices additionalColumns,
                             TimeoutTimer timer) const;
 
   // Get the blocks (an ordered subset of the blocks that are passed in via the
@@ -375,7 +376,7 @@ class CompressedRelationReader {
   // The blocks are guaranteed to be in order.
   IdTableGenerator lazyScan(CompressedRelationMetadata metadata, Id col1Id,
                             std::vector<CompressedBlockMetadata> blockMetadata,
-                            ColumnIndices additionalColumns,
+                            OwningColumnIndices additionalColumns,
                             TimeoutTimer timer) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
@@ -466,9 +467,9 @@ class CompressedRelationReader {
   // are yielded, else the complete blocks are yielded. The blocks are yielded
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
-  IdTableGenerator asyncParallelBlockGenerator(auto beginBlock, auto endBlock,
-                                               ColumnIndices columnIndices,
-                                               TimeoutTimer timer) const;
+  IdTableGenerator asyncParallelBlockGenerator(
+      auto beginBlock, auto endBlock, OwningColumnIndices columnIndices,
+      TimeoutTimer timer) const;
 
   // A helper function to abstract away the timeout check:
   static void checkTimeout(
@@ -479,7 +480,7 @@ class CompressedRelationReader {
   }
 
   // Return a vector that consists of the concatenation of `baseColumns` and
-  // `additionalColumns`
+  // `additionalColumnsAndVariables`
   static std::vector<ColumnIndex> prepareColumnIndices(
       std::initializer_list<ColumnIndex> baseColumns,
       ColumnIndices additionalColumns);

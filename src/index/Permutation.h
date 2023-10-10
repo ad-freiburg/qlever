@@ -33,7 +33,8 @@ class Permutation {
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using TimeoutTimer = ad_utility::SharedConcurrentTimeoutTimer;
-  using ColumnIndices = std::span<const ColumnIndex>;
+  using ColumnIndices = CompressedRelationReader::ColumnIndices;
+  using OwningColumnIndices = CompressedRelationReader::OwningColumnIndices;
 
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".

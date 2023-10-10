@@ -31,8 +31,6 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
     additionalColumns_.push_back(idx);
     additionalVariables_.push_back(variable);
   }
-  // TODO<joka921> Can we safely integrate this and the above initialization
-  // into the member initializers
   sizeEstimate_ = computeSizeEstimate();
 
   // Check the following invariant: The permuted input triple must contain at

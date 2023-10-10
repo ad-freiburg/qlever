@@ -143,13 +143,15 @@ Permutation::IdTableGenerator Permutation::lazyScan(
         relationMetadata, col1Id, meta_.blockData());
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   }
+  OwningColumnIndices owningColumns{additionalColumns.begin(),
+                                    additionalColumns.end()};
   if (col1Id.has_value()) {
     return reader().lazyScan(meta_.getMetaData(col0Id), col1Id.value(),
-                             std::move(blocks.value()), additionalColumns,
-                             timer);
+                             std::move(blocks.value()),
+                             std::move(owningColumns), timer);
   } else {
     return reader().lazyScan(meta_.getMetaData(col0Id),
-                             std::move(blocks.value()), additionalColumns,
-                             timer);
+                             std::move(blocks.value()),
+                             std::move(owningColumns), timer);
   }
 }
