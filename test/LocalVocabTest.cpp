@@ -293,8 +293,9 @@ TEST(LocalVocab, propagation) {
   // NOTE: As part of an actual query, the child of a transitive path
   // operation is always an index scan, which has a non-empty
   // local-vocabulary. Still, it doesn't harm to test this.
-  TransitivePath transitivePath(testQec, qet(values1), true, true, 0, 1, {}, {},
-                                Variable{"?x"}, Variable{"?y"}, 1, 1);
+  TransitivePathSide left(std::nullopt, 0, Variable{"?x"});
+  TransitivePathSide right(std::nullopt, 1, Variable{"?y"});
+  TransitivePath transitivePath(testQec, qet(values1), left, right, 1, 1);
   checkLocalVocab(transitivePath, std::vector<std::string>{"x", "y1", "y2"});
 
   // PATTERN TRICK operations.

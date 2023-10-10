@@ -397,52 +397,44 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         std::vector<SubtreePlan> candidatesOut;
 
         for (auto& sub : candidatesIn) {
-          size_t leftCol, rightCol;
-          Id leftValue, rightValue;
+          TransitivePathSide left;
+          TransitivePathSide right;
           // TODO<joka921> Refactor the `TransitivePath` class s.t. we don't
           // have to specify a `Variable` that isn't used at all in the case of
           // a fixed subject or object.
-          Variable leftColName{"?undefined"}, rightColName{"?undefined"};
-          size_t min, max;
-          bool leftVar, rightVar;
+          left.subCol = sub._qet->getVariableColumn(arg._innerLeft.getVariable());
           if (isVariable(arg._left)) {
-            leftVar = true;
-            leftCol = sub._qet->getVariableColumn(arg._innerLeft.getVariable());
-            leftColName = Variable{arg._left.getVariable()};
+            left.value = Variable{arg._left.getVariable()};
           } else {
-            leftVar = false;
-            leftColName = generateUniqueVarName();
-            leftCol = sub._qet->getVariableColumn(arg._innerLeft.getVariable());
+            left.value = generateUniqueVarName();
             if (auto opt = arg._left.toValueId(_qec->getIndex().getVocab());
                 opt.has_value()) {
-              leftValue = opt.value();
+              left.value = opt.value();
             } else {
               AD_THROW("No vocabulary entry for " + arg._left.toString());
             }
           }
           // TODO<joka921> This is really much code duplication, get rid of it!
+          right.subCol = sub._qet->getVariableColumn(arg._innerRight.getVariable());
           if (isVariable(arg._right)) {
-            rightVar = true;
-            rightCol =
-                sub._qet->getVariableColumn(arg._innerRight.getVariable());
-            rightColName = Variable{arg._right.getVariable()};
+            right.value = Variable{arg._right.getVariable()};
           } else {
-            rightVar = false;
-            rightCol =
-                sub._qet->getVariableColumn(arg._innerRight.getVariable());
-            rightColName = generateUniqueVarName();
+            right.value = generateUniqueVarName();
             if (auto opt = arg._right.toValueId(_qec->getIndex().getVocab());
                 opt.has_value()) {
-              rightValue = opt.value();
+              right.value = opt.value();
             } else {
               AD_THROW("No vocabulary entry for " + arg._right.toString());
             }
           }
-          min = arg._min;
-          max = arg._max;
+          LOG(DEBUG) << "Left:" << std::endl;
+          LOG(DEBUG) << std::get<Variable>(left.value)._name << std::endl;
+          LOG(DEBUG) << "Right:" << std::endl;
+          LOG(DEBUG) << std::get<Variable>(right.value)._name << std::endl;
+          size_t min = arg._min;
+          size_t max = arg._max;
           auto plan = makeSubtreePlan<TransitivePath>(
-              _qec, sub._qet, leftVar, rightVar, leftCol, rightCol, leftValue,
-              rightValue, leftColName, rightColName, min, max);
+              _qec, sub._qet, left, right, min, max);
           candidatesOut.push_back(std::move(plan));
         }
         joinCandidates(std::move(candidatesOut));
@@ -878,6 +870,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
   } else if (path._children.size() == 1) {
     LOG(WARN) << "Processing a sequence property path that has only one child."
               << std::endl;
+    // TODO: This leads to infinite recursion. Throw an exception instead?
     return seedFromPropertyPath(left, path, right);
   }
 
@@ -2033,7 +2026,9 @@ auto QueryPlanner::createJoinWithTransitivePath(
   const size_t otherCol = aIsTransPath ? jcs[0][1] : jcs[0][0];
   const size_t thisCol = aIsTransPath ? jcs[0][0] : jcs[0][1];
   // Do not bind the side of a path twice
-  if (transPathOperation->isBound()) {
+  if ((transPathOperation->isBound() ||
+      (transPathOperation->leftIsBound() && thisCol == 0) ||
+      (transPathOperation->rightIsBound() && thisCol == 1))) {
     return std::nullopt;
   }
   // An unbound transitive path has at most two columns.
