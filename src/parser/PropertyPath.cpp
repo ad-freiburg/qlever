@@ -13,7 +13,7 @@ PropertyPath::PropertyPath(Operation op, std::string iri,
 
 // _____________________________________________________________________________
 PropertyPath PropertyPath::makeModified(PropertyPath child,
-                                        std::string modifier) {
+                                        std::string_view modifier) {
   if (modifier == "+") {
     return makeWithChildren({std::move(child)}, Operation::ONE_OR_MORE);
   } else if (modifier == "*") {
