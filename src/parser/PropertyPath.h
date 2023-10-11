@@ -25,16 +25,13 @@ class PropertyPath {
   };
 
   PropertyPath()
-      : _operation(Operation::IRI),
-        _iri(),
-        _children(),
-        _can_be_null(false) {}
+      : _operation(Operation::IRI), _iri(), _children(), _can_be_null(false) {}
   explicit PropertyPath(Operation op)
       : _operation(op), _iri(), _children(), _can_be_null(false) {
-        if (op == Operation::ZERO_OR_MORE || op == Operation::ZERO_OR_ONE) {
-          _can_be_null = true;
-        }
-      }
+    if (op == Operation::ZERO_OR_MORE || op == Operation::ZERO_OR_ONE) {
+      _can_be_null = true;
+    }
+  }
   PropertyPath(Operation op, std::string iri,
                std::initializer_list<PropertyPath> children);
 

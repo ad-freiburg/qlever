@@ -12,10 +12,11 @@
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
-TransitivePath::TransitivePath(
-    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
-    TransitivePathSide leftSide, TransitivePathSide rightSide,
-    size_t minDist, size_t maxDist)
+TransitivePath::TransitivePath(QueryExecutionContext* qec,
+                               std::shared_ptr<QueryExecutionTree> child,
+                               TransitivePathSide leftSide,
+                               TransitivePathSide rightSide, size_t minDist,
+                               size_t maxDist)
     : Operation(qec),
       _subtree(std::move(child)),
       _lhs(leftSide),
@@ -25,11 +26,11 @@ TransitivePath::TransitivePath(
       _maxDist(maxDist) {
   if (leftSide.isVariable()) {
     _variableColumns[std::get<Variable>(leftSide.value)] =
-      makeAlwaysDefinedColumn(0);
+        makeAlwaysDefinedColumn(0);
   }
   if (rightSide.isVariable()) {
     _variableColumns[std::get<Variable>(rightSide.value)] =
-      makeAlwaysDefinedColumn(1);
+        makeAlwaysDefinedColumn(1);
   }
 
   _lhs.outputCol = 0;
@@ -42,8 +43,7 @@ std::string TransitivePath::asStringImpl(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << "TransitivePath leftCol " << _lhs.subCol << " rightCol "
-     << _rhs.subCol;
+  os << "TransitivePath leftCol " << _lhs.subCol << " rightCol " << _rhs.subCol;
 
   if (std::holds_alternative<Id>(_lhs.value)) {
     os << " leftValue " << std::get<Id>(_lhs.value);
@@ -224,40 +224,37 @@ size_t TransitivePath::getCostEstimate() {
 
 // _____________________________________________________________________________
 template <size_t RES_WIDTH, size_t SUB_WIDTH, size_t OTHER_WIDTH>
-void TransitivePath::computeTransitivePathBound(IdTable* dynRes,
-    const IdTable& dynSub, const TransitivePathSide& startSide,
-    const TransitivePathSide& targetSide,
-    const IdTable& otherTable) const {
-    
+void TransitivePath::computeTransitivePathBound(
+    IdTable* dynRes, const IdTable& dynSub, const TransitivePathSide& startSide,
+    const TransitivePathSide& targetSide, const IdTable& otherTable) const {
   IdTableStatic<RES_WIDTH> res = std::move(*dynRes).toStatic<RES_WIDTH>();
 
   auto [edges, nodes] = setupMapAndNodes<SUB_WIDTH, OTHER_WIDTH>(
-    dynSub, startSide, targetSide, otherTable);
+      dynSub, startSide, targetSide, otherTable);
 
   Map hull = transitiveHull(edges, nodes);
 
   TransitivePath::fillTableWithHull<RES_WIDTH, OTHER_WIDTH>(
-    res, hull, nodes, startSide.outputCol, targetSide.outputCol,
-    otherTable, startSide.treeAndCol.value().second);
-  
+      res, hull, nodes, startSide.outputCol, targetSide.outputCol, otherTable,
+      startSide.treeAndCol.value().second);
+
   *dynRes = std::move(res).toDynamic();
 }
 
 // _____________________________________________________________________________
 template <size_t RES_WIDTH, size_t SUB_WIDTH>
-void TransitivePath::computeTransitivePath(IdTable* dynRes,
-    const IdTable& dynSub, const TransitivePathSide& startSide,
+void TransitivePath::computeTransitivePath(
+    IdTable* dynRes, const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
-
   IdTableStatic<RES_WIDTH> res = std::move(*dynRes).toStatic<RES_WIDTH>();
 
-  auto [edges, nodes] = setupMapAndNodes<SUB_WIDTH>(
-    dynSub, startSide, targetSide);
+  auto [edges, nodes] =
+      setupMapAndNodes<SUB_WIDTH>(dynSub, startSide, targetSide);
 
   Map hull = transitiveHull(edges, nodes);
 
-  TransitivePath::fillTableWithHull<RES_WIDTH>(
-    res, hull, startSide.outputCol, targetSide.outputCol);
+  TransitivePath::fillTableWithHull<RES_WIDTH>(res, hull, startSide.outputCol,
+                                               targetSide.outputCol);
 
   *dynRes = std::move(res).toDynamic();
 }
@@ -275,7 +272,8 @@ ResultTable TransitivePath::computeResult() {
   size_t subWidth = subRes->idTable().numColumns();
   if (_lhs.treeAndCol.has_value()) {
     LOG(DEBUG) << "TransitivePath left result computation..." << std::endl;
-    shared_ptr<const ResultTable> leftRes = _lhs.treeAndCol.value().first->getResult();
+    shared_ptr<const ResultTable> leftRes =
+        _lhs.treeAndCol.value().first->getResult();
     LOG(DEBUG) << "TransitivePath left result computation done." << std::endl;
     size_t leftWidth = leftRes->idTable().numColumns();
 
@@ -286,7 +284,8 @@ ResultTable TransitivePath::computeResult() {
 
   } else if (_rhs.treeAndCol.has_value()) {
     LOG(DEBUG) << "TransitivePath right result computation..." << std::endl;
-    shared_ptr<const ResultTable> rightRes = _rhs.treeAndCol.value().first->getResult();
+    shared_ptr<const ResultTable> rightRes =
+        _rhs.treeAndCol.value().first->getResult();
     LOG(DEBUG) << "TransitivePath right result computation done." << std::endl;
     size_t rightWidth = rightRes->idTable().numColumns();
 
@@ -370,18 +369,14 @@ bool TransitivePath::isBound() const {
 }
 
 // _____________________________________________________________________________
-bool TransitivePath::leftIsBound() const {
-  return _lhs.isBound();
-}
+bool TransitivePath::leftIsBound() const { return _lhs.isBound(); }
 
 // _____________________________________________________________________________
-bool TransitivePath::rightIsBound() const {
-  return _rhs.isBound();
-}
+bool TransitivePath::rightIsBound() const { return _rhs.isBound(); }
 
 // _____________________________________________________________________________
-TransitivePath::Map TransitivePath::transitiveHull(const Map& edges,
-    const std::vector<Id>& nodes) const {
+TransitivePath::Map TransitivePath::transitiveHull(
+    const Map& edges, const std::vector<Id>& nodes) const {
   using MapIt = TransitivePath::Map::const_iterator;
   // For every node do a dfs on the graph
   Map hull;
@@ -436,10 +431,12 @@ TransitivePath::Map TransitivePath::transitiveHull(const Map& edges,
         if (childDepth >= _minDist) {
           marks.insert(child);
           if (_rhs.isVariable() || child == std::get<Id>(_rhs.value)) {
-            hull.try_emplace(nodes[i], std::make_shared<ad_utility::HashSet<Id>>());
+            hull.try_emplace(nodes[i],
+                             std::make_shared<ad_utility::HashSet<Id>>());
             hull[nodes[i]]->insert(child);
           } else if (_lhs.isVariable() || child == std::get<Id>(_lhs.value)) {
-            hull.try_emplace(child, std::make_shared<ad_utility::HashSet<Id>>());
+            hull.try_emplace(child,
+                             std::make_shared<ad_utility::HashSet<Id>>());
             hull[child]->insert(nodes[i]);
           }
         }
@@ -463,10 +460,13 @@ TransitivePath::Map TransitivePath::transitiveHull(const Map& edges,
 // _____________________________________________________________________________
 template <size_t WIDTH, size_t TEMP_WIDTH>
 void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
-    std::vector<Id>& nodes, size_t startSideCol, size_t targetSideCol,
-    const IdTable& tableTemplate, size_t skipCol) {
-
-  IdTableView<TEMP_WIDTH> templateView = tableTemplate.asStaticView<TEMP_WIDTH>();
+                                       std::vector<Id>& nodes,
+                                       size_t startSideCol,
+                                       size_t targetSideCol,
+                                       const IdTable& tableTemplate,
+                                       size_t skipCol) {
+  IdTableView<TEMP_WIDTH> templateView =
+      tableTemplate.asStaticView<TEMP_WIDTH>();
 
   size_t rowIndex = 0;
   for (size_t i = 0; i < nodes.size(); i++) {
@@ -480,7 +480,8 @@ void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
       table(rowIndex, startSideCol) = node;
       table(rowIndex, targetSideCol) = otherNode;
 
-      TransitivePath::copyColumns<TEMP_WIDTH, WIDTH>(templateView, table, i, rowIndex, skipCol);
+      TransitivePath::copyColumns<TEMP_WIDTH, WIDTH>(templateView, table, i,
+                                                     rowIndex, skipCol);
 
       rowIndex++;
     }
@@ -490,8 +491,8 @@ void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
 // _____________________________________________________________________________
 template <size_t WIDTH>
 void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
-    size_t startSideCol, size_t targetSideCol) {
-
+                                       size_t startSideCol,
+                                       size_t targetSideCol) {
   size_t rowIndex = 0;
   for (auto const& [node, linkedNodes] : hull) {
     for (Id linkedNode : *linkedNodes) {
@@ -506,36 +507,39 @@ void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
 
 // _____________________________________________________________________________
 template <size_t SUB_WIDTH, size_t SIDE_WIDTH>
-std::pair<TransitivePath::Map, std::vector<Id>> TransitivePath::setupMapAndNodes(
-    const IdTable& sub, const TransitivePathSide& startSide,
-    const TransitivePathSide& targetSide,
-    const IdTable& startSideTable) const {
+std::pair<TransitivePath::Map, std::vector<Id>>
+TransitivePath::setupMapAndNodes(const IdTable& sub,
+                                 const TransitivePathSide& startSide,
+                                 const TransitivePathSide& targetSide,
+                                 const IdTable& startSideTable) const {
   std::vector<Id> nodes;
   Map edges = setupEdgesMap<SUB_WIDTH>(sub, startSide, targetSide);
 
   // Bound -> var|id
   nodes = setupNodesVector<SIDE_WIDTH>(startSideTable,
-                                        startSide.treeAndCol.value().second);
+                                       startSide.treeAndCol.value().second);
 
   return std::make_pair(edges, nodes);
 }
 
 // _____________________________________________________________________________
 template <size_t SUB_WIDTH>
-std::pair<TransitivePath::Map, std::vector<Id>> TransitivePath::setupMapAndNodes(
-    const IdTable& sub, const TransitivePathSide& startSide,
-    const TransitivePathSide& targetSide) const {
+std::pair<TransitivePath::Map, std::vector<Id>>
+TransitivePath::setupMapAndNodes(const IdTable& sub,
+                                 const TransitivePathSide& startSide,
+                                 const TransitivePathSide& targetSide) const {
   std::vector<Id> nodes;
   Map edges = setupEdgesMap<SUB_WIDTH>(sub, startSide, targetSide);
 
   // id -> var|id
-   if (startSide.isBound()) {
+  if (startSide.isBound()) {
     nodes.push_back(std::get<Id>(startSide.value));
-  // var -> var
+    // var -> var
   } else {
     nodes = setupNodesVector<SUB_WIDTH>(sub, startSide.subCol);
     if (_minDist == 0) {
-      std::vector<Id> targetNodes = setupNodesVector<SUB_WIDTH>(sub, targetSide.subCol);
+      std::vector<Id> targetNodes =
+          setupNodesVector<SUB_WIDTH>(sub, targetSide.subCol);
       nodes.insert(nodes.end(), targetNodes.begin(), targetNodes.end());
     }
   }
@@ -545,10 +549,9 @@ std::pair<TransitivePath::Map, std::vector<Id>> TransitivePath::setupMapAndNodes
 
 // _____________________________________________________________________________
 template <size_t SUB_WIDTH>
-TransitivePath::Map TransitivePath::setupEdgesMap(const IdTable& dynSub,
-    const TransitivePathSide& startSide,
+TransitivePath::Map TransitivePath::setupEdgesMap(
+    const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) {
-
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
   Map edges;
 
@@ -572,7 +575,8 @@ TransitivePath::Map TransitivePath::setupEdgesMap(const IdTable& dynSub,
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-std::vector<Id> TransitivePath::setupNodesVector(const IdTable& table, size_t col) {
+std::vector<Id> TransitivePath::setupNodesVector(const IdTable& table,
+                                                 size_t col) {
   std::vector<Id> nodes;
   const IdTableView<WIDTH> tableView = table.asStaticView<WIDTH>();
   for (size_t i = 0; i < tableView.size(); i++) {
@@ -582,12 +586,11 @@ std::vector<Id> TransitivePath::setupNodesVector(const IdTable& table, size_t co
 }
 
 // _____________________________________________________________________________
-template<size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-void TransitivePath::copyColumns(
-    const IdTableView<INPUT_WIDTH>& inputTable,
-    IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow, size_t outputRow,
-    size_t skipCol) {
-
+template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
+void TransitivePath::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
+                                 IdTableStatic<OUTPUT_WIDTH>& outputTable,
+                                 size_t inputRow, size_t outputRow,
+                                 size_t skipCol) {
   size_t inCol = 0;
   size_t outCol = 2;
   while (inCol < inputTable.numColumns() && outCol < outputTable.numColumns()) {

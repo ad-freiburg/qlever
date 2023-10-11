@@ -663,8 +663,7 @@ TEST(SparqlParser, propertyPaths) {
   expectPathOrVar("a:a+", OneOrMore({Iri("<http://www.example.com/a>")}),
                   {{"a", "<http://www.example.com/>"}});
   {
-    PropertyPath expected =
-        ZeroOrOne({Iri("<http://www.example.com/a>")});
+    PropertyPath expected = ZeroOrOne({Iri("<http://www.example.com/a>")});
     expected._can_be_null = true;
     expectPathOrVar("a:a?", expected, {{"a", "<http://www.example.com/>"}});
   }
@@ -675,16 +674,15 @@ TEST(SparqlParser, propertyPaths) {
   }
   // Test a bigger example that contains everything.
   {
-    PropertyPath expected = Alternative(
-        {Sequence({
-             Iri("<http://www.example.com/a/a>"),
-             ZeroOrMore({Iri("<http://www.example.com/b/b>")}),
-         }),
-         Iri("<http://www.example.com/c/c>"),
-         OneOrMore(
-             {Sequence({Iri("<http://www.example.com/a/a>"),
-                        Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")})}
-             )});
+    PropertyPath expected =
+        Alternative({Sequence({
+                         Iri("<http://www.example.com/a/a>"),
+                         ZeroOrMore({Iri("<http://www.example.com/b/b>")}),
+                     }),
+                     Iri("<http://www.example.com/c/c>"),
+                     OneOrMore({Sequence({Iri("<http://www.example.com/a/a>"),
+                                          Iri("<http://www.example.com/b/b>"),
+                                          Iri("<a/b/c>")})})});
     expected.computeCanBeNull();
     expected._can_be_null = false;
     expectPathOrVar("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+", expected,

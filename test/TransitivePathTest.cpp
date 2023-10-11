@@ -53,7 +53,8 @@ TEST(TransitivePathTest, idToId) {
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, V(3), 1);
-  TransitivePath T(nullptr, nullptr, left, right, 1, std::numeric_limits<size_t>::max());
+  TransitivePath T(nullptr, nullptr, left, right, 1,
+                   std::numeric_limits<size_t>::max());
 
   T.computeTransitivePath<2, 2>(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
@@ -75,7 +76,8 @@ TEST(TransitivePathTest, idToVar) {
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  TransitivePath T(nullptr, nullptr, left, right, 1, std::numeric_limits<size_t>::max());
+  TransitivePath T(nullptr, nullptr, left, right, 1,
+                   std::numeric_limits<size_t>::max());
 
   T.computeTransitivePath<2, 2>(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
@@ -100,7 +102,8 @@ TEST(TransitivePathTest, varTovar) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  TransitivePath T(nullptr, nullptr, right, left, 1, std::numeric_limits<size_t>::max());
+  TransitivePath T(nullptr, nullptr, right, left, 1,
+                   std::numeric_limits<size_t>::max());
 
   T.computeTransitivePath<2, 2>(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
@@ -141,12 +144,12 @@ TEST(TransitivePathTest, unlimitedMaxLength) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  TransitivePath T(nullptr, nullptr, left, right, 1, std::numeric_limits<size_t>::max());
+  TransitivePath T(nullptr, nullptr, left, right, 1,
+                   std::numeric_limits<size_t>::max());
 
   T.computeTransitivePath<2, 2>(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
 }
-
 
 TEST(TransitivePathTest, maxLength2) {
   IdTable sub(2, makeAllocator());
