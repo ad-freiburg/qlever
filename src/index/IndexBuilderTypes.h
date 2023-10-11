@@ -167,7 +167,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
     itemArray[j].getId(LANGUAGE_PREDICATE);
     itemArray[j]._map.reserve(2 * maxNumberOfTriples);
   }
-  using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
+  using OptionalIds = std::array<std::array<Id, 3>, 3>;
 
   /* given an index idx, returns a lambda that
    * - Takes a triple and a language tag
@@ -181,6 +181,8 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
     return [&map = itemArray[idx], indexPtr](auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(std::move(tr));
       OptionalIds res;
+      res[1][0] = Id::makeUndefined();
+      res[2][0] = Id::makeUndefined();
       // get Ids for the actual triple and store them in the result.
       res[0] = map.getId(lt._triple);
       if (!lt._langtag.empty()) {  // the object of the triple was a literal
@@ -194,15 +196,15 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
                 std::get<PossiblyExternalizedIriOrLiteral>(lt._triple[1])
                     ._iriOrLiteral,
                 lt._langtag));
-        auto& spoIds = *(res[0]);  // ids of original triple
+        auto& spoIds = res[0];  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.
         // extra triple <subject> @language@<predicate> <object>
-        res[1].emplace(
-            std::array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
+        res[1] =
+            std::array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]};
         // extra triple <object> ql:language-tag <@language>
-        res[2].emplace(std::array<Id, 3>{
-            spoIds[2], map.getId(LANGUAGE_PREDICATE), langTagId});
+        res[2] = std::array<Id, 3>{
+            spoIds[2], map.getId(LANGUAGE_PREDICATE), langTagId};
       }
       return res;
     };

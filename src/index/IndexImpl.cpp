@@ -264,6 +264,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   // Each of these futures corresponds to the processing and writing of one
   // batch of triples and partial vocabulary.
   std::array<std::future<void>, 3> writePartialVocabularyFuture;
+  size_t totalWaitingTimePreviousSteps = 0;
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
@@ -298,9 +299,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       while (auto opt = p.getNextValue()) {
         i++;
         for (const auto& innerOpt : opt.value()) {
-          if (innerOpt) {
+          if (!innerOpt[0].isUndefined()) {
             actualCurrentPartialSize++;
-            localWriter.push_back(innerOpt.value());
+            localWriter.push_back(innerOpt);
           }
         }
         if (i % 100'000'000 == 0) {
@@ -325,9 +326,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     if (writePartialVocabularyFuture[0].valid()) {
       writePartialVocabularyFuture[0].get();
     }
-    LOG(TIMING)
-        << "Time spent waiting for the writing of a previous vocabulary: "
-        << sortFutureTimer.msecs() << "ms." << std::endl;
+    totalWaitingTimePreviousSteps += sortFutureTimer.msecs();
+      LOG(TIMING)
+          << "Time spent waiting for the writing of a previous vocabulary: "
+          << sortFutureTimer.msecs() << "ms." << std::endl;
     std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS> convertedMaps;
     for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
       convertedMaps[j] = std::move(itemArray[j]).moveMap();
@@ -352,6 +354,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       future.get();
     }
   }
+  LOG(INFO) << "Total waiting time for previous vocabularies " << totalWaitingTimePreviousSteps << "ms" << std::endl;
   LOG(INFO) << "Done, total number of triples read: " << i
             << " [may contain duplicates]" << std::endl;
   LOG(INFO) << "Number of QLever-internal triples created: "

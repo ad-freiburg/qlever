@@ -12,6 +12,7 @@
 #include "util/Log.h"
 #include "util/Timer.h"
 #include "util/TupleHelpers.h"
+#include "util/UninitializedAllocator.h"
 
 namespace ad_pipeline {
 
@@ -29,7 +30,7 @@ struct Batch {
   bool m_isPipelineGood = true;  // if set to false, this was the last (and
                                  // possibly incomplete) batch, else there might
                                  // be more content waiting in the pipeline.
-  std::vector<T> m_content;      // the actual payload
+  std::vector<T, ad_utility::default_init_allocator<T>> m_content;      // the actual payload
 };
 
 /*
@@ -124,7 +125,9 @@ class Batcher {
         return res;
       }
       res.m_isPipelineGood = true;
-      res.m_content = std::move(*opt);
+      res.m_content.reserve(opt->size());
+      std::ranges::copy(*opt, std::back_inserter(res.m_content));
+      //res.m_content = std::move(*opt);
       return res;
     } else {
       res.m_isPipelineGood = true;
@@ -195,7 +198,7 @@ class BatchedPipeline {
       Timer timer{Timer::InitialStatus::Started};
       auto res = _fut.get();
       orderNextBatch();
-      LOG(TIMING) << "batch wait time " << timer.msecs() << std::endl;
+      //LOG(TIMING) << "batch wait time " << timer.msecs() << std::endl;
       _waitingTime->fetch_add(timer.msecs());
       return res;
     } catch (std::future_error& e) {
@@ -253,16 +256,21 @@ class BatchedPipeline {
     // and later we merge. <TODO>(joka921) Doing this in place would require
     // something like a std::vector without default construction on insert.
     const size_t batchSize = inBatchSize / Parallelism;
-    auto futures = setupParallelismImpl(batchSize, inBatch.m_content,
+    //Timer timerResize{Timer::Started};
+    result.m_content.resize(inBatch.m_content.size());
+    //LOG(TIMING) << "Time for resize " << timerResize.msecs() << std::endl;
+    auto futures = setupParallelismImpl(batchSize, inBatch.m_content, result.m_content,
                                         std::make_index_sequence<Parallelism>{},
                                         transformers...);
     // if we had multiple threads, we have to merge the partial results in the
     // correct order.
     for (size_t i = 0; i < Parallelism; ++i) {
       auto vec = futures[i].get();
+      /*
       result.m_content.insert(result.m_content.end(),
                               std::make_move_iterator(vec.begin()),
                               std::make_move_iterator(vec.end()));
+                              */
     }
     LOG(TIMING) << "produce batch time " << timer.msecs() << std::endl;
     return result;
@@ -292,12 +300,11 @@ class BatchedPipeline {
 
   // For each element x in [beg, end): move it, apply *transformer to it and
   // append it to *res
-  template <typename It, typename ResVec, typename TransformerPtr>
-  static void moveAndTransform(It beg, It end, ResVec* res,
+  template <typename It, typename ResIt, typename TransformerPtr>
+  static void moveAndTransform(It beg, It end, ResIt res,
                                TransformerPtr transformer) {
-    res->reserve(end - beg);
     std::transform(std::make_move_iterator(beg), std::make_move_iterator(end),
-                   std::back_inserter(*res),
+                   res,
                    [transformer](typename std::decay_t<decltype(*beg)>&& x) {
                      return (*transformer)(std::move(x));
                    });
@@ -319,30 +326,31 @@ class BatchedPipeline {
    * @param transformer Pointer to the first transformer
    * @param transformers Pointers to the remaining transformers
    */
-  template <size_t... I, typename InVec, typename... TransformerPtrs>
-  static auto setupParallelismImpl(size_t batchSize, InVec& in,
+  template <size_t... I, typename InVec, typename OutVec, typename... TransformerPtrs>
+  static auto setupParallelismImpl(size_t batchSize, InVec& in, OutVec& out,
                                    std::index_sequence<I...>,
                                    TransformerPtrs... transformers) {
+    AD_CORRECTNESS_CHECK(out.size() == in.size());
     if constexpr (sizeof...(I) == sizeof...(TransformerPtrs)) {
-      return std::array{(createIthFuture<I>(batchSize, in, transformers))...};
+      return std::array{(createIthFuture<I>(batchSize, in, out, transformers))...};
     } else if constexpr (sizeof...(TransformerPtrs) == 1) {
       // only one transformer that is applied to several threads
       auto onlyTransformer =
           std::get<0>(std::forward_as_tuple(transformers...));
       return std::array{
-          (createIthFuture<I>(batchSize, in, onlyTransformer))...};
+          (createIthFuture<I>(batchSize, in, out, onlyTransformer))...};
     }
   }
 
-  template <size_t Idx, typename InVec, typename TransformerPtr>
+  template <size_t Idx, typename InVec, typename OutVec, typename TransformerPtr>
   static std::future<std::vector<ResT>> createIthFuture(
-      size_t batchSize, InVec& in, TransformerPtr transformer) {
+      size_t batchSize, InVec& in, OutVec& out, TransformerPtr transformer) {
     auto [startIt, endIt] = getBatchRange(in.begin(), in.end(), batchSize, Idx);
     // start a thread for the transformer.
     return std::async(std::launch::async,
-                      [transformer, startIt = startIt, endIt = endIt] {
+                      [transformer, startIt = startIt, endIt = endIt, outIt = out.begin() + (endIt - startIt)] {
                         std::vector<ResT> res;
-                        moveAndTransform(startIt, endIt, &res, transformer);
+                        moveAndTransform(startIt, endIt, outIt, transformer);
                         return res;
                       });
   }
@@ -525,7 +533,7 @@ class BatchExtractor {
       std::make_unique<std::atomic<size_t>>(0)};
   std::unique_ptr<Pipeline> _pipeline;
   std::future<detail::Batch<ValueT>> _fut;
-  std::vector<ValueT> _buffer;
+  std::vector<ValueT, ad_utility::default_init_allocator<ValueT>> _buffer;
   size_t _bufferPosition = 0;
   bool _isPipelineValid = true;
 
