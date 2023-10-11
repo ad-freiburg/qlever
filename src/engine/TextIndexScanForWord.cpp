@@ -1,15 +1,15 @@
-#include "engine/WordIndexScan.h"
+#include "engine/TextIndexScanForWord.h"
 
 // _____________________________________________________________________________
-WordIndexScan::WordIndexScan(QueryExecutionContext* qec, Variable cvar,
-                             string word)
+TextIndexScanForWord::TextIndexScanForWord(QueryExecutionContext* qec,
+                                           Variable cvar, string word)
     : Operation(qec),
       cvar_(std::move(cvar)),
       word_(std::move(word)),
       isPrefix_(word_.ends_with('*')) {}
 
 // _____________________________________________________________________________
-ResultTable WordIndexScan::computeResult() {
+ResultTable TextIndexScanForWord::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
   Index::WordEntityPostings wep =
@@ -29,7 +29,7 @@ ResultTable WordIndexScan::computeResult() {
 }
 
 // _____________________________________________________________________________
-VariableToColumnMap WordIndexScan::computeVariableToColumnMap() const {
+VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
   VariableToColumnMap vcmap;
   auto addDefinedVar = [&vcmap,
                         index = ColumnIndex{0}](const Variable& var) mutable {
@@ -45,20 +45,20 @@ VariableToColumnMap WordIndexScan::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-size_t WordIndexScan::getResultWidth() const { return 1 + isPrefix_; }
+size_t TextIndexScanForWord::getResultWidth() const { return 1 + isPrefix_; }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> WordIndexScan::resultSortedOn() const {
+vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
   return {ColumnIndex(0)};
 }
 
 // _____________________________________________________________________________
-string WordIndexScan::getDescriptor() const {
-  return "WordIndexScan on " + cvar_.name() + " with word " + word_;
+string TextIndexScanForWord::getDescriptor() const {
+  return "TextIndexScanForWord on " + cvar_.name() + " with word " + word_;
 }
 
 // _____________________________________________________________________________
-string WordIndexScan::asStringImpl(size_t indent) const {
+string TextIndexScanForWord::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";

@@ -27,12 +27,12 @@
 #include "engine/OrderBy.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "engine/TextIndexScanForWord.h"
 #include "engine/TextOperationWithFilter.h"
 #include "engine/TextOperationWithoutFilter.h"
 #include "engine/TransitivePath.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
-#include "engine/WordIndexScan.h"
 #include "parser/Alias.h"
 #include "parser/SparqlParserHelpers.h"
 
@@ -1195,7 +1195,8 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   } else {
     AD_CONTRACT_CHECK(node._wordPart.has_value());
     AD_CONTRACT_CHECK(node._wordPart.value().size() == 1);
-    plan = makeSubtreePlan<WordIndexScan>(_qec, node._cvar.value(), word);
+    plan =
+        makeSubtreePlan<TextIndexScanForWord>(_qec, node._cvar.value(), word);
   }
   plan._idsOfIncludedNodes |= (size_t(1) << node._id);
   return plan;

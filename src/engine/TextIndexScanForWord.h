@@ -6,16 +6,16 @@
 
 // This operation filters all entries of a text-variable out that do not contain
 // a certain word or a certain prefix.
-class WordIndexScan : public Operation {
+class TextIndexScanForWord : public Operation {
  private:
   const Variable cvar_;
   const string word_;
   bool isPrefix_ = false;
 
  public:
-  WordIndexScan(QueryExecutionContext* qec, Variable cvar, string word);
+  TextIndexScanForWord(QueryExecutionContext* qec, Variable cvar, string word);
 
-  virtual ~WordIndexScan() = default;
+  virtual ~TextIndexScanForWord() = default;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
