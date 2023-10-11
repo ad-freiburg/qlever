@@ -409,10 +409,8 @@ TransitivePath::Map TransitivePath::transitiveHull(const Map& edges,
       edgeCache.push_back(rootEdges->second);
     }
     if (_minDist == 0) {
-      // res.push_back({nodes[i], nodes[i]});
-      AD_THROW(
-          "The TransitivePath operation does not support a minimum "
-          "distance of 0 (use at least one instead).");
+      hull.try_emplace(nodes[i], std::make_shared<ad_utility::HashSet<Id>>());
+      hull[nodes[i]]->insert(nodes[i]);
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -473,6 +471,10 @@ void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
   size_t rowIndex = 0;
   for (size_t i = 0; i < nodes.size(); i++) {
     Id node = nodes[i];
+    if (!hull.contains(node)) {
+      continue;
+    }
+
     for (Id otherNode : *hull[node]) {
       table.emplace_back();
       table(rowIndex, startSideCol) = node;
@@ -532,6 +534,10 @@ std::pair<TransitivePath::Map, std::vector<Id>> TransitivePath::setupMapAndNodes
   // var -> var
   } else {
     nodes = setupNodesVector<SUB_WIDTH>(sub, startSide.subCol);
+    if (_minDist == 0) {
+      std::vector<Id> targetNodes = setupNodesVector<SUB_WIDTH>(sub, targetSide.subCol);
+      nodes.insert(nodes.end(), targetNodes.begin(), targetNodes.end());
+    }
   }
 
   return std::make_pair(edges, nodes);
@@ -580,12 +586,18 @@ template<size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 void TransitivePath::copyColumns(
     const IdTableView<INPUT_WIDTH>& inputTable,
     IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow, size_t outputRow,
-    size_t tableCol) {
-  for (size_t i = 2; i < outputTable.numColumns() + 1; i++) {
-    if (i - 2 < tableCol) {
-      outputTable(outputRow, i) = inputTable(inputRow, i - 2);
-    } else if (i - 2 > tableCol) {
-      outputTable(outputRow, i - 1) = inputTable(inputRow, i - 2);
+    size_t skipCol) {
+
+  size_t inCol = 0;
+  size_t outCol = 2;
+  while (inCol < inputTable.numColumns() && outCol < outputTable.numColumns()) {
+    if (skipCol == inCol) {
+      inCol++;
+      continue;
     }
+
+    outputTable(outputRow, outCol) = inputTable(inputRow, inCol);
+    inCol++;
+    outCol++;
   }
 }

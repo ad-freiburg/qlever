@@ -427,10 +427,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
               AD_THROW("No vocabulary entry for " + arg._right.toString());
             }
           }
-          LOG(DEBUG) << "Left:" << std::endl;
-          LOG(DEBUG) << std::get<Variable>(left.value)._name << std::endl;
-          LOG(DEBUG) << "Right:" << std::endl;
-          LOG(DEBUG) << std::get<Variable>(right.value)._name << std::endl;
           size_t min = arg._min;
           size_t max = arg._max;
           auto plan = makeSubtreePlan<TransitivePath>(
@@ -818,13 +814,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
     const SparqlTriple& triple) {
-  if (triple._p._can_be_null) {
-    std::stringstream buf;
-    buf << "The property path ";
-    triple._p.writeToStream(buf);
-    buf << " can evaluate to the empty path which is not yet supported.";
-    AD_THROW(std::move(buf).str());
-  }
   std::shared_ptr<ParsedQuery::GraphPattern> pattern =
       seedFromPropertyPath(triple._s, triple._p, triple._o);
 #if LOGLEVEL >= TRACE
