@@ -13,7 +13,7 @@
 class ZstdWrapper {
  public:
   // Compress the given byte array and return the result;
-  static std::vector<char> compress(void* src, size_t numBytes,
+  static std::vector<char> compress(const void* src, size_t numBytes,
                                     int compressionLevel = 3) {
     std::vector<char> result(ZSTD_compressBound(numBytes));
     auto compressedSize = ZSTD_compress(result.data(), result.size(), src,
@@ -42,8 +42,8 @@ class ZstdWrapper {
   requires(std::is_trivially_copyable_v<T>)
   static size_t decompressToBuffer(const char* src, size_t numBytes, T* buffer,
                                    size_t bufferCapacity) {
-    auto decompressedSize = ZSTD_decompress(buffer, bufferCapacity,
-                                            const_cast<char*>(src), numBytes);
+    auto decompressedSize =
+        ZSTD_decompress(buffer, bufferCapacity, src, numBytes);
     if (ZSTD_isError(decompressedSize)) {
       throw std::runtime_error(std::string("error during decompression : ") +
                                ZSTD_getErrorName(decompressedSize));

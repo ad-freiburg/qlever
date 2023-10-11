@@ -122,7 +122,7 @@ void IndexImpl::addTextFromContextFile(const string& contextFile,
   v.reserve(nofLines);
   processWordsForInvertedLists(contextFile, addWordsFromLiterals, v);
   LOG(DEBUG) << "Sorting text index, #elements = " << v.size() << std::endl;
-  stxxl::sort(begin(v), end(v), SortText(), stxxlMemoryInBytes() / 3);
+  stxxl::sort(begin(v), end(v), SortText(), stxxlMemory().getBytes() / 3);
   LOG(DEBUG) << "Sort done" << std::endl;
   createTextIndex(indexFilename, v);
   openTextFileHandle();

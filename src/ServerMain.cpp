@@ -15,13 +15,11 @@
 #include <string>
 #include <vector>
 
-using std::cerr;
-using std::cout;
-using std::endl;
-using std::flush;
+#include "util/MemorySize/MemorySize.h"
+#include "util/MemorySize/MemorySizeParser.h"
+
 using std::size_t;
 using std::string;
-using std::vector;
 
 namespace po = boost::program_options;
 
@@ -126,8 +124,10 @@ int main(int argc, char** argv) {
             << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
 
   try {
-    Server server(port, static_cast<int>(numSimultaneousQueries),
-                  memoryMaxSizeGb, std::move(accessToken), !noPatternTrick);
+    Server server(
+        port, numSimultaneousQueries,
+        ad_utility::MemorySize::gigabytes(static_cast<size_t>(memoryMaxSizeGb)),
+        std::move(accessToken), !noPatternTrick);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled

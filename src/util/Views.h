@@ -8,6 +8,7 @@
 #include <future>
 
 #include "./Generator.h"
+#include "util/Log.h"
 
 namespace ad_utility {
 
@@ -49,26 +50,61 @@ cppcoro::generator<typename View::value_type> bufferedAsyncView(
 
 /// Takes a view and yields the elements of the same view, but skips over
 /// consecutive duplicates.
-template <typename SortedView>
-cppcoro::generator<typename SortedView::value_type> uniqueView(
-    SortedView view) {
+template <typename SortedView, typename ValueType = SortedView::value_type>
+cppcoro::generator<ValueType> uniqueView(SortedView view) {
+  size_t numInputs = 0;
+  size_t numUnique = 0;
   auto it = view.begin();
   if (it == view.end()) {
     co_return;
   }
-  auto previousValue = std::move(*it);
-  auto previousValueCopy = previousValue;
+  ValueType previousValue = std::move(*it);
+  ValueType previousValueCopy = previousValue;
   co_yield previousValueCopy;
+  numInputs = 1;
+  numUnique = 1;
   ++it;
 
   for (; it != view.end(); ++it) {
+    ++numInputs;
     if (*it != previousValue) {
       previousValue = std::move(*it);
       previousValueCopy = previousValue;
+      ++numUnique;
       co_yield previousValueCopy;
     }
   }
+  LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
+  LOG(INFO) << "Number of unique outputs of `uniqueView`: " << numUnique
+            << std::endl;
 }
+
+// A view that owns its underlying storage. It is a rather simple drop-in
+// replacement for `std::ranges::owning_view` which is not yet supported by
+// `GCC 11`.
+template <std::ranges::range UnderlyingRange>
+struct OwningView
+    : public std::ranges::view_interface<OwningView<UnderlyingRange>> {
+ private:
+  UnderlyingRange value_;
+
+ public:
+  explicit OwningView(UnderlyingRange&& range) : value_{std::move(range)} {}
+  auto begin() { return value_.begin(); }
+  auto end() { return value_.end(); }
+};
+
+// Returns a view that contains all the values in `[0, upperBound)`, similar to
+// Python's `range` function. Avoids the common pitfall in `std::views::iota`
+// that the count variable is only derived from the first argument. For example,
+// `std::views::iota(0, size_t(INT_MAX) + 1)` leads to undefined behavior
+// because of an integer overflow, but `ad_utility::integerRange(size_t(INT_MAX)
+// + 1)` is perfectly safe and behaves as expected.
+template <std::unsigned_integral Int>
+auto integerRange(Int upperBound) {
+  return std::views::iota(Int{0}, upperBound);
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_VIEWS_H

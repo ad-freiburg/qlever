@@ -35,12 +35,23 @@ TEST(BenchmarkMeasurementContainerTest, ResultEntry) {
   // The function should just wait 0.1 seconds.
   constexpr size_t waitTimeinMillieseconds = 100;
 
-  ResultEntry entry(entryDescriptor, createWaitLambda(waitTimeinMillieseconds));
+  // The normal constructor.
+  ResultEntry entryNormalConstructor(entryDescriptor,
+                                     createWaitLambda(waitTimeinMillieseconds));
 
-  ASSERT_EQ(entry.descriptor_, entryDescriptor);
+  ASSERT_EQ(entryNormalConstructor.descriptor_, entryDescriptor);
 
   // The time measurements can't be 100% accurat, so we give it a 'window'.
-  ASSERT_NEAR(waitTimeinMillieseconds / 1000.0, entry.measuredTime_, 0.01);
+  ASSERT_NEAR(waitTimeinMillieseconds / 1000.0,
+              entryNormalConstructor.measuredTime_, 0.01);
+
+  // The constructor with custom log descriptor.
+  ResultEntry entryLogConstructor(entryDescriptor, "t",
+                                  createWaitLambda(waitTimeinMillieseconds));
+
+  // The time measurements can't be 100% accurat, so we give it a 'window'.
+  ASSERT_NEAR(waitTimeinMillieseconds / 1000.0,
+              entryLogConstructor.measuredTime_, 0.01);
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
@@ -76,9 +87,11 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
 TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   // Looks, if the general form is correct.
   auto checkForm = [](const ResultTable& table, const std::string& name,
+                      const std::string& descriptorForLog,
                       const std::vector<std::string>& rowNames,
                       const std::vector<std::string>& columnNames) {
     ASSERT_EQ(name, table.descriptor_);
+    ASSERT_EQ(descriptorForLog, table.descriptorForLog_);
     ASSERT_EQ(columnNames, table.columnNames_);
     ASSERT_EQ(rowNames.size(), table.numRows());
     ASSERT_EQ(columnNames.size(), table.numColumns());
@@ -145,7 +158,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   ResultTable table("My table", rowNames, columnNames);
 
   // Was it created correctly?
-  checkForm(table, "My table", rowNames, columnNames);
+  checkForm(table, "My table", "My table", rowNames, columnNames);
 
   // Add measured function to it.
   table.addMeasurement(0, 1, createWaitLambda(100));
@@ -167,7 +180,8 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   // Can we add a new row, without changing things?
   table.addRow();
   table.setEntry(2, 0, std::string{"row3"});
-  checkForm(table, "My table", {"row1", "row2", "row3"}, columnNames);
+  checkForm(table, "My table", "My table", {"row1", "row2", "row3"},
+            columnNames);
   checkRow(table, 0, std::string{"row1"}, static_cast<float>(0.1),
            static_cast<float>(4.9));
   checkRow(table, 1, std::string{"row2"}, std::string{"Custom entry"});
@@ -181,5 +195,9 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   table.setEntry(2, 2, "Custom entry #2");
   checkRow(table, 2, std::string{"row3"}, static_cast<float>(0.29),
            std::string{"Custom entry #2"});
+
+  // Does the constructor for the custom log name work?
+  checkForm(ResultTable("My table", "T", rowNames, columnNames), "My table",
+            "T", rowNames, columnNames);
 }
 }  // namespace ad_benchmark

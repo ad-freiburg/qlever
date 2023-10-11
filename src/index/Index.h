@@ -210,8 +210,8 @@ class Index {
 
   void setKeepTempFiles(bool keepTempFiles);
 
-  uint64_t& stxxlMemoryInBytes();
-  const uint64_t& stxxlMemoryInBytes() const;
+  ad_utility::MemorySize& stxxlMemory();
+  const ad_utility::MemorySize& stxxlMemory() const;
 
   uint64_t& blocksizePermutationsInBytes();
 
