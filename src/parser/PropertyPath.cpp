@@ -12,7 +12,8 @@ PropertyPath::PropertyPath(Operation op, std::string iri,
       _can_be_null(false) {}
 
 // _____________________________________________________________________________
-PropertyPath PropertyPath::makeModified(PropertyPath child, std::string modifier) {
+PropertyPath PropertyPath::makeModified(PropertyPath child,
+                                        std::string modifier) {
   if (modifier == "+") {
     return makeWithChildren({std::move(child)}, Operation::ONE_OR_MORE);
   } else if (modifier == "*") {

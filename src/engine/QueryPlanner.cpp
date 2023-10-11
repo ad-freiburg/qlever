@@ -402,7 +402,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           // TODO<joka921> Refactor the `TransitivePath` class s.t. we don't
           // have to specify a `Variable` that isn't used at all in the case of
           // a fixed subject or object.
-          left.subCol = sub._qet->getVariableColumn(arg._innerLeft.getVariable());
+          left.subCol =
+              sub._qet->getVariableColumn(arg._innerLeft.getVariable());
           if (isVariable(arg._left)) {
             left.value = Variable{arg._left.getVariable()};
           } else {
@@ -415,7 +416,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
             }
           }
           // TODO<joka921> This is really much code duplication, get rid of it!
-          right.subCol = sub._qet->getVariableColumn(arg._innerRight.getVariable());
+          right.subCol =
+              sub._qet->getVariableColumn(arg._innerRight.getVariable());
           if (isVariable(arg._right)) {
             right.value = Variable{arg._right.getVariable()};
           } else {
@@ -429,8 +431,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           }
           size_t min = arg._min;
           size_t max = arg._max;
-          auto plan = makeSubtreePlan<TransitivePath>(
-              _qec, sub._qet, left, right, min, max);
+          auto plan = makeSubtreePlan<TransitivePath>(_qec, sub._qet, left,
+                                                      right, min, max);
           candidatesOut.push_back(std::move(plan));
         }
         joinCandidates(std::move(candidatesOut));
@@ -2016,8 +2018,8 @@ auto QueryPlanner::createJoinWithTransitivePath(
   const size_t thisCol = aIsTransPath ? jcs[0][0] : jcs[0][1];
   // Do not bind the side of a path twice
   if ((transPathOperation->isBound() ||
-      (transPathOperation->leftIsBound() && thisCol == 0) ||
-      (transPathOperation->rightIsBound() && thisCol == 1))) {
+       (transPathOperation->leftIsBound() && thisCol == 0) ||
+       (transPathOperation->rightIsBound() && thisCol == 1))) {
     return std::nullopt;
   }
   // An unbound transitive path has at most two columns.
