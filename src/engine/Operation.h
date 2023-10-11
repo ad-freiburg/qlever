@@ -114,7 +114,7 @@ class Operation {
 
   RuntimeInformation& runtimeInfo() const { return *_runtimeInfo; }
 
-  std::shared_ptr<RuntimeInformation> getRuntimeInfoPointer() const {
+  std::shared_ptr<RuntimeInformation> getRuntimeInfoPointer() {
     return _runtimeInfo;
   }
 
@@ -122,6 +122,7 @@ class Operation {
     return _runtimeInfoWholeQuery;
   }
 
+  /// Notify the `QueryExecutionContext` of the latest `RuntimeInformation`.
   void signalQueryUpdate() const;
 
   /**
@@ -294,6 +295,8 @@ class Operation {
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo =
       std::make_shared<RuntimeInformation>();
+  /// Pointer to the head of the `RuntimeInformation`.
+  /// Used in `signalQueryUpdate()`, reset in `createRuntimeInfoFromEstimates()`
   std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
   RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 

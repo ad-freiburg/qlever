@@ -198,6 +198,8 @@ void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
   if (!(hasLimit || hasOffset)) {
     return;
   }
+  // Create a shallow copy, so we can modify the original values without
+  // losing anything
   children_ = std::vector{std::make_shared<RuntimeInformation>(*this)};
   const auto& actualOperation = children_.at(0);
   numRows_ = l.actualSize(actualOperation->numRows_);

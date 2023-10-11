@@ -65,7 +65,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
 
   if (isRoot) {
     // Start with an estimated runtime info which will be updated as we go.
-    createRuntimeInfoFromEstimates(_runtimeInfo);
+    createRuntimeInfoFromEstimates(getRuntimeInfoPointer());
     signalQueryUpdate();
   }
   auto& cache = _executionContext->getQueryTreeCache();
