@@ -156,7 +156,7 @@ struct LangtagAndTriple {
 template <size_t Parallelism>
 auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
                      size_t maxNumberOfTriples,
-                     const TripleComponentComparator* comp) {
+                     const TripleComponentComparator* comp, auto* indexPtr) {
   // that way the different ids won't interfere
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < Parallelism; ++j) {
@@ -177,8 +177,9 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
    * tag)
    * - All Ids are assigned according to itemArray[idx]
    */
-  const auto itemMapLamdaCreator = [&itemArray](const size_t idx) {
-    return [&map = itemArray[idx]](LangtagAndTriple&& lt) {
+  const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
+    return [&map = itemArray[idx], indexPtr](auto&& tr) {
+      auto lt = indexPtr->tripleToInternalRepresentation(std::move(tr));
       OptionalIds res;
       // get Ids for the actual triple and store them in the result.
       res[0] = map.getId(lt._triple);

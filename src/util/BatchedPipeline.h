@@ -195,6 +195,7 @@ class BatchedPipeline {
       Timer timer{Timer::InitialStatus::Started};
       auto res = _fut.get();
       orderNextBatch();
+      LOG(TIMING) << "batch wait time " << timer.msecs() << std::endl;
       _waitingTime->fetch_add(timer.msecs());
       return res;
     } catch (std::future_error& e) {
@@ -245,6 +246,7 @@ class BatchedPipeline {
                                           size_t inBatchSize,
                                           TransformerPtrs... transformers) {
     auto inBatch = previousStage->pickupBatch();
+    Timer timer{Timer::Started};
     Batch<ResT> result;
     result.m_isPipelineGood = inBatch.m_isPipelineGood;
     // currently each of the <parallelism> threads first creates its own Batch
@@ -262,6 +264,7 @@ class BatchedPipeline {
                               std::make_move_iterator(vec.begin()),
                               std::make_move_iterator(vec.end()));
     }
+    LOG(TIMING) << "produce batch time " << timer.msecs() << std::endl;
     return result;
   }
 

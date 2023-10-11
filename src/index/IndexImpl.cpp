@@ -272,7 +272,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
     {
-      auto p = ad_pipeline::setupParallelPipeline<3, NUM_PARALLEL_ITEM_MAPS>(
+      auto p = ad_pipeline::setupParallelPipeline<NUM_PARALLEL_ITEM_MAPS>(
           parserBatchSize_,
           // when called, returns an optional to the next triple. If
           // `linesPerPartial` triples were parsed, return std::nullopt. when
@@ -281,17 +281,19 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
           // as a first step in the parallel Pipeline.
           ParserBatcher(parser, linesPerPartial,
                         [&]() { parserExhausted = true; }),
+          /*
           // convert each triple to the internal representation (e.g. special
           // values for Numbers, externalized literals, etc.)
           [this](TurtleTriple&& t) -> LangtagAndTriple {
             return tripleToInternalRepresentation(std::move(t));
           },
+           */
 
           // get the Ids for the original triple and the possibly added language
           // Tag triples using the provided HashMaps via itemArray. See
           // documentation of the function for more details
           getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(
-              &itemArray, linesPerPartial, &(vocab_.getCaseComparator())));
+              &itemArray, linesPerPartial, &(vocab_.getCaseComparator()),this));
 
       while (auto opt = p.getNextValue()) {
         i++;
@@ -1117,12 +1119,12 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       return c(a.second.m_splitVal, b.second.m_splitVal,
                decltype(vocab_)::SortLevel::TOTAL);
     };
-    LOG(TIMING) << "Start sorting of vocabulary with #elements: " << vec.size()
+    LOG(TRACE) << "Start sorting of vocabulary with #elements: " << vec.size()
                 << std::endl;
     sortVocabVector(&vec, identicalPred, true);
-    LOG(TIMING) << "Finished sorting of vocabulary" << std::endl;
+    LOG(TRACE) << "Finished sorting of vocabulary" << std::endl;
     auto mapping = createInternalMapping(&vec);
-    LOG(TIMING) << "Finished creating of Mapping vocabulary" << std::endl;
+    LOG(TRACE) << "Finished creating of Mapping vocabulary" << std::endl;
     auto sz = vec.size();
     // since now adjacent duplicates also have the same Ids, it suffices to
     // compare those
@@ -1143,21 +1145,21 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
     writePartialVocabularyToFile(vec, partialFilename);
     if (vocabPrefixCompressed) {
       // sort according to the actual byte values
-      LOG(TIMING) << "Start sorting of vocabulary for prefix compression"
+      LOG(TRACE) << "Start sorting of vocabulary for prefix compression"
                   << std::endl;
       sortVocabVector(
           &vec, [](const auto& a, const auto& b) { return a.first < b.first; },
           false);
-      LOG(TIMING) << "Finished sorting of vocabulary for prefix compression"
+      LOG(TRACE) << "Finished sorting of vocabulary for prefix compression"
                   << std::endl;
-      LOG(TIMING) << "Remove externalized words from prefix compression"
+      LOG(TRACE) << "Remove externalized words from prefix compression"
                   << std::endl;
       std::erase_if(vec, [](const auto& a) {
         return a.second.m_splitVal.isExternalized_;
       });
       writePartialVocabularyToFile(vec, partialCompressionFilename);
     }
-    LOG(TIMING) << "Finished writing the partial vocabulary" << std::endl;
+    LOG(TRACE) << "Finished writing the partial vocabulary" << std::endl;
     vec.clear();
   };
 
