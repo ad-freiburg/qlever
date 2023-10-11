@@ -233,5 +233,5 @@ class TransitivePath : public Operation {
     static void copyColumns(
         const IdTableView<INPUT_WIDTH>& inputTable,
         IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow, size_t outputRow,
-        size_t inputTableCol);
+        size_t skipCol);
 };
