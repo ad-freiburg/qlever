@@ -168,20 +168,30 @@ class LocaleManager {
    */
   [[nodiscard]] SortKey getSortKey(std::string_view s,
                                    const Level level) const {
+    // TODO<joka921> This is wrong and for debugging.
     auto utf16 = icu::UnicodeString::fromUTF8(toStringPiece(s));
     auto& col = *_collator[static_cast<uint8_t>(level)];
-    auto sz = col.getSortKey(utf16, nullptr, 0);
+    std::string sortKeyBuffer;
+    sortKeyBuffer.resize(50 * s.size());
     SortKey finalRes;
-    std::string& res = finalRes.get();
-    res.resize(sz);
     static_assert(sizeof(uint8_t) == sizeof(std::string::value_type));
-    sz = col.getSortKey(utf16, reinterpret_cast<uint8_t*>(res.data()),
-                        res.size());
-    AD_CONTRACT_CHECK(
-        sz == static_cast<decltype(sz)>(
-                  res.size()));  // this is save by the way we obtained sz
+    auto sz =
+        col.getSortKey(utf16, reinterpret_cast<uint8_t*>(sortKeyBuffer.data()),
+                       sortKeyBuffer.size());
+    AD_CONTRACT_CHECK(sz >= 0);
+    auto& res = finalRes.get();
+    res.resize(sz);
+    if (static_cast<size_t>(sz) > sortKeyBuffer.size()) {
+      LOG(INFO) << "SortKey too large for buffer" << std::endl;
+      sz = col.getSortKey(utf16, reinterpret_cast<uint8_t*>(res.data()),
+                          res.size());
+      AD_CONTRACT_CHECK(sz == static_cast<decltype(sz)>(res.size()));
+    } else {
+      std::copy(sortKeyBuffer.begin(), sortKeyBuffer.begin() + sz, res.begin());
+    }
     // since this is a c-api we still have a trailing '\0'. Trimming this is
     // necessary for the prefix range to work correct.
+    AD_CORRECTNESS_CHECK(!res.empty());
     res.resize(res.size() - 1);
     return finalRes;
   }

@@ -96,16 +96,17 @@ struct alignas(256) ItemMapManager {
       return std::get<Id>(keyOrId);
     }
     const auto& key = std::get<PossiblyExternalizedIriOrLiteral>(keyOrId);
-    if (!_map.count(key._iriOrLiteral)) {
-      uint64_t res = _map.size() + _minId;
-      _map[key._iriOrLiteral] = {
-          res, m_comp->extractAndTransformComparable(
-                   key._iriOrLiteral, TripleComponentComparator::Level::TOTAL,
-                   key._isExternal)};
+    auto [it, inserted] = _map.try_emplace(
+        key._iriOrLiteral, 0, TripleComponentComparator::SplitVal{});
+    if (inserted) {
+      uint64_t res = _map.size() - 1 + _minId;
+      it->second.m_id = res;
+      it->second.m_splitVal = m_comp->extractAndTransformComparable(
+          key._iriOrLiteral, TripleComponentComparator::Level::TOTAL,
+          key._isExternal);
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
-      return Id::makeFromVocabIndex(
-          VocabIndex::make(_map[key._iriOrLiteral].m_id));
+      return Id::makeFromVocabIndex(VocabIndex::make(it->second.m_id));
     }
   }
 
@@ -200,12 +201,12 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.
         // extra triple <subject> @language@<predicate> <object>
-        res[1] =
-            std::array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]};
+        res[1] = std::array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]};
         // extra triple <object> ql:language-tag <@language>
-        res[2] = std::array<Id, 3>{
-            spoIds[2], map.getId(LANGUAGE_PREDICATE), langTagId};
+        res[2] = std::array<Id, 3>{spoIds[2], map.getId(LANGUAGE_PREDICATE),
+                                   langTagId};
       }
+      AD_CORRECTNESS_CHECK(!res[0][0].isUndefined());
       return res;
     };
   };

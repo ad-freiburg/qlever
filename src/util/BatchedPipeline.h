@@ -30,7 +30,8 @@ struct Batch {
   bool m_isPipelineGood = true;  // if set to false, this was the last (and
                                  // possibly incomplete) batch, else there might
                                  // be more content waiting in the pipeline.
-  std::vector<T, ad_utility::default_init_allocator<T>> m_content;      // the actual payload
+  std::vector<T, ad_utility::default_init_allocator<T>>
+      m_content;  // the actual payload
 };
 
 /*
@@ -125,9 +126,11 @@ class Batcher {
         return res;
       }
       res.m_isPipelineGood = true;
+      Timer timer{Timer::Started};
       res.m_content.reserve(opt->size());
-      std::ranges::copy(*opt, std::back_inserter(res.m_content));
-      //res.m_content = std::move(*opt);
+      std::ranges::move(*opt, std::back_inserter(res.m_content));
+      LOG(TIMING) << "Time for copying an input batch " << timer.msecs()
+                  << std::endl;
       return res;
     } else {
       res.m_isPipelineGood = true;
@@ -198,7 +201,7 @@ class BatchedPipeline {
       Timer timer{Timer::InitialStatus::Started};
       auto res = _fut.get();
       orderNextBatch();
-      //LOG(TIMING) << "batch wait time " << timer.msecs() << std::endl;
+      // LOG(TIMING) << "batch wait time " << timer.msecs() << std::endl;
       _waitingTime->fetch_add(timer.msecs());
       return res;
     } catch (std::future_error& e) {
@@ -256,12 +259,12 @@ class BatchedPipeline {
     // and later we merge. <TODO>(joka921) Doing this in place would require
     // something like a std::vector without default construction on insert.
     const size_t batchSize = inBatchSize / Parallelism;
-    //Timer timerResize{Timer::Started};
+    // Timer timerResize{Timer::Started};
     result.m_content.resize(inBatch.m_content.size());
-    //LOG(TIMING) << "Time for resize " << timerResize.msecs() << std::endl;
-    auto futures = setupParallelismImpl(batchSize, inBatch.m_content, result.m_content,
-                                        std::make_index_sequence<Parallelism>{},
-                                        transformers...);
+    // LOG(TIMING) << "Time for resize " << timerResize.msecs() << std::endl;
+    auto futures = setupParallelismImpl(
+        batchSize, inBatch.m_content, result.m_content,
+        std::make_index_sequence<Parallelism>{}, transformers...);
     // if we had multiple threads, we have to merge the partial results in the
     // correct order.
     for (size_t i = 0; i < Parallelism; ++i) {
@@ -326,13 +329,15 @@ class BatchedPipeline {
    * @param transformer Pointer to the first transformer
    * @param transformers Pointers to the remaining transformers
    */
-  template <size_t... I, typename InVec, typename OutVec, typename... TransformerPtrs>
+  template <size_t... I, typename InVec, typename OutVec,
+            typename... TransformerPtrs>
   static auto setupParallelismImpl(size_t batchSize, InVec& in, OutVec& out,
                                    std::index_sequence<I...>,
                                    TransformerPtrs... transformers) {
     AD_CORRECTNESS_CHECK(out.size() == in.size());
     if constexpr (sizeof...(I) == sizeof...(TransformerPtrs)) {
-      return std::array{(createIthFuture<I>(batchSize, in, out, transformers))...};
+      return std::array{
+          (createIthFuture<I>(batchSize, in, out, transformers))...};
     } else if constexpr (sizeof...(TransformerPtrs) == 1) {
       // only one transformer that is applied to several threads
       auto onlyTransformer =
@@ -342,13 +347,15 @@ class BatchedPipeline {
     }
   }
 
-  template <size_t Idx, typename InVec, typename OutVec, typename TransformerPtr>
+  template <size_t Idx, typename InVec, typename OutVec,
+            typename TransformerPtr>
   static std::future<std::vector<ResT>> createIthFuture(
       size_t batchSize, InVec& in, OutVec& out, TransformerPtr transformer) {
     auto [startIt, endIt] = getBatchRange(in.begin(), in.end(), batchSize, Idx);
     // start a thread for the transformer.
     return std::async(std::launch::async,
-                      [transformer, startIt = startIt, endIt = endIt, outIt = out.begin() + (endIt - startIt)] {
+                      [transformer, startIt = startIt, endIt = endIt,
+                       outIt = out.begin() + (endIt - startIt)] {
                         std::vector<ResT> res;
                         moveAndTransform(startIt, endIt, outIt, transformer);
                         return res;

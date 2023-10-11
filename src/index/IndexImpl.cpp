@@ -293,8 +293,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
           // get the Ids for the original triple and the possibly added language
           // Tag triples using the provided HashMaps via itemArray. See
           // documentation of the function for more details
-          getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(
-              &itemArray, linesPerPartial, &(vocab_.getCaseComparator()),this));
+          getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(&itemArray, linesPerPartial,
+                                                  &(vocab_.getCaseComparator()),
+                                                  this));
 
       while (auto opt = p.getNextValue()) {
         i++;
@@ -327,9 +328,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       writePartialVocabularyFuture[0].get();
     }
     totalWaitingTimePreviousSteps += sortFutureTimer.msecs();
-      LOG(TIMING)
-          << "Time spent waiting for the writing of a previous vocabulary: "
-          << sortFutureTimer.msecs() << "ms." << std::endl;
+    LOG(TIMING)
+        << "Time spent waiting for the writing of a previous vocabulary: "
+        << sortFutureTimer.msecs() << "ms." << std::endl;
     std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS> convertedMaps;
     for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
       convertedMaps[j] = std::move(itemArray[j]).moveMap();
@@ -354,11 +355,13 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       future.get();
     }
   }
-  LOG(INFO) << "Total waiting time for previous vocabularies " << totalWaitingTimePreviousSteps << "ms" << std::endl;
+  LOG(INFO) << "Total waiting time for previous vocabularies "
+            << totalWaitingTimePreviousSteps << "ms" << std::endl;
   LOG(INFO) << "Done, total number of triples read: " << i
             << " [may contain duplicates]" << std::endl;
+  auto triplesSize = (*idTriples.wlock())->size();
   LOG(INFO) << "Number of QLever-internal triples created: "
-            << ((*idTriples.wlock())->size() - i) << " [may contain duplicates]"
+            << (triplesSize - i) << " [may contain duplicates] " << triplesSize
             << std::endl;
 
   size_t sizeInternalVocabulary = 0;
@@ -1123,7 +1126,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
                decltype(vocab_)::SortLevel::TOTAL);
     };
     LOG(TRACE) << "Start sorting of vocabulary with #elements: " << vec.size()
-                << std::endl;
+               << std::endl;
     sortVocabVector(&vec, identicalPred, true);
     LOG(TRACE) << "Finished sorting of vocabulary" << std::endl;
     auto mapping = createInternalMapping(&vec);
@@ -1149,14 +1152,14 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
     if (vocabPrefixCompressed) {
       // sort according to the actual byte values
       LOG(TRACE) << "Start sorting of vocabulary for prefix compression"
-                  << std::endl;
+                 << std::endl;
       sortVocabVector(
           &vec, [](const auto& a, const auto& b) { return a.first < b.first; },
           false);
       LOG(TRACE) << "Finished sorting of vocabulary for prefix compression"
-                  << std::endl;
+                 << std::endl;
       LOG(TRACE) << "Remove externalized words from prefix compression"
-                  << std::endl;
+                 << std::endl;
       std::erase_if(vec, [](const auto& a) {
         return a.second.m_splitVal.isExternalized_;
       });
