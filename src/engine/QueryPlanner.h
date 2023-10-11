@@ -271,15 +271,9 @@ class QueryPlanner {
   [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromAlternative(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
-  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromZeroOrMore(
+  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitive(
       const TripleComponent& left, const PropertyPath& path,
-      const TripleComponent& right);
-  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromZeroOrOne(
-      const TripleComponent& left, const PropertyPath& path,
-      const TripleComponent& right);
-  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromOneOrMore(
-      const TripleComponent& left, const PropertyPath& path,
-      const TripleComponent& right);
+      const TripleComponent& right, size_t min, size_t max);
   [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromInverse(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);

@@ -74,7 +74,15 @@ class PropertyPath {
     return makeWithChildren({std::move(child)}, Operation::INVERSE);
   }
 
-  static PropertyPath makeModified(PropertyPath child, std::string modifier);
+  /**
+   * @brief Make a PropertyPath based on the given child and apply the path
+   * modifier. The path modifier may be one of: ? + *
+   * 
+   * @param child The PropertyPath child
+   * @param modifier A PropertyPath modifier (? + *)
+   * @return PropertyPath With given modifier as Operation and given child
+   */
+  static PropertyPath makeModified(PropertyPath child, std::string_view modifier);
 
   static PropertyPath makeZeroOrMore(PropertyPath child) {
     return makeWithChildren({std::move(child)}, Operation::ZERO_OR_MORE);

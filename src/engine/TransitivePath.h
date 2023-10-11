@@ -12,11 +12,14 @@
 
 using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
 struct TransitivePathSide {
-  // If this is not nullptr then this side of all paths is within the result
-  // of this tree.
+  // treeAndCol contains the QueryExecutionTree of this side and the column
+  // where the Ids of this side are located. This member only has a value if
+  // this side was bound.
   std::optional<TreeAndCol> treeAndCol;
+  // Column of the sub table where the Ids of this side are located
   size_t subCol;
   std::variant<Id, Variable> value;
+  // The column in the ouput table where this side Ids are written to.
   // This member is set by the TransitivePath class
   size_t outputCol = 0;
 

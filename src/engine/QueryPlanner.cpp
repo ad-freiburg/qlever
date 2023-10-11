@@ -402,33 +402,28 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           // TODO<joka921> Refactor the `TransitivePath` class s.t. we don't
           // have to specify a `Variable` that isn't used at all in the case of
           // a fixed subject or object.
+          auto getSideValue = [this](TripleComponent side) {
+            std::variant<Id, Variable> value;
+            if (isVariable(side)) {
+              value = Variable{side.getVariable()};
+            } else {
+              value = generateUniqueVarName();
+              if (auto opt = side.toValueId(_qec->getIndex().getVocab());
+                  opt.has_value()) {
+                value = opt.value();
+              } else {
+                AD_THROW("No vocabulary entry for " + side.toString());
+              }
+            }
+            return value;
+          };
+
           left.subCol =
               sub._qet->getVariableColumn(arg._innerLeft.getVariable());
-          if (isVariable(arg._left)) {
-            left.value = Variable{arg._left.getVariable()};
-          } else {
-            left.value = generateUniqueVarName();
-            if (auto opt = arg._left.toValueId(_qec->getIndex().getVocab());
-                opt.has_value()) {
-              left.value = opt.value();
-            } else {
-              AD_THROW("No vocabulary entry for " + arg._left.toString());
-            }
-          }
-          // TODO<joka921> This is really much code duplication, get rid of it!
+          left.value = getSideValue(arg._left);
           right.subCol =
               sub._qet->getVariableColumn(arg._innerRight.getVariable());
-          if (isVariable(arg._right)) {
-            right.value = Variable{arg._right.getVariable()};
-          } else {
-            right.value = generateUniqueVarName();
-            if (auto opt = arg._right.toValueId(_qec->getIndex().getVocab());
-                opt.has_value()) {
-              right.value = opt.value();
-            } else {
-              AD_THROW("No vocabulary entry for " + arg._right.toString());
-            }
-          }
+          right.value = getSideValue(arg._right);
           size_t min = arg._min;
           size_t max = arg._max;
           auto plan = makeSubtreePlan<TransitivePath>(_qec, sub._qet, left,
@@ -841,11 +836,11 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
     case PropertyPath::Operation::SEQUENCE:
       return seedFromSequence(left, path, right);
     case PropertyPath::Operation::ZERO_OR_MORE:
-      return seedFromZeroOrMore(left, path, right);
+      return seedFromTransitive(left, path, right, 0, std::numeric_limits<size_t>::max());
     case PropertyPath::Operation::ONE_OR_MORE:
-      return seedFromOneOrMore(left, path, right);
+      return seedFromTransitive(left, path, right, 1, std::numeric_limits<size_t>::max());
     case PropertyPath::Operation::ZERO_OR_ONE:
-      return seedFromZeroOrOne(left, path, right);
+      return seedFromTransitive(left, path, right, 0, 1);
   }
   AD_FAIL();
 }
@@ -854,16 +849,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  if (path._children.empty()) {
-    AD_THROW(
-        "Tried processing a sequence property path node without any "
-        "children.");
-  } else if (path._children.size() == 1) {
-    LOG(WARN) << "Processing a sequence property path that has only one child."
-              << std::endl;
-    // TODO: This leads to infinite recursion. Throw an exception instead?
-    return seedFromPropertyPath(left, path, right);
-  }
+  AD_CORRECTNESS_CHECK(path._children.size() > 1);
 
   // Split the child paths into groups that can not be null (have at least one
   // node that can not be null). If all children can be null create a single
@@ -1034,9 +1020,9 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromZeroOrMore(
+std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
     const TripleComponent& left, const PropertyPath& path,
-    const TripleComponent& right) {
+    const TripleComponent& right, size_t min, size_t max) {
   Variable innerLeft = generateUniqueVarName();
   Variable innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
@@ -1048,52 +1034,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromZeroOrMore(
   transPath._right = right;
   transPath._innerLeft = innerLeft;
   transPath._innerRight = innerRight;
-  transPath._min = 0;
-  transPath._max = std::numeric_limits<size_t>::max();
-  transPath._childGraphPattern = *childPlan;
-  p->_graphPatterns.emplace_back(std::move(transPath));
-  return p;
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromZeroOrOne(
-    const TripleComponent& left, const PropertyPath& path,
-    const TripleComponent& right) {
-  Variable innerLeft = generateUniqueVarName();
-  Variable innerRight = generateUniqueVarName();
-  std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
-      seedFromPropertyPath(innerLeft, path._children[0], innerRight);
-  std::shared_ptr<ParsedQuery::GraphPattern> p =
-      std::make_shared<ParsedQuery::GraphPattern>();
-  p::TransPath transPath;
-  transPath._left = left;
-  transPath._right = right;
-  transPath._innerLeft = innerLeft;
-  transPath._innerRight = innerRight;
-  transPath._min = 0;
-  transPath._max = 1;
-  transPath._childGraphPattern = *childPlan;
-  p->_graphPatterns.emplace_back(std::move(transPath));
-  return p;
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromOneOrMore(
-    const TripleComponent& left, const PropertyPath& path,
-    const TripleComponent& right) {
-  Variable innerLeft = generateUniqueVarName();
-  Variable innerRight = generateUniqueVarName();
-  std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
-      seedFromPropertyPath(innerLeft, path._children[0], innerRight);
-  std::shared_ptr<ParsedQuery::GraphPattern> p =
-      std::make_shared<ParsedQuery::GraphPattern>();
-  p::TransPath transPath;
-  transPath._left = left;
-  transPath._right = right;
-  transPath._innerLeft = innerLeft;
-  transPath._innerRight = innerRight;
-  transPath._min = 1;
-  transPath._max = std::numeric_limits<size_t>::max();
+  transPath._min = min;
+  transPath._max = max;
   transPath._childGraphPattern = *childPlan;
   p->_graphPatterns.emplace_back(std::move(transPath));
   return p;
