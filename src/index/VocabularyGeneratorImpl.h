@@ -294,8 +294,12 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
     const auto& [id, splitVal] = idAndSplitVal;
-    TripleComponentWithIndex entry{word, splitVal.isExternalized_, id};
-    serializer << entry;
+    // TODO<joka921> there are unnecessary string copies involved here...
+    // TripleComponentWithIndex entry{std::string{word},
+    // splitVal.isExternalized_, id};
+    serializer << word;
+    serializer << splitVal.isExternalized_;
+    serializer << id;
   }
   serializer.close();
   LOG(DEBUG) << "Done writing partial vocabulary\n";
@@ -327,14 +331,44 @@ void writePartialIdMapToBinaryFileForMerging(
 // __________________________________________________________________________________________________
 inline ItemVec vocabMapsToVector(std::unique_ptr<ItemMapArray> map) {
   ItemVec els;
-  size_t totalEls = std::accumulate(
-      map->begin(), map->end(), 0,
-      [](const auto& x, const auto& y) { return x + y.size(); });
-  els.reserve(totalEls);
+  std::vector<size_t> offsets;
+  size_t totalEls =
+      std::accumulate(map->begin(), map->end(), 0,
+                      [&offsets](const auto& x, const auto& y) mutable {
+                        offsets.push_back(x);
+                        return x + y.size();
+                      });
+  els.resize(totalEls);
+  std::vector<std::future<void>> futures;
+  size_t i = 0;
   for (auto& singleMap : *map) {
-    els.insert(end(els), std::make_move_iterator(begin(singleMap)),
-               std::make_move_iterator(end(singleMap)));
+    futures.push_back(
+        std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
+          ad_utility::TimeBlockAndLog l{"handling a single map"};
+          using T = ItemVec::value_type;
+          std::ranges::transform(
+              singleMap, els.begin() + offsets[i], [](auto& el) -> T {
+                return {std::move(const_cast<std::string&>(el.first)),
+                        std::move(el.second)};
+              });
+          singleMap.clear();
+        }));
+    ++i;
   }
+  {
+    ad_utility::TimeBlockAndLog l{
+        "waiting for the futures in vocabMapsToVector"};
+    for (auto& fut : futures) {
+      fut.get();
+    }
+  }
+
+  {
+    ad_utility::TimeBlockAndLog l{
+        "calling the destructor of the large hashMap"};
+    map.reset(nullptr);
+  }
+
   return els;
 }
 
@@ -345,10 +379,8 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
   auto& els = *vecPtr;
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
-      ad_utility::parallel_sort(
-          begin(els), end(els), comp,
-          //                           ad_utility::parallel_tag(8));
-          ad_utility::parallel_tag(NUM_SORT_THREADS));
+      ad_utility::parallel_sort(begin(els), end(els), comp,
+                                ad_utility::parallel_tag(10));
     } else {
       std::sort(begin(els), end(els), comp);
     }

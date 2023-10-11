@@ -254,6 +254,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   bool parserExhausted = false;
 
   size_t i = 0;
+  size_t numPushedActually = 0;
   // already count the numbers of triples that will be used for the language
   // filter
   size_t numFiles = 0;
@@ -263,7 +264,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
   // Each of these futures corresponds to the processing and writing of one
   // batch of triples and partial vocabulary.
-  std::array<std::future<void>, 3> writePartialVocabularyFuture;
+  // std::array<std::future<void>, 3> writePartialVocabularyFuture;
+  std::array<std::future<void>, 2> writePartialVocabularyFuture;
   size_t totalWaitingTimePreviousSteps = 0;
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
@@ -299,14 +301,19 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
       while (auto opt = p.getNextValue()) {
         i++;
+        AD_CORRECTNESS_CHECK(!opt.value()[0][0].isUndefined());
         for (const auto& innerOpt : opt.value()) {
+          AD_CORRECTNESS_CHECK(innerOpt.size() == 3);
           if (!innerOpt[0].isUndefined()) {
+            numPushedActually++;
             actualCurrentPartialSize++;
             localWriter.push_back(innerOpt);
           }
         }
         if (i % 100'000'000 == 0) {
           LOG(INFO) << "Input triples processed: " << i << std::endl;
+          LOG(INFO) << "Total num triples processed: " << numPushedActually
+                    << std::endl;
         }
       }
       LOG(TIMING) << "WaitTimes for Pipeline in msecs\n";
@@ -1119,54 +1126,71 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
                  items = std::move(items), vocab = &vocab_, partialFilename,
                  partialCompressionFilename, numFiles,
                  vocabPrefixCompressed = vocabPrefixCompressed_]() mutable {
-    auto vec = vocabMapsToVector(std::move(items));
+    auto vec = [&]() {
+      ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
+      return vocabMapsToVector(std::move(items));
+    }();
     const auto identicalPred = [&c = vocab->getCaseComparator()](
                                    const auto& a, const auto& b) {
       return c(a.second.m_splitVal, b.second.m_splitVal,
                decltype(vocab_)::SortLevel::TOTAL);
     };
-    LOG(TRACE) << "Start sorting of vocabulary with #elements: " << vec.size()
-               << std::endl;
-    sortVocabVector(&vec, identicalPred, true);
-    LOG(TRACE) << "Finished sorting of vocabulary" << std::endl;
-    auto mapping = createInternalMapping(&vec);
+    {
+      ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
+      sortVocabVector(&vec, identicalPred, true);
+    }
+    auto mapping = [&]() {
+      ad_utility::TimeBlockAndLog l{"creating internal mapping"};
+      return createInternalMapping(&vec);
+    }();
     LOG(TRACE) << "Finished creating of Mapping vocabulary" << std::endl;
     auto sz = vec.size();
     // since now adjacent duplicates also have the same Ids, it suffices to
     // compare those
-    vec.erase(std::unique(vec.begin(), vec.end(),
-                          [](const auto& a, const auto& b) {
-                            return a.second.m_id == b.second.m_id;
-                          }),
-              vec.end());
-    LOG(TRACE) << "Removed " << sz - vec.size()
-               << " Duplicates from the local partial vocabularies\n";
+    {
+      ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
+      vec.erase(std::unique(vec.begin(), vec.end(),
+                            [](const auto& a, const auto& b) {
+                              return a.second.m_id == b.second.m_id;
+                            }),
+                vec.end());
+    }
     // The writing to the STXXL vector has to be done in order, to
     // make the update from local to global ids work.
-    globalWritePtr->withWriteLockAndOrdered(
-        [&](auto& writerPtr) {
-          writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
-        },
-        numFiles);
-    writePartialVocabularyToFile(vec, partialFilename);
+
+    auto writeTriplesFuture = std::async(std::launch::async, [&]() {
+      globalWritePtr->withWriteLockAndOrdered(
+          [&](auto& writerPtr) {
+            writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
+          },
+          numFiles);
+    });
+    {
+      ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
+      writePartialVocabularyToFile(vec, partialFilename);
+    }
     if (vocabPrefixCompressed) {
       // sort according to the actual byte values
       LOG(TRACE) << "Start sorting of vocabulary for prefix compression"
                  << std::endl;
-      sortVocabVector(
-          &vec, [](const auto& a, const auto& b) { return a.first < b.first; },
-          false);
-      LOG(TRACE) << "Finished sorting of vocabulary for prefix compression"
-                 << std::endl;
-      LOG(TRACE) << "Remove externalized words from prefix compression"
-                 << std::endl;
       std::erase_if(vec, [](const auto& a) {
         return a.second.m_splitVal.isExternalized_;
       });
+      {
+        ad_utility::TimeBlockAndLog l{"sorting for compression"};
+        sortVocabVector(
+            &vec,
+            [](const auto& a, const auto& b) { return a.first < b.first; },
+            true);
+      }
       writePartialVocabularyToFile(vec, partialCompressionFilename);
     }
     LOG(TRACE) << "Finished writing the partial vocabulary" << std::endl;
     vec.clear();
+    {
+      ad_utility::TimeBlockAndLog l{"writing to global file"};
+      writeTriplesFuture.get();
+    }
   };
 
   return std::async(std::launch::async, std::move(lambda));

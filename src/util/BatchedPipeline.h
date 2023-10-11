@@ -129,8 +129,8 @@ class Batcher {
       Timer timer{Timer::Started};
       res.m_content.reserve(opt->size());
       std::ranges::move(*opt, std::back_inserter(res.m_content));
-      LOG(TIMING) << "Time for copying an input batch " << timer.msecs()
-                  << std::endl;
+      LOG(TRACE) << "Time for copying an input batch " << timer.msecs()
+                 << std::endl;
       return res;
     } else {
       res.m_isPipelineGood = true;
@@ -268,14 +268,9 @@ class BatchedPipeline {
     // if we had multiple threads, we have to merge the partial results in the
     // correct order.
     for (size_t i = 0; i < Parallelism; ++i) {
-      auto vec = futures[i].get();
-      /*
-      result.m_content.insert(result.m_content.end(),
-                              std::make_move_iterator(vec.begin()),
-                              std::make_move_iterator(vec.end()));
-                              */
+      futures[i].get();
     }
-    LOG(TIMING) << "produce batch time " << timer.msecs() << std::endl;
+    // LOG(TIMING) << "produce batch time " << timer.msecs() << std::endl;
     return result;
   }
 
@@ -349,16 +344,16 @@ class BatchedPipeline {
 
   template <size_t Idx, typename InVec, typename OutVec,
             typename TransformerPtr>
-  static std::future<std::vector<ResT>> createIthFuture(
-      size_t batchSize, InVec& in, OutVec& out, TransformerPtr transformer) {
+  static std::future<void> createIthFuture(size_t batchSize, InVec& in,
+                                           OutVec& out,
+                                           TransformerPtr transformer) {
     auto [startIt, endIt] = getBatchRange(in.begin(), in.end(), batchSize, Idx);
     // start a thread for the transformer.
     return std::async(std::launch::async,
                       [transformer, startIt = startIt, endIt = endIt,
-                       outIt = out.begin() + (endIt - startIt)] {
+                       outIt = out.begin() + (startIt - in.begin())] {
                         std::vector<ResT> res;
                         moveAndTransform(startIt, endIt, outIt, transformer);
-                        return res;
                       });
   }
 
