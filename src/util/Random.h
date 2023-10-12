@@ -26,16 +26,12 @@ template <typename Int>
 requires(std::is_integral_v<Int> && sizeof(Int) <= sizeof(uint64_t))
 class FastRandomIntGenerator {
  public:
-  FastRandomIntGenerator() {
+  FastRandomIntGenerator(unsigned int seed = std::random_device{}()) {
     // Randomly initialize the shuffleTable
-    std::random_device seeder{};
-    // `std::random_device` only yields 32 bit values, so we need two of them
-    // for each entry of `_shuffleTable`
-    static_assert(sizeof(decltype(seeder())) == 4);
+    std::default_random_engine randomEngine{std::move(seed)};
+    std::uniform_int_distribution<uint64_t> distribution;
     for (auto& el : _shuffleTable) {
-      el = seeder();
-      el <<= 32;
-      el |= seeder();
+      el = distribution(randomEngine);
     }
   }
 
@@ -70,8 +66,9 @@ template <typename Int, typename = std::enable_if_t<std::is_integral_v<Int>>>
 class SlowRandomIntGenerator {
  public:
   explicit SlowRandomIntGenerator(Int min = std::numeric_limits<Int>::min(),
-                                  Int max = std::numeric_limits<Int>::max())
-      : _randomEngine{std::random_device{}()}, _distribution{min, max} {}
+                                  Int max = std::numeric_limits<Int>::max(),
+                                  unsigned int seed = std::random_device{}())
+      : _randomEngine{std::move(seed)}, _distribution{min, max} {}
 
   Int operator()() { return _distribution(_randomEngine); }
 
@@ -87,8 +84,9 @@ class RandomDoubleGenerator {
  public:
   explicit RandomDoubleGenerator(
       double min = std::numeric_limits<double>::min(),
-      double max = std::numeric_limits<double>::max())
-      : _randomEngine{std::random_device{}()}, _distribution{min, max} {}
+      double max = std::numeric_limits<double>::max(),
+      unsigned int seed = std::random_device{}())
+      : _randomEngine{std::move(seed)}, _distribution{min, max} {}
 
   double operator()() { return _distribution(_randomEngine); }
 
@@ -99,8 +97,8 @@ class RandomDoubleGenerator {
 
 /// Randomly shuffle range denoted by `[begin, end)`
 template <typename RandomIt>
-void randomShuffle(RandomIt begin, RandomIt end) {
-  std::random_device rd;
-  std::mt19937 g(rd());
+void randomShuffle(RandomIt begin, RandomIt end,
+                   unsigned int seed = std::random_device{}()) {
+  std::mt19937 g(seed);
   std::shuffle(begin, end, g);
 }
