@@ -289,8 +289,8 @@ class CompressedRelationReader {
    * @param blockMetadata The metadata of the on-disk blocks for the given
    * permutation.
    * @param file The file in which the permutation is stored.
-   * @param timer If specified (!= nullptr) a `TimeoutException` will be thrown
-   *          if the timer runs out during the exeuction of this function.
+   * @param abortionHandle An `AbortionException` will be thrown if the
+   * abortionHandle runs out during the execution of this function.
    *
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
@@ -342,8 +342,8 @@ class CompressedRelationReader {
    * @param file The file in which the permutation is stored.
    * @param result The ID table to which we write the result. It must have
    * exactly one column.
-   * @param timer If specified (!= nullptr) a `TimeoutException` will be
-   * thrown if the timer runs out during the exeuction of this function.
+   * @param abortionHandle An `AbortionException` will be thrown if the
+   * abortionHandle runs out during the execution of this function.
    *
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).

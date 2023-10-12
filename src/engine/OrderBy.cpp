@@ -78,7 +78,7 @@ ResultTable OrderBy::computeResult() {
       remainingTime() * sortEstimateCancellationFactor) {
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation
-    throw ad_utility::TimeoutException(
+    throw ad_utility::AbortionException(
         "OrderBy operation was canceled, because time estimate exceeded "
         "remaining time by a factor of " +
         std::to_string(sortEstimateCancellationFactor));

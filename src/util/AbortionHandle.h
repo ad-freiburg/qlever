@@ -10,22 +10,45 @@
 #include <atomic>
 #include <type_traits>
 
+#include "util/Exception.h"
+
+// Inlining is super important for performance here, and clang considers
+// throwIfAborted for too costly to inline, so we override this behaviour
+// to shave of some nanoseconds
+#ifdef __CLANG__
+#define ALWAYS_INLINE [[clang::always_inline]]
+#else
+#ifdef __GNUC__
+#define ALWAYS_INLINE [[gnu::always_inline]]
+#else
+#warning Unknown compiler, inlining might not be guaranteed
+#define ALWAYS_INLINE
+#endif
+#endif
+
 namespace ad_utility {
-
-/// An exception signalling a timeout
-class TimeoutException : public std::exception {
- public:
-  TimeoutException(std::string message) : message_{std::move(message)} {}
-  const char* what() const noexcept override { return message_.c_str(); }
-
- private:
-  std::string message_;
-};
-
 /// Enum to represent possible states of abortion
 enum class AbortionState { NOT_ABORTED, CANCELLED, TIMEOUT };
 
+/// An exception signalling an abortion
+class AbortionException : public std::runtime_error {
+ public:
+  explicit AbortionException(const std::string& message)
+      : std::runtime_error{message} {}
+  AbortionException(AbortionState reason, std::string_view details)
+      : std::runtime_error{absl::StrCat(
+            "Aborted due to ",
+            reason == AbortionState::TIMEOUT ? "timeout" : "cancellation",
+            ". Stage: ", details)} {
+    AD_CONTRACT_CHECK(reason != AbortionState::NOT_ABORTED);
+  }
+};
+
+// Ensure no locks are used
 static_assert(std::atomic<AbortionState>::is_always_lock_free);
+
+/// Helper identity function
+constexpr auto identity(std::string_view value) { return value; }
 
 /// Thread safe wrapper around an atomic variable, providing efficient
 /// checks for abortion across threads.
@@ -36,24 +59,20 @@ class AbortionHandle {
   /// Sets the abortion flag so the next call to throwIfAborted will throw
   void abort(AbortionState reason);
 
-  void throwIfAborted(std::string_view detail) const;
+  ALWAYS_INLINE void throwIfAborted(std::string_view detail) const {
+    throwIfAborted(&identity, detail);
+  }
 
   template <typename Func, typename... ArgTypes>
-  void throwIfAborted(const Func& detailSupplier,
-                      ArgTypes&&... argTypes) const {
+  ALWAYS_INLINE void throwIfAborted(const Func& detailSupplier,
+                                    ArgTypes&&... argTypes) const {
     auto state = abortionState_.load(std::memory_order_relaxed);
-    switch (state) {
-      [[likely]] case AbortionState::NOT_ABORTED:
-        return;
-      case AbortionState::CANCELLED:
-        throw std::runtime_error{absl::StrCat(
-            "Cancelled",
-            std::invoke(detailSupplier, std::forward<ArgTypes>(argTypes)...))};
-      case AbortionState::TIMEOUT:
-        throw TimeoutException{absl::StrCat(
-            "Timeout",
-            std::invoke(detailSupplier, std::forward<ArgTypes>(argTypes)...))};
+    if (state == AbortionState::NOT_ABORTED) [[likely]] {
+      return;
     }
+    throw AbortionException{
+        state,
+        std::invoke(detailSupplier, std::forward<ArgTypes>(argTypes)...)};
   }
 };
 }  // namespace ad_utility

@@ -15,14 +15,4 @@ void AbortionHandle::abort(AbortionState reason) {
   abortionState_.compare_exchange_strong(NOT_ABORTED, reason,
                                          std::memory_order_relaxed);
 }
-
-// _____________________________________________________________________________
-
-constexpr auto identity(std::string_view value) { return value; }
-
-// _____________________________________________________________________________
-
-void AbortionHandle::throwIfAborted(std::string_view detail) const {
-  throwIfAborted(&identity, detail);
-}
 }  // namespace ad_utility
