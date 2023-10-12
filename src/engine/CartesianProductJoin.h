@@ -80,6 +80,11 @@ class CartesianProductJoin : public Operation {
  private:
   //! Compute the result of the query-subtree rooted at this element..
   ResultTable computeResult() override;
+
+  template <size_t StaticGroupSize = 0>
+  void writeResultColumn(std::span<Id> targetColumn,
+                                std::span<const Id> inputColumn, size_t groupSize,
+                                size_t offset);
 };
 
 #endif  // QLEVER_CARTESIANPRODUCTJOIN_H
