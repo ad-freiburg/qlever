@@ -259,8 +259,8 @@ void IndexScan::computeFullScan(IdTable* result,
   size_t i = 0;
   const auto& permutationImpl =
       getExecutionContext()->getIndex().getImpl().getPermutation(permutation);
-  auto triplesView = TriplesView(permutationImpl, ignoredRanges,
-                                 isTripleIgnored, abortionHandle_);
+  auto triplesView = TriplesView(permutationImpl, abortionHandle_,
+                                 ignoredRanges, isTripleIgnored);
   for (const auto& triple : triplesView) {
     if (i >= resultSize) {
       break;

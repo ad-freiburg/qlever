@@ -399,13 +399,12 @@ class IndexImpl {
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       const Permutation::Enum& permutation,
-      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle =
-          nullptr) const;
+      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
 
   // _____________________________________________________________________________
-  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-               std::shared_ptr<ad_utility::AbortionHandle> abortionHandle =
-                   nullptr) const;
+  IdTable scan(
+      Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(const TripleComponent& col0,

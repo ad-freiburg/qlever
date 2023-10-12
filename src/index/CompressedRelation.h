@@ -348,11 +348,10 @@ class CompressedRelationReader {
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
-  IdTable scan(const CompressedRelationMetadata& metadata, Id col1Id,
-               std::span<const CompressedBlockMetadata> blocks,
-               ad_utility::File& file,
-               std::shared_ptr<ad_utility::AbortionHandle> abortionHandle =
-                   nullptr) const;
+  IdTable scan(
+      const CompressedRelationMetadata& metadata, Id col1Id,
+      std::span<const CompressedBlockMetadata> blocks, ad_utility::File& file,
+      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
@@ -462,9 +461,7 @@ class CompressedRelationReader {
   // A helper function to abstract away the timeout check:
   static void checkAbortion(
       const std::shared_ptr<ad_utility::AbortionHandle>& abortionHandle) {
-    if (abortionHandle) {
-      abortionHandle->throwIfAborted("IndexScan"sv);
-    }
+    abortionHandle->throwIfAborted("IndexScan"sv);
   }
 };
 

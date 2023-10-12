@@ -206,6 +206,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata, Id col1Id,
     std::vector<CompressedBlockMetadata> blockMetadata, ad_utility::File& file,
     std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const {
+  AD_CONTRACT_CHECK(abortionHandle);
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
   auto beginBlock = relevantBlocks.begin();
   auto endBlock = relevantBlocks.end();
@@ -226,7 +227,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     AD_CORRECTNESS_CHECK(endBlock - beginBlock <= 1);
   }
 
-  auto getIncompleteBlock = [&](auto it) {
+  auto getIncompleteBlock = [&, abortionHandle](auto it) {
     auto result = readPossiblyIncompleteBlock(metadata, col1Id, file, *it,
                                               std::ref(details));
     result.setColumnSubset(std::array<ColumnIndex, 1>{1});

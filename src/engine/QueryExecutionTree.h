@@ -19,7 +19,6 @@
 #include "../util/stream_generator.h"
 #include "./Operation.h"
 #include "./QueryExecutionContext.h"
-#include "util/AbortionHandle.h"
 
 using std::shared_ptr;
 using std::string;
