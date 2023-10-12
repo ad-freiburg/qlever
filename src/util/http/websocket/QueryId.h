@@ -105,10 +105,10 @@ class QueryRegistry {
   OwningQueryId uniqueId() {
     static thread_local std::mt19937 generator(std::random_device{}());
     std::uniform_int_distribution<uint64_t> distrib{};
-    std::optional<OwningQueryId> result = std::nullopt;
-    while (!result.has_value()) {
+    std::optional<OwningQueryId> result;
+    do {
       result = uniqueIdFromString(std::to_string(distrib(generator)));
-    }
+    } while (!result.has_value());
     return std::move(result.value());
   }
 };
