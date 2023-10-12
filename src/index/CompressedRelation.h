@@ -11,6 +11,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "util/AbortionHandle.h"
 #include "util/BufferedVector.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
@@ -20,7 +21,6 @@
 #include "util/Serializer/SerializeArray.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
-#include "util/Timer.h"
 #include "util/TypeTraits.h"
 
 // Forward declaration of the `IdTable` class.
@@ -227,12 +227,13 @@ class CompressedRelationWriter {
       std::span<const Id> column);
 };
 
+using namespace std::string_view_literals;
+
 /// Manage the reading of relations from disk that have been previously written
 /// using the `CompressedRelationWriter`.
 class CompressedRelationReader {
  public:
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
-  using TimeoutTimer = ad_utility::SharedConcurrentTimeoutTimer;
 
   // The metadata of a single relation together with a subset of its
   // blocks and possibly a `col1Id` for additional filtering. This is used as
@@ -294,16 +295,20 @@ class CompressedRelationReader {
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
-  IdTable scan(const CompressedRelationMetadata& metadata,
-               std::span<const CompressedBlockMetadata> blockMetadata,
-               ad_utility::File& file, const TimeoutTimer& timer) const;
+  IdTable scan(
+      const CompressedRelationMetadata& metadata,
+      std::span<const CompressedBlockMetadata> blockMetadata,
+      ad_utility::File& file,
+      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
-  IdTableGenerator lazyScan(CompressedRelationMetadata metadata,
-                            std::vector<CompressedBlockMetadata> blockMetadata,
-                            ad_utility::File& file, TimeoutTimer timer) const;
+  IdTableGenerator lazyScan(
+      CompressedRelationMetadata metadata,
+      std::vector<CompressedBlockMetadata> blockMetadata,
+      ad_utility::File& file,
+      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
 
   // Get the blocks (an ordered subset of the blocks that are passed in via the
   // `metadataAndBlocks`) where the `col1Id` can theoretically match one of the
@@ -346,14 +351,17 @@ class CompressedRelationReader {
   IdTable scan(const CompressedRelationMetadata& metadata, Id col1Id,
                std::span<const CompressedBlockMetadata> blocks,
                ad_utility::File& file,
-               const TimeoutTimer& timer = nullptr) const;
+               std::shared_ptr<ad_utility::AbortionHandle> abortionHandle =
+                   nullptr) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
-  IdTableGenerator lazyScan(CompressedRelationMetadata metadata, Id col1Id,
-                            std::vector<CompressedBlockMetadata> blockMetadata,
-                            ad_utility::File& file, TimeoutTimer timer) const;
+  IdTableGenerator lazyScan(
+      CompressedRelationMetadata metadata, Id col1Id,
+      std::vector<CompressedBlockMetadata> blockMetadata,
+      ad_utility::File& file,
+      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
   // and Y. This can be done by scanning one or two blocks. Note: The overload
@@ -449,13 +457,13 @@ class CompressedRelationReader {
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ad_utility::File& file,
       std::optional<std::vector<size_t>> columnIndices,
-      TimeoutTimer timer) const;
+      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
 
   // A helper function to abstract away the timeout check:
-  static void checkTimeout(
-      const ad_utility::SharedConcurrentTimeoutTimer& timer) {
-    if (timer) {
-      timer->wlock()->checkTimeoutAndThrow("IndexScan :");
+  static void checkAbortion(
+      const std::shared_ptr<ad_utility::AbortionHandle>& abortionHandle) {
+    if (abortionHandle) {
+      abortionHandle->throwIfAborted("IndexScan"sv);
     }
   }
 };

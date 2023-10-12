@@ -6,12 +6,9 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
-#include <type_traits>
 #include <variant>
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-#include "util/Timer.h"
-#include "util/json.h"
 
 namespace ad_benchmark {
 /*
@@ -20,12 +17,7 @@ before finishing. Note: 1000 milliseconds are 1 second.
 */
 static auto createWaitLambda(const size_t& waitDuration) {
   return [&waitDuration]() {
-    // This will measure, if at least the given amount of time has passed.
-    ad_utility::TimeoutTimer timer(std::chrono::milliseconds{waitDuration},
-                                   ad_utility::Timer::InitialStatus::Started);
-    // Just do nothing, while waiting.
-    while (!timer.hasTimedOut())
-      ;
+    std::this_thread::sleep_for(std::chrono::milliseconds(waitDuration));
   };
 }
 

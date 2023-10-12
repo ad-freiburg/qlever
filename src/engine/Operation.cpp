@@ -48,12 +48,24 @@ vector<string> Operation::collectWarnings() const {
 }
 
 // ________________________________________________________________________
-void Operation::recursivelySetTimeoutTimer(
-    const ad_utility::SharedConcurrentTimeoutTimer& timer) {
-  _timeoutTimer = timer;
+void Operation::recursivelySetAbortionHandle(
+    SharedAbortionHandle abortionHandle) {
   for (auto child : getChildren()) {
     if (child) {
-      child->recursivelySetTimeoutTimer(timer);
+      child->getRootOperation()->recursivelySetAbortionHandle(abortionHandle);
+    }
+  }
+  abortionHandle_ = std::move(abortionHandle);
+}
+
+// ________________________________________________________________________
+
+void Operation::recursivelySetTimeConstraint(
+    std::chrono::steady_clock::time_point deadline) {
+  deadline_ = deadline;
+  for (auto child : getChildren()) {
+    if (child) {
+      child->getRootOperation()->recursivelySetTimeConstraint(deadline);
     }
   }
 }
@@ -109,12 +121,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
               }
             });
     auto computeLambda = [this, &timer] {
-      if (_timeoutTimer->wlock()->hasTimedOut()) {
-        throw ad_utility::TimeoutException(
-            "Timeout in operation with no or insufficient timeout "
-            "functionality, before " +
-            getDescriptor());
-      }
+      checkAbortion([this]() { return "before " + getDescriptor(); });
       ResultTable result = computeResult();
 
       // Compute the datatypes that occur in each column of the result.
@@ -126,12 +133,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       // change in the DEBUG builds.
       AD_EXPENSIVE_CHECK(
           result.checkDefinedness(getExternallyVisibleVariableColumns()));
-      if (_timeoutTimer->wlock()->hasTimedOut()) {
-        throw ad_utility::TimeoutException(
-            "Timeout in " + getDescriptor() +
-            ". This timeout was not caught inside the actual computation, "
-            "which indicates insufficient timeout functionality.");
-      }
+      checkAbortion([this]() { return "in " + getDescriptor(); });
       // Make sure that the results that are written to the cache have the
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as
@@ -204,10 +206,24 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
 }
 
 // ______________________________________________________________________
-void Operation::checkTimeout() const {
-  if (_timeoutTimer->wlock()->hasTimedOut()) {
-    throw ad_utility::TimeoutException("Timeout in " + getDescriptor());
-  }
+
+void Operation::checkAbortion() const {
+  abortionHandle_->throwIfAborted(&Operation::getDescriptor, this);
+}
+
+// ______________________________________________________________________
+
+void Operation::checkAbortion(const auto& detailSupplier) const {
+  abortionHandle_->throwIfAborted(detailSupplier);
+}
+
+// ______________________________________________________________________
+
+std::chrono::seconds Operation::remainingTime() const {
+  auto interval = deadline_ - std::chrono::steady_clock::now();
+  return interval >= std::chrono::seconds::zero()
+             ? std::chrono::duration_cast<std::chrono::seconds>(interval)
+             : std::chrono::seconds::zero();
 }
 
 // _______________________________________________________________________

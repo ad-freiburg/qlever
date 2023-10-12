@@ -29,7 +29,6 @@
 #include <util/Forward.h>
 #include <util/HashMap.h>
 #include <util/MmapVector.h>
-#include <util/Timer.h>
 #include <util/json.h>
 
 #include <array>
@@ -43,6 +42,7 @@
 #include <vector>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "util/AbortionHandle.h"
 #include "util/MemorySize/MemorySize.h"
 
 using ad_utility::BufferedVector;
@@ -399,11 +399,13 @@ class IndexImpl {
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       const Permutation::Enum& permutation,
-      ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle =
+          nullptr) const;
 
   // _____________________________________________________________________________
   IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-               ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+               std::shared_ptr<ad_utility::AbortionHandle> abortionHandle =
+                   nullptr) const;
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(const TripleComponent& col0,

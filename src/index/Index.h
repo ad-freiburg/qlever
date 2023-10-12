@@ -16,6 +16,7 @@
 #include "index/StringSortComparator.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
+#include "util/AbortionHandle.h"
 
 // Forward declarations.
 class IdTable;
@@ -265,11 +266,13 @@ class Index {
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       Permutation::Enum p,
-      ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle =
+          nullptr) const;
 
   // Similar to the overload of `scan` above, but the keys are specified as IDs.
   IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-               ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+               std::shared_ptr<ad_utility::AbortionHandle> abortionHandle =
+                   nullptr) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of
   // the scan result.

@@ -320,7 +320,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       // The scan is a relatively expensive disk operation, so we can afford to
       // check for timeouts before each call.
-      checkTimeout();
+      checkAbortion();
       IdTable jr = scan(currentJoinId);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
@@ -451,8 +451,7 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
   if (a.empty() || b.empty()) {
     return;
   }
-  [[maybe_unused]] auto checkTimeoutAfterNCalls =
-      checkTimeoutAfterNCallsFactory();
+  checkAbortion();
   ad_utility::JoinColumnMapping joinColumnData{
       {{jc1, jc2}}, a.numColumns(), b.numColumns()};
   auto joinColumnL = a.getColumn(jc1);

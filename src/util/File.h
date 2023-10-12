@@ -21,7 +21,6 @@
 #include "./Exception.h"
 #include "./Forward.h"
 #include "Log.h"
-#include "Timer.h"
 
 using std::cerr;
 using std::cout;
@@ -200,22 +199,16 @@ class File {
   //! Read nofBytesToRead bytes from file starting at the given offset.
   //! Returns the number of bytes read or the error returned by pread()
   //! which is < 0
-  ssize_t read(void* targetBuffer, size_t nofBytesToRead, off_t offset,
-               ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) {
+  ssize_t read(void* targetBuffer, size_t nofBytesToRead, off_t offset) {
     assert(_file);
     const int fd = fileno(_file);
     size_t bytesRead = 0;
     auto* to = static_cast<uint8_t*>(targetBuffer);
-    size_t batchSize =
-        timer ? 1024 * 1024 * 64 : std::numeric_limits<size_t>::max();
     while (bytesRead < nofBytesToRead) {
-      size_t toRead = std::min(nofBytesToRead - bytesRead, batchSize);
+      size_t toRead = nofBytesToRead - bytesRead;
 
       const ssize_t ret = pread(fd, to + bytesRead, toRead, offset + bytesRead);
 
-      if (timer) {
-        timer->wlock()->checkTimeoutAndThrow();
-      }
       if (ret < 0) {
         return ret;
       }

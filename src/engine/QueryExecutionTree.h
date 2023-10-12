@@ -19,6 +19,7 @@
 #include "../util/stream_generator.h"
 #include "./Operation.h"
 #include "./QueryExecutionContext.h"
+#include "util/AbortionHandle.h"
 
 using std::shared_ptr;
 using std::string;
@@ -155,11 +156,6 @@ class QueryExecutionTree {
   // recursively get all warnings from descendant operations
   vector<string> collectWarnings() const {
     return _rootOperation->collectWarnings();
-  }
-
-  void recursivelySetTimeoutTimer(
-      ad_utility::SharedConcurrentTimeoutTimer timer) {
-    _rootOperation->recursivelySetTimeoutTimer(std::move(timer));
   }
 
   template <typename F>

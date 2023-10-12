@@ -94,7 +94,7 @@ bool CartesianProductJoin::knownEmptyResult() {
 template <size_t StaticGroupSize = 0>
 static void writeResultColumn(std::span<Id> targetColumn,
                               std::span<const Id> inputColumn, size_t groupSize,
-                              size_t offset, auto& checkForTimeout) {
+                              size_t offset, const auto& checkForAbortion) {
   if (StaticGroupSize != 0) {
     AD_CORRECTNESS_CHECK(StaticGroupSize == groupSize);
   }
@@ -117,7 +117,7 @@ static void writeResultColumn(std::span<Id> targetColumn,
           }
           targetColumn[numRowsWritten] = inputColumn[i];
           ++numRowsWritten;
-          checkForTimeout();
+          checkForAbortion();
         }
       };
       if constexpr (StaticGroupSize == 0) {
@@ -183,7 +183,6 @@ ResultTable CartesianProductJoin::computeResult() {
 
   result.resize(totalSizeIncludingLimit);
 
-  auto checkForTimeout = checkTimeoutAfterNCallsFactory(1'000'000);
   if (totalSizeIncludingLimit != 0) {
     // A `groupSize` of N means that each row of the current result is copied N
     // times adjacent to each other.
@@ -197,7 +196,7 @@ ResultTable CartesianProductJoin::computeResult() {
         decltype(auto) resultCol = result.getColumn(resultColIdx);
         ad_utility::callFixedSize(groupSize, [&]<size_t I>() {
           writeResultColumn<I>(resultCol, inputCol, groupSize, offset,
-                               checkForTimeout);
+                               [this]() { checkAbortion(); });
         });
         ++resultColIdx;
       }

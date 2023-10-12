@@ -18,7 +18,6 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
-#include "util/Timer.h"
 #include "util/http/HttpServer.h"
 #include "util/http/streamable_body.h"
 #include "util/http/websocket/QueryHub.h"
@@ -132,4 +131,8 @@ class Server {
   ///         on destruction.
   ad_utility::websocket::OwningQueryId getQueryId(
       const ad_utility::httpUtils::HttpRequest auto& request);
+
+  static Awaitable<std::function<void()>> cancelAfterDeadline(
+      std::weak_ptr<ad_utility::AbortionHandle> abortionHandle,
+      std::chrono::seconds timeLimit);
 };

@@ -17,14 +17,16 @@
 #include "engine/VariableToColumnMap.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/Variable.h"
+#include "util/AbortionHandle.h"
 #include "util/Exception.h"
 #include "util/Log.h"
-#include "util/Timer.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
 
 class Operation {
+  using SharedAbortionHandle = std::shared_ptr<ad_utility::AbortionHandle>;
+
  public:
   // Default Constructor.
   Operation() : _executionContext(nullptr) {}
@@ -142,11 +144,19 @@ class Operation {
   shared_ptr<const ResultTable> getResult(bool isRoot = false,
                                           bool onlyReadFromCache = false);
 
-  // Use the same timeout timer for all children of an operation (= query plan
-  // rooted at that operation). As soon as one child times out, the whole
-  // operation times out.
-  void recursivelySetTimeoutTimer(
-      const ad_utility::SharedConcurrentTimeoutTimer& timer);
+  // Use the same abortion handle for all children of an operation (= query plan
+  // rooted at that operation). As soon as one child is aborted, the whole
+  // operation is aborted out.
+  void recursivelySetAbortionHandle(SharedAbortionHandle abortionHandle);
+
+  template <typename Rep, typename Period>
+  void recursivelySetTimeConstraint(
+      std::chrono::duration<Rep, Period> duration) {
+    recursivelySetTimeConstraint(std::chrono::steady_clock::now() + duration);
+  }
+
+  void recursivelySetTimeConstraint(
+      std::chrono::steady_clock::time_point deadline);
 
   // True iff this operation directly implement a `LIMIT` clause on its result.
   [[nodiscard]] virtual bool supportsLimit() const { return false; }
@@ -198,34 +208,20 @@ class Operation {
     return _warnings;
   }
 
-  // Check if there is still time left and throw a TimeoutException otherwise.
-  // This will be called at strategic places on code that potentially can take a
-  // (too) long time.
-  void checkTimeout() const;
+  void checkAbortion() const;
+  // Check if the abortion flag has been set and throws an exception if that's
+  // the case. This will be called at strategic places on code that potentially
+  // can take a (too) long time.
+  void checkAbortion(const auto& detailSupplier) const;
 
-  // Handles the timeout of this operation.
-  ad_utility::SharedConcurrentTimeoutTimer _timeoutTimer =
-      std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-          ad_utility::TimeoutTimer::unlimited());
+  std::chrono::seconds remainingTime() const;
 
-  // Returns a lambda with the following behavior: For every call, increase the
-  // internal counter i by countIncrease. If the counter exceeds countMax, check
-  // for timeout and reset the counter to zero. That way, the expensive timeout
-  // check is called only rarely. Note that we sometimes need to "simulate"
-  // several operations at a time, hence the countIncrease.
-  auto checkTimeoutAfterNCallsFactory(
-      size_t numOperationsBetweenTimeoutChecks =
-          NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS) const {
-    return [numOperationsBetweenTimeoutChecks, i = 0ull,
-            this](size_t countIncrease = 1) mutable {
-      i += countIncrease;
-      if (i >= numOperationsBetweenTimeoutChecks) {
-        _timeoutTimer->wlock()->checkTimeoutAndThrow(
-            [this]() { return "Timeout in " + getDescriptor(); });
-        i = 0;
-      }
-    };
-  }
+  /// Pointer to the abortion handle of this operation.
+  SharedAbortionHandle abortionHandle_ =
+      std::make_shared<SharedAbortionHandle::element_type>();
+
+  std::chrono::steady_clock::time_point deadline_ =
+      std::chrono::steady_clock::time_point::max();
 
   // Get the mapping from variables to column indices. This mapping may only be
   // used internally, because the actually visible variables might be different

@@ -503,6 +503,29 @@ ad_utility::websocket::OwningQueryId Server::getQueryId(
   return std::move(queryId.value());
 }
 
+// _____________________________________________________________________________
+
+Awaitable<std::function<void()>> Server::cancelAfterDeadline(
+    std::weak_ptr<ad_utility::AbortionHandle> abortionHandle,
+    std::chrono::seconds timeLimit) {
+  auto executor = net::make_strand(co_await net::this_coro::executor);
+  auto timer = std::make_shared<net::steady_timer>(executor, timeLimit);
+
+  auto cancelAfterTimeout =
+      [](std::weak_ptr<ad_utility::AbortionHandle> abortionHandle,
+         std::shared_ptr<net::steady_timer> timer) -> net::awaitable<void> {
+    co_await timer->async_wait(net::use_awaitable);
+    if (auto pointer = abortionHandle.lock()) {
+      pointer->abort(ad_utility::AbortionState::TIMEOUT);
+    }
+  };
+  net::co_spawn(executor, cancelAfterTimeout(std::move(abortionHandle), timer),
+                net::detached);
+  co_return [executor, timer = std::move(timer)]() mutable {
+    net::post(executor, [timer = std::move(timer)]() { timer->cancel(); });
+  };
+}
+
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
@@ -532,14 +555,11 @@ boost::asio::awaitable<void> Server::processQuery(
   // access to the runtimeInformation in the case of an error.
   std::optional<QueryExecutionTree> queryExecutionTree;
   try {
-    ad_utility::SharedConcurrentTimeoutTimer timeoutTimer = [&]() {
-      auto t = ad_utility::TimeoutTimer::unlimited();
-      if (params.contains("timeout")) {
-        ad_utility::Timer::Seconds timeout{std::stof(params.at("timeout"))};
-        t = ad_utility::TimeoutTimer{timeout, ad_utility::Timer::Started};
-      }
-      return std::make_shared<ad_utility::ConcurrentTimeoutTimer>(std::move(t));
-    }();
+    std::optional<std::chrono::seconds> timeLimit =
+        params.contains("timeout")
+            ? std::optional<std::chrono::seconds>{std::chrono::seconds(
+                  std::stoi(params.at("timeout")))}
+            : std::nullopt;
 
     auto containsParam = [&params](const std::string& param,
                                    const std::string& expected) {
@@ -615,8 +635,7 @@ boost::asio::awaitable<void> Server::processQuery(
     auto messageSender = co_await ad_utility::websocket::MessageSender::create(
         getQueryId(request), *queryHub_);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
-    // then be used to process the query. Start the shared `timeoutTimer` here
-    // to also include the query planning.
+    // then be used to process the query.
     //
     // NOTE: This should come after determining the media type. Otherwise, it
     // might happen that the query planner runs for a while (recall that it many
@@ -630,7 +649,19 @@ boost::asio::awaitable<void> Server::processQuery(
     queryExecutionTree = qp.createExecutionTree(pq);
     auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
-    qet.recursivelySetTimeoutTimer(timeoutTimer);
+    // TODO register abortion handle somewhere
+    auto abortionHandle = std::make_shared<ad_utility::AbortionHandle>();
+    qet.getRootOperation()->recursivelySetAbortionHandle(abortionHandle);
+    std::optional<
+        ad_utility::unique_cleanup::UniqueCleanup<std::function<void()>>>
+        cancelTimeout = std::nullopt;
+    if (timeLimit.has_value()) {
+      qet.getRootOperation()->recursivelySetTimeConstraint(timeLimit.value());
+      cancelTimeout.emplace(
+          ad_utility::unique_cleanup::UniqueCleanup<std::function<void()>>{
+              co_await cancelAfterDeadline(abortionHandle, timeLimit.value()),
+              [](auto&& func) { std::invoke(AD_FWD(func)); }});
+    }
     size_t timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
         qet.getRootOperation()->getRuntimeInfoWholeQuery();
