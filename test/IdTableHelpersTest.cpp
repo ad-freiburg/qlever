@@ -17,6 +17,7 @@
 #include "util/ConstexprUtils.h"
 #include "util/IdTestHelpers.h"
 #include "util/Iterators.h"
+#include "util/RandomTestHelpers.h"
 
 /*
 @brief Calculate all sub-sets of a container of elements. Note: Duplicated
@@ -325,4 +326,46 @@ TEST(IdTableHelpersTest, generateIdTable) {
       return entry == ad_utility::testing::VocabId(row);
     }));
   }
+}
+
+/*
+Quick check, if identical calls, with the same random number generator seed,
+create the same `IdTable`.
+*/
+TEST(IdTableHelpersTest, randomSeed) {
+  // How big should the tables be.
+  constexpr size_t NUM_ROWS = 100;
+  constexpr size_t NUM_COLUMNS = 200;
+
+  std::ranges::for_each(
+      createArrayOfRandomSeeds<5>(), [](const unsigned int seed) {
+        // Simply generate and compare.
+        ASSERT_EQ(
+            createRandomlyFilledIdTable(
+                NUM_ROWS, NUM_COLUMNS,
+                std::vector<std::pair<size_t, std::function<ValueId()>>>{},
+                seed),
+            createRandomlyFilledIdTable(
+                NUM_ROWS, NUM_COLUMNS,
+                std::vector<std::pair<size_t, std::function<ValueId()>>>{},
+                seed));
+        ASSERT_EQ(createRandomlyFilledIdTable(
+                      NUM_ROWS, NUM_COLUMNS, std::vector<size_t>{},
+                      []() { return ad_utility::testing::VocabId(1); }, seed),
+                  createRandomlyFilledIdTable(
+                      NUM_ROWS, NUM_COLUMNS, std::vector<size_t>{},
+                      []() { return ad_utility::testing::VocabId(1); }, seed));
+        ASSERT_EQ(createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS,
+                                              JoinColumnAndBounds{}, seed),
+                  createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS,
+                                              JoinColumnAndBounds{}, seed));
+        ASSERT_EQ(createRandomlyFilledIdTable(
+                      NUM_ROWS, NUM_COLUMNS, std::vector<JoinColumnAndBounds>{},
+                      seed),
+                  createRandomlyFilledIdTable(
+                      NUM_ROWS, NUM_COLUMNS, std::vector<JoinColumnAndBounds>{},
+                      seed));
+        ASSERT_EQ(createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS, seed),
+                  createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS, seed));
+      });
 }

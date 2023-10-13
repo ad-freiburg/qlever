@@ -11,20 +11,12 @@
 #include <ranges>
 #include <type_traits>
 
+#include "../test/util/RandomTestHelpers.h"
 #include "util/Exception.h"
 #include "util/GTestHelpers.h"
 #include "util/Random.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
-
-// Create a array of non-deterministic random seeds for use with random number
-// generators.
-template <size_t NumSeeds>
-static std::array<unsigned int, NumSeeds> createArrayOfRandomSeeds() {
-  std::array<unsigned int, NumSeeds> seeds{};
-  std::ranges::generate(seeds, []() { return std::random_device{}(); });
-  return std::move(seeds);
-}
 
 /*
 @brief Test, if random number generators, that take a seed, produce the same
