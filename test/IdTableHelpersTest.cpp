@@ -217,12 +217,14 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGeneratos) {
   // Giving an empty function.
   ASSERT_ANY_THROW(createRandomlyFilledIdTable(
       10, 10, {{1, createCountUpGenerator()}, {1, {}}}));
-  ASSERT_ANY_THROW(createRandomlyFilledIdTable(10, 10, {1}, {}));
+  ASSERT_ANY_THROW(
+      createRandomlyFilledIdTable(10, 10, {1}, std::function<ValueId()>{}));
 
   // Creating an empty table of size (0,0).
   ASSERT_ANY_THROW(createRandomlyFilledIdTable(
       0, 0, std::vector<std::pair<size_t, std::function<ValueId()>>>{}));
-  ASSERT_ANY_THROW(createRandomlyFilledIdTable(0, 0, {}, {}));
+  ASSERT_ANY_THROW(
+      createRandomlyFilledIdTable(0, 0, {}, std::function<ValueId()>{}));
 
   // Exhaustive test, if the creation of a randomly filled table works,
   // regardless of the amount of join columns and their position.
