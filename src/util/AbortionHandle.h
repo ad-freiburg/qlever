@@ -83,4 +83,7 @@ class AbortionHandle {
 };
 }  // namespace ad_utility
 
+// Make sure this macro doesn't leak from here
+#undef ALWAYS_INLINE
+
 #endif  // QLEVER_ABORTIONHANDLE_H
