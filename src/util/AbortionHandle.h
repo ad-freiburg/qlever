@@ -59,13 +59,19 @@ class AbortionHandle {
   /// Sets the abortion flag so the next call to throwIfAborted will throw
   void abort(AbortionState reason);
 
+  /// Overload for static exception messages, make sure the string is a constant
+  /// expression, or computed in advance. If that's not the case do not use
+  /// this overload and instead use the "original" variant.
   ALWAYS_INLINE void throwIfAborted(std::string_view detail) const {
     throwIfAborted(&identity, detail);
   }
 
-  template <typename Func, typename... ArgTypes>
-  ALWAYS_INLINE void throwIfAborted(const Func& detailSupplier,
-                                    ArgTypes&&... argTypes) const {
+  /// Throw an `AbortionException` when this handle has been aborted. Do
+  /// nothing otherwise
+  template <typename... ArgTypes>
+  ALWAYS_INLINE void throwIfAborted(
+      const std::invocable<ArgTypes...> auto& detailSupplier,
+      ArgTypes&&... argTypes) const {
     auto state = abortionState_.load(std::memory_order_relaxed);
     if (state == AbortionState::NOT_ABORTED) [[likely]] {
       return;

@@ -121,7 +121,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
               }
             });
     auto computeLambda = [this, &timer] {
-      checkAbortion([this]() { return "before " + getDescriptor(); });
+      checkAbortion([this]() { return "Before " + getDescriptor(); });
       ResultTable result = computeResult();
 
       // Compute the datatypes that occur in each column of the result.
@@ -133,7 +133,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       // change in the DEBUG builds.
       AD_EXPENSIVE_CHECK(
           result.checkDefinedness(getExternallyVisibleVariableColumns()));
-      checkAbortion([this]() { return "in " + getDescriptor(); });
+      checkAbortion([this]() { return "In " + getDescriptor(); });
       // Make sure that the results that are written to the cache have the
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as
