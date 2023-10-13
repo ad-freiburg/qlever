@@ -14,5 +14,5 @@ template <size_t NumSeeds>
 static std::array<unsigned int, NumSeeds> createArrayOfRandomSeeds() {
   std::array<unsigned int, NumSeeds> seeds{};
   std::ranges::generate(seeds, []() { return std::random_device{}(); });
-  return std::move(seeds);
+  return seeds;
 }
