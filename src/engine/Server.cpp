@@ -658,9 +658,8 @@ boost::asio::awaitable<void> Server::processQuery(
     if (timeLimit.has_value()) {
       qet.getRootOperation()->recursivelySetTimeConstraint(timeLimit.value());
       cancelTimeout.emplace(
-          ad_utility::unique_cleanup::UniqueCleanup<std::function<void()>>{
-              co_await cancelAfterDeadline(abortionHandle, timeLimit.value()),
-              [](auto&& func) { std::invoke(AD_FWD(func)); }});
+          co_await cancelAfterDeadline(abortionHandle, timeLimit.value()),
+          [](auto&& func) { std::invoke(AD_FWD(func)); });
     }
     size_t timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
