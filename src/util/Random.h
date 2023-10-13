@@ -26,7 +26,7 @@ template <typename Int>
 requires(std::is_integral_v<Int> && sizeof(Int) <= sizeof(uint64_t))
 class FastRandomIntGenerator {
  public:
-  FastRandomIntGenerator(unsigned int seed = std::random_device{}()) {
+  explicit FastRandomIntGenerator(unsigned int seed = std::random_device{}()) {
     // Randomly initialize the shuffleTable
     std::default_random_engine randomEngine{std::move(seed)};
     std::uniform_int_distribution<uint64_t> distribution;
