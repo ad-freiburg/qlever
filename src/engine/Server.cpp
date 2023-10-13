@@ -514,7 +514,8 @@ Awaitable<std::function<void()>> Server::cancelAfterDeadline(
   auto cancelAfterTimeout =
       [](std::weak_ptr<ad_utility::AbortionHandle> abortionHandle,
          std::shared_ptr<net::steady_timer> timer) -> net::awaitable<void> {
-    co_await timer->async_wait(net::use_awaitable);
+    // Ignore cancellation exceptions, they are normal
+    co_await timer->async_wait(net::as_tuple(net::use_awaitable));
     if (auto pointer = abortionHandle.lock()) {
       pointer->abort(ad_utility::AbortionState::TIMEOUT);
     }
