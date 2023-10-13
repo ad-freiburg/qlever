@@ -6,7 +6,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
-#include <variant>
+#include <thread>
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 
@@ -15,8 +15,8 @@ namespace ad_benchmark {
 @brief Creates a lambda, that waits the given amount of milliseconds,
 before finishing. Note: 1000 milliseconds are 1 second.
 */
-static auto createWaitLambda(const size_t& waitDuration) {
-  return [&waitDuration]() {
+static auto createWaitLambda(size_t waitDuration) {
+  return [waitDuration]() {
     std::this_thread::sleep_for(std::chrono::milliseconds(waitDuration));
   };
 }
