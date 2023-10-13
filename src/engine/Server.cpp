@@ -651,7 +651,6 @@ boost::asio::awaitable<void> Server::processQuery(
     qet.isRoot() = true;  // allow pinning of the final result
     // TODO<RobinTF> register abortion handle somewhere
     auto abortionHandle = std::make_shared<ad_utility::AbortionHandle>();
-    qet.getRootOperation()->recursivelySetAbortionHandle(abortionHandle);
     std::optional<
         ad_utility::unique_cleanup::UniqueCleanup<std::function<void()>>>
         cancelTimeout = std::nullopt;
@@ -661,6 +660,8 @@ boost::asio::awaitable<void> Server::processQuery(
           co_await cancelAfterDeadline(abortionHandle, timeLimit.value()),
           [](auto&& func) { std::invoke(AD_FWD(func)); });
     }
+    qet.getRootOperation()->recursivelySetAbortionHandle(
+        std::move(abortionHandle));
     size_t timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
         qet.getRootOperation()->getRuntimeInfoWholeQuery();
