@@ -445,8 +445,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
                              source_location l = source_location::current()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
-  ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+  ad_utility::AllocatorWithLimit<Id> alloc{makeAllocator()};
   VariableToColumnMap map;
   LocalVocab localVocab;
   IdTable table{alloc};
@@ -604,8 +603,8 @@ TEST(RelationalExpression, StringVectorAndStringVector) {
   // is actually supported.
 }
 
-// Assert that the expression `leftValue Comp rightValue`, when evaluated on the
-// `TestContext` (see above), yields the `expected` result.
+// Assert that the expression `leftValue Comparator rightValue`, when evaluated
+// on the `TestContext` (see above), yields the `expected` result.
 
 template <Comparison Comp>
 void testWithExplicitIdResult(auto leftValue, auto rightValue,
@@ -718,9 +717,10 @@ TEST(RelationalExpression, VariableAndVariable) {
 
 // `rightValue` must be a constant. Sort the `IdTable` of the `TestContext`
 // `ctx` by the variable `leftValue` and then check that the expression
-// `leftValue Comp rightValue`, when evaluated on this sortest `IdTable` yields
-// the `expected` result. The type of `expected`, `SetOfIntervals` indicates
-// that the expression was evaluated using binary search on the sorted table.
+// `leftValue Comparator rightValue`, when evaluated on this sortest `IdTable`
+// yields the `expected` result. The type of `expected`, `SetOfIntervals`
+// indicates that the expression was evaluated using binary search on the sorted
+// table.
 template <Comparison Comp>
 void testSortedVariableAndConstant(
     Variable leftValue, auto rightValue, ad_utility::SetOfIntervals expected,

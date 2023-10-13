@@ -9,9 +9,10 @@
 #include <string>
 #include <thread>
 
-#include "../../src/util/Cache.h"
-#include "../../src/util/ConcurrentCache.h"
-#include "../../src/util/Timer.h"
+#include "util/Cache.h"
+#include "util/ConcurrentCache.h"
+#include "util/DefaultValueSizeGetter.h"
+#include "util/Timer.h"
 
 using namespace std::literals;
 
@@ -76,7 +77,8 @@ auto wait_and_throw_function(size_t milliseconds,
 }
 
 using SimpleConcurrentLruCache =
-    ad_utility::ConcurrentCache<ad_utility::LRUCache<int, std::string>>;
+    ad_utility::ConcurrentCache<ad_utility::LRUCache<
+        int, std::string, ad_utility::StringSizeGetter<std::string>>>;
 
 TEST(ConcurrentCache, sequentialComputation) {
   SimpleConcurrentLruCache a{3ul};

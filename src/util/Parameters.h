@@ -2,19 +2,21 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#ifndef QLEVER_PARAMETERS_H
-#define QLEVER_PARAMETERS_H
+#pragma once
 
 #include <atomic>
+#include <concepts>
 #include <optional>
 #include <tuple>
+#include <type_traits>
 
-#include "./ConstexprMap.h"
-#include "./ConstexprSmallString.h"
-#include "./HashMap.h"
-#include "./HashSet.h"
-#include "./TupleForEach.h"
-#include "./TypeTraits.h"
+#include "util/ConstexprMap.h"
+#include "util/ConstexprSmallString.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
+#include "util/MemorySize/MemorySize.h"
+#include "util/TupleForEach.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
 using ParameterName = ad_utility::ConstexprSmallString<100>;
@@ -31,6 +33,21 @@ struct ParameterBase {
   virtual ~ParameterBase() = default;
 };
 
+// Concepts for the template types of `Parameter`.
+template <typename FunctionType, typename ToType>
+concept ParameterFromStringType =
+    std::default_initializable<FunctionType> &&
+    std::invocable<FunctionType, const std::string&> &&
+    ad_utility::isSimilar<
+        ToType, std::invoke_result_t<FunctionType, const std::string&>>;
+
+template <typename FunctionType, typename FromType>
+concept ParameterToStringType =
+    std::default_initializable<FunctionType> &&
+    std::invocable<FunctionType, FromType> &&
+    ad_utility::isSimilar<std::string,
+                          std::invoke_result_t<FunctionType, FromType>>;
+
 /// Abstraction for a parameter that connects a (compile time) `Name` to a
 /// runtime value.
 /// \tparam Type The type of the parameter value
@@ -40,8 +57,8 @@ struct ParameterBase {
 ///         a std::string representation.
 /// \tparam Name The Name of the parameter (there are typically a lot of
 ///         parameters with the same `Type`).
-template <typename Type, typename FromString, typename ToString,
-          ParameterName Name>
+template <std::semiregular Type, ParameterFromStringType<Type> FromString,
+          ParameterToStringType<Type> ToString, ParameterName Name>
 struct Parameter : public ParameterBase {
   constexpr static ParameterName name = Name;
 
@@ -99,6 +116,22 @@ struct Parameter : public ParameterBase {
   }
 };
 
+// Concept that checks whether a type is an instantiation of the `Parameter`
+// template.
+namespace detail::parameterConceptImpl {
+template <typename T>
+struct ParameterConceptImpl : std::false_type {};
+
+template <std::semiregular Type, ParameterFromStringType<Type> FromString,
+          ParameterToStringType<Type> ToString, ParameterName Name>
+struct ParameterConceptImpl<Parameter<Type, FromString, ToString, Name>>
+    : std::true_type {};
+}  // namespace detail::parameterConceptImpl
+
+template <typename T>
+concept IsParameter =
+    detail::parameterConceptImpl::ParameterConceptImpl<T>::value;
+
 namespace detail::parameterShortNames {
 
 // TODO<joka921> Replace these by versions that actually parse the whole
@@ -117,6 +150,16 @@ struct toString {
   std::string operator()(const auto& s) const { return std::to_string(s); }
 };
 
+// To/from string for `MemorySize`.
+struct MemorySizeToString {
+  std::string operator()(const MemorySize& m) const { return m.asString(); }
+};
+struct MemorySizeFromString {
+  MemorySize operator()(const std::string& str) const {
+    return MemorySize::parse(str);
+  }
+};
+
 /// Partial template specialization for Parameters with common types (numeric
 /// types and strings)
 template <ParameterName Name>
@@ -131,6 +174,9 @@ using SizeT = Parameter<size_t, szt, toString, Name>;
 template <ParameterName Name>
 using String = Parameter<std::string, std::identity, std::identity, Name>;
 
+template <ParameterName Name>
+using MemorySizeParameter =
+    Parameter<MemorySize, MemorySizeFromString, MemorySizeToString, Name>;
 }  // namespace detail::parameterShortNames
 
 /// A container class that stores several `Parameters`. The reading (via
@@ -141,7 +187,7 @@ using String = Parameter<std::string, std::identity, std::identity, Name>;
 /// "increase the cache size by 20%") nor an atomic update of multiple
 /// parameters at the same time. If needed, this functionality could be added
 /// to the current implementation.
-template <typename... ParameterTypes>
+template <IsParameter... ParameterTypes>
 class Parameters {
  private:
   using Tuple = std::tuple<ad_utility::Synchronized<ParameterTypes>...>;
@@ -260,5 +306,3 @@ class Parameters {
   }
 };
 }  // namespace ad_utility
-
-#endif  // QLEVER_PARAMETERS_H

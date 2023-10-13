@@ -26,3 +26,5 @@ endfunction()
 
 # Add benchmarks after here.
 addAndLinkBenchmark(BenchmarkExamples)
+
+addAndLinkBenchmark(IdTableCompressedWriterBenchmark engine testUtil gtest gmock)

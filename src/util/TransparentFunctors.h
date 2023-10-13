@@ -107,6 +107,17 @@ template <typename T>
 static constexpr detail::GetIfImpl<T> getIf;
 
 static constexpr detail::ToBoolImpl toBool;
+
+/// A functor that takes an arbitrary number of arguments by reference and does
+/// nothing.
+struct Noop {
+  void operator()(const auto&...) const {
+    // This function deliberately does nothing (static analysis expects a
+    // comment here).
+  }
+};
+[[maybe_unused]] static constexpr Noop noop{};
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_TRANSPARENTFUNCTORS_H

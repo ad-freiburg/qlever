@@ -99,10 +99,9 @@ struct alignas(256) ItemMapManager {
     if (!_map.count(key._iriOrLiteral)) {
       uint64_t res = _map.size() + _minId;
       _map[key._iriOrLiteral] = {
-          res,
-          m_comp->extractAndTransformComparable(
-              key._iriOrLiteral, TripleComponentComparator::Level::IDENTICAL,
-              key._isExternal)};
+          res, m_comp->extractAndTransformComparable(
+                   key._iriOrLiteral, TripleComponentComparator::Level::TOTAL,
+                   key._isExternal)};
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
       return Id::makeFromVocabIndex(
