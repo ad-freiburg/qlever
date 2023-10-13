@@ -83,8 +83,8 @@ class CartesianProductJoin : public Operation {
 
   template <size_t StaticGroupSize = 0>
   void writeResultColumn(std::span<Id> targetColumn,
-                                std::span<const Id> inputColumn, size_t groupSize,
-                                size_t offset);
+                         std::span<const Id> inputColumn, size_t groupSize,
+                         size_t offset);
 };
 
 #endif  // QLEVER_CARTESIANPRODUCTJOIN_H
