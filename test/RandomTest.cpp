@@ -87,7 +87,7 @@ struct NumericalRange {
   const T maximum_;
 
   NumericalRange(const T minimum, const T maximum)
-      : minimum_{std::move(minimum)}, maximum_{std::move(maximum)} {
+      : minimum_{minimum}, maximum_{maximum} {
     AD_CORRECTNESS_CHECK(minimum <= maximum);
   }
 };
