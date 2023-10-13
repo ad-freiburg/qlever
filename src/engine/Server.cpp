@@ -649,7 +649,7 @@ boost::asio::awaitable<void> Server::processQuery(
     queryExecutionTree = qp.createExecutionTree(pq);
     auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
-    // TODO register abortion handle somewhere
+    // TODO<RobinTF> register abortion handle somewhere
     auto abortionHandle = std::make_shared<ad_utility::AbortionHandle>();
     qet.getRootOperation()->recursivelySetAbortionHandle(abortionHandle);
     std::optional<
