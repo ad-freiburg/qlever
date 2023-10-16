@@ -362,6 +362,19 @@ class ConcatExpression : public detail::VariadicExpression {
   }
 };
 
+// ENCODE_FOR_URI
+[[maybe_unused]] auto encodeForUriImpl =
+    [](std::optional<std::string> input) -> IdOrString {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    // TODO encode the string in percent encoding
+    return input.value();
+  }
+};
+using EncodeForUriExpression = StringExpressionImpl<1, decltype(encodeForUriImpl)>;
+
+
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
 using std::make_unique;
@@ -410,4 +423,9 @@ Expr makeContainsExpression(Expr child1, Expr child2) {
 Expr makeConcatExpression(std::vector<Expr> children) {
   return std::make_unique<ConcatExpression>(std::move(children));
 }
+
+Expr makeEncodeForUriExpression(Expr child) {
+  return make<EncodeForUriExpression>(child);
+}
+
 }  // namespace sparqlExpression
