@@ -4,6 +4,7 @@
 
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
+#include <boost/url.hpp>
 
 namespace sparqlExpression {
 namespace detail::string_expressions {
@@ -368,8 +369,10 @@ class ConcatExpression : public detail::VariadicExpression {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    // TODO encode the string in percent encoding
-    return input.value();
+
+    //TODO:: issue: "hi"@en -> "%22hi%22%40en", expected "hi"
+    return boost::urls::encode(input.value().data(),
+                               boost::urls::unreserved_chars);
   }
 };
 using EncodeForUriExpression = StringExpressionImpl<1, decltype(encodeForUriImpl)>;
