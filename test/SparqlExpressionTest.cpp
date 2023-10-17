@@ -858,3 +858,20 @@ TEST(SparqlExpression, literalExpression) {
               iriExpr.evaluate(&ctx.context));
   }
 }
+
+auto checkEncodeForUri =
+    std::bind_front(testUnaryExpression, &makeEncodeForUriExpression);
+
+TEST(SparqlExpression, encodeForUri) {
+  checkEncodeForUri(IdOrStrings{"Los Angeles"}, IdOrStrings{"Los%20Angeles"});
+  checkEncodeForUri(IdOrStrings{"\"Los Angeles\"@en"},
+                    IdOrStrings{"Los%20Angeles"});
+  checkEncodeForUri(IdOrStrings{"\"Los Angeles\"^^xsd:string"},
+                    IdOrStrings{"Los%20Angeles"});
+  checkEncodeForUri(IdOrStrings{"\"Los \\\"Angeles\"^^xsd:string"},
+                    IdOrStrings{"Los%20%5C%22Angeles"});
+  checkEncodeForUri(IdOrStrings{"\"Los Angeles"},
+                    IdOrStrings{"%22Los%20Angeles"});
+  checkEncodeForUri(IdOrStrings{"L\"os \"Angeles"},
+                    IdOrStrings{"L%22os%20%22Angeles"});
+}
