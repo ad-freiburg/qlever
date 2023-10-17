@@ -218,24 +218,20 @@ size_t TransitivePath::getCostEstimate() {
   return costEstimate;
 }
 
-// This instantiantion is needed by the unit tests
-// template void TransitivePath::computeTransitivePath<2>(
-//     IdTable* res, const IdTable& sub);
-
 // _____________________________________________________________________________
-template <size_t RES_WIDTH, size_t SUB_WIDTH, size_t OTHER_WIDTH>
+template <size_t RES_WIDTH, size_t SUB_WIDTH, size_t SIDE_WIDTH>
 void TransitivePath::computeTransitivePathBound(
     IdTable* dynRes, const IdTable& dynSub, const TransitivePathSide& startSide,
-    const TransitivePathSide& targetSide, const IdTable& otherTable) const {
+    const TransitivePathSide& targetSide, const IdTable& startSideTable) const {
   IdTableStatic<RES_WIDTH> res = std::move(*dynRes).toStatic<RES_WIDTH>();
 
-  auto [edges, nodes] = setupMapAndNodes<SUB_WIDTH, OTHER_WIDTH>(
-      dynSub, startSide, targetSide, otherTable);
+  auto [edges, nodes] = setupMapAndNodes<SUB_WIDTH, SIDE_WIDTH>(
+      dynSub, startSide, targetSide, startSideTable);
 
   Map hull = transitiveHull(edges, nodes);
 
-  TransitivePath::fillTableWithHull<RES_WIDTH, OTHER_WIDTH>(
-      res, hull, nodes, startSide.outputCol, targetSide.outputCol, otherTable,
+  TransitivePath::fillTableWithHull<RES_WIDTH, SIDE_WIDTH>(
+      res, hull, nodes, startSide.outputCol, targetSide.outputCol, startSideTable,
       startSide.treeAndCol.value().second);
 
   *dynRes = std::move(res).toDynamic();
@@ -376,7 +372,7 @@ bool TransitivePath::rightIsBound() const { return _rhs.isBound(); }
 
 // _____________________________________________________________________________
 TransitivePath::Map TransitivePath::transitiveHull(
-    const Map& edges, const std::vector<Id>& nodes) const {
+    const Map& edges, const std::vector<Id>& startNodes) const {
   using MapIt = TransitivePath::Map::const_iterator;
   // For every node do a dfs on the graph
   Map hull;
@@ -392,20 +388,20 @@ TransitivePath::Map TransitivePath::transitiveHull(
   // be modified after this point.
   std::vector<std::shared_ptr<const ad_utility::HashSet<Id>>> edgeCache;
 
-  for (size_t i = 0; i < nodes.size(); i++) {
-    if (hull.contains(nodes[i])) {
+  for (size_t i = 0; i < startNodes.size(); i++) {
+    if (hull.contains(startNodes[i])) {
       // We have already computed the hull for this node
       continue;
     }
 
-    MapIt rootEdges = edges.find(nodes[i]);
+    MapIt rootEdges = edges.find(startNodes[i]);
     if (rootEdges != edges.end()) {
       positions.push_back(rootEdges->second->begin());
       edgeCache.push_back(rootEdges->second);
     }
     if (_minDist == 0) {
-      hull.try_emplace(nodes[i], std::make_shared<ad_utility::HashSet<Id>>());
-      hull[nodes[i]]->insert(nodes[i]);
+      hull.try_emplace(startNodes[i], std::make_shared<ad_utility::HashSet<Id>>());
+      hull[startNodes[i]]->insert(startNodes[i]);
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -432,13 +428,13 @@ TransitivePath::Map TransitivePath::transitiveHull(
         if (childDepth >= _minDist) {
           marks.insert(child);
           if (_rhs.isVariable() || child == std::get<Id>(_rhs.value)) {
-            hull.try_emplace(nodes[i],
+            hull.try_emplace(startNodes[i],
                              std::make_shared<ad_utility::HashSet<Id>>());
-            hull[nodes[i]]->insert(child);
+            hull[startNodes[i]]->insert(child);
           } else if (_lhs.isVariable() || child == std::get<Id>(_lhs.value)) {
             hull.try_emplace(child,
                              std::make_shared<ad_utility::HashSet<Id>>());
-            hull[child]->insert(nodes[i]);
+            hull[child]->insert(startNodes[i]);
           }
         }
         // Add the child to the stack
@@ -450,7 +446,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
       }
     }
 
-    if (i + 1 < nodes.size()) {
+    if (i + 1 < startNodes.size()) {
       // reset everything for the next iteration
       marks.clear();
     }
@@ -459,15 +455,15 @@ TransitivePath::Map TransitivePath::transitiveHull(
 }
 
 // _____________________________________________________________________________
-template <size_t WIDTH, size_t TEMP_WIDTH>
+template <size_t WIDTH, size_t START_WIDTH>
 void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
                                        std::vector<Id>& nodes,
                                        size_t startSideCol,
                                        size_t targetSideCol,
-                                       const IdTable& tableTemplate,
+                                       const IdTable& startSideTable,
                                        size_t skipCol) {
-  IdTableView<TEMP_WIDTH> templateView =
-      tableTemplate.asStaticView<TEMP_WIDTH>();
+  IdTableView<START_WIDTH> startView =
+      startSideTable.asStaticView<START_WIDTH>();
 
   size_t rowIndex = 0;
   for (size_t i = 0; i < nodes.size(); i++) {
@@ -481,7 +477,7 @@ void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
       table(rowIndex, startSideCol) = node;
       table(rowIndex, targetSideCol) = otherNode;
 
-      TransitivePath::copyColumns<TEMP_WIDTH, WIDTH>(templateView, table, i,
+      TransitivePath::copyColumns<START_WIDTH, WIDTH>(startView, table, i,
                                                      rowIndex, skipCol);
 
       rowIndex++;

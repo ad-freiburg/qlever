@@ -113,28 +113,51 @@ class TransitivePath : public Operation {
 
   /**
    * @brief Compute the transitive hull with a bound side.
+   * This function is called when the startSide is bound and
+   * it is a variable. The other IdTable contains the result
+   * of the start side and will be used to get the start nodes.
    *
-   * @tparam RES_WIDTH
-   * @tparam SUB_WIDTH
-   * @tparam OTHER_WIDTH
-   * @param res
-   * @param sub
-   * @param startSide
-   * @param targetSide
-   * @param other
+   * @tparam RES_WIDTH Number of columns of the result table
+   * @tparam SUB_WIDTH Number of columns of the sub table
+   * @tparam SIDE_WIDTH Number of columns of the 
+   * @param res The result table which will be filled in-place
+   * @param sub The IdTable for the sub result
+   * @param startSide The start side for the transitive hull
+   * @param targetSide The target side for the transitive hull
+   * @param startSideTable The IdTable of the startSide
    */
-  template <size_t RES_WIDTH, size_t SUB_WIDTH, size_t OTHER_WIDTH>
+  template <size_t RES_WIDTH, size_t SUB_WIDTH, size_t SIDE_WIDTH>
   void computeTransitivePathBound(IdTable* res, const IdTable& sub,
                                   const TransitivePathSide& startSide,
                                   const TransitivePathSide& targetSide,
-                                  const IdTable& other) const;
+                                  const IdTable& startSideTable) const;
 
+  /**
+   * @brief Compute the transitive hull.
+   * This function is called when no side is bound (or an id).
+   * 
+   * @tparam RES_WIDTH Number of columns of the result table
+   * @tparam SUB_WIDTH Number of columns of the sub table
+   * @param res The result table which will be filled in-place
+   * @param sub The IdTable for the sub result
+   * @param startSide The start side for the transitive hull
+   * @param targetSide The target side for the transitive hull
+   */
   template <size_t RES_WIDTH, size_t SUB_WIDTH>
   void computeTransitivePath(IdTable* res, const IdTable& sub,
                              const TransitivePathSide& startSide,
                              const TransitivePathSide& targetSide) const;
 
  private:
+  /**
+   * @brief Compute the result for this TransitivePath operation
+   * This function chooses the start and target side for the transitive
+   * hull computation. This choice of the start side has a large impact
+   * on the time it takes to compute the hull. The set of nodes on the
+   * start side should be as small as possible.
+   * 
+   * @return ResultTable The result of the TransitivePath operation
+   */
   virtual ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
@@ -149,42 +172,44 @@ class TransitivePath : public Operation {
    * @brief Compute the transitive hull starting at the given nodes,
    * using the given Map.
    *
-   * @param edges An adjacency matrix, mapping Ids (nodes) to their connected
+   * @param edges Adjacency lists, mapping Ids (nodes) to their connected
    * Ids.
    * @param nodes A list of Ids. These Ids are used as starting points for the
    * transitive hull. Thus, this parameter guides the performance of this
    * algorithm.
    * @return Map Maps each Id to its connected Ids in the transitive hull
    */
-  Map transitiveHull(const Map& edges, const std::vector<Id>& nodes) const;
+  Map transitiveHull(const Map& edges, const std::vector<Id>& startNodes) const;
 
   /**
    * @brief Fill the given table with the transitive hull and use the
-   * tableTemplate to fill in the rest of the columns.
+   * startSideTable to fill in the rest of the columns.
+   * This function is called if the start side is bound and a variable.
    *
    * @tparam WIDTH The number of columns of the result table.
-   * @tparam TEMP_WIDTH The number of columns of the template table.
+   * @tparam START_WIDTH The number of columns of the start table.
    * @param table The result table which will be filled.
    * @param hull The transitive hull.
    * @param nodes The start nodes of the transitive hull. These need to be in
-   * the same order and amount as the starting side nodes in the tableTemplate.
+   * the same order and amount as the starting side nodes in the startTable.
    * @param startSideCol The column of the result table for the startSide of the
    * hull
    * @param targetSideCol The column of the result table for the targetSide of
    * the hull
-   * @param tableTemplate An IdTable that holds other results. The other results
+   * @param startSideTable An IdTable that holds other results. The other results
    * will be transferred to the new result table.
    * @param skipCol This column contains the Ids of the start side in the
-   * templateTable and will be skipped.
+   * startSideTable and will be skipped.
    */
-  template <size_t WIDTH, size_t TEMP_WIDTH>
+  template <size_t WIDTH, size_t START_WIDTH>
   static void fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
                                 std::vector<Id>& nodes, size_t startSideCol,
                                 size_t targetSideCol,
-                                const IdTable& tableTemplate, size_t skipCol);
+                                const IdTable& startSideTable, size_t skipCol);
 
   /**
    * @brief Fill the given table with the transitive hull.
+   * This function is called if the sides are unbound or ids.
    *
    * @tparam WIDTH The number of columns of the result table.
    * @param table The result table which will be filled.
