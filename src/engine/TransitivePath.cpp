@@ -257,9 +257,7 @@ void TransitivePath::computeTransitivePath(
 
 // _____________________________________________________________________________
 ResultTable TransitivePath::computeResult() {
-  LOG(DEBUG) << "TransitivePath subresult computation..." << std::endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
-  LOG(DEBUG) << "TransitivePath subresult computation done." << std::endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};
 
@@ -267,37 +265,32 @@ ResultTable TransitivePath::computeResult() {
 
   size_t subWidth = subRes->idTable().numColumns();
   if (_lhs.treeAndCol.has_value()) {
-    LOG(DEBUG) << "TransitivePath left result computation..." << std::endl;
     shared_ptr<const ResultTable> leftRes =
         _lhs.treeAndCol.value().first->getResult();
-    LOG(DEBUG) << "TransitivePath left result computation done." << std::endl;
     size_t leftWidth = leftRes->idTable().numColumns();
 
-    LOG(DEBUG) << "TransitivePath result computation..." << std::endl;
     CALL_FIXED_SIZE((std::array{_resultWidth, subWidth, leftWidth}),
                     &TransitivePath::computeTransitivePathBound, this, &idTable,
                     subRes->idTable(), _lhs, _rhs, leftRes->idTable());
 
   } else if (_rhs.treeAndCol.has_value()) {
-    LOG(DEBUG) << "TransitivePath right result computation..." << std::endl;
     shared_ptr<const ResultTable> rightRes =
         _rhs.treeAndCol.value().first->getResult();
-    LOG(DEBUG) << "TransitivePath right result computation done." << std::endl;
     size_t rightWidth = rightRes->idTable().numColumns();
 
-    LOG(DEBUG) << "TransitivePath result computation..." << std::endl;
     CALL_FIXED_SIZE((std::array{_resultWidth, subWidth, rightWidth}),
                     &TransitivePath::computeTransitivePathBound, this, &idTable,
                     subRes->idTable(), _rhs, _lhs, rightRes->idTable());
-
+  } else if (_rhs.isBound() && !_rhs.isVariable()) {
+    CALL_FIXED_SIZE((std::array{_resultWidth, subWidth}),
+                    &TransitivePath::computeTransitivePath, this, &idTable,
+                    subRes->idTable(), _rhs, _lhs);
   } else {
-    LOG(DEBUG) << "TransitivePath result computation..." << std::endl;
     CALL_FIXED_SIZE((std::array{_resultWidth, subWidth}),
                     &TransitivePath::computeTransitivePath, this, &idTable,
                     subRes->idTable(), _lhs, _rhs);
   }
 
-  LOG(DEBUG) << "TransitivePath result computation done." << std::endl;
   // NOTE: The only place, where the input to a transitive path operation is not
   // an index scan (which has an empty local vocabulary by default) is the
   // `LocalVocabTest`. But it doesn't harm to propagate the local vocab here
