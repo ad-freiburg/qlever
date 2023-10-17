@@ -43,25 +43,20 @@ std::string TransitivePath::asStringImpl(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << "TransitivePath leftCol " << _lhs.subCol << " rightCol " << _rhs.subCol;
-
-  if (std::holds_alternative<Id>(_lhs.value)) {
-    os << " leftValue " << std::get<Id>(_lhs.value);
-  }
-  if (std::holds_alternative<Id>(_rhs.value)) {
-    os << " rightValue " << std::get<Id>(_rhs.value);
-  }
   os << " minDist " << _minDist << " maxDist " << _maxDist << "\n";
-  os << _subtree->asString(indent) << "\n";
-  if (_lhs.treeAndCol.has_value()) {
-    os << "Left subtree:\n";
-    os << _lhs.treeAndCol.value().first->asString(indent) << "\n";
+
+  for (size_t i = 0; i < indent; ++i) {
+    os << " ";
   }
-  os << _subtree->asString(indent) << "\n";
-  if (_rhs.treeAndCol.has_value()) {
-    os << "Right subtree:\n";
-    os << _rhs.treeAndCol.value().first->asString(indent) << "\n";
+  os << "Left side:\n";
+  os << _lhs.asString(indent + 1);
+
+  for (size_t i = 0; i < indent; ++i) {
+    os << " ";
   }
+  os << "Right side:\n";
+  os << _rhs.asString(indent + 1);
+
   return std::move(os).str();
 }
 

@@ -28,6 +28,26 @@ struct TransitivePathSide {
   bool isBound() const {
     return treeAndCol.has_value() || std::holds_alternative<Id>(value);
   };
+
+  std::string asString(size_t indent) const {
+    std::ostringstream os;
+    for (size_t i = 0; i < indent; i++) {
+      os << " ";
+    }
+    if (isVariable()) {
+      os << "Variable name: " << std::get<Variable>(value)._name;
+    } else if (isBound()) {
+      os << "Id: " << std::get<Id>(value);
+    }
+
+    os << ", Column: " << subCol;
+    
+    if (treeAndCol.has_value()) {
+      os << ", Subtree:\n";
+      os << treeAndCol.value().first->asString(indent) << "\n";
+    }
+    return std::move(os).str();
+  }
 };
 
 class TransitivePath : public Operation {
