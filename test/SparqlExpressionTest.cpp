@@ -874,4 +874,5 @@ TEST(SparqlExpression, encodeForUri) {
                     IdOrStrings{"%22Los%20Angeles"});
   checkEncodeForUri(IdOrStrings{"L\"os \"Angeles"},
                     IdOrStrings{"L%22os%20%22Angeles"});
+  checkEncodeForUri(IdOrStrings{U}, IdOrStrings{U});
 }
