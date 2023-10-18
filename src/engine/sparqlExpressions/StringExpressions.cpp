@@ -374,11 +374,9 @@ class ConcatExpression : public detail::VariadicExpression {
 
     if (value.starts_with("\"")) {
       auto contentEnd = ad_utility::findLiteralEnd(value, "\"");
-      if (contentEnd != string::npos && contentEnd != 0) {
+      if (contentEnd != 0) {
         std::string content = value.substr(1, contentEnd - 1);
-        std::string encodedContent =
-            boost::urls::encode(content, boost::urls::unreserved_chars);
-        return encodedContent;
+        return boost::urls::encode(content, boost::urls::unreserved_chars);
       }
     }
     return boost::urls::encode(value, boost::urls::unreserved_chars);
