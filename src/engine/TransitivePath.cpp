@@ -114,23 +114,11 @@ vector<ColumnIndex> TransitivePath::resultSortedOn() const {
     // This operation preserves the order of the _leftCol of the subtree.
     return {0};
   }
-  if (_lhs.treeAndCol.has_value()) {
-    auto tree = _lhs.treeAndCol.value().first;
-    auto col = _lhs.treeAndCol.value().second;
-    const std::vector<ColumnIndex>& leftSortedOn =
-        tree->getRootOperation()->getResultSortedOn();
-    if (leftSortedOn.size() > 0 && leftSortedOn[0] == col) {
-      return {0};
-    }
+  if (_lhs.isSortedOnInputCol()) {
+    return {0};
   }
-  if (_rhs.treeAndCol.has_value()) {
-    auto tree = _rhs.treeAndCol.value().first;
-    auto col = _rhs.treeAndCol.value().second;
-    const std::vector<ColumnIndex>& rightSortedOn =
-        tree->getRootOperation()->getResultSortedOn();
-    if (rightSortedOn.size() > 0 && rightSortedOn[0] == col) {
-      return {1};
-    }
+  if (_rhs.isSortedOnInputCol()) {
+    return {1};
   }
   return {};
 }
@@ -143,11 +131,8 @@ VariableToColumnMap TransitivePath::computeVariableToColumnMap() const {
 // _____________________________________________________________________________
 void TransitivePath::setTextLimit(size_t limit) {
   _subtree->setTextLimit(limit);
-  if (_lhs.treeAndCol.has_value()) {
-    _lhs.treeAndCol.value().first->setTextLimit(limit);
-  }
-  if (_rhs.treeAndCol.has_value()) {
-    _rhs.treeAndCol.value().first->setTextLimit(limit);
+  for (auto child : getChildren()) {
+    child->setTextLimit(limit);
   }
 }
 
@@ -322,9 +307,9 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(
       getExecutionContext(), _subtree, _lhs, _rhs, _minDist, _maxDist);
   if (isLeft) {
-    p->_lhs.treeAndCol = std::make_pair(leftOrRightOp, inputCol);
+    p->_lhs.treeAndCol = {leftOrRightOp, inputCol};
   } else {
-    p->_rhs.treeAndCol = std::make_pair(leftOrRightOp, inputCol);
+    p->_rhs.treeAndCol = {leftOrRightOp, inputCol};
   }
 
   // Note: The `variable` in the following structured binding is `const`, even
@@ -336,11 +321,10 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
     if (columnIndex != inputCol) {
       if (columnIndex > inputCol) {
         columnIndexWithType.columnIndex_++;
-        p->_variableColumns[variable] = columnIndexWithType;
       } else {
         columnIndexWithType.columnIndex_ += 2;
-        p->_variableColumns[variable] = columnIndexWithType;
       }
+      p->_variableColumns[variable] = columnIndexWithType;
       p->_resultWidth++;
     }
   }
@@ -376,20 +360,23 @@ TransitivePath::Map TransitivePath::transitiveHull(
   // be modified after this point.
   std::vector<std::shared_ptr<const ad_utility::HashSet<Id>>> edgeCache;
 
-  for (size_t i = 0; i < startNodes.size(); i++) {
-    if (hull.contains(startNodes[i])) {
+  for (Id currentStartNode : startNodes) {
+    if (hull.contains(currentStartNode)) {
       // We have already computed the hull for this node
       continue;
     }
 
-    MapIt rootEdges = edges.find(startNodes[i]);
+    // Reset for this iteration
+    marks.clear();
+
+    MapIt rootEdges = edges.find(currentStartNode);
     if (rootEdges != edges.end()) {
       positions.push_back(rootEdges->second->begin());
       edgeCache.push_back(rootEdges->second);
     }
     if (_minDist == 0) {
-      hull.try_emplace(startNodes[i], std::make_shared<ad_utility::HashSet<Id>>());
-      hull[startNodes[i]]->insert(startNodes[i]);
+      hull.try_emplace(currentStartNode, std::make_shared<ad_utility::HashSet<Id>>());
+      hull[currentStartNode]->insert(currentStartNode);
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -415,13 +402,13 @@ TransitivePath::Map TransitivePath::transitiveHull(
         if (childDepth >= _minDist) {
           marks.insert(child);
           if (_rhs.isVariable() || child == std::get<Id>(_rhs.value)) {
-            hull.try_emplace(startNodes[i],
+            hull.try_emplace(currentStartNode,
                              std::make_shared<ad_utility::HashSet<Id>>());
-            hull[startNodes[i]]->insert(child);
+            hull[currentStartNode]->insert(child);
           } else if (_lhs.isVariable() || child == std::get<Id>(_lhs.value)) {
             hull.try_emplace(child,
                              std::make_shared<ad_utility::HashSet<Id>>());
-            hull[child]->insert(startNodes[i]);
+            hull[child]->insert(currentStartNode);
           }
         }
         // Add the child to the stack
@@ -431,11 +418,6 @@ TransitivePath::Map TransitivePath::transitiveHull(
           edgeCache.push_back(it->second);
         }
       }
-    }
-
-    if (i + 1 < startNodes.size()) {
-      // reset everything for the next iteration
-      marks.clear();
     }
   }
   return hull;
@@ -455,11 +437,12 @@ void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
   size_t rowIndex = 0;
   for (size_t i = 0; i < nodes.size(); i++) {
     Id node = nodes[i];
-    if (!hull.contains(node)) {
+    auto it = hull.find(node);
+    if (it == hull.end()) {
       continue;
     }
 
-    for (Id otherNode : *hull[node]) {
+    for (Id otherNode : *it->second) {
       table.emplace_back();
       table(rowIndex, startSideCol) = node;
       table(rowIndex, targetSideCol) = otherNode;
@@ -500,10 +483,11 @@ TransitivePath::setupMapAndNodes(const IdTable& sub,
   Map edges = setupEdgesMap<SUB_WIDTH>(sub, startSide, targetSide);
 
   // Bound -> var|id
-  nodes = setupNodesVector<SIDE_WIDTH>(startSideTable,
+  std::span<const Id> startNodes = setupNodes<SIDE_WIDTH>(startSideTable,
                                        startSide.treeAndCol.value().second);
+  nodes.insert(nodes.end(), startNodes.begin(), startNodes.end());
 
-  return std::make_pair(edges, nodes);
+  return {std::move(edges), std::move(nodes)};
 }
 
 // _____________________________________________________________________________
@@ -520,15 +504,16 @@ TransitivePath::setupMapAndNodes(const IdTable& sub,
     nodes.push_back(std::get<Id>(startSide.value));
     // var -> var
   } else {
-    nodes = setupNodesVector<SUB_WIDTH>(sub, startSide.subCol);
+    std::span<const Id> startNodes = setupNodes<SUB_WIDTH>(sub, startSide.subCol);
+    nodes.insert(nodes.end(), startNodes.begin(), startNodes.end());
     if (_minDist == 0) {
-      std::vector<Id> targetNodes =
-          setupNodesVector<SUB_WIDTH>(sub, targetSide.subCol);
+      std::span<const Id> targetNodes =
+          setupNodes<SUB_WIDTH>(sub, targetSide.subCol);
       nodes.insert(nodes.end(), targetNodes.begin(), targetNodes.end());
     }
   }
 
-  return std::make_pair(edges, nodes);
+  return {std::move(edges), std::move(nodes)};
 }
 
 // _____________________________________________________________________________
@@ -538,11 +523,12 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
     const TransitivePathSide& targetSide) {
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
   Map edges;
+  decltype (auto) startCol = sub.getColumn(startSide.subCol);
+  decltype (auto) targetCol = sub.getColumn(targetSide.subCol);
 
   for (size_t i = 0; i < sub.size(); i++) {
-    // checkTimeoutHashSet();
-    Id startId = sub(i, startSide.subCol);
-    Id targetId = sub(i, targetSide.subCol);
+    Id startId = startCol[i];
+    Id targetId = targetCol[i];
     MapIt it = edges.find(startId);
     if (it == edges.end()) {
       std::shared_ptr<ad_utility::HashSet<Id>> edgeTargets =
@@ -559,14 +545,9 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-std::vector<Id> TransitivePath::setupNodesVector(const IdTable& table,
+std::span<const Id> TransitivePath::setupNodes(const IdTable& table,
                                                  size_t col) {
-  std::vector<Id> nodes;
-  const IdTableView<WIDTH> tableView = table.asStaticView<WIDTH>();
-  for (size_t i = 0; i < tableView.size(); i++) {
-    nodes.push_back(tableView(i, col));
-  }
-  return nodes;
+  return table.getColumn(col);
 }
 
 // _____________________________________________________________________________

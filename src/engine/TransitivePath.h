@@ -48,6 +48,17 @@ struct TransitivePathSide {
     }
     return std::move(os).str();
   }
+
+  bool isSortedOnInputCol() const {
+    if (treeAndCol.has_value()) {
+      auto [tree, col] = treeAndCol.value();
+      const std::vector<ColumnIndex>& sortedOn = tree->getRootOperation()->getResultSortedOn();
+      if (sortedOn.size() > 0 && sortedOn[0] == col) {
+        return true;
+      }
+    }
+    return false;
+  }
 };
 
 class TransitivePath : public Operation {
@@ -286,7 +297,7 @@ class TransitivePath : public Operation {
 
   // initialize a vector for the starting nodes (Ids)
   template <size_t WIDTH>
-  static std::vector<Id> setupNodesVector(const IdTable& table, size_t col);
+  static std::span<const Id> setupNodes(const IdTable& table, size_t col);
 
   // Copy the columns from the input table to the output table
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
