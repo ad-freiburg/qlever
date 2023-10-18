@@ -26,7 +26,7 @@ struct TransitivePathSide {
   bool isVariable() const { return std::holds_alternative<Variable>(value); };
 
   bool isBound() const {
-    return treeAndCol.has_value() || std::holds_alternative<Id>(value);
+    return treeAndCol.has_value();
   };
 
   std::string asString(size_t indent) const {
@@ -103,10 +103,6 @@ class TransitivePath : public Operation {
    * Neither side of a tree may be bound twice
    */
   bool isBound() const;
-
-  bool leftIsBound() const;
-
-  bool rightIsBound() const;
 
  protected:
   virtual std::string asStringImpl(size_t indent = 0) const override;

@@ -108,8 +108,7 @@ size_t TransitivePath::getResultWidth() const { return _resultWidth; }
 vector<ColumnIndex> TransitivePath::resultSortedOn() const {
   const std::vector<ColumnIndex>& subSortedOn =
       _subtree->getRootOperation()->getResultSortedOn();
-  if (_lhs.isBound() && _lhs.isVariable() && _rhs.isBound() &&
-      _lhs.isVariable() && subSortedOn.size() > 0 &&
+  if (!_lhs.isBound() && !_rhs.isBound() && subSortedOn.size() > 0 &&
       subSortedOn[0] == _lhs.subCol) {
     // This operation preserves the order of the _leftCol of the subtree.
     return {0};
@@ -244,7 +243,7 @@ ResultTable TransitivePath::computeResult() {
   idTable.setNumColumns(getResultWidth());
 
   size_t subWidth = subRes->idTable().numColumns();
-  if (_lhs.treeAndCol.has_value()) {
+  if (_lhs.isBound()) {
     shared_ptr<const ResultTable> leftRes =
         _lhs.treeAndCol.value().first->getResult();
     size_t leftWidth = leftRes->idTable().numColumns();
@@ -253,7 +252,7 @@ ResultTable TransitivePath::computeResult() {
                     &TransitivePath::computeTransitivePathBound, this, &idTable,
                     subRes->idTable(), _lhs, _rhs, leftRes->idTable());
 
-  } else if (_rhs.treeAndCol.has_value()) {
+  } else if (_rhs.isBound()) {
     shared_ptr<const ResultTable> rightRes =
         _rhs.treeAndCol.value().first->getResult();
     size_t rightWidth = rightRes->idTable().numColumns();
@@ -261,7 +260,7 @@ ResultTable TransitivePath::computeResult() {
     CALL_FIXED_SIZE((std::array{_resultWidth, subWidth, rightWidth}),
                     &TransitivePath::computeTransitivePathBound, this, &idTable,
                     subRes->idTable(), _rhs, _lhs, rightRes->idTable());
-  } else if (_rhs.isBound() && !_rhs.isVariable()) {
+  } else if (!_rhs.isVariable()) {
     CALL_FIXED_SIZE((std::array{_resultWidth, subWidth}),
                     &TransitivePath::computeTransitivePath, this, &idTable,
                     subRes->idTable(), _rhs, _lhs);
@@ -333,14 +332,8 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
 
 // _____________________________________________________________________________
 bool TransitivePath::isBound() const {
-  return _lhs.isBound() && _rhs.isBound();
+  return _lhs.isBound() || _rhs.isBound();
 }
-
-// _____________________________________________________________________________
-bool TransitivePath::leftIsBound() const { return _lhs.isBound(); }
-
-// _____________________________________________________________________________
-bool TransitivePath::rightIsBound() const { return _rhs.isBound(); }
 
 // _____________________________________________________________________________
 TransitivePath::Map TransitivePath::transitiveHull(
@@ -499,7 +492,7 @@ TransitivePath::setupMapAndNodes(const IdTable& sub,
   Map edges = setupEdgesMap<SUB_WIDTH>(sub, startSide, targetSide);
 
   // id -> var|id
-  if (startSide.isBound()) {
+  if (!startSide.isVariable()) {
     nodes.push_back(std::get<Id>(startSide.value));
     // var -> var
   } else {
