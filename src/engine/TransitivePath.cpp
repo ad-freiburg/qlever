@@ -307,9 +307,9 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(
       getExecutionContext(), _subtree, _lhs, _rhs, _minDist, _maxDist);
   if (isLeft) {
-    p->_lhs.treeAndCol = {leftOrRightOp, inputCol};
+    p->_lhs.treeAndCol = {leftOrRightOp.get(), inputCol};
   } else {
-    p->_rhs.treeAndCol = {leftOrRightOp, inputCol};
+    p->_rhs.treeAndCol = {leftOrRightOp.get(), inputCol};
   }
 
   // Note: The `variable` in the following structured binding is `const`, even
@@ -358,7 +358,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
   // Used to store all edges leading away from a node for every level.
   // Reduces access to the hashmap, and is safe as the map will not
   // be modified after this point.
-  std::vector<std::shared_ptr<const ad_utility::HashSet<Id>>> edgeCache;
+  std::vector<const ad_utility::HashSet<Id>*> edgeCache;
 
   for (Id currentStartNode : startNodes) {
     if (hull.contains(currentStartNode)) {
@@ -371,12 +371,12 @@ TransitivePath::Map TransitivePath::transitiveHull(
 
     MapIt rootEdges = edges.find(currentStartNode);
     if (rootEdges != edges.end()) {
-      positions.push_back(rootEdges->second->begin());
-      edgeCache.push_back(rootEdges->second);
+      positions.push_back(rootEdges->second.begin());
+      edgeCache.push_back(&rootEdges->second);
     }
     if (_minDist == 0) {
-      hull.try_emplace(currentStartNode, std::make_shared<ad_utility::HashSet<Id>>());
-      hull[currentStartNode]->insert(currentStartNode);
+      hull.try_emplace(currentStartNode, ad_utility::HashSet<Id>());
+      hull[currentStartNode].insert(currentStartNode);
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -386,7 +386,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
       size_t stackIndex = positions.size() - 1;
       // Process the next child of the node at the top of the stack
       ad_utility::HashSet<Id>::const_iterator& pos = positions[stackIndex];
-      const ad_utility::HashSet<Id>* nodeEdges = edgeCache.back().get();
+      const ad_utility::HashSet<Id>* nodeEdges = edgeCache.back();
 
       if (pos == nodeEdges->end()) {
         // We finished processing this node
@@ -403,20 +403,18 @@ TransitivePath::Map TransitivePath::transitiveHull(
         if (childDepth >= _minDist) {
           marks.insert(child);
           if (_rhs.isVariable() || child == std::get<Id>(_rhs.value)) {
-            hull.try_emplace(currentStartNode,
-                             std::make_shared<ad_utility::HashSet<Id>>());
-            hull[currentStartNode]->insert(child);
+            hull.try_emplace(currentStartNode, ad_utility::HashSet<Id>());
+            hull[currentStartNode].insert(child);
           } else if (_lhs.isVariable() || child == std::get<Id>(_lhs.value)) {
-            hull.try_emplace(child,
-                             std::make_shared<ad_utility::HashSet<Id>>());
-            hull[child]->insert(currentStartNode);
+            hull.try_emplace(child, ad_utility::HashSet<Id>());
+            hull[child].insert(currentStartNode);
           }
         }
         // Add the child to the stack
         MapIt it = edges.find(child);
         if (it != edges.end()) {
-          positions.push_back(it->second->begin());
-          edgeCache.push_back(it->second);
+          positions.push_back(it->second.begin());
+          edgeCache.push_back(&it->second);
         }
       }
     }
@@ -443,7 +441,7 @@ void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
       continue;
     }
 
-    for (Id otherNode : *it->second) {
+    for (Id otherNode : it->second) {
       table.emplace_back();
       table(rowIndex, startSideCol) = node;
       table(rowIndex, targetSideCol) = otherNode;
@@ -463,7 +461,7 @@ void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
                                        size_t targetSideCol) {
   size_t rowIndex = 0;
   for (auto const& [node, linkedNodes] : hull) {
-    for (Id linkedNode : *linkedNodes) {
+    for (Id linkedNode : linkedNodes) {
       table.emplace_back();
       table(rowIndex, startSideCol) = node;
       table(rowIndex, targetSideCol) = linkedNode;
@@ -533,13 +531,12 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
     Id targetId = targetCol[i];
     MapIt it = edges.find(startId);
     if (it == edges.end()) {
-      std::shared_ptr<ad_utility::HashSet<Id>> edgeTargets =
-          std::make_shared<ad_utility::HashSet<Id>>();
-      edgeTargets->insert(targetId);
+      ad_utility::HashSet<Id> edgeTargets = ad_utility::HashSet<Id>();
+      edgeTargets.insert(targetId);
       edges[startId] = edgeTargets;
     } else {
       // If r is not in the vector insert it
-      it->second->insert(targetId);
+      it->second.insert(targetId);
     }
   }
   return edges;

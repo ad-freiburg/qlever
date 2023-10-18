@@ -10,7 +10,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
 
-using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
+using TreeAndCol = std::pair<QueryExecutionTree*, size_t>;
 struct TransitivePathSide {
   // treeAndCol contains the QueryExecutionTree of this side and the column
   // where the Ids of this side are located. This member only has a value if
@@ -62,7 +62,7 @@ struct TransitivePathSide {
 };
 
 class TransitivePath : public Operation {
-  using Map = ad_utility::HashMap<Id, std::shared_ptr<ad_utility::HashSet<Id>>>;
+  using Map = ad_utility::HashMap<Id, ad_utility::HashSet<Id>>;
   using MapIt = Map::iterator;
 
   std::shared_ptr<QueryExecutionTree> _subtree;
@@ -132,13 +132,14 @@ class TransitivePath : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override {
     std::vector<QueryExecutionTree*> res;
-    if (_lhs.treeAndCol.has_value()) {
-      res.push_back(_lhs.treeAndCol.value().first.get());
-    }
+    auto addChildren = [](std::vector<QueryExecutionTree*>& res, TransitivePathSide side) {
+      if (side.treeAndCol.has_value()) {
+        res.push_back(side.treeAndCol.value().first);
+      }
+    };
+    addChildren(res, _lhs);
+    addChildren(res, _rhs);
     res.push_back(_subtree.get());
-    if (_rhs.treeAndCol.has_value()) {
-      res.push_back(_rhs.treeAndCol.value().first.get());
-    }
     return res;
   }
 
