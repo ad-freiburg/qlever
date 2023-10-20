@@ -672,9 +672,76 @@ bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
     return true;
   } else if (computeGroupByForFullIndexScan(result)) {
     return true;
+  } else if (computeGroupByForJoinWithFullScan(result)) {
+    return true;
   } else {
-    return computeGroupByForJoinWithFullScan(result);
+    return computeGroupByForSortedSubtree(result);
   }
+}
+
+// _____________________________________________________________________________
+std::optional<GroupBy::SortedJoinData>
+    GroupBy::checkIfSortedJoin(const Sort* sort) {
+  if (_groupByVariables.size() != 1) {
+    return std::nullopt;
+  }
+  const Variable& groupByVariable = _groupByVariables.front();
+
+  // This seems very strange, we already have join, so can't we extract
+  // the column from this?
+  auto* child = static_cast<const Operation*>(sort)->getChildren().at(0);
+  auto columnIndex = child->getVariableColumn(groupByVariable);
+
+  return SortedJoinData{ columnIndex };
+}
+
+// _____________________________________________________________________________
+bool GroupBy::computeGroupByForSortedSubtree(IdTable* result) {
+  auto sort = dynamic_cast<Sort*>(_subtree->getRootOperation().get());
+  if (!sort) {
+    return false;
+  }
+
+  // Can the child be something other than Join?
+  auto childOperation = sort->getChildren().at(0)->getRootOperation().get();
+  auto join = dynamic_cast<Join*>(childOperation);
+  if (!join) {
+    return false;
+  }
+
+  auto sortedJoinData = checkIfSortedJoin(sort);
+  if (!sortedJoinData.has_value()) {
+    return false;
+  }
+  const auto [columnIndex] = sortedJoinData.value();
+
+  sort->updateRuntimeInformationWhenOptimizedOut({});
+  auto joinResult = join->getResult();
+  if (joinResult->idTable().size() == 0) {
+    return true;
+  }
+
+  result->setNumColumns(2);
+  auto idTable = std::move(*result).toStatic<2>();
+
+  std::map<ValueId, int64_t> columnCountMap;
+  for (size_t i = 0; i < joinResult->idTable().size(); ++i) {
+    auto id = joinResult->idTable()(i, columnIndex);
+    if (columnCountMap.contains(id)) {
+      columnCountMap.at(id)++;
+    } else {
+      columnCountMap.insert(std::make_pair(id, 1));
+    }
+  }
+
+  for (auto it = columnCountMap.begin(); it != columnCountMap.end();
+       ++it) {
+    idTable.push_back({it->first, Id::makeFromInt(it->second)});
+  }
+
+
+  *result = std::move(idTable).toDynamic();
+  return true;
 }
 
 // _____________________________________________________________________________

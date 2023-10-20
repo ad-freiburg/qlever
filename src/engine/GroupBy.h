@@ -25,6 +25,7 @@ using std::vector;
 // Forward declarations for internal member function
 class IndexScan;
 class Join;
+class Sort;
 
 class GroupBy : public Operation {
  private:
@@ -155,6 +156,27 @@ class GroupBy : public Operation {
   // triple, and that the COUNT may be by any of the variables `?x`, `?y`, or
   // `?z`.
   bool computeGroupByForJoinWithFullScan(IdTable* result);
+
+  // First, check if the query represented by this GROUP BY is of the following
+  // form:
+  //  SELECT ?x (COUNT (?x) as ?cnt) WHERE {
+  //    %arbitrary graph pattern that contains ?x, and at least one of ?y and ?z
+  //    %arbitrary graph pattern that contains at least one of ?y and ?z,
+  //      but not ?x
+  //  } GROUP BY ?x
+  // Note that `?x` can also appear in the second triple, but then may not
+  // appear in the first. The key requirement for this optimization is that
+  // the grouped-by variable is not a join column.
+  bool computeGroupByForSortedSubtree(IdTable* result);
+
+  struct SortedJoinData {
+    size_t subtreeColumnIndex_;
+  };
+
+  // Check if the previously described optimization can be applied. The argument
+  // Must be the single subtree of this GROUP BY, properly cast to a `const
+  // Sort*`.
+  std::optional<SortedJoinData> checkIfSortedJoin(const Sort* sort);
 
   // The check whether the optimization just described can be applied and its
   // actual computation are split up in two functions. This struct contains
