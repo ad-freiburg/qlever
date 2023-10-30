@@ -15,24 +15,25 @@ namespace ad_utility {
 
 namespace net = boost::asio;
 
-/// Helper function that ensures that co_await resumes on the same
-/// executor it started with.
+/// Helper function that ensures that co_await resumes on the executor
+/// this coroutine was co_spawned on.
 /// IMPORTANT: If the coroutine is cancelled, no guarantees are given. Make
 /// sure to keep that in mind when handling cancellation errors!
 template <typename T>
-inline net::awaitable<T> sameExecutor(net::awaitable<T> awaitable) {
-  auto initialExecutor = co_await net::this_coro::executor;
+inline net::awaitable<T> resumeOnOriginalExecutor(net::awaitable<T> awaitable) {
   std::exception_ptr exceptionPtr;
   try {
     T result = co_await std::move(awaitable);
-    co_await net::dispatch(initialExecutor, net::use_awaitable);
+    co_await net::dispatch(net::use_awaitable);
     co_return result;
   } catch (...) {
     exceptionPtr = std::current_exception();
   }
   auto cancellationState = co_await net::this_coro::cancellation_state;
   if (cancellationState.cancelled() == net::cancellation_type::none) {
-    co_await net::dispatch(initialExecutor, net::use_awaitable);
+    // use_awaitable always resumes the coroutine on the executor the coroutine
+    // was co_spawned on
+    co_await net::dispatch(net::use_awaitable);
   }
   AD_CORRECTNESS_CHECK(exceptionPtr);
   std::rethrow_exception(exceptionPtr);
@@ -40,10 +41,10 @@ inline net::awaitable<T> sameExecutor(net::awaitable<T> awaitable) {
 
 // _____________________________________________________________________________
 
-/// Helper function that ensures that co_await resumes on the same
-/// executor it started with. Overload for void.
-inline net::awaitable<void> sameExecutor(net::awaitable<void> awaitable) {
-  auto initialExecutor = co_await net::this_coro::executor;
+/// Helper function that ensures that co_await resumes on the executor
+/// this coroutine was co_spawned on. Overload for void.
+inline net::awaitable<void> resumeOnOriginalExecutor(
+    net::awaitable<void> awaitable) {
   std::exception_ptr exceptionPtr;
   try {
     co_await std::move(awaitable);
@@ -52,7 +53,9 @@ inline net::awaitable<void> sameExecutor(net::awaitable<void> awaitable) {
   }
   if ((co_await net::this_coro::cancellation_state).cancelled() ==
       net::cancellation_type::none) {
-    co_await net::dispatch(initialExecutor, net::use_awaitable);
+    // use_awaitable always resumes the coroutine on the executor the coroutine
+    // was co_spawned on
+    co_await net::dispatch(net::use_awaitable);
   }
   if (exceptionPtr) {
     std::rethrow_exception(exceptionPtr);

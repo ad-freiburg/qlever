@@ -112,10 +112,18 @@ class Operation {
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
 
-  RuntimeInformation& getRuntimeInfo() { return _runtimeInfo; }
+  RuntimeInformation& runtimeInfo() const { return *_runtimeInfo; }
+
+  std::shared_ptr<RuntimeInformation> getRuntimeInfoPointer() {
+    return _runtimeInfo;
+  }
+
   RuntimeInformationWholeQuery& getRuntimeInfoWholeQuery() {
     return _runtimeInfoWholeQuery;
   }
+
+  /// Notify the `QueryExecutionContext` of the latest `RuntimeInformation`.
+  void signalQueryUpdate() const;
 
   /**
    * @brief Get the result for the subtree rooted at this element. Use existing
@@ -151,7 +159,8 @@ class Operation {
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
-  virtual void createRuntimeInfoFromEstimates() final;
+  virtual void createRuntimeInfoFromEstimates(
+      std::shared_ptr<const RuntimeInformation> root) final;
 
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
@@ -254,7 +263,7 @@ class Operation {
   // children were evaluated nevertheless. For an example usage of this feature
   // see `GroupBy.cpp`
   virtual void updateRuntimeInformationWhenOptimizedOut(
-      std::vector<RuntimeInformation> children,
+      std::vector<std::shared_ptr<RuntimeInformation>> children,
       RuntimeInformation::Status status =
           RuntimeInformation::Status::optimizedOut);
 
@@ -284,7 +293,11 @@ class Operation {
   template <typename F>
   void forAllDescendants(F f) const;
 
-  RuntimeInformation _runtimeInfo;
+  std::shared_ptr<RuntimeInformation> _runtimeInfo =
+      std::make_shared<RuntimeInformation>();
+  /// Pointer to the head of the `RuntimeInformation`.
+  /// Used in `signalQueryUpdate()`, reset in `createRuntimeInfoFromEstimates()`
+  std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
   RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 
   // Collect all the warnings that were created during the creation or

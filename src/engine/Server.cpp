@@ -628,7 +628,6 @@ boost::asio::awaitable<void> Server::processQuery(
     auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
     qet.recursivelySetTimeoutTimer(timeoutTimer);
-    qet.getRootOperation()->createRuntimeInfoFromEstimates();
     size_t timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
         qet.getRootOperation()->getRuntimeInfoWholeQuery();
@@ -705,8 +704,7 @@ boost::asio::awaitable<void> Server::processQuery(
               << ", total time was " << requestTimer.msecs() << " ms"
               << std::endl;
     LOG(DEBUG) << "Runtime Info:\n"
-               << qet.getRootOperation()->getRuntimeInfo().toString()
-               << std::endl;
+               << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
@@ -741,7 +739,7 @@ boost::asio::awaitable<void> Server::processQuery(
         query, exceptionErrorMsg.value(), requestTimer, metadata);
     if (queryExecutionTree) {
       errorResponseJson["runtimeInformation"] = nlohmann::ordered_json(
-          queryExecutionTree->getRootOperation()->getRuntimeInfo());
+          queryExecutionTree->getRootOperation()->runtimeInfo());
     }
     co_return co_await sendJson(errorResponseJson, responseStatus);
   }
@@ -754,6 +752,6 @@ Awaitable<T> Server::computeInNewThread(Function function) const {
     co_await net::post(net::bind_executor(executor, net::use_awaitable));
     co_return std::invoke(func);
   };
-  return ad_utility::sameExecutor(
+  return ad_utility::resumeOnOriginalExecutor(
       runOnExecutor(threadPool_.get_executor(), std::move(function)));
 }
