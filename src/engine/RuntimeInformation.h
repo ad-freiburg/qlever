@@ -67,7 +67,7 @@ class RuntimeInformation {
   std::vector<std::string> columnNames_;
 
   /// The child operations of this operation.
-  std::vector<RuntimeInformation> children_;
+  std::vector<std::shared_ptr<RuntimeInformation>> children_;
 
   /// A key-value map of various other information that might be different for
   /// different types of operations.

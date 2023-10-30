@@ -618,8 +618,8 @@ bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
       {});
 
   join->updateRuntimeInformationWhenOptimizedOut(
-      {subtree.getRootOperation()->getRuntimeInfo(),
-       threeVarSubtree.getRootOperation()->getRuntimeInfo()});
+      {subtree.getRootOperation()->getRuntimeInfoPointer(),
+       threeVarSubtree.getRootOperation()->getRuntimeInfoPointer()});
   result->setNumColumns(2);
   if (subresult->idTable().size() == 0) {
     return true;
