@@ -331,11 +331,11 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
   CompactVectorOfStrings<Id> patterns(patternsSrc);
 
-  RuntimeInformation runtimeInfo;
+  RuntimeInformation runtimeInfo{};
   try {
-    CALL_FIXED_SIZE(
-        input.numColumns(), CountAvailablePredicates::computePatternTrick,
-        input, &result, hasPattern, hasRelation, patterns, 0, &runtimeInfo);
+    CALL_FIXED_SIZE(input.numColumns(),
+                    CountAvailablePredicates::computePatternTrick, input,
+                    &result, hasPattern, hasRelation, patterns, 0, runtimeInfo);
   } catch (const std::runtime_error& e) {
     // More verbose output in the case of an exception occuring.
     std::cout << e.what() << std::endl;

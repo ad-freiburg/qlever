@@ -117,7 +117,7 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnSignalEnd, 3) {
       net::co_spawn(ioContext, distributor1->signalEnd(), net::use_future);
 
   // Wait until signalEnd() blocks, increase time if tests sporadically fail
-  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  std::this_thread::sleep_for(std::chrono::milliseconds(2));
 
   auto distributor2 =
       co_await queryHub.createOrAcquireDistributorForSending(queryId);
@@ -138,18 +138,23 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
 
   co_await net::dispatch(
       net::bind_executor(queryHub.getStrand(), net::use_awaitable));
-  net::post(ioContext, [distributor = std::move(distributor)]() mutable {
-    // Invoke destructor while the strand of queryHub is still in use
-    distributor.reset();
-  });
+  auto future = net::post(ioContext,
+                          std::packaged_task<void()>(
+                              [distributor = std::move(distributor)]() mutable {
+                                // Invoke destructor while the strand of
+                                // queryHub is still in use
+                                distributor.reset();
+                              }));
 
   // Wait until destructor of distributor blocks, increase time if tests
   // sporadically fail
-  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  std::this_thread::sleep_for(std::chrono::milliseconds(2));
   distributor =
       co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
   EXPECT_FALSE(!comparison.owner_before(distributor) &&
                !distributor.owner_before(comparison));
+  co_await net::post(net::use_awaitable);
+  future.wait();
 }
 
 // _____________________________________________________________________________
