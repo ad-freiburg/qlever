@@ -689,7 +689,7 @@ void updateRuntimeInfoForLazyScan(
     const CompressedRelationReader::LazyScanMetadata& metadata) {
   scanTree.updateRuntimeInformationWhenOptimizedOut(
       RuntimeInformation::Status::lazilyMaterialized);
-  auto& rti = scanTree.getRuntimeInfo();
+  auto& rti = scanTree.runtimeInfo();
   rti.numRows_ = metadata.numElementsRead_;
   rti.totalTime_ = static_cast<double>(metadata.blockingTimeMs_);
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
@@ -714,7 +714,7 @@ IdTable Join::computeResultForTwoIndexScans() {
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
   auto [leftBlocksInternal, rightBlocksInternal] =
       IndexScan::lazyScanForJoinOfTwoScans(leftScan, rightScan);
-  getRuntimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
+  runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
   auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
   auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
@@ -764,7 +764,7 @@ IdTable Join::computeResultForIndexScanAndIdTable(const IdTable& idTable,
       permutationIdTable.col(), scan);
   auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
 
-  getRuntimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
+  runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
   auto doJoin = [&rowAdder](auto& left, auto& right) mutable {
     ad_utility::zipperJoinForBlocksWithoutUndef(left, right, std::less{},
