@@ -28,7 +28,7 @@ class FastRandomIntGenerator {
  public:
   explicit FastRandomIntGenerator(unsigned int seed = std::random_device{}()) {
     // Randomly initialize the shuffleTable
-    std::default_random_engine randomEngine{seed};
+    std::mt19937_64 randomEngine{seed};
     std::uniform_int_distribution<uint64_t> distribution;
     for (auto& el : _shuffleTable) {
       el = distribution(randomEngine);
@@ -73,7 +73,7 @@ class SlowRandomIntGenerator {
   Int operator()() { return _distribution(_randomEngine); }
 
  private:
-  std::default_random_engine _randomEngine;
+  std::mt19937_64 _randomEngine;
   std::uniform_int_distribution<Int> _distribution;
 };
 
@@ -91,7 +91,7 @@ class RandomDoubleGenerator {
   double operator()() { return _distribution(_randomEngine); }
 
  private:
-  std::default_random_engine _randomEngine;
+  std::mt19937_64 _randomEngine;
   std::uniform_real_distribution<double> _distribution;
 };
 
