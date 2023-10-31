@@ -102,7 +102,7 @@ IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::vector<std::pair<size_t, std::function<ValueId()>>>&
         joinColumnWithGenerator,
-    const unsigned int randomNumberGeneratorSeed) {
+    const Seed randomSeed) {
   AD_CONTRACT_CHECK(numberRows > 0 && numberColumns > 0);
 
   // Views for clearer access.
@@ -125,8 +125,8 @@ IdTable createRandomlyFilledIdTable(
       joinColumnGeneratorView, [](auto func) { return func != nullptr; }));
 
   // The random number generators for normal entries.
-  SlowRandomIntGenerator<size_t> randomNumberGenerator(
-      0, ValueId::maxIndex, randomNumberGeneratorSeed);
+  SlowRandomIntGenerator<size_t> randomNumberGenerator(0, ValueId::maxIndex,
+                                                       randomSeed);
   std::function<ValueId()> normalEntryGenerator = [&randomNumberGenerator]() {
     // `IdTable`s don't take raw numbers, you have to transform them first.
     return ad_utility::testing::VocabId(randomNumberGenerator());
@@ -155,11 +155,11 @@ IdTable createRandomlyFilledIdTable(
 }
 
 // ____________________________________________________________________________
-IdTable createRandomlyFilledIdTable(
-    const size_t numberRows, const size_t numberColumns,
-    const std::vector<size_t>& joinColumns,
-    const std::function<ValueId()>& generator,
-    const unsigned int randomNumberGeneratorSeed) {
+IdTable createRandomlyFilledIdTable(const size_t numberRows,
+                                    const size_t numberColumns,
+                                    const std::vector<size_t>& joinColumns,
+                                    const std::function<ValueId()>& generator,
+                                    const Seed randomSeed) {
   // Is the generator not empty?
   AD_CONTRACT_CHECK(generator != nullptr);
 
@@ -178,14 +178,14 @@ IdTable createRandomlyFilledIdTable(
             return std::make_pair(
                 num, std::function{[&generator]() { return generator(); }});
           }),
-      randomNumberGeneratorSeed);
+      randomSeed);
 }
 
 // ____________________________________________________________________________
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::vector<JoinColumnAndBounds>& joinColumnsAndBounds,
-    const unsigned int randomNumberGeneratorSeed) {
+    const Seed randomSeed) {
   // Entries in IdTables have a max size.
   constexpr size_t maxIdSize = ValueId::maxIndex;
 
@@ -207,36 +207,33 @@ IdTable createRandomlyFilledIdTable(
         return std::make_pair(
             j.joinColumn_,
             // Each column gets its own random generator.
-            std::function{[generator = SlowRandomIntGenerator<size_t>(
-                               j.lowerBound_, j.upperBound_,
-                               j.randomNumberGeneratorSeed_)]() mutable {
-              // `IdTable`s don't take raw numbers, you have to transform
-              // them first.
-              return ad_utility::testing::VocabId(generator());
-            }});
+            std::function{
+                [generator = SlowRandomIntGenerator<size_t>(
+                     j.lowerBound_, j.upperBound_, j.randomSeed_)]() mutable {
+                  // `IdTable`s don't take raw numbers, you have to transform
+                  // them first.
+                  return ad_utility::testing::VocabId(generator());
+                }});
       });
 
   return createRandomlyFilledIdTable(numberRows, numberColumns,
-                                     joinColumnAndGenerator,
-                                     randomNumberGeneratorSeed);
+                                     joinColumnAndGenerator, randomSeed);
 }
 
 // ____________________________________________________________________________
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
-    const JoinColumnAndBounds& joinColumnAndBounds,
-    const unsigned int randomNumberGeneratorSeed) {
+    const JoinColumnAndBounds& joinColumnAndBounds, const Seed randomSeed) {
   // Just call the other overload.
-  return createRandomlyFilledIdTable(numberRows, numberColumns,
-                                     std::vector{joinColumnAndBounds},
-                                     randomNumberGeneratorSeed);
+  return createRandomlyFilledIdTable(
+      numberRows, numberColumns, std::vector{joinColumnAndBounds}, randomSeed);
 }
 
 // ____________________________________________________________________________
-IdTable createRandomlyFilledIdTable(
-    const size_t numberRows, const size_t numberColumns,
-    const unsigned int randomNumberGeneratorSeed) {
+IdTable createRandomlyFilledIdTable(const size_t numberRows,
+                                    const size_t numberColumns,
+                                    const Seed randomSeed) {
   return createRandomlyFilledIdTable(numberRows, numberColumns,
                                      std::vector<JoinColumnAndBounds>{},
-                                     randomNumberGeneratorSeed);
+                                     randomSeed);
 }

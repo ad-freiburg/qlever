@@ -113,15 +113,15 @@ entries are random.
 have.
 @param joinColumnWithGenerator Every pair describes the position of a join
 column and the function, which will be called, to generate it's entries.
-@param randomNumberGeneratorSeed The seed for the random number generator, that
-generates the content for the non join column entries.
+@param randomSeed The seed for the random number generator, that generates the
+content for the non join column entries.
 */
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::vector<std::pair<size_t, std::function<ValueId()>>>&
         joinColumnWithGenerator,
-    const unsigned int randomNumberGeneratorSeed =
-        FastRandomIntGenerator<unsigned int>{}());
+    const Seed randomSeed =
+        Seed::make(FastRandomIntGenerator<unsigned int>{}()));
 
 /*
 @brief Creates a `IdTable`, where the content of the join columns is given via
@@ -133,15 +133,15 @@ have.
 @param generator The generator for the join columns. Order of calls: Row per
 row, starting from row 0, and in a row for every join column, with the join
 columns ordered by their column. Starting from column 0.
-@param randomNumberGeneratorSeed The seed for the random number generator, that
-generates the content for the non join column entries.
+@param randomSeed The seed for the random number generator, that generates the
+content for the non join column entries.
 */
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::vector<size_t>& joinColumns,
     const std::function<ValueId()>& generator,
-    const unsigned int randomNumberGeneratorSeed =
-        FastRandomIntGenerator<unsigned int>{}());
+    const Seed randomSeed =
+        Seed::make(FastRandomIntGenerator<unsigned int>{}()));
 
 // Describes a join column together with an inclusive range of numbers, defined
 // as [lowerBound, upperBound], and the seed for the random number generator.
@@ -149,8 +149,7 @@ struct JoinColumnAndBounds {
   const size_t joinColumn_;
   const size_t lowerBound_;
   const size_t upperBound_;
-  const unsigned int randomNumberGeneratorSeed_ =
-      FastRandomIntGenerator<unsigned int>{}();
+  const Seed randomSeed_ = Seed::make(FastRandomIntGenerator<unsigned int>{}());
 };
 
 /*
@@ -161,14 +160,14 @@ being entered in the join column can be defined.
 returned.
 @param joinColumnAndBounds The given join column will be filled with random
 number, that are all inside the given range.
-@param randomNumberGeneratorSeed The seed for the random number generator, that
+@param randomSeed The seed for the random number generator, that
 generates the content for the non join column entries.
 */
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const JoinColumnAndBounds& joinColumnAndBounds,
-    const unsigned int randomNumberGeneratorSeed =
-        FastRandomIntGenerator<unsigned int>{}());
+    const Seed randomSeed =
+        Seed::make(FastRandomIntGenerator<unsigned int>{}()));
 
 /*
 @brief Return a IdTable, that is randomly filled. The range of numbers
@@ -178,24 +177,24 @@ being entered in the join columns can be defined.
 returned.
 @param joinColumnsAndBounds Every join columns will be filled with random
 number, that are inside their corresponding range.
-@param randomNumberGeneratorSeed The seed for the random number generator, that
+@param randomSeed The seed for the random number generator, that
 generates the content for the non join column entries.
 */
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::vector<JoinColumnAndBounds>& joinColumnsAndBounds,
-    const unsigned int randomNumberGeneratorSeed =
-        FastRandomIntGenerator<unsigned int>{}());
+    const Seed randomSeed =
+        Seed::make(FastRandomIntGenerator<unsigned int>{}()));
 
 /*
 @brief Return a IdTable, that is completly randomly filled.
 
 @param numberRows, numberColumns The size of the IdTable, that is to be
 returned.
-@param randomNumberGeneratorSeed The seed for the random number generator, that
+@param randomSeed The seed for the random number generator, that
 generates the content.
 */
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
-    const unsigned int randomNumberGeneratorSeed =
-        FastRandomIntGenerator<unsigned int>{}());
+    const Seed randomSeed =
+        Seed::make(FastRandomIntGenerator<unsigned int>{}()));
