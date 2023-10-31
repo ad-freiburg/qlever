@@ -121,6 +121,7 @@ TEST(ValueId, Indices) {
   testRandomIds(&makeVocabId, &getVocabIndex, Datatype::VocabIndex);
   testRandomIds(&makeLocalVocabId, &getLocalVocabIndex,
                 Datatype::LocalVocabIndex);
+  testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex);
 }
 
 TEST(ValueId, Undefined) {
@@ -159,6 +160,7 @@ TEST(ValueId, IndexOrdering) {
 
   testOrder(&makeVocabId, &getVocabIndex);
   testOrder(&makeLocalVocabId, &getLocalVocabIndex);
+  testOrder(&makeWordVocabId, &getWordVocabIndex);
   testOrder(&makeTextRecordId, &getTextRecordIndex);
 }
 
@@ -288,6 +290,7 @@ TEST(ValueId, toDebugString) {
   test(makeVocabId(15), "VocabIndex:15");
   test(makeLocalVocabId(25), "LocalVocabIndex:25");
   test(makeTextRecordId(37), "TextRecordIndex:37");
+  test(makeWordVocabId(42), "WordVocabIndex:42");
   test(ValueId::makeFromDate(
            DateOrLargeYear{123456, DateOrLargeYear::Type::Year}),
        "Date:123456");

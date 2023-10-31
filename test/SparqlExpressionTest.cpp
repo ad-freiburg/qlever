@@ -14,6 +14,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
 
 namespace {
@@ -97,7 +98,7 @@ auto testNaryExpression = [](auto&& makeExpression,
                              SingleExpressionResult auto&& expected,
                              SingleExpressionResult auto&&... operands) {
   ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+      ad_utility::testing::makeAllocator()};
   VariableToColumnMap map;
   LocalVocab localVocab;
   IdTable table{alloc};
@@ -109,7 +110,15 @@ auto testNaryExpression = [](auto&& makeExpression,
     }
     return 1;
   };
-  auto resultSize = std::max({getResultSize(operands)...});
+
+  const auto resultSize = [&operands..., &getResultSize]() {
+    if constexpr (sizeof...(operands) == 0) {
+      (void)getResultSize;
+      return 0ul;
+    } else {
+      return std::max({getResultSize(operands)...});
+    }
+  }();
 
   sparqlExpression::EvaluationContext context{*ad_utility::testing::getQec(),
                                               map, table, alloc, localVocab};
@@ -138,6 +147,22 @@ auto testNaryExpression = [](auto&& makeExpression,
   std::visit(checkResultsEqual, ExpressionResult{clone(expected)}, result);
   // ASSERT_EQ(result, ExpressionResult{clone(expected)});
 };
+
+template <typename T>
+concept VectorOrExpressionResult =
+    SingleExpressionResult<T> ||
+    (ad_utility::isVector<T> && isConstantResult<typename T::value_type>);
+
+template <VectorOrExpressionResult T>
+auto liftVector(T vec) {
+  if constexpr (SingleExpressionResult<T>) {
+    return vec;
+  } else {
+    return VectorWithMemoryLimit<typename T::value_type>{
+        std::make_move_iterator(vec.begin()),
+        std::make_move_iterator(vec.end()), alloc};
+  }
+}
 
 // Assert that the given commutative binary expression has the `expected` result
 // in both orders of the operands `op1` and `op2`.
@@ -172,6 +197,22 @@ auto testBinaryExpressionVec =
 
       testNaryExpression(makeExpression, liftVector(expected), liftVector(op1),
                          liftVector(op2));
+    };
+// Test an NARY expression, but the operands and expected result are passed in
+// via `std::vector`, not as a `VectorWithMemoryLimit`. This makes the usage
+// simpler.
+auto testNaryExpressionVec =
+    []<VectorOrExpressionResult Exp, VectorOrExpressionResult... Ops>(
+        auto makeExpression, Exp expected, std::tuple<Ops...> ops,
+        source_location l = source_location::current()) {
+      auto t = generateLocationTrace(l, "testBinaryExpressionVec");
+
+      std::apply(
+          [&](auto&... args) {
+            testNaryExpression(makeExpression, liftVector(expected),
+                               liftVector(args)...);
+          },
+          ops);
     };
 
 auto testOr =
@@ -345,12 +386,6 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(times13, mixed, D(1.0 / 1.3));
 }
 
-// Helper function to lift a `vector<T>` to `vectorWithMemoryLimit<T>`
-template <typename T>
-VectorWithMemoryLimit<T> liftVector(std::vector<T> vec) {
-  return VectorWithMemoryLimit<T>{std::make_move_iterator(vec.begin()),
-                                  std::make_move_iterator(vec.end()), alloc};
-}
 //
 // TODO: The tests above could also be simplified (and made much more readable)
 // in this vein.
@@ -364,35 +399,56 @@ auto testUnaryExpression =
                          liftVector(operand));
     };
 
-// Test `YearExpression`, `MonthExpression`, and `DayExpression`.
+// Test `YearExpression`, `MonthExpression`, `DayExpression`,
+//  `HoursExpression`, `MinutesExpression`, and `SecondsExpression`.
 TEST(SparqlExpression, dateOperators) {
   // Helper function that asserts that the date operators give the expected
   // result on the given date.
   auto checkYear = std::bind_front(testUnaryExpression, &makeYearExpression);
   auto checkMonth = std::bind_front(testUnaryExpression, &makeMonthExpression);
   auto checkDay = std::bind_front(testUnaryExpression, &makeDayExpression);
-  auto check = [&checkYear, &checkMonth, &checkDay](
+  auto checkHours = std::bind_front(testUnaryExpression, &makeHoursExpression);
+  auto checkMinutes =
+      std::bind_front(testUnaryExpression, &makeMinutesExpression);
+  auto checkSeconds =
+      std::bind_front(testUnaryExpression, &makeSecondsExpression);
+  auto check = [&checkYear, &checkMonth, &checkDay, &checkHours, &checkMinutes,
+                &checkSeconds](
                    const DateOrLargeYear& date, std::optional<int> expectedYear,
-                   std::optional<int> expectedMonth,
-                   std::optional<int> expectedDay,
+                   std::optional<int> expectedMonth = std::nullopt,
+                   std::optional<int> expectedDay = std::nullopt,
+                   std::optional<int> expectedHours = std::nullopt,
+                   std::optional<int> expectedMinutes = std::nullopt,
+                   std::optional<double> expectedSeconds = std::nullopt,
                    std::source_location l = std::source_location::current()) {
     auto trace = generateLocationTrace(l);
-    auto optToId = [](const auto& opt) {
+    auto optToIdInt = [](const auto& opt) {
       if (opt.has_value()) {
         return Id::makeFromInt(opt.value());
       } else {
         return Id::makeUndefined();
       }
     };
-    checkYear(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedYear)});
-    checkMonth(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedMonth)});
-    checkDay(Ids{Id::makeFromDate(date)}, Ids{optToId(expectedDay)});
+    auto optToIdDouble = [](const auto& opt) {
+      if (opt.has_value()) {
+        return Id::makeFromDouble(opt.value());
+      } else {
+        return Id::makeUndefined();
+      }
+    };
+    checkYear(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedYear)});
+    checkMonth(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedMonth)});
+    checkDay(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedDay)});
+    checkHours(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedHours)});
+    checkMinutes(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedMinutes)});
+    checkSeconds(Ids{Id::makeFromDate(date)},
+                 Ids{optToIdDouble(expectedSeconds)});
   };
 
   using D = DateOrLargeYear;
   // Now the checks for dates with varying level of detail.
-  check(D::parseXsdDatetime("1970-04-22T11:53:00"), 1970, 4, 22);
-  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
+  check(D::parseXsdDatetime("1970-04-22T11:53:42.25"), 1970, 4, 22, 11, 53,
+        42.25);
   check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
   check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
   check(D::parseXsdDate("0042-12-24"), 42, 12, 24);
@@ -403,9 +459,9 @@ TEST(SparqlExpression, dateOperators) {
 
   // Test behavior of the `largeYear` representation that doesn't store the
   // actual date.
-  check(D::parseGYear("123456"), 123456, std::nullopt, std::nullopt);
-  check(D::parseGYearMonth("-12345-01"), -12345, 1, std::nullopt);
-  check(D::parseGYearMonth("-12345-03"), -12345, 1, std::nullopt);
+  check(D::parseGYear("123456"), 123456);
+  check(D::parseGYearMonth("-12345-01"), -12345, 1);
+  check(D::parseGYearMonth("-12345-03"), -12345, 1);
   check(D::parseXsdDate("-12345-01-01"), -12345, 1, 1);
   check(D::parseXsdDate("-12345-03-04"), -12345, 1, 1);
 
@@ -413,6 +469,9 @@ TEST(SparqlExpression, dateOperators) {
   checkYear(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
   checkMonth(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
   checkDay(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
+  checkHours(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
+  checkMinutes(Ids{Id::makeFromInt(84)}, Ids{Id::makeUndefined()});
+  checkSeconds(Ids{Id::makeFromDouble(120.0123)}, Ids{Id::makeUndefined()});
   auto testYear = std::bind_front(testUnaryExpression, &makeYearExpression);
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
@@ -672,4 +731,130 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkDist(U, IdOrString{I(12)}, IdOrString{"POINT(24.3 26.8)"});
   checkDist(U, IdOrString{"POINT(24.3 26.8)"s}, IdOrString{"NotAPoint"});
   checkDist(U, IdOrString{"NotAPoint"}, IdOrString{"POINT(24.3 26.8)"});
+}
+
+// ________________________________________________________________________________________
+TEST(SparqlExpression, ifAndCoalesce) {
+  auto checkIf = std::bind_front(testNaryExpressionVec, &makeIfExpression);
+  auto checkCoalesce =
+      std::bind_front(testNaryExpressionVec, makeCoalesceExpressionVariadic);
+
+  const auto T = Id::makeFromBool(true);
+  const auto F = Id::makeFromBool(false);
+
+  checkIf(
+      IdOrStrings{I(0), "eins", I(2), I(3), "vier", "fünf"},
+      // UNDEF and the empty string are considered to be `false`.
+      std::tuple{IdOrStrings{T, F, T, "true", U, ""},
+                 Ids{I(0), I(1), I(2), I(3), I(4), I(5)},
+                 IdOrStrings{"null", "eins", "zwei", "drei", "vier", "fünf"}});
+  checkCoalesce(IdOrStrings{I(0), "eins", I(2), I(3), U, D(5.0)},
+                // UNDEF and the empty string are considered to be `false`.
+                std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.0)},
+                           IdOrStrings{"null", "eins", "zwei", "drei", U, U},
+                           Ids{U, U, U, U, U, D(5.0)}});
+  // Example for COALESCE where we have a constant input and evaluating the last
+  // input is not necessary.
+  checkCoalesce(IdOrStrings{I(0), "eins", I(2), I(3), "eins", D(5.0)},
+                // UNDEF and the empty string are considered to be `false`.
+                std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.0)}, U,
+                           IdOrString{"eins"}, Ids{U, U, U, U, U, D(5.0)}});
+
+  checkCoalesce(IdOrStrings{}, std::tuple{});
+  auto coalesceExpr =
+      makeCoalesceExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
+                                     std::make_unique<IriExpression>("<bam>"));
+  ASSERT_THAT(coalesceExpr->getCacheKey({}),
+              testing::AllOf(::testing::ContainsRegex("CoalesceExpression"),
+                             ::testing::ContainsRegex("<bim>, <bam>)")));
+}
+
+// ________________________________________________________________________________________
+TEST(SparqlExpression, concatExpression) {
+  auto checkConcat =
+      std::bind_front(testNaryExpressionVec, makeConcatExpressionVariadic);
+
+  const auto T = Id::makeFromBool(true);
+  checkConcat(IdOrStrings{"0null", "eins", "2zwei", "3drei", "", "5.35.2"},
+              // UNDEF evaluates to an empty string..
+              std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.3)},
+                         IdOrStrings{"null", "eins", "zwei", "drei", U, U},
+                         Ids{U, U, U, U, U, D(5.2)}});
+  // Example with some constants in the middle.
+  checkConcat(IdOrStrings{"0trueeins", "trueeins", "2trueeins", "3trueeins",
+                          "trueeins", "12.3trueeins-2.1"},
+              // UNDEF and the empty string are considered to be `false`.
+              std::tuple{Ids{I(0), U, I(2), I(3), U, D(12.3)}, T,
+                         IdOrString{"eins"}, Ids{U, U, U, U, U, D(-2.1)}});
+
+  // Only constants
+  checkConcat(IdOrString{"trueMe1"}, std::tuple{T, IdOrString{"Me"}, I(1)});
+  // Constants at the beginning.
+  checkConcat(IdOrStrings{"trueMe1", "trueMe2"},
+              std::tuple{T, IdOrString{"Me"}, Ids{I(1), I(2)}});
+
+  checkConcat(IdOrString{""}, std::tuple{});
+  auto coalesceExpr =
+      makeConcatExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
+                                   std::make_unique<IriExpression>("<bam>"));
+  ASSERT_THAT(coalesceExpr->getCacheKey({}),
+              testing::AllOf(::testing::ContainsRegex("ConcatExpression"),
+                             ::testing::ContainsRegex("<bim>, <bam>)")));
+}
+
+TEST(SparqlExpression, ReplaceExpression) {
+  auto checkReplace =
+      std::bind_front(testNaryExpressionVec, makeReplaceExpression);
+  // A simple replace( no regexes involved).
+  checkReplace(IdOrStrings{"null", "Eins", "zwEi", "drEi", U, U},
+               std::tuple{IdOrStrings{"null", "eins", "zwei", "drei", U, U},
+                          IdOrString{"e"}, IdOrString{"E"}});
+  // A somewhat more involved regex
+  checkReplace(IdOrStrings{"null", "Xs", "zwei", "drei", U, U},
+               std::tuple{IdOrStrings{"null", "eins", "zwei", "drei", U, U},
+                          IdOrString{"e.[a-z]"}, IdOrString{"X"}});
+
+  // Case-insensitive matching using the hack for google regex:
+  checkReplace(IdOrStrings{"null", "xxns", "zwxx", "drxx"},
+               std::tuple{IdOrStrings{"null", "eIns", "zwEi", "drei"},
+                          IdOrString{"(?i)[ei]"}, IdOrString{"x"}});
+
+  // Multiple matches withing the same string
+  checkReplace(
+      IdOrString{"wEeDEflE"},
+      std::tuple{IdOrString{"weeeDeeflee"}, IdOrString{"ee"}, IdOrString{"E"}});
+
+  // Illegal regex.
+  checkReplace(IdOrStrings{U, U, U, U, U, U},
+               std::tuple{IdOrStrings{"null", "Xs", "zwei", "drei", U, U},
+                          IdOrString{"e.[a-z"}, IdOrString{"X"}});
+  // Undefined regex
+  checkReplace(IdOrStrings{U, U, U, U, U, U},
+               std::tuple{IdOrStrings{"null", "Xs", "zwei", "drei", U, U}, U,
+                          IdOrString{"X"}});
+  // Illegal replacement.
+  checkReplace(IdOrStrings{U, U, U, U, U, U},
+               std::tuple{IdOrStrings{"null", "Xs", "zwei", "drei", U, U},
+                          IdOrString{"e"}, Id::makeUndefined()});
+}
+
+TEST(SparqlExpression, literalExpression) {
+  TestContext ctx;
+  StringLiteralExpression expr{TripleComponent::Literal{
+      RdfEscaping::normalizeRDFLiteral("\"notInTheVocabulary\"")}};
+  // Evaluate multiple times to test the caching behavior.
+  for (size_t i = 0; i < 15; ++i) {
+    ASSERT_EQ((ExpressionResult{IdOrString{"\"notInTheVocabulary\""}}),
+              expr.evaluate(&ctx.context));
+  }
+  // A similar test with a constant entry that is part of the vocabulary and can
+  // therefore be converted to an ID.
+  IriExpression iriExpr{"<x>"};
+  Id idOfX;
+  bool result = ctx.qec->getIndex().getId("<x>", &idOfX);
+  AD_CORRECTNESS_CHECK(result);
+  for (size_t i = 0; i < 15; ++i) {
+    ASSERT_EQ((ExpressionResult{IdOrString{idOfX}}),
+              iriExpr.evaluate(&ctx.context));
+  }
 }

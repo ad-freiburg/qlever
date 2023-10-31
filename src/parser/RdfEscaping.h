@@ -137,6 +137,10 @@ std::string escapeForCsv(std::string input);
  * for more information.
  */
 std::string escapeForTsv(std::string input);
+
+// Escape a string to be compatible with XML.
+std::string escapeForXml(std::string input);
+
 }  // namespace RdfEscaping
 
 #endif  // QLEVER_RDFESCAPING_H

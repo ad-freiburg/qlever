@@ -13,48 +13,43 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
-#include "util/BoostHelpers/AsyncWaitForFuture.h"
+#include "util/AsioHelpers.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/http/websocket/MessageSender.h"
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
 
 // __________________________________________________________________________
-Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
-               std::string accessToken, bool usePatternTrick)
+Server::Server(unsigned short port, size_t numThreads,
+               ad_utility::MemorySize maxMem, std::string accessToken,
+               bool usePatternTrick)
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
-      allocator_{
-          ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMemGB *
-                                                               (1ULL << 30U)),
-          [this](size_t numBytesToAllocate) {
-            cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
-                                            numBytesToAllocate / sizeof(Id));
-          }},
+      allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
+                 [this](ad_utility::MemorySize numMemoryToAllocate) {
+                   cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
+                                                   numMemoryToAllocate);
+                 }},
       index_{allocator_},
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.
-      queryProcessingSemaphore_(numThreads) {
-  // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
-  // in the cache and the memory limit
-  // Convert a number of gigabytes to the number of Ids that find in that
-  // amount of memory.
-  auto toNumIds = [](size_t gigabytes) -> size_t {
-    return gigabytes * (1ull << 30u) / sizeof(Id);
-  };
+      threadPool_{numThreads} {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
   RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
   RuntimeParameters().setOnUpdateAction<"cache-max-size-gb">(
-      [this, toNumIds](size_t newValue) {
-        cache_.setMaxSize(toNumIds(newValue));
+      [this](size_t newValue) {
+        cache_.setMaxSize(ad_utility::MemorySize::gigabytes(newValue));
       });
   RuntimeParameters().setOnUpdateAction<"cache-max-size-gb-single-entry">(
-      [this, toNumIds](size_t newValue) {
-        cache_.setMaxSizeSingleEntry(toNumIds(newValue));
+      [this](size_t newValue) {
+        cache_.setMaxSizeSingleEntry(
+            ad_utility::MemorySize::gigabytes(newValue));
       });
 }
 
@@ -136,14 +131,19 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
-  auto httpServer =
-      HttpServer{port_, "0.0.0.0", numThreads_, std::move(httpSessionHandler)};
+  auto httpServer = HttpServer{port_, "0.0.0.0", static_cast<int>(numThreads_),
+                               std::move(httpSessionHandler)};
+  queryHub_ = &httpServer.getQueryHub();
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations);
 
   // Start listening for connections on the server.
   httpServer.run();
+
+  // This will probably never be executed, but to ensure there will never
+  // be any dangling pointers, set it to zero after use.
+  queryHub_ = nullptr;
 }
 
 // _____________________________________________________________________________
@@ -464,10 +464,43 @@ nlohmann::json Server::composeCacheStatsJson() const {
   nlohmann::json result;
   result["num-non-pinned-entries"] = cache_.numNonPinnedEntries();
   result["num-pinned-entries"] = cache_.numPinnedEntries();
-  result["non-pinned-size"] = cache_.nonPinnedSize();
-  result["pinned-size"] = cache_.pinnedSize();
+
+  // TODO Get rid of the `getByte()`, once `MemorySize` has it's own json
+  // converter.
+  result["non-pinned-size"] = cache_.nonPinnedSize().getBytes();
+  result["pinned-size"] = cache_.pinnedSize().getBytes();
   result["num-pinned-index-scan-sizes"] = cache_.pinnedSizes().rlock()->size();
   return result;
+}
+
+// _____________________________________________
+
+/// Special type of std::runtime_error used to indicate that there has been
+/// a collision of query ids. This will happen when a HTTP client chooses an
+/// explicit id that is currently already in use. In this case the server
+/// will respond with HTTP status 409 Conflict and the client is encouraged
+/// to re-submit their request with a different query id.
+class QueryAlreadyInUseError : public std::runtime_error {
+ public:
+  explicit QueryAlreadyInUseError(std::string_view proposedQueryId)
+      : std::runtime_error{"Query id '" + proposedQueryId +
+                           "' is already in use!"} {}
+};
+
+// _____________________________________________
+
+ad_utility::websocket::OwningQueryId Server::getQueryId(
+    const ad_utility::httpUtils::HttpRequest auto& request) {
+  using ad_utility::websocket::OwningQueryId;
+  std::string_view queryIdHeader = request.base()["Query-Id"];
+  if (queryIdHeader.empty()) {
+    return queryRegistry_.uniqueId();
+  }
+  auto queryId = queryRegistry_.uniqueIdFromString(std::string(queryIdHeader));
+  if (!queryId) {
+    throw QueryAlreadyInUseError{queryIdHeader};
+  }
+  return std::move(queryId.value());
 }
 
 // ____________________________________________________________________________
@@ -479,13 +512,15 @@ boost::asio::awaitable<void> Server::processQuery(
   const auto& query = params.at("query");
   AD_CONTRACT_CHECK(!query.empty());
 
-  auto sendJson = [&request, &send](
-                      const json& jsonString,
-                      http::status status =
-                          http::status::ok) -> boost::asio::awaitable<void> {
-    auto response = createJsonResponse(jsonString, request, status);
+  auto sendJson =
+      [&request, &send](
+          const json& jsonString,
+          http::status responseStatus) -> boost::asio::awaitable<void> {
+    auto response = createJsonResponse(jsonString, request, responseStatus);
     co_return co_await send(std::move(response));
   };
+
+  http::status responseStatus = http::status::ok;
 
   // Put the whole query processing in a try-catch block. If any exception
   // occurs, log the error message and send a JSON response with all the details
@@ -531,11 +566,9 @@ boost::asio::awaitable<void> Server::processQuery(
     // required by the SPARQL standard.
     const auto supportedMediaTypes = []() {
       static const std::vector<MediaType> mediaTypes{
-          ad_utility::MediaType::sparqlJson,
-          ad_utility::MediaType::qleverJson,
-          ad_utility::MediaType::tsv,
-          ad_utility::MediaType::csv,
-          ad_utility::MediaType::turtle,
+          ad_utility::MediaType::sparqlJson, ad_utility::MediaType::sparqlXml,
+          ad_utility::MediaType::qleverJson, ad_utility::MediaType::tsv,
+          ad_utility::MediaType::csv,        ad_utility::MediaType::turtle,
           ad_utility::MediaType::octetStream};
       return mediaTypes;
     };
@@ -578,6 +611,9 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
+    AD_CORRECTNESS_CHECK(queryHub_ != nullptr);
+    auto messageSender = co_await ad_utility::websocket::MessageSender::create(
+        getQueryId(request), *queryHub_);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query. Start the shared `timeoutTimer` here
     // to also include the query planning.
@@ -587,15 +623,14 @@ boost::asio::awaitable<void> Server::processQuery(
     // do index scans) and then we get an error message afterwards that a
     // certain media type is not supported.
     QueryExecutionContext qec(index_, &cache_, allocator_,
-                              sortPerformanceEstimator_, pinSubtrees,
-                              pinResult);
+                              sortPerformanceEstimator_,
+                              std::ref(messageSender), pinSubtrees, pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(enablePatternTrick_);
     queryExecutionTree = qp.createExecutionTree(pq);
     auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
     qet.recursivelySetTimeoutTimer(timeoutTimer);
-    qet.getRootOperation()->createRuntimeInfoFromEstimates();
     size_t timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
         qet.getRootOperation()->getRuntimeInfoWholeQuery();
@@ -614,7 +649,7 @@ boost::asio::awaitable<void> Server::processQuery(
       });
 
       // The `streamable_body` that is used internally turns all exceptions that
-      // occur while generating the rults into "broken pipe". We store the
+      // occur while generating the results into "broken pipe". We store the
       // actual exceptions and manually rethrow them to propagate the correct
       // error messages to the user.
       // TODO<joka921> What happens, when part of the TSV export has already
@@ -639,6 +674,7 @@ boost::asio::awaitable<void> Server::processQuery(
       case ad_utility::MediaType::csv:
       case ad_utility::MediaType::tsv:
       case ad_utility::MediaType::octetStream:
+      case ad_utility::MediaType::sparqlXml:
       case ad_utility::MediaType::turtle: {
         co_await sendStreamableResponse(mediaType.value());
       } break;
@@ -649,7 +685,7 @@ boost::asio::awaitable<void> Server::processQuery(
           return ExportQueryExecutionTrees::computeResultAsJSON(
               pq, qet, requestTimer, maxSend, mediaType.value());
         });
-        co_await sendJson(std::move(responseString));
+        co_await sendJson(std::move(responseString), responseStatus);
       } break;
       default:
         // This should never happen, because we have carefully restricted the
@@ -671,12 +707,16 @@ boost::asio::awaitable<void> Server::processQuery(
               << ", total time was " << requestTimer.msecs() << " ms"
               << std::endl;
     LOG(DEBUG) << "Runtime Info:\n"
-               << qet.getRootOperation()->getRuntimeInfo().toString()
-               << std::endl;
+               << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
   } catch (const ParseException& e) {
+    responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
+  } catch (const QueryAlreadyInUseError& e) {
+    responseStatus = http::status::conflict;
+    exceptionErrorMsg = e.what();
   } catch (const std::exception& e) {
+    responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
@@ -702,22 +742,19 @@ boost::asio::awaitable<void> Server::processQuery(
         query, exceptionErrorMsg.value(), requestTimer, metadata);
     if (queryExecutionTree) {
       errorResponseJson["runtimeInformation"] = nlohmann::ordered_json(
-          queryExecutionTree->getRootOperation()->getRuntimeInfo());
+          queryExecutionTree->getRootOperation()->runtimeInfo());
     }
-    co_return co_await sendJson(errorResponseJson, http::status::bad_request);
+    co_return co_await sendJson(errorResponseJson, responseStatus);
   }
 }
 
 // _____________________________________________________________________________
 template <typename Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function) const {
-  auto acquireComputeRelease = [this, function = std::move(function)] {
-    LOG(DEBUG) << "Acquiring new thread for query processing\n";
-    queryProcessingSemaphore_.acquire();
-    auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-        [this]() { queryProcessingSemaphore_.release(); });
-    return function();
+  auto runOnExecutor = [](auto executor, Function func) -> net::awaitable<T> {
+    co_await net::post(net::bind_executor(executor, net::use_awaitable));
+    co_return std::invoke(func);
   };
-  co_return co_await ad_utility::asio_helpers::async_on_external_thread(
-      std::move(acquireComputeRelease), boost::asio::use_awaitable);
+  return ad_utility::resumeOnOriginalExecutor(
+      runOnExecutor(threadPool_.get_executor(), std::move(function)));
 }

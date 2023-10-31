@@ -13,6 +13,7 @@
 #include "util/Log.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
+#include "util/http/websocket/WebSocketSession.h"
 #include "util/jthread.h"
 
 namespace beast = boost::beast;    // from <boost/beast.hpp>
@@ -44,19 +45,18 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 template <typename HttpHandler>
 class HttpServer {
  private:
-  const net::ip::address ipAddress_;
-  const unsigned short port_;
   HttpHandler httpHandler_;
   int numServerThreads_;
   net::io_context ioContext_;
-  tcp::acceptor acceptor_;
   // All code that uses the `acceptor_` must run within this strand.
   // Note that the `acceptor_` might be concurrently accessed by the `listener`
   // and the `shutdown` function, the latter of which is currently only used in
   // unit tests.
   net::strand<net::io_context::executor_type> acceptorStrand_ =
       net::make_strand(ioContext_);
+  tcp::acceptor acceptor_{acceptorStrand_};
   std::atomic<bool> serverIsReady_ = false;
+  ad_utility::websocket::QueryHub queryHub_{ioContext_};
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
@@ -66,16 +66,13 @@ class HttpServer {
                       const std::string& ipAddress = "0.0.0.0",
                       int numServerThreads = 1,
                       HttpHandler handler = HttpHandler{})
-      : ipAddress_{net::ip::make_address(ipAddress)},
-        port_{port},
-        httpHandler_{std::move(handler)},
+      : httpHandler_{std::move(handler)},
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?
         numServerThreads_{std::max(2, numServerThreads)},
-        ioContext_{numServerThreads_},
-        acceptor_{ioContext_} {
+        ioContext_{numServerThreads_} {
     try {
-      tcp::endpoint endpoint{ipAddress_, port_};
+      tcp::endpoint endpoint{net::ip::make_address(ipAddress), port};
       // Open the acceptor.
       acceptor_.open(endpoint.protocol());
       boost::asio::socket_base::reuse_address option{true};
@@ -87,6 +84,8 @@ class HttpServer {
       throw;
     }
   }
+
+  ad_utility::websocket::QueryHub& getQueryHub() noexcept { return queryHub_; }
 
   /// Run the server using the specified number of threads. Note that this
   /// function never returns, unless the Server crashes. The second argument
@@ -114,7 +113,7 @@ class HttpServer {
   }
 
   // Get the server port.
-  [[nodiscard]] unsigned short getPort() const { return port_; }
+  auto getPort() const { return acceptor_.local_endpoint().port(); }
 
   // Is the server ready yet? We need this in `test/HttpTest.cpp` so that our
   // test can wait for the server to be ready and continue with its test
@@ -162,12 +161,23 @@ class HttpServer {
       try {
         // Wait for a request (the code only continues after we have received
         // and accepted a request).
-        auto socket =
-            co_await acceptor_.async_accept(boost::asio::use_awaitable);
+        // Note: Although a single session is conceptually single-threaded, we
+        // still have to manually schedule it on the `coroExecutor` to make the
+        // thread sanitizer happy. The reason is, that the thread of execution
+        // specified by the coroutine might change threads as the coroutine is
+        // suspended and then resumed.
+        auto coroExecutor = co_await net::this_coro::executor;
+        auto socket = co_await acceptor_.async_accept(
+            coroExecutor, boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
-        net::co_spawn(ioContext_, session(std::move(socket)), net::detached);
+        net::co_spawn(coroExecutor, session(std::move(socket)), net::detached);
       } catch (const boost::system::system_error& b) {
-        logBeastError(b.code(), "Error in the accept loop");
+        // If the server is shut down this will cause operations to abort.
+        // This will most likely only happen in tests, but could also occur
+        // in a future version of Qlever that manually handles SIGTERM signals.
+        if (b.code() != boost::asio::error::operation_aborted) {
+          logBeastError(b.code(), "Error in the accept loop");
+        }
       }
     }
   }
@@ -215,13 +225,29 @@ class HttpServer {
         co_await http::async_read(stream, buffer, req,
                                   boost::asio::use_awaitable);
 
-        // Currently there is no timeout on the server side, this is handled
-        // by QLever's timeout mechanism.
-        stream.expires_never();
+        // Let request be handled by `WebSocketSession` if the HTTP
+        // request is a WebSocket handshake
+        if (beast::websocket::is_upgrade(req)) {
+          auto errorResponse = ad_utility::websocket::WebSocketSession::
+              getErrorResponseIfPathIsInvalid(req);
+          if (errorResponse.has_value()) {
+            co_await sendMessage(errorResponse.value());
+          } else {
+            // prevent cleanup after socket has been moved from
+            releaseConnection.cancel();
+            co_await ad_utility::websocket::WebSocketSession::handleSession(
+                queryHub_, req, std::move(stream.socket()));
+            co_return;
+          }
+        } else {
+          // Currently there is no timeout on the server side, this is handled
+          // by QLever's timeout mechanism.
+          stream.expires_never();
 
-        // Handle the http request. Note that `httpHandler_` is also
-        // responsible for sending the message via the `sendMessage` lambda.
-        co_await httpHandler_(std::move(req), sendMessage);
+          // Handle the http request. Note that `httpHandler_` is also
+          // responsible for sending the message via the `sendMessage` lambda.
+          co_await httpHandler_(std::move(req), sendMessage);
+        }
 
         // The closing of the stream is done in the exception handler.
         if (streamNeedsClosing) {
@@ -233,8 +259,10 @@ class HttpServer {
           beast::error_code ec;
           stream.socket().shutdown(tcp::socket::shutdown_send, ec);
         } else {
-          // This is the error "The socket was closed due to a timeout".
-          if (error.code() == beast::error::timeout) {
+          // This is the error "The socket was closed due to a timeout" or if
+          // the client stream ended unexpectedly.
+          if (error.code() == beast::error::timeout ||
+              error.code() == boost::asio::error::eof) {
             LOG(TRACE) << error.what() << " (code " << error.code() << ")"
                        << std::endl;
           } else {

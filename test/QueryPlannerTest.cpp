@@ -810,8 +810,14 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
       "\"friend*\" and 2 variables with textLimit = 1 filtered by\n"
       "  {\n    SCAN POS with P = \"<is-a>\", O = \"<Politician>"
       "\"\n    qet-width: 1 \n  }\n   filtered on column 0\n "
-      " qet-width: 4 \n}",
+      " qet-width: 5 \n}",
       qet.asString());
+  auto c = Variable{"?c"};
+  ASSERT_EQ(0u, qet.getVariableColumn(c));
+  ASSERT_EQ(1u, qet.getVariableColumn(c.getTextScoreVariable()));
+  ASSERT_EQ(2u, qet.getVariableColumn(Variable{"?y"}));
+  ASSERT_EQ(3u, qet.getVariableColumn(Variable{"?x"}));
+  ASSERT_EQ(4u, qet.getVariableColumn(c.getMatchingWordVariable("friend")));
 }
 
 TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
@@ -834,11 +840,11 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
       "TEXT OPERATION WITH FILTER: co-occurrence with words: \"friend*\" and 2 "
       "variables with textLimit = 1 filtered by\n        {\n          SCAN POS "
       "with P = \"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n    "
-      "    }\n         filtered on column 0\n        qet-width: 4 \n      }\n  "
-      "    qet-width: 4 \n    } join-column: [2]\n    |X|\n    {\n      SCAN "
+      "    }\n         filtered on column 0\n        qet-width: 5 \n      }\n  "
+      "    qet-width: 5 \n    } join-column: [2]\n    |X|\n    {\n      SCAN "
       "POS with P = \"<is-a>\", O = \"<Scientist>\"\n      qet-width: 1 \n    "
-      "} join-column: [0]\n    qet-width: 4 \n  }\n   filtered on column 2\n  "
-      "qet-width: 6 \n}",
+      "} join-column: [0]\n    qet-width: 5 \n  }\n   filtered on column 2\n  "
+      "qet-width: 7 \n}",
       qet.asString());
 }
 
@@ -1077,4 +1083,32 @@ TEST(QueryPlannerTest, SimpleTripleThreeVariables) {
             h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {PSO}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?o",
             h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {POS}));
+}
+
+TEST(QueryPlannerTest, CartesianProductJoin) {
+  auto scan = h::IndexScanFromStrings;
+  h::expect(
+      "SELECT ?x ?p ?o WHERE {"
+      "<s> <p> ?o . ?a <b> <c> }",
+      h::CartesianProductJoin(scan("<s>", "<p>", "?o"),
+                              scan("?a", "<b>", "<c>")));
+  // This currently fails because of a bug, we have to fix the bug...
+  h::expect(
+      "SELECT ?x ?p ?o WHERE {"
+      "<s> ?p ?o . ?a ?b ?c }",
+      h::CartesianProductJoin(scan("<s>", "?p", "?o"), scan("?a", "?b", "?c")));
+  h::expect(
+      "SELECT * WHERE {"
+      "?s <p> <o> . ?s <p2> ?o2 . ?x <b> ?c }",
+      h::CartesianProductJoin(
+          h::Join(scan("?s", "<p>", "<o>"), scan("?s", "<p2>", "?o2")),
+          scan("?x", "<b>", "?c")));
+}
+
+// __________________________________________________________________________
+TEST(QueryPlanner, BindAtBeginningOfQuery) {
+  h::expect(
+      "SELECT * WHERE {"
+      " BIND (3 + 5 AS ?x) }",
+      h::Bind(h::NeutralElementOperation(), "3 + 5", Variable{"?x"}));
 }

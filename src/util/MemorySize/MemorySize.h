@@ -7,13 +7,16 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <algorithm>
 #include <cassert>
 #include <concepts>
 #include <cstddef>
+#include <functional>
+#include <limits>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 
-#include "util/Cache.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
@@ -24,6 +27,10 @@ namespace ad_utility {
 # Definition #
 ##############
 */
+
+// A concept, for when a type should be an integral, or a floating point.
+template <typename T>
+concept Arithmetic = std::integral<T> || std::floating_point<T>;
 
 /*
 An abstract class, that represents an amount of memory.
@@ -48,20 +55,23 @@ class MemorySize {
   constexpr MemorySize& operator=(const MemorySize&) = default;
   constexpr MemorySize& operator=(MemorySize&&) = default;
 
+  // Default comparison operator.
+  constexpr auto operator<=>(const MemorySize&) const = default;
+
   /*
   Factory functions for creating an instance of this class with the wanted
   memory size saved internally. Always requries the exact memory size unit and
   size wanted.
   */
-  constexpr static MemorySize bytes(size_t numBytes);
-  constexpr static MemorySize kilobytes(size_t numKilobytes);
-  constexpr static MemorySize kilobytes(double numKilobytes);
-  constexpr static MemorySize megabytes(size_t numMegabytes);
-  constexpr static MemorySize megabytes(double numMegabytes);
-  constexpr static MemorySize gigabytes(size_t numGigabytes);
-  constexpr static MemorySize gigabytes(double numGigabytes);
-  constexpr static MemorySize terabytes(size_t numTerabytes);
-  constexpr static MemorySize terabytes(double numTerabytes);
+  template <std::integral T>
+  constexpr static MemorySize bytes(T numBytes);
+  constexpr static MemorySize kilobytes(Arithmetic auto numKilobytes);
+  constexpr static MemorySize megabytes(Arithmetic auto numMegabytes);
+  constexpr static MemorySize gigabytes(Arithmetic auto numGigabytes);
+  constexpr static MemorySize terabytes(Arithmetic auto numTerabytes);
+
+  // Factory for max size instance.
+  constexpr static MemorySize max();
 
   /*
   Return the internal memory amount in the wanted memory unit format.
@@ -96,6 +106,27 @@ class MemorySize {
   An amount of bytes described via a user defined literal.
   */
   static MemorySize parse(std::string_view str);
+
+  // Arithmetic operators and arithmetic assignment operators.
+  constexpr MemorySize operator+(const MemorySize& m) const;
+  constexpr MemorySize& operator+=(const MemorySize& m);
+  constexpr MemorySize operator-(const MemorySize& m) const;
+  constexpr MemorySize& operator-=(const MemorySize& m);
+
+  template <Arithmetic T>
+  constexpr MemorySize operator*(const T c) const;
+
+  template <Arithmetic T>
+  friend constexpr MemorySize operator*(const T c, const MemorySize m);
+
+  template <Arithmetic T>
+  constexpr MemorySize& operator*=(const T c);
+
+  template <Arithmetic T>
+  constexpr MemorySize operator/(const T c) const;
+
+  template <Arithmetic T>
+  constexpr MemorySize& operator/=(const T c);
 
  private:
   // Constructor for the factory functions.
@@ -149,91 +180,139 @@ constexpr static double sizeTDivision(const size_t dividend,
          static_cast<double>(dividend % divisor) / static_cast<double>(divisor);
 }
 
+// Max value for a size_t.
+static constexpr size_t size_t_max = std::numeric_limits<size_t>::max();
+
+// The maximal amount of a memory unit, that a `MemorySize` can remember.
+constexpr ConstexprMap<std::string_view, double, 5> maxAmountOfUnit(
+    {std::pair{"B", sizeTDivision(size_t_max, numBytesPerUnit.at("B"))},
+     std::pair{"kB", sizeTDivision(size_t_max, numBytesPerUnit.at("kB"))},
+     std::pair{"MB", sizeTDivision(size_t_max, numBytesPerUnit.at("MB"))},
+     std::pair{"GB", sizeTDivision(size_t_max, numBytesPerUnit.at("GB"))},
+     std::pair{"TB", sizeTDivision(size_t_max, numBytesPerUnit.at("TB"))}});
+
+// Converts a given number to `size_t`. Rounds up, if needed.
+template <Arithmetic T>
+constexpr size_t ceilAndCastToSizeT(const T d) {
+  if constexpr (std::is_floating_point_v<T>) {
+    // TODO<c++23> As of `c++23`, `std::ceil` is constexpr and can be used.
+    const auto unrounded = static_cast<size_t>(d);
+    // We (maybe) have to round up.
+    return d > static_cast<T>(unrounded) ? unrounded + 1 : unrounded;
+  } else {
+    static_assert(std::is_integral_v<T>);
+    return static_cast<size_t>(d);
+  }
+}
+
 /*
 @brief Calculate the amount of bytes for a given amount of units.
 
-@param unitName Must be `B`, `kB`, `MB`, `GB`, or `TB`.
+@param unitName Must be `kB`, `MB`, `GB`, or `TB`.
 
 @return The amount of bytes. Rounded up, if needed.
 */
-template <typename T>
-requires std::integral<T> || std::floating_point<T>
+template <Arithmetic T>
 constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
                                            std::string_view unitName) {
-  // Negativ values makes no sense.
-  AD_CONTRACT_CHECK(amountOfUnits >= 0);
+  if constexpr (std::is_signed_v<T>) {
+    // Negativ values makes no sense.
+    AD_CONTRACT_CHECK(amountOfUnits >= 0);
+  }
 
   // Must be one of the supported units.
+  // TODO Replace with correctness check, should it ever become constexpr.
   AD_CONTRACT_CHECK(numBytesPerUnit.contains(unitName));
 
-  // Max value for `amountOfUnits`.
-  if (static_cast<T>(sizeTDivision(size_t_max, numBytesPerUnit.at(unitName))) <
+  /*
+  Max value for `amountOfUnits`.
+  Note, that max amount of units for a unit of `unitName` is sometimes bigger
+  than what can represented with `T`.
+  */
+  if (static_cast<T>(
+          std::min(maxAmountOfUnit.at(unitName),
+                   static_cast<double>(std::numeric_limits<T>::max()))) <
       amountOfUnits) {
     throw std::runtime_error(
         absl::StrCat(amountOfUnits, " ", unitName,
                      " is larger than the maximum amount of memory that can be "
-                     "addressed using 64 bits"));
+                     "addressed using 64 bits."));
   }
 
   if constexpr (std::is_floating_point_v<T>) {
-    // TODO<c++23> As of `c++23`, `std::ceil` is constexpr and can be used.
-    const double doubleResult =
-        amountOfUnits * static_cast<double>(numBytesPerUnit.at(unitName));
-    const auto unroundedResult = static_cast<size_t>(doubleResult);
-    // We (maybe) have to round up.
-    return doubleResult > static_cast<double>(unroundedResult)
-               ? unroundedResult + 1
-               : unroundedResult;
+    return ceilAndCastToSizeT(
+        static_cast<double>(amountOfUnits) *
+        static_cast<double>(numBytesPerUnit.at(unitName)));
   } else {
     static_assert(std::is_integral_v<T>);
-    return amountOfUnits * numBytesPerUnit.at(unitName);
+    return static_cast<size_t>(amountOfUnits) * numBytesPerUnit.at(unitName);
   }
+}
+
+/*
+@brief The implementation for the `MemorySize` multiplication and division
+operator.
+
+@param m The `MemorySize` instance, which will deliver the amount of bytes for
+the first argument of `func`.
+@param c The constant, with which the given `MemorySize` will be
+multiplied/divied with.
+@param func This function will calculate the amount of bytes, that the new
+`MemorySize` records. It will be given the amount of bytes in `m`, followed by
+`c` for this calculation. Both will either have been cast to `size_t`, or
+`double.` Note, that the rounding and casting to `size_t` for floating point
+return types will be automaticly done, and can be ignored by `func`.
+ */
+template <Arithmetic T, typename Func>
+requires std::invocable<Func, const double, const double> ||
+         std::invocable<Func, const size_t, const size_t>
+constexpr MemorySize magicImplForDivAndMul(const MemorySize& m, const T c,
+                                           Func func) {
+  // In order for the results to be as precise as possible, we cast to highest
+  // precision data type variant of `T`.
+  using PrecisionType =
+      std::conditional_t<std::is_integral_v<T>, size_t, double>;
+
+  return MemorySize::bytes(detail::ceilAndCastToSizeT(
+      std::invoke(func, static_cast<PrecisionType>(m.getBytes()),
+                  static_cast<PrecisionType>(c))));
 }
 }  // namespace detail
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::bytes(size_t numBytes) {
-  return MemorySize{numBytes};
+template <std::integral T>
+constexpr MemorySize MemorySize::bytes(T numBytes) {
+  if constexpr (std::is_signed_v<T>) {
+    // Doesn't make much sense to a negativ amount of memory.
+    AD_CONTRACT_CHECK(numBytes >= 0);
+  }
+
+  return MemorySize{static_cast<size_t>(numBytes)};
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::kilobytes(size_t numKilobytes) {
+constexpr MemorySize MemorySize::kilobytes(Arithmetic auto numKilobytes) {
   return MemorySize{detail::convertMemoryUnitsToBytes(numKilobytes, "kB")};
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::kilobytes(double numKilobytes) {
-  return MemorySize{detail::convertMemoryUnitsToBytes(numKilobytes, "kB")};
-}
-
-// _____________________________________________________________________________
-constexpr MemorySize MemorySize::megabytes(size_t numMegabytes) {
+constexpr MemorySize MemorySize::megabytes(Arithmetic auto numMegabytes) {
   return MemorySize{detail::convertMemoryUnitsToBytes(numMegabytes, "MB")};
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::megabytes(double numMegabytes) {
-  return MemorySize{detail::convertMemoryUnitsToBytes(numMegabytes, "MB")};
-}
-
-// _____________________________________________________________________________
-constexpr MemorySize MemorySize::gigabytes(size_t numGigabytes) {
+constexpr MemorySize MemorySize::gigabytes(Arithmetic auto numGigabytes) {
   return MemorySize{detail::convertMemoryUnitsToBytes(numGigabytes, "GB")};
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::gigabytes(double numGigabytes) {
-  return MemorySize{detail::convertMemoryUnitsToBytes(numGigabytes, "GB")};
-}
-
-// _____________________________________________________________________________
-constexpr MemorySize MemorySize::terabytes(size_t numTerabytes) {
+constexpr MemorySize MemorySize::terabytes(Arithmetic auto numTerabytes) {
   return MemorySize{detail::convertMemoryUnitsToBytes(numTerabytes, "TB")};
 }
 
 // _____________________________________________________________________________
-constexpr MemorySize MemorySize::terabytes(double numTerabytes) {
-  return MemorySize{detail::convertMemoryUnitsToBytes(numTerabytes, "TB")};
+constexpr MemorySize MemorySize::max() {
+  return MemorySize{detail::size_t_max};
 }
 
 // _____________________________________________________________________________
@@ -261,6 +340,124 @@ constexpr double MemorySize::getGigabytes() const {
 constexpr double MemorySize::getTerabytes() const {
   return detail::sizeTDivision(memoryInBytes_,
                                detail::numBytesPerUnit.at("TB"));
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::operator+(const MemorySize& m) const {
+  // Check for overflow.
+  if (memoryInBytes_ > detail::size_t_max - m.memoryInBytes_) {
+    throw std::overflow_error(
+        "Overflow error: Addition of the two given 'MemorySize's is not "
+        "possible. "
+        "It would result in a size_t overflow.");
+  }
+  return MemorySize::bytes(memoryInBytes_ + m.memoryInBytes_);
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize& MemorySize::operator+=(const MemorySize& m) {
+  *this = *this + m;
+  return *this;
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize MemorySize::operator-(const MemorySize& m) const {
+  // Check for underflow.
+  if (memoryInBytes_ < m.memoryInBytes_) {
+    throw std::underflow_error(
+        "Underflow error: Subtraction of the two given 'MemorySize's is not "
+        "possible. It would result in a size_t underflow.");
+  }
+  return MemorySize::bytes(memoryInBytes_ - m.memoryInBytes_);
+}
+
+// _____________________________________________________________________________
+constexpr MemorySize& MemorySize::operator-=(const MemorySize& m) {
+  *this = *this - m;
+  return *this;
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize MemorySize::operator*(const T c) const {
+  if constexpr (std::is_signed_v<T>) {
+    // A negative amount of memory wouldn't make much sense.
+    AD_CONTRACT_CHECK(c >= static_cast<T>(0));
+  }
+
+  // Check for overflow.
+  if (static_cast<double>(c) >
+      detail::sizeTDivision(detail::size_t_max, memoryInBytes_)) {
+    throw std::overflow_error(
+        "Overflow error: Multiplicaton of the given 'MemorySize' with the "
+        "given constant is not possible. It would result in a size_t "
+        "overflow.");
+  }
+  return detail::magicImplForDivAndMul(*this, c, std::multiplies{});
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize operator*(const T c, const MemorySize m) {
+  return m * c;
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize& MemorySize::operator*=(const T c) {
+  *this = *this * c;
+  return *this;
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize MemorySize::operator/(const T c) const {
+  if constexpr (std::is_signed_v<T>) {
+    // A negative amount of memory wouldn't make much sense.
+    AD_CONTRACT_CHECK(c > static_cast<T>(0));
+  }
+
+  /*
+  Check for overflow. Underflow isn't possible, because neither `MemorySize`,
+  nor `c`, can be negative.
+
+  Furthermore, overflow is only possible, if `T` is a floating point. Because
+  the quoutient, of the division between two natural numbers, is always smaller
+  than the dividend. Which is not always true, if the divisor is a floating
+  point number.
+  For example: 1/(1/2) = 2
+  */
+  if (std::floating_point<T> &&
+      static_cast<double>(memoryInBytes_) >
+          static_cast<double>(detail::size_t_max) * static_cast<double>(c)) {
+    throw std::overflow_error(
+        "Overflow error: Division of the given 'MemorySize' with the given "
+        "constant is not possible. It would result in a size_t overflow.");
+  }
+
+  /*
+  The default division for `size_t` doesn't always round up, which is the
+  wanted behavior for the calculation of memory sizes. Instead, we calculate
+  the division with as much precision as possible and leave the rounding to
+  `magicImpl`.
+  */
+  return detail::magicImplForDivAndMul(
+      *this, c,
+      []<typename DivisionType>(const DivisionType& a, const DivisionType& b) {
+        if constexpr (std::is_floating_point_v<DivisionType>) {
+          return a / b;
+        } else {
+          static_assert(std::is_integral_v<DivisionType>);
+          return detail::sizeTDivision(a, b);
+        }
+      });
+}
+
+// _____________________________________________________________________________
+template <Arithmetic T>
+constexpr MemorySize& MemorySize::operator/=(const T c) {
+  *this = *this / c;
+  return *this;
 }
 
 namespace memory_literals {

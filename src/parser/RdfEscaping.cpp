@@ -276,6 +276,19 @@ std::string escapeForTsv(std::string input) {
 }
 
 // __________________________________________________________________________
+std::string escapeForXml(std::string input) {
+  if (ctre::search<"[&\"<>']">(input)) [[unlikely]] {
+    absl::StrReplaceAll({{"&", "&amp;"},
+                         {"<", "&lt;"},
+                         {">", "&gt;"},
+                         {"\"", "&quot;"},
+                         {"'", "&apos;"}},
+                        &input);
+  }
+  return input;
+}
+
+// __________________________________________________________________________
 std::string normalizedContentFromLiteralOrIri(std::string&& input) {
   if (input.starts_with('<')) {
     AD_CORRECTNESS_CHECK(input.ends_with('>'));

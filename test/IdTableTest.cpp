@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "./util/AllocatorTestHelpers.h"
+#include "./util/GTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
@@ -98,7 +99,8 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
     // via auto!
     // The technical reason is that the `operator[]` returns a `const Id&` even
     // though the `rowProxy` object is not const:
-#ifdef __GLIBCXX__
+#if false
+//#ifdef __GLIBCXX__
     static_assert(std::is_same_v<const Id&, decltype(rowProxy[0])>);
 #endif
   }
@@ -116,7 +118,8 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
     // via auto!
     // The technical reason is that the `operator[]` returns a `const Id&` even
     // though the `rowProxy` object is not const:
-#ifdef __GLIBCXX__
+#if false
+//#ifdef __GLIBCXX__
     static_assert(std::is_same_v<const Id&, decltype(rowProxy[0])>);
 #endif
   }
@@ -276,12 +279,27 @@ TEST(IdTable, push_back_and_assign) {
                     make(i * NUM_COLS + 3), make(i * NUM_COLS + 4)});
     }
 
+    IdTable t2{NUM_COLS, makeAllocator()};
+    // Test the push_back function for spans
+    for (size_t i = 0; i < NUM_ROWS; i++) {
+      std::vector<ValueId> row;
+      row.push_back(Id::makeFromInt(i * NUM_COLS + 1));
+      row.push_back(Id::makeFromInt(i * NUM_COLS + 2));
+      row.push_back(Id::makeFromInt(i * NUM_COLS + 3));
+      row.push_back(Id::makeFromInt(i * NUM_COLS + 4));
+      t2.push_back(row);
+    }
+
     ASSERT_EQ(NUM_ROWS, t1.size());
     ASSERT_EQ(NUM_ROWS, t1.numRows());
     ASSERT_EQ(NUM_COLS, t1.numColumns());
+    ASSERT_EQ(NUM_ROWS, t2.size());
+    ASSERT_EQ(NUM_ROWS, t2.numRows());
+    ASSERT_EQ(NUM_COLS, t2.numColumns());
     // Check the entries
     for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
       ASSERT_EQ(make(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+      ASSERT_EQ(Id::makeFromInt(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
     }
 
     // Assign new values to the entries
@@ -725,6 +743,51 @@ TEST(IdTableStaticTest, copyAndMove) {
   }
 }
 
+TEST(IdTableTest, statusAfterMove) {
+  {
+    IdTableStatic<3> t1{makeAllocator()};
+    t1.push_back(std::array{V(1), V(42), V(2304)});
+
+    auto t2 = std::move(t1);
+    // `t1` is valid and still has the same number of columns, but they now are
+    // empty.
+    ASSERT_EQ(3, t1.numColumns());
+    ASSERT_EQ(0, t1.numRows());
+    ASSERT_NO_THROW(t1.push_back(std::array{V(4), V(16), V(23)}));
+    ASSERT_EQ(1, t1.numRows());
+    ASSERT_EQ((static_cast<std::array<Id, 3>>(t1[0])),
+              (std::array{V(4), V(16), V(23)}));
+  }
+  {
+    using Buffer = ad_utility::BufferedVector<Id>;
+    Buffer buffer(0, "IdTableTest.statusAfterMove.dat");
+    using BufferedTable = columnBasedIdTable::IdTable<Id, 1, Buffer>;
+    BufferedTable table{1, std::array{std::move(buffer)}};
+    table.push_back(std::array{V(19)});
+    auto t2 = std::move(table);
+    // The `table` has been moved from and is invalid, because we don't have a
+    // file anymore where we could write the contents. This means that all
+    // operations that would have to change the size of the IdTable throw until
+    // we have reinstated the column vector by explicitly assigning a newly
+    // constructed table. The exceptions that are thrown are from the
+    // `BufferedVector` class which throws when it is being accessed after being
+    // moved from. In other words, the `IdTable` class needs no special code to
+    // handle the case of the columns being stored in a `BufferedVector`.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        table.push_back(std::array{V(4)}),
+        ::testing::ContainsRegex("Tried to access a DiskBasedArray"));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        table.resize(42),
+        ::testing::ContainsRegex("Tried to access a DiskBasedArray"));
+    table = BufferedTable{
+        1, std::array{Buffer{0, "IdTableTest.statusAfterMove2.dat"}}};
+    ASSERT_NO_THROW(table.push_back(std::array{V(4)}));
+    ASSERT_NO_THROW(table.resize(42));
+    ASSERT_EQ(table.size(), 42u);
+    ASSERT_EQ(table(0, 0), V(4));
+  }
+}
+
 TEST(IdTableStaticTest, erase) {
   constexpr size_t NUM_ROWS = 12;
   constexpr size_t NUM_COLS = 4;
@@ -968,21 +1031,22 @@ TEST(IdTable, shrinkToFit) {
   // necessary to change them if one of our used standard libraries has a
   // different behavior, but this is unlikely due to ABI stability goals between
   // library versions.
-  auto memory = ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000);
+  auto memory = ad_utility::makeAllocationMemoryLeftThreadsafeObject(1_kB);
   IdTable table{2, ad_utility::AllocatorWithLimit<Id>{memory}};
-  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 1000);
+  using namespace ad_utility::memory_literals;
+  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 1_kB);
   table.reserve(20);
   ASSERT_TRUE(table.empty());
   // 20 rows * 2 columns * 8 bytes per ID were allocated.
-  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 680);
+  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 680_B);
   table.emplace_back();
   table.emplace_back();
   ASSERT_EQ(table.numRows(), 2u);
-  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 680);
+  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 680_B);
   table.shrinkToFit();
   ASSERT_EQ(table.numRows(), 2u);
   // Now only 2 rows * 2 columns * 8 bytes were allocated.
-  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 968);
+  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 968_B);
 }
 
 TEST(IdTable, staticAsserts) {

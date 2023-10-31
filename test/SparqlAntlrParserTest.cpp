@@ -23,6 +23,7 @@
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "util/AllocatorTestHelpers.h"
 #include "util/SourceLocation.h"
 
 using namespace sparqlParserHelpers;
@@ -200,7 +201,7 @@ TEST(SparqlExpressionParser, First) {
 
   VariableToColumnMap map;
   ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+      ad_utility::testing::makeAllocator()};
   IdTable table{alloc};
   LocalVocab localVocab;
   sparqlExpression::EvaluationContext input{*ad_utility::testing::getQec(), map,
@@ -1226,7 +1227,7 @@ auto matchNaryWithChildrenMatchers(auto makeFunction,
     return std::type_index{typeid(*ptr)};
   };
 
-  auto makeDummyChild = [](auto&&) -> SparqlExpression::Ptr {
+  [[maybe_unused]] auto makeDummyChild = [](auto&&) -> SparqlExpression::Ptr {
     return std::make_unique<VariableExpression>(Variable{"?x"});
   };
   auto expectedTypeIndex =
@@ -1279,11 +1280,33 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
   expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
   expectBuiltInCall("day(?x)", matchUnary(&makeDayExpression));
+  expectBuiltInCall("hours(?x)", matchUnary(&makeHoursExpression));
+  expectBuiltInCall("minutes(?x)", matchUnary(&makeMinutesExpression));
+  expectBuiltInCall("seconds(?x)", matchUnary(&makeSecondsExpression));
   expectBuiltInCall("abs(?x)", matchUnary(&makeAbsExpression));
   expectBuiltInCall("ceil(?x)", matchUnary(&makeCeilExpression));
   expectBuiltInCall("floor(?x)", matchUnary(&makeFloorExpression));
   expectBuiltInCall("round(?x)", matchUnary(&makeRoundExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
+  expectBuiltInCall("COALESCE(?x)", matchUnary(makeCoalesceExpressionVariadic));
+  expectBuiltInCall("COALESCE()", matchNary(makeCoalesceExpressionVariadic));
+  expectBuiltInCall("COALESCE(?x, ?y, ?z)",
+                    matchNary(makeCoalesceExpressionVariadic, Var{"?x"},
+                              Var{"?y"}, Var{"?z"}));
+  expectBuiltInCall("CONCAT(?x)", matchUnary(makeConcatExpressionVariadic));
+  expectBuiltInCall("concaT()", matchNary(makeConcatExpressionVariadic));
+  expectBuiltInCall(
+      "concat(?x, ?y, ?z)",
+      matchNary(makeConcatExpressionVariadic, Var{"?x"}, Var{"?y"}, Var{"?z"}));
+
+  expectBuiltInCall(
+      "replace(?x, ?y, ?z)",
+      matchNary(&makeReplaceExpression, Var{"?x"}, Var{"?y"}, Var{"?z"}));
+  expectFails("replace(?x, ?y, ?z, \"i\")",
+              ::testing::AllOf(::testing::ContainsRegex("regex"),
+                               ::testing::ContainsRegex("flags")));
+  expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
+                                                Var{"?h"}, Var{"?c"}));
 
   // The following three cases delegate to a separate parsing function, so we
   // only perform rather simple checks.

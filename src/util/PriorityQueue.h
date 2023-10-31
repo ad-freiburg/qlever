@@ -89,7 +89,7 @@ class TreeBasedPQ {
  public:
   /**
    * @brief Construct a Priority Queue
-   * @param c If omitted will default-construct a Comp object (will become
+   * @param c If omitted will default-construct a Comparator object (will become
    * useful with default-constructible lambdas in C++20
    */
   TreeBasedPQ(Comp c = Comp()) : mMap(makeComparator(c)) {}

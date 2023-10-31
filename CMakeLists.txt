@@ -44,14 +44,6 @@ if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
     endif ()
 endif ()
 
-if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU") AND
-   (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "12") AND
-   (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13"))
-    message(STATUS "Adding -Wno-error for g++12.0 because of the many false positive warnings from stdlib headers")
-    add_compile_options(-Wno-error)
-    else()
-endif ()
-
 ###############################################################################
 ##### Essential settings #####
 ###############################################################################
@@ -124,7 +116,7 @@ endif()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.74 COMPONENTS iostreams serialization program_options REQUIRED)
+find_package(Boost 1.81 COMPONENTS iostreams serialization program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 
@@ -134,15 +126,21 @@ include_directories(${Boost_INCLUDE_DIR})
 find_package(OpenSSL REQUIRED)
 
 ##############################################
-# Define a set of common third-party libraries that are used almost as
-# frequently as the standard library or as a  drop-in replacement for
-# some of its functionality.To enable the usage in all parts of QLever,
-# call the following function `qlever_target_link_libraries` for all
-# libraries and executables. It is a drop-in replacement for
-# `target_link_libraries` that additionally links against the common
-# libraries.
+# Define a set of common third-party and self made libraries that are used almost
+# as frequently as the standard library or as a  drop-in replacement for some of
+# its functionality.To enable the usage in all parts of QLever, call the following
+# function `qlever_target_link_libraries` for all libraries and executables. It
+# is a drop-in replacement for `target_link_libraries` that additionally links
+# against the common libraries.
 function (qlever_target_link_libraries target)
-    target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings absl::str_format ICU::uc ICU::i18n)
+    target_link_libraries(${target} ${ARGN} absl::flat_hash_map
+        absl::flat_hash_set absl::strings absl::str_format ICU::uc
+        ICU::i18n)
+
+    # memorySize is a utility library for defining memory sizes.
+    if (NOT ${target} STREQUAL "memorySize")
+        target_link_libraries(${target} memorySize)
+    endif()
 endfunction()
 
 
@@ -194,6 +192,8 @@ include_directories(third_party/ctre/include)
 # ABSEIL
 ################################
 set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
+# For CMake 3.8 and up this will be the default in a future version of abseil
+set(ABSL_PROPAGATE_CXX_STD ON)
 add_subdirectory(third_party/abseil-cpp  EXCLUDE_FROM_ALL)
 include_directories(SYSTEM third_party/abseil-cpp/)
 

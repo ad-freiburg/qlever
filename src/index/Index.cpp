@@ -1,12 +1,13 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Authors:
-//   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Björn Buchhold (2014-2017, buchhold@informatik.uni-freiburg.de)
+// Johannes Kalmbach (2018- , kalmbach@informatik.uni-freiburg.de)
 
-#include "./Index.h"
+#include "index/Index.h"
 
-#include "./IndexImpl.h"
+#include "index/IndexImpl.h"
+#include "util/MemorySize/MemorySize.h"
 
 // ____________________________________________________________________________
 Index::Index(ad_utility::AllocatorWithLimit<Id> allocator)
@@ -80,6 +81,11 @@ std::optional<std::string> Index::idToOptionalString(VocabIndex id) const {
 }
 
 // ____________________________________________________________________________
+std::optional<std::string> Index::idToOptionalString(WordVocabIndex id) const {
+  return pimpl_->idToOptionalString(id);
+}
+
+// ____________________________________________________________________________
 bool Index::getId(const std::string& element, Id* id) const {
   return pimpl_->getId(element, id);
 }
@@ -132,7 +138,7 @@ size_t Index::getSizeEstimate(const std::string& words) const {
 // ____________________________________________________________________________
 void Index::getContextListForWords(const std::string& words,
                                    IdTable* result) const {
-  return pimpl_->getContextListForWords(words, result);
+  return pimpl_->callFixedGetContextListForWords(words, result);
 }
 
 // ____________________________________________________________________________
@@ -169,33 +175,6 @@ void Index::getFilteredECListForWordsWidthOne(const std::string& words,
 Index::WordEntityPostings Index::getContextEntityScoreListsForWords(
     const std::string& words) const {
   return pimpl_->getContextEntityScoreListsForWords(words);
-}
-
-// ____________________________________________________________________________
-template <size_t I>
-void Index::getECListForWordsAndSingleSub(
-    const std::string& words, const vector<std::array<Id, I>>& subres,
-    size_t subResMainCol, size_t limit,
-    vector<std::array<Id, 3 + I>>& res) const {
-  return pimpl_->getECListForWordsAndSingleSub(words, subres, subResMainCol,
-                                               limit, res);
-}
-
-// ____________________________________________________________________________
-void Index::getECListForWordsAndTwoW1Subs(
-    const std::string& words, const vector<std::array<Id, 1>> subres1,
-    const vector<std::array<Id, 1>> subres2, size_t limit,
-    vector<std::array<Id, 5>>& res) const {
-  return pimpl_->getECListForWordsAndTwoW1Subs(words, subres1, subres2, limit,
-                                               res);
-}
-
-// ____________________________________________________________________________
-void Index::getECListForWordsAndSubtrees(
-    const std::string& words,
-    const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
-    size_t limit, vector<vector<Id>>& res) const {
-  return pimpl_->getECListForWordsAndSubtrees(words, subResVecs, limit, res);
 }
 
 // ____________________________________________________________________________
@@ -246,7 +225,7 @@ void Index::setKeepTempFiles(bool keepTempFiles) {
 }
 
 // ____________________________________________________________________________
-uint64_t& Index::stxxlMemoryInBytes() { return pimpl_->stxxlMemoryInBytes(); }
+ad_utility::MemorySize& Index::stxxlMemory() { return pimpl_->stxxlMemory(); }
 
 // ____________________________________________________________________________
 uint64_t& Index::blocksizePermutationsInBytes() {
@@ -254,8 +233,8 @@ uint64_t& Index::blocksizePermutationsInBytes() {
 }
 
 // ____________________________________________________________________________
-const uint64_t& Index::stxxlMemoryInBytes() const {
-  return pimpl_->stxxlMemoryInBytes();
+const ad_utility::MemorySize& Index::stxxlMemory() const {
+  return pimpl_->stxxlMemory();
 }
 
 // ____________________________________________________________________________

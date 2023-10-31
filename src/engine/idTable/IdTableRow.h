@@ -80,6 +80,7 @@ class Row {
   const_iterator end() const { return {this, numColumns()}; };
 
   size_t numColumns() const { return data_.size(); }
+  size_t size() const { return numColumns(); }
 
   friend void swap(Row& a, Row& b) { std::swap(a.data_, b.data_); }
 
@@ -254,6 +255,14 @@ class RowReferenceImpl {
       for (size_t i = 0; i < numCols; ++i) {
         result[i] = std::move(*this)[i];
       }
+      return result;
+    }
+
+    // Convert from a static `RowReference` to a `std::array` (makes a copy).
+    explicit operator std::array<T, numStaticColumns>() const
+        requires(numStaticColumns != 0) {
+      std::array<T, numStaticColumns> result;
+      std::ranges::copy(*this, result.begin());
       return result;
     }
 

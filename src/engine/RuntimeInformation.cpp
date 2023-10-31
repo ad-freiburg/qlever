@@ -86,8 +86,8 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   }
   if (!children_.empty()) {
     out << indentStr(indent) << "┬\n";
-    for (const RuntimeInformation& child : children_) {
-      child.writeToStream(out, indent + 1);
+    for (const auto& child : children_) {
+      child->writeToStream(out, indent + 1);
     }
   }
 }
@@ -131,7 +131,7 @@ double RuntimeInformation::getOperationTime() const {
 size_t RuntimeInformation::getOperationCostEstimate() const {
   size_t result = costEstimate_;
   for (const auto& child : children_) {
-    result -= child.costEstimate_;
+    result -= child->costEstimate_;
   }
   return result;
 }
@@ -153,6 +153,13 @@ std::string_view RuntimeInformation::toString(Status status) {
       return "failed because child failed";
   }
   AD_FAIL();
+}
+
+// ________________________________________________________________________________________________________________
+void to_json(nlohmann::ordered_json& j,
+             const std::shared_ptr<RuntimeInformation>& rti) {
+  AD_CONTRACT_CHECK(rti);
+  to_json(j, *rti);
 }
 
 // ________________________________________________________________________________________________________________
@@ -191,14 +198,16 @@ void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
   if (!(hasLimit || hasOffset)) {
     return;
   }
-  children_ = std::vector{*this};
-  auto& actualOperation = children_.at(0);
-  numRows_ = l.actualSize(actualOperation.numRows_);
+  // Create a shallow copy, so we can modify the original values without
+  // losing anything
+  children_ = std::vector{std::make_shared<RuntimeInformation>(*this)};
+  const auto& actualOperation = children_.at(0);
+  numRows_ = l.actualSize(actualOperation->numRows_);
   details_.clear();
   cacheStatus_ = ad_utility::CacheStatus::computed;
   totalTime_ += static_cast<double>(timeForLimit);
-  actualOperation.addDetail("not-written-to-cache-because-child-of-limit",
-                            fullResultIsNotCached);
+  actualOperation->addDetail("not-written-to-cache-because-child-of-limit",
+                             fullResultIsNotCached);
   sizeEstimate_ = l.actualSize(sizeEstimate_);
 
   // Update the descriptor.
