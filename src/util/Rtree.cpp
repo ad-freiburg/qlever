@@ -98,8 +98,6 @@ Node::Node(uint64_t id, Rtree::BoundingBox boundingbox) {
 
 Node::Node(uint64_t id) { this->id = id; }
 
-Node::Node() {}
-
 Node::Node(uint64_t id, Rtree::BoundingBox boundingBox, multiBoxGeo& children,
            bool isLastInnerNode) {
   this->id = id;
@@ -108,12 +106,13 @@ Node::Node(uint64_t id, Rtree::BoundingBox boundingBox, multiBoxGeo& children,
   this->isLastInnerNode = isLastInnerNode;
 }
 
-Node::Node(uint64_t id, double minX, double minY, double maxX, double maxY,
-           bool isLastInnerNode) {
+Node::Node(uint64_t id, BoundingBox boundingbox, bool isLastInnerNode) {
   this->id = id;
-  this->boundingBox = Rtree::createBoundingBox(minX, minY, maxX, maxY);
+  this->boundingBox = boundingbox;
   this->isLastInnerNode = isLastInnerNode;
 }
+
+Node::Node() {}
 
 bool Node::GetIsLastInnerNode() const { return this->isLastInnerNode; }
 

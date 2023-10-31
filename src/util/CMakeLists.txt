@@ -3,5 +3,5 @@ add_subdirectory(MemorySize)
 add_subdirectory(http)
 add_library(util GeoSparqlHelpers.cpp
         antlr/ANTLRErrorHandling.cpp ParseException.cpp Conversions.cpp Date.cpp antlr/GenerateAntlrExceptionMetadata.cpp
-        Rtree.h Rtree.cpp RtreeFileReader.h RtreeFileReader.cpp RtreeBuild.cpp)
+        Rtree.h Rtree.cpp RtreeFileReader.h RtreeBuild.cpp)
 qlever_target_link_libraries(util Boost::serialization)

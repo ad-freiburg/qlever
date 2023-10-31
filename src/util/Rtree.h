@@ -66,8 +66,7 @@ class Node {
   Node(uint64_t id, BoundingBox boundingBox);
   Node(uint64_t id, BoundingBox boundingBox, multiBoxGeo& children,
        bool isLastInnerNode);
-  Node(uint64_t id, double minX, double minY, double maxX, double maxY,
-       bool isLastInnerNode);
+  Node(uint64_t id, BoundingBox boundingbox, bool isLastInnerNode);
   [[nodiscard]] uint64_t GetId() const;
   [[nodiscard]] BoundingBox GetBoundingBox() const;
   void AddChild(Node& child);
@@ -386,8 +385,8 @@ struct SortRuleLambdaWithIndex {
                                       std::numeric_limits<double>::max(),
                                       std::numeric_limits<double>::max()),
              0},
-            LLONG_MAX,
-            LLONG_MAX};
+            std::numeric_limits<long long>::max(),
+            std::numeric_limits<long long>::max()};
   }
 };
 

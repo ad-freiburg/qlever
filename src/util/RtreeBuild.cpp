@@ -8,6 +8,16 @@
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/serialization/vector.hpp>
 
+#include "ctre/ctre.h"
+
+static bool isBorderOfSplitCandidate(uint64_t current, uint64_t splitSize,
+                                     uint64_t M) {
+  if (((current + 1) % splitSize == 0 && (current + 1) / splitSize < M) ||
+      (current % splitSize == 0 && current / splitSize >= 1))
+    return true;
+  return false;
+}
+
 static void centerOrdering(multiBoxGeo& boxes, size_t dim) {
   if (dim == 0) {
     // order by centerX
@@ -46,15 +56,10 @@ OrderedBoxes SortInput(const std::string& onDiskBase, size_t M,
     rectsD0Basic = Rtree::LoadEntries(onDiskBase + ".boundingbox.tmp");
     centerOrdering(rectsD0Basic, 0);
   } else {
-    FileReaderWithoutIndex fileReaderRectsD0 =
-        FileReaderWithoutIndex(onDiskBase + ".boundingbox.tmp");
-    std::optional<RTreeValue> rectD0Element =
-        fileReaderRectsD0.GetNextElement();
-    while (rectD0Element) {
-      sorterRectsD0Basic.push(rectD0Element.value());
-      rectD0Element = fileReaderRectsD0.GetNextElement();
+    for (const RTreeValue& rectD0Element :
+         FileReaderWithoutIndex(onDiskBase + ".boundingbox.tmp")) {
+      sorterRectsD0Basic.push(rectD0Element);
     }
-    fileReaderRectsD0.Close();
   }
 
   uint64_t xSize = 0;
@@ -111,24 +116,19 @@ OrderedBoxes SortInput(const std::string& onDiskBase, size_t M,
   RTreeValueWithOrderIndex maxD1;
 
   auto processD1Element = [&ySize, currentS, M, &r1Small, &minD1,
-                           &maxD1](RTreeValueWithOrderIndex element) {
+                           &maxD1](RTreeValueWithOrderIndex& element) {
     element.orderY = ySize;
 
-    if (((ySize + 1) % currentS == 0 && (ySize + 1) / currentS >= 1 &&
-         (ySize + 1) / currentS < M) ||
-        (ySize % currentS == 0 && ySize / currentS >= 1 &&
-         ySize / currentS < M)) {
+    if (isBorderOfSplitCandidate(ySize, currentS, M)) {
       // index i * S - 1 or i * S
       r1Small->push_back(element);
     }
 
     if (ySize == 0) {
       minD1 = element;
-      maxD1 = element;
     }
-    if (element.orderY > maxD1.orderY) {
-      maxD1 = element;
-    }
+
+    maxD1 = element;
 
     ySize++;
   };
@@ -168,22 +168,16 @@ OrderedBoxes SortInput(const std::string& onDiskBase, size_t M,
   RTreeValueWithOrderIndex maxD0;
 
   auto processD0Element = [&currentX, currentS, M, &r0Small, &minD0,
-                           &maxD0](RTreeValueWithOrderIndex element) {
-    if (((currentX + 1) % currentS == 0 && (currentX + 1) / currentS >= 1 &&
-         (currentX + 1) / currentS < M) ||
-        (currentX % currentS == 0 && currentX / currentS >= 1 &&
-         currentX / currentS < M)) {
+                           &maxD0](RTreeValueWithOrderIndex& element) {
+    if (isBorderOfSplitCandidate(currentX, currentS, M)) {
       // index i * S - 1 or i * S
       r0Small->push_back(element);
     }
 
     if (currentX == 0) {
       minD0 = element;
-      maxD0 = element;
     }
-    if (element.orderX > maxD0.orderX) {
-      maxD0 = element;
-    }
+    maxD0 = element;
 
     currentX++;
   };
@@ -376,18 +370,11 @@ void ConstructionNode::AddChildrenToItem() {
       this->AddChild(leafNode);
     }
   } else {
-    FileReader fileReader =
-        FileReader(this->GetOrderedBoxes().GetRectanglesOnDisk());
-
-    std::optional<RTreeValueWithOrderIndex> element =
-        fileReader.GetNextElement();
-    while (element) {
-      Node leafNode = Node(element.value().id, element.value().box);
+    for (const RTreeValueWithOrderIndex& element :
+         FileReader(this->GetOrderedBoxes().GetRectanglesOnDisk())) {
+      Node leafNode = Node(element.id, element.box);
       this->AddChild(leafNode);
-      element = fileReader.GetNextElement();
     }
-
-    fileReader.Close();
   }
 }
 
@@ -422,63 +409,24 @@ std::optional<Rtree::BoundingBox> GetBoundingBoxFromWKT(
    * Parse the wkt literal in a way, that only the relevant data for the rtree
    * gets read in.
    */
-  bool lookingForX = true;
-  bool readingDouble = false;
-  std::string currentDouble;
+  double maxDouble = std::numeric_limits<double>::max();
 
-  double minX = -1;
-  double maxX = -1;
-  double minY = -1;
-  double maxY = -1;
+  double minX = maxDouble;
+  double maxX = -maxDouble;
+  double minY = maxDouble;
+  double maxY = -maxDouble;
 
-  for (char c : wkt) {
-    if (isdigit(c)) {
-      readingDouble = true;
-      currentDouble += c;
-    } else if (c == '.') {
-      readingDouble = true;
-      currentDouble += '.';
-    } else if (c == ' ') {
-      if (readingDouble && lookingForX) {
-        // x is completely read in
-        readingDouble = false;
-        lookingForX = false;
-        double x;
-        try {
-          x = std::stod(currentDouble);
-        } catch (...) {
-          return {};
-        }
-        currentDouble = "";
-        if (x < minX || minX == -1) {
-          minX = x;
-        }
+  // Iterate over matches and capture x and y coordinates
+  for (auto match :
+       ctre::range<R"(( *([\-|\+]?[0-9]+.[0-9]+) +([\-|\+]?[0-9]+.[0-9]+)))">(
+           wkt)) {
+    double x = std::stod(std::string(match.get<1>()));
+    double y = std::stod(std::string(match.get<2>()));
 
-        if (x > maxX) {
-          maxX = x;
-        }
-      }
-    } else {
-      if (readingDouble && !lookingForX) {
-        // y is completely read in
-        readingDouble = false;
-        lookingForX = true;
-        double y;
-        try {
-          y = std::stod(currentDouble);
-        } catch (...) {
-          return {};
-        }
-        currentDouble = "";
-        if (y < minY || minY == -1) {
-          minY = y;
-        }
-
-        if (y > maxY) {
-          maxY = y;
-        }
-      }
-    }
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
   }
 
   return {Rtree::createBoundingBox(minX, minY, maxX, maxY)};
@@ -486,38 +434,17 @@ std::optional<Rtree::BoundingBox> GetBoundingBoxFromWKT(
 
 std::optional<Rtree::BoundingBox> Rtree::ConvertWordToRtreeEntry(
     const std::string& wkt) {
-  /**
+  /*
    * Convert a single wkt literal to a boundingbox.
+   * Get the bounding box(es) of either a multipolygon, polygon or a linestring
    */
-  std::optional<Rtree::BoundingBox> boundingBox;
 
-  /* Get the bounding box(es) of either a multipolygon, polygon or a linestring
-   */
-  std::size_t posWKTStart = wkt.find("MULTIPOLYGON(((") + 14;
-  std::size_t posWKTEnd = wkt.find(")))", posWKTStart);
-  if (posWKTStart != std::string::npos && posWKTEnd != std::string::npos) {
-    std::string newWkt = wkt.substr(posWKTStart, posWKTEnd - posWKTStart + 1);
-    boundingBox = GetBoundingBoxFromWKT(newWkt);
-  } else {
-    posWKTStart = wkt.find("POLYGON((") + 8;
-    posWKTEnd = wkt.find("))", posWKTStart);
-    if (posWKTStart != std::string::npos && posWKTEnd != std::string::npos) {
-      std::string newWkt = wkt.substr(posWKTStart, posWKTEnd - posWKTStart + 1);
-      boundingBox = GetBoundingBoxFromWKT(newWkt);
-    } else {
-      posWKTStart = wkt.find("LINESTRING(") + 10;
-      posWKTEnd = wkt.find(')', posWKTStart);
-      if (posWKTStart != std::string::npos && posWKTEnd != std::string::npos) {
-        std::string newWkt =
-            wkt.substr(posWKTStart, posWKTEnd - posWKTStart + 1);
-        boundingBox = GetBoundingBoxFromWKT(newWkt);
-      } else {
-        return {};
-      }
-    }
+  if (wkt.starts_with("\"MULTIPOLYGON") || wkt.starts_with("\"POLYGON") ||
+      wkt.starts_with("\"LINESTRING")) {
+    return GetBoundingBoxFromWKT(wkt);
   }
 
-  return boundingBox;
+  return {};
 }
 
 void Rtree::SaveEntry(Rtree::BoundingBox boundingBox, uint64_t index,
@@ -563,15 +490,9 @@ void Rtree::SaveEntryWithOrderIndex(RTreeValueWithOrderIndex treeValue,
 multiBoxGeo Rtree::LoadEntries(const std::string& file) {
   multiBoxGeo boxes;
 
-  FileReaderWithoutIndex fileReader = FileReaderWithoutIndex(file);
-
-  std::optional<RTreeValue> element = fileReader.GetNextElement();
-  while (element) {
-    boxes.push_back(element.value());
-    element = fileReader.GetNextElement();
+  for (const RTreeValue& element : FileReaderWithoutIndex(file)) {
+    boxes.push_back(element);
   }
-
-  fileReader.Close();
 
   return boxes;
 }
@@ -579,15 +500,10 @@ multiBoxGeo Rtree::LoadEntries(const std::string& file) {
 multiBoxWithOrderIndex Rtree::LoadEntriesWithOrderIndex(
     const std::string& file) {
   multiBoxWithOrderIndex boxes;
-  FileReader fileReader = FileReader(file);
 
-  std::optional<RTreeValueWithOrderIndex> element = fileReader.GetNextElement();
-  while (element) {
-    boxes.push_back(element.value());
-    element = fileReader.GetNextElement();
+  for (const RTreeValueWithOrderIndex& element : FileReader(file)) {
+    boxes.push_back(element);
   }
-
-  fileReader.Close();
 
   return boxes;
 }
@@ -942,17 +858,89 @@ std::pair<Rtree::BoundingBox, Rtree::BoundingBox> OrderedBoxes::PerformSplit(
     fileReaderDim0 = {FileReader(this->rectsD0.rectanglesOnDisk)};
     fileReaderDim1 = {FileReader(this->rectsD1.rectanglesOnDisk)};
   }
+  FileReader::iterator fileReaderDim0Iterator =
+      fileReaderDim0 ? fileReaderDim0.value().begin() : FileReader::iterator();
+  FileReader::iterator fileReaderDim1Iterator =
+      fileReaderDim1 ? fileReaderDim1.value().begin() : FileReader::iterator();
   uint64_t currentXSplit0 = 0;
   uint64_t currentXSplit1 = 0;
   uint64_t currentYSplit0 = 0;
   uint64_t currentYSplit1 = 0;
+
+  auto performCertainSplit =
+      [M, &splitBuffers, &splitResult](
+          size_t dim, size_t split, uint64_t& current,
+          uint64_t& currentSplitSize, RTreeValueWithOrderIndex& minElement,
+          RTreeValueWithOrderIndex& maxElement, bool currentSplitInRam,
+          bool workInRam, RTreeValueWithOrderIndex& element,
+          Rtree::BoundingBox& box) {
+        std::shared_ptr<multiBoxWithOrderIndex> currentList;
+        std::shared_ptr<multiBoxWithOrderIndex> currentSmallList;
+        std::ofstream* currentFile;
+
+        if (split == 0) {
+          if (dim == 0) {
+            currentList = splitBuffers.splitBuffersRam.s0Dim0;
+            currentSmallList = splitBuffers.splitBuffersRam.s0SmallDim0;
+            currentFile = &splitBuffers.split0Dim0File.value();
+          } else {
+            currentList = splitBuffers.splitBuffersRam.s0Dim1;
+            currentSmallList = splitBuffers.splitBuffersRam.s0SmallDim1;
+            currentFile = &splitBuffers.split0Dim1File.value();
+          }
+        } else {
+          if (dim == 0) {
+            currentList = splitBuffers.splitBuffersRam.s1Dim0;
+            currentSmallList = splitBuffers.splitBuffersRam.s1SmallDim0;
+            currentFile = &splitBuffers.split1Dim0File.value();
+          } else {
+            currentList = splitBuffers.splitBuffersRam.s1Dim1;
+            currentSmallList = splitBuffers.splitBuffersRam.s1SmallDim1;
+            currentFile = &splitBuffers.split1Dim1File.value();
+          }
+        }
+
+        // add the element to the current split dimension 0/1 vector / file
+        if (currentSplitInRam || workInRam) {
+          currentList->push_back(element);
+        } else {
+          Rtree::SaveEntryWithOrderIndex(element, *currentFile);
+        }
+
+        // check if the element is at the position i * S (described in the
+        // algorithm) or one before it. In this case it is a future possible
+        // split position and needs to be saved to the "small list"
+        if (isBorderOfSplitCandidate(current, currentSplitSize, M)) {
+          // index i * S - 1 or i * S
+          currentSmallList->push_back(element);
+        }
+
+        // update the boundingbox to get the whole boundingbox of the split
+        if (dim == 0) box = Rtree::combineBoundingBoxes(box, element.box);
+
+        // keep track of the min and max element of the split, to later
+        // replace the placeholder in the "small lists"
+        if (splitResult.bestDim == 1 - dim) {
+          if (current == 0) {
+            minElement = element;
+          }
+          // max element gets updated each time, because the elements are sorted
+          // in an ascending way
+          maxElement = element;
+        }
+
+        current++;
+      };
+
   for (size_t dim = 0; dim < 2; dim++) {
     // start performing the actual split
     uint64_t i = 0;
 
-    if (!this->workInRam) {
-      if (dim == 0) elementOpt = fileReaderDim0.value().GetNextElement();
-      if (dim == 1) elementOpt = fileReaderDim1.value().GetNextElement();
+    if (!this->workInRam &&
+        fileReaderDim0Iterator != fileReaderDim0.value().end() &&
+        fileReaderDim1Iterator != fileReaderDim1.value().end()) {
+      if (dim == 0) elementOpt = *fileReaderDim0Iterator;
+      if (dim == 1) elementOpt = *fileReaderDim1Iterator;
     }
 
     while ((this->workInRam && i < this->size) ||
@@ -974,144 +962,42 @@ std::pair<Rtree::BoundingBox, Rtree::BoundingBox> OrderedBoxes::PerformSplit(
         // the element belongs to split 0
 
         if (dim == 0) {
-          // add the element to the split 0 dimension 0 vector / file
-          if (split0InRam || this->workInRam) {
-            splitBuffers.splitBuffersRam.s0Dim0->push_back(element);
-          } else {
-            Rtree::SaveEntryWithOrderIndex(element,
-                                           splitBuffers.split0Dim0File.value());
-          }
-
-          // check if the element is at the position i * S (described in the
-          // algorithm) or one before it. In this case it is a future possible
-          // split position and needs to be saved to the "small list"
-          if (((currentXSplit0 + 1) % SSplit0 == 0 &&
-               (currentXSplit0 + 1) / SSplit0 >= 1 &&
-               (currentXSplit0 + 1) / SSplit0 < M) ||
-              (currentXSplit0 % SSplit0 == 0 && currentXSplit0 / SSplit0 >= 1 &&
-               currentXSplit0 / SSplit0 < M)) {
-            // index i * S - 1 or i * S
-            splitBuffers.splitBuffersRam.s0SmallDim0->push_back(element);
-          }
-
-          // update the boundingbox to get the whole boundingbox of the split
-          boxSplit0 = Rtree::combineBoundingBoxes(boxSplit0, element.box);
-
-          // keep track of the min and max element of the split, to later
-          // replace the placeholder in the "small lists"
-          if (splitResult.bestDim == 1) {
-            if (currentXSplit0 == 0) {
-              minSplit0OtherDim = element;
-              maxSplit0OtherDim = element;
-            }
-            if (element.orderX > maxSplit0OtherDim.orderX) {
-              maxSplit0OtherDim = element;
-            }
-          }
-
-          currentXSplit0++;
+          performCertainSplit(0, 0, currentXSplit0, SSplit0, minSplit0OtherDim,
+                              maxSplit0OtherDim, split0InRam, this->workInRam,
+                              element, boxSplit0);
         } else {
-          if (split0InRam || this->workInRam) {
-            splitBuffers.splitBuffersRam.s0Dim1->push_back(element);
-          } else {
-            Rtree::SaveEntryWithOrderIndex(element,
-                                           splitBuffers.split0Dim1File.value());
-          }
-
-          if (((currentYSplit0 + 1) % SSplit0 == 0 &&
-               (currentYSplit0 + 1) / SSplit0 >= 1 &&
-               (currentYSplit0 + 1) / SSplit0 < M) ||
-              (currentYSplit0 % SSplit0 == 0 && currentYSplit0 / SSplit0 >= 1 &&
-               currentYSplit0 / SSplit0 < M)) {
-            // index i * S - 1 or i * S
-            splitBuffers.splitBuffersRam.s0SmallDim1->push_back(element);
-          }
-
-          if (splitResult.bestDim == 0) {
-            if (currentYSplit0 == 0) {
-              minSplit0OtherDim = element;
-              maxSplit0OtherDim = element;
-            }
-            if (element.orderX > maxSplit0OtherDim.orderX) {
-              maxSplit0OtherDim = element;
-            }
-          }
-
-          currentYSplit0++;
+          performCertainSplit(1, 0, currentYSplit0, SSplit0, minSplit0OtherDim,
+                              maxSplit0OtherDim, split0InRam, this->workInRam,
+                              element, boxSplit0);
         }
       } else {
         // the element belongs to split 1
 
         if (dim == 0) {
-          if (split1InRam || this->workInRam) {
-            splitBuffers.splitBuffersRam.s1Dim0->push_back(element);
-          } else {
-            Rtree::SaveEntryWithOrderIndex(element,
-                                           splitBuffers.split1Dim0File.value());
-          }
-          if (((currentXSplit1 + 1) % SSplit1 == 0 &&
-               (currentXSplit1 + 1) / SSplit1 >= 1 &&
-               (currentXSplit1 + 1) / SSplit1 < M) ||
-              (currentXSplit1 % SSplit1 == 0 && currentXSplit1 / SSplit1 >= 1 &&
-               currentXSplit1 / SSplit1 < M)) {
-            // index i * S - 1 or i * S
-            splitBuffers.splitBuffersRam.s1SmallDim0->push_back(element);
-          }
-
-          boxSplit1 = Rtree::combineBoundingBoxes(boxSplit1, element.box);
-
-          if (splitResult.bestDim == 1) {
-            if (currentXSplit1 == 0) {
-              minSplit1OtherDim = element;
-              maxSplit1OtherDim = element;
-            }
-            if (element.orderX > maxSplit1OtherDim.orderX) {
-              maxSplit1OtherDim = element;
-            }
-          }
-
-          currentXSplit1++;
+          performCertainSplit(0, 1, currentXSplit1, SSplit1, minSplit1OtherDim,
+                              maxSplit1OtherDim, split1InRam, this->workInRam,
+                              element, boxSplit1);
         } else {
-          if (split1InRam || this->workInRam) {
-            splitBuffers.splitBuffersRam.s1Dim1->push_back(element);
-          } else {
-            Rtree::SaveEntryWithOrderIndex(element,
-                                           splitBuffers.split1Dim1File.value());
-          }
-          if (((currentYSplit1 + 1) % SSplit1 == 0 &&
-               (currentYSplit1 + 1) / SSplit1 >= 1 &&
-               (currentYSplit1 + 1) / SSplit1 < M) ||
-              (currentYSplit1 % SSplit1 == 0 && currentYSplit1 / SSplit1 >= 1 &&
-               currentYSplit1 / SSplit1 < M)) {
-            // index i * S - 1 or i * S
-            splitBuffers.splitBuffersRam.s1SmallDim1->push_back(element);
-          }
-
-          if (splitResult.bestDim == 0) {
-            if (currentYSplit1 == 0) {
-              minSplit1OtherDim = element;
-              maxSplit1OtherDim = element;
-            }
-            if (element.orderX > maxSplit1OtherDim.orderX) {
-              maxSplit1OtherDim = element;
-            }
-          }
-
-          currentYSplit1++;
+          performCertainSplit(1, 1, currentYSplit1, SSplit1, minSplit1OtherDim,
+                              maxSplit1OtherDim, split1InRam, this->workInRam,
+                              element, boxSplit1);
         }
       }
       i++;
 
-      if (!this->workInRam) {
-        if (dim == 0) elementOpt = fileReaderDim0.value().GetNextElement();
-        if (dim == 1) elementOpt = fileReaderDim1.value().GetNextElement();
+      if (!this->workInRam &&
+          fileReaderDim0Iterator != fileReaderDim0.value().end() &&
+          fileReaderDim1Iterator != fileReaderDim1.value().end()) {
+        if (dim == 0) {
+          ++fileReaderDim0Iterator;
+          elementOpt = *fileReaderDim0Iterator;
+        }
+        if (dim == 1) {
+          ++fileReaderDim1Iterator;
+          elementOpt = *fileReaderDim1Iterator;
+        }
       }
     }
-  }
-
-  if (!this->workInRam) {
-    fileReaderDim0.value().Close();
-    fileReaderDim1.value().Close();
   }
 
   // replace the placeholder
