@@ -115,6 +115,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
             "functionality, before " +
             getDescriptor());
       }
+      runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
+      signalQueryUpdate();
       ResultTable result = computeResult();
 
       // Compute the datatypes that occur in each column of the result.
