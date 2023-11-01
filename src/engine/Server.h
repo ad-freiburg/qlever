@@ -132,7 +132,17 @@ class Server {
   ad_utility::websocket::OwningQueryId getQueryId(
       const ad_utility::httpUtils::HttpRequest auto& request);
 
-  static Awaitable<std::function<void()>> cancelAfterDeadline(
+  /// Schedule a task to trigger the timeout after the `timeLimit`.
+  /// The returned callback can be used to prevent this task from executing
+  /// either because the `abortionHandle` has been aborted by some other mean
+  /// or because the task has been completed successfully.
+  static auto cancelAfterDeadline(
+      const net::any_io_executor& executor,
       std::weak_ptr<ad_utility::AbortionHandle> abortionHandle,
       std::chrono::seconds timeLimit);
+
+  static std::function<void()> setupAbortionHandle(
+      const net::any_io_executor& executor,
+      const std::shared_ptr<Operation>& rootOperation,
+      std::optional<std::chrono::seconds> timeLimit);
 };

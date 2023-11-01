@@ -11,8 +11,8 @@ namespace ad_utility {
 void AbortionHandle::abort(AbortionState reason) {
   AD_CONTRACT_CHECK(reason != AbortionState::NOT_ABORTED);
 
-  static AbortionState NOT_ABORTED = AbortionState::NOT_ABORTED;
-  abortionState_.compare_exchange_strong(NOT_ABORTED, reason,
+  AbortionState notAborted = AbortionState::NOT_ABORTED;
+  abortionState_.compare_exchange_strong(notAborted, reason,
                                          std::memory_order_relaxed);
 }
 }  // namespace ad_utility

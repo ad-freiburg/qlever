@@ -461,6 +461,9 @@ class CompressedRelationReader {
   // A helper function to abstract away the timeout check:
   static void checkAbortion(
       const std::shared_ptr<ad_utility::AbortionHandle>& abortionHandle) {
+    // Not really expensive but since this should be called
+    // very often, try to avoid any extra checks.
+    AD_EXPENSIVE_CHECK(abortionHandle);
     abortionHandle->throwIfAborted("IndexScan"sv);
   }
 };

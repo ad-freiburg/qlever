@@ -211,8 +211,9 @@ class Operation {
   void checkAbortion() const;
   // Check if the abortion flag has been set and throws an exception if that's
   // the case. This will be called at strategic places on code that potentially
-  // can take a (too) long time.
-  void checkAbortion(const auto& detailSupplier) const;
+  // can take a (too) long time. The `detailSupplier` allows to pass a message
+  // to add to any potential exception that might be thrown.
+  void checkAbortion(const std::invocable auto& detailSupplier) const;
 
   std::chrono::seconds remainingTime() const;
 

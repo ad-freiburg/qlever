@@ -85,12 +85,7 @@ bool CartesianProductJoin::knownEmptyResult() {
   return std::ranges::any_of(childView(), &Operation::knownEmptyResult);
 }
 
-// Copy each element from the `inputColumn` `groupSize` times to the
-// `targetColumn`. Repeat until the `targetColumn` is copletely filled. Skip the
-// first `offset` write operations to the `targetColumn`. Call `checkForTimeout`
-// after each write. If `StaticGroupSize != 0`, then the group size is known at
-// compile time which allows for more efficient loop processing for very small
-// group sizes.
+// ____________________________________________________________________________
 template <size_t StaticGroupSize>
 void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
                                              std::span<const Id> inputColumn,

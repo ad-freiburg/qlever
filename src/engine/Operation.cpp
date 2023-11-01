@@ -50,6 +50,7 @@ vector<string> Operation::collectWarnings() const {
 // ________________________________________________________________________
 void Operation::recursivelySetAbortionHandle(
     SharedAbortionHandle abortionHandle) {
+  AD_CORRECTNESS_CHECK(abortionHandle);
   for (auto child : getChildren()) {
     if (child) {
       child->getRootOperation()->recursivelySetAbortionHandle(abortionHandle);
@@ -213,7 +214,7 @@ void Operation::checkAbortion() const {
 
 // ______________________________________________________________________
 
-void Operation::checkAbortion(const auto& detailSupplier) const {
+void Operation::checkAbortion(const std::invocable auto& detailSupplier) const {
   abortionHandle_->throwIfAborted(detailSupplier);
 }
 
@@ -221,9 +222,8 @@ void Operation::checkAbortion(const auto& detailSupplier) const {
 
 std::chrono::seconds Operation::remainingTime() const {
   auto interval = deadline_ - std::chrono::steady_clock::now();
-  return interval >= std::chrono::seconds::zero()
-             ? std::chrono::duration_cast<std::chrono::seconds>(interval)
-             : std::chrono::seconds::zero();
+  return std::max(std::chrono::seconds::zero(),
+                  std::chrono::duration_cast<std::chrono::seconds>(interval));
 }
 
 // _______________________________________________________________________
