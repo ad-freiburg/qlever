@@ -216,18 +216,12 @@ requires(sizeof...(Ts) > 0)
 using First = typename detail::FirstWrapper<Ts...>::type;
 
 /*
-The difference between the following concepts, for checking if types are
-invocable with given types and what their return type looks like, and
-`std::is_invocable_r_v` is, that `std::is_invocable_r_v` only checks, if the
-actual return type can be converted to the wanted return type.
-
-For example: Let `F` be an invocable class, which takes nothing and returns
-`int`. Then `std::is_invocable_r_v(double, F)` is true.
-
-Our self made concepts allow for tighter control over the wanted return type, by
-either demanding the exact same type, or by demanding the exact same type, after
-removing all cv (const or volatile) qualifiers and all references from both
-the actual and wanted return type.
+The following concepts are similar to `std::is_invocable_r_v` with the following
+difference: `std::is_invocable_r_v` only checks that the return type of a
+function is convertible to the specified type, but the following concepts check
+for an exact match of the return type (`InvocableWithExactReturnType`) or a
+similar return type (`invocablewithsimilarreturntype`), meaning that the types
+are the same when ignoring `const`, `volatile`, and reference qualifiers.
 */
 
 /*
