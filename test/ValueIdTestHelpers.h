@@ -15,23 +15,29 @@ static constexpr size_t numElements = 10'000;
 static constexpr size_t numElements = 10;
 #endif
 
-inline auto positiveRepresentableDoubleGenerator = RandomDoubleGenerator(
-    ValueId::minPositiveDouble, std::numeric_limits<double>::max());
-inline auto negativeRepresentableDoubleGenerator = RandomDoubleGenerator(
-    -std::numeric_limits<double>::max(), -ValueId::minPositiveDouble);
-inline auto nonRepresentableDoubleGenerator = RandomDoubleGenerator(
+inline auto positiveRepresentableDoubleGenerator =
+    ad_utility::RandomDoubleGenerator(ValueId::minPositiveDouble,
+                                      std::numeric_limits<double>::max());
+inline auto negativeRepresentableDoubleGenerator =
+    ad_utility::RandomDoubleGenerator(-std::numeric_limits<double>::max(),
+                                      -ValueId::minPositiveDouble);
+inline auto nonRepresentableDoubleGenerator = ad_utility::RandomDoubleGenerator(
     -ValueId::minPositiveDouble, ValueId::minPositiveDouble);
 inline auto indexGenerator =
-    SlowRandomIntGenerator<uint64_t>(0, ValueId::maxIndex);
-inline auto invalidIndexGenerator = SlowRandomIntGenerator<uint64_t>(
-    ValueId::maxIndex, std::numeric_limits<uint64_t>::max());
+    ad_utility::SlowRandomIntGenerator<uint64_t>(0, ValueId::maxIndex);
+inline auto invalidIndexGenerator =
+    ad_utility::SlowRandomIntGenerator<uint64_t>(
+        ValueId::maxIndex, std::numeric_limits<uint64_t>::max());
 
-inline auto nonOverflowingNBitGenerator = SlowRandomIntGenerator<int64_t>(
-    ValueId::IntegerType::min(), ValueId::IntegerType::max());
-inline auto overflowingNBitGenerator = SlowRandomIntGenerator<int64_t>(
-    ValueId::IntegerType::max() + 1, std::numeric_limits<int64_t>::max());
-inline auto underflowingNBitGenerator = SlowRandomIntGenerator<int64_t>(
-    std::numeric_limits<int64_t>::min(), ValueId::IntegerType::min() - 1);
+inline auto nonOverflowingNBitGenerator =
+    ad_utility::SlowRandomIntGenerator<int64_t>(ValueId::IntegerType::min(),
+                                                ValueId::IntegerType::max());
+inline auto overflowingNBitGenerator =
+    ad_utility::SlowRandomIntGenerator<int64_t>(
+        ValueId::IntegerType::max() + 1, std::numeric_limits<int64_t>::max());
+inline auto underflowingNBitGenerator =
+    ad_utility::SlowRandomIntGenerator<int64_t>(
+        std::numeric_limits<int64_t>::min(), ValueId::IntegerType::min() - 1);
 
 // Some helper functions to convert uint64_t values directly to and from index
 // type `ValueId`s.
@@ -61,7 +67,7 @@ inline uint64_t getWordVocabIndex(ValueId id) {
 
 inline auto addIdsFromGenerator = [](auto& generator, auto makeIds,
                                      std::vector<ValueId>& ids) {
-  SlowRandomIntGenerator<uint8_t> numRepetitionGenerator(1, 4);
+  ad_utility::SlowRandomIntGenerator<uint8_t> numRepetitionGenerator(1, 4);
   for (size_t i = 0; i < numElements; ++i) {
     auto randomValue = generator();
     auto numRepetitions = numRepetitionGenerator();
@@ -92,7 +98,7 @@ inline auto makeRandomDoubleIds = []() {
     ids.push_back(ValueId::makeFromDouble(max));
     ids.push_back(ValueId::makeFromDouble(min));
   }
-  randomShuffle(ids.begin(), ids.end());
+  ad_utility::randomShuffle(ids.begin(), ids.end());
   return ids;
 };
 inline auto makeRandomIds = []() {
@@ -109,7 +115,7 @@ inline auto makeRandomIds = []() {
     ids.push_back(ValueId::makeUndefined());
   }
 
-  randomShuffle(ids.begin(), ids.end());
+  ad_utility::randomShuffle(ids.begin(), ids.end());
   return ids;
 };
 

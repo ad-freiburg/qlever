@@ -120,8 +120,8 @@ IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::vector<std::pair<size_t, std::function<ValueId()>>>&
         joinColumnWithGenerator,
-    const RandomSeed randomSeed =
-        RandomSeed::make(FastRandomIntGenerator<unsigned int>{}()));
+    const ad_utility::RandomSeed randomSeed = ad_utility::RandomSeed::make(
+        ad_utility::FastRandomIntGenerator<unsigned int>{}()));
 
 /*
 @brief Creates a `IdTable`, where the content of the join columns is given via
@@ -140,8 +140,8 @@ IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::vector<size_t>& joinColumns,
     const std::function<ValueId()>& generator,
-    const RandomSeed randomSeed =
-        RandomSeed::make(FastRandomIntGenerator<unsigned int>{}()));
+    const ad_utility::RandomSeed randomSeed = ad_utility::RandomSeed::make(
+        ad_utility::FastRandomIntGenerator<unsigned int>{}()));
 
 // Describes a join column together with an inclusive range of numbers, defined
 // as [lowerBound, upperBound], and the seed for the random number generator.
@@ -149,8 +149,8 @@ struct JoinColumnAndBounds {
   const size_t joinColumn_;
   const size_t lowerBound_;
   const size_t upperBound_;
-  const RandomSeed randomSeed_ =
-      RandomSeed::make(FastRandomIntGenerator<unsigned int>{}());
+  const ad_utility::RandomSeed randomSeed_ = ad_utility::RandomSeed::make(
+      ad_utility::FastRandomIntGenerator<unsigned int>{}());
 };
 
 /*
@@ -167,8 +167,8 @@ generates the content for the non join column entries.
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const JoinColumnAndBounds& joinColumnAndBounds,
-    const RandomSeed randomSeed =
-        RandomSeed::make(FastRandomIntGenerator<unsigned int>{}()));
+    const ad_utility::RandomSeed randomSeed = ad_utility::RandomSeed::make(
+        ad_utility::FastRandomIntGenerator<unsigned int>{}()));
 
 /*
 @brief Return a IdTable, that is randomly filled. The range of numbers
@@ -184,8 +184,8 @@ generates the content for the non join column entries.
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::vector<JoinColumnAndBounds>& joinColumnsAndBounds,
-    const RandomSeed randomSeed =
-        RandomSeed::make(FastRandomIntGenerator<unsigned int>{}()));
+    const ad_utility::RandomSeed randomSeed = ad_utility::RandomSeed::make(
+        ad_utility::FastRandomIntGenerator<unsigned int>{}()));
 
 /*
 @brief Return a IdTable, that is completly randomly filled.
@@ -197,5 +197,5 @@ generates the content.
 */
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
-    const RandomSeed randomSeed =
-        RandomSeed::make(FastRandomIntGenerator<unsigned int>{}()));
+    const ad_utility::RandomSeed randomSeed = ad_utility::RandomSeed::make(
+        ad_utility::FastRandomIntGenerator<unsigned int>{}()));

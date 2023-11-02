@@ -338,7 +338,7 @@ TEST(IdTableHelpersTest, randomSeed) {
   constexpr size_t NUM_COLUMNS = 200;
 
   std::ranges::for_each(
-      createArrayOfRandomSeeds<5>(), [](const RandomSeed seed) {
+      createArrayOfRandomSeeds<5>(), [](const ad_utility::RandomSeed seed) {
         // Simply generate and compare.
         ASSERT_EQ(
             createRandomlyFilledIdTable(

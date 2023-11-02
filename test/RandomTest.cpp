@@ -18,6 +18,8 @@
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
+namespace ad_utility {
+
 /*
 @brief Test, if random number generators, that take a seed, produce the same
 numbers for the same seed.
@@ -232,3 +234,5 @@ TEST(RandomShuffleTest, Seed) {
             });
       });
 }
+
+}  // namespace ad_utility

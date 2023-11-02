@@ -15,6 +15,7 @@
 
 #include "global/TypedIndex.h"
 
+namespace ad_utility {
 // The seed type for random number generators.
 using RandomSeed = ad_utility::TypedIndex<unsigned int, "Seed">;
 
@@ -110,3 +111,5 @@ void randomShuffle(RandomIt begin, RandomIt end,
   std::mt19937 g(seed.get());
   std::shuffle(begin, end, g);
 }
+
+}  // namespace ad_utility
