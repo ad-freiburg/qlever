@@ -115,7 +115,8 @@ TEST(ValueIdComparators, NumericTypes) {
         getRangeForDatatype(ids.begin(), ids.end(), datatype);
     auto numEntries = endOfDatatype - beginOfDatatype;
     AD_CONTRACT_CHECK(numEntries > 0);
-    auto getRandomIndex = SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
+    auto getRandomIndex =
+        ad_utility::SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
 
     for (size_t i = 0; i < 200; ++i) {
       auto randomId = *(beginOfDatatype + getRandomIndex());
@@ -222,7 +223,8 @@ TEST(ValueIdComparators, IndexTypes) {
         getRangeForDatatype(ids.begin(), ids.end(), datatype);
     auto numEntries = endOfDatatype - beginOfDatatype;
     AD_CONTRACT_CHECK(numEntries > 0);
-    auto getRandomIndex = SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
+    auto getRandomIndex =
+        ad_utility::SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
 
     auto isTypeMatching = [&](ValueId id) {
       return id.getDatatype() == datatype;
