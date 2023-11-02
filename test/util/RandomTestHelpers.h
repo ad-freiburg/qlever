@@ -13,7 +13,7 @@
 // Create a array of non-deterministic random seeds for use with random number
 // generators.
 template <size_t NumSeeds>
-static std::array<Seed, NumSeeds> createArrayOfRandomSeeds() {
+inline std::array<Seed, NumSeeds> createArrayOfRandomSeeds() {
   std::array<Seed, NumSeeds> seeds{};
   std::ranges::generate(seeds,
                         []() { return Seed::make(std::random_device{}()); });
