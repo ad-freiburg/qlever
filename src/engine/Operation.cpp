@@ -105,7 +105,9 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
         ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
             [this, &timer]() {
               if (std::uncaught_exceptions()) {
-                updateRuntimeInformationOnFailure(timer.msecs());
+                updateRuntimeInformationOnFailure(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        timer.value()));
               }
             });
     auto computeLambda = [this, &timer] {
@@ -138,9 +140,10 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as
       // the last argument.
-      updateRuntimeInformationOnSuccess(result,
-                                        ad_utility::CacheStatus::computed,
-                                        timer.msecs(), std::nullopt);
+      updateRuntimeInformationOnSuccess(
+          result, ad_utility::CacheStatus::computed,
+          std::chrono::duration_cast<std::chrono::milliseconds>(timer.value()),
+          std::nullopt);
       // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
       // already perform it. An example for an operation that directly computes
       // the Limit is a full index scan with three variables.
@@ -149,7 +152,11 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
         // Note: both of the following calls have no effect and negligible
         // runtime if neither a LIMIT nor an OFFSET were specified.
         result.applyLimitOffset(_limit);
-        runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
+        runtimeInfo().addLimitOffsetRow(
+            _limit,
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                limitTimer.value()),
+            true);
       } else {
         AD_CONTRACT_CHECK(result.idTable().numRows() ==
                           _limit.actualSize(result.idTable().numRows()));
@@ -167,7 +174,9 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       return nullptr;
     }
 
-    updateRuntimeInformationOnSuccess(result, timer.msecs());
+    updateRuntimeInformationOnSuccess(
+        result,
+        std::chrono::duration_cast<std::chrono::milliseconds>(timer.value()));
     auto resultNumRows = result._resultPointer->resultTable()->size();
     auto resultNumCols = result._resultPointer->resultTable()->width();
     LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
@@ -215,7 +224,8 @@ void Operation::checkTimeout() const {
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
     const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
-    size_t timeInMilliseconds, std::optional<RuntimeInformation> runtimeInfo) {
+    std::chrono::milliseconds timeInMilliseconds,
+    std::optional<RuntimeInformation> runtimeInfo) {
   _runtimeInfo->totalTime_ = timeInMilliseconds;
   _runtimeInfo->numRows_ = resultTable.size();
   _runtimeInfo->cacheStatus_ = cacheStatus;
@@ -253,7 +263,7 @@ void Operation::updateRuntimeInformationOnSuccess(
 // ____________________________________________________________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
     const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
-    size_t timeInMilliseconds) {
+    std::chrono::milliseconds timeInMilliseconds) {
   updateRuntimeInformationOnSuccess(
       *resultAndCacheStatus._resultPointer->resultTable(),
       resultAndCacheStatus._cacheStatus, timeInMilliseconds,
@@ -273,7 +283,8 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   auto timesOfChildren = _runtimeInfo->children_ |
                          std::views::transform(&RuntimeInformation::totalTime_);
   _runtimeInfo->totalTime_ =
-      std::accumulate(timesOfChildren.begin(), timesOfChildren.end(), 0.0);
+      std::reduce(timesOfChildren.begin(), timesOfChildren.end(),
+                  std::chrono::milliseconds::zero());
 
   signalQueryUpdate();
 }
@@ -284,7 +295,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   auto setStatus = [&status](RuntimeInformation& rti,
                              const auto& self) -> void {
     rti.status_ = status;
-    rti.totalTime_ = 0;
+    rti.totalTime_ = std::chrono::milliseconds::zero();
     for (auto& child : rti.children_) {
       self(*child, self);
     }
@@ -295,7 +306,8 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
 }
 
 // _______________________________________________________________________
-void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
+void Operation::updateRuntimeInformationOnFailure(
+    std::chrono::milliseconds timeInMilliseconds) {
   _runtimeInfo->children_.clear();
   for (auto child : getChildren()) {
     _runtimeInfo->children_.push_back(child->getRootOperation()->_runtimeInfo);

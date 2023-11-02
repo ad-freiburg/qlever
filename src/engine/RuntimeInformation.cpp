@@ -66,18 +66,20 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
       << '\n';
   out << indentStr(indent) << "columns: " << absl::StrJoin(columnNames_, ", ")
       << '\n';
-  out << indentStr(indent) << "total_time: " << totalTime_ << " ms" << '\n';
-  out << indentStr(indent) << "operation_time: " << getOperationTime() << " ms"
+  out << indentStr(indent) << "total_time: " << totalTime_.count() << " ms"
       << '\n';
+  out << indentStr(indent) << "operation_time: " << getOperationTime().count()
+      << " ms" << '\n';
   out << indentStr(indent) << "status: " << toString(status_) << '\n';
   out << indentStr(indent)
       << "cache_status: " << ad_utility::toString(cacheStatus_) << '\n';
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
-    out << indentStr(indent) << "original_total_time: " << originalTotalTime_
-        << " ms" << '\n';
     out << indentStr(indent)
-        << "original_operation_time: " << originalOperationTime_ << " ms"
+        << "original_total_time: " << originalTotalTime_.count() << " ms"
         << '\n';
+    out << indentStr(indent)
+        << "original_operation_time: " << originalOperationTime_.count()
+        << " ms" << '\n';
   }
   for (const auto& el : details_.items()) {
     out << indentStr(indent) << "  " << el.key() << ": ";
@@ -113,7 +115,7 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
 }
 
 // __________________________________________________________________________
-double RuntimeInformation::getOperationTime() const {
+std::chrono::milliseconds RuntimeInformation::getOperationTime() const {
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
     return totalTime_;
   } else {
@@ -122,8 +124,12 @@ double RuntimeInformation::getOperationTime() const {
     // `totalTime_`. That's why we skip such children in the following loop.
     auto timesOfChildren =
         children_ | std::views::transform(&RuntimeInformation::totalTime_);
-    return totalTime_ -
-           std::accumulate(timesOfChildren.begin(), timesOfChildren.end(), 0.0);
+    // Prevent "negative" computation times in case totalTime_ was not
+    // computed for this yet.
+    constexpr auto zero = std::chrono::milliseconds::zero();
+    return std::max(zero,
+                    totalTime_ - std::reduce(timesOfChildren.begin(),
+                                             timesOfChildren.end(), zero));
   }
 }
 
@@ -171,10 +177,10 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"result_rows", rti.numRows_},
       {"result_cols", rti.numCols_},
       {"column_names", rti.columnNames_},
-      {"total_time", rti.totalTime_},
-      {"operation_time", rti.getOperationTime()},
-      {"original_total_time", rti.originalTotalTime_},
-      {"original_operation_time", rti.originalOperationTime_},
+      {"total_time", rti.totalTime_.count()},
+      {"operation_time", rti.getOperationTime().count()},
+      {"original_total_time", rti.originalTotalTime_.count()},
+      {"original_operation_time", rti.originalOperationTime_.count()},
       {"cache_status", ad_utility::toString(rti.cacheStatus_)},
       {"details", rti.details_},
       {"estimated_total_cost", rti.costEstimate_},
@@ -192,9 +198,9 @@ void to_json(nlohmann::ordered_json& j,
 }
 
 // __________________________________________________________________________
-void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
-                                           size_t timeForLimit,
-                                           bool fullResultIsNotCached) {
+void RuntimeInformation::addLimitOffsetRow(
+    const LimitOffsetClause& l, std::chrono::milliseconds timeForLimit,
+    bool fullResultIsNotCached) {
   bool hasLimit = l._limit.has_value();
   bool hasOffset = l._offset != 0;
   if (!(hasLimit || hasOffset)) {
@@ -207,7 +213,7 @@ void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
   numRows_ = l.actualSize(actualOperation->numRows_);
   details_.clear();
   cacheStatus_ = ad_utility::CacheStatus::computed;
-  totalTime_ += static_cast<double>(timeForLimit);
+  totalTime_ += timeForLimit;
   actualOperation->addDetail("not-written-to-cache-because-child-of-limit",
                              fullResultIsNotCached);
   sizeEstimate_ = l.actualSize(sizeEstimate_);

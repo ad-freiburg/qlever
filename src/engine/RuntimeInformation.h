@@ -39,12 +39,14 @@ class RuntimeInformation {
 
   /// The total time spent computing this operation. This includes the
   /// computation of the children.
-  double totalTime_ = 0.0;
+  std::chrono::milliseconds totalTime_ = std::chrono::milliseconds::zero();
 
   /// In case this operation was read from the cache, we will store the time
   /// information about the original computation in the following two members.
-  double originalTotalTime_ = 0.0;
-  double originalOperationTime_ = 0.0;
+  std::chrono::milliseconds originalTotalTime_ =
+      std::chrono::milliseconds::zero();
+  std::chrono::milliseconds originalOperationTime_ =
+      std::chrono::milliseconds::zero();
 
   /// The estimated cost, size, and column multiplicities of the operation.
   size_t costEstimate_ = 0;
@@ -91,10 +93,10 @@ class RuntimeInformation {
 
   /// Get the time spent computing the operation. This is the total time minus
   /// the time spent computing the children.
-  [[nodiscard]] double getOperationTime() const;
+  [[nodiscard]] std::chrono::milliseconds getOperationTime() const;
 
   /// Get the cost estimate for this operation. This is the total cost estimate
-  /// minus the sum of the cost estimates of all children.
+  /// minus the sum of the cost estimates of all children, but always positive.
   [[nodiscard]] size_t getOperationCostEstimate() const;
 
   /// Add a key-value pair to the `details` section of the output. `value` may
@@ -109,7 +111,8 @@ class RuntimeInformation {
   // The details of the LIMIT/OFFSET, the time (in ms) that was spent computing
   // it, and the information whether the `actual` operation (the old root of the
   // runtime information) is written to the cache, are passed in as arguments.
-  void addLimitOffsetRow(const LimitOffsetClause& l, size_t timeForLimit,
+  void addLimitOffsetRow(const LimitOffsetClause& l,
+                         std::chrono::milliseconds timeForLimit,
                          bool fullResultIsNotCached);
 
   static std::string_view toString(Status status);
