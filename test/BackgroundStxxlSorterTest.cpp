@@ -45,7 +45,7 @@ TEST(StxxlUniqueSorter, uniqueInts) {
   std::vector<int> originalInts;
   const uint64_t numInts = 50'000;
   originalInts.reserve(numInts);
-  SlowRandomIntGenerator<int> r{-200'000, 200'000};
+  ad_utility::SlowRandomIntGenerator<int> r{-200'000, 200'000};
   for (size_t i = 0; i < numInts; ++i) {
     originalInts.push_back(r());
   }
