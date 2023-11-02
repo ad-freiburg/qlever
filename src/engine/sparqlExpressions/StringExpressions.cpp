@@ -370,12 +370,12 @@ class ConcatExpression : public detail::VariadicExpression {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    std::string value = input.value();
+    std::string_view value{input.value()} ;
 
     if (value.starts_with("\"")) {
       auto contentEnd = ad_utility::findLiteralEnd(value, "\"");
       if (contentEnd != 0) {
-        std::string content = value.substr(1, contentEnd - 1);
+        std::string_view content = value.substr(1, contentEnd - 1);
         return boost::urls::encode(content, boost::urls::unreserved_chars);
       }
     }
