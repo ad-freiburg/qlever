@@ -216,8 +216,23 @@ requires(sizeof...(Ts) > 0)
 using First = typename detail::FirstWrapper<Ts...>::type;
 
 /*
+The difference between the following concepts, for checking if types are
+invocable with given types and what their return type looks like, and
+`std::is_invocable_r_v` is, that `std::is_invocable_r_v` only checks, if the
+actual return type can be converted to the wanted return type.
+
+For example: Let `F` be an invocable class, which takes nothing and returns
+`int`. Then `std::is_invocable_r_v(double, F)` is true.
+
+Our self made concepts allow for tighter control over the wanted return type, by
+either demanding the exact same type, or by demanding the exact same type, after
+removing all cv (const or volatile) qualifiers and all references from both
+the actual and wanted return type.
+*/
+
+/*
 @brief Require `Fn` to be invocable with `Args...` and the return type to be
-`isSimilar` with `Ret`.
+`isSimilar` to `Ret`.
 */
 template <typename Fn, typename Ret, typename... Args>
 concept InvocableWithSimilarReturnType =
@@ -235,11 +250,12 @@ concept InvocableWithExactReturnType =
 
 /*
 @brief Require `Fn` to be regular invocable with `Args...` and the return type
-to be `isSimilar` with `Ret`.
+to be `isSimilar` to `Ret`.
 
 Note: Currently, the difference between invocable and regular invocable is
 purely semantic. In other words, we can not, currently, actually check, if an
 invocable type is regular invocable, or not.
+For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 */
 template <typename Fn, typename Ret, typename... Args>
 concept RegularInvocableWithSimilarReturnType =
@@ -253,6 +269,7 @@ to be `Ret`.
 Note: Currently, the difference between invocable and regular invocable is
 purely semantic. In other words, we can not, currently, actually check, if an
 invocable type is regular invocable, or not.
+For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 */
 template <typename Fn, typename Ret, typename... Args>
 concept RegularInvocableWithExactReturnType =
