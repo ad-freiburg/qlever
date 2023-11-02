@@ -370,7 +370,7 @@ class ConcatExpression : public detail::VariadicExpression {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    std::string_view value{input.value()} ;
+    std::string_view value{input.value()};
 
     if (value.starts_with("\"")) {
       auto contentEnd = ad_utility::findLiteralEnd(value, "\"");
