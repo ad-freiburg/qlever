@@ -30,7 +30,7 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
     BenchmarkResults results{};
 
     auto generateRandomRow =
-        [gen = FastRandomIntGenerator<uint64_t>{}]() mutable {
+        [gen = ad_utility::FastRandomIntGenerator<uint64_t>{}]() mutable {
           std::array<Id, numCols> arr;
           for (auto& id : arr) {
             id = Id::fromBits(gen() >> 40);

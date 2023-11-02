@@ -330,6 +330,8 @@ addLinkAndDiscoverTest(ConfigOptionProxyTest configManager)
 
 addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
+addLinkAndDiscoverTest(RandomTest)
+
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 
 addLinkAndDiscoverTest(FindUndefRangesTest engine)
