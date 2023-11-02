@@ -2,13 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (Januar of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../test/util/IdTableHelpers.h"
-
 #include <absl/strings/str_cat.h>
 
 #include <algorithm>
 #include <utility>
 
+#include "../test/util/IdTableHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
@@ -102,7 +101,7 @@ IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::vector<std::pair<size_t, std::function<ValueId()>>>&
         joinColumnWithGenerator,
-    const Seed randomSeed) {
+    const RandomSeed randomSeed) {
   AD_CONTRACT_CHECK(numberRows > 0 && numberColumns > 0);
 
   // Views for clearer access.
@@ -159,7 +158,7 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
                                     const size_t numberColumns,
                                     const std::vector<size_t>& joinColumns,
                                     const std::function<ValueId()>& generator,
-                                    const Seed randomSeed) {
+                                    const RandomSeed randomSeed) {
   // Is the generator not empty?
   AD_CONTRACT_CHECK(generator != nullptr);
 
@@ -185,7 +184,7 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::vector<JoinColumnAndBounds>& joinColumnsAndBounds,
-    const Seed randomSeed) {
+    const RandomSeed randomSeed) {
   // Entries in IdTables have a max size.
   constexpr size_t maxIdSize = ValueId::maxIndex;
 
@@ -223,7 +222,8 @@ IdTable createRandomlyFilledIdTable(
 // ____________________________________________________________________________
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
-    const JoinColumnAndBounds& joinColumnAndBounds, const Seed randomSeed) {
+    const JoinColumnAndBounds& joinColumnAndBounds,
+    const RandomSeed randomSeed) {
   // Just call the other overload.
   return createRandomlyFilledIdTable(
       numberRows, numberColumns, std::vector{joinColumnAndBounds}, randomSeed);
@@ -232,7 +232,7 @@ IdTable createRandomlyFilledIdTable(
 // ____________________________________________________________________________
 IdTable createRandomlyFilledIdTable(const size_t numberRows,
                                     const size_t numberColumns,
-                                    const Seed randomSeed) {
+                                    const RandomSeed randomSeed) {
   return createRandomlyFilledIdTable(numberRows, numberColumns,
                                      std::vector<JoinColumnAndBounds>{},
                                      randomSeed);

@@ -16,7 +16,7 @@
 #include "global/TypedIndex.h"
 
 // The seed type for random number generators.
-using Seed = ad_utility::TypedIndex<unsigned int, "Seed">;
+using RandomSeed = ad_utility::TypedIndex<unsigned int, "Seed">;
 
 /**
  * A simple and fast Pseudo-Random-Number-Generator called Xoroshiro128+,
@@ -33,7 +33,7 @@ requires(std::is_integral_v<Int> && sizeof(Int) <= sizeof(uint64_t))
 class FastRandomIntGenerator {
  public:
   explicit FastRandomIntGenerator(
-      Seed seed = Seed::make(std::random_device{}())) {
+      RandomSeed seed = RandomSeed::make(std::random_device{}())) {
     // Randomly initialize the shuffleTable
     std::mt19937_64 randomEngine{seed.get()};
     std::uniform_int_distribution<uint64_t> distribution;
@@ -75,7 +75,7 @@ class SlowRandomIntGenerator {
   explicit SlowRandomIntGenerator(
       Int min = std::numeric_limits<Int>::min(),
       Int max = std::numeric_limits<Int>::max(),
-      Seed seed = Seed::make(std::random_device{}()))
+      RandomSeed seed = RandomSeed::make(std::random_device{}()))
       : _randomEngine{seed.get()}, _distribution{min, max} {}
 
   Int operator()() { return _distribution(_randomEngine); }
@@ -93,7 +93,7 @@ class RandomDoubleGenerator {
   explicit RandomDoubleGenerator(
       double min = std::numeric_limits<double>::min(),
       double max = std::numeric_limits<double>::max(),
-      Seed seed = Seed::make(std::random_device{}()))
+      RandomSeed seed = RandomSeed::make(std::random_device{}()))
       : _randomEngine{seed.get()}, _distribution{min, max} {}
 
   double operator()() { return _distribution(_randomEngine); }
@@ -106,7 +106,7 @@ class RandomDoubleGenerator {
 /// Randomly shuffle range denoted by `[begin, end)`
 template <typename RandomIt>
 void randomShuffle(RandomIt begin, RandomIt end,
-                   Seed seed = Seed::make(std::random_device{}())) {
+                   RandomSeed seed = RandomSeed::make(std::random_device{}())) {
   std::mt19937 g(seed.get());
   std::shuffle(begin, end, g);
 }

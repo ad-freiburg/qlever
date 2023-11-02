@@ -25,7 +25,7 @@ numbers for the same seed.
 @param randomNumberGeneratorFactory An invocable object, that should return a
 random number generator, using the given seed.
 */
-template <std::invocable<Seed> T>
+template <std::invocable<RandomSeed> T>
 void testSeed(
     T randomNumberGeneratorFactory,
     ad_utility::source_location l = ad_utility::source_location::current()) {
@@ -49,9 +49,9 @@ void testSeed(
   // numbers.
   std::ranges::for_each(
       createArrayOfRandomSeeds<NUM_SEEDS>(),
-      [&randomNumberGeneratorFactory](const Seed seed) {
+      [&randomNumberGeneratorFactory](const RandomSeed seed) {
         // What type of generator does the factory create?
-        using GeneratorType = std::invoke_result_t<T, Seed>;
+        using GeneratorType = std::invoke_result_t<T, RandomSeed>;
 
         // What kind of number does the generator return?
         using NumberType = std::invoke_result_t<GeneratorType>;
@@ -76,7 +76,8 @@ void testSeed(
 }
 
 TEST(RandomNumberGeneratorTest, FastRandomIntGenerator) {
-  testSeed([](Seed seed) { return FastRandomIntGenerator<size_t>{seed}; });
+  testSeed(
+      [](RandomSeed seed) { return FastRandomIntGenerator<size_t>{seed}; });
 }
 
 // Describes an inclusive numerical range `[min, max]`.
@@ -100,9 +101,9 @@ random number generator, using the given range and seed. Functionparameters
 should be `RangeNumberType rangeMin, RangeNumberType rangeMax, Seed seed`.
 @param ranges The ranges, that should be used.
 */
-template <
-    typename RangeNumberType,
-    std::invocable<RangeNumberType, RangeNumberType, Seed> GeneratorFactory>
+template <typename RangeNumberType,
+          std::invocable<RangeNumberType, RangeNumberType, RandomSeed>
+              GeneratorFactory>
 void testSeedWithRange(
     GeneratorFactory randomNumberGeneratorFactory,
     const std::vector<NumericalRange<RangeNumberType>>& ranges,
@@ -112,7 +113,7 @@ void testSeedWithRange(
 
   std::ranges::for_each(ranges, [&randomNumberGeneratorFactory](
                                     const NumericalRange<RangeNumberType>& r) {
-    testSeed([&r, &randomNumberGeneratorFactory](Seed seed) {
+    testSeed([&r, &randomNumberGeneratorFactory](RandomSeed seed) {
       return std::invoke(randomNumberGeneratorFactory, r.minimum_, r.maximum_,
                          seed);
     });
@@ -151,7 +152,7 @@ void testRange(
 }
 
 TEST(RandomNumberGeneratorTest, SlowRandomIntGenerator) {
-  testSeed([](Seed seed) {
+  testSeed([](RandomSeed seed) {
     return SlowRandomIntGenerator<size_t>{std::numeric_limits<size_t>::min(),
                                           std::numeric_limits<size_t>::max(),
                                           seed};
@@ -162,7 +163,7 @@ TEST(RandomNumberGeneratorTest, SlowRandomIntGenerator) {
       {4ul, 7ul}, {200ul, 70171ul}, {71747ul, 1936556173ul}};
 
   testSeedWithRange(
-      [](const auto rangeMin, const auto rangeMax, Seed seed) {
+      [](const auto rangeMin, const auto rangeMax, RandomSeed seed) {
         return SlowRandomIntGenerator{rangeMin, rangeMax, seed};
       },
       ranges);
@@ -171,7 +172,7 @@ TEST(RandomNumberGeneratorTest, SlowRandomIntGenerator) {
 }
 
 TEST(RandomNumberGeneratorTest, RandomDoubleGenerator) {
-  testSeed([](Seed seed) {
+  testSeed([](RandomSeed seed) {
     return RandomDoubleGenerator{std::numeric_limits<double>::min(),
                                  std::numeric_limits<double>::max(), seed};
   });
@@ -182,7 +183,7 @@ TEST(RandomNumberGeneratorTest, RandomDoubleGenerator) {
 
   // Repeat this test, but this time do it inside of a range.
   testSeedWithRange(
-      [](const auto rangeMin, const auto rangeMax, Seed seed) {
+      [](const auto rangeMin, const auto rangeMax, RandomSeed seed) {
         return RandomDoubleGenerator{rangeMin, rangeMax, seed};
       },
       ranges);
@@ -207,24 +208,27 @@ TEST(RandomShuffleTest, Seed) {
   For every random seed test, if the shuffled array is the same, if given
   identical input and seed.
   */
-  std::ranges::for_each(createArrayOfRandomSeeds<NUM_SEEDS>(), [](const Seed
-                                                                      seed) {
-    std::array<std::array<int, ARRAY_LENGTH>, NUM_SHUFFLED_ARRAY> inputArrays{};
+  std::ranges::for_each(
+      createArrayOfRandomSeeds<NUM_SEEDS>(), [](const RandomSeed seed) {
+        std::array<std::array<int, ARRAY_LENGTH>, NUM_SHUFFLED_ARRAY>
+            inputArrays{};
 
-    // Fill the first input array with random values, then copy it into the
-    // other 'slots'.
-    std::ranges::generate(inputArrays.front(), FastRandomIntGenerator<int>{});
-    std::ranges::fill(std::views::drop(inputArrays, 1), inputArrays.front());
+        // Fill the first input array with random values, then copy it into the
+        // other 'slots'.
+        std::ranges::generate(inputArrays.front(),
+                              FastRandomIntGenerator<int>{});
+        std::ranges::fill(std::views::drop(inputArrays, 1),
+                          inputArrays.front());
 
-    // Shuffle and compare, if they are all the same.
-    std::ranges::for_each(
-        inputArrays, [&seed](std::array<int, ARRAY_LENGTH>& inputArray) {
-          randomShuffle(inputArray.begin(), inputArray.end(), seed);
-        });
-    std::ranges::for_each(
-        std::views::drop(inputArrays, 1),
-        [&inputArrays](const std::array<int, ARRAY_LENGTH>& inputArray) {
-          ASSERT_EQ(inputArrays.front(), inputArray);
-        });
-  });
+        // Shuffle and compare, if they are all the same.
+        std::ranges::for_each(
+            inputArrays, [&seed](std::array<int, ARRAY_LENGTH>& inputArray) {
+              randomShuffle(inputArray.begin(), inputArray.end(), seed);
+            });
+        std::ranges::for_each(
+            std::views::drop(inputArrays, 1),
+            [&inputArrays](const std::array<int, ARRAY_LENGTH>& inputArray) {
+              ASSERT_EQ(inputArrays.front(), inputArray);
+            });
+      });
 }
