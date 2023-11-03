@@ -218,8 +218,8 @@ void Operation::checkTimeout() const {
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
     const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
-    millis timeInMilliseconds, std::optional<RuntimeInformation> runtimeInfo) {
-  _runtimeInfo->totalTime_ = timeInMilliseconds;
+    millis duration, std::optional<RuntimeInformation> runtimeInfo) {
+  _runtimeInfo->totalTime_ = duration;
   _runtimeInfo->numRows_ = resultTable.size();
   _runtimeInfo->cacheStatus_ = cacheStatus;
 
@@ -256,10 +256,10 @@ void Operation::updateRuntimeInformationOnSuccess(
 // ____________________________________________________________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
     const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
-    millis timeInMilliseconds) {
+    millis duration) {
   updateRuntimeInformationOnSuccess(
       *resultAndCacheStatus._resultPointer->resultTable(),
-      resultAndCacheStatus._cacheStatus, timeInMilliseconds,
+      resultAndCacheStatus._cacheStatus, duration,
       resultAndCacheStatus._resultPointer->runtimeInfo());
 }
 
@@ -298,13 +298,13 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
 }
 
 // _______________________________________________________________________
-void Operation::updateRuntimeInformationOnFailure(millis timeInMilliseconds) {
+void Operation::updateRuntimeInformationOnFailure(millis duration) {
   _runtimeInfo->children_.clear();
   for (auto child : getChildren()) {
     _runtimeInfo->children_.push_back(child->getRootOperation()->_runtimeInfo);
   }
 
-  _runtimeInfo->totalTime_ = timeInMilliseconds;
+  _runtimeInfo->totalTime_ = duration;
   _runtimeInfo->status_ = RuntimeInformation::Status::failed;
 
   signalQueryUpdate();

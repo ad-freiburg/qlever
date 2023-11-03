@@ -243,7 +243,7 @@ class Operation {
   // it has either been succesfully computed or read from the cache.
   virtual void updateRuntimeInformationOnSuccess(
       const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
-      millis timeInMilliseconds) final;
+      millis duration) final;
 
   // Similar to the function above, but the components are specified manually.
   // If nullopt is specified for the last argument, then the `_runtimeInfo` is
@@ -252,8 +252,7 @@ class Operation {
   // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
       const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
-      millis timeInMilliseconds,
-      std::optional<RuntimeInformation> runtimeInfo) final;
+      millis duration, std::optional<RuntimeInformation> runtimeInfo) final;
 
  public:
   // This function has to be called when this `Operation` was not executed,
@@ -281,7 +280,7 @@ class Operation {
  private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.
-  void updateRuntimeInformationOnFailure(millis timeInMilliseconds);
+  void updateRuntimeInformationOnFailure(millis duration);
 
   // Compute the variable to column index mapping. Is used internally by
   // `getInternallyVisibleVariableColumns`.

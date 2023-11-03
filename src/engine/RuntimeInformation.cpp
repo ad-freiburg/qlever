@@ -127,9 +127,8 @@ std::chrono::milliseconds RuntimeInformation::getOperationTime() const {
     // Prevent "negative" computation times in case totalTime_ was not
     // computed for this yet.
     constexpr auto zero = std::chrono::milliseconds::zero();
-    return std::max(zero,
-                    totalTime_ - std::reduce(timesOfChildren.begin(),
-                                             timesOfChildren.end(), zero));
+    return std::max(zero, -std::reduce(timesOfChildren.begin(),
+                                       timesOfChildren.end(), -totalTime_));
   }
 }
 
