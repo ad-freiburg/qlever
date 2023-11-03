@@ -45,20 +45,22 @@ using namespace std::string_literals;
 
 namespace ad_benchmark {
 /*
- * @brief Creates an overlap between the join columns of the IdTables, by
- *  randomly overiding entries of the smaller table with entries of the bigger
- *  table.
- *
- * @param smallerTable The table, where join column entries will be
- *  overwritten.
- * @param biggerTable The table, where join column entries will be copied from.
- * @param probabilityToCreateOverlap The height of the probability for any
- *  join column entry of smallerTable to be overwritten by a random join column
- *  entry of biggerTable.
- */
+@brief Creates an overlap between the join columns of the IdTables, by
+randomly overiding entries of the smaller table with entries of the bigger
+table.
+
+@param smallerTable The table, where join column entries will be
+overwritten.
+@param biggerTable The table, where join column entries will be copied from.
+@param probabilityToCreateOverlap The height of the probability for any
+join column entry of smallerTable to be overwritten by a random join column
+entry of biggerTable.
+@param randomSeed Seed for the random generators.
+*/
 static void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
                                   const IdTableAndJoinColumn& biggerTable,
-                                  const double probabilityToCreateOverlap) {
+                                  const double probabilityToCreateOverlap,
+                                  ad_utility::RandomSeed randomSeed) {
   // For easier reading.
   const size_t smallerTableJoinColumn = (*smallerTable).joinColumn;
   const size_t smallerTableNumberRows = (*smallerTable).idTable.numRows();
@@ -71,12 +73,23 @@ static void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   // Is the bigger table actually bigger?
   AD_CONTRACT_CHECK(smallerTableNumberRows <= biggerTable.idTable.numRows());
 
+  /*
+  For creating seeds for the random generators that are hopefully quite
+  different.
+  */
+  auto seedGenerator = [randomGenerator =
+                            ad_utility::FastRandomIntGenerator<unsigned int>{
+                                std::move(randomSeed)}]() mutable {
+    return ad_utility::RandomSeed::make(std::invoke(randomGenerator));
+  };
+
   // Creating the generator for choosing a random row in the bigger table.
   ad_utility::SlowRandomIntGenerator<size_t> randomBiggerTableRow(
-      0, biggerTable.idTable.numRows() - 1);
+      0, biggerTable.idTable.numRows() - 1, std::invoke(seedGenerator));
 
   // Generator for checking, if an overlap should be created.
-  ad_utility::RandomDoubleGenerator randomDouble(0, 100);
+  ad_utility::RandomDoubleGenerator randomDouble(0, 100,
+                                                 std::invoke(seedGenerator));
 
   for (size_t i = 0; i < smallerTableNumberRows; i++) {
     // Only do anything, if the probability is right.
@@ -112,13 +125,14 @@ constexpr size_t JOIN_ALGORITHM_SPEEDUP_COLUMN_NUM = 6;
 
 /*
 @brief Adds the function time measurements to a row of the benchmark table
-in `makeBenchmarkTable`.
-For an explanation of the parameters, see `makeBenchmarkTable`.
+in `makeGrowingBenchmarkTable`.
+For an explanation of the parameters, see `makeGrowingBenchmarkTable`.
 */
 static void addMeasurementsToRowOfBenchmarkTable(
     ResultTable* table, const size_t& row, const float overlap,
-    const bool smallerTableSorted, const bool biggerTableSorted,
-    const size_t& ratioRows, const size_t& smallerTableAmountRows,
+    ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
+    const bool biggerTableSorted, const size_t& ratioRows,
+    const size_t& smallerTableAmountRows,
     const size_t& smallerTableAmountColumns,
     const size_t& biggerTableAmountColumns,
     const float smallerTableJoinColumnSampleSizeRatio = 1.0,
@@ -174,7 +188,8 @@ static void addMeasurementsToRowOfBenchmarkTable(
 
   // Creating overlap, if wanted.
   if (overlap > 0) {
-    createOverlapRandomly(&smallerTable, biggerTable, overlap);
+    createOverlapRandomly(&smallerTable, biggerTable, overlap,
+                          std::move(randomSeed));
   }
 
   // Sort the `IdTables`, if they should be.
@@ -288,6 +303,7 @@ False, if there are enough rows and the created table should be returned.
 Decides the final size of the benchmark table.
 @param overlap The height of the probability for any join column entry of
 smallerTable to be overwritten by a random join column entry of biggerTable.
+@param randomSeed Seed for the random generators.
 @param smallerTableSorted, biggerTableSorted Should the bigger/smaller table
 be sorted by his join column before being joined? More specificly, some
 join algorithm require one, or both, of the IdTables to be sorted. If this
@@ -318,9 +334,10 @@ requires exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>
 static ResultTable& makeGrowingBenchmarkTable(
     BenchmarkResults* results, const std::string_view tableDescriptor,
     std::string parameterName, StopFunction stopFunction, const T1& overlap,
-    const bool smallerTableSorted, const bool biggerTableSorted,
-    const T2& ratioRows, const T3& smallerTableAmountRows,
-    const T4& smallerTableAmountColumns, const T5& biggerTableAmountColumns,
+    const ad_utility::RandomSeed& randomSeed, const bool smallerTableSorted,
+    const bool biggerTableSorted, const T2& ratioRows,
+    const T3& smallerTableAmountRows, const T4& smallerTableAmountColumns,
+    const T5& biggerTableAmountColumns,
     const T6& smallerTableJoinColumnSampleSizeRatio = 1.0,
     const T7& biggerTableJoinColumnSampleSizeRatio = 1.0) {
   // Is something a growth function?
@@ -397,8 +414,9 @@ static ResultTable& makeGrowingBenchmarkTable(
 
     // Converting all our function parameters to non functions.
     addMeasurementsToRowOfBenchmarkTable(
-        &table, rowNumber, returnOrCall(overlap, rowNumber), smallerTableSorted,
-        biggerTableSorted, returnOrCall(ratioRows, rowNumber),
+        &table, rowNumber, returnOrCall(overlap, rowNumber), randomSeed,
+        smallerTableSorted, biggerTableSorted,
+        returnOrCall(ratioRows, rowNumber),
         returnOrCall(smallerTableAmountRows, rowNumber),
         returnOrCall(smallerTableAmountColumns, rowNumber),
         returnOrCall(biggerTableAmountColumns, rowNumber),
@@ -966,6 +984,7 @@ class BmOnlyBiggerTableSizeChanges final
 
         ResultTable& table = makeGrowingBenchmarkTable(
             &results, tableName, "Row ratio", stoppingFunction, overlapChance_,
+            ad_utility::RandomSeed::make(std::random_device{}()),
             smallerTableSorted, biggerTableSorted, growthFunction,
             smallerTableAmountRows_, smallerTableAmountColumns_,
             biggerTableAmountColumns_);
@@ -1045,8 +1064,9 @@ class BmOnlySmallerTableSizeChanges final
 
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Amount of rows in the smaller table",
-              stoppingFunction, overlapChance_, smallerTableSorted,
-              biggerTableSorted, ratioRows, growthFunction,
+              stoppingFunction, overlapChance_,
+              ad_utility::RandomSeed::make(std::random_device{}()),
+              smallerTableSorted, biggerTableSorted, ratioRows, growthFunction,
               smallerTableAmountColumns_, biggerTableAmountColumns_);
 
           // Add the metadata, that changes with every call and can't be
@@ -1119,9 +1139,10 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
         ResultTable& table = makeGrowingBenchmarkTable(
             &results, tableName, "Amount of rows", stoppingFunction,
-            overlapChance_, smallerTableSorted, biggerTableSorted, 1UL,
-            growthFunction, smallerTableAmountColumns_,
-            biggerTableAmountColumns_);
+            overlapChance_,
+            ad_utility::RandomSeed::make(std::random_device{}()),
+            smallerTableSorted, biggerTableSorted, 1UL, growthFunction,
+            smallerTableAmountColumns_, biggerTableAmountColumns_);
 
         // Add the metadata, that changes with every call and can't be
         // generalized.
