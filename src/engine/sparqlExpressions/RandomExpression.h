@@ -13,7 +13,7 @@ namespace sparqlExpression {
 class RandomExpression : public SparqlExpression {
  private:
   // Unique random ID for this expression.
-  int64_t randId = FastRandomIntGenerator<int64_t>{}();
+  int64_t randId = ad_utility::FastRandomIntGenerator<int64_t>{}();
 
  public:
   // Evaluate a Sparql expression.
@@ -21,7 +21,7 @@ class RandomExpression : public SparqlExpression {
     VectorWithMemoryLimit<Id> result{context->_allocator};
     const size_t numElements = context->_endIndex - context->_beginIndex;
     result.reserve(numElements);
-    FastRandomIntGenerator<int64_t> randInt;
+    ad_utility::FastRandomIntGenerator<int64_t> randInt;
 
     // As part of a GROUP BY we only return one value per group.
     if (context->_isPartOfGroupBy) {

@@ -79,7 +79,8 @@ class BMSingleMeasurements : public ConfigOptions {
     BenchmarkResults results{};
 
     // Setup.
-    const size_t number = SlowRandomIntGenerator<size_t>(10, 1'000)();
+    const size_t number =
+        ad_utility::SlowRandomIntGenerator<size_t>(10, 1'000)();
     auto exponentiate = [](const size_t numberToExponentiate) {
       return numberToExponentiate * numberToExponentiate;
     };

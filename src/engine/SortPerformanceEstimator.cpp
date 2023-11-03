@@ -21,7 +21,7 @@ IdTable createRandomIdTable(
   result.setNumColumns(numColumns);
   result.reserve(numRows);
 
-  FastRandomIntGenerator<uint32_t> generator;
+  ad_utility::FastRandomIntGenerator<uint32_t> generator;
 
   for (size_t i = 0; i < numRows; ++i) {
     result.emplace_back();
