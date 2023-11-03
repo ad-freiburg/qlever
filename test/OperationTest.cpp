@@ -2,12 +2,16 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (joka921) <kalmbach@cs.uni-freiburg.de>
 
-#include "./IndexTestHelpers.h"
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include "IndexTestHelpers.h"
 #include "engine/NeutralElementOperation.h"
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
+#include "engine/ValuesForTesting.h"
+#include "util/IdTableHelpers.h"
 
 using namespace ad_utility::testing;
+using namespace ::testing;
 
 // ________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
@@ -78,4 +82,68 @@ TEST(OperationTest, getResultOnlyCached) {
   // Clear the (global) cache again to not possibly interfere with other unit
   // tests.
   qec->getQueryTreeCache().clearAll();
+}
+
+// _____________________________________________________________________________
+
+MATCHER_P2(HasJsonKeyValue, key, value, "") {
+  try {
+    auto json = nlohmann::json::parse(arg);
+    if (!json.contains(key)) {
+      *result_listener << "JSON object does not contain key \"" << key << '"';
+      return false;
+    }
+    if (json[key] == value) {
+      return true;
+    }
+    *result_listener << "JSON key \"" << key << "\" has value \"" << json[key]
+                     << '"';
+  } catch (const nlohmann::json::parse_error& error) {
+    *result_listener << "failed to parse JSON";
+  }
+  return false;
+}
+
+TEST(OperationTest, verifyOperationStatusChangesToInProgressAndComputed) {
+  std::vector<std::string> jsonHistory;
+
+  Index index =
+      makeTestIndex("OperationTest", std::nullopt, true, true, true, 32);
+  QueryResultCache cache;
+  QueryExecutionContext qec{
+      index, &cache, makeAllocator(), SortPerformanceEstimator{},
+      [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
+  auto table = makeIdTableFromVector({{}, {}, {}});
+  ValuesForTesting operation{&qec, std::move(table), {}};
+
+  // Ignore result, we only care about the side effects
+  operation.getResult(true);
+
+  EXPECT_THAT(jsonHistory,
+              ElementsAre(HasJsonKeyValue("status", "not started"),
+                          HasJsonKeyValue("status", "in progress"),
+                          HasJsonKeyValue("status", "fully materialized"),
+                          HasJsonKeyValue("status", "fully materialized")));
+}
+
+TEST(OperationTest, verifyCachePreventsInProgressState) {
+  std::vector<std::string> jsonHistory;
+
+  Index index =
+      makeTestIndex("OperationTest", std::nullopt, true, true, true, 32);
+  QueryResultCache cache;
+  QueryExecutionContext qec{
+      index, &cache, makeAllocator(), SortPerformanceEstimator{},
+      [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
+  auto table = makeIdTableFromVector({{}, {}, {}});
+  ValuesForTesting operation{&qec, std::move(table), {}};
+
+  // Run twice and clear history to get cached values
+  operation.getResult(true);
+  jsonHistory.clear();
+  operation.getResult(true);
+
+  EXPECT_THAT(jsonHistory,
+              ElementsAre(HasJsonKeyValue("status", "fully materialized"),
+                          HasJsonKeyValue("status", "fully materialized")));
 }
