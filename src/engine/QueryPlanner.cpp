@@ -1956,6 +1956,11 @@ auto QueryPlanner::createJoinWithTransitivePath(
   auto transPathOperation = std::dynamic_pointer_cast<TransitivePath>(
       transPathTree->getRootOperation());
 
+  // TODO: Handle the case of two or more common variables
+  if (jcs.size() > 1) {
+    AD_THROW("Transitive Path operation with more than"
+             " two common variables is not supported");
+  }
   const size_t otherCol = aIsTransPath ? jcs[0][1] : jcs[0][0];
   const size_t thisCol = aIsTransPath ? jcs[0][0] : jcs[0][1];
   // Do not bind the side of a path twice

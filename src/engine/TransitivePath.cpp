@@ -108,7 +108,7 @@ size_t TransitivePath::getResultWidth() const { return _resultWidth; }
 vector<ColumnIndex> TransitivePath::resultSortedOn() const {
   const std::vector<ColumnIndex>& subSortedOn =
       _subtree->getRootOperation()->getResultSortedOn();
-  if (!_lhs.isBound() && !_rhs.isBound() && subSortedOn.size() > 0 &&
+  if (!_lhs.isBoundVariable() && !_rhs.isBoundVariable() && subSortedOn.size() > 0 &&
       subSortedOn[0] == _lhs.subCol) {
     // This operation preserves the order of the _leftCol of the subtree.
     return {0};
@@ -129,7 +129,6 @@ VariableToColumnMap TransitivePath::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 void TransitivePath::setTextLimit(size_t limit) {
-  _subtree->setTextLimit(limit);
   for (auto child : getChildren()) {
     child->setTextLimit(limit);
   }
@@ -243,7 +242,8 @@ ResultTable TransitivePath::computeResult() {
   idTable.setNumColumns(getResultWidth());
 
   size_t subWidth = subRes->idTable().numColumns();
-  if (_lhs.isBound()) {
+  // Left side is bound and a variable
+  if (_lhs.isBoundVariable()) {
     shared_ptr<const ResultTable> leftRes =
         _lhs.treeAndCol.value().first->getResult();
     size_t leftWidth = leftRes->idTable().numColumns();
@@ -252,7 +252,10 @@ ResultTable TransitivePath::computeResult() {
                     &TransitivePath::computeTransitivePathBound, this, &idTable,
                     subRes->idTable(), _lhs, _rhs, leftRes->idTable());
 
-  } else if (_rhs.isBound()) {
+    return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocabFromNonEmptyOf(*leftRes.get(), *subRes.get())};
+
+  // Right side is bound and a variable
+  } else if (_rhs.isBoundVariable()) {
     shared_ptr<const ResultTable> rightRes =
         _rhs.treeAndCol.value().first->getResult();
     size_t rightWidth = rightRes->idTable().numColumns();
@@ -260,10 +263,15 @@ ResultTable TransitivePath::computeResult() {
     CALL_FIXED_SIZE((std::array{_resultWidth, subWidth, rightWidth}),
                     &TransitivePath::computeTransitivePathBound, this, &idTable,
                     subRes->idTable(), _rhs, _lhs, rightRes->idTable());
+
+    return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocabFromNonEmptyOf(*rightRes.get(), *subRes.get())};
+
+  // Right side is an Id
   } else if (!_rhs.isVariable()) {
     CALL_FIXED_SIZE((std::array{_resultWidth, subWidth}),
                     &TransitivePath::computeTransitivePath, this, &idTable,
                     subRes->idTable(), _rhs, _lhs);
+  // No side is bound and the right side is not an Id
   } else {
     CALL_FIXED_SIZE((std::array{_resultWidth, subWidth}),
                     &TransitivePath::computeTransitivePath, this, &idTable,
@@ -306,9 +314,9 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(
       getExecutionContext(), _subtree, _lhs, _rhs, _minDist, _maxDist);
   if (isLeft) {
-    p->_lhs.treeAndCol = {leftOrRightOp.get(), inputCol};
+    p->_lhs.treeAndCol = {leftOrRightOp, inputCol};
   } else {
-    p->_rhs.treeAndCol = {leftOrRightOp.get(), inputCol};
+    p->_rhs.treeAndCol = {leftOrRightOp, inputCol};
   }
 
   // Note: The `variable` in the following structured binding is `const`, even
@@ -317,22 +325,19 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
   for (auto [variable, columnIndexWithType] :
        leftOrRightOp->getVariableColumns()) {
     ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
-    if (columnIndex != inputCol) {
-      if (columnIndex > inputCol) {
-        columnIndexWithType.columnIndex_++;
-      } else {
-        columnIndexWithType.columnIndex_ += 2;
-      }
-      p->_variableColumns[variable] = columnIndexWithType;
-      p->_resultWidth++;
-    }
+    if (columnIndex == inputCol) { continue; }
+
+    columnIndexWithType.columnIndex_ += columnIndex > inputCol ? 1: 2;
+
+    p->_variableColumns[variable] = columnIndexWithType;
+    p->_resultWidth++;
   }
   return p;
 }
 
 // _____________________________________________________________________________
 bool TransitivePath::isBound() const {
-  return _lhs.isBound() || _rhs.isBound();
+  return _lhs.isBoundVariable() || _rhs.isBoundVariable();
 }
 
 // _____________________________________________________________________________
@@ -368,7 +373,6 @@ TransitivePath::Map TransitivePath::transitiveHull(
       edgeCache.push_back(&rootEdges->second);
     }
     if (_minDist == 0) {
-      hull.try_emplace(currentStartNode, ad_utility::HashSet<Id>());
       hull[currentStartNode].insert(currentStartNode);
     }
 
@@ -396,10 +400,8 @@ TransitivePath::Map TransitivePath::transitiveHull(
         if (childDepth >= _minDist) {
           marks.insert(child);
           if (_rhs.isVariable() || child == std::get<Id>(_rhs.value)) {
-            hull.try_emplace(currentStartNode, ad_utility::HashSet<Id>());
             hull[currentStartNode].insert(child);
           } else if (_lhs.isVariable() || child == std::get<Id>(_lhs.value)) {
-            hull.try_emplace(child, ad_utility::HashSet<Id>());
             hull[child].insert(currentStartNode);
           }
         }
@@ -524,9 +526,7 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
     Id targetId = targetCol[i];
     MapIt it = edges.find(startId);
     if (it == edges.end()) {
-      ad_utility::HashSet<Id> edgeTargets = ad_utility::HashSet<Id>();
-      edgeTargets.insert(targetId);
-      edges[startId] = edgeTargets;
+      edges[startId].insert(targetId);
     } else {
       // If r is not in the vector insert it
       it->second.insert(targetId);

@@ -10,7 +10,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
 
-using TreeAndCol = std::pair<QueryExecutionTree*, size_t>;
+using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
 struct TransitivePathSide {
   // treeAndCol contains the QueryExecutionTree of this side and the column
   // where the Ids of this side are located. This member only has a value if
@@ -25,7 +25,7 @@ struct TransitivePathSide {
 
   bool isVariable() const { return std::holds_alternative<Variable>(value); };
 
-  bool isBound() const {
+  bool isBoundVariable() const {
     return treeAndCol.has_value();
   };
 
@@ -36,7 +36,7 @@ struct TransitivePathSide {
     }
     if (isVariable()) {
       os << "Variable name: " << std::get<Variable>(value)._name;
-    } else if (isBound()) {
+    } else if (isBoundVariable()) {
       os << "Id: " << std::get<Id>(value);
     }
 
@@ -50,14 +50,11 @@ struct TransitivePathSide {
   }
 
   bool isSortedOnInputCol() const {
-    if (treeAndCol.has_value()) {
-      auto [tree, col] = treeAndCol.value();
-      const std::vector<ColumnIndex>& sortedOn = tree->getRootOperation()->getResultSortedOn();
-      if (sortedOn.size() > 0 && sortedOn[0] == col) {
-        return true;
-      }
-    }
-    return false;
+    if (!treeAndCol.has_value()) { return false; };
+
+    auto [tree, col] = treeAndCol.value();
+    const std::vector<ColumnIndex>& sortedOn = tree->getRootOperation()->getResultSortedOn();
+    return (!sortedOn.empty() && sortedOn[0] == col);
   }
 };
 
@@ -130,7 +127,7 @@ class TransitivePath : public Operation {
     std::vector<QueryExecutionTree*> res;
     auto addChildren = [](std::vector<QueryExecutionTree*>& res, TransitivePathSide side) {
       if (side.treeAndCol.has_value()) {
-        res.push_back(side.treeAndCol.value().first);
+        res.push_back(side.treeAndCol.value().first.get());
       }
     };
     addChildren(res, _lhs);
