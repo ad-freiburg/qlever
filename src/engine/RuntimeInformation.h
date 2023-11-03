@@ -115,8 +115,7 @@ class RuntimeInformation {
   // The details of the LIMIT/OFFSET, the time (in ms) that was spent computing
   // it, and the information whether the `actual` operation (the old root of the
   // runtime information) is written to the cache, are passed in as arguments.
-  void addLimitOffsetRow(const LimitOffsetClause& l,
-                         Milliseconds timeForLimit,
+  void addLimitOffsetRow(const LimitOffsetClause& l, Milliseconds timeForLimit,
                          bool fullResultIsNotCached);
 
   static std::string_view toString(Status status);
