@@ -10,13 +10,15 @@
 
 #include "util/Random.h"
 
-// Create a array of non-deterministic random seeds for use with random number
-// generators.
+// Create a array of random seeds for use with random number generators.
 template <size_t NumSeeds>
-inline std::array<ad_utility::RandomSeed, NumSeeds> createArrayOfRandomSeeds() {
+inline std::array<ad_utility::RandomSeed, NumSeeds> createArrayOfRandomSeeds(
+    ad_utility::RandomSeed seed =
+        ad_utility::RandomSeed::make(std::random_device{}())) {
+  ad_utility::FastRandomIntGenerator<unsigned int> generator{std::move(seed)};
   std::array<ad_utility::RandomSeed, NumSeeds> seeds{};
-  std::ranges::generate(seeds, []() {
-    return ad_utility::RandomSeed::make(std::random_device{}());
+  std::ranges::generate(seeds, [&generator]() {
+    return ad_utility::RandomSeed::make(std::invoke(generator));
   });
   return seeds;
 }
