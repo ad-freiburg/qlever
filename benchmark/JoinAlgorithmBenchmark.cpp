@@ -72,11 +72,11 @@ static void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   AD_CONTRACT_CHECK(smallerTableNumberRows <= biggerTable.idTable.numRows());
 
   // Creating the generator for choosing a random row in the bigger table.
-  SlowRandomIntGenerator<size_t> randomBiggerTableRow(
+  ad_utility::SlowRandomIntGenerator<size_t> randomBiggerTableRow(
       0, biggerTable.idTable.numRows() - 1);
 
   // Generator for checking, if an overlap should be created.
-  RandomDoubleGenerator randomDouble(0, 100);
+  ad_utility::RandomDoubleGenerator randomDouble(0, 100);
 
   for (size_t i = 0; i < smallerTableNumberRows; i++) {
     // Only do anything, if the probability is right.
