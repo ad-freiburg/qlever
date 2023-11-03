@@ -545,6 +545,12 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   float maxTimeSingleMeasurement_;
   std::string configVariableMaxMemory_;
 
+  /*
+  The random seed, that we use to create random seeds for our random
+  generators.
+  */
+  size_t randomSeed_;
+
  protected:
   /*
   The benchmark classes after this point always make tables, where one
@@ -605,6 +611,12 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "the same value as an entry in the join column of the bigger "
         "`IdTable`. Must be in the range $(0,100]$.",
         &overlapChance_, 42.f);
+
+    decltype(auto) randomSeed = config.addOption(
+        "randomSeed",
+        "The seed used for random generators. Note: The default value is a "
+        "non-deterministic random value, which changes with every execution.",
+        &randomSeed_, static_cast<size_t>(std::random_device{}()));
 
     decltype(auto) ratioRows = config.addOption(
         "ratioRows",
@@ -752,6 +764,18 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                         "'overlapChance' must be bigger than 0.",
                         overlapChance);
 
+    /*
+    Is `randomSeed_` smaller/equal than the max value for seeds?
+    Note: The static cast is needed, because a random generator seed is always
+    `unsigned int`:
+    */
+    config.addValidator(
+        [maxSeed = static_cast<size_t>(ad_utility::RandomSeed::max().get())](
+            const size_t seed) { return seed <= maxSeed; },
+        absl::StrCat("'randomSeed' must be smaller than, or equal to, ",
+                     ad_utility::RandomSeed::max().get(), "."),
+        randomSeed);
+
     // Is `maxTimeSingleMeasurement` a positive number?
     config.addValidator(
         generateBiggerEqualLambda(0UL, true),
@@ -830,6 +854,18 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     } else {
       return {std::nullopt};
     }
+  }
+
+  /*
+  Getter for the the random seed, that we use to create random seeds for our
+  random generators.
+  */
+  ad_utility::RandomSeed randomSeed() const {
+    /*
+    Note: The static cast is needed, because a random generator seed is always
+    `unsigned int`:
+    */
+    return ad_utility::RandomSeed::make(static_cast<unsigned int>(randomSeed_));
   }
 };
 
@@ -983,8 +1019,7 @@ class BmOnlyBiggerTableSizeChanges final
 
         ResultTable& table = makeGrowingBenchmarkTable(
             &results, tableName, "Row ratio", stoppingFunction, overlapChance_,
-            ad_utility::RandomSeed::make(std::random_device{}()),
-            smallerTableSorted, biggerTableSorted, growthFunction,
+            randomSeed(), smallerTableSorted, biggerTableSorted, growthFunction,
             smallerTableAmountRows_, smallerTableAmountColumns_,
             biggerTableAmountColumns_);
 
@@ -1004,6 +1039,7 @@ class BmOnlyBiggerTableSizeChanges final
 
     meta.addKeyValuePair("Value changing with every row", "ratioRows");
     meta.addKeyValuePair("overlapChance", overlapChance_);
+    meta.addKeyValuePair("randomSeed", randomSeed().get());
     meta.addKeyValuePair("smallerTableAmountRows", smallerTableAmountRows_);
     meta.addKeyValuePair("smallerTableAmountColumns",
                          smallerTableAmountColumns_);
@@ -1063,8 +1099,7 @@ class BmOnlySmallerTableSizeChanges final
 
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Amount of rows in the smaller table",
-              stoppingFunction, overlapChance_,
-              ad_utility::RandomSeed::make(std::random_device{}()),
+              stoppingFunction, overlapChance_, randomSeed(),
               smallerTableSorted, biggerTableSorted, ratioRows, growthFunction,
               smallerTableAmountColumns_, biggerTableAmountColumns_);
 
@@ -1085,6 +1120,7 @@ class BmOnlySmallerTableSizeChanges final
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableAmountRows");
     meta.addKeyValuePair("overlapChance", overlapChance_);
+    meta.addKeyValuePair("randomSeed", randomSeed().get());
     meta.addKeyValuePair("smallerTableAmountColumns",
                          smallerTableAmountColumns_);
     meta.addKeyValuePair("biggerTableAmountColumns", biggerTableAmountColumns_);
@@ -1138,10 +1174,9 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
         ResultTable& table = makeGrowingBenchmarkTable(
             &results, tableName, "Amount of rows", stoppingFunction,
-            overlapChance_,
-            ad_utility::RandomSeed::make(std::random_device{}()),
-            smallerTableSorted, biggerTableSorted, 1UL, growthFunction,
-            smallerTableAmountColumns_, biggerTableAmountColumns_);
+            overlapChance_, randomSeed(), smallerTableSorted, biggerTableSorted,
+            1UL, growthFunction, smallerTableAmountColumns_,
+            biggerTableAmountColumns_);
 
         // Add the metadata, that changes with every call and can't be
         // generalized.
@@ -1160,6 +1195,7 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableAmountRows");
     meta.addKeyValuePair("overlapChance", overlapChance_);
+    meta.addKeyValuePair("randomSeed", randomSeed().get());
     meta.addKeyValuePair("ratioRows", 1);
     meta.addKeyValuePair("smallerTableAmountColumns",
                          smallerTableAmountColumns_);
