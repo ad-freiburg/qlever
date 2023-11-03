@@ -215,4 +215,58 @@ template <typename... Ts>
 requires(sizeof...(Ts) > 0)
 using First = typename detail::FirstWrapper<Ts...>::type;
 
+/*
+The following concepts are similar to `std::is_invocable_r_v` with the following
+difference: `std::is_invocable_r_v` only checks that the return type of a
+function is convertible to the specified type, but the following concepts check
+for an exact match of the return type (`InvocableWithExactReturnType`) or a
+similar return type (`invocablewithsimilarreturntype`), meaning that the types
+are the same when ignoring `const`, `volatile`, and reference qualifiers.
+*/
+
+/*
+@brief Require `Fn` to be invocable with `Args...` and the return type to be
+`isSimilar` to `Ret`.
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept InvocableWithSimilarReturnType =
+    std::invocable<Fn, Args...> &&
+    isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
+
+/*
+@brief Require `Fn` to be invocable with `Args...` and the return type to be
+ `Ret`.
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept InvocableWithExactReturnType =
+    std::invocable<Fn, Args...> &&
+    std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
+
+/*
+@brief Require `Fn` to be regular invocable with `Args...` and the return type
+to be `isSimilar` to `Ret`.
+
+Note: Currently, the difference between invocable and regular invocable is
+purely semantic. In other words, we can not, currently, actually check, if an
+invocable type is regular invocable, or not.
+For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept RegularInvocableWithSimilarReturnType =
+    std::regular_invocable<Fn, Args...> &&
+    isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
+
+/*
+@brief Require `Fn` to be regular invocable with `Args...` and the return type
+to be `Ret`.
+
+Note: Currently, the difference between invocable and regular invocable is
+purely semantic. In other words, we can not, currently, actually check, if an
+invocable type is regular invocable, or not.
+For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept RegularInvocableWithExactReturnType =
+    std::regular_invocable<Fn, Args...> &&
+    std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
 }  // namespace ad_utility

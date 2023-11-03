@@ -3,7 +3,10 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/TypeTraits.h"
+#include <functional>
+
+#include "../test/util/TypeTraitsTestHelpers.h"
+#include "util/TypeTraits.h"
 
 using namespace ad_utility;
 TEST(TypeTraits, IsSimilar) {
@@ -99,4 +102,192 @@ TEST(TypeTraits, TupleCat) {
   static_assert(std::is_same_v<std::tuple<int, short, bool, long, size_t>,
                                TupleCat<T1, T3, T2>>);
   ASSERT_TRUE(true);
+}
+
+// There is a lot of overlap between the concepts.
+TEST(TypeTraits, InvocableWithReturnType) {
+  /*
+  Currently, `std::invocable` and `std::regular_invocable` are the same.
+  Therefore, having separate tests would be an unnecessary code increase.
+  */
+  constexpr auto bothInvocableWithExactReturnType =
+      []<typename Fn, typename Ret, typename... Args>() {
+        return InvocableWithExactReturnType<Fn, Ret, Args...> &&
+               RegularInvocableWithExactReturnType<Fn, Ret, Args...>;
+      };
+  constexpr auto bothInvocableWithSimilarReturnType =
+      []<typename Fn, typename Ret, typename... Args>() {
+        return InvocableWithSimilarReturnType<Fn, Ret, Args...> &&
+               RegularInvocableWithSimilarReturnType<Fn, Ret, Args...>;
+      };
+
+  /*
+  Call the given template function with every type in the parameter type list
+  `Type, Type&, const Type&, Type&&, const Type&&` as template parameter.
+  */
+  constexpr auto callWithEveryVariantOfType = []<typename Type>(auto func) {
+    using pureT = std::decay_t<Type>;
+    passListOfTypesToLambda<pureT, pureT&, const pureT&, pureT&&,
+                            const pureT&&>(std::move(func));
+  };
+
+  /*
+  Call the given template function with every type combination in the cartesian
+  product of the parameter type list `Type, Type&, const Type&, Type&&, const
+  Type&&`, as template parameter.
+  */
+  constexpr auto callWithCartesianProductOfEveryVariantOfType =
+      []<typename Type>(auto func) {
+        using pureT = std::decay_t<Type>;
+        passCartesianPorductToLambda<decltype(func), pureT, pureT&,
+                                     const pureT&, pureT&&, const pureT&&>(
+            std::move(func));
+      };
+
+  // Invocable types for checking.
+  auto singleParameterLambda = [](int&) -> int { return 4; };
+  using SingleParameter = decltype(singleParameterLambda);
+  auto doubleParameterLambda = [](bool&, bool&) -> bool { return true; };
+  using DoubleParameter = decltype(doubleParameterLambda);
+
+  /*
+  Make sure, that the parameter types and the types, with which the function is
+  called, DON'T have to be the exact same in cases, where they don't need to.
+
+  For example: A function with the single parameter `int` can take any version
+  of `int`. `int`, `const int`, `const int&`, etc.
+  */
+  callWithEveryVariantOfType.template operator()<int>(
+      [&bothInvocableWithExactReturnType,
+       &bothInvocableWithSimilarReturnType]<typename ParameterType>() {
+        static_assert(bothInvocableWithExactReturnType.template
+                      operator()<std::negate<int>, int, ParameterType>());
+        static_assert(bothInvocableWithSimilarReturnType.template
+                      operator()<std::negate<int>, int, ParameterType>());
+      });
+  callWithCartesianProductOfEveryVariantOfType.template operator()<int>(
+      [&bothInvocableWithExactReturnType,
+       &bothInvocableWithSimilarReturnType]<typename FirstParameterType,
+                                            typename SecondParameterType>() {
+        static_assert(bothInvocableWithExactReturnType.template
+                      operator()<std::equal_to<int>, bool, FirstParameterType,
+                                 SecondParameterType>());
+        static_assert(bothInvocableWithSimilarReturnType.template
+                      operator()<std::equal_to<int>, bool, FirstParameterType,
+                                 SecondParameterType>());
+      });
+
+  // Not an invocable.
+  static_assert(!bothInvocableWithExactReturnType
+                     .template operator()<bool, bool, bool>());
+  static_assert(!bothInvocableWithSimilarReturnType
+                     .template operator()<bool, bool, bool>());
+
+  // Valid function.
+  callWithEveryVariantOfType.template operator()<int>(
+      [&bothInvocableWithExactReturnType,
+       &bothInvocableWithSimilarReturnType]<typename ReturnType>() {
+        if constexpr (std::same_as<ReturnType, int>) {
+          static_assert(bothInvocableWithExactReturnType.template
+                        operator()<SingleParameter, ReturnType, int&>());
+        }
+        static_assert(bothInvocableWithSimilarReturnType.template
+                      operator()<SingleParameter, ReturnType, int&>());
+      });
+  callWithEveryVariantOfType.template operator()<bool>(
+      [&bothInvocableWithSimilarReturnType,
+       &bothInvocableWithExactReturnType]<typename ReturnType>() {
+        if constexpr (std::same_as<ReturnType, bool>) {
+          static_assert(
+              bothInvocableWithExactReturnType.template
+              operator()<DoubleParameter, ReturnType, bool&, bool&>());
+        }
+        static_assert(bothInvocableWithSimilarReturnType.template
+                      operator()<DoubleParameter, ReturnType, bool&, bool&>());
+      });
+
+  // The number of parameter types is wrong.
+  static_assert(!bothInvocableWithExactReturnType
+                     .template operator()<SingleParameter, int>());
+  static_assert(!bothInvocableWithExactReturnType
+                     .template operator()<SingleParameter, int, int&, int&>());
+  static_assert(!bothInvocableWithExactReturnType
+                     .template operator()<DoubleParameter, bool>());
+  static_assert(!bothInvocableWithSimilarReturnType
+                     .template operator()<DoubleParameter, bool, bool&>());
+  static_assert(!bothInvocableWithSimilarReturnType.template
+                 operator()<DoubleParameter, bool, bool&, bool&, bool&>());
+
+  // The parameter types  are wrong, but the return type is correct.
+  callWithEveryVariantOfType.template operator()<int>(
+      [&bothInvocableWithExactReturnType,
+       &bothInvocableWithSimilarReturnType]<typename ParameterType>() {
+        if constexpr (!std::same_as<ParameterType, int&>) {
+          static_assert(!bothInvocableWithExactReturnType.template
+                         operator()<SingleParameter, int, ParameterType>());
+          static_assert(!bothInvocableWithSimilarReturnType.template
+                         operator()<SingleParameter, int, ParameterType>());
+        }
+      });
+  callWithCartesianProductOfEveryVariantOfType.template operator()<bool>(
+      [&bothInvocableWithExactReturnType,
+       &bothInvocableWithSimilarReturnType]<typename FirstParameterType,
+                                            typename SecondParameterType>() {
+        if constexpr (!std::same_as<FirstParameterType, bool&> ||
+                      !std::same_as<SecondParameterType, bool&>) {
+          static_assert(!bothInvocableWithExactReturnType.template
+                         operator()<DoubleParameter, bool, FirstParameterType,
+                                    SecondParameterType>());
+          static_assert(!bothInvocableWithSimilarReturnType.template
+                         operator()<DoubleParameter, bool, FirstParameterType,
+                                    SecondParameterType>());
+        }
+      });
+
+  // Parameter types are correct, but return type is wrong.
+  callWithEveryVariantOfType.template operator()<int>(
+      [&bothInvocableWithExactReturnType]<typename ReturnType>() {
+        if constexpr (!std::same_as<ReturnType, int>) {
+          static_assert(!bothInvocableWithExactReturnType.template
+                         operator()<SingleParameter, ReturnType, int&>());
+        }
+      });
+  callWithEveryVariantOfType.template operator()<bool>(
+      [&bothInvocableWithExactReturnType]<typename ReturnType>() {
+        if constexpr (!std::same_as<ReturnType, bool>) {
+          static_assert(
+              !bothInvocableWithExactReturnType.template
+               operator()<DoubleParameter, ReturnType, bool&, bool&>());
+        }
+      });
+
+  // Both the parameter types and the return type is wrong.
+  // TODO Is there a cleaner way of iterating multiple parameter packs?
+  callWithCartesianProductOfEveryVariantOfType.template operator()<int>(
+      [&bothInvocableWithExactReturnType]<typename ReturnType,
+                                          typename ParameterType>() {
+        if constexpr (!std::same_as<ReturnType, int> &&
+                      !std::same_as<ParameterType, int&>) {
+          static_assert(
+              !bothInvocableWithExactReturnType.template
+               operator()<SingleParameter, ReturnType, ParameterType>());
+        }
+      });
+  callWithCartesianProductOfEveryVariantOfType.template operator()<bool>(
+      [&bothInvocableWithExactReturnType,
+       &callWithEveryVariantOfType]<typename FirstParameterType,
+                                    typename SecondParameterType>() {
+        // For the return type.
+        callWithEveryVariantOfType.template operator()<bool>(
+            [&bothInvocableWithExactReturnType]<typename ReturnType>() {
+              if constexpr ((!std::same_as<FirstParameterType, bool&> ||
+                             !std::same_as<SecondParameterType, bool&>)&&!std::
+                                same_as<ReturnType, bool>) {
+                static_assert(
+                    !bothInvocableWithExactReturnType.template
+                     operator()<DoubleParameter, ReturnType, FirstParameterType,
+                                SecondParameterType>());
+              }
+            });
+      });
 }
