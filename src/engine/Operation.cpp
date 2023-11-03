@@ -8,6 +8,8 @@
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
+using namespace std::chrono_literals;
+
 std::chrono::milliseconds toMs(const ad_utility::Timer& timer) {
   return std::chrono::duration_cast<std::chrono::milliseconds>(timer.value());
 }
@@ -68,6 +70,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
+    // Reset runtime info, tests may re-use Operation objects.
+    _runtimeInfo = std::make_shared<RuntimeInformation>();
     // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates(getRuntimeInfoPointer());
     signalQueryUpdate();
@@ -218,7 +222,7 @@ void Operation::checkTimeout() const {
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
     const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
-    millis duration, std::optional<RuntimeInformation> runtimeInfo) {
+    Milliseconds duration, std::optional<RuntimeInformation> runtimeInfo) {
   _runtimeInfo->totalTime_ = duration;
   _runtimeInfo->numRows_ = resultTable.size();
   _runtimeInfo->cacheStatus_ = cacheStatus;
@@ -256,7 +260,7 @@ void Operation::updateRuntimeInformationOnSuccess(
 // ____________________________________________________________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
     const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
-    millis duration) {
+    Milliseconds duration) {
   updateRuntimeInformationOnSuccess(
       *resultAndCacheStatus._resultPointer->resultTable(),
       resultAndCacheStatus._cacheStatus, duration,
@@ -275,8 +279,8 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   // To set it to zero we thus have to set the `totalTime_` to that sum.
   auto timesOfChildren = _runtimeInfo->children_ |
                          std::views::transform(&RuntimeInformation::totalTime_);
-  _runtimeInfo->totalTime_ = std::reduce(timesOfChildren.begin(),
-                                         timesOfChildren.end(), millis::zero());
+  _runtimeInfo->totalTime_ =
+      std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0ms);
 
   signalQueryUpdate();
 }
@@ -287,7 +291,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   auto setStatus = [&status](RuntimeInformation& rti,
                              const auto& self) -> void {
     rti.status_ = status;
-    rti.totalTime_ = millis::zero();
+    rti.totalTime_ = 0ms;
     for (auto& child : rti.children_) {
       self(*child, self);
     }
@@ -298,7 +302,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
 }
 
 // _______________________________________________________________________
-void Operation::updateRuntimeInformationOnFailure(millis duration) {
+void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
   _runtimeInfo->children_.clear();
   for (auto child : getChildren()) {
     _runtimeInfo->children_.push_back(child->getRootOperation()->_runtimeInfo);

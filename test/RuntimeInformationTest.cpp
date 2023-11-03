@@ -7,55 +7,54 @@
 
 #include "engine/RuntimeInformation.h"
 
-using std::chrono::milliseconds;
+using namespace std::chrono_literals;
 
 // ________________________________________________________________
 TEST(RuntimeInformation, addLimitOffsetRow) {
   RuntimeInformation rti;
   rti.descriptor_ = "BaseOperation";
-  rti.totalTime_ = milliseconds{4};
+  rti.totalTime_ = 4ms;
   rti.sizeEstimate_ = 34;
 
-  rti.addLimitOffsetRow(LimitOffsetClause{23, 1, 4}, milliseconds{20}, true);
+  rti.addLimitOffsetRow(LimitOffsetClause{23, 1, 4}, 20ms, true);
   EXPECT_EQ(rti.descriptor_, "LIMIT 23 OFFSET 4");
-  EXPECT_EQ(rti.totalTime_, milliseconds{24});
-  EXPECT_EQ(rti.getOperationTime(), milliseconds{20});
+  EXPECT_EQ(rti.totalTime_, 24ms);
+  EXPECT_EQ(rti.getOperationTime(), 20ms);
 
   ASSERT_EQ(rti.children_.size(), 1u);
   auto& child = *rti.children_.at(0);
   EXPECT_EQ(child.descriptor_, "BaseOperation");
-  EXPECT_EQ(child.totalTime_, milliseconds{4});
-  EXPECT_EQ(child.getOperationTime(), milliseconds{4});
+  EXPECT_EQ(child.totalTime_, 4ms);
+  EXPECT_EQ(child.getOperationTime(), 4ms);
   EXPECT_TRUE(child.details_.at("not-written-to-cache-because-child-of-limit"));
 
-  rti.addLimitOffsetRow(LimitOffsetClause{std::nullopt, 1, 17},
-                        milliseconds{15}, false);
+  rti.addLimitOffsetRow(LimitOffsetClause{std::nullopt, 1, 17}, 15ms, false);
   EXPECT_FALSE(rti.children_.at(0)->details_.at(
       "not-written-to-cache-because-child-of-limit"));
   EXPECT_EQ(rti.descriptor_, "OFFSET 17");
 
-  rti.addLimitOffsetRow(LimitOffsetClause{42, 1, 0}, milliseconds{15}, true);
+  rti.addLimitOffsetRow(LimitOffsetClause{42, 1, 0}, 15ms, true);
   EXPECT_EQ(rti.descriptor_, "LIMIT 42");
 }
 
 // ________________________________________________________________
 TEST(RuntimeInformation, getOperationTimeAndCostEstimate) {
   RuntimeInformation child1;
-  child1.totalTime_ = milliseconds{3};
+  child1.totalTime_ = 3ms;
   child1.costEstimate_ = 12;
   RuntimeInformation child2;
-  child2.totalTime_ = milliseconds{4};
+  child2.totalTime_ = 4ms;
   child2.costEstimate_ = 43;
 
   RuntimeInformation parent;
-  parent.totalTime_ = milliseconds{10};
+  parent.totalTime_ = 10ms;
   parent.costEstimate_ = 100;
 
   parent.children_.push_back(std::make_shared<RuntimeInformation>(child1));
   parent.children_.push_back(std::make_shared<RuntimeInformation>(child2));
 
   // 3 == 10 - 4 - 3
-  ASSERT_EQ(parent.getOperationTime(), milliseconds{3});
+  ASSERT_EQ(parent.getOperationTime(), 3ms);
 
   // 45 == 100 - 43 - 12
   ASSERT_EQ(parent.getOperationCostEstimate(), 45);
@@ -127,7 +126,7 @@ TEST(RuntimeInformation, toStringAndJson) {
   child.numRows_ = 7;
   child.columnNames_.emplace_back("?x");
   child.columnNames_.emplace_back("?y");
-  child.totalTime_ = milliseconds{3};
+  child.totalTime_ = 3ms;
   child.cacheStatus_ = ad_utility::CacheStatus::cachedPinned;
   child.status_ = RuntimeInformation::Status::optimizedOut;
   child.addDetail("minor detail", 42);
@@ -137,7 +136,7 @@ TEST(RuntimeInformation, toStringAndJson) {
   parent.numCols_ = 6;
   parent.numRows_ = 4;
   parent.columnNames_.push_back("?alpha");
-  parent.totalTime_ = milliseconds{6};
+  parent.totalTime_ = 6ms;
   parent.cacheStatus_ = ad_utility::CacheStatus::computed;
   parent.status_ = RuntimeInformation::Status::fullyMaterialized;
 

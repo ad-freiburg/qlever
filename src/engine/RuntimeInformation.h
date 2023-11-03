@@ -22,6 +22,12 @@
 /// time to compute, status, etc.). Also contains the functionality to print
 /// that information nicely formatted and to export it to JSON.
 class RuntimeInformation {
+  using Milliseconds = std::chrono::milliseconds;
+  // Ideally we'd use `using namespace std::chrono_literals;` here,
+  // but C++ forbids using this within a class, and we don't want
+  // to clutter the global namespace.
+  static constexpr auto ZERO = Milliseconds::zero();
+
  public:
   /// The computation status of an operation.
   enum struct Status {
@@ -39,14 +45,12 @@ class RuntimeInformation {
 
   /// The total time spent computing this operation. This includes the
   /// computation of the children.
-  std::chrono::milliseconds totalTime_ = std::chrono::milliseconds::zero();
+  Milliseconds totalTime_ = ZERO;
 
   /// In case this operation was read from the cache, we will store the time
   /// information about the original computation in the following two members.
-  std::chrono::milliseconds originalTotalTime_ =
-      std::chrono::milliseconds::zero();
-  std::chrono::milliseconds originalOperationTime_ =
-      std::chrono::milliseconds::zero();
+  Milliseconds originalTotalTime_ = ZERO;
+  Milliseconds originalOperationTime_ = ZERO;
 
   /// The estimated cost, size, and column multiplicities of the operation.
   size_t costEstimate_ = 0;
@@ -92,11 +96,11 @@ class RuntimeInformation {
   void setColumnNames(const VariableToColumnMap& columnMap);
 
   /// Get the time spent computing the operation. This is the total time minus
-  /// the time spent computing the children.
-  [[nodiscard]] std::chrono::milliseconds getOperationTime() const;
+  /// the time spent computing the children, but always positive.
+  [[nodiscard]] Milliseconds getOperationTime() const;
 
   /// Get the cost estimate for this operation. This is the total cost estimate
-  /// minus the sum of the cost estimates of all children, but always positive.
+  /// minus the sum of the cost estimates of all children.
   [[nodiscard]] size_t getOperationCostEstimate() const;
 
   /// Add a key-value pair to the `details` section of the output. `value` may
@@ -112,7 +116,7 @@ class RuntimeInformation {
   // it, and the information whether the `actual` operation (the old root of the
   // runtime information) is written to the cache, are passed in as arguments.
   void addLimitOffsetRow(const LimitOffsetClause& l,
-                         std::chrono::milliseconds timeForLimit,
+                         Milliseconds timeForLimit,
                          bool fullResultIsNotCached);
 
   static std::string_view toString(Status status);

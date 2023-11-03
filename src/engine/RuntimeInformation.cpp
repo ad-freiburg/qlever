@@ -9,6 +9,8 @@
 
 #include <ranges>
 
+using namespace std::chrono_literals;
+
 // __________________________________________________________________________
 std::string RuntimeInformation::toString() const {
   std::ostringstream buffer;
@@ -75,6 +77,7 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
       << "cache_status: " << ad_utility::toString(cacheStatus_) << '\n';
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
     out << indentStr(indent)
+        // TODO<g++12, Clang 17> use `<< originalTotalTime_` directly
         << "original_total_time: " << originalTotalTime_.count() << " ms"
         << '\n';
     out << indentStr(indent)
@@ -126,9 +129,8 @@ std::chrono::milliseconds RuntimeInformation::getOperationTime() const {
         children_ | std::views::transform(&RuntimeInformation::totalTime_);
     // Prevent "negative" computation times in case totalTime_ was not
     // computed for this yet.
-    constexpr auto zero = std::chrono::milliseconds::zero();
-    return std::max(zero, -std::reduce(timesOfChildren.begin(),
-                                       timesOfChildren.end(), -totalTime_));
+    return std::max(0ms, totalTime_ - std::reduce(timesOfChildren.begin(),
+                                                  timesOfChildren.end(), 0ms));
   }
 }
 
@@ -197,9 +199,9 @@ void to_json(nlohmann::ordered_json& j,
 }
 
 // __________________________________________________________________________
-void RuntimeInformation::addLimitOffsetRow(
-    const LimitOffsetClause& l, std::chrono::milliseconds timeForLimit,
-    bool fullResultIsNotCached) {
+void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
+                                           Milliseconds timeForLimit,
+                                           bool fullResultIsNotCached) {
   bool hasLimit = l._limit.has_value();
   bool hasOffset = l._offset != 0;
   if (!(hasLimit || hasOffset)) {

@@ -4,8 +4,10 @@
 
 #pragma once
 
-#include "gmock/gmock.h"
+#include <gmock/gmock.h>
+
 #include "util/SourceLocation.h"
+#include "util/json.h"
 
 // The following two macros make the usage of `testing::Property` and
 // `testing::Field` simpler and more consistent. Examples:
@@ -59,4 +61,37 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
     ad_utility::source_location l,
     std::string_view errorMessage = "Actual location of the test failure") {
   return {l.file_name(), static_cast<int>(l.line()), errorMessage};
+}
+
+// _____________________________________________________________________________
+
+// Helper matcher that allows to use matchers for strings that represent json
+// objects.
+// Example: EXPECT_THAT("{}", ParsedAsJson(Eq(nlohmann::json::object())));
+MATCHER_P(ParsedAsJson, matcher,
+          (negation ? "is not json " : "parsed as json ") +
+              testing::DescribeMatcher<nlohmann::json>(matcher, negation)) {
+  try {
+    auto json = nlohmann::json::parse(arg);
+    *result_listener << "is a JSON object ";
+    return testing::ExplainMatchResult(matcher, json, result_listener);
+  } catch (const nlohmann::json::parse_error& error) {
+    *result_listener << "is not a JSON object.";
+  }
+  return false;
+}
+
+// Helper matcher that can be used to make assertions about a JSON object's
+// values for a certain key. Example:
+// EXPECT_THAT((nlohmann::json{{"a", "b"}}), HasKeyMatching("a", Eq("b")));
+MATCHER_P2(HasKeyMatching, key, matcher,
+           (negation ? "has no key with value " : "has key with value ") +
+               testing::DescribeMatcher<nlohmann::json>(matcher, negation)) {
+  if (!arg.contains(key)) {
+    *result_listener << "that does not contain key \"" << key << '"';
+    return false;
+  }
+  *result_listener << "that contains key \"" << key << "\", with value "
+                   << arg[key] << ' ';
+  return testing::ExplainMatchResult(matcher, arg[key], result_listener);
 }
