@@ -27,6 +27,7 @@
 #include "../benchmark/util/BenchmarkTableCommonCalculations.h"
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/JoinHelpers.h"
+#include "../test/util/RandomTestHelpers.h"
 #include "engine/Engine.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
@@ -73,23 +74,16 @@ static void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   // Is the bigger table actually bigger?
   AD_CONTRACT_CHECK(smallerTableNumberRows <= biggerTable.idTable.numRows());
 
-  /*
-  For creating seeds for the random generators that are hopefully quite
-  different.
-  */
-  auto seedGenerator = [randomGenerator =
-                            ad_utility::FastRandomIntGenerator<unsigned int>{
-                                std::move(randomSeed)}]() mutable {
-    return ad_utility::RandomSeed::make(std::invoke(randomGenerator));
-  };
+  // Seeds for the random generators, so that things are less similiar.
+  std::array<ad_utility::RandomSeed, 2> seeds =
+      createArrayOfRandomSeeds<2>(std::move(randomSeed));
 
   // Creating the generator for choosing a random row in the bigger table.
   ad_utility::SlowRandomIntGenerator<size_t> randomBiggerTableRow(
-      0, biggerTable.idTable.numRows() - 1, std::invoke(seedGenerator));
+      0, biggerTable.idTable.numRows() - 1, seeds.at(0));
 
   // Generator for checking, if an overlap should be created.
-  ad_utility::RandomDoubleGenerator randomDouble(0, 100,
-                                                 std::invoke(seedGenerator));
+  ad_utility::RandomDoubleGenerator randomDouble(0, 100, seeds.at(1));
 
   for (size_t i = 0; i < smallerTableNumberRows; i++) {
     // Only do anything, if the probability is right.
@@ -171,25 +165,30 @@ static void addMeasurementsToRowOfBenchmarkTable(
                      biggerTableJoinColumnSampleSizeRatio)) -
       1;
 
+  // Seeds for the random generators, so that things are less similiar.
+  std::array<ad_utility::RandomSeed, 3> seeds =
+      createArrayOfRandomSeeds<3>(std::move(randomSeed));
+
   // Now we create two randomly filled `IdTable`, which have no overlap, and
   // save them together with the information, where their join column is.
   IdTableAndJoinColumn smallerTable{
       createRandomlyFilledIdTable(
           smallerTableAmountRows, smallerTableAmountColumns,
           JoinColumnAndBounds{0, smallerTableJoinColumnLowerBound,
-                              smallerTableJoinColumnUpperBound}),
+                              smallerTableJoinColumnUpperBound},
+          seeds.at(0)),
       0};
   IdTableAndJoinColumn biggerTable{
       createRandomlyFilledIdTable(
           smallerTableAmountRows * ratioRows, biggerTableAmountColumns,
           JoinColumnAndBounds{0, biggerTableJoinColumnLowerBound,
-                              biggerTableJoinColumnUpperBound}),
+                              biggerTableJoinColumnUpperBound},
+          seeds.at(1)),
       0};
 
   // Creating overlap, if wanted.
   if (overlap > 0) {
-    createOverlapRandomly(&smallerTable, biggerTable, overlap,
-                          std::move(randomSeed));
+    createOverlapRandomly(&smallerTable, biggerTable, overlap, seeds.at(2));
   }
 
   // Sort the `IdTables`, if they should be.
