@@ -11,9 +11,9 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "util/AbortionHandle.h"
 #include "util/BufferedVector.h"
 #include "util/Cache.h"
+#include "util/CancellationHandle.h"
 #include "util/ConcurrentCache.h"
 #include "util/File.h"
 #include "util/Generator.h"
@@ -289,8 +289,8 @@ class CompressedRelationReader {
    * @param blockMetadata The metadata of the on-disk blocks for the given
    * permutation.
    * @param file The file in which the permutation is stored.
-   * @param abortionHandle An `AbortionException` will be thrown if the
-   * abortionHandle runs out during the execution of this function.
+   * @param cancellationHandle An `CancellationException` will be thrown if the
+   * cancellationHandle runs out during the execution of this function.
    *
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
@@ -299,7 +299,7 @@ class CompressedRelationReader {
       const CompressedRelationMetadata& metadata,
       std::span<const CompressedBlockMetadata> blockMetadata,
       ad_utility::File& file,
-      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
@@ -308,7 +308,7 @@ class CompressedRelationReader {
       CompressedRelationMetadata metadata,
       std::vector<CompressedBlockMetadata> blockMetadata,
       ad_utility::File& file,
-      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Get the blocks (an ordered subset of the blocks that are passed in via the
   // `metadataAndBlocks`) where the `col1Id` can theoretically match one of the
@@ -342,8 +342,8 @@ class CompressedRelationReader {
    * @param file The file in which the permutation is stored.
    * @param result The ID table to which we write the result. It must have
    * exactly one column.
-   * @param abortionHandle An `AbortionException` will be thrown if the
-   * abortionHandle runs out during the execution of this function.
+   * @param cancellationHandle An `CancellationException` will be thrown if the
+   * cancellationHandle runs out during the execution of this function.
    *
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
@@ -351,7 +351,7 @@ class CompressedRelationReader {
   IdTable scan(
       const CompressedRelationMetadata& metadata, Id col1Id,
       std::span<const CompressedBlockMetadata> blocks, ad_utility::File& file,
-      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
@@ -360,7 +360,7 @@ class CompressedRelationReader {
       CompressedRelationMetadata metadata, Id col1Id,
       std::vector<CompressedBlockMetadata> blockMetadata,
       ad_utility::File& file,
-      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
   // and Y. This can be done by scanning one or two blocks. Note: The overload
@@ -456,15 +456,16 @@ class CompressedRelationReader {
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ad_utility::File& file,
       std::optional<std::vector<size_t>> columnIndices,
-      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // A helper function to abstract away the timeout check:
-  static void checkAbortion(
-      const std::shared_ptr<ad_utility::AbortionHandle>& abortionHandle) {
+  static void checkCancellation(
+      const std::shared_ptr<ad_utility::CancellationHandle>&
+          cancellationHandle) {
     // Not really expensive but since this should be called
     // very often, try to avoid any extra checks.
-    AD_EXPENSIVE_CHECK(abortionHandle);
-    abortionHandle->throwIfAborted("IndexScan"sv);
+    AD_EXPENSIVE_CHECK(cancellationHandle);
+    cancellationHandle->throwIfCancelled("IndexScan"sv);
   }
 };
 

@@ -507,21 +507,22 @@ ad_utility::websocket::OwningQueryId Server::getQueryId(
 
 auto Server::cancelAfterDeadline(
     const net::any_io_executor& executor,
-    std::weak_ptr<ad_utility::AbortionHandle> abortionHandle,
+    std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
     std::chrono::seconds timeLimit) {
   auto strand = net::make_strand(executor);
   auto timer = std::make_shared<net::steady_timer>(strand, timeLimit);
 
   auto cancelAfterTimeout =
-      [](std::weak_ptr<ad_utility::AbortionHandle> abortionHandle,
+      [](std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
          std::shared_ptr<net::steady_timer> timer) -> net::awaitable<void> {
     // Ignore cancellation exceptions, they are normal
     co_await timer->async_wait(net::as_tuple(net::use_awaitable));
-    if (auto pointer = abortionHandle.lock()) {
-      pointer->abort(ad_utility::AbortionState::TIMEOUT);
+    if (auto pointer = cancellationHandle.lock()) {
+      pointer->cancel(ad_utility::CancellationState::TIMEOUT);
     }
   };
-  net::co_spawn(strand, cancelAfterTimeout(std::move(abortionHandle), timer),
+  net::co_spawn(strand,
+                cancelAfterTimeout(std::move(cancellationHandle), timer),
                 net::detached);
   return [strand, timer = std::move(timer)]() mutable {
     net::post(strand, [timer = std::move(timer)]() { timer->cancel(); });
@@ -529,17 +530,18 @@ auto Server::cancelAfterDeadline(
 }
 
 // ____________________________________________________________________________
-std::function<void()> Server::setupAbortionHandle(
+std::function<void()> Server::setupCancellationHandle(
     const net::any_io_executor& executor,
     const std::shared_ptr<Operation>& rootOperation,
     std::optional<std::chrono::seconds> timeLimit) {
-  // TODO<RobinTF> register abortion handle to allow manual cancellation
-  auto abortionHandle = std::make_shared<ad_utility::AbortionHandle>();
+  // TODO<RobinTF> register cancellation handle to allow manual cancellation
+  auto cancellationHandle = std::make_shared<ad_utility::CancellationHandle>();
   if (timeLimit.has_value()) {
     rootOperation->recursivelySetTimeConstraint(timeLimit.value());
-    return cancelAfterDeadline(executor, abortionHandle, timeLimit.value());
+    return cancelAfterDeadline(executor, cancellationHandle, timeLimit.value());
   }
-  rootOperation->recursivelySetAbortionHandle(std::move(abortionHandle));
+  rootOperation->recursivelySetCancellationHandle(
+      std::move(cancellationHandle));
   return []() {};
 }
 
@@ -665,7 +667,7 @@ boost::asio::awaitable<void> Server::processQuery(
     queryExecutionTree = qp.createExecutionTree(pq);
     auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
-    absl::Cleanup cleanAbortionHandle{setupAbortionHandle(
+    absl::Cleanup cleanCancellationHandle{setupCancellationHandle(
         co_await net::this_coro::executor, qet.getRootOperation(), timeLimit)};
     size_t timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =

@@ -284,7 +284,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   size_t blockStart = 0;
 
   for (size_t pos = 1; pos < input.size(); pos++) {
-    checkAbortion();
+    checkCancellation();
     bool rowMatchesCurrentBlock =
         std::all_of(currentGroupBlock.begin(), currentGroupBlock.end(),
                     [&](const auto& columns) {

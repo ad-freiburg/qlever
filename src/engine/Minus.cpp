@@ -146,14 +146,14 @@ void Minus::computeMinus(
       // Write a result
       writeResult(ia);
       ia++;
-      checkAbortion();
+      checkCancellation();
       if (ia >= a.size()) {
         goto finish;
       }
     }
     while (b(ib, joinColumns[0][1]) < a(ia, joinColumns[0][0])) {
       ib++;
-      checkAbortion();
+      checkCancellation();
       if (ib >= b.size()) {
         goto finish;
       }
@@ -187,7 +187,7 @@ void Minus::computeMinus(
         default:
           AD_FAIL();
       }
-      checkAbortion();
+      checkCancellation();
     }
   }
 finish:

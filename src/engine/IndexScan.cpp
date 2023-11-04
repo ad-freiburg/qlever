@@ -121,10 +121,10 @@ ResultTable IndexScan::computeResult() {
   const auto permutedTriple = getPermutedTriple();
   if (numVariables_ == 2) {
     idTable = index.scan(*permutedTriple[0], std::nullopt, permutation_,
-                         abortionHandle_);
+                         cancellationHandle_);
   } else if (numVariables_ == 1) {
     idTable = index.scan(*permutedTriple[0], *permutedTriple[1], permutation_,
-                         abortionHandle_);
+                         cancellationHandle_);
   } else {
     AD_CORRECTNESS_CHECK(numVariables_ == 3);
     computeFullScan(&idTable, permutation_);
@@ -259,7 +259,7 @@ void IndexScan::computeFullScan(IdTable* result,
   size_t i = 0;
   const auto& permutationImpl =
       getExecutionContext()->getIndex().getImpl().getPermutation(permutation);
-  auto triplesView = TriplesView(permutationImpl, abortionHandle_,
+  auto triplesView = TriplesView(permutationImpl, cancellationHandle_,
                                  ignoredRanges, isTripleIgnored);
   for (const auto& triple : triplesView) {
     if (i >= resultSize) {
@@ -290,7 +290,7 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
     col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
   }
   return index.getPermutation(s.permutation())
-      .lazyScan(col0Id, col1Id, std::move(blocks), s.abortionHandle_);
+      .lazyScan(col0Id, col1Id, std::move(blocks), s.cancellationHandle_);
 };
 
 // ________________________________________________________________

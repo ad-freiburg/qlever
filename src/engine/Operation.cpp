@@ -48,15 +48,16 @@ vector<string> Operation::collectWarnings() const {
 }
 
 // ________________________________________________________________________
-void Operation::recursivelySetAbortionHandle(
-    SharedAbortionHandle abortionHandle) {
-  AD_CORRECTNESS_CHECK(abortionHandle);
+void Operation::recursivelySetCancellationHandle(
+    SharedCancellationHandle cancellationHandle) {
+  AD_CORRECTNESS_CHECK(cancellationHandle);
   for (auto child : getChildren()) {
     if (child) {
-      child->getRootOperation()->recursivelySetAbortionHandle(abortionHandle);
+      child->getRootOperation()->recursivelySetCancellationHandle(
+          cancellationHandle);
     }
   }
-  abortionHandle_ = std::move(abortionHandle);
+  cancellationHandle_ = std::move(cancellationHandle);
 }
 
 // ________________________________________________________________________
@@ -122,7 +123,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
               }
             });
     auto computeLambda = [this, &timer] {
-      checkAbortion([this]() { return "Before " + getDescriptor(); });
+      checkCancellation([this]() { return "Before " + getDescriptor(); });
       ResultTable result = computeResult();
 
       // Compute the datatypes that occur in each column of the result.
@@ -134,7 +135,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       // change in the DEBUG builds.
       AD_EXPENSIVE_CHECK(
           result.checkDefinedness(getExternallyVisibleVariableColumns()));
-      checkAbortion([this]() { return "In " + getDescriptor(); });
+      checkCancellation([this]() { return "In " + getDescriptor(); });
       // Make sure that the results that are written to the cache have the
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as
@@ -208,14 +209,15 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
 
 // ______________________________________________________________________
 
-void Operation::checkAbortion() const {
-  abortionHandle_->throwIfAborted(&Operation::getDescriptor, this);
+void Operation::checkCancellation() const {
+  cancellationHandle_->throwIfCancelled(&Operation::getDescriptor, this);
 }
 
 // ______________________________________________________________________
 
-void Operation::checkAbortion(const std::invocable auto& detailSupplier) const {
-  abortionHandle_->throwIfAborted(detailSupplier);
+void Operation::checkCancellation(
+    const std::invocable auto& detailSupplier) const {
+  cancellationHandle_->throwIfCancelled(detailSupplier);
 }
 
 // ______________________________________________________________________

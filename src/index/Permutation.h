@@ -8,7 +8,7 @@
 
 #include "global/Constants.h"
 #include "index/IndexMetaData.h"
-#include "util/AbortionHandle.h"
+#include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Log.h"
 
@@ -53,7 +53,7 @@ class Permutation {
   // `CompressedRelationMetaData::scan`.
   IdTable scan(
       Id col0Id, std::optional<Id> col1Id,
-      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;
@@ -75,7 +75,7 @@ class Permutation {
   IdTableGenerator lazyScan(
       Id col0Id, std::optional<Id> col1Id,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
-      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Return the metadata for the relation specified by the `col0Id`
   // along with the metadata for all the blocks that contain this relation (also

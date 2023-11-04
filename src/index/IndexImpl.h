@@ -42,7 +42,7 @@
 #include <vector>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
-#include "util/AbortionHandle.h"
+#include "util/CancellationHandle.h"
 #include "util/MemorySize/MemorySize.h"
 
 using ad_utility::BufferedVector;
@@ -399,12 +399,12 @@ class IndexImpl {
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       const Permutation::Enum& permutation,
-      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // _____________________________________________________________________________
   IdTable scan(
       Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-      std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const;
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(const TripleComponent& col0,

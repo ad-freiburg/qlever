@@ -17,7 +17,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/Variable.h"
-#include "util/AbortionHandle.h"
+#include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 
@@ -25,7 +25,8 @@
 class QueryExecutionTree;
 
 class Operation {
-  using SharedAbortionHandle = std::shared_ptr<ad_utility::AbortionHandle>;
+  using SharedCancellationHandle =
+      std::shared_ptr<ad_utility::CancellationHandle>;
 
  public:
   // Default Constructor.
@@ -144,10 +145,11 @@ class Operation {
   shared_ptr<const ResultTable> getResult(bool isRoot = false,
                                           bool onlyReadFromCache = false);
 
-  // Use the same abortion handle for all children of an operation (= query plan
-  // rooted at that operation). As soon as one child is aborted, the whole
+  // Use the same cancellation handle for all children of an operation (= query
+  // plan rooted at that operation). As soon as one child is aborted, the whole
   // operation is aborted out.
-  void recursivelySetAbortionHandle(SharedAbortionHandle abortionHandle);
+  void recursivelySetCancellationHandle(
+      SharedCancellationHandle cancellationHandle);
 
   template <typename Rep, typename Period>
   void recursivelySetTimeConstraint(
@@ -208,18 +210,18 @@ class Operation {
     return _warnings;
   }
 
-  void checkAbortion() const;
-  // Check if the abortion flag has been set and throws an exception if that's
-  // the case. This will be called at strategic places on code that potentially
-  // can take a (too) long time. The `detailSupplier` allows to pass a message
-  // to add to any potential exception that might be thrown.
-  void checkAbortion(const std::invocable auto& detailSupplier) const;
+  void checkCancellation() const;
+  // Check if the cancellation flag has been set and throws an exception if
+  // that's the case. This will be called at strategic places on code that
+  // potentially can take a (too) long time. The `detailSupplier` allows to pass
+  // a message to add to any potential exception that might be thrown.
+  void checkCancellation(const std::invocable auto& detailSupplier) const;
 
   std::chrono::seconds remainingTime() const;
 
-  /// Pointer to the abortion handle of this operation.
-  SharedAbortionHandle abortionHandle_ =
-      std::make_shared<SharedAbortionHandle::element_type>();
+  /// Pointer to the cancellation handle of this operation.
+  SharedCancellationHandle cancellationHandle_ =
+      std::make_shared<SharedCancellationHandle::element_type>();
 
   std::chrono::steady_clock::time_point deadline_ =
       std::chrono::steady_clock::time_point::max();

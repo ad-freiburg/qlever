@@ -6,8 +6,8 @@
 #include "CompressedRelation.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
-#include "util/AbortionHandle.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Generator.h"
 
@@ -34,7 +34,7 @@ inline auto alwaysReturnFalse = [](auto&&...) { return false; };
 template <typename IsTripleIgnored = decltype(detail::alwaysReturnFalse)>
 cppcoro::generator<std::array<Id, 3>> TriplesView(
     const auto& permutation,
-    std::shared_ptr<ad_utility::AbortionHandle> abortionHandle,
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle,
     detail::IgnoredRelations ignoredRanges = {},
     IsTripleIgnored isTripleIgnored = IsTripleIgnored{}) {
   std::sort(ignoredRanges.begin(), ignoredRanges.end());
@@ -71,8 +71,8 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
   for (auto& [begin, end] : allowedRanges) {
     for (auto it = begin; it != end; ++it) {
       Id id = it.getId();
-      auto blockGenerator =
-          permutation.lazyScan(id, std::nullopt, std::nullopt, abortionHandle);
+      auto blockGenerator = permutation.lazyScan(id, std::nullopt, std::nullopt,
+                                                 cancellationHandle);
       for (const IdTable& col1And2 : blockGenerator) {
         AD_CORRECTNESS_CHECK(col1And2.numColumns() == 2);
         for (const auto& row : col1And2) {

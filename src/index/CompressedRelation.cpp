@@ -24,7 +24,7 @@ IdTable CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata,
     std::span<const CompressedBlockMetadata> blockMetadata,
     ad_utility::File& file,
-    std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const {
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   IdTable result(2, allocator_);
 
   auto relevantBlocks =
@@ -61,7 +61,7 @@ IdTable CompressedRelationReader::scan(
   // Read the first block (it might be incomplete).
   readIncompleteBlock(*beginBlock);
   ++beginBlock;
-  checkAbortion(abortionHandle);
+  checkCancellation(cancellationHandle);
 
   // Read all the other (complete!) blocks in parallel
   if (beginBlock < endBlock) {
@@ -90,7 +90,7 @@ IdTable CompressedRelationReader::scan(
 #pragma omp task
         {
           // TODO verify correct behaviour
-          checkAbortion(abortionHandle);
+          checkCancellation(cancellationHandle);
           decompressLambda();
         }
 
@@ -110,7 +110,7 @@ CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
     auto beginBlock, auto endBlock, ad_utility::File& file,
     std::optional<std::vector<size_t>> columnIndices,
-    std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const {
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
     co_return;
@@ -121,7 +121,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   std::mutex blockIteratorMutex;
   auto readAndDecompressBlock =
       [&]() -> std::optional<std::pair<size_t, DecompressedBlock>> {
-    checkAbortion(abortionHandle);
+    checkCancellation(cancellationHandle);
     std::unique_lock lock{blockIteratorMutex};
     if (blockIterator == endBlock) {
       return std::nullopt;
@@ -158,7 +158,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       queueSize, numThreads, readAndDecompressBlock);
   for (IdTable& block : queue) {
     popTimer.stop();
-    checkAbortion(abortionHandle);
+    checkCancellation(cancellationHandle);
     ++details.numBlocksRead_;
     details.numElementsRead_ += block.numRows();
     co_yield block;
@@ -173,7 +173,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata,
     std::vector<CompressedBlockMetadata> blockMetadata, ad_utility::File& file,
-    std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const {
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   auto relevantBlocks =
       getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
   const auto beginBlock = relevantBlocks.begin();
@@ -190,10 +190,10 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   auto firstBlock = readPossiblyIncompleteBlock(metadata, std::nullopt, file,
                                                 *beginBlock, std::ref(details));
   co_yield firstBlock;
-  checkAbortion(abortionHandle);
+  checkCancellation(cancellationHandle);
 
   auto blockGenerator = asyncParallelBlockGenerator(
-      beginBlock + 1, endBlock, file, std::nullopt, abortionHandle);
+      beginBlock + 1, endBlock, file, std::nullopt, cancellationHandle);
   blockGenerator.setDetailsPointer(&details);
   for (auto& block : blockGenerator) {
     co_yield block;
@@ -205,8 +205,8 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata, Id col1Id,
     std::vector<CompressedBlockMetadata> blockMetadata, ad_utility::File& file,
-    std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const {
-  AD_CONTRACT_CHECK(abortionHandle);
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+  AD_CONTRACT_CHECK(cancellationHandle);
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
   auto beginBlock = relevantBlocks.begin();
   auto endBlock = relevantBlocks.end();
@@ -227,11 +227,11 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     AD_CORRECTNESS_CHECK(endBlock - beginBlock <= 1);
   }
 
-  auto getIncompleteBlock = [&, abortionHandle](auto it) {
+  auto getIncompleteBlock = [&, cancellationHandle](auto it) {
     auto result = readPossiblyIncompleteBlock(metadata, col1Id, file, *it,
                                               std::ref(details));
     result.setColumnSubset(std::array<ColumnIndex, 1>{1});
-    checkAbortion(abortionHandle);
+    checkCancellation(cancellationHandle);
     return result;
   };
 
@@ -243,7 +243,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   if (beginBlock + 1 < endBlock) {
     auto blockGenerator = asyncParallelBlockGenerator(
         beginBlock + 1, endBlock - 1, file, std::vector{1UL},
-        std::move(abortionHandle));
+        std::move(cancellationHandle));
     blockGenerator.setDetailsPointer(&details);
     for (auto& block : blockGenerator) {
       co_yield block;
@@ -411,7 +411,7 @@ CompressedRelationReader::getBlocksForJoin(
 IdTable CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata, Id col1Id,
     std::span<const CompressedBlockMetadata> blocks, ad_utility::File& file,
-    std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) const {
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   IdTable result(1, allocator_);
 
   // Get all the blocks  that possibly might contain our pair of col0Id and
@@ -447,13 +447,13 @@ IdTable CompressedRelationReader::scan(
     firstBlockResult = readIncompleteBlock(*beginBlock);
     totalResultSize += firstBlockResult.value().size();
     ++beginBlock;
-    checkAbortion(abortionHandle);
+    checkCancellation(cancellationHandle);
   }
   if (beginBlock < endBlock) {
     lastBlockResult = readIncompleteBlock(*(endBlock - 1));
     totalResultSize += lastBlockResult.value().size();
     endBlock--;
-    checkAbortion(abortionHandle);
+    checkCancellation(cancellationHandle);
   }
 
   // Determine the total size of the result.
@@ -500,7 +500,7 @@ IdTable CompressedRelationReader::scan(
 #pragma omp task
       {
         // TODO verify correct behaviour
-        checkAbortion(abortionHandle);
+        checkCancellation(cancellationHandle);
         decompressLambda();
       }
 

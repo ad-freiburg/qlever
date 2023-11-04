@@ -292,14 +292,16 @@ Join::ScanMethodType Join::getScanMethod(
   // during its lifetime
   const auto& idx = _executionContext->getIndex();
   const auto scanLambda =
-      [&idx](const Permutation::Enum perm,
-             std::shared_ptr<ad_utility::AbortionHandle> abortionHandle) {
-        return [&idx, perm, abortionHandle = std::move(abortionHandle)](Id id) {
-          return idx.scan(id, std::nullopt, perm, abortionHandle);
+      [&idx](
+          const Permutation::Enum perm,
+          std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) {
+        return [&idx, perm,
+                cancellationHandle = std::move(cancellationHandle)](Id id) {
+          return idx.scan(id, std::nullopt, perm, cancellationHandle);
         };
       };
   AD_CORRECTNESS_CHECK(scan.getResultWidth() == 3);
-  return scanLambda(scan.permutation(), abortionHandle_);
+  return scanLambda(scan.permutation(), cancellationHandle_);
 }
 
 // _____________________________________________________________________________
@@ -324,7 +326,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       // The scan is a relatively expensive disk operation, so we can afford to
       // check for timeouts before each call.
-      checkAbortion();
+      checkCancellation();
       IdTable jr = scan(currentJoinId);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
@@ -455,7 +457,7 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
   if (a.empty() || b.empty()) {
     return;
   }
-  checkAbortion();
+  checkCancellation();
   ad_utility::JoinColumnMapping joinColumnData{
       {{jc1, jc2}}, a.numColumns(), b.numColumns()};
   auto joinColumnL = a.getColumn(jc1);

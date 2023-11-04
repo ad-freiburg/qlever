@@ -112,7 +112,7 @@ void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
           }
           targetColumn[numRowsWritten] = inputColumn[i];
           ++numRowsWritten;
-          checkAbortion();
+          checkCancellation();
         }
       };
       if constexpr (StaticGroupSize == 0) {
