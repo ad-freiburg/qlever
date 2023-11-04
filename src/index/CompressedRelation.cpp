@@ -89,9 +89,9 @@ IdTable CompressedRelationReader::scan(
         // The `decompressLambda` can now run in parallel
 #pragma omp task
         {
-          // TODO verify correct behaviour
-          checkCancellation(cancellationHandle);
-          decompressLambda();
+          if (!cancellationHandle->isCancelled()) {
+            decompressLambda();
+          }
         }
 
         // this is again serial code, set up the correct pointers
@@ -102,6 +102,7 @@ IdTable CompressedRelationReader::scan(
       AD_CORRECTNESS_CHECK(spaceLeft == 0);
     }  // End of omp parallel region, all the decompression was handled now.
   }
+  checkCancellation(cancellationHandle);
   return result;
 }
 
@@ -499,9 +500,9 @@ IdTable CompressedRelationReader::scan(
       // block in parallel
 #pragma omp task
       {
-        // TODO verify correct behaviour
-        checkCancellation(cancellationHandle);
-        decompressLambda();
+        if (!cancellationHandle->isCancelled()) {
+          decompressLambda();
+        }
       }
 
       // update the pointers
@@ -515,6 +516,7 @@ IdTable CompressedRelationReader::scan(
     rowIndexOfNextBlockStart += lastBlockResult.value().size();
   }
   AD_CORRECTNESS_CHECK(rowIndexOfNextBlockStart == result.size());
+  checkCancellation(cancellationHandle);
   return result;
 }
 

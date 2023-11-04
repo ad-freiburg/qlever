@@ -18,6 +18,8 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/Variable.h"
 #include "util/CancellationHandle.h"
+#include "util/CompilerExtensions.h"
+#include "util/Concepts.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 
@@ -210,14 +212,22 @@ class Operation {
     return _warnings;
   }
 
-  void checkCancellation() const;
-  // Check if the cancellation flag has been set and throws an exception if
-  // that's the case. This will be called at strategic places on code that
-  // potentially can take a (too) long time. The `detailSupplier` allows to pass
-  // a message to add to any potential exception that might be thrown.
-  void checkCancellation(const std::invocable auto& detailSupplier) const;
+  AD_ALWAYS_INLINE void checkCancellation() const {
+    cancellationHandle_->throwIfCancelled(&Operation::getDescriptor, this);
+  }
 
-  std::chrono::seconds remainingTime() const;
+  // Check if the cancellation flag has been set and throw an exception if
+  // that's the case. This will be called at strategic places on code that
+  // potentially can take a (too) long time. This function is designed to be
+  // as lightweight as possible because of that. The `detailSupplier` allows to
+  // pass a message to add to any potential exception that might be thrown.
+  AD_ALWAYS_INLINE void checkCancellation(
+      const ad_utility::InvocableWithReturnValue<std::string_view> auto&
+          detailSupplier) const {
+    cancellationHandle_->throwIfCancelled(detailSupplier);
+  }
+
+  std::chrono::milliseconds remainingTime() const;
 
   /// Pointer to the cancellation handle of this operation.
   SharedCancellationHandle cancellationHandle_ =

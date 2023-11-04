@@ -51,12 +51,10 @@ vector<string> Operation::collectWarnings() const {
 void Operation::recursivelySetCancellationHandle(
     SharedCancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(cancellationHandle);
-  for (auto child : getChildren()) {
-    if (child) {
-      child->getRootOperation()->recursivelySetCancellationHandle(
-          cancellationHandle);
-    }
-  }
+  forAllDescendants([&cancellationHandle](auto child) {
+    child->getRootOperation()->recursivelySetCancellationHandle(
+        cancellationHandle);
+  });
   cancellationHandle_ = std::move(cancellationHandle);
 }
 
@@ -65,11 +63,9 @@ void Operation::recursivelySetCancellationHandle(
 void Operation::recursivelySetTimeConstraint(
     std::chrono::steady_clock::time_point deadline) {
   deadline_ = deadline;
-  for (auto child : getChildren()) {
-    if (child) {
-      child->getRootOperation()->recursivelySetTimeConstraint(deadline);
-    }
-  }
+  forAllDescendants([deadline](auto child) {
+    child->getRootOperation()->recursivelySetTimeConstraint(deadline);
+  });
 }
 
 // ________________________________________________________________________
@@ -209,23 +205,11 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
 
 // ______________________________________________________________________
 
-void Operation::checkCancellation() const {
-  cancellationHandle_->throwIfCancelled(&Operation::getDescriptor, this);
-}
-
-// ______________________________________________________________________
-
-void Operation::checkCancellation(
-    const std::invocable auto& detailSupplier) const {
-  cancellationHandle_->throwIfCancelled(detailSupplier);
-}
-
-// ______________________________________________________________________
-
-std::chrono::seconds Operation::remainingTime() const {
+std::chrono::milliseconds Operation::remainingTime() const {
   auto interval = deadline_ - std::chrono::steady_clock::now();
-  return std::max(std::chrono::seconds::zero(),
-                  std::chrono::duration_cast<std::chrono::seconds>(interval));
+  return std::max(
+      std::chrono::milliseconds::zero(),
+      std::chrono::duration_cast<std::chrono::milliseconds>(interval));
 }
 
 // _______________________________________________________________________

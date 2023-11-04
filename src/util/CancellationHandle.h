@@ -11,6 +11,7 @@
 #include <type_traits>
 
 #include "util/CompilerExtensions.h"
+#include "util/Concepts.h"
 #include "util/Exception.h"
 
 // Inlining is super important for performance here, and clang considers
@@ -59,14 +60,25 @@ class CancellationHandle {
   /// Throw an `CancellationException` when this handle has been cancelled. Do
   /// nothing otherwise
   template <typename... ArgTypes>
-  AD_ALWAYS_INLINE void throwIfCancelled(const auto& detailSupplier,
-                                         ArgTypes&&... argTypes) const {
+  AD_ALWAYS_INLINE void throwIfCancelled(
+      const InvocableWithReturnValue<std::string_view, ArgTypes...> auto&
+          detailSupplier,
+      ArgTypes&&... argTypes) const {
     auto state = cancellationState_.load(std::memory_order_relaxed);
     if (state == CancellationState::NOT_CANCELLED) [[likely]] {
       return;
     }
     throw CancellationException{
         state, std::invoke(detailSupplier, AD_FWD(argTypes)...)};
+  }
+
+  /// Return true if this cancellation handle has been cancelled, false
+  /// otherwise. Note: Make sure to not use this value to set any other atomic
+  /// value with relaxed memory ordering, as this may lead to out-of-thin-air
+  /// values.
+  AD_ALWAYS_INLINE bool isCancelled() const {
+    return cancellationState_.load(std::memory_order_relaxed) !=
+           CancellationState::NOT_CANCELLED;
   }
 };
 }  // namespace ad_utility

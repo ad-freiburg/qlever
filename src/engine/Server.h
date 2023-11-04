@@ -141,6 +141,8 @@ class Server {
       std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
       std::chrono::seconds timeLimit);
 
+  /// Create a cancellation handle, pass it to the operation and configure
+  /// it to get cancelled automatically if a time limit is passed.
   static std::function<void()> setupCancellationHandle(
       const net::any_io_executor& executor,
       const std::shared_ptr<Operation>& rootOperation,

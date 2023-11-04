@@ -536,12 +536,12 @@ std::function<void()> Server::setupCancellationHandle(
     std::optional<std::chrono::seconds> timeLimit) {
   // TODO<RobinTF> register cancellation handle to allow manual cancellation
   auto cancellationHandle = std::make_shared<ad_utility::CancellationHandle>();
+  rootOperation->recursivelySetCancellationHandle(
+      std::move(cancellationHandle));
   if (timeLimit.has_value()) {
     rootOperation->recursivelySetTimeConstraint(timeLimit.value());
     return cancelAfterDeadline(executor, cancellationHandle, timeLimit.value());
   }
-  rootOperation->recursivelySetCancellationHandle(
-      std::move(cancellationHandle));
   return []() {};
 }
 
@@ -667,7 +667,7 @@ boost::asio::awaitable<void> Server::processQuery(
     queryExecutionTree = qp.createExecutionTree(pq);
     auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
-    absl::Cleanup cleanCancellationHandle{setupCancellationHandle(
+    absl::Cleanup cancelCancellationHandle{setupCancellationHandle(
         co_await net::this_coro::executor, qet.getRootOperation(), timeLimit)};
     size_t timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
