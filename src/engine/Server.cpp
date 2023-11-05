@@ -542,7 +542,7 @@ std::function<void()> Server::setupCancellationHandle(
     rootOperation->recursivelySetTimeConstraint(timeLimit.value());
     return cancelAfterDeadline(executor, cancellationHandle, timeLimit.value());
   }
-  return []() {};
+  return []() { /* Do nothing when no timeout is given */ };
 }
 
 // ____________________________________________________________________________

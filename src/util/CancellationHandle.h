@@ -25,8 +25,7 @@ enum class CancellationState { NOT_CANCELLED, MANUAL, TIMEOUT };
 /// An exception signalling an cancellation
 class CancellationException : public std::runtime_error {
  public:
-  explicit CancellationException(const std::string& message)
-      : std::runtime_error{message} {}
+  using std::runtime_error::runtime_error;
   CancellationException(CancellationState reason, std::string_view details)
       : std::runtime_error{absl::StrCat("Cancelled due to ",
                                         reason == CancellationState::TIMEOUT
