@@ -4,6 +4,8 @@
 
 // Common classes / Typedefs that are used during Index Creation
 
+#include <memory_resource>
+
 #include "../global/Constants.h"
 #include "../global/Id.h"
 #include "../util/Conversions.h"
@@ -65,12 +67,41 @@ inline Triple makeTriple(std::array<std::string, 3>&& t) {
 /// The index of a word and the corresponding `SplitVal`.
 struct LocalVocabIndexAndSplitVal {
   uint64_t m_id;
-  TripleComponentComparator::SplitVal m_splitVal;
+  TripleComponentComparator::SplitValNonOwningWithSortKey m_splitVal;
 };
 
-using ItemMap = ad_utility::HashMap<std::string, LocalVocabIndexAndSplitVal>;
-using ItemMapArray = std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS>;
-using ItemVec = std::vector<std::pair<std::string, LocalVocabIndexAndSplitVal>>;
+using ItemAlloc = std::pmr::polymorphic_allocator<
+    std::pair<const std::string_view, LocalVocabIndexAndSplitVal>>;
+using ItemMap = ad_utility::HashMap<
+    std::string_view, LocalVocabIndexAndSplitVal,
+    absl::container_internal::hash_default_hash<std::string_view>,
+    absl::container_internal::hash_default_eq<std::string_view>,
+    std::pmr::polymorphic_allocator<
+        std::pair<const std::string_view, LocalVocabIndexAndSplitVal>>>;
+using ItemVec =
+    std::vector<std::pair<std::string_view, LocalVocabIndexAndSplitVal>>;
+struct MonotonicBuffer {
+  std::unique_ptr<std::pmr::monotonic_buffer_resource> buffer_ =
+      std::make_unique<std::pmr::monotonic_buffer_resource>();
+  std::unique_ptr<std::pmr::polymorphic_allocator<char>> charAllocator =
+      std::make_unique<std::pmr::polymorphic_allocator<char>>(buffer_.get());
+  std::string_view addString(std::string_view input) {
+    auto ptr = charAllocator->allocate(input.size());
+    std::ranges::copy(input, ptr);
+    return {ptr, ptr + input.size()};
+  }
+};
+
+struct ItemMapAndBuffer {
+  ItemMap map_;
+  MonotonicBuffer buffer_;
+
+  explicit ItemMapAndBuffer(ItemAlloc alloc) : map_{alloc} {}
+  ItemMapAndBuffer(ItemMapAndBuffer&&) noexcept = default;
+  ItemMapAndBuffer& operator=(ItemMapAndBuffer&&) noexcept = delete;
+};
+
+using ItemMapArray = std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS>;
 
 /**
  * Manage a HashMap of string->Id to create unique Ids for strings.
@@ -80,30 +111,36 @@ using ItemVec = std::vector<std::pair<std::string, LocalVocabIndexAndSplitVal>>;
 // Align each ItemMapManager on its own cache line to avoid false sharing.
 struct alignas(256) ItemMapManager {
   /// Construct by assigning the minimum ID that should be returned by the map.
-  explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp)
-      : _map(), _minId(minId), m_comp(cmp) {}
-  /// Minimum Id is 0
-  ItemMapManager() = default;
+  explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp,
+                          ItemAlloc alloc)
+      : _map(alloc), _minId(minId), m_comp(cmp) {}
 
   /// Move the held HashMap out as soon as we are done inserting and only need
   /// the actual vocabulary
-  ItemMap&& moveMap() && { return std::move(_map); }
+  ItemMapAndBuffer&& moveMap() && { return std::move(_map); }
 
   /// If the key was seen before, return its preassigned ID. Else assign the
   /// next free ID to the string, store and return it.
+  // TODO<joka921> Can we move that in?
   Id getId(const TripleComponentOrId& keyOrId) {
     if (std::holds_alternative<Id>(keyOrId)) {
       return std::get<Id>(keyOrId);
     }
     const auto& key = std::get<PossiblyExternalizedIriOrLiteral>(keyOrId);
-    auto [it, inserted] = _map.try_emplace(
-        key._iriOrLiteral, 0, TripleComponentComparator::SplitVal{});
-    if (inserted) {
-      uint64_t res = _map.size() - 1 + _minId;
-      it->second.m_id = res;
-      it->second.m_splitVal = m_comp->extractAndTransformComparable(
-          key._iriOrLiteral, TripleComponentComparator::Level::TOTAL,
-          key._isExternal);
+    auto& map = _map.map_;
+    auto& buffer = _map.buffer_;
+    auto it = map.find(key._iriOrLiteral);
+    // TODO<joka921> store the hash.
+    if (it == map.end()) {
+      uint64_t res = map.size() + _minId;
+      // TODO<joka921> piecewise construct.
+      auto keyView = buffer.addString(key._iriOrLiteral);
+      map.try_emplace(
+          keyView, LocalVocabIndexAndSplitVal{
+                       res, m_comp->extractAndTransformComparableNonOwning(
+                                key._iriOrLiteral,
+                                TripleComponentComparator::Level::TOTAL,
+                                key._isExternal, buffer.charAllocator.get())});
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
       return Id::makeFromVocabIndex(VocabIndex::make(it->second.m_id));
@@ -114,7 +151,7 @@ struct alignas(256) ItemMapManager {
   std::array<Id, 3> getId(const Triple& t) {
     return {getId(t[0]), getId(t[1]), getId(t[2])};
   }
-  ItemMap _map;
+  ItemMapAndBuffer _map;
   uint64_t _minId = 0;
   const TripleComponentComparator* m_comp = nullptr;
 };
@@ -155,18 +192,23 @@ struct LangtagAndTriple {
  * @return A Tuple of lambda functions (see above)
  */
 template <size_t Parallelism>
-auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
-                     size_t maxNumberOfTriples,
-                     const TripleComponentComparator* comp, auto* indexPtr) {
+auto getIdMapLambdas(
+    std::array<std::optional<ItemMapManager>, Parallelism>* itemArrayPtr,
+    size_t maxNumberOfTriples, const TripleComponentComparator* comp,
+    auto* indexPtr, ItemAlloc alloc) {
   // that way the different ids won't interfere
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < Parallelism; ++j) {
-    itemArray[j] = ItemMapManager(j * 100 * maxNumberOfTriples, comp);
+    itemArray[j].emplace(j * 100 * maxNumberOfTriples, comp, alloc);
+    {
+      // ad_utility::TimeBlockAndLog tbl{"reserving one of the large hash
+      // maps"};
+      itemArray[j]->_map.map_.reserve(4 * maxNumberOfTriples);
+    }
     // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
     // This is not necessary for the actual QLever code, but certain unit tests
     // currently fail without it.
-    itemArray[j].getId(LANGUAGE_PREDICATE);
-    itemArray[j]._map.reserve(2 * maxNumberOfTriples);
+    itemArray[j]->getId(LANGUAGE_PREDICATE);
   }
   using OptionalIds = std::array<std::array<Id, 3>, 3>;
 
@@ -179,7 +221,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
    * - All Ids are assigned according to itemArray[idx]
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    return [&map = itemArray[idx], indexPtr](auto&& tr) {
+    return [&map = *itemArray[idx], indexPtr](auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(std::move(tr));
       OptionalIds res;
       res[1][0] = Id::makeUndefined();

@@ -13,16 +13,17 @@
 #include <utility>
 #include <vector>
 
-#include "../parser/RdfEscaping.h"
-#include "../util/Conversions.h"
-#include "../util/Exception.h"
-#include "../util/HashMap.h"
-#include "../util/Log.h"
-#include "../util/Serializer/FileSerializer.h"
-#include "../util/Serializer/SerializeString.h"
-#include "./ConstantsIndexBuilding.h"
-#include "./Vocabulary.h"
-#include "./VocabularyGenerator.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/Vocabulary.h"
+#include "index/VocabularyGenerator.h"
+#include "parser/RdfEscaping.h"
+#include "util/Conversions.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
+#include "util/Log.h"
+#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/SerializeString.h"
 
 // ___________________________________________________________________
 template <typename Comparator, typename InternalVocabularyAction>
@@ -240,8 +241,9 @@ inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
     ItemVec* elsPtr) {
   auto& els = *elsPtr;
   ad_utility::HashMap<uint64_t, uint64_t> res;
+  res.reserve(2 * els.size());
   bool first = true;
-  std::string lastWord;
+  std::string_view lastWord;
   size_t nextWordId = 0;
   for (auto& el : els) {
     if (!first && lastWord != el.first) {
@@ -286,6 +288,11 @@ inline void writeMappedIdsToExtVec(
 inline void writePartialVocabularyToFile(const ItemVec& els,
                                          const string& fileName) {
   LOG(DEBUG) << "Writing partial vocabulary to: " << fileName << "\n";
+  ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
+  {
+    ad_utility::TimeBlockAndLog t{"reserving the byte buffer"};
+    byteBuffer.reserve(1'000'000'000);
+  }
   ad_utility::serialization::FileWriteSerializer serializer{fileName};
   uint64_t size = els.size();  // really make sure that this has 64bits;
   serializer << size;
@@ -297,11 +304,16 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
     // TODO<joka921> there are unnecessary string copies involved here...
     // TripleComponentWithIndex entry{std::string{word},
     // splitVal.isExternalized_, id};
-    serializer << word;
-    serializer << splitVal.isExternalized_;
-    serializer << id;
+    byteBuffer << word;
+    byteBuffer << splitVal.isExternalized_;
+    byteBuffer << id;
   }
-  serializer.close();
+  {
+    ad_utility::TimeBlockAndLog t{"performing the actual write"};
+    serializer.serializeBytes(byteBuffer.data().data(),
+                              byteBuffer.data().size());
+    serializer.close();
+  }
   LOG(DEBUG) << "Done writing partial vocabulary\n";
 }
 
@@ -314,10 +326,10 @@ void writePartialIdMapToBinaryFileForMerging(
   ItemVec els;
   size_t totalEls = std::accumulate(
       map->begin(), map->end(), 0,
-      [](const auto& x, const auto& y) { return x + y.size(); });
+      [](const auto& x, const auto& y) { return x + y.map_.size(); });
   els.reserve(totalEls);
   for (const auto& singleMap : *map) {
-    els.insert(end(els), begin(singleMap), end(singleMap));
+    els.insert(end(els), begin(singleMap.map_), end(singleMap.map_));
   }
   LOG(TRACE) << "Sorting ..." << std::endl;
 
@@ -328,32 +340,58 @@ void writePartialIdMapToBinaryFileForMerging(
   writePartialVocabularyToFile(els, fileName);
 }
 
+__attribute__((noinline)) void destroyMap(auto& map) {
+  using T = std::decay_t<decltype(map)>;
+  // ad_utility::Timer t{ad_utility::Timer::Started};
+  map.~T();
+  // auto time = t.msecs();
+  //  LOG(TIMING) << "destructor of a single map took " << time << " ms " <<
+  //  std::endl;
+}
+
+__attribute__((noinline)) void makeMap(auto* map) {
+  using T = std::decay_t<decltype(*map)>;
+  new (map) T{};
+}
+
+__attribute__((noinline)) void clearMap(auto& map) {
+  destroyMap(map);
+  makeMap(&map);
+}
+
 // __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(std::unique_ptr<ItemMapArray> map) {
+inline ItemVec vocabMapsToVector(ItemMapArray& map) {
   ItemVec els;
   std::vector<size_t> offsets;
-  size_t totalEls =
-      std::accumulate(map->begin(), map->end(), 0,
-                      [&offsets](const auto& x, const auto& y) mutable {
-                        offsets.push_back(x);
-                        return x + y.size();
-                      });
+  size_t totalEls = 0;
+  {
+    ad_utility::TimeBlockAndLog l{"accumulating the size"};
+    totalEls =
+        std::accumulate(map.begin(), map.end(), 0,
+                        [&offsets](const auto& x, const auto& y) mutable {
+                          offsets.push_back(x);
+                          return x + y.map_.size();
+                        });
+  }
   els.resize(totalEls);
   std::vector<std::future<void>> futures;
-  size_t i = 0;
-  for (auto& singleMap : *map) {
-    futures.push_back(
-        std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
-          ad_utility::TimeBlockAndLog l{"handling a single map"};
-          using T = ItemVec::value_type;
-          std::ranges::transform(
-              singleMap, els.begin() + offsets[i], [](auto& el) -> T {
-                return {std::move(const_cast<std::string&>(el.first)),
-                        std::move(el.second)};
-              });
-          singleMap.clear();
-        }));
-    ++i;
+  {
+    size_t i = 0;
+    ad_utility::TimeBlockAndLog l{
+        "setting up the futures in vocabMapsToVector"};
+    for (auto& singleMap : map) {
+      futures.push_back(
+          std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
+            // ad_utility::TimeBlockAndLog l{"handling a single map"};
+            using T = ItemVec::value_type;
+            std::ranges::transform(singleMap.map_, els.begin() + offsets[i],
+                                   [](auto& el) -> T {
+                                     return {el.first, std::move(el.second)};
+                                   });
+            // singleMap.map_ = decltype(singleMap.map_){};
+          }));
+      ++i;
+    }
   }
   {
     ad_utility::TimeBlockAndLog l{
@@ -366,7 +404,22 @@ inline ItemVec vocabMapsToVector(std::unique_ptr<ItemMapArray> map) {
   {
     ad_utility::TimeBlockAndLog l{
         "calling the destructor of the large hashMap"};
-    map.reset(nullptr);
+    for (auto& single : map) {
+      /*
+      ad_utility::TimeBlockAndLog l2{
+          "calling the destructor of a single map"};
+          */
+      static_assert(
+          std::is_trivially_destructible_v<decltype(single.map_)::value_type>);
+      static_assert(
+          std::is_trivially_destructible_v<decltype(single.map_)::key_type>);
+      // single.map_ = decltype(single.map_){};
+      //  TODO<joka921> This is dangerous and wrong...
+      // std::destroy_at(&single.map_);
+      // auto alloc = single.map_.get_allocator();
+      clearMap(single.map_);
+      // single.map_ = decltype(single.map_){};
+    }
   }
 
   return els;

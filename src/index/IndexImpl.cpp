@@ -267,12 +267,85 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   // std::array<std::future<void>, 3> writePartialVocabularyFuture;
   std::array<std::future<void>, 2> writePartialVocabularyFuture;
   size_t totalWaitingTimePreviousSteps = 0;
+  std::pmr::pool_options options;
+  options.max_blocks_per_chunk = 100;
+  options.largest_required_pool_block = (5_GB).getBytes();
+  std::pmr::synchronized_pool_resource syncPool(options);
+
+  struct LogginDefaultResource : public std::pmr::memory_resource {
+    std::pmr::memory_resource* alloc = std::pmr::get_default_resource();
+    void* do_allocate(std::size_t bytes, std::size_t alignment) override {
+      // LOG(INFO) << "Allocating " << bytes << " bytes using fallback" <<
+      // std::endl;
+      return alloc->allocate(bytes, alignment);
+    }
+    void do_deallocate(void* p, std::size_t bytes,
+                       std::size_t alignment) override {
+      ad_utility::Timer timer{ad_utility::Timer::Started};
+      alloc->deallocate(p, bytes, alignment);
+      // LOG(INFO) << "Deallocating " << bytes << " bytes using fallback took "
+      // << timer.msecs() << "ms" << std::endl;
+    }
+    bool do_is_equal(
+        const std::pmr::memory_resource& other) const noexcept override {
+      return this == &other;
+    }
+  };
+  struct LoggingPool : public std::pmr::memory_resource {
+    LogginDefaultResource fallback{};
+    ad_utility::HashMap<std::pair<size_t, size_t>, std::vector<void*>> cache_;
+    std::mutex mutex;
+
+    void* do_allocate(std::size_t bytes, std::size_t alignment) override {
+      std::lock_guard l{mutex};
+      // LOG(INFO) << "Allocating " << bytes << " bytes" << std::endl;
+      ad_utility::Timer timer{ad_utility::Timer::Started};
+      auto it = cache_.find(std::pair{bytes, alignment});
+      if (it == cache_.end() || it->second.empty()) {
+        auto res = fallback.allocate(bytes, alignment);
+        // LOG(TIMING) << "Allocating " << bytes << " bytes took " <<
+        // timer.msecs() << "ms" << std::endl;
+        return res;
+      }
+      auto& c = it->second;
+      auto res = c.back();
+      c.pop_back();
+      // LOG(TIMING) << "Allocating " << bytes << " bytes took " <<
+      // timer.msecs() << "ms" << std::endl;
+      return res;
+    }
+    void do_deallocate(void* p, std::size_t bytes,
+                       std::size_t alignment) override {
+      std::lock_guard l{mutex};
+      ad_utility::Timer timer{ad_utility::Timer::Started};
+      cache_[std::pair{bytes, alignment}].push_back(p);
+
+      // LOG(INFO) << "Deallocating " << bytes << " bytes took " <<
+      // timer.msecs() << "ms" << std::endl;
+    }
+    bool do_is_equal(
+        const std::pmr::memory_resource& other) const noexcept override {
+      return this == &other;
+    }
+
+    ~LoggingPool() {
+      for (auto& [key, pointers] : cache_) {
+        for (auto ptr : pointers) {
+          fallback.deallocate(ptr, key.first, key.second);
+        }
+      }
+      // LOG(INFO) << "Destroyed the logging pool" << std::endl;
+    }
+  };
+  LoggingPool loggingPool;
+  // ItemAlloc itemAlloc(&syncPool);
+  ItemAlloc itemAlloc(&loggingPool);
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
     std::vector<std::array<Id, 3>> localWriter;
 
-    std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
+    std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
     {
       auto p = ad_pipeline::setupParallelPipeline<NUM_PARALLEL_ITEM_MAPS>(
@@ -297,7 +370,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
           // documentation of the function for more details
           getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(&itemArray, linesPerPartial,
                                                   &(vocab_.getCaseComparator()),
-                                                  this));
+                                                  this, itemAlloc));
 
       while (auto opt = p.getNextValue()) {
         i++;
@@ -312,8 +385,6 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
         }
         if (i % 100'000'000 == 0) {
           LOG(INFO) << "Input triples processed: " << i << std::endl;
-          LOG(INFO) << "Total num triples processed: " << numPushedActually
-                    << std::endl;
         }
       }
       LOG(TIMING) << "WaitTimes for Pipeline in msecs\n";
@@ -338,10 +409,13 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     LOG(TIMING)
         << "Time spent waiting for the writing of a previous vocabulary: "
         << sortFutureTimer.msecs() << "ms." << std::endl;
-    std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS> convertedMaps;
-    for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
-      convertedMaps[j] = std::move(itemArray[j]).moveMap();
-    }
+    std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS> convertedMaps =
+        std::apply(
+            [](auto&&... vals) {
+              return std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS>{
+                  std::move(vals.value()).moveMap()...};
+            },
+            std::move(itemArray));
     auto oldItemPtr = std::make_unique<ItemMapArray>(std::move(convertedMaps));
     for (auto it = writePartialVocabularyFuture.begin() + 1;
          it < writePartialVocabularyFuture.end(); ++it) {
@@ -1128,7 +1202,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
                  vocabPrefixCompressed = vocabPrefixCompressed_]() mutable {
     auto vec = [&]() {
       ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
-      return vocabMapsToVector(std::move(items));
+      return vocabMapsToVector(*items);
     }();
     const auto identicalPred = [&c = vocab->getCaseComparator()](
                                    const auto& a, const auto& b) {
@@ -1144,7 +1218,6 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       return createInternalMapping(&vec);
     }();
     LOG(TRACE) << "Finished creating of Mapping vocabulary" << std::endl;
-    auto sz = vec.size();
     // since now adjacent duplicates also have the same Ids, it suffices to
     // compare those
     {
