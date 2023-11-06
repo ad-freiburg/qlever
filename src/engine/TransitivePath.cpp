@@ -106,13 +106,6 @@ size_t TransitivePath::getResultWidth() const { return _resultWidth; }
 
 // _____________________________________________________________________________
 vector<ColumnIndex> TransitivePath::resultSortedOn() const {
-  const std::vector<ColumnIndex>& subSortedOn =
-      _subtree->getRootOperation()->getResultSortedOn();
-  if (!_lhs.isBoundVariable() && !_rhs.isBoundVariable() && subSortedOn.size() > 0 &&
-      subSortedOn[0] == _lhs.subCol) {
-    // This operation preserves the order of the _leftCol of the subtree.
-    return {0};
-  }
   if (_lhs.isSortedOnInputCol()) {
     return {0};
   }
