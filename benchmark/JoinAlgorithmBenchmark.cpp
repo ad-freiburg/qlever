@@ -700,6 +700,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
               ad_utility::MemorySize::parse(maxMemory), "smaller table",
               smallerTableNumColumns);
         },
+        "'maxMemory' must be big enough for at least one row in the smaller "
+        "table.",
         maxMemoryInStringFormat, smallerTableAmountColumns);
     config.addValidator(
         [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
@@ -708,6 +710,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
               ad_utility::MemorySize::parse(maxMemory), "bigger table",
               biggerTableNumColumns);
         },
+        "'maxMemory' must be big enough for at least one row in the bigger "
+        "table.",
         maxMemoryInStringFormat, biggerTableAmountColumns);
     config.addValidator(
         [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
@@ -718,17 +722,22 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
               "result of joining the smaller and bigger table",
               smallerTableNumColumns + biggerTableNumColumns - 1);
         },
+        "'maxMemory' must be big enough for at least one row in the result of "
+        "joining the smaller and bigger table.",
         maxMemoryInStringFormat, smallerTableAmountColumns,
         biggerTableAmountColumns);
 
     // Is `smallerTableAmountRows` a valid value?
     config.addValidator(generateBiggerEqualLambda(1UL, true),
                         "'smallerTableAmountRows' must be at least 1.",
+                        "'smallerTableAmountRows' must be at least 1.",
                         smallerTableAmountRows);
 
     // Is `smallerTableAmountRows` smaller than `minBiggerTableRows`?
     config.addValidator(
         lessEqualLambda,
+        "'smallerTableAmountRows' must be smaller than, or equal to, "
+        "'minBiggerTableRows'.",
         "'smallerTableAmountRows' must be smaller than, or equal to, "
         "'minBiggerTableRows'.",
         smallerTableAmountRows, minBiggerTableRows);
@@ -743,6 +752,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             "only start to turn up at ",
             minBiggerTableRows.getConfigOption().getDefaultValueAsString(),
             " rows, or more."),
+        absl::StrCat(
+            "Interessting measurement values show up at ",
+            minBiggerTableRows.getConfigOption().getDefaultValueAsString(),
+            ", or more, for 'minBiggerTableRows'"),
         minBiggerTableRows);
 
     // Is `minBiggerTableRows` smaller, or equal, to `maxBiggerTableRows`?
@@ -750,18 +763,23 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         lessEqualLambda,
         "'minBiggerTableRows' must be smaller than, or equal to, "
         "'maxBiggerTableRows'.",
+        "'minBiggerTableRows' must be smaller than, or equal to, "
+        "'maxBiggerTableRows'.",
         minBiggerTableRows, maxBiggerTableRows);
 
     // Do we have at least 1 column?
     config.addValidator(generateBiggerEqualLambda(1UL, true),
                         "'smallerTableAmountColumns' must be at least 1.",
+                        "'smallerTableAmountColumns' must be at least 1.",
                         smallerTableAmountColumns);
     config.addValidator(generateBiggerEqualLambda(1UL, true),
+                        "'biggerTableAmountColumns' must be at least 1.",
                         "'biggerTableAmountColumns' must be at least 1.",
                         biggerTableAmountColumns);
 
     // Is `overlapChance_` bigger than 0?
     config.addValidator(generateBiggerEqualLambda(0UL, false),
+                        "'overlapChance' must be bigger than 0.",
                         "'overlapChance' must be bigger than 0.",
                         overlapChance);
 
@@ -775,22 +793,29 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             const size_t seed) { return seed <= maxSeed; },
         absl::StrCat("'randomSeed' must be smaller than, or equal to, ",
                      ad_utility::RandomSeed::max().get(), "."),
+        absl::StrCat("'randomSeed' must be smaller than, or equal to, ",
+                     ad_utility::RandomSeed::max().get(), "."),
         randomSeed);
 
     // Is `maxTimeSingleMeasurement` a positive number?
     config.addValidator(
         generateBiggerEqualLambda(0UL, true),
         "'maxTimeSingleMeasurement' must be bigger to, or equal to, 0.",
+        "'maxTimeSingleMeasurement' must be bigger to, or equal to, 0.",
         maxTimeSingleMeasurement);
 
     // Is the ratio of rows at least 10?
     config.addValidator(generateBiggerEqualLambda(10UL, true),
-                        "'ratioRows' must be at least 10 .", ratioRows);
+                        "'ratioRows' must be at least 10.",
+                        "'ratioRows' must be at least 10.", ratioRows);
     config.addValidator(generateBiggerEqualLambda(10UL, true),
-                        "'minRatioRows' must be at least 10 .", minRatioRows);
+                        "'minRatioRows' must be at least 10.",
+                        "'minRatioRows' must be at least 10.", minRatioRows);
 
     // Is `minRatioRows` smaller than `maxRatioRows`?
     config.addValidator(lessEqualLambda,
+                        "'minRatioRows' must be smaller than, or equal to, "
+                        "'maxRatioRows'.",
                         "'minRatioRows' must be smaller than, or equal to, "
                         "'maxRatioRows'.",
                         minRatioRows, maxRatioRows);
