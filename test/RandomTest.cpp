@@ -1,0 +1,238 @@
+// Copyright 2023, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Andre Schlegel (October of 2023, schlegea@informatik.uni-freiburg.de)
+
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <array>
+#include <concepts>
+#include <random>
+#include <ranges>
+#include <type_traits>
+
+#include "../test/util/RandomTestHelpers.h"
+#include "util/Exception.h"
+#include "util/GTestHelpers.h"
+#include "util/Random.h"
+#include "util/SourceLocation.h"
+#include "util/TypeTraits.h"
+
+namespace ad_utility {
+
+/*
+@brief Test, if random number generators, that take a seed, produce the same
+numbers for the same seed.
+
+@param randomNumberGeneratorFactory An invocable object, that should return a
+random number generator, using the given seed.
+*/
+template <std::invocable<RandomSeed> T>
+void testSeed(
+    T randomNumberGeneratorFactory,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{generateLocationTrace(l, "testSeed")};
+
+  // For how many random seeds should the test be done for?
+  constexpr size_t NUM_SEEDS = 5;
+  static_assert(NUM_SEEDS > 1);
+
+  // How many instances of the random number generator, with the given
+  // seed, should we compare?
+  constexpr size_t NUM_GENERATORS = 3;
+  static_assert(NUM_GENERATORS > 1);
+
+  // How many random numbers should be generated for comparison?
+  constexpr size_t NUM_RANDOM_NUMBER = 50;
+  static_assert(NUM_RANDOM_NUMBER > 1);
+
+  // For every seed test, if the random number generators return the same
+  // numbers.
+  std::ranges::for_each(
+      createArrayOfRandomSeeds<NUM_SEEDS>(),
+      [&randomNumberGeneratorFactory](const RandomSeed seed) {
+        // What type of generator does the factory create?
+        using GeneratorType = std::invoke_result_t<T, RandomSeed>;
+
+        // What kind of number does the generator return?
+        using NumberType = std::invoke_result_t<GeneratorType>;
+
+        // The generators, that should create the same numbers.
+        std::array<GeneratorType, NUM_GENERATORS> generators;
+        std::ranges::generate(
+            generators, [&randomNumberGeneratorFactory, &seed]() {
+              return std::invoke(randomNumberGeneratorFactory, seed);
+            });
+
+        // Do they generators create the same numbers?
+        for (size_t numCall = 0; numCall < NUM_RANDOM_NUMBER; numCall++) {
+          const NumberType expectedNumber = std::invoke(generators.front());
+
+          std::ranges::for_each(std::views::drop(generators, 1),
+                                [&expectedNumber](GeneratorType& g) {
+                                  ASSERT_EQ(std::invoke(g), expectedNumber);
+                                });
+        }
+      });
+}
+
+TEST(RandomNumberGeneratorTest, FastRandomIntGenerator) {
+  testSeed(
+      [](RandomSeed seed) { return FastRandomIntGenerator<size_t>{seed}; });
+}
+
+// Describes an inclusive numerical range `[min, max]`.
+template <typename T>
+struct NumericalRange {
+  const T minimum_;
+  const T maximum_;
+
+  NumericalRange(const T minimum, const T maximum)
+      : minimum_{minimum}, maximum_{maximum} {
+    AD_CORRECTNESS_CHECK(minimum <= maximum);
+  }
+};
+
+/*
+@brief Test, if random number generators, that take a seed and a range, produce
+the same numbers for the same seed and range.
+
+@param randomNumberGeneratorFactory An invocable object, that should return a
+random number generator, using the given range and seed. Functionparameters
+should be `RangeNumberType rangeMin, RangeNumberType rangeMax, Seed seed`.
+@param ranges The ranges, that should be used.
+*/
+template <typename RangeNumberType,
+          std::invocable<RangeNumberType, RangeNumberType, RandomSeed>
+              GeneratorFactory>
+void testSeedWithRange(
+    GeneratorFactory randomNumberGeneratorFactory,
+    const std::vector<NumericalRange<RangeNumberType>>& ranges,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{generateLocationTrace(l, "testSeedWithRange")};
+
+  std::ranges::for_each(ranges, [&randomNumberGeneratorFactory](
+                                    const NumericalRange<RangeNumberType>& r) {
+    testSeed([&r, &randomNumberGeneratorFactory](RandomSeed seed) {
+      return std::invoke(randomNumberGeneratorFactory, r.minimum_, r.maximum_,
+                         seed);
+    });
+  });
+}
+
+/*
+@brief Test, if a given random number generator only creates numbers in a range.
+
+@tparam Generator The random number generator. Must have a constructor, whose
+first argument is the minimum of the range and the second argument the maximum
+of the range.
+
+@param ranges The ranges, for which should be tested for.
+*/
+template <typename Generator, typename RangeNumberType>
+requires std::constructible_from<Generator, RangeNumberType, RangeNumberType> &&
+         std::invocable<Generator> &&
+         ad_utility::isSimilar<std::invoke_result_t<Generator>, RangeNumberType>
+void testRange(
+    const std::vector<NumericalRange<RangeNumberType>>& ranges,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{generateLocationTrace(l, "testRange")};
+
+  // How many random numbers should be generated?
+  constexpr size_t NUM_RANDOM_NUMBER = 500;
+  static_assert(NUM_RANDOM_NUMBER > 1);
+
+  std::ranges::for_each(ranges, [](const NumericalRange<RangeNumberType>& r) {
+    Generator generator(r.minimum_, r.maximum_);
+    const auto& generatedNumber = std::invoke(generator);
+    ASSERT_LE(generatedNumber, r.maximum_);
+    ASSERT_GE(generatedNumber, r.minimum_);
+  });
+}
+
+TEST(RandomNumberGeneratorTest, SlowRandomIntGenerator) {
+  testSeed([](RandomSeed seed) {
+    return SlowRandomIntGenerator<size_t>{std::numeric_limits<size_t>::min(),
+                                          std::numeric_limits<size_t>::max(),
+                                          seed};
+  });
+
+  // For use withing the range tests.
+  const std::vector<NumericalRange<size_t>> ranges{
+      {4ul, 7ul}, {200ul, 70171ul}, {71747ul, 1936556173ul}};
+
+  testSeedWithRange(
+      [](const auto rangeMin, const auto rangeMax, RandomSeed seed) {
+        return SlowRandomIntGenerator{rangeMin, rangeMax, seed};
+      },
+      ranges);
+
+  testRange<SlowRandomIntGenerator<size_t>>(ranges);
+}
+
+TEST(RandomNumberGeneratorTest, RandomDoubleGenerator) {
+  testSeed([](RandomSeed seed) {
+    return RandomDoubleGenerator{std::numeric_limits<double>::min(),
+                                 std::numeric_limits<double>::max(), seed};
+  });
+
+  // For use withing the range tests.
+  const std::vector<NumericalRange<double>> ranges{
+      {4.74717, 7.4}, {-200.0771370, -70.77713}, {-71747.6666, 1936556173.}};
+
+  // Repeat this test, but this time do it inside of a range.
+  testSeedWithRange(
+      [](const auto rangeMin, const auto rangeMax, RandomSeed seed) {
+        return RandomDoubleGenerator{rangeMin, rangeMax, seed};
+      },
+      ranges);
+
+  testRange<RandomDoubleGenerator>(ranges);
+}
+
+// Small test, if `randomShuffle` shuffles things the same way, if given the
+// same seed.
+TEST(RandomShuffleTest, Seed) {
+  // For how many random seeds should the test be done for?
+  constexpr size_t NUM_SEEDS = 5;
+  static_assert(NUM_SEEDS > 1);
+
+  // How many shuffled `std::array` should we compare per seed? And how big
+  // should they be?
+  constexpr size_t NUM_SHUFFLED_ARRAY = 3;
+  constexpr size_t ARRAY_LENGTH = 100;
+  static_assert(NUM_SHUFFLED_ARRAY > 1 && ARRAY_LENGTH > 1);
+
+  /*
+  For every random seed test, if the shuffled array is the same, if given
+  identical input and seed.
+  */
+  std::ranges::for_each(
+      createArrayOfRandomSeeds<NUM_SEEDS>(), [](const RandomSeed seed) {
+        std::array<std::array<int, ARRAY_LENGTH>, NUM_SHUFFLED_ARRAY>
+            inputArrays{};
+
+        // Fill the first input array with random values, then copy it into the
+        // other 'slots'.
+        std::ranges::generate(inputArrays.front(),
+                              FastRandomIntGenerator<int>{});
+        std::ranges::fill(std::views::drop(inputArrays, 1),
+                          inputArrays.front());
+
+        // Shuffle and compare, if they are all the same.
+        std::ranges::for_each(
+            inputArrays, [&seed](std::array<int, ARRAY_LENGTH>& inputArray) {
+              randomShuffle(inputArray.begin(), inputArray.end(), seed);
+            });
+        std::ranges::for_each(
+            std::views::drop(inputArrays, 1),
+            [&inputArrays](const std::array<int, ARRAY_LENGTH>& inputArray) {
+              ASSERT_EQ(inputArrays.front(), inputArray);
+            });
+      });
+}
+
+}  // namespace ad_utility

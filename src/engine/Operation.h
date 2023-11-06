@@ -29,6 +29,7 @@ class QueryExecutionTree;
 class Operation {
   using SharedCancellationHandle =
       std::shared_ptr<ad_utility::CancellationHandle>;
+  using Milliseconds = std::chrono::milliseconds;
 
  public:
   // Default Constructor.
@@ -250,7 +251,7 @@ class Operation {
   // it has either been succesfully computed or read from the cache.
   virtual void updateRuntimeInformationOnSuccess(
       const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
-      size_t timeInMilliseconds) final;
+      Milliseconds duration) final;
 
   // Similar to the function above, but the components are specified manually.
   // If nullopt is specified for the last argument, then the `_runtimeInfo` is
@@ -259,7 +260,7 @@ class Operation {
   // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
       const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
-      size_t timeInMilliseconds,
+      Milliseconds duration,
       std::optional<RuntimeInformation> runtimeInfo) final;
 
  public:
@@ -288,7 +289,7 @@ class Operation {
  private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.
-  void updateRuntimeInformationOnFailure(size_t timeInMilliseconds);
+  void updateRuntimeInformationOnFailure(Milliseconds duration);
 
   // Compute the variable to column index mapping. Is used internally by
   // `getInternallyVisibleVariableColumns`.
