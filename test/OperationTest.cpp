@@ -12,6 +12,10 @@
 
 using namespace ad_utility::testing;
 using namespace ::testing;
+using namespace std::chrono_literals;
+using ad_utility::CancellationException;
+using ad_utility::CancellationHandle;
+using ad_utility::CancellationState;
 
 // ________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
@@ -133,4 +137,61 @@ TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
       ElementsAre(
           ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
           ParsedAsJson(HasKeyMatching("status", Eq("fully materialized")))));
+}
+
+class StallForeverOperation : public Operation {
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  string asStringImpl([[maybe_unused]] size_t) const override {
+    return "StallForEverOperation";
+  }
+  string getDescriptor() const override {
+    return "StallForEverOperationDescriptor";
+  }
+  size_t getResultWidth() const override { return 0; }
+  size_t getCostEstimate() override { return 0; }
+  uint64_t getSizeEstimateBeforeLimit() override { return 0; }
+  float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
+  bool knownEmptyResult() override { return false; }
+  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+
+ public:
+  // Do-nothing operation that runs for 100ms without computing anything, but
+  // which can be cancelled.
+  ResultTable computeResult() override {
+    auto end = std::chrono::steady_clock::now() + 100ms;
+    while (std::chrono::steady_clock::now() < end) {
+      checkCancellation();
+    }
+    throw std::runtime_error{"Loop was not interrupted for 100ms, aborting"};
+  }
+
+  // Provide public view of remainingTime for tests
+  std::chrono::milliseconds publicRemainingTime() const {
+    return remainingTime();
+  }
+};
+
+// _____________________________________________________________________________
+
+TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
+  auto handle = std::make_shared<CancellationHandle>();
+  StallForeverOperation operation{};
+  operation.recursivelySetCancellationHandle(handle);
+
+  std::thread thread{[&]() {
+    std::this_thread::sleep_for(5ms);
+    handle->cancel(CancellationState::TIMEOUT);
+  }};
+  EXPECT_THROW(operation.computeResult(), CancellationException);
+  thread.join();
+}
+
+// _____________________________________________________________________________
+
+TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
+  StallForeverOperation operation{};
+  operation.recursivelySetTimeConstraint(1ms);
+  std::this_thread::sleep_for(1ms);
+  EXPECT_EQ(operation.publicRemainingTime(), 0ms);
 }
