@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -15,8 +13,12 @@
 #include <sstream>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
+using namespace std::string_literals;
+
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
@@ -151,12 +153,15 @@ ResultTable::ResultTable(const std::string& descriptor,
 // ____________________________________________________________________________
 void ResultTable::setEntry(const size_t& row, const size_t& column,
                            const EntryType& newEntryContent) {
+  // 'Deleting' an entry doesn't make much sense.
+  AD_CONTRACT_CHECK(!std::holds_alternative<std::monostate>(newEntryContent));
+
   entries_.at(row).at(column) = newEntryContent;
 }
 
 // ____________________________________________________________________________
 ResultTable::operator std::string() const {
-  // Used for the formating of numbers in the table. They will always be
+  // Used for the formating of floats in the table. They will always be
   // formated as having 4 values after the decimal point.
   static constexpr absl::string_view floatFormatSpecifier = "%.4f";
 
@@ -166,19 +171,22 @@ ResultTable::operator std::string() const {
   // Convert an `EntryType` of `ResultTable` to a screen friendly
   // format.
   auto entryToStringVisitor = []<typename T>(const T& entry) {
-    // We have 3 possible types, because `EntryType` has three distinct possible
-    // types, that all need different handeling.
-    // Fortunaly, we can decide the handeling at compile time and throw the
-    // others away, using `if constexpr(std::is_same<...,...>::value)`.
+    /*
+    `EntryType` has multiple distinct possible types, that all need different
+    handeling. Fortunaly, we can decide the handeling at compile time and
+    throw the others away, using `if constexpr(std::is_same<...,...>::value)`.
+    */
     if constexpr (std::is_same_v<T, std::monostate>) {
       // No value, print it as NA.
-      return (std::string) "NA";
+      return "NA"s;
     } else if constexpr (std::is_same_v<T, float>) {
       // There is a value, format it as specified.
       return absl::StrFormat(floatFormatSpecifier, entry);
-    } else {
-      // Only other possible type is a string, which needs no formating.
+    } else if constexpr (std::is_same_v<T, std::string>) {
       return entry;
+    } else {
+      // Unsupported type.
+      AD_CONTRACT_CHECK(false);
     }
   };
   auto entryToString = [&entryToStringVisitor](const EntryType& entry) {
