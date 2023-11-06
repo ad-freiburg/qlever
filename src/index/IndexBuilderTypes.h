@@ -224,7 +224,7 @@ auto getIdMapLambdas(
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < Parallelism; ++j) {
     itemArray[j].emplace(j * 100 * maxNumberOfTriples, comp, alloc);
-    { itemArray[j]->_map.map_.reserve(4 * maxNumberOfTriples); }
+    itemArray[j]->_map.map_.reserve(5 * maxNumberOfTriples / Parallelism);
     // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
     // This is not necessary for the actual QLever code, but certain unit tests
     // currently fail without it.
