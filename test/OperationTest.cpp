@@ -138,6 +138,7 @@ TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
           ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
           ParsedAsJson(HasKeyMatching("status", Eq("fully materialized")))));
 }
+// _____________________________________________________________________________
 
 class StallForeverOperation : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
@@ -156,6 +157,7 @@ class StallForeverOperation : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
 
  public:
+  using Operation::Operation;
   // Do-nothing operation that runs for 100ms without computing anything, but
   // which can be cancelled.
   ResultTable computeResult() override {
@@ -171,27 +173,93 @@ class StallForeverOperation : public Operation {
     return remainingTime();
   }
 };
+// _____________________________________________________________________________
+
+// Dummy parent to test recursive application of a function
+class ShallowParentOperation : public Operation {
+  std::shared_ptr<QueryExecutionTree> child_;
+
+  explicit ShallowParentOperation(std::shared_ptr<QueryExecutionTree> child)
+      : child_{std::move(child)} {}
+  string asStringImpl([[maybe_unused]] size_t) const override {
+    return "ParentOperation";
+  }
+  string getDescriptor() const override { return "ParentOperationDescriptor"; }
+  size_t getResultWidth() const override { return 0; }
+  size_t getCostEstimate() override { return 0; }
+  uint64_t getSizeEstimateBeforeLimit() override { return 0; }
+  float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
+  bool knownEmptyResult() override { return false; }
+  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+
+ public:
+  template <typename ChildOperation, typename... Args>
+  static ShallowParentOperation of(QueryExecutionContext* qec, Args&&... args) {
+    return ShallowParentOperation{
+        ad_utility::makeExecutionTree<ChildOperation>(qec, args...)};
+  }
+
+  std::vector<QueryExecutionTree*> getChildren() override {
+    return {child_.get()};
+  }
+
+  ResultTable computeResult() override {
+    auto childResult = child_->getResult();
+    return {childResult->idTable().clone(), resultSortedOn(),
+            childResult->getSharedLocalVocab()};
+  }
+
+  // Provide public view of remainingTime for tests
+  std::chrono::milliseconds publicRemainingTime() const {
+    return remainingTime();
+  }
+};
+
+template <>
+void QueryExecutionTree::setOperation<StallForeverOperation>(
+    std::shared_ptr<StallForeverOperation> operation) {
+  _rootOperation = std::move(operation);
+}
 
 // _____________________________________________________________________________
 
 TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
+  auto qec = getQec();
   auto handle = std::make_shared<CancellationHandle>();
-  StallForeverOperation operation{};
+  ShallowParentOperation operation =
+      ShallowParentOperation::of<StallForeverOperation>(qec);
   operation.recursivelySetCancellationHandle(handle);
 
   std::thread thread{[&]() {
     std::this_thread::sleep_for(5ms);
     handle->cancel(CancellationState::TIMEOUT);
   }};
-  EXPECT_THROW(operation.computeResult(), CancellationException);
+  EXPECT_THROW(
+      {
+        try {
+          operation.computeResult();
+        } catch (const ad_utility::AbortException& exception) {
+          EXPECT_THAT(exception.what(),
+                      ::testing::HasSubstr("Cancelled due to timeout"));
+          throw;
+        }
+      },
+      ad_utility::AbortException);
   thread.join();
 }
 
 // _____________________________________________________________________________
 
 TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
-  StallForeverOperation operation{};
+  auto qec = getQec();
+  ShallowParentOperation operation =
+      ShallowParentOperation::of<StallForeverOperation>(qec);
   operation.recursivelySetTimeConstraint(1ms);
   std::this_thread::sleep_for(1ms);
+  // Verify time is up for parent and child
   EXPECT_EQ(operation.publicRemainingTime(), 0ms);
+  auto childOperation = std::dynamic_pointer_cast<StallForeverOperation>(
+      operation.getChildren().at(0)->getRootOperation());
+  EXPECT_EQ(childOperation->publicRemainingTime(), 0ms);
 }
