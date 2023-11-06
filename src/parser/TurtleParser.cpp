@@ -845,12 +845,7 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
         inputBatch = std::move(remainingBatchFromInitialization_);
         first = false;
       } else {
-        ad_utility::Timer t{ad_utility::Timer::Started};
         auto nextOptional = fileBuffer_.getNextBlock();
-        if (t.msecs() > 5) {
-          LOG(TRACE) << "time spent waiting for an input block " << t.msecs()
-                     << std::endl;
-        }
         if (!nextOptional) {
           // Wait until everything has been parsed.
           parallelParser_.finish();

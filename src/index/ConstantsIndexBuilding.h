@@ -31,7 +31,7 @@ static const size_t PARSER_BATCH_SIZE = 1'000'000;
 static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 10'000;
 
 // When reading from a file, Chunks of this size will
-// be fed to the parser at once (100 MiB)
+// be fed to the parser at once (10 MiB)
 inline std::atomic<size_t>& FILE_BUFFER_SIZE() {
   static std::atomic<size_t> fileBufferSize = 10 * (1ul << 20);
   return fileBufferSize;

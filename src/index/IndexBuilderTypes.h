@@ -6,15 +6,15 @@
 
 #include <memory_resource>
 
-#include "../global/Constants.h"
-#include "../global/Id.h"
-#include "../util/Conversions.h"
-#include "../util/HashMap.h"
-#include "../util/Serializer/Serializer.h"
-#include "../util/TupleHelpers.h"
-#include "../util/TypeTraits.h"
-#include "./ConstantsIndexBuilding.h"
-#include "./StringSortComparator.h"
+#include "global/Constants.h"
+#include "global/Id.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/StringSortComparator.h"
+#include "util/Conversions.h"
+#include "util/HashMap.h"
+#include "util/Serializer/Serializer.h"
+#include "util/TupleHelpers.h"
+#include "util/TypeTraits.h"
 
 #ifndef QLEVER_INDEXBUILDERTYPES_H
 #define QLEVER_INDEXBUILDERTYPES_H
@@ -70,34 +70,60 @@ struct LocalVocabIndexAndSplitVal {
   TripleComponentComparator::SplitValNonOwningWithSortKey m_splitVal;
 };
 
+// During the first phase of the index building we use hash maps from strings
+// (entries in the vocabulary) to their `LocalVocabIndexAndSplitVal` (see
+// above). In the hash map we will only store pointers (`string_view` as the
+// key, and the `LocalVocabIndexAndSplitVal` also is a non-owning pointer type)
+// and manage the memory separately, s.t. we can deallocate all the strings of a
+// single phase at once as soon as we are finished with them.
+
+// Allocator type for the hash map
 using ItemAlloc = std::pmr::polymorphic_allocator<
     std::pair<const std::string_view, LocalVocabIndexAndSplitVal>>;
+
+// The actual hash map type.
 using ItemMap = ad_utility::HashMap<
     std::string_view, LocalVocabIndexAndSplitVal,
     absl::container_internal::hash_default_hash<std::string_view>,
-    absl::container_internal::hash_default_eq<std::string_view>,
-    std::pmr::polymorphic_allocator<
-        std::pair<const std::string_view, LocalVocabIndexAndSplitVal>>>;
+    absl::container_internal::hash_default_eq<std::string_view>, ItemAlloc>;
+
+// A vector that stores the same values as the hash map.
 using ItemVec =
     std::vector<std::pair<std::string_view, LocalVocabIndexAndSplitVal>>;
-struct MonotonicBuffer {
+
+// A buffer that very efficiently handles a set of strings that is deallocated
+// at once when the buffer goes out of scope.
+class MonotonicBuffer {
   std::unique_ptr<std::pmr::monotonic_buffer_resource> buffer_ =
       std::make_unique<std::pmr::monotonic_buffer_resource>();
-  std::unique_ptr<std::pmr::polymorphic_allocator<char>> charAllocator =
+  std::unique_ptr<std::pmr::polymorphic_allocator<char>> charAllocator_ =
       std::make_unique<std::pmr::polymorphic_allocator<char>>(buffer_.get());
+
+ public:
+  // Access to the underlying allocator.
+  std::pmr::polymorphic_allocator<char>& charAllocator() {
+    return *charAllocator_;
+  }
+  // Append a string to the buffer and return a `string_view` that points into
+  // the buffer.
   std::string_view addString(std::string_view input) {
-    auto ptr = charAllocator->allocate(input.size());
+    auto ptr = charAllocator_->allocate(input.size());
     std::ranges::copy(input, ptr);
     return {ptr, ptr + input.size()};
   }
 };
 
+// The hash map (which only stores pointers) together with the `MonotonicBuffer`
+// that manages the actual strings.
 struct ItemMapAndBuffer {
   ItemMap map_;
   MonotonicBuffer buffer_;
 
   explicit ItemMapAndBuffer(ItemAlloc alloc) : map_{alloc} {}
   ItemMapAndBuffer(ItemMapAndBuffer&&) noexcept = default;
+  // We have to delete the move-assignment as it would have the wrong semantics
+  // (the monotonic buffer wouldn't be moved, this is one of the oddities of the
+  // `std::pmr` types.
   ItemMapAndBuffer& operator=(ItemMapAndBuffer&&) noexcept = delete;
 };
 
@@ -130,17 +156,15 @@ struct alignas(256) ItemMapManager {
     auto& map = _map.map_;
     auto& buffer = _map.buffer_;
     auto it = map.find(key._iriOrLiteral);
-    // TODO<joka921> store the hash.
     if (it == map.end()) {
       uint64_t res = map.size() + _minId;
-      // TODO<joka921> piecewise construct.
       auto keyView = buffer.addString(key._iriOrLiteral);
-      map.try_emplace(
-          keyView, LocalVocabIndexAndSplitVal{
-                       res, m_comp->extractAndTransformComparableNonOwning(
-                                key._iriOrLiteral,
-                                TripleComponentComparator::Level::TOTAL,
-                                key._isExternal, buffer.charAllocator.get())});
+      map.try_emplace(keyView,
+                      LocalVocabIndexAndSplitVal{
+                          res, m_comp->extractAndTransformComparableNonOwning(
+                                   key._iriOrLiteral,
+                                   TripleComponentComparator::Level::TOTAL,
+                                   key._isExternal, &buffer.charAllocator())});
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
       return Id::makeFromVocabIndex(VocabIndex::make(it->second.m_id));
@@ -200,17 +224,13 @@ auto getIdMapLambdas(
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < Parallelism; ++j) {
     itemArray[j].emplace(j * 100 * maxNumberOfTriples, comp, alloc);
-    {
-      // ad_utility::TimeBlockAndLog tbl{"reserving one of the large hash
-      // maps"};
-      itemArray[j]->_map.map_.reserve(4 * maxNumberOfTriples);
-    }
+    { itemArray[j]->_map.map_.reserve(4 * maxNumberOfTriples); }
     // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
     // This is not necessary for the actual QLever code, but certain unit tests
     // currently fail without it.
     itemArray[j]->getId(LANGUAGE_PREDICATE);
   }
-  using OptionalIds = std::array<std::array<Id, 3>, 3>;
+  using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
 
   /* given an index idx, returns a lambda that
    * - Takes a triple and a language tag
@@ -224,8 +244,6 @@ auto getIdMapLambdas(
     return [&map = *itemArray[idx], indexPtr](auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(std::move(tr));
       OptionalIds res;
-      res[1][0] = Id::makeUndefined();
-      res[2][0] = Id::makeUndefined();
       // get Ids for the actual triple and store them in the result.
       res[0] = map.getId(lt._triple);
       if (!lt._langtag.empty()) {  // the object of the triple was a literal
@@ -239,16 +257,16 @@ auto getIdMapLambdas(
                 std::get<PossiblyExternalizedIriOrLiteral>(lt._triple[1])
                     ._iriOrLiteral,
                 lt._langtag));
-        auto& spoIds = res[0];  // ids of original triple
+        auto& spoIds = *res[0];  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.
         // extra triple <subject> @language@<predicate> <object>
-        res[1] = std::array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]};
+        res[1].emplace(
+            std::array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
         // extra triple <object> ql:language-tag <@language>
-        res[2] = std::array<Id, 3>{spoIds[2], map.getId(LANGUAGE_PREDICATE),
-                                   langTagId};
+        res[2].emplace(std::array<Id, 3>{
+            spoIds[2], map.getId(LANGUAGE_PREDICATE), langTagId});
       }
-      AD_CORRECTNESS_CHECK(!res[0][0].isUndefined());
       return res;
     };
   };

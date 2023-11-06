@@ -340,86 +340,32 @@ void writePartialIdMapToBinaryFileForMerging(
   writePartialVocabularyToFile(els, fileName);
 }
 
-__attribute__((noinline)) void destroyMap(auto& map) {
-  using T = std::decay_t<decltype(map)>;
-  // ad_utility::Timer t{ad_utility::Timer::Started};
-  map.~T();
-  // auto time = t.msecs();
-  //  LOG(TIMING) << "destructor of a single map took " << time << " ms " <<
-  //  std::endl;
-}
-
-__attribute__((noinline)) void makeMap(auto* map) {
-  using T = std::decay_t<decltype(*map)>;
-  new (map) T{};
-}
-
-__attribute__((noinline)) void clearMap(auto& map) {
-  destroyMap(map);
-  makeMap(&map);
-}
-
 // __________________________________________________________________________________________________
 inline ItemVec vocabMapsToVector(ItemMapArray& map) {
   ItemVec els;
   std::vector<size_t> offsets;
-  size_t totalEls = 0;
-  {
-    ad_utility::TimeBlockAndLog l{"accumulating the size"};
-    totalEls =
-        std::accumulate(map.begin(), map.end(), 0,
-                        [&offsets](const auto& x, const auto& y) mutable {
-                          offsets.push_back(x);
-                          return x + y.map_.size();
-                        });
-  }
+  size_t totalEls =
+      std::accumulate(map.begin(), map.end(), 0,
+                      [&offsets](const auto& x, const auto& y) mutable {
+                        offsets.push_back(x);
+                        return x + y.map_.size();
+                      });
   els.resize(totalEls);
   std::vector<std::future<void>> futures;
-  {
-    size_t i = 0;
-    ad_utility::TimeBlockAndLog l{
-        "setting up the futures in vocabMapsToVector"};
-    for (auto& singleMap : map) {
-      futures.push_back(
-          std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
-            // ad_utility::TimeBlockAndLog l{"handling a single map"};
-            using T = ItemVec::value_type;
-            std::ranges::transform(singleMap.map_, els.begin() + offsets[i],
-                                   [](auto& el) -> T {
-                                     return {el.first, std::move(el.second)};
-                                   });
-            // singleMap.map_ = decltype(singleMap.map_){};
-          }));
-      ++i;
-    }
+  size_t i = 0;
+  for (auto& singleMap : map) {
+    futures.push_back(
+        std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
+          using T = ItemVec::value_type;
+          std::ranges::transform(singleMap.map_, els.begin() + offsets[i],
+                                 [](auto& el) -> T {
+                                   return {el.first, std::move(el.second)};
+                                 });
+        }));
+    ++i;
   }
-  {
-    ad_utility::TimeBlockAndLog l{
-        "waiting for the futures in vocabMapsToVector"};
-    for (auto& fut : futures) {
-      fut.get();
-    }
-  }
-
-  {
-    ad_utility::TimeBlockAndLog l{
-        "calling the destructor of the large hashMap"};
-    for (auto& single : map) {
-      /*
-      ad_utility::TimeBlockAndLog l2{
-          "calling the destructor of a single map"};
-          */
-      static_assert(
-          std::is_trivially_destructible_v<decltype(single.map_)::value_type>);
-      static_assert(
-          std::is_trivially_destructible_v<decltype(single.map_)::key_type>);
-      // single.map_ = decltype(single.map_){};
-      //  TODO<joka921> This is dangerous and wrong...
-      // std::destroy_at(&single.map_);
-      // auto alloc = single.map_.get_allocator();
-      clearMap(single.map_);
-      // single.map_ = decltype(single.map_){};
-    }
+  for (auto& fut : futures) {
+    fut.get();
   }
 
   return els;

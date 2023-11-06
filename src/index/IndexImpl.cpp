@@ -21,6 +21,7 @@
 #include "index/VocabularyGenerator.h"
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
+#include "util/CachingMemoryResource.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
 #include "util/Serializer/FileSerializer.h"
@@ -254,7 +255,6 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   bool parserExhausted = false;
 
   size_t i = 0;
-  size_t numPushedActually = 0;
   // already count the numbers of triples that will be used for the language
   // filter
   size_t numFiles = 0;
@@ -267,79 +267,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   // std::array<std::future<void>, 3> writePartialVocabularyFuture;
   std::array<std::future<void>, 2> writePartialVocabularyFuture;
   size_t totalWaitingTimePreviousSteps = 0;
-  std::pmr::pool_options options;
-  options.max_blocks_per_chunk = 100;
-  options.largest_required_pool_block = (5_GB).getBytes();
-  std::pmr::synchronized_pool_resource syncPool(options);
 
-  struct LogginDefaultResource : public std::pmr::memory_resource {
-    std::pmr::memory_resource* alloc = std::pmr::get_default_resource();
-    void* do_allocate(std::size_t bytes, std::size_t alignment) override {
-      // LOG(INFO) << "Allocating " << bytes << " bytes using fallback" <<
-      // std::endl;
-      return alloc->allocate(bytes, alignment);
-    }
-    void do_deallocate(void* p, std::size_t bytes,
-                       std::size_t alignment) override {
-      ad_utility::Timer timer{ad_utility::Timer::Started};
-      alloc->deallocate(p, bytes, alignment);
-      // LOG(INFO) << "Deallocating " << bytes << " bytes using fallback took "
-      // << timer.msecs() << "ms" << std::endl;
-    }
-    bool do_is_equal(
-        const std::pmr::memory_resource& other) const noexcept override {
-      return this == &other;
-    }
-  };
-  struct LoggingPool : public std::pmr::memory_resource {
-    LogginDefaultResource fallback{};
-    ad_utility::HashMap<std::pair<size_t, size_t>, std::vector<void*>> cache_;
-    std::mutex mutex;
-
-    void* do_allocate(std::size_t bytes, std::size_t alignment) override {
-      std::lock_guard l{mutex};
-      // LOG(INFO) << "Allocating " << bytes << " bytes" << std::endl;
-      ad_utility::Timer timer{ad_utility::Timer::Started};
-      auto it = cache_.find(std::pair{bytes, alignment});
-      if (it == cache_.end() || it->second.empty()) {
-        auto res = fallback.allocate(bytes, alignment);
-        // LOG(TIMING) << "Allocating " << bytes << " bytes took " <<
-        // timer.msecs() << "ms" << std::endl;
-        return res;
-      }
-      auto& c = it->second;
-      auto res = c.back();
-      c.pop_back();
-      // LOG(TIMING) << "Allocating " << bytes << " bytes took " <<
-      // timer.msecs() << "ms" << std::endl;
-      return res;
-    }
-    void do_deallocate(void* p, std::size_t bytes,
-                       std::size_t alignment) override {
-      std::lock_guard l{mutex};
-      ad_utility::Timer timer{ad_utility::Timer::Started};
-      cache_[std::pair{bytes, alignment}].push_back(p);
-
-      // LOG(INFO) << "Deallocating " << bytes << " bytes took " <<
-      // timer.msecs() << "ms" << std::endl;
-    }
-    bool do_is_equal(
-        const std::pmr::memory_resource& other) const noexcept override {
-      return this == &other;
-    }
-
-    ~LoggingPool() {
-      for (auto& [key, pointers] : cache_) {
-        for (auto ptr : pointers) {
-          fallback.deallocate(ptr, key.first, key.second);
-        }
-      }
-      // LOG(INFO) << "Destroyed the logging pool" << std::endl;
-    }
-  };
-  LoggingPool loggingPool;
-  // ItemAlloc itemAlloc(&syncPool);
-  ItemAlloc itemAlloc(&loggingPool);
+  ad_utility::CachingMemoryResource cachingMemoryResource;
+  ItemAlloc itemAlloc(&cachingMemoryResource);
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
@@ -357,14 +287,6 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
           // as a first step in the parallel Pipeline.
           ParserBatcher(parser, linesPerPartial,
                         [&]() { parserExhausted = true; }),
-          /*
-          // convert each triple to the internal representation (e.g. special
-          // values for Numbers, externalized literals, etc.)
-          [this](TurtleTriple&& t) -> LangtagAndTriple {
-            return tripleToInternalRepresentation(std::move(t));
-          },
-           */
-
           // get the Ids for the original triple and the possibly added language
           // Tag triples using the provided HashMaps via itemArray. See
           // documentation of the function for more details
@@ -374,13 +296,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
       while (auto opt = p.getNextValue()) {
         i++;
-        AD_CORRECTNESS_CHECK(!opt.value()[0][0].isUndefined());
         for (const auto& innerOpt : opt.value()) {
-          AD_CORRECTNESS_CHECK(innerOpt.size() == 3);
-          if (!innerOpt[0].isUndefined()) {
-            numPushedActually++;
+          if (innerOpt) {
             actualCurrentPartialSize++;
-            localWriter.push_back(innerOpt);
+            localWriter.push_back(innerOpt.value());
           }
         }
         if (i % 100'000'000 == 0) {
