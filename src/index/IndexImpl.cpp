@@ -1026,6 +1026,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                    ignorePunctuationOpt.wasSetAtRuntime();
       },
       "All three options under 'locale' must be set, or none of them.",
+      "All three options under 'locale' must be set, or none of them.",
       langOption, countryOption, ignorePunctuationOption);
 
   // TODO Write a description.
