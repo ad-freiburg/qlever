@@ -30,6 +30,18 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
 }
 
 auto V = ad_utility::testing::VocabId;
+
+auto makeItemMapArray = [] {
+  std::array<std::optional<ItemMapAndBuffer>, NUM_PARALLEL_ITEM_MAPS>
+      optionalArrs;
+  auto alloc = ItemAlloc{std::pmr::get_default_resource()};
+  for (auto& opt : optionalArrs) {
+    opt.emplace(alloc);
+  }
+  return std::apply(
+      [](auto&&... vals) { return ItemMapArray{std::move(vals.value())...}; },
+      std::move(optionalArrs));
+};
 }  // namespace
 
 // Test fixture that sets up the binary files vor partial vocabulary and
@@ -187,11 +199,12 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 }
 
 TEST(VocabularyGenerator, ReadAndWritePartial) {
+  using S = TripleComponentComparator::SplitValNonOwningWithSortKey;
   {
-    using S = TripleComponentComparator::SplitVal;
     S dummy;
-    ItemMapArray arr;
-    auto& s = arr[0];
+
+    ItemMapArray arr = makeItemMapArray();
+    auto& s = arr[0].map_;
     s["A"] = {5, dummy};
     s["acb"] = {6, dummy};
     s["b"] = {7, dummy};
@@ -230,11 +243,15 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
   try {
     RdfsVocabulary v;
     v.setLocale("en", "US", false);
-    ItemMapArray arr;
-    auto& s = arr[0];
+    ItemMapArray arr = makeItemMapArray();
+    auto& s = arr[0].map_;
+    auto alloc =
+        std::pmr::polymorphic_allocator<char>{std::pmr::get_default_resource()};
     auto assign = [&](std::string_view str, size_t id) {
-      s[str] = {id, v.getCaseComparator().extractAndTransformComparable(
-                        str, TripleComponentComparator::Level::IDENTICAL)};
+      s[str] = {
+          id,
+          v.getCaseComparator().extractAndTransformComparableNonOwning(
+              str, TripleComponentComparator::Level::IDENTICAL, false, &alloc)};
     };
     assign("\"A\"", 5);
     assign("\"a\"", 6);
@@ -277,7 +294,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
 TEST(VocabularyGeneratorTest, createInternalMapping) {
   ItemVec input;
   using S = LocalVocabIndexAndSplitVal;
-  TripleComponentComparator::SplitVal
+  TripleComponentComparator::SplitValNonOwningWithSortKey
       d;  // dummy value that is unused in this case.
   input.emplace_back("alpha", S{5, d});
   input.emplace_back("beta", S{4, d});
