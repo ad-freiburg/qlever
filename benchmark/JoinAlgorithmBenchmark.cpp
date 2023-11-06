@@ -75,7 +75,7 @@ static void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   AD_CONTRACT_CHECK(smallerTableNumberRows <= biggerTable.idTable.numRows());
 
   // Seeds for the random generators, so that things are less similiar.
-  std::array<ad_utility::RandomSeed, 2> seeds =
+  const std::array<ad_utility::RandomSeed, 2> seeds =
       createArrayOfRandomSeeds<2>(std::move(randomSeed));
 
   // Creating the generator for choosing a random row in the bigger table.
@@ -167,7 +167,7 @@ static void addMeasurementsToRowOfBenchmarkTable(
 
   // Seeds for the random generators, so that things are less similiar between
   // the tables.
-  std::array<ad_utility::RandomSeed, 5> seeds =
+  const std::array<ad_utility::RandomSeed, 5> seeds =
       createArrayOfRandomSeeds<5>(std::move(randomSeed));
 
   // Now we create two randomly filled `IdTable`, which have no overlap, and
@@ -334,7 +334,7 @@ requires exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>
 static ResultTable& makeGrowingBenchmarkTable(
     BenchmarkResults* results, const std::string_view tableDescriptor,
     std::string parameterName, StopFunction stopFunction, const T1& overlap,
-    const ad_utility::RandomSeed& randomSeed, const bool smallerTableSorted,
+    ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
     const bool biggerTableSorted, const T2& ratioRows,
     const T3& smallerTableAmountRows, const T4& smallerTableAmountColumns,
     const T5& biggerTableAmountColumns,
@@ -386,6 +386,13 @@ static ResultTable& makeGrowingBenchmarkTable(
     }
   };
 
+  // For creating a new random seed for every new row.
+  auto seedGenerator = [numberGenerator =
+                            ad_utility::FastRandomIntGenerator<unsigned int>(
+                                std::move(randomSeed))]() mutable {
+    return ad_utility::RandomSeed::make(std::invoke(numberGenerator));
+  };
+
   /*
   Now on to creating the benchmark table. Because we don't know, how many row
   names we will have, we just create a table without row names.
@@ -414,8 +421,8 @@ static ResultTable& makeGrowingBenchmarkTable(
 
     // Converting all our function parameters to non functions.
     addMeasurementsToRowOfBenchmarkTable(
-        &table, rowNumber, returnOrCall(overlap, rowNumber), randomSeed,
-        smallerTableSorted, biggerTableSorted,
+        &table, rowNumber, returnOrCall(overlap, rowNumber),
+        std::invoke(seedGenerator), smallerTableSorted, biggerTableSorted,
         returnOrCall(ratioRows, rowNumber),
         returnOrCall(smallerTableAmountRows, rowNumber),
         returnOrCall(smallerTableAmountColumns, rowNumber),
