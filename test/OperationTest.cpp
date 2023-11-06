@@ -2,12 +2,16 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (joka921) <kalmbach@cs.uni-freiburg.de>
 
-#include "./IndexTestHelpers.h"
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include "IndexTestHelpers.h"
 #include "engine/NeutralElementOperation.h"
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
+#include "engine/ValuesForTesting.h"
+#include "util/IdTableHelpers.h"
 
 using namespace ad_utility::testing;
+using namespace ::testing;
 
 // ________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
@@ -78,4 +82,55 @@ TEST(OperationTest, getResultOnlyCached) {
   // Clear the (global) cache again to not possibly interfere with other unit
   // tests.
   qec->getQueryTreeCache().clearAll();
+}
+
+// _____________________________________________________________________________
+
+/// Fixture to work with a generic operation
+class OperationTestFixture : public testing::Test {
+ protected:
+  std::vector<std::string> jsonHistory;
+
+  Index index =
+      makeTestIndex("OperationTest", std::nullopt, true, true, true, 32);
+  QueryResultCache cache;
+  QueryExecutionContext qec{
+      index, &cache, makeAllocator(), SortPerformanceEstimator{},
+      [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
+  IdTable table = makeIdTableFromVector({{}, {}, {}});
+  ValuesForTesting operation{&qec, std::move(table), {}};
+};
+
+// _____________________________________________________________________________
+
+TEST_F(OperationTestFixture,
+       verifyOperationStatusChangesToInProgressAndComputed) {
+  // Ignore result, we only care about the side effects
+  operation.getResult(true);
+
+  EXPECT_THAT(
+      jsonHistory,
+      ElementsAre(
+          ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
+          ParsedAsJson(HasKeyMatching("status", Eq("in progress"))),
+          // Note: Currently the implementation triggers twice if a value
+          // is not cached. This is not a requirement, just an implementation
+          // detail that we account for here.
+          ParsedAsJson(HasKeyMatching("status", Eq("fully materialized"))),
+          ParsedAsJson(HasKeyMatching("status", Eq("fully materialized")))));
+}
+
+// _____________________________________________________________________________
+
+TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
+  // Run twice and clear history to get cached values
+  operation.getResult(true);
+  jsonHistory.clear();
+  operation.getResult(true);
+
+  EXPECT_THAT(
+      jsonHistory,
+      ElementsAre(
+          ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
+          ParsedAsJson(HasKeyMatching("status", Eq("fully materialized")))));
 }
