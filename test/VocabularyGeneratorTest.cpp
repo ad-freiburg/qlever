@@ -239,14 +239,19 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     (void)res;
   }
 
-  // again with the case insensitive variant.
+  // Again with the case-insensitive variant.
   try {
     RdfsVocabulary v;
     v.setLocale("en", "US", false);
     ItemMapArray arr = makeItemMapArray();
     auto& s = arr[0].map_;
+    // The actual strings are never deallocated, but the
+    // `monotonic_buffer_resource` deallocates them all at once. Note that
+    // simply passing `std::pmr::get_default_resource` to the `alloc` below
+    // would lead to memory leaks.
+    std::pmr::monotonic_buffer_resource buffer;
     auto alloc =
-        std::pmr::polymorphic_allocator<char>{std::pmr::get_default_resource()};
+        std::pmr::polymorphic_allocator<char>{&buffer};
     auto assign = [&](std::string_view str, size_t id) {
       s[str] = {
           id,

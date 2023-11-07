@@ -4,6 +4,9 @@
 
 // Common classes / Typedefs that are used during Index Creation
 
+#ifndef QLEVER_INDEXBUILDERTYPES_H
+#define QLEVER_INDEXBUILDERTYPES_H
+
 #include <memory_resource>
 
 #include "global/Constants.h"
@@ -16,8 +19,6 @@
 #include "util/TupleHelpers.h"
 #include "util/TypeTraits.h"
 
-#ifndef QLEVER_INDEXBUILDERTYPES_H
-#define QLEVER_INDEXBUILDERTYPES_H
 
 // An IRI or a literal together with the information, whether it should be part
 // of the external vocabulary
@@ -142,7 +143,7 @@ struct alignas(256) ItemMapManager {
       : _map(alloc), _minId(minId), m_comp(cmp) {}
 
   /// Move the held HashMap out as soon as we are done inserting and only need
-  /// the actual vocabulary
+  /// the actual vocabulary.
   ItemMapAndBuffer&& moveMap() && { return std::move(_map); }
 
   /// If the key was seen before, return its preassigned ID. Else assign the
@@ -158,6 +159,8 @@ struct alignas(256) ItemMapManager {
     auto it = map.find(key._iriOrLiteral);
     if (it == map.end()) {
       uint64_t res = map.size() + _minId;
+      // We have to first add the string to the buffer, otherwise we don't have a persistent `string_view` to add to
+      // the `map`.
       auto keyView = buffer.addString(key._iriOrLiteral);
       map.try_emplace(keyView,
                       LocalVocabIndexAndSplitVal{
@@ -241,8 +244,8 @@ auto getIdMapLambdas(
    * - All Ids are assigned according to itemArray[idx]
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    return [&map = *itemArray[idx], indexPtr](auto&& tr) {
-      auto lt = indexPtr->tripleToInternalRepresentation(std::move(tr));
+    return [&map = *itemArray[idx], indexPtr](ad_utility::Rvalue auto&& tr) {
+      auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       OptionalIds res;
       // get Ids for the actual triple and store them in the result.
       res[0] = map.getId(lt._triple);

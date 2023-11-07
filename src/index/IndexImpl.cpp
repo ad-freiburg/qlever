@@ -264,9 +264,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
   // Each of these futures corresponds to the processing and writing of one
   // batch of triples and partial vocabulary.
-  // std::array<std::future<void>, 3> writePartialVocabularyFuture;
-  std::array<std::future<void>, 2> writePartialVocabularyFuture;
-  size_t totalWaitingTimePreviousSteps = 0;
+  std::array<std::future<void>, 3> writePartialVocabularyFuture;
 
   ad_utility::CachingMemoryResource cachingMemoryResource;
   ItemAlloc itemAlloc(&cachingMemoryResource);
@@ -324,17 +322,14 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     if (writePartialVocabularyFuture[0].valid()) {
       writePartialVocabularyFuture[0].get();
     }
-    totalWaitingTimePreviousSteps += sortFutureTimer.msecs();
     LOG(TIMING)
         << "Time spent waiting for the writing of a previous vocabulary: "
         << sortFutureTimer.msecs() << "ms." << std::endl;
+    auto moveMap = [](std::optional<ItemMapManager>&& el) -> ItemMapAndBuffer {
+      return std::move(el.value()).moveMap();
+    };
     std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS> convertedMaps =
-        std::apply(
-            [](auto&&... vals) {
-              return std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS>{
-                  std::move(vals.value()).moveMap()...};
-            },
-            std::move(itemArray));
+        ad_utility::transformArray(std::move(itemArray), moveMap);
     auto oldItemPtr = std::make_unique<ItemMapArray>(std::move(convertedMaps));
     for (auto it = writePartialVocabularyFuture.begin() + 1;
          it < writePartialVocabularyFuture.end(); ++it) {
@@ -355,13 +350,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       future.get();
     }
   }
-  LOG(INFO) << "Total waiting time for previous vocabularies "
-            << totalWaitingTimePreviousSteps << "ms" << std::endl;
   LOG(INFO) << "Done, total number of triples read: " << i
             << " [may contain duplicates]" << std::endl;
-  auto triplesSize = (*idTriples.wlock())->size();
   LOG(INFO) << "Number of QLever-internal triples created: "
-            << (triplesSize - i) << " [may contain duplicates] " << triplesSize
+            << (*idTriples.wlock())->size() << " [may contain duplicates]"
             << std::endl;
 
   size_t sizeInternalVocabulary = 0;

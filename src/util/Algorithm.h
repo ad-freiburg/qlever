@@ -145,6 +145,17 @@ auto removeDuplicates(const Range& input) -> std::vector<
   return result;
 }
 
+template <typename Array, typename F>
+requires(ad_utility::isArray<std::decay_t<Array>> &&
+         std::invocable<F, typename std::decay_t<Array>::value_type>)
+auto transformArray(Array&& array, F f) {
+  return std::apply(
+      [&f](auto&&... vals) {
+        return std::array{std::invoke(f, AD_FWD(vals))...};
+      },
+      AD_FWD(array));
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_ALGORITHM_H

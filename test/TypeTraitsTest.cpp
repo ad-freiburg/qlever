@@ -100,3 +100,13 @@ TEST(TypeTraits, TupleCat) {
                                TupleCat<T1, T3, T2>>);
   ASSERT_TRUE(true);
 }
+
+TEST(TypeTraits, Rvalue) {
+  static_assert(Rvalue<int>);
+  static_assert(Rvalue<int&&>);
+  static_assert(Rvalue<const int>);
+  static_assert(!Rvalue<const int&>);
+  static_assert(!Rvalue<int&>);
+}
+
+
