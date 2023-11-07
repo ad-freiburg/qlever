@@ -11,6 +11,7 @@
 #include <memory>
 #include <ranges>
 #include <sstream>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
@@ -182,6 +183,9 @@ ResultTable::operator std::string() const {
     } else if constexpr (std::is_same_v<T, float>) {
       // There is a value, format it as specified.
       return absl::StrFormat(floatFormatSpecifier, entry);
+    } else if constexpr (std::is_same_v<T, size_t> || std::is_same_v<T, int>) {
+      // There is already a `std` function for this.
+      return std::to_string(entry);
     } else if constexpr (std::is_same_v<T, std::string>) {
       return entry;
     } else if constexpr (std::is_same_v<T, bool>) {

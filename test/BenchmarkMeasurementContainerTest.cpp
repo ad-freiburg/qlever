@@ -118,6 +118,10 @@ static Type createDummyValueEntryType() {
     return "test"s;
   } else if constexpr (ad_utility::isSimilar<Type, bool>) {
     return true;
+  } else if constexpr (ad_utility::isSimilar<Type, size_t>) {
+    return 17361644613946UL;
+  } else if constexpr (ad_utility::isSimilar<Type, int>) {
+    return -42;
   } else {
     // Not a supported type.
     AD_CORRECTNESS_CHECK(false);
