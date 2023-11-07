@@ -8,6 +8,12 @@
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
+using namespace std::chrono_literals;
+
+std::chrono::milliseconds toMs(const ad_utility::Timer& timer) {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(timer.value());
+}
+
 template <typename F>
 void Operation::forAllDescendants(F f) {
   static_assert(
@@ -64,6 +70,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
+    // Reset runtime info, tests may re-use Operation objects.
+    _runtimeInfo = std::make_shared<RuntimeInformation>();
     // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates(getRuntimeInfoPointer());
     signalQueryUpdate();
@@ -105,7 +113,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
         ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
             [this, &timer]() {
               if (std::uncaught_exceptions()) {
-                updateRuntimeInformationOnFailure(timer.msecs());
+                updateRuntimeInformationOnFailure(toMs(timer));
               }
             });
     auto computeLambda = [this, &timer] {
@@ -115,6 +123,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
             "functionality, before " +
             getDescriptor());
       }
+      runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
+      signalQueryUpdate();
       ResultTable result = computeResult();
 
       // Compute the datatypes that occur in each column of the result.
@@ -136,9 +146,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as
       // the last argument.
-      updateRuntimeInformationOnSuccess(result,
-                                        ad_utility::CacheStatus::computed,
-                                        timer.msecs(), std::nullopt);
+      updateRuntimeInformationOnSuccess(
+          result, ad_utility::CacheStatus::computed, toMs(timer), std::nullopt);
       // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
       // already perform it. An example for an operation that directly computes
       // the Limit is a full index scan with three variables.
@@ -147,7 +156,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
         // Note: both of the following calls have no effect and negligible
         // runtime if neither a LIMIT nor an OFFSET were specified.
         result.applyLimitOffset(_limit);
-        runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
+        runtimeInfo().addLimitOffsetRow(_limit, toMs(limitTimer), true);
       } else {
         AD_CONTRACT_CHECK(result.idTable().numRows() ==
                           _limit.actualSize(result.idTable().numRows()));
@@ -165,7 +174,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       return nullptr;
     }
 
-    updateRuntimeInformationOnSuccess(result, timer.msecs());
+    updateRuntimeInformationOnSuccess(result, toMs(timer));
     auto resultNumRows = result._resultPointer->resultTable()->size();
     auto resultNumCols = result._resultPointer->resultTable()->width();
     LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
@@ -213,8 +222,8 @@ void Operation::checkTimeout() const {
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
     const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
-    size_t timeInMilliseconds, std::optional<RuntimeInformation> runtimeInfo) {
-  _runtimeInfo->totalTime_ = timeInMilliseconds;
+    Milliseconds duration, std::optional<RuntimeInformation> runtimeInfo) {
+  _runtimeInfo->totalTime_ = duration;
   _runtimeInfo->numRows_ = resultTable.size();
   _runtimeInfo->cacheStatus_ = cacheStatus;
 
@@ -251,10 +260,10 @@ void Operation::updateRuntimeInformationOnSuccess(
 // ____________________________________________________________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
     const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
-    size_t timeInMilliseconds) {
+    Milliseconds duration) {
   updateRuntimeInformationOnSuccess(
       *resultAndCacheStatus._resultPointer->resultTable(),
-      resultAndCacheStatus._cacheStatus, timeInMilliseconds,
+      resultAndCacheStatus._cacheStatus, duration,
       resultAndCacheStatus._resultPointer->runtimeInfo());
 }
 
@@ -271,7 +280,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   auto timesOfChildren = _runtimeInfo->children_ |
                          std::views::transform(&RuntimeInformation::totalTime_);
   _runtimeInfo->totalTime_ =
-      std::accumulate(timesOfChildren.begin(), timesOfChildren.end(), 0.0);
+      std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0ms);
 
   signalQueryUpdate();
 }
@@ -282,7 +291,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   auto setStatus = [&status](RuntimeInformation& rti,
                              const auto& self) -> void {
     rti.status_ = status;
-    rti.totalTime_ = 0;
+    rti.totalTime_ = 0ms;
     for (auto& child : rti.children_) {
       self(*child, self);
     }
@@ -293,13 +302,13 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
 }
 
 // _______________________________________________________________________
-void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
+void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
   _runtimeInfo->children_.clear();
   for (auto child : getChildren()) {
     _runtimeInfo->children_.push_back(child->getRootOperation()->_runtimeInfo);
   }
 
-  _runtimeInfo->totalTime_ = timeInMilliseconds;
+  _runtimeInfo->totalTime_ = duration;
   _runtimeInfo->status_ = RuntimeInformation::Status::failed;
 
   signalQueryUpdate();

@@ -691,7 +691,7 @@ void updateRuntimeInfoForLazyScan(
       RuntimeInformation::Status::lazilyMaterialized);
   auto& rti = scanTree.runtimeInfo();
   rti.numRows_ = metadata.numElementsRead_;
-  rti.totalTime_ = static_cast<double>(metadata.blockingTimeMs_);
+  rti.totalTime_ = metadata.blockingTime_;
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
   rti.addDetail("num-blocks-all", metadata.numBlocksAll_);
 }

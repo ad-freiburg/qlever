@@ -649,7 +649,8 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
   j["runtimeInformation"]["meta"] = nlohmann::ordered_json(
       qet.getRootOperation()->getRuntimeInfoWholeQuery());
   RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
-  runtimeInformation.addLimitOffsetRow(query._limitOffset, 0, false);
+  runtimeInformation.addLimitOffsetRow(
+      query._limitOffset, std::chrono::milliseconds::zero(), false);
   runtimeInformation.addDetail("executed-implicitly-during-query-export", true);
   j["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);
