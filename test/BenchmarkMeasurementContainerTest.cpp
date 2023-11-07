@@ -10,13 +10,14 @@
 #include <string>
 #include <type_traits>
 #include <variant>
-using namespace std::string_literals;
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "util/Exception.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
+
+using namespace std::string_literals;
 
 namespace ad_benchmark {
 /*

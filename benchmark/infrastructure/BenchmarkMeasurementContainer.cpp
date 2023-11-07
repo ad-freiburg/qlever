@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
+
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -17,9 +19,6 @@
 #include <variant>
 #include <vector>
 
-using namespace std::string_literals;
-
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
@@ -27,6 +26,8 @@ using namespace std::string_literals;
 #include "util/Forward.h"
 #include "util/Iterators.h"
 #include "util/StringUtils.h"
+
+using namespace std::string_literals;
 
 namespace ad_benchmark {
 
