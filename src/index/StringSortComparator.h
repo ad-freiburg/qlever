@@ -170,13 +170,14 @@ class LocaleManager {
    * not create c++ strings in large parts of the API
    * @param s A UTF-8 encoded string.
    * @param level The Collation Level for which we want to create the SortKey
-   * @param callback Will be called with a c-string (pointer and size) of the
-   * result.
+   * @param resultFunction Will be called with a c-string (pointer and size) of
+   * the result.
    * @return A weight string s.t. compare(s, t, level) ==
    * std::strcmp(getSortKey(s, level), getSortKey(t, level)
    */
-  void getSortKey(std::string_view s, const Level level,
-                  std::invocable<const char*, size_t> auto callback) const {
+  void getSortKey(
+      std::string_view s, const Level level,
+      std::invocable<const char*, size_t> auto resultFunction) const {
     // TODO<joka921> This function is one of the bottlenecks of the first pass
     // of the IndexBuilder One possible improvement is to reuse the memory
     // allocations for the `sortKeyBuffer` and to not materialize the result as
@@ -204,7 +205,11 @@ class LocaleManager {
       AD_CONTRACT_CHECK(actualSz ==
                         static_cast<decltype(sz)>(sortKeyBuffer.size()));
     }
-    callback(sortKeyBuffer.data(), sz);
+    // since this is a c-api we still have a trailing '\0'. Trimming this is
+    // necessary for the prefix range to work correct.
+    AD_CORRECTNESS_CHECK(sz > 0);
+    --sz;
+    resultFunction(sortKeyBuffer.data(), sz);
   }
 
   // Overload of `getSortKey` that returns a `SortKey` directly.

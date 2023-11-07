@@ -149,7 +149,7 @@ auto removeDuplicates(const Range& input) -> std::vector<
 // of the elements of the `input`.
 template <typename Array, typename Function>
 requires(ad_utility::isArray<std::decay_t<Array>> &&
-         std::invocable<Function, decltype(std::declval<Array>()[0])>)
+         std::invocable<Function, typename Array::value_type>)
 auto transformArray(Array&& input, Function function) {
   return std::apply(
       [&function](auto&&... vals) {

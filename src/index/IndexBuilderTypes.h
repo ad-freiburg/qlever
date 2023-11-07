@@ -226,6 +226,12 @@ auto getIdMapLambdas(
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < NumThreads; ++j) {
     itemArray[j].emplace(j * 100 * maxNumberOfTriples, comp, alloc);
+    // This `reserve` is for a guaranteed upper bound that stays the same during
+    // the whole index building. That's why we use the `CachingMemoryResource`
+    // as an underlying memory pool for the allocator of the hash map to make
+    // the allocation and deallocation of these hash maps (that are newly
+    // created for each batch) much cheaper (see `CachingMemoryResource.h` and
+    // `IndexImpl.cpp`).
     itemArray[j]->_map.map_.reserve(5 * maxNumberOfTriples / NumThreads);
     // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
     // This is not necessary for the actual QLever code, but certain unit tests
