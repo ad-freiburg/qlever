@@ -174,6 +174,8 @@ TEST(Sort, SimpleMemberFunctions) {
   }
 }
 
+// _____________________________________________________________________________
+
 TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
   VectorTable input;
   // Make sure the estimator estimates a couple of ms to sort this
@@ -182,23 +184,15 @@ TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
   }
   auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
   Sort sort = makeSort(std::move(inputTable), {1, 0});
+  // Safe to do, because we know the underlying estimator is mutable
   const_cast<SortPerformanceEstimator&>(
       sort.getExecutionContext()->getSortPerformanceEstimator())
       .computeEstimatesExpensively(
-          ad_utility::makeUnlimitedAllocator<ValueId>(),
-          std::numeric_limits<size_t>::max());
+          ad_utility::makeUnlimitedAllocator<ValueId>(), 1000000);
 
   sort.recursivelySetTimeConstraint(0ms);
 
-  EXPECT_THROW(
-      {
-        try {
-          sort.getResult(true);
-        } catch (const ad_utility::AbortException& exception) {
-          EXPECT_THAT(exception.what(),
-                      ::testing::HasSubstr("time estimate exceeded"));
-          throw;
-        }
-      },
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      sort.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
       ad_utility::AbortException);
 }

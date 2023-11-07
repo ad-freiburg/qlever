@@ -11,12 +11,8 @@
 #include <type_traits>
 
 #include "util/CompilerExtensions.h"
-#include "util/Concepts.h"
 #include "util/Exception.h"
-
-// Inlining is super important for performance here, and clang considers
-// throwIfCancelled for too costly to inline, so we override this behaviour
-// to shave of some nanoseconds
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
 /// Enum to represent possible states of cancellation
@@ -51,16 +47,19 @@ class CancellationHandle {
 
   /// Overload for static exception messages, make sure the string is a constant
   /// expression, or computed in advance. If that's not the case do not use
-  /// this overload and instead use the "original" variant.
+  /// this overload and use the overload that takes a callable that creates
+  /// the exception message (see below).
   AD_ALWAYS_INLINE void throwIfCancelled(std::string_view detail) const {
     throwIfCancelled(std::identity{}, detail);
   }
 
   /// Throw an `CancellationException` when this handle has been cancelled. Do
-  /// nothing otherwise
+  /// nothing otherwise. The arg types are passed to the `detailSupplier` only
+  /// if an exception is about to be thrown. If no exception is thrown,
+  /// `detailSupplier` will not be evaluated.
   template <typename... ArgTypes>
   AD_ALWAYS_INLINE void throwIfCancelled(
-      const InvocableWithReturnValue<std::string_view, ArgTypes...> auto&
+      const InvocableWithReturnType<std::string_view, ArgTypes...> auto&
           detailSupplier,
       ArgTypes&&... argTypes) const {
     auto state = cancellationState_.load(std::memory_order_relaxed);

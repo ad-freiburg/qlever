@@ -6,6 +6,8 @@
 #include <gtest/gtest.h>
 
 #include "util/CancellationHandle.h"
+#include "util/GTestHelpers.h"
+#include "util/jthread.h"
 
 using ad_utility::CancellationException;
 using ad_utility::CancellationHandle;
@@ -20,11 +22,15 @@ TEST(CancellationException, verifyConstructorMessageIsPassed) {
   EXPECT_STREQ(message, exception.what());
 }
 
+// _____________________________________________________________________________
+
 TEST(CancellationException, verifyConstructorDoesNotAcceptNoReason) {
   EXPECT_THROW(
       CancellationException exception(CancellationState::NOT_CANCELLED, ""),
       ad_utility::Exception);
 }
+
+// _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyNotCancelledByDefault) {
   CancellationHandle handle;
@@ -34,6 +40,8 @@ TEST(CancellationHandle, verifyNotCancelledByDefault) {
   EXPECT_NO_THROW(handle.throwIfCancelled([]() { return ""; }));
 }
 
+// _____________________________________________________________________________
+
 TEST(CancellationHandle, verifyCancelWithWrongReasonThrows) {
   CancellationHandle handle;
 
@@ -41,70 +49,49 @@ TEST(CancellationHandle, verifyCancelWithWrongReasonThrows) {
                ad_utility::Exception);
 }
 
+// _____________________________________________________________________________
+
+auto detail = "Some Detail";
+
 TEST(CancellationHandle, verifyTimeoutCancellationWorks) {
   CancellationHandle handle;
 
   handle.cancel(CancellationState::TIMEOUT);
 
+  auto timeoutMessageMatcher = AllOf(HasSubstr(detail), HasSubstr("timeout"));
   EXPECT_TRUE(handle.isCancelled());
-  EXPECT_THROW(
-      {
-        try {
-          handle.throwIfCancelled("Some Detail");
-        } catch (const CancellationException& exception) {
-          EXPECT_THAT(exception.what(), HasSubstr("Some Detail"));
-          EXPECT_THAT(exception.what(), HasSubstr("timeout"));
-          throw;
-        }
-      },
-      CancellationException);
-  EXPECT_THROW(
-      {
-        try {
-          handle.throwIfCancelled([]() { return "Some Detail"; });
-        } catch (const CancellationException& exception) {
-          EXPECT_THAT(exception.what(), HasSubstr("Some Detail"));
-          EXPECT_THAT(exception.what(), HasSubstr("timeout"));
-          throw;
-        }
-      },
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(handle.throwIfCancelled(detail),
+                                        timeoutMessageMatcher,
+                                        CancellationException);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      handle.throwIfCancelled([]() { return detail; }), timeoutMessageMatcher,
       CancellationException);
 }
+
+// _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyManualCancellationWorks) {
   CancellationHandle handle;
 
   handle.cancel(CancellationState::MANUAL);
 
+  auto cancellationMessageMatcher =
+      AllOf(HasSubstr(detail), HasSubstr("manual cancellation"));
   EXPECT_TRUE(handle.isCancelled());
-  EXPECT_THROW(
-      {
-        try {
-          handle.throwIfCancelled("Some Detail");
-        } catch (const CancellationException& exception) {
-          EXPECT_THAT(exception.what(), HasSubstr("Some Detail"));
-          EXPECT_THAT(exception.what(), HasSubstr("manual cancellation"));
-          throw;
-        }
-      },
-      CancellationException);
-  EXPECT_THROW(
-      {
-        try {
-          handle.throwIfCancelled([]() { return "Some Detail"; });
-        } catch (const CancellationException& exception) {
-          EXPECT_THAT(exception.what(), HasSubstr("Some Detail"));
-          EXPECT_THAT(exception.what(), HasSubstr("manual cancellation"));
-          throw;
-        }
-      },
-      CancellationException);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(handle.throwIfCancelled(detail),
+                                        cancellationMessageMatcher,
+                                        CancellationException);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      handle.throwIfCancelled([]() { return detail; }),
+      cancellationMessageMatcher, CancellationException);
 }
+
+// _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCancellationWorksWithMultipleThreads) {
   CancellationHandle handle;
 
-  std::thread thread{[&]() {
+  ad_utility::JThread thread{[&]() {
     std::this_thread::sleep_for(5ms);
     handle.cancel(CancellationState::TIMEOUT);
   }};
@@ -118,5 +105,4 @@ TEST(CancellationHandle, verifyCancellationWorksWithMultipleThreads) {
       },
       CancellationException);
   EXPECT_TRUE(handle.isCancelled());
-  thread.join();
 }

@@ -13,7 +13,4 @@ namespace ad_utility {
  */
 template <typename T>
 concept Streamable = requires(T x, std::ostream& os) { os << x; };
-
-template <typename Func, typename R, typename... ArgTypes>
-concept InvocableWithReturnValue = std::is_invocable_r_v<R, Func, ArgTypes...>;
 }  // namespace ad_utility

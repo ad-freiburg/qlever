@@ -40,18 +40,22 @@ A `errorMessageMatcher` is a google test matcher. More information can be found
 here:
 https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matchers-reference
 */
-#define AD_EXPECT_THROW_WITH_MESSAGE(statement, errorMessageMatcher)      \
-  try {                                                                   \
-    statement;                                                            \
-    FAIL() << "No exception was thrown";                                  \
-  } catch (const std::exception& e) {                                     \
-    EXPECT_THAT(e.what(), errorMessageMatcher)                            \
-        << "The exception message does not match";                        \
-  } catch (...) {                                                         \
-    FAIL() << "The thrown exception did not inherit from std::exception"; \
-  }                                                                       \
+#define AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(statement, errorMessageMatcher, \
+                                              exceptionType)                  \
+  try {                                                                       \
+    statement;                                                                \
+    FAIL() << "No exception was thrown";                                      \
+  } catch (const exceptionType& e) {                                          \
+    EXPECT_THAT(e.what(), errorMessageMatcher)                                \
+        << "The exception message does not match";                            \
+  } catch (...) {                                                             \
+    FAIL() << "The thrown exception did not inherit from " #exceptionType;    \
+  }                                                                           \
   void()
 
+#define AD_EXPECT_THROW_WITH_MESSAGE(statement, errorMessageMatcher)    \
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(statement, errorMessageMatcher, \
+                                        std::exception)
 // _____________________________________________________________________________
 // Add the given `source_location`  to all gtest failure messages that occur,
 // while the return value is still in scope. It is important to bind the return

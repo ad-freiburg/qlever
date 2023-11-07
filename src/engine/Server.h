@@ -135,14 +135,15 @@ class Server {
   /// Schedule a task to trigger the timeout after the `timeLimit`.
   /// The returned callback can be used to prevent this task from executing
   /// either because the `cancellationHandle` has been aborted by some other
-  /// mean or because the task has been completed successfully.
+  /// means or because the task has been completed successfully.
   static auto cancelAfterDeadline(
       const net::any_io_executor& executor,
       std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
       std::chrono::seconds timeLimit);
 
   /// Create a cancellation handle, pass it to the operation and configure
-  /// it to get cancelled automatically if a time limit is passed.
+  /// it to get cancelled automatically if a time limit is passed by calling
+  /// `cancelAfterDeadline`. If `timeLimit` is empty, return a no-op lambda.
   static std::function<void()> setupCancellationHandle(
       const net::any_io_executor& executor,
       const std::shared_ptr<Operation>& rootOperation,

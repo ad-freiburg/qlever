@@ -19,9 +19,9 @@
 #include "parser/data/Variable.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
-#include "util/Concepts.h"
 #include "util/Exception.h"
 #include "util/Log.h"
+#include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
@@ -213,19 +213,21 @@ class Operation {
     return _warnings;
   }
 
-  AD_ALWAYS_INLINE void checkCancellation() const {
-    cancellationHandle_->throwIfCancelled(&Operation::getDescriptor, this);
-  }
-
   // Check if the cancellation flag has been set and throw an exception if
   // that's the case. This will be called at strategic places on code that
   // potentially can take a (too) long time. This function is designed to be
   // as lightweight as possible because of that. The `detailSupplier` allows to
   // pass a message to add to any potential exception that might be thrown.
   AD_ALWAYS_INLINE void checkCancellation(
-      const ad_utility::InvocableWithReturnValue<std::string_view> auto&
+      const ad_utility::InvocableWithReturnType<std::string_view> auto&
           detailSupplier) const {
     cancellationHandle_->throwIfCancelled(detailSupplier);
+  }
+
+  // Same as checkCancellation, but with the descriptor of this operation
+  // as string.
+  AD_ALWAYS_INLINE void checkCancellation() const {
+    cancellationHandle_->throwIfCancelled(&Operation::getDescriptor, this);
   }
 
   std::chrono::milliseconds remainingTime() const;

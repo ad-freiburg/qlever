@@ -249,20 +249,11 @@ TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
   const_cast<SortPerformanceEstimator&>(
       orderBy.getExecutionContext()->getSortPerformanceEstimator())
       .computeEstimatesExpensively(
-          ad_utility::makeUnlimitedAllocator<ValueId>(),
-          std::numeric_limits<size_t>::max());
+          ad_utility::makeUnlimitedAllocator<ValueId>(), 1000000);
 
   orderBy.recursivelySetTimeConstraint(0ms);
 
-  EXPECT_THROW(
-      {
-        try {
-          orderBy.getResult(true);
-        } catch (const ad_utility::AbortException& exception) {
-          EXPECT_THAT(exception.what(),
-                      ::testing::HasSubstr("time estimate exceeded"));
-          throw;
-        }
-      },
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      orderBy.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
       ad_utility::AbortException);
 }
