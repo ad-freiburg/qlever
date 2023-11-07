@@ -235,36 +235,30 @@ ResultTable TransitivePath::computeResult() {
   idTable.setNumColumns(getResultWidth());
 
   size_t subWidth = subRes->idTable().numColumns();
-  // Left side is bound and a variable
+
+  auto computeForOneSide = [this, &idTable, subRes, subWidth](auto boundSide, auto otherSide) -> ResultTable {
+    shared_ptr<const ResultTable> sideRes =
+        boundSide.treeAndCol.value().first->getResult();
+    size_t sideWidth = sideRes->idTable().numColumns();
+
+    CALL_FIXED_SIZE((std::array{_resultWidth, subWidth, sideWidth}),
+                    &TransitivePath::computeTransitivePathBound, this, &idTable,
+                    subRes->idTable(), boundSide, otherSide, sideRes->idTable());
+
+    return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocabFromNonEmptyOf(*sideRes.get(), *subRes.get())};
+  };
+
   if (_lhs.isBoundVariable()) {
-    shared_ptr<const ResultTable> leftRes =
-        _lhs.treeAndCol.value().first->getResult();
-    size_t leftWidth = leftRes->idTable().numColumns();
-
-    CALL_FIXED_SIZE((std::array{_resultWidth, subWidth, leftWidth}),
-                    &TransitivePath::computeTransitivePathBound, this, &idTable,
-                    subRes->idTable(), _lhs, _rhs, leftRes->idTable());
-
-    return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocabFromNonEmptyOf(*leftRes.get(), *subRes.get())};
-
-  // Right side is bound and a variable
+    return computeForOneSide(_lhs, _rhs);
   } else if (_rhs.isBoundVariable()) {
-    shared_ptr<const ResultTable> rightRes =
-        _rhs.treeAndCol.value().first->getResult();
-    size_t rightWidth = rightRes->idTable().numColumns();
-
-    CALL_FIXED_SIZE((std::array{_resultWidth, subWidth, rightWidth}),
-                    &TransitivePath::computeTransitivePathBound, this, &idTable,
-                    subRes->idTable(), _rhs, _lhs, rightRes->idTable());
-
-    return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocabFromNonEmptyOf(*rightRes.get(), *subRes.get())};
-
+    return computeForOneSide(_rhs, _lhs);
   // Right side is an Id
   } else if (!_rhs.isVariable()) {
     CALL_FIXED_SIZE((std::array{_resultWidth, subWidth}),
                     &TransitivePath::computeTransitivePath, this, &idTable,
                     subRes->idTable(), _rhs, _lhs);
-  // No side is bound and the right side is not an Id
+  // No side is a bound variable, the right side is an unbound variable
+  // and the left side is either an unbound Variable or an ID.
   } else {
     CALL_FIXED_SIZE((std::array{_resultWidth, subWidth}),
                     &TransitivePath::computeTransitivePath, this, &idTable,
