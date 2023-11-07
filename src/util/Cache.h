@@ -37,9 +37,7 @@ with the given value type as const l-value reference and return a `MemorySize`.
 template <typename T, typename ValueType>
 concept ValueSizeGetter =
     std::default_initializable<T> &&
-    std::regular_invocable<T, const ValueType&> &&
-    ad_utility::isSimilar<std::invoke_result_t<T, const ValueType&>,
-                          MemorySize>;
+    RegularInvocableWithSimilarReturnType<T, MemorySize, const ValueType&>;
 
 /*
  @brief Associative array for almost arbitrary keys and values that acts as a

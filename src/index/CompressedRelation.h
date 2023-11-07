@@ -259,7 +259,7 @@ class CompressedRelationReader {
     size_t numBlocksRead_ = 0;
     size_t numBlocksAll_ = 0;
     size_t numElementsRead_ = 0;
-    size_t blockingTimeMs_ = 0;
+    std::chrono::milliseconds blockingTime_ = std::chrono::milliseconds::zero();
   };
 
   using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;

@@ -21,6 +21,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
@@ -37,6 +38,23 @@
 
 namespace ad_utility {
 // ____________________________________________________________________________
+void ConfigManager::verifyHashMapEntry(
+    std::string_view jsonPathToEntry,
+    const HashMapEntry::pointer entryPointer) {
+  // Make sure, that it is not a null pointer.
+  AD_CORRECTNESS_CHECK(entryPointer != nullptr);
+
+  // An empty sub manager tends to point to a logic error on the user
+  // side.
+  if (const ConfigManager* ptr = std::get_if<ConfigManager>(entryPointer);
+      ptr != nullptr && ptr->configurationOptions_.empty()) {
+    throw std::runtime_error(
+        absl::StrCat("The sub manager at '", jsonPathToEntry,
+                     "' is empty. Either fill it, or delete it."));
+  }
+}
+
+// ____________________________________________________________________________
 template <typename ReturnReference>
 requires std::same_as<ReturnReference, ConfigOption&> ||
          std::same_as<ReturnReference, const ConfigOption&>
@@ -46,24 +64,15 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
   std::vector<std::pair<std::string, ReturnReference>> collectedOptions;
 
   /*
-  Takes one entry of an instance of `configurationOptions`, checks, that the
+  Takes one entry of an instance of `configurationOptions_`, checks, that the
   pointer isn't empty, and returns the pair with the pointer dereferenced.
   */
   auto checkNonEmptyAndDereference = [&pathPrefix](const auto& pair) {
     const auto& [jsonPath, pointerToVariant] = pair;
 
-    // Make sure, that there is no null pointer.
-    AD_CORRECTNESS_CHECK(pointerToVariant != nullptr);
-
-    // An empty sub manager tends to point to a logic error on the user
-    // side.
-    if (const ConfigManager* ptr =
-            std::get_if<ConfigManager>(pointerToVariant.get());
-        ptr != nullptr && ptr->configurationOptions_.empty()) {
-      throw std::runtime_error(
-          absl::StrCat("The sub manager at '", pathPrefix, jsonPath,
-                       "' is empty. Either fill it, or delete it."));
-    }
+    // Check the hash map entry.
+    verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath),
+                       pointerToVariant.get());
 
     // Return a dereferenced reference.
     return std::tie(jsonPath, *pointerToVariant);
@@ -477,6 +486,15 @@ std::string ConfigManager::printConfigurationDoc(
                             }),
       "\n\n");
 
+  // List of the validators.
+  const std::string& listOfAllValidators = ad_utility::lazyStrJoin(
+      ad_utility::transform(validators(),
+                            [](const ConfigOptionValidatorManager& validator) {
+                              return absl::StrCat("- ",
+                                                  validator.getDescription());
+                            }),
+      "\n\n");
+
   return absl::StrCat(
       "Locations of available configuration options with",
       (printCurrentJsonConfiguration ? " their current values"
@@ -486,6 +504,11 @@ std::string ConfigManager::printConfigurationDoc(
                                  "    "),
       "\n\nAvailable configuration options:\n",
       ad_utility::addIndentation(listOfConfigurationOptions, "    "),
+      "\n\nRequired invariants of the configuration options:",
+      listOfAllValidators.empty()
+          ? " None."
+          : absl::StrCat(
+                "\n", ad_utility::addIndentation(listOfAllValidators, "    ")),
       "\n\nConfiguration options, that kept their default values:\n",
       ad_utility::addIndentation(
           getListOfNotChangedConfigOptionsWithDefaultValuesAsString(), "    "));
@@ -535,36 +558,51 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
 
   return ad_utility::lazyStrJoin(unchangedFromDefaultConfigOptions, "\n");
 }
-// ____________________________________________________________________________
-void ConfigManager::verifyWithValidators() const {
-  // Check all the validators in sub managers.
-  std::ranges::for_each(
-      configurationOptions_,
-      [](auto pair) {
-        const auto& [jsonPath, variantObject] = pair;
 
-        std::visit(
-            []<typename T>(T& var) {
-              // Nothing to do, if we are not looking at a config manager.
-              if constexpr (isSimilar<T, ConfigManager>) {
-                var.verifyWithValidators();
-              }
-            },
-            variantObject);
-      },
-      [](const auto& pair) {
+// ____________________________________________________________________________
+std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
+ConfigManager::validators(std::string_view pathPrefix) const {
+  // For the collected validators. Initialized with the validators inside this
+  // manager.
+  std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
+      allValidators(ad_utility::transform(
+          validators_, [](const auto& val) { return std::cref(val); }));
+
+  /*
+  Return true, iff., the given entry of a hash map, of type
+  `decltype(configurationOptions_)`, contains a non-empty `ConfigManager`.
+  */
+  auto isNonEmptySubManager = [&pathPrefix](const auto& pair) {
+    // Easier access.
+    const auto& [jsonPath, pointerToVariant] = pair;
+
+    // Is the entry not a null pointer? If yes, and if it's a `ConfigManager`,
+    // is the `ConfigManager` not empty?
+    verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath),
+                       pointerToVariant.get());
+
+    return std::holds_alternative<ConfigManager>(*pointerToVariant);
+  };
+
+  // Collect the validators from the sub managers.
+  std::ranges::for_each(
+      std::views::filter(configurationOptions_, isNonEmptySubManager),
+      [&pathPrefix, &allValidators](const auto& pair) {
+        // Easier access.
         const auto& [jsonPath, pointerToVariant] = pair;
 
-        // Make sure, that there is no null pointer.
-        AD_CORRECTNESS_CHECK(pointerToVariant != nullptr);
-
-        // Return a dereferenced reference.
-        return std::tie(jsonPath, *pointerToVariant);
+        appendVector(allValidators,
+                     std::get<ConfigManager>(*pointerToVariant)
+                         .validators(absl::StrCat(pathPrefix, jsonPath)));
       });
 
-  // Check all validators, that were directly registered.
-  std::ranges::for_each(validators_,
-                        [](auto& validator) { std::invoke(validator); });
+  return allValidators;
+}
+
+// ____________________________________________________________________________
+void ConfigManager::verifyWithValidators() const {
+  std::ranges::for_each(
+      validators(), [](auto& validator) { validator.get().checkValidator(); });
 };
 
 // ____________________________________________________________________________
@@ -577,6 +615,4 @@ bool ConfigManager::containsOption(const ConfigOption& opt) const {
       &opt);
 }
 
-// ____________________________________________________________________________
-const std::string& ErrorMessage::getMessage() const { return message_; }
 }  // namespace ad_utility

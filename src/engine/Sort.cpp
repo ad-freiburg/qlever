@@ -77,7 +77,7 @@ ResultTable Sort::computeResult() {
   LOG(DEBUG) << "Sort result computation..." << endl;
   ad_utility::Timer t{ad_utility::timer::Timer::InitialStatus::Started};
   IdTable idTable = subRes->idTable().clone();
-  getRuntimeInfo().addDetail("time-cloning", t.msecs());
+  runtimeInfo().addDetail("time-cloning", t.msecs());
   Engine::sort(idTable, sortColumnIndices_);
 
   LOG(DEBUG) << "Sort result computation done." << endl;

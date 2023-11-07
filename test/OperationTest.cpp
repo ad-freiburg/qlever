@@ -2,12 +2,16 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (joka921) <kalmbach@cs.uni-freiburg.de>
 
-#include "./IndexTestHelpers.h"
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include "IndexTestHelpers.h"
 #include "engine/NeutralElementOperation.h"
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
+#include "engine/ValuesForTesting.h"
+#include "util/IdTableHelpers.h"
 
 using namespace ad_utility::testing;
+using namespace ::testing;
 
 // ________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
@@ -32,7 +36,7 @@ TEST(OperationTest, getResultOnlyCached) {
   // The second `true` means "only read the result if it was cached".
   // We have just cleared the cache, and so this should return `nullptr`.
   EXPECT_EQ(n.getResult(true, true), nullptr);
-  EXPECT_EQ(n.getRuntimeInfo().status_, RuntimeInformation::Status::notStarted);
+  EXPECT_EQ(n.runtimeInfo().status_, RuntimeInformation::Status::notStarted);
   // Nothing has been stored in the cache by this call.
   EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
   EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 0);
@@ -41,10 +45,9 @@ TEST(OperationTest, getResultOnlyCached) {
   NeutralElementOperation n2{qec};
   auto result = n2.getResult();
   EXPECT_NE(result, nullptr);
-  EXPECT_EQ(n2.getRuntimeInfo().status_,
+  EXPECT_EQ(n2.runtimeInfo().status_,
             RuntimeInformation::Status::fullyMaterialized);
-  EXPECT_EQ(n2.getRuntimeInfo().cacheStatus_,
-            ad_utility::CacheStatus::computed);
+  EXPECT_EQ(n2.runtimeInfo().cacheStatus_, ad_utility::CacheStatus::computed);
   EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 1);
   EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 0);
 
@@ -52,7 +55,7 @@ TEST(OperationTest, getResultOnlyCached) {
   // get exactly the same `shared_ptr` as with the previous call.
   NeutralElementOperation n3{qec};
   EXPECT_EQ(n3.getResult(true, true), result);
-  EXPECT_EQ(n3.getRuntimeInfo().cacheStatus_,
+  EXPECT_EQ(n3.runtimeInfo().cacheStatus_,
             ad_utility::CacheStatus::cachedNotPinned);
 
   // We can even use the `onlyReadFromCache` case to upgrade a non-pinned
@@ -64,7 +67,7 @@ TEST(OperationTest, getResultOnlyCached) {
 
   // The cache status is `cachedNotPinned` because we found the element cached
   // but not pinned (it does reflect the status BEFORE the operation).
-  EXPECT_EQ(n4.getRuntimeInfo().cacheStatus_,
+  EXPECT_EQ(n4.runtimeInfo().cacheStatus_,
             ad_utility::CacheStatus::cachedNotPinned);
   EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
   EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 1);
@@ -73,10 +76,61 @@ TEST(OperationTest, getResultOnlyCached) {
   // result.
   qecCopy._pinResult = false;
   EXPECT_EQ(n4.getResult(true, true), result);
-  EXPECT_EQ(n4.getRuntimeInfo().cacheStatus_,
+  EXPECT_EQ(n4.runtimeInfo().cacheStatus_,
             ad_utility::CacheStatus::cachedPinned);
 
   // Clear the (global) cache again to not possibly interfere with other unit
   // tests.
   qec->getQueryTreeCache().clearAll();
+}
+
+// _____________________________________________________________________________
+
+/// Fixture to work with a generic operation
+class OperationTestFixture : public testing::Test {
+ protected:
+  std::vector<std::string> jsonHistory;
+
+  Index index =
+      makeTestIndex("OperationTest", std::nullopt, true, true, true, 32);
+  QueryResultCache cache;
+  QueryExecutionContext qec{
+      index, &cache, makeAllocator(), SortPerformanceEstimator{},
+      [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
+  IdTable table = makeIdTableFromVector({{}, {}, {}});
+  ValuesForTesting operation{&qec, std::move(table), {}};
+};
+
+// _____________________________________________________________________________
+
+TEST_F(OperationTestFixture,
+       verifyOperationStatusChangesToInProgressAndComputed) {
+  // Ignore result, we only care about the side effects
+  operation.getResult(true);
+
+  EXPECT_THAT(
+      jsonHistory,
+      ElementsAre(
+          ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
+          ParsedAsJson(HasKeyMatching("status", Eq("in progress"))),
+          // Note: Currently the implementation triggers twice if a value
+          // is not cached. This is not a requirement, just an implementation
+          // detail that we account for here.
+          ParsedAsJson(HasKeyMatching("status", Eq("fully materialized"))),
+          ParsedAsJson(HasKeyMatching("status", Eq("fully materialized")))));
+}
+
+// _____________________________________________________________________________
+
+TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
+  // Run twice and clear history to get cached values
+  operation.getResult(true);
+  jsonHistory.clear();
+  operation.getResult(true);
+
+  EXPECT_THAT(
+      jsonHistory,
+      ElementsAre(
+          ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
+          ParsedAsJson(HasKeyMatching("status", Eq("fully materialized")))));
 }
