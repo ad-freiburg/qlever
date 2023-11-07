@@ -100,6 +100,14 @@ class TransitivePath : public Operation {
    * Neither side of a tree may be bound twice
    */
   bool isBound() const;
+  
+  /**
+   * Getters, mainly necessary for testing 
+   */
+  size_t getMinDist() const { return _minDist; }
+  size_t getMaxDist() const { return _maxDist; }
+  const TransitivePathSide& getLeft() const {return _lhs; }
+  const TransitivePathSide& getRight() const {return _rhs; }
 
  protected:
   virtual std::string asStringImpl(size_t indent = 0) const override;
