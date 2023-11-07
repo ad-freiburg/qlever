@@ -133,7 +133,7 @@ class ResultTable : public BenchmarkMetadataGetter {
   time in seconds, the `monostate` for empty entries, and the rest for custom
   entries by the user for better readability.
   */
-  using EntryType = std::variant<std::monostate, float, std::string>;
+  using EntryType = std::variant<std::monostate, float, std::string, bool>;
 
  private:
   // For identification.

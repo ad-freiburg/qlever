@@ -184,6 +184,9 @@ ResultTable::operator std::string() const {
       return absl::StrFormat(floatFormatSpecifier, entry);
     } else if constexpr (std::is_same_v<T, std::string>) {
       return entry;
+    } else if constexpr (std::is_same_v<T, bool>) {
+      // Simple conversion.
+      return entry ? "true"s : "false"s;
     } else {
       // Unsupported type.
       AD_CONTRACT_CHECK(false);
