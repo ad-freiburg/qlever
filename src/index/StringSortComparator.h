@@ -42,24 +42,26 @@ class LocaleManager {
   };
 
   /**
-   * Wraps a string that contains unicode collation weights for another string
-   * Only needed for making interfaces explicit and less errorProne
+   * A strong typedef for a string that contains unicode collation weights for
+   * another string. The actual storage can be a `std::string` or a
+   * `std::string_view`.
    */
   // TODO<GCC12> As soon as we have constexpr std::string, this class can
   //  become constexpr.
   template <typename T>
+  requires(std::same_as<T, std::string> || std::same_as<T, std::string_view>)
   class SortKeyImpl {
    public:
     SortKeyImpl() = default;
-    explicit SortKeyImpl(std::string_view sortKey) : _sortKey(sortKey) {}
-    [[nodiscard]] constexpr const T& get() const noexcept { return _sortKey; }
-    constexpr T& get() noexcept { return _sortKey; }
+    explicit SortKeyImpl(std::string_view sortKey) : sortKey_(sortKey) {}
+    [[nodiscard]] constexpr const T& get() const noexcept { return sortKey_; }
+    constexpr T& get() noexcept { return sortKey_; }
 
     // Comparison of sort key is done lexicographically on the byte values
-    // of member `_sortKey`
+    // of member `sortKey_`
     template <typename U>
     [[nodiscard]] int compare(const SortKeyImpl<U>& rhs) const noexcept {
-      return std::string_view{_sortKey}.compare(std::string_view{rhs._sortKey});
+      return std::string_view{sortKey_}.compare(std::string_view{rhs.sortKey_});
     }
 
     auto operator<=>(const SortKeyImpl&) const = default;
@@ -75,7 +77,7 @@ class LocaleManager {
     std::string::size_type size() const noexcept { return get().size(); }
 
    private:
-    T _sortKey;
+    T sortKey_;
   };
   using SortKey = SortKeyImpl<std::string>;
   using SortKeyView = SortKeyImpl<std::string_view>;
@@ -154,11 +156,10 @@ class LocaleManager {
    * interface
    * @return <0 iff a<b , >0 iff a>b,  0 iff a==b
    */
-  template <typename T>
-  static int compare(const SortKeyImpl<T>& a, const SortKeyImpl<T>& b,
+  template <typename T, typename U>
+  static int compare(const SortKeyImpl<T>& a, const SortKeyImpl<U>& b,
                      [[maybe_unused]] const Level) {
     return a.compare(b);
-    // return std::strcmp(a.get().c_str(), b.get().c_str());
   }
 
   /**
@@ -169,11 +170,13 @@ class LocaleManager {
    * not create c++ strings in large parts of the API
    * @param s A UTF-8 encoded string.
    * @param level The Collation Level for which we want to create the SortKey
+   * @param callback Will be called with a c-string (pointer and size) of the
+   * result.
    * @return A weight string s.t. compare(s, t, level) ==
    * std::strcmp(getSortKey(s, level), getSortKey(t, level)
    */
-  [[nodiscard]] SortKey getSortKey(std::string_view s,
-                                   const Level level) const {
+  void getSortKey(std::string_view s, const Level level,
+                  std::invocable<const char*, size_t> auto callback) const {
     // TODO<joka921> This function is one of the bottlenecks of the first pass
     // of the IndexBuilder One possible improvement is to reuse the memory
     // allocations for the `sortKeyBuffer` and to not materialize the result as
@@ -181,27 +184,39 @@ class LocaleManager {
     auto utf16 = icu::UnicodeString::fromUTF8(toStringPiece(s));
     auto& col = *_collator[static_cast<uint8_t>(level)];
     std::string sortKeyBuffer;
+    // The actual computation of the sort key is very expensive, so we first
+    // allocate a buffer that is typically large enough to store the sort key.
     sortKeyBuffer.resize(50 * s.size());
-    SortKey finalRes;
     static_assert(sizeof(uint8_t) == sizeof(std::string::value_type));
     auto sz =
         col.getSortKey(utf16, reinterpret_cast<uint8_t*>(sortKeyBuffer.data()),
                        sortKeyBuffer.size());
     AD_CONTRACT_CHECK(sz >= 0);
-    auto& res = finalRes.get();
-    res.resize(sz);
+    // If the buffer was large enough, we only have to copy the sort key to the
+    // destination. Otherwise, we now know the exact size of the sort key and
+    // can retrigger the computation.
     if (static_cast<size_t>(sz) > sortKeyBuffer.size()) {
-      sz = col.getSortKey(utf16, reinterpret_cast<uint8_t*>(res.data()),
-                          res.size());
-      AD_CONTRACT_CHECK(sz == static_cast<decltype(sz)>(res.size()));
-    } else {
-      std::copy(sortKeyBuffer.begin(), sortKeyBuffer.begin() + sz, res.begin());
+      sortKeyBuffer.clear();
+      sortKeyBuffer.resize(sz);
+      auto actualSz = col.getSortKey(
+          utf16, reinterpret_cast<uint8_t*>(sortKeyBuffer.data()),
+          sortKeyBuffer.size());
+      AD_CONTRACT_CHECK(actualSz ==
+                        static_cast<decltype(sz)>(sortKeyBuffer.size()));
     }
-    // since this is a c-api we still have a trailing '\0'. Trimming this is
-    // necessary for the prefix range to work correct.
-    AD_CORRECTNESS_CHECK(!res.empty());
-    res.resize(res.size() - 1);
-    return finalRes;
+    callback(sortKeyBuffer.data(), sz);
+  }
+
+  // Overload of `getSortKey` that returns a `SortKey` directly.
+  [[nodiscard]] SortKey getSortKey(std::string_view s,
+                                   const Level level) const {
+    SortKey result;
+    auto writeSortKey = [&result](const char* begin, size_t sz) {
+      std::string& s = result.get();
+      s.insert(s.end(), begin, begin + sz);
+    };
+    getSortKey(s, level, writeSortKey);
+    return result;
   }
 
   /// Get a `SortKey` for `Level::PRIMARY` that corresponds to a prefix of `s`.
@@ -554,6 +569,9 @@ class TripleComponentComparator {
   using SplitValNonOwning =
       SplitValBase<std::string_view, std::string_view, std::string_view>;
 
+  // This class only holds `string_view`s, but the contents are stored as a view
+  // to a sort key. This is used during index building for more efficient memory
+  // allocations.
   using SplitValNonOwningWithSortKey =
       SplitValBase<LocaleManager::SortKeyView, std::string_view,
                    std::string_view>;
@@ -608,12 +626,18 @@ class TripleComponentComparator {
       std::string_view a, const Level level, bool isExternal = false) const {
     return extractComparable<SplitVal>(a, level, isExternal);
   }
+
+  // Similar to `extractAndTransformComparable` but returns a `SplitVal` that
+  // contains of `string_views` the contents of which will be allocated using
+  // the `allocator`. Note: the user has to take care of the deallocation
+  // manually, otherwise the memory will leak. This is currently used during the
+  // index building.
   [[nodiscard]] SplitValNonOwningWithSortKey
   extractAndTransformComparableNonOwning(
       std::string_view a, const Level level, bool isExternal,
-      std::pmr::polymorphic_allocator<char>* alloc) const {
+      std::pmr::polymorphic_allocator<char>* allocator) const {
     return extractComparable<SplitValNonOwningWithSortKey>(a, level, isExternal,
-                                                           alloc);
+                                                           allocator);
   }
 
   /**
@@ -752,16 +776,19 @@ class TripleComponentComparator {
       return {first, res, langtag, isExternal, a};
     } else if constexpr (std::is_same_v<SplitValType,
                                         SplitValNonOwningWithSortKey>) {
+      // For the non-owning sort key we allocate all the strings using the
+      // `allocator`
       AD_CONTRACT_CHECK(allocator != nullptr);
       auto add = [allocator](std::string_view s) -> std::string_view {
         auto ptr = allocator->allocate(s.size());
         std::ranges::copy(s, ptr);
         return {ptr, ptr + s.size()};
       };
-      // TODO<joka921> Directly move the allocation into the `getSortKey`
-      // function.
-      auto sortKey = LocaleManager::SortKeyView{
-          add(_locManager.getSortKey(res, level).get())};
+      LocaleManager::SortKeyView sortKey;
+      auto writeSortKey = [&sortKey, &add](const char* begin, size_t sz) {
+        sortKey = LocaleManager::SortKeyView{add(std::string_view{begin, sz})};
+      };
+      _locManager.getSortKey(res, level, writeSortKey);
       return {first, sortKey, add(langtag), isExternal, add(a)};
     } else {
       static_assert(ad_utility::alwaysFalse<SplitValType>);

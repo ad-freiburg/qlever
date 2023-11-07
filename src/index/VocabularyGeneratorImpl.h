@@ -289,10 +289,7 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
                                          const string& fileName) {
   LOG(DEBUG) << "Writing partial vocabulary to: " << fileName << "\n";
   ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
-  {
-    ad_utility::TimeBlockAndLog t{"reserving the byte buffer"};
-    byteBuffer.reserve(1'000'000'000);
-  }
+  byteBuffer.reserve(1'000'000'000);
   ad_utility::serialization::FileWriteSerializer serializer{fileName};
   uint64_t size = els.size();  // really make sure that this has 64bits;
   serializer << size;
@@ -301,9 +298,6 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
     const auto& [id, splitVal] = idAndSplitVal;
-    // TODO<joka921> there are unnecessary string copies involved here...
-    // TripleComponentWithIndex entry{std::string{word},
-    // splitVal.isExternalized_, id};
     byteBuffer << word;
     byteBuffer << splitVal.isExternalized_;
     byteBuffer << id;

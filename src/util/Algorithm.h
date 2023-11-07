@@ -145,15 +145,17 @@ auto removeDuplicates(const Range& input) -> std::vector<
   return result;
 }
 
-template <typename Array, typename F>
+// Return a new `std::input` that is obtained by applying the `function` to each
+// of the elements of the `input`.
+template <typename Array, typename Function>
 requires(ad_utility::isArray<std::decay_t<Array>> &&
-         std::invocable<F, typename std::decay_t<Array>::value_type>)
-auto transformArray(Array&& array, F f) {
+         std::invocable<Function, decltype(std::declval<Array>()[0])>)
+auto transformArray(Array&& input, Function function) {
   return std::apply(
-      [&f](auto&&... vals) {
-        return std::array{std::invoke(f, AD_FWD(vals))...};
+      [&function](auto&&... vals) {
+        return std::array{std::invoke(function, AD_FWD(vals))...};
       },
-      AD_FWD(array));
+      AD_FWD(input));
 }
 
 }  // namespace ad_utility

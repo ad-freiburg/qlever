@@ -11,6 +11,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
 #include "index/VocabularyGenerator.h"
+#include "util/Algorithm.h"
 
 namespace {
 // equality operator used in this test
@@ -32,15 +33,11 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
 auto V = ad_utility::testing::VocabId;
 
 auto makeItemMapArray = [] {
-  std::array<std::optional<ItemMapAndBuffer>, NUM_PARALLEL_ITEM_MAPS>
-      optionalArrs;
+  std::array<int, NUM_PARALLEL_ITEM_MAPS> dummy;
   auto alloc = ItemAlloc{std::pmr::get_default_resource()};
-  for (auto& opt : optionalArrs) {
-    opt.emplace(alloc);
-  }
-  return std::apply(
-      [](auto&&... vals) { return ItemMapArray{std::move(vals.value())...}; },
-      std::move(optionalArrs));
+  auto make = [&](auto&&...) { return ItemMapAndBuffer{alloc}; };
+  return ad_utility::transformArray(std::array<int, NUM_PARALLEL_ITEM_MAPS>{},
+                                    make);
 };
 }  // namespace
 
@@ -250,8 +247,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     // simply passing `std::pmr::get_default_resource` to the `alloc` below
     // would lead to memory leaks.
     std::pmr::monotonic_buffer_resource buffer;
-    auto alloc =
-        std::pmr::polymorphic_allocator<char>{&buffer};
+    auto alloc = std::pmr::polymorphic_allocator<char>{&buffer};
     auto assign = [&](std::string_view str, size_t id) {
       s[str] = {
           id,

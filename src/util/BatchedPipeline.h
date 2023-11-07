@@ -126,11 +126,8 @@ class Batcher {
         return res;
       }
       res.m_isPipelineGood = true;
-      Timer timer{Timer::Started};
       res.m_content.reserve(opt->size());
       std::ranges::move(*opt, std::back_inserter(res.m_content));
-      LOG(TRACE) << "Time for copying an input batch " << timer.msecs()
-                 << std::endl;
       return res;
     } else {
       res.m_isPipelineGood = true;
@@ -201,7 +198,6 @@ class BatchedPipeline {
       Timer timer{Timer::InitialStatus::Started};
       auto res = _fut.get();
       orderNextBatch();
-      // LOG(TIMING) << "batch wait time " << timer.msecs() << std::endl;
       _waitingTime->fetch_add(timer.msecs());
       return res;
     } catch (std::future_error& e) {
@@ -252,16 +248,12 @@ class BatchedPipeline {
                                           size_t inBatchSize,
                                           TransformerPtrs... transformers) {
     auto inBatch = previousStage->pickupBatch();
-    Timer timer{Timer::Started};
     Batch<ResT> result;
     result.m_isPipelineGood = inBatch.m_isPipelineGood;
-    // currently each of the <parallelism> threads first creates its own Batch
-    // and later we merge. <TODO>(joka921) Doing this in place would require
-    // something like a std::vector without default construction on insert.
     const size_t batchSize = inBatchSize / Parallelism;
-    // Timer timerResize{Timer::Started};
+    // We know the total size in advance, so we can preallocate the memory and
+    // the threads can directly write to the final result.
     result.m_content.resize(inBatch.m_content.size());
-    // LOG(TIMING) << "Time for resize " << timerResize.msecs() << std::endl;
     auto futures = setupParallelismImpl(
         batchSize, inBatch.m_content, result.m_content,
         std::make_index_sequence<Parallelism>{}, transformers...);
@@ -270,7 +262,6 @@ class BatchedPipeline {
     for (size_t i = 0; i < Parallelism; ++i) {
       futures[i].get();
     }
-    // LOG(TIMING) << "produce batch time " << timer.msecs() << std::endl;
     return result;
   }
 

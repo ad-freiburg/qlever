@@ -19,7 +19,6 @@
 #include "util/TupleHelpers.h"
 #include "util/TypeTraits.h"
 
-
 // An IRI or a literal together with the information, whether it should be part
 // of the external vocabulary
 struct PossiblyExternalizedIriOrLiteral {
@@ -159,8 +158,8 @@ struct alignas(256) ItemMapManager {
     auto it = map.find(key._iriOrLiteral);
     if (it == map.end()) {
       uint64_t res = map.size() + _minId;
-      // We have to first add the string to the buffer, otherwise we don't have a persistent `string_view` to add to
-      // the `map`.
+      // We have to first add the string to the buffer, otherwise we don't have
+      // a persistent `string_view` to add to the `map`.
       auto keyView = buffer.addString(key._iriOrLiteral);
       map.try_emplace(keyView,
                       LocalVocabIndexAndSplitVal{
@@ -194,7 +193,7 @@ struct LangtagAndTriple {
  * @brief Get the tuple of lambda functions that is needed for the String-> Id
  * step of the Index building Pipeline
  *
- * return a tuple of <Parallelism> lambda functions, each lambda does the
+ * return a tuple of <NumThreads> lambda functions, each lambda does the
  * following
  *
  * given an index idx, returns a lambda that
@@ -218,16 +217,16 @@ struct LangtagAndTriple {
  * ranges for the individual HashMaps
  * @return A Tuple of lambda functions (see above)
  */
-template <size_t Parallelism>
+template <size_t NumThreads>
 auto getIdMapLambdas(
-    std::array<std::optional<ItemMapManager>, Parallelism>* itemArrayPtr,
+    std::array<std::optional<ItemMapManager>, NumThreads>* itemArrayPtr,
     size_t maxNumberOfTriples, const TripleComponentComparator* comp,
     auto* indexPtr, ItemAlloc alloc) {
   // that way the different ids won't interfere
   auto& itemArray = *itemArrayPtr;
-  for (size_t j = 0; j < Parallelism; ++j) {
+  for (size_t j = 0; j < NumThreads; ++j) {
     itemArray[j].emplace(j * 100 * maxNumberOfTriples, comp, alloc);
-    itemArray[j]->_map.map_.reserve(5 * maxNumberOfTriples / Parallelism);
+    itemArray[j]->_map.map_.reserve(5 * maxNumberOfTriples / NumThreads);
     // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
     // This is not necessary for the actual QLever code, but certain unit tests
     // currently fail without it.
@@ -277,8 +276,7 @@ auto getIdMapLambdas(
   // setup a tuple with one lambda function per map in the itemArray
   // (the first lambda will assign ids according to itemArray[1]...
   auto itemMapLambdaTuple =
-      ad_tuple_helpers::setupTupleFromCallable<Parallelism>(
-          itemMapLamdaCreator);
+      ad_tuple_helpers::setupTupleFromCallable<NumThreads>(itemMapLamdaCreator);
   return itemMapLambdaTuple;
 }
 #endif  // QLEVER_INDEXBUILDERTYPES_H
