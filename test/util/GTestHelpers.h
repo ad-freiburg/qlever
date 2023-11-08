@@ -7,6 +7,7 @@
 #include <gmock/gmock.h>
 
 #include "util/SourceLocation.h"
+#include "util/TypeTraits.h"
 #include "util/json.h"
 
 // The following two macros make the usage of `testing::Property` and
@@ -30,6 +31,11 @@
   ::testing::Field(#Member, &Class::Member, Matcher)
 #endif
 
+// Type that can never be thrown because it can't be built
+class NeverThrown {
+  NeverThrown() = default;
+};
+
 /*
 Similar to Gtest's `EXPECT_THROW`. Expect that executing `statement` throws
 an exception that inherits from `std::exception`, and that the error message
@@ -48,6 +54,12 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
   } catch (const exceptionType& e) {                                          \
     EXPECT_THAT(e.what(), errorMessageMatcher)                                \
         << "The exception message does not match";                            \
+  } catch (const std::conditional_t<                                          \
+           ad_utility::isSimilar<exceptionType, std::exception>,              \
+           ::NeverThrown, std::exception>& exception) {                       \
+    FAIL() << "The thrown exception was "                                     \
+           << ::testing::internal::GetTypeName(typeid(exception))             \
+           << ", expected " #exceptionType;                                   \
   } catch (...) {                                                             \
     FAIL() << "The thrown exception did not inherit from " #exceptionType;    \
   }                                                                           \
