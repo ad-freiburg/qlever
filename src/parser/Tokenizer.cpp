@@ -6,9 +6,19 @@
 
 // ______________________________________________________
 void Tokenizer::skipWhitespaceAndComments() {
-  skipWhitespace();
-  skipComments();
-  skipWhitespace();
+  // Call `skipWhitespace` and `skipComments` in a loop until no more input was
+  // consumed. This is necessary because we might have multiple lines of
+  // comments that are spearated by whitespace.
+  auto ptr = _data.begin();
+  while (true) {
+    skipWhitespace();
+    skipComments();
+    auto newPtr = _data.begin();
+    if (ptr == newPtr) {
+      return;
+    }
+    ptr = newPtr;
+  }
 }
 
 // _______________________________________________________
