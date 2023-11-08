@@ -201,15 +201,12 @@ class TokenizerCtre {
     // Call `skipWhitespace` and `skipComments` in a loop until no more input
     // was consumed. This is necessary because we might have multiple lines of
     // comments that are spearated by whitespace.
-    auto ptr = _data.begin();
     while (true) {
-      skipWhitespace();
-      skipComments();
-      auto newPtr = _data.begin();
-      if (ptr == newPtr) {
+      bool a = skipWhitespace();
+      bool b = skipComments();
+      if (!(a || b)) {
         return;
       }
-      ptr = newPtr;
     }
   }
 
@@ -241,15 +238,16 @@ class TokenizerCtre {
   std::string_view _data;
 
   // ________________________________________________________________
-  void skipWhitespace() {
+  bool skipWhitespace() {
     auto v = view();
     auto pos = v.find_first_not_of("\x20\x09\x0D\x0A");
     pos = std::min(pos, v.size());
     _data.remove_prefix(pos);
+    return pos != 0;
   }
 
   // ___________________________________________________________________________________
-  void skipComments() {
+  bool skipComments() {
     auto v = view();
     if (v.starts_with('#')) {
       auto pos = v.find('\n');
@@ -260,7 +258,9 @@ class TokenizerCtre {
       } else {
         _data.remove_prefix(pos + 1);
       }
+      return true;
     }
+    return false;
   }
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
 

@@ -306,16 +306,16 @@ class Tokenizer {
   const RE2& idToRegex(const TurtleTokenId reg);
 
   // ________________________________________________________________
-  void skipWhitespace() {
+  bool skipWhitespace() {
     auto v = view();
     auto pos = v.find_first_not_of("\x20\x09\x0D\x0A");
     pos = std::min(pos, v.size());
     _data.remove_prefix(pos);
-    return;
+    return pos != 0;
   }
 
   // ___________________________________________________________________________________
-  void skipComments() {
+  bool skipComments() {
     // if not successful, then there was no comment, but this does not matter to
     // us
     auto v = view();
@@ -328,7 +328,9 @@ class Tokenizer {
       } else {
         _data.remove_prefix(pos + 1);
       }
+      return true;
     }
+    return false;
   }
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
   re2::StringPiece _data;
