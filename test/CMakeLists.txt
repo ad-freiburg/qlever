@@ -372,4 +372,6 @@ addLinkAndDiscoverTest(UpdateFetcherTest http)
 
 addLinkAndDiscoverTest(MessageSenderTest http)
 
+addLinkAndDiscoverTest(CachingMemoryResourceTest)
+
 addLinkAndDiscoverTest(ParallelMultiwayMergeTest)

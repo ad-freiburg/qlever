@@ -11,6 +11,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
 #include "index/VocabularyGenerator.h"
+#include "util/Algorithm.h"
 
 namespace {
 // equality operator used in this test
@@ -30,6 +31,13 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
 }
 
 auto V = ad_utility::testing::VocabId;
+
+auto makeItemMapArray = [] {
+  auto alloc = ItemAlloc{std::pmr::get_default_resource()};
+  auto make = [&](auto&&...) { return ItemMapAndBuffer{alloc}; };
+  return ad_utility::transformArray(std::array<int, NUM_PARALLEL_ITEM_MAPS>{},
+                                    make);
+};
 }  // namespace
 
 // Test fixture that sets up the binary files vor partial vocabulary and
@@ -101,8 +109,8 @@ class MergeVocabularyTest : public ::testing::Test {
           partialVocab << tripleComponents.size();
           size_t localIdx = 0;
           for (auto w : tripleComponents) {
-            auto globalId = w._index;
-            w._index = localIdx;
+            auto globalId = w.index_;
+            w.index_ = localIdx;
             partialVocab << w;
             if (mapping) {
               mapping->emplace_back(V(localIdx), V(globalId));
@@ -187,11 +195,12 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 }
 
 TEST(VocabularyGenerator, ReadAndWritePartial) {
+  using S = TripleComponentComparator::SplitValNonOwningWithSortKey;
   {
-    using S = TripleComponentComparator::SplitVal;
     S dummy;
-    ItemMapArray arr;
-    auto& s = arr[0];
+
+    ItemMapArray arr = makeItemMapArray();
+    auto& s = arr[0].map_;
     s["A"] = {5, dummy};
     s["acb"] = {6, dummy};
     s["b"] = {7, dummy};
@@ -226,15 +235,23 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     (void)res;
   }
 
-  // again with the case insensitive variant.
+  // Again with the case-insensitive variant.
   try {
     RdfsVocabulary v;
     v.setLocale("en", "US", false);
-    ItemMapArray arr;
-    auto& s = arr[0];
+    ItemMapArray arr = makeItemMapArray();
+    auto& s = arr[0].map_;
+    // The actual strings are never deallocated, but the
+    // `monotonic_buffer_resource` deallocates them all at once. Note that
+    // simply passing `std::pmr::get_default_resource` to the `alloc` below
+    // would lead to memory leaks.
+    std::pmr::monotonic_buffer_resource buffer;
+    auto alloc = std::pmr::polymorphic_allocator<char>{&buffer};
     auto assign = [&](std::string_view str, size_t id) {
-      s[str] = {id, v.getCaseComparator().extractAndTransformComparable(
-                        str, TripleComponentComparator::Level::IDENTICAL)};
+      s[str] = {
+          id,
+          v.getCaseComparator().extractAndTransformComparableNonOwning(
+              str, TripleComponentComparator::Level::IDENTICAL, false, &alloc)};
     };
     assign("\"A\"", 5);
     assign("\"a\"", 6);
@@ -246,7 +263,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     writePartialIdMapToBinaryFileForMerging(
         ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
         [&c = v.getCaseComparator()](const auto& a, const auto& b) {
-          return c(a.second.m_splitVal, b.second.m_splitVal,
+          return c(a.second.splitVal_, b.second.splitVal_,
                    TripleComponentComparator::Level::IDENTICAL);
         },
         false);
@@ -277,7 +294,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
 TEST(VocabularyGeneratorTest, createInternalMapping) {
   ItemVec input;
   using S = LocalVocabIndexAndSplitVal;
-  TripleComponentComparator::SplitVal
+  TripleComponentComparator::SplitValNonOwningWithSortKey
       d;  // dummy value that is unused in this case.
   input.emplace_back("alpha", S{5, d});
   input.emplace_back("beta", S{4, d});
@@ -288,13 +305,13 @@ TEST(VocabularyGeneratorTest, createInternalMapping) {
   input.emplace_back("xenon", S{0, d});
 
   auto res = createInternalMapping(&input);
-  ASSERT_EQ(0u, input[0].second.m_id);
-  ASSERT_EQ(1u, input[1].second.m_id);
-  ASSERT_EQ(1u, input[2].second.m_id);
-  ASSERT_EQ(2u, input[3].second.m_id);
-  ASSERT_EQ(3u, input[4].second.m_id);
-  ASSERT_EQ(3u, input[5].second.m_id);
-  ASSERT_EQ(4u, input[6].second.m_id);
+  ASSERT_EQ(0u, input[0].second.id_);
+  ASSERT_EQ(1u, input[1].second.id_);
+  ASSERT_EQ(1u, input[2].second.id_);
+  ASSERT_EQ(2u, input[3].second.id_);
+  ASSERT_EQ(3u, input[4].second.id_);
+  ASSERT_EQ(3u, input[5].second.id_);
+  ASSERT_EQ(4u, input[6].second.id_);
 
   ASSERT_EQ(0u, res[5]);
   ASSERT_EQ(1u, res[4]);
