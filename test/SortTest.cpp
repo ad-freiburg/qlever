@@ -188,7 +188,7 @@ TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
   const_cast<SortPerformanceEstimator&>(
       sort.getExecutionContext()->getSortPerformanceEstimator())
       .computeEstimatesExpensively(
-          ad_utility::makeUnlimitedAllocator<ValueId>(), 1000000);
+          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000);
 
   sort.recursivelySetTimeConstraint(0ms);
 

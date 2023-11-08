@@ -249,7 +249,7 @@ TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
   const_cast<SortPerformanceEstimator&>(
       orderBy.getExecutionContext()->getSortPerformanceEstimator())
       .computeEstimatesExpensively(
-          ad_utility::makeUnlimitedAllocator<ValueId>(), 1000000);
+          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000);
 
   orderBy.recursivelySetTimeConstraint(0ms);
 
