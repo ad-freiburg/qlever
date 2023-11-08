@@ -19,17 +19,17 @@ TransitivePath::TransitivePath(QueryExecutionContext* qec,
                                size_t maxDist)
     : Operation(qec),
       _subtree(std::move(child)),
-      _lhs(leftSide),
-      _rhs(rightSide),
+      _lhs(std::move(leftSide)),
+      _rhs(std::move(rightSide)),
       _resultWidth(2),
       _minDist(minDist),
       _maxDist(maxDist) {
-  if (leftSide.isVariable()) {
-    _variableColumns[std::get<Variable>(leftSide.value)] =
+  if (_lhs.isVariable()) {
+    _variableColumns[std::get<Variable>(_lhs.value)] =
         makeAlwaysDefinedColumn(0);
   }
-  if (rightSide.isVariable()) {
-    _variableColumns[std::get<Variable>(rightSide.value)] =
+  if (_rhs.isVariable()) {
+    _variableColumns[std::get<Variable>(_rhs.value)] =
         makeAlwaysDefinedColumn(1);
   }
 
