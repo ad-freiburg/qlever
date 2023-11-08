@@ -126,8 +126,8 @@ class VocabularyMerger {
     }
     [[nodiscard]] std::string& iriOrLiteral() { return _entry.iriOrLiteral(); }
 
-    [[nodiscard]] const auto& id() const { return _entry._index; }
-    [[nodiscard]] auto& id() { return _entry._index; }
+    [[nodiscard]] const auto& id() const { return _entry.index_; }
+    [[nodiscard]] auto& id() { return _entry.index_; }
   };
 
   // write the queu words in the buffer to their corresponding idPairVecs.

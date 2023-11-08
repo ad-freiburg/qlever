@@ -109,8 +109,8 @@ class MergeVocabularyTest : public ::testing::Test {
           partialVocab << tripleComponents.size();
           size_t localIdx = 0;
           for (auto w : tripleComponents) {
-            auto globalId = w._index;
-            w._index = localIdx;
+            auto globalId = w.index_;
+            w.index_ = localIdx;
             partialVocab << w;
             if (mapping) {
               mapping->emplace_back(V(localIdx), V(globalId));
@@ -263,7 +263,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     writePartialIdMapToBinaryFileForMerging(
         ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
         [&c = v.getCaseComparator()](const auto& a, const auto& b) {
-          return c(a.second.m_splitVal, b.second.m_splitVal,
+          return c(a.second.splitVal_, b.second.splitVal_,
                    TripleComponentComparator::Level::IDENTICAL);
         },
         false);
@@ -305,13 +305,13 @@ TEST(VocabularyGeneratorTest, createInternalMapping) {
   input.emplace_back("xenon", S{0, d});
 
   auto res = createInternalMapping(&input);
-  ASSERT_EQ(0u, input[0].second.m_id);
-  ASSERT_EQ(1u, input[1].second.m_id);
-  ASSERT_EQ(1u, input[2].second.m_id);
-  ASSERT_EQ(2u, input[3].second.m_id);
-  ASSERT_EQ(3u, input[4].second.m_id);
-  ASSERT_EQ(3u, input[5].second.m_id);
-  ASSERT_EQ(4u, input[6].second.m_id);
+  ASSERT_EQ(0u, input[0].second.id_);
+  ASSERT_EQ(1u, input[1].second.id_);
+  ASSERT_EQ(1u, input[2].second.id_);
+  ASSERT_EQ(2u, input[3].second.id_);
+  ASSERT_EQ(3u, input[4].second.id_);
+  ASSERT_EQ(3u, input[5].second.id_);
+  ASSERT_EQ(4u, input[6].second.id_);
 
   ASSERT_EQ(0u, res[5]);
   ASSERT_EQ(1u, res[4]);

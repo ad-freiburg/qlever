@@ -6,6 +6,8 @@
 
 #include <memory_resource>
 
+#include "util/HashMap.h"
+
 namespace ad_utility {
 
 // A memory resource that inherits from `std::pmr::memory_resource` with the
@@ -51,7 +53,7 @@ class CachingMemoryResource : public std::pmr::memory_resource {
     cache_[std::pair{bytes, alignment}].push_back(p);
   }
 
-  // Equaility implementation.
+  // Equality implementation.
   bool do_is_equal(
       const std::pmr::memory_resource& other) const noexcept override {
     return this == &other;
@@ -59,8 +61,8 @@ class CachingMemoryResource : public std::pmr::memory_resource {
 
  public:
   // Destructor: actually deallocate the blocks in the cache.
-  ~CachingMemoryResource() {
-    for (auto& [key, pointers] : cache_) {
+  ~CachingMemoryResource() override {
+    for (const auto& [key, pointers] : cache_) {
       for (auto ptr : pointers) {
         allocator_->deallocate(ptr, key.first, key.second);
       }

@@ -1,5 +1,5 @@
 //  Copyright 2020, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
+//                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 // Common classes / Typedefs that are used during Index Creation
@@ -24,31 +24,31 @@
 struct PossiblyExternalizedIriOrLiteral {
   PossiblyExternalizedIriOrLiteral(std::string iriOrLiteral,
                                    bool isExternal = false)
-      : _iriOrLiteral{std::move(iriOrLiteral)}, _isExternal{isExternal} {}
+      : iriOrLiteral_{std::move(iriOrLiteral)}, isExternal_{isExternal} {}
   PossiblyExternalizedIriOrLiteral() = default;
-  std::string _iriOrLiteral;
-  bool _isExternal = false;
+  std::string iriOrLiteral_;
+  bool isExternal_ = false;
 
   AD_SERIALIZE_FRIEND_FUNCTION(PossiblyExternalizedIriOrLiteral) {
-    serializer | arg._iriOrLiteral;
-    serializer | arg._isExternal;
+    serializer | arg.iriOrLiteral_;
+    serializer | arg.isExternal_;
   }
 };
 
 struct TripleComponentWithIndex {
-  std::string _iriOrLiteral;
-  bool _isExternal = false;
-  uint64_t _index = 0;
+  std::string iriOrLiteral_;
+  bool isExternal_ = false;
+  uint64_t index_ = 0;
 
-  [[nodiscard]] const auto& isExternal() const { return _isExternal; }
-  [[nodiscard]] auto& isExternal() { return _isExternal; }
-  [[nodiscard]] const auto& iriOrLiteral() const { return _iriOrLiteral; }
-  [[nodiscard]] auto& iriOrLiteral() { return _iriOrLiteral; }
+  [[nodiscard]] const auto& isExternal() const { return isExternal_; }
+  [[nodiscard]] auto& isExternal() { return isExternal_; }
+  [[nodiscard]] const auto& iriOrLiteral() const { return iriOrLiteral_; }
+  [[nodiscard]] auto& iriOrLiteral() { return iriOrLiteral_; }
 
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
-    serializer | arg._iriOrLiteral;
-    serializer | arg._isExternal;
-    serializer | arg._index;
+    serializer | arg.iriOrLiteral_;
+    serializer | arg.isExternal_;
+    serializer | arg.index_;
   }
 };
 
@@ -66,8 +66,8 @@ inline Triple makeTriple(std::array<std::string, 3>&& t) {
 
 /// The index of a word and the corresponding `SplitVal`.
 struct LocalVocabIndexAndSplitVal {
-  uint64_t m_id;
-  TripleComponentComparator::SplitValNonOwningWithSortKey m_splitVal;
+  uint64_t id_;
+  TripleComponentComparator::SplitValNonOwningWithSortKey splitVal_;
 };
 
 // During the first phase of the index building we use hash maps from strings
@@ -139,37 +139,36 @@ struct alignas(256) ItemMapManager {
   /// Construct by assigning the minimum ID that should be returned by the map.
   explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp,
                           ItemAlloc alloc)
-      : _map(alloc), _minId(minId), m_comp(cmp) {}
+      : map_(alloc), minId_(minId), comparator_(cmp) {}
 
   /// Move the held HashMap out as soon as we are done inserting and only need
   /// the actual vocabulary.
-  ItemMapAndBuffer&& moveMap() && { return std::move(_map); }
+  ItemMapAndBuffer&& moveMap() && { return std::move(map_); }
 
   /// If the key was seen before, return its preassigned ID. Else assign the
   /// next free ID to the string, store and return it.
-  // TODO<joka921> Can we move that in?
   Id getId(const TripleComponentOrId& keyOrId) {
     if (std::holds_alternative<Id>(keyOrId)) {
       return std::get<Id>(keyOrId);
     }
     const auto& key = std::get<PossiblyExternalizedIriOrLiteral>(keyOrId);
-    auto& map = _map.map_;
-    auto& buffer = _map.buffer_;
-    auto it = map.find(key._iriOrLiteral);
+    auto& map = map_.map_;
+    auto& buffer = map_.buffer_;
+    auto it = map.find(key.iriOrLiteral_);
     if (it == map.end()) {
-      uint64_t res = map.size() + _minId;
+      uint64_t res = map.size() + minId_;
       // We have to first add the string to the buffer, otherwise we don't have
       // a persistent `string_view` to add to the `map`.
-      auto keyView = buffer.addString(key._iriOrLiteral);
-      map.try_emplace(keyView,
-                      LocalVocabIndexAndSplitVal{
-                          res, m_comp->extractAndTransformComparableNonOwning(
-                                   key._iriOrLiteral,
-                                   TripleComponentComparator::Level::TOTAL,
-                                   key._isExternal, &buffer.charAllocator())});
+      auto keyView = buffer.addString(key.iriOrLiteral_);
+      map.try_emplace(
+          keyView, LocalVocabIndexAndSplitVal{
+                       res, comparator_->extractAndTransformComparableNonOwning(
+                                key.iriOrLiteral_,
+                                TripleComponentComparator::Level::TOTAL,
+                                key.isExternal_, &buffer.charAllocator())});
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
-      return Id::makeFromVocabIndex(VocabIndex::make(it->second.m_id));
+      return Id::makeFromVocabIndex(VocabIndex::make(it->second.id_));
     }
   }
 
@@ -177,16 +176,16 @@ struct alignas(256) ItemMapManager {
   std::array<Id, 3> getId(const Triple& t) {
     return {getId(t[0]), getId(t[1]), getId(t[2])};
   }
-  ItemMapAndBuffer _map;
-  uint64_t _minId = 0;
-  const TripleComponentComparator* m_comp = nullptr;
+  ItemMapAndBuffer map_;
+  uint64_t minId_ = 0;
+  const TripleComponentComparator* comparator_ = nullptr;
 };
 
 /// Combines a triple (three strings) together with the (possibly empty)
 /// language tag of its object.
 struct LangtagAndTriple {
-  std::string _langtag;
-  Triple _triple;
+  std::string langtag_;
+  Triple triple_;
 };
 
 /**
@@ -232,7 +231,7 @@ auto getIdMapLambdas(
     // the allocation and deallocation of these hash maps (that are newly
     // created for each batch) much cheaper (see `CachingMemoryResource.h` and
     // `IndexImpl.cpp`).
-    itemArray[j]->_map.map_.reserve(5 * maxNumberOfTriples / NumThreads);
+    itemArray[j]->map_.map_.reserve(5 * maxNumberOfTriples / NumThreads);
     // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
     // This is not necessary for the actual QLever code, but certain unit tests
     // currently fail without it.
@@ -253,18 +252,18 @@ auto getIdMapLambdas(
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       OptionalIds res;
       // get Ids for the actual triple and store them in the result.
-      res[0] = map.getId(lt._triple);
-      if (!lt._langtag.empty()) {  // the object of the triple was a literal
+      res[0] = map.getId(lt.triple_);
+      if (!lt.langtag_.empty()) {  // the object of the triple was a literal
                                    // with a language tag
         // get the Id for the corresponding langtag Entity
         auto langTagId =
-            map.getId(ad_utility::convertLangtagToEntityUri(lt._langtag));
+            map.getId(ad_utility::convertLangtagToEntityUri(lt.langtag_));
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
             map.getId(ad_utility::convertToLanguageTaggedPredicate(
-                std::get<PossiblyExternalizedIriOrLiteral>(lt._triple[1])
-                    ._iriOrLiteral,
-                lt._langtag));
+                std::get<PossiblyExternalizedIriOrLiteral>(lt.triple_[1])
+                    .iriOrLiteral_,
+                lt.langtag_));
         auto& spoIds = *res[0];  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.

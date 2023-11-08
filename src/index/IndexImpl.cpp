@@ -325,7 +325,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     LOG(TIMING)
         << "Time spent waiting for the writing of a previous vocabulary: "
         << sortFutureTimer.msecs() << "ms." << std::endl;
-    auto moveMap = [](std::optional<ItemMapManager>&& el) -> ItemMapAndBuffer {
+    auto moveMap = [](std::optional<ItemMapManager>&& el) {
       return std::move(el.value()).moveMap();
     };
     std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS> convertedMaps =
@@ -921,7 +921,7 @@ void IndexImpl::readConfiguration() {
 LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     TurtleTriple&& triple) const {
   LangtagAndTriple result{"", {}};
-  auto& resultTriple = result._triple;
+  auto& resultTriple = result.triple_;
   resultTriple[0] = std::move(triple.subject_);
   resultTriple[1] = std::move(triple.predicate_);
 
@@ -945,14 +945,14 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
       continue;
     }
     auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
-    auto& iriOrLiteral = component._iriOrLiteral;
+    auto& iriOrLiteral = component.iriOrLiteral_;
     iriOrLiteral = vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
     if (vocab_.shouldBeExternalized(iriOrLiteral)) {
-      component._isExternal = true;
+      component.isExternal_ = true;
     }
     // Only the third element (the object) might contain a language tag.
     if (i == 2 && isLiteral(iriOrLiteral)) {
-      result._langtag = decltype(vocab_)::getLanguage(iriOrLiteral);
+      result.langtag_ = decltype(vocab_)::getLanguage(iriOrLiteral);
     }
   }
   return result;
@@ -1117,7 +1117,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
     }();
     const auto identicalPred = [&c = vocab->getCaseComparator()](
                                    const auto& a, const auto& b) {
-      return c(a.second.m_splitVal, b.second.m_splitVal,
+      return c(a.second.splitVal_, b.second.splitVal_,
                decltype(vocab_)::SortLevel::TOTAL);
     };
     {
@@ -1135,20 +1135,22 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
       vec.erase(std::unique(vec.begin(), vec.end(),
                             [](const auto& a, const auto& b) {
-                              return a.second.m_id == b.second.m_id;
+                              return a.second.id_ == b.second.id_;
                             }),
                 vec.end());
     }
     // The writing to the STXXL vector has to be done in order, to
     // make the update from local to global ids work.
 
-    auto writeTriplesFuture = std::async(std::launch::async, [&]() {
-      globalWritePtr->withWriteLockAndOrdered(
-          [&](auto& writerPtr) {
-            writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
-          },
-          numFiles);
-    });
+    auto writeTriplesFuture = std::async(
+        std::launch::async,
+        [&globalWritePtr, &localIds, &mapping, &numFiles]() {
+          globalWritePtr->withWriteLockAndOrdered(
+              [&](auto& writerPtr) {
+                writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
+              },
+              numFiles);
+        });
     {
       ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
       writePartialVocabularyToFile(vec, partialFilename);
@@ -1158,7 +1160,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       LOG(TRACE) << "Start sorting of vocabulary for prefix compression"
                  << std::endl;
       std::erase_if(vec, [](const auto& a) {
-        return a.second.m_splitVal.isExternalized_;
+        return a.second.splitVal_.isExternalized_;
       });
       {
         ad_utility::TimeBlockAndLog l{"sorting for compression"};

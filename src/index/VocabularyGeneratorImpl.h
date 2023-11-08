@@ -39,7 +39,7 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     if (t1.isExternal() != t2.isExternal()) {
       return t2.isExternal();
     }
-    return comparator(t1._iriOrLiteral, t2._iriOrLiteral);
+    return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
   };
 
   // For the priority queue we have to invert the comparison, because
@@ -186,9 +186,9 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       }
 
       metaData_.internalEntities_.addIfWordMatches(
-          top.iriOrLiteral(), lastTripleComponent_.value()._index);
+          top.iriOrLiteral(), lastTripleComponent_.value().index_);
       metaData_.langTaggedPredicates_.addIfWordMatches(
-          top.iriOrLiteral(), lastTripleComponent_.value()._index);
+          top.iriOrLiteral(), lastTripleComponent_.value().index_);
       metaData_.numWordsTotal_++;
       if (metaData_.numWordsTotal_ % 100'000'000 == 0) {
         LOG(INFO) << "Words merged: " << metaData_.numWordsTotal_ << std::endl;
@@ -197,7 +197,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     // Write pair of local and global ID to buffer.
     writeBuf.emplace_back(
         top._partialFileId,
-        std::pair{top.id(), lastTripleComponent_.value()._index});
+        std::pair{top.id(), lastTripleComponent_.value().index_});
 
     if (writeBuf.size() >= bufSize) {
       auto task = [this, buf = std::move(writeBuf)]() {
@@ -250,9 +250,9 @@ inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
       nextWordId++;
       lastWord = el.first;
     }
-    AD_CONTRACT_CHECK(!res.count(el.second.m_id));
-    res[el.second.m_id] = nextWordId;
-    el.second.m_id = nextWordId;
+    AD_CONTRACT_CHECK(!res.count(el.second.id_));
+    res[el.second.id_] = nextWordId;
+    el.second.id_ = nextWordId;
     first = false;
   }
   return res;
