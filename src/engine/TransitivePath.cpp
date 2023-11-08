@@ -238,6 +238,11 @@ void TransitivePath::computeTransitivePath(
 
 // _____________________________________________________________________________
 ResultTable TransitivePath::computeResult() {
+  if (_minDist == 0 && !isBound() && _lhs.isVariable() && _rhs.isVariable()) {
+    AD_THROW(
+        "This query might have to evalute the empty path, which is currently "
+        "not supported");
+  }
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
   IdTable idTable{getExecutionContext()->getAllocator()};
