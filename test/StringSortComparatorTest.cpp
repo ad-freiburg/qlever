@@ -264,15 +264,6 @@ TEST(LocaleManager, PrefixSortKey) {
   auto a = locIgnorePunct.getPrefixSortKey("vivæ", 4).second;
   auto b = locIgnorePunct.getPrefixSortKey("vivae", 4).second;
 
-  auto a2 =
-      locIgnorePunct.getSortKey("vivæ", LocaleManager::Level::PRIMARY).get();
-  auto b2 =
-      locIgnorePunct.getSortKey("vivae", LocaleManager::Level::PRIMARY).get();
-
-  LOG(INFO) << a.get() << std::endl;
-  LOG(INFO) << b.get() << std::endl;
-  LOG(INFO) << a2 << std::endl;
-  LOG(INFO) << b2 << std::endl;
   ASSERT_GT(a.size(), b.size());
   ASSERT_TRUE(a.starts_with(b));
   // Also test the defaulted consistent comparison.

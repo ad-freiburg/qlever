@@ -20,13 +20,10 @@ namespace ad_utility {
 //    sizes or alignments, but is only able to reuse memory if the size and
 //    alignment match exactly.
 // This class can be used when we know that blocks of the same size will be
-// reused over and over again, for example if there are many `std::string`s over
-// time with the same length, but only few of
-// these vectors exist at the same time. It is for example used for the first
-// pass of the index building for large hash maps that are reserved in advance
-// to a guaranteed upper bound of their actual size (see `IndexBuilderTypes.h`).
-// A simpler approach would be to reuse the hash maps directly, but once this is
-// not feasible, this allocator can come in handy.
+// reused over and over again. For example in `IndexBuilderTypes.h` we use it
+// for multiple hash maps that all reserve the same amount of space. A simpler
+// approach would be to reuse the hash maps directly, but once this is not
+// feasible, this allocator can come in handy.
 class CachingMemoryResource : public std::pmr::memory_resource {
  private:
   std::pmr::memory_resource* allocator_ = std::pmr::get_default_resource();
