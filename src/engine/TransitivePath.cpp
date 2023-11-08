@@ -199,7 +199,12 @@ void TransitivePath::computeTransitivePathBound(
   auto [edges, nodes] = setupMapAndNodes<SUB_WIDTH, SIDE_WIDTH>(
       dynSub, startSide, targetSide, startSideTable);
 
-  Map hull = transitiveHull(edges, nodes);
+  Map hull;
+  if (!targetSide.isVariable()) {
+    hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value));
+  } else {
+    hull = transitiveHull(edges, nodes, std::nullopt);
+  }
 
   TransitivePath::fillTableWithHull<RES_WIDTH, SIDE_WIDTH>(
       res, hull, nodes, startSide.outputCol, targetSide.outputCol, startSideTable,
@@ -218,7 +223,12 @@ void TransitivePath::computeTransitivePath(
   auto [edges, nodes] =
       setupMapAndNodes<SUB_WIDTH>(dynSub, startSide, targetSide);
 
-  Map hull = transitiveHull(edges, nodes);
+  Map hull;
+  if (!targetSide.isVariable()) {
+    hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value));
+  } else {
+    hull = transitiveHull(edges, nodes, std::nullopt);
+  }
 
   TransitivePath::fillTableWithHull<RES_WIDTH>(res, hull, startSide.outputCol,
                                                targetSide.outputCol);
@@ -329,7 +339,7 @@ bool TransitivePath::isBound() const {
 
 // _____________________________________________________________________________
 TransitivePath::Map TransitivePath::transitiveHull(
-    const Map& edges, const std::vector<Id>& startNodes) const {
+    const Map& edges, const std::vector<Id>& startNodes, std::optional<Id> target) const {
   using MapIt = TransitivePath::Map::const_iterator;
   // For every node do a dfs on the graph
   Map hull;
@@ -386,10 +396,8 @@ TransitivePath::Map TransitivePath::transitiveHull(
         // process the child
         if (childDepth >= _minDist) {
           marks.insert(child);
-          if (_rhs.isVariable() || child == std::get<Id>(_rhs.value)) {
+          if (!target.has_value() || child == target.value()) {
             hull[currentStartNode].insert(child);
-          } else if (_lhs.isVariable() || child == std::get<Id>(_lhs.value)) {
-            hull[child].insert(currentStartNode);
           }
         }
         // Add the child to the stack
