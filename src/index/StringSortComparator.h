@@ -191,7 +191,7 @@ class LocaleManager {
     sortKeyBuffer.resize(50 * s.size());
     static_assert(sizeof(uint8_t) == sizeof(std::string::value_type));
     static constexpr auto intMax = std::numeric_limits<int32_t>::max();
-    AD_CORRECTNESS_CHECK(sortKeyBuffer.size() <= intMax);
+    AD_CORRECTNESS_CHECK(sortKeyBuffer.size() <= static_cast<size_t>(intMax));
     auto sz = col.getSortKey(utf16, sortKeyBuffer.data(),
                              static_cast<int32_t>(sortKeyBuffer.size()));
     AD_CONTRACT_CHECK(sz >= 0);
@@ -201,7 +201,7 @@ class LocaleManager {
     if (static_cast<size_t>(sz) > sortKeyBuffer.size()) {
       sortKeyBuffer.clear();
       sortKeyBuffer.resize(sz);
-      AD_CORRECTNESS_CHECK(sortKeyBuffer.size() <= intMax);
+      AD_CORRECTNESS_CHECK(sortKeyBuffer.size() <= static_cast<size_t>(intMax));
       auto actualSz =
           col.getSortKey(utf16, (sortKeyBuffer.data()),
                          static_cast<int32_t>(sortKeyBuffer.size()));
