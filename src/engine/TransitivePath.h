@@ -210,9 +210,12 @@ class TransitivePath : public Operation {
    * @param nodes A list of Ids. These Ids are used as starting points for the
    * transitive hull. Thus, this parameter guides the performance of this
    * algorithm.
+   * @param target Optional target Id. If supplied, only paths which end
+   * in this Id are added to the hull.
    * @return Map Maps each Id to its connected Ids in the transitive hull
    */
-  Map transitiveHull(const Map& edges, const std::vector<Id>& startNodes) const;
+  Map transitiveHull(const Map& edges, const std::vector<Id>& startNodes,
+                     std::optional<Id> target) const;
 
   /**
    * @brief Fill the given table with the transitive hull and use the
