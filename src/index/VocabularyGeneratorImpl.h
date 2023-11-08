@@ -164,7 +164,7 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     if (t1.isExternal() != t2.isExternal()) {
       return t2.isExternal();
     }
-    return comparator(t1._iriOrLiteral, t2._iriOrLiteral);
+    return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
   };
   auto lessThanForQueue = [&lessThan](const QueueWord& p1,
                                       const QueueWord& p2) {
@@ -298,9 +298,9 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       }
 
       metaData_.internalEntities_.addIfWordMatches(
-          top.iriOrLiteral(), lastTripleComponent_.value()._index);
+          top.iriOrLiteral(), lastTripleComponent_.value().index_);
       metaData_.langTaggedPredicates_.addIfWordMatches(
-          top.iriOrLiteral(), lastTripleComponent_.value()._index);
+          top.iriOrLiteral(), lastTripleComponent_.value().index_);
       metaData_.numWordsTotal_++;
       if (metaData_.numWordsTotal_ % 100'000'000 == 0) {
         LOG(INFO) << "Words merged: " << metaData_.numWordsTotal_ << std::endl;
@@ -309,7 +309,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     // Write pair of local and global ID to buffer.
     writeBuf.emplace_back(
         top._partialFileId,
-        std::pair{top.id(), lastTripleComponent_.value()._index});
+        std::pair{top.id(), lastTripleComponent_.value().index_});
 
     if (writeBuf.size() >= bufSize) {
       auto task = [this, buf = std::move(writeBuf)]() {
@@ -354,16 +354,16 @@ inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
   auto& els = *elsPtr;
   ad_utility::HashMap<uint64_t, uint64_t> res;
   bool first = true;
-  std::string lastWord;
+  std::string_view lastWord;
   size_t nextWordId = 0;
   for (auto& el : els) {
     if (!first && lastWord != el.first) {
       nextWordId++;
       lastWord = el.first;
     }
-    AD_CONTRACT_CHECK(!res.count(el.second.m_id));
-    res[el.second.m_id] = nextWordId;
-    el.second.m_id = nextWordId;
+    AD_CONTRACT_CHECK(!res.count(el.second.id_));
+    res[el.second.id_] = nextWordId;
+    el.second.id_ = nextWordId;
     first = false;
   }
   return res;
@@ -399,6 +399,8 @@ inline void writeMappedIdsToExtVec(
 inline void writePartialVocabularyToFile(const ItemVec& els,
                                          const string& fileName) {
   LOG(DEBUG) << "Writing partial vocabulary to: " << fileName << "\n";
+  ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
+  byteBuffer.reserve(1'000'000'000);
   ad_utility::serialization::FileWriteSerializer serializer{fileName};
   uint64_t size = els.size();  // really make sure that this has 64bits;
   serializer << size;
@@ -407,8 +409,15 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
     const auto& [id, splitVal] = idAndSplitVal;
-    TripleComponentWithIndex entry{word, splitVal.isExternalized_, id};
-    serializer << entry;
+    byteBuffer << word;
+    byteBuffer << splitVal.isExternalized_;
+    byteBuffer << id;
+  }
+  {
+    ad_utility::TimeBlockAndLog t{"performing the actual write"};
+    serializer.serializeBytes(byteBuffer.data().data(),
+                              byteBuffer.data().size());
+    serializer.close();
   }
   serializer.close();
   LOG(DEBUG) << "Done writing partial vocabulary\n";
@@ -423,10 +432,10 @@ void writePartialIdMapToBinaryFileForMerging(
   ItemVec els;
   size_t totalEls = std::accumulate(
       map->begin(), map->end(), 0,
-      [](const auto& x, const auto& y) { return x + y.size(); });
+      [](const auto& x, const auto& y) { return x + y.map_size(); });
   els.reserve(totalEls);
   for (const auto& singleMap : *map) {
-    els.insert(end(els), begin(singleMap), end(singleMap));
+    els.insert(end(els), begin(singleMap.map_), end(singleMap.map_));
   }
   LOG(TRACE) << "Sorting ..." << std::endl;
 
@@ -437,18 +446,35 @@ void writePartialIdMapToBinaryFileForMerging(
   writePartialVocabularyToFile(els, fileName);
 }
 
-// __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(std::unique_ptr<ItemMapArray> map) {
-  ItemVec els;
-  size_t totalEls = std::accumulate(
-      map->begin(), map->end(), 0,
-      [](const auto& x, const auto& y) { return x + y.size(); });
-  els.reserve(totalEls);
-  for (auto& singleMap : *map) {
-    els.insert(end(els), std::make_move_iterator(begin(singleMap)),
-               std::make_move_iterator(end(singleMap)));
-  }
-  return els;
+// ___________________________________________________________
+inline ItemVec vocabMapsToVector(ItemMapArray& map) {
+    ItemVec els;
+    std::vector<size_t> offsets;
+    size_t totalEls =
+            std::accumulate(map.begin(), map.end(), 0,
+                            [&offsets](const auto& x, const auto& y) mutable {
+                                offsets.push_back(x);
+                                return x + y.map_.size();
+                            });
+    els.resize(totalEls);
+    std::vector<std::future<void>> futures;
+    size_t i = 0;
+    for (auto& singleMap : map) {
+        futures.push_back(
+                std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
+                    using T = ItemVec::value_type;
+                    std::ranges::transform(singleMap.map_, els.begin() + offsets[i],
+                                           [](auto& el) -> T {
+                                               return {el.first, std::move(el.second)};
+                                           });
+                }));
+        ++i;
+    }
+    for (auto& fut : futures) {
+        fut.get();
+    }
+
+    return els;
 }
 
 // _______________________________________________________________________________________________________________________
@@ -459,7 +485,7 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
       ad_utility::parallel_sort(begin(els), end(els), comp,
-                                ad_utility::parallel_tag(NUM_SORT_THREADS));
+                                ad_utility::parallel_tag(10));
     } else {
       std::sort(begin(els), end(els), comp);
     }

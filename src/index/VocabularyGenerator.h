@@ -107,6 +107,7 @@ class VocabularyMerger {
                                      size_t numFiles, Comp comparator,
                                      InternalVocabularyAction& action);
 
+
  private:
   // helper struct used in the priority queue for merging.
   // represents tokens/words in a certain partial vocabulary

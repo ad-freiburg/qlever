@@ -7,12 +7,23 @@
 
 #include "util/AsyncStream.h"
 #include "util/Generator.h"
+#include "util/Views.h"
 
 namespace ad_utility {
 
+template<typename T>
+cppcoro::generator<T> simpleJoin(auto range) {
+  for (auto& x : range) {
+    for (auto& y : x) {
+      co_yield y;
+    }
+  }
+}
+
+
 template <typename T>
 cppcoro::generator<std::vector<T>> lazyBinaryMerge(size_t blocksize,
-                                                   auto&& range1, auto&& range2,
+                                                   auto range1, auto range2,
                                                    auto comparison) {
   std::vector<T> buffer;
   buffer.reserve(blocksize);
@@ -67,7 +78,7 @@ cppcoro::generator<std::vector<T>> lazyBinaryMerge(size_t blocksize,
 
 template <typename T>
 cppcoro::generator<std::vector<T>> batchToVector(size_t blocksize,
-                                                 auto&& range) {
+                                                 auto range) {
   std::vector<T> buffer;
   buffer.reserve(blocksize);
   for (auto& el : range) {
@@ -89,9 +100,9 @@ cppcoro::generator<std::vector<T>> parallelMultiwayMerge(size_t blocksize,
                                                          auto comparison) {
   AD_CORRECTNESS_CHECK(!rangeOfRanges.empty());
   if (rangeOfRanges.size() == 1) {
-    return batchToVector<T>(blocksize, rangeOfRanges.front());
+    return batchToVector<T>(blocksize, std::move(rangeOfRanges.front()));
   } else if (rangeOfRanges.size() == 2) {
-    return lazyBinaryMerge<T>(blocksize, rangeOfRanges[0], rangeOfRanges[1],
+    return lazyBinaryMerge<T>(blocksize, std::move(rangeOfRanges[0]), std::move(rangeOfRanges[1]),
                               comparison);
   } else {
     size_t size = std::ranges::size(rangeOfRanges);
@@ -102,9 +113,9 @@ cppcoro::generator<std::vector<T>> parallelMultiwayMerge(size_t blocksize,
     return ad_utility::streams::runStreamAsync(
         lazyBinaryMerge<T>(
             blocksize,
-            std::views::join(parallelMultiwayMerge<T>(
+            simpleJoin<T>(parallelMultiwayMerge<T>(
                 blocksize, std::ranges::subrange{beg, splitIt}, comparison)),
-            std::views::join(parallelMultiwayMerge<T>(
+            simpleJoin<T>(parallelMultiwayMerge<T>(
                 blocksize, std::ranges::subrange{splitIt, end}, comparison)),
             comparison),
         2);
