@@ -308,16 +308,14 @@ class Tokenizer {
   // ________________________________________________________________
   bool skipWhitespace() {
     auto v = view();
-    auto pos = v.find_first_not_of("\x20\x09\x0D\x0A");
-    pos = std::min(pos, v.size());
-    _data.remove_prefix(pos);
-    return pos != 0;
+    auto numLeadingWhitespace = v.find_first_not_of("\x20\x09\x0D\x0A");
+    numLeadingWhitespace = std::min(numLeadingWhitespace, v.size());
+    _data.remove_prefix(numLeadingWhitespace);
+    return numLeadingWhitespace > 0;
   }
 
   // ___________________________________________________________________________________
   bool skipComments() {
-    // if not successful, then there was no comment, but this does not matter to
-    // us
     auto v = view();
     if (v.starts_with('#')) {
       auto pos = v.find('\n');
