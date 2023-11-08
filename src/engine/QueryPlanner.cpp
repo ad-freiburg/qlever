@@ -836,9 +836,11 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
     case PropertyPath::Operation::SEQUENCE:
       return seedFromSequence(left, path, right);
     case PropertyPath::Operation::ZERO_OR_MORE:
-      return seedFromTransitive(left, path, right, 0, std::numeric_limits<size_t>::max());
+      return seedFromTransitive(left, path, right, 0,
+                                std::numeric_limits<size_t>::max());
     case PropertyPath::Operation::ONE_OR_MORE:
-      return seedFromTransitive(left, path, right, 1, std::numeric_limits<size_t>::max());
+      return seedFromTransitive(left, path, right, 1,
+                                std::numeric_limits<size_t>::max());
     case PropertyPath::Operation::ZERO_OR_ONE:
       return seedFromTransitive(left, path, right, 0, 1);
   }
@@ -1958,8 +1960,9 @@ auto QueryPlanner::createJoinWithTransitivePath(
 
   // TODO: Handle the case of two or more common variables
   if (jcs.size() > 1) {
-    AD_THROW("Transitive Path operation with more than"
-             " two common variables is not supported");
+    AD_THROW(
+        "Transitive Path operation with more than"
+        " two common variables is not supported");
   }
   const size_t otherCol = aIsTransPath ? jcs[0][1] : jcs[0][0];
   const size_t thisCol = aIsTransPath ? jcs[0][0] : jcs[0][1];

@@ -207,8 +207,8 @@ void TransitivePath::computeTransitivePathBound(
   }
 
   TransitivePath::fillTableWithHull<RES_WIDTH, SIDE_WIDTH>(
-      res, hull, nodes, startSide.outputCol, targetSide.outputCol, startSideTable,
-      startSide.treeAndCol.value().second);
+      res, hull, nodes, startSide.outputCol, targetSide.outputCol,
+      startSideTable, startSide.treeAndCol.value().second);
 
   *dynRes = std::move(res).toDynamic();
 }
@@ -246,29 +246,33 @@ ResultTable TransitivePath::computeResult() {
 
   size_t subWidth = subRes->idTable().numColumns();
 
-  auto computeForOneSide = [this, &idTable, subRes, subWidth](auto boundSide, auto otherSide) -> ResultTable {
+  auto computeForOneSide = [this, &idTable, subRes, subWidth](
+                               auto boundSide, auto otherSide) -> ResultTable {
     shared_ptr<const ResultTable> sideRes =
         boundSide.treeAndCol.value().first->getResult();
     size_t sideWidth = sideRes->idTable().numColumns();
 
     CALL_FIXED_SIZE((std::array{_resultWidth, subWidth, sideWidth}),
                     &TransitivePath::computeTransitivePathBound, this, &idTable,
-                    subRes->idTable(), boundSide, otherSide, sideRes->idTable());
+                    subRes->idTable(), boundSide, otherSide,
+                    sideRes->idTable());
 
-    return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocabFromNonEmptyOf(*sideRes.get(), *subRes.get())};
+    return {std::move(idTable), resultSortedOn(),
+            subRes->getSharedLocalVocabFromNonEmptyOf(*sideRes.get(),
+                                                      *subRes.get())};
   };
 
   if (_lhs.isBoundVariable()) {
     return computeForOneSide(_lhs, _rhs);
   } else if (_rhs.isBoundVariable()) {
     return computeForOneSide(_rhs, _lhs);
-  // Right side is an Id
+    // Right side is an Id
   } else if (!_rhs.isVariable()) {
     CALL_FIXED_SIZE((std::array{_resultWidth, subWidth}),
                     &TransitivePath::computeTransitivePath, this, &idTable,
                     subRes->idTable(), _rhs, _lhs);
-  // No side is a bound variable, the right side is an unbound variable
-  // and the left side is either an unbound Variable or an ID.
+    // No side is a bound variable, the right side is an unbound variable
+    // and the left side is either an unbound Variable or an ID.
   } else {
     CALL_FIXED_SIZE((std::array{_resultWidth, subWidth}),
                     &TransitivePath::computeTransitivePath, this, &idTable,
@@ -322,9 +326,11 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
   for (auto [variable, columnIndexWithType] :
        leftOrRightOp->getVariableColumns()) {
     ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
-    if (columnIndex == inputCol) { continue; }
+    if (columnIndex == inputCol) {
+      continue;
+    }
 
-    columnIndexWithType.columnIndex_ += columnIndex > inputCol ? 1: 2;
+    columnIndexWithType.columnIndex_ += columnIndex > inputCol ? 1 : 2;
 
     p->_variableColumns[variable] = columnIndexWithType;
     p->_resultWidth++;
@@ -339,7 +345,8 @@ bool TransitivePath::isBound() const {
 
 // _____________________________________________________________________________
 TransitivePath::Map TransitivePath::transitiveHull(
-    const Map& edges, const std::vector<Id>& startNodes, std::optional<Id> target) const {
+    const Map& edges, const std::vector<Id>& startNodes,
+    std::optional<Id> target) const {
   using MapIt = TransitivePath::Map::const_iterator;
   // For every node do a dfs on the graph
   Map hull;
@@ -436,7 +443,7 @@ void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
       table(rowIndex, targetSideCol) = otherNode;
 
       TransitivePath::copyColumns<START_WIDTH, WIDTH>(startView, table, i,
-                                                     rowIndex, skipCol);
+                                                      rowIndex, skipCol);
 
       rowIndex++;
     }
@@ -471,8 +478,8 @@ TransitivePath::setupMapAndNodes(const IdTable& sub,
   Map edges = setupEdgesMap<SUB_WIDTH>(sub, startSide, targetSide);
 
   // Bound -> var|id
-  std::span<const Id> startNodes = setupNodes<SIDE_WIDTH>(startSideTable,
-                                       startSide.treeAndCol.value().second);
+  std::span<const Id> startNodes = setupNodes<SIDE_WIDTH>(
+      startSideTable, startSide.treeAndCol.value().second);
   nodes.insert(nodes.end(), startNodes.begin(), startNodes.end());
 
   return {std::move(edges), std::move(nodes)};
@@ -492,7 +499,8 @@ TransitivePath::setupMapAndNodes(const IdTable& sub,
     nodes.push_back(std::get<Id>(startSide.value));
     // var -> var
   } else {
-    std::span<const Id> startNodes = setupNodes<SUB_WIDTH>(sub, startSide.subCol);
+    std::span<const Id> startNodes =
+        setupNodes<SUB_WIDTH>(sub, startSide.subCol);
     nodes.insert(nodes.end(), startNodes.begin(), startNodes.end());
     if (_minDist == 0) {
       std::span<const Id> targetNodes =
@@ -511,8 +519,8 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
     const TransitivePathSide& targetSide) {
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
   Map edges;
-  decltype (auto) startCol = sub.getColumn(startSide.subCol);
-  decltype (auto) targetCol = sub.getColumn(targetSide.subCol);
+  decltype(auto) startCol = sub.getColumn(startSide.subCol);
+  decltype(auto) targetCol = sub.getColumn(targetSide.subCol);
 
   for (size_t i = 0; i < sub.size(); i++) {
     Id startId = startCol[i];
@@ -531,7 +539,7 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
 // _____________________________________________________________________________
 template <size_t WIDTH>
 std::span<const Id> TransitivePath::setupNodes(const IdTable& table,
-                                                 size_t col) {
+                                               size_t col) {
   return table.getColumn(col);
 }
 

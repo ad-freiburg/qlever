@@ -6,7 +6,6 @@
 
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
-#include "engine/TransitivePath.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -14,6 +13,7 @@
 #include "engine/NeutralElementOperation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
+#include "engine/TransitivePath.h"
 #include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
 #include "parser/SparqlParser.h"
@@ -126,28 +126,25 @@ inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
 inline auto CartesianProductJoin =
     MatchTypeAndUnorderedChildren<::CartesianProductJoin>;
 
-inline auto TransitivePathSideMatcher = [](TransitivePathSide side){
-    return AllOf(
-      AD_FIELD(TransitivePathSide, value, Eq(side.value)),
-      AD_FIELD(TransitivePathSide, subCol, Eq(side.subCol)),
-      AD_FIELD(TransitivePathSide, outputCol, Eq(side.outputCol))
-    );
+inline auto TransitivePathSideMatcher = [](TransitivePathSide side) {
+  return AllOf(AD_FIELD(TransitivePathSide, value, Eq(side.value)),
+               AD_FIELD(TransitivePathSide, subCol, Eq(side.subCol)),
+               AD_FIELD(TransitivePathSide, outputCol, Eq(side.outputCol)));
 };
 
 // Match a TransitivePath operation
-inline auto TransitivePath = [](TransitivePathSide left,
-  TransitivePathSide right, size_t minDist, size_t maxDist,
-  const std::same_as<QetMatcher> auto&... childMatchers){
-    return RootOperation<::TransitivePath>(AllOf(
-      Property("getChildren", &Operation::getChildren,
-                         ElementsAre(Pointee(childMatchers)...)),
-      AD_PROPERTY(TransitivePath, getMinDist, Eq(minDist)),
-      AD_PROPERTY(TransitivePath, getMaxDist, Eq(maxDist)),
-      AD_PROPERTY(TransitivePath, getLeft, TransitivePathSideMatcher(left)),
-      AD_PROPERTY(TransitivePath, getRight, TransitivePathSideMatcher(right))
-    )
-  );
-};
+inline auto TransitivePath =
+    [](TransitivePathSide left, TransitivePathSide right, size_t minDist,
+       size_t maxDist, const std::same_as<QetMatcher> auto&... childMatchers) {
+      return RootOperation<::TransitivePath>(AllOf(
+          Property("getChildren", &Operation::getChildren,
+                   ElementsAre(Pointee(childMatchers)...)),
+          AD_PROPERTY(TransitivePath, getMinDist, Eq(minDist)),
+          AD_PROPERTY(TransitivePath, getMaxDist, Eq(maxDist)),
+          AD_PROPERTY(TransitivePath, getLeft, TransitivePathSideMatcher(left)),
+          AD_PROPERTY(TransitivePath, getRight,
+                      TransitivePathSideMatcher(right))));
+    };
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`
