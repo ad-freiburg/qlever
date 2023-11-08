@@ -25,9 +25,7 @@ struct TransitivePathSide {
 
   bool isVariable() const { return std::holds_alternative<Variable>(value); };
 
-  bool isBoundVariable() const {
-    return treeAndCol.has_value();
-  };
+  bool isBoundVariable() const { return treeAndCol.has_value(); };
 
   std::string asString(size_t indent) const {
     std::ostringstream os;
@@ -41,7 +39,7 @@ struct TransitivePathSide {
     }
 
     os << ", Column: " << subCol;
-    
+
     if (treeAndCol.has_value()) {
       os << ", Subtree:\n";
       os << treeAndCol.value().first->asString(indent) << "\n";
@@ -50,10 +48,13 @@ struct TransitivePathSide {
   }
 
   bool isSortedOnInputCol() const {
-    if (!treeAndCol.has_value()) { return false; };
+    if (!treeAndCol.has_value()) {
+      return false;
+    };
 
     auto [tree, col] = treeAndCol.value();
-    const std::vector<ColumnIndex>& sortedOn = tree->getRootOperation()->getResultSortedOn();
+    const std::vector<ColumnIndex>& sortedOn =
+        tree->getRootOperation()->getResultSortedOn();
     // TODO<C++23> use std::ranges::starts_with
     return (!sortedOn.empty() && sortedOn[0] == col);
   }
@@ -106,19 +107,19 @@ class TransitivePath : public Operation {
    * a TransitivePath or not. If one side of the TransitivePath is an Id, then
    * the other side may be bound. Also, it is not possible to bind a side
    * which has an Id.
-   * 
+   *
    * @return true The TransitivePath has a bound side
    * @return false The TransitivePath does not have a bound side
    */
   bool isBound() const;
-  
+
   /**
-   * Getters, mainly necessary for testing 
+   * Getters, mainly necessary for testing
    */
   size_t getMinDist() const { return _minDist; }
   size_t getMaxDist() const { return _maxDist; }
-  const TransitivePathSide& getLeft() const {return _lhs; }
-  const TransitivePathSide& getRight() const {return _rhs; }
+  const TransitivePathSide& getLeft() const { return _lhs; }
+  const TransitivePathSide& getRight() const { return _rhs; }
 
  protected:
   virtual std::string asStringImpl(size_t indent = 0) const override;
@@ -144,7 +145,8 @@ class TransitivePath : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override {
     std::vector<QueryExecutionTree*> res;
-    auto addChildren = [](std::vector<QueryExecutionTree*>& res, TransitivePathSide side) {
+    auto addChildren = [](std::vector<QueryExecutionTree*>& res,
+                          TransitivePathSide side) {
       if (side.treeAndCol.has_value()) {
         res.push_back(side.treeAndCol.value().first.get());
       }
@@ -163,7 +165,7 @@ class TransitivePath : public Operation {
    *
    * @tparam RES_WIDTH Number of columns of the result table
    * @tparam SUB_WIDTH Number of columns of the sub table
-   * @tparam SIDE_WIDTH Number of columns of the 
+   * @tparam SIDE_WIDTH Number of columns of the
    * @param res The result table which will be filled in-place
    * @param sub The IdTable for the sub result
    * @param startSide The start side for the transitive hull
@@ -179,7 +181,7 @@ class TransitivePath : public Operation {
   /**
    * @brief Compute the transitive hull.
    * This function is called when no side is bound (or an id).
-   * 
+   *
    * @tparam RES_WIDTH Number of columns of the result table
    * @tparam SUB_WIDTH Number of columns of the sub table
    * @param res The result table which will be filled in-place
@@ -199,7 +201,7 @@ class TransitivePath : public Operation {
    * hull computation. This choice of the start side has a large impact
    * on the time it takes to compute the hull. The set of nodes on the
    * start side should be as small as possible.
-   * 
+   *
    * @return ResultTable The result of the TransitivePath operation
    */
   virtual ResultTable computeResult() override;
@@ -243,8 +245,8 @@ class TransitivePath : public Operation {
    * hull
    * @param targetSideCol The column of the result table for the targetSide of
    * the hull
-   * @param startSideTable An IdTable that holds other results. The other results
-   * will be transferred to the new result table.
+   * @param startSideTable An IdTable that holds other results. The other
+   * results will be transferred to the new result table.
    * @param skipCol This column contains the Ids of the start side in the
    * startSideTable and will be skipped.
    */
