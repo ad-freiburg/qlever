@@ -241,8 +241,7 @@ static void addMeasurementsToRowOfBenchmarkTable(
       });
 
   // Adding the number of rows of the result.
-  table->setEntry(row, NUM_ROWS_OF_JOIN_RESULT_COLUMN_NUM,
-                  std::to_string(numberRowsOfResult));
+  table->setEntry(row, NUM_ROWS_OF_JOIN_RESULT_COLUMN_NUM, numberRowsOfResult);
 }
 
 // `T` must be a function, that returns something of type `ReturnType`, when
@@ -413,11 +412,11 @@ static ResultTable& makeGrowingBenchmarkTable(
     // Add a new row without content.
     table.addRow();
     table.setEntry(rowNumber, CHANGING_PARAMTER_COLUMN_NUM,
-                   std::to_string(returnFirstGrowthFunction(
+                   returnFirstGrowthFunction(
                        overlap, ratioRows, smallerTableAmountRows,
                        smallerTableAmountColumns, biggerTableAmountColumns,
                        smallerTableJoinColumnSampleSizeRatio,
-                       biggerTableJoinColumnSampleSizeRatio)(rowNumber)));
+                       biggerTableJoinColumnSampleSizeRatio)(rowNumber));
 
     // Converting all our function parameters to non functions.
     addMeasurementsToRowOfBenchmarkTable(
