@@ -28,8 +28,8 @@ static auto createWaitLambda(std::chrono::milliseconds waitDuration) {
 TEST(BenchmarkMeasurementContainerTest, ResultEntry) {
   // There's really no special cases.
   const std::string entryDescriptor{"entry"};
-  // The function should just wait 0.01 seconds.
-  constexpr auto waitTime = 10ms;
+  // The function should just wait 0.1 seconds.
+  constexpr auto waitTime = 100ms;
 
   // The normal constructor.
   ResultEntry entryNormalConstructor(entryDescriptor,
@@ -51,8 +51,8 @@ TEST(BenchmarkMeasurementContainerTest, ResultEntry) {
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
-  // The function should just wait 0.01 seconds.
-  constexpr auto waitTime = 10ms;
+  // The function should just wait 0.1 seconds.
+  constexpr auto waitTime = 100ms;
   // There's really no special cases.
   ResultGroup group("group");
 
@@ -218,7 +218,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
             "T", rowNames, columnNames);
 
   // Add measured function to it.
-  table.addMeasurement(0, 1, createWaitLambda(10ms));
+  table.addMeasurement(0, 1, createWaitLambda(100ms));
 
   // Check, if it works with custom entries.
   doForTypeInResultTableEntryType(
@@ -230,7 +230,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
           table.setEntry(1, 1, createDummyValueEntryType<T2>());
 
           // Check the entries.
-          checkRow(table, 0, "row1"s, 0.01f, createDummyValueEntryType<T1>());
+          checkRow(table, 0, "row1"s, 0.1f, createDummyValueEntryType<T1>());
           checkRow(table, 1, "row2"s, createDummyValueEntryType<T2>());
           checkNeverSet(table, 1, 2);
         });
@@ -250,7 +250,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
     addRowRowNames.emplace_back(absl::StrCat("row", indexNewRow + 1));
     table.setEntry(indexNewRow, 0, addRowRowNames.back());
     checkForm(table, "My table", "My table", addRowRowNames, columnNames);
-    checkRow(table, 0, "row1"s, 0.01f);
+    checkRow(table, 0, "row1"s, 0.1f);
     checkRow(table, 1, "row2"s);
     checkNeverSet(table, 1, 2);
 
@@ -259,9 +259,9 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
     checkNeverSet(table, indexNewRow, 2);
 
     // To those new fields work like the old ones?
-    table.addMeasurement(indexNewRow, 1, createWaitLambda(29ms));
+    table.addMeasurement(indexNewRow, 1, createWaitLambda(290ms));
     table.setEntry(indexNewRow, 2, createDummyValueEntryType<T>());
-    checkRow(table, indexNewRow, addRowRowNames.back(), 0.029f,
+    checkRow(table, indexNewRow, addRowRowNames.back(), 0.29f,
              createDummyValueEntryType<T>());
   });
 
