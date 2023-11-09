@@ -388,7 +388,10 @@ TransitivePath::Map TransitivePath::transitiveHull(
     // While we have not found the entire transitive hull and have not reached
     // the max step limit
     while (!positions.empty()) {
+<<<<<<< HEAD
       checkCancellation();
+=======
+>>>>>>> f3ef5a1abc9be5fb8621fbcdc2ca21de4eaa6274
       size_t stackIndex = positions.size() - 1;
       // Process the next child of the node at the top of the stack
       ad_utility::HashSet<Id>::const_iterator& pos = positions[stackIndex];
@@ -530,10 +533,7 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
 
   for (size_t i = 0; i < sub.size(); i++) {
     checkCancellation();
-    Id startId = startCol[i];
     Id targetId = targetCol[i];
-    MapIt it = edges.find(startId);
-    if (it == edges.end()) {
       edges[startId].insert(targetId);
     } else {
       // If r is not in the vector insert it
