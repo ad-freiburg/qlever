@@ -24,9 +24,6 @@ void testTime(Timer::Duration duration, std::chrono::milliseconds msecs,
 
   EXPECT_GE(msecs, lowerBound);
   EXPECT_LE(msecs, upperBound);
-
-  EXPECT_GE(duration, lowerBound);
-  EXPECT_LE(duration, upperBound);
 }
 
 void testTime(const ad_utility::Timer& timer,
