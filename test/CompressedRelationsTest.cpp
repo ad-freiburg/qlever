@@ -111,8 +111,7 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
   ASSERT_EQ(metaData.size(), inputs.size());
 
   ad_utility::File file{filename, "r"};
-  auto timer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-      ad_utility::TimeoutTimer::unlimited());
+  auto cancellationHandle = std::make_shared<ad_utility::CancellationHandle>();
   // Check the contents of the metadata.
 
   CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>()};
@@ -125,13 +124,13 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
                     m.multiplicityCol1_);
     // Scan for all distinct `col0` and check that we get the expected result.
-    IdTable table = reader.scan(metaData[i], blocks, file, timer);
+    IdTable table = reader.scan(metaData[i], blocks, file, cancellationHandle);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
     table.clear();
     for (const auto& block :
-         reader.lazyScan(metaData[i], blocks, file, timer)) {
+         reader.lazyScan(metaData[i], blocks, file, cancellationHandle)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -145,14 +144,14 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     auto scanAndCheck = [&]() {
       auto size =
           reader.getResultSizeOfScan(metaData[i], V(lastCol1Id), blocks, file);
-      IdTable tableWidthOne =
-          reader.scan(metaData[i], V(lastCol1Id), blocks, file, timer);
+      IdTable tableWidthOne = reader.scan(metaData[i], V(lastCol1Id), blocks,
+                                          file, cancellationHandle);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
-      for (const auto& block :
-           reader.lazyScan(metaData[i], V(lastCol1Id), blocks, file, timer)) {
+      for (const auto& block : reader.lazyScan(
+               metaData[i], V(lastCol1Id), blocks, file, cancellationHandle)) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
