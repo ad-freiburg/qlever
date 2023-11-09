@@ -151,3 +151,13 @@ TEST(AlgorithmTest, ZipVectors) {
     ASSERT_FLOAT_EQ(floatVector.at(i), combinedVector.at(i).second);
   }
 };
+
+// ___________________________________________________________________________
+TEST(AlgorithmTest, transformArray) {
+  using namespace std::string_literals;
+  auto inc = [](int x) { return x + 2; };
+  ASSERT_EQ(transformArray(std::array{1, 3, 5}, inc), (std::array{3, 5, 7}));
+  auto str = [](size_t x) { return std::string(x, 'a'); };
+  ASSERT_EQ(transformArray(std::array{1, 3, 5}, str),
+            (std::array{"a"s, "aaa"s, "aaaaa"s}));
+}
