@@ -342,7 +342,7 @@ class BatchedPipeline {
         getBatchRange(std::begin(in), std::end(in), batchSize, Idx);
     // start a thread for the transformer.
     return std::async(std::launch::async,
-                      [transformer, startIt, endIt,
+                      [transformer, startIt = startIt, endIt = endIt,
                        outIt = out.begin() + (startIt - in.begin())] {
                         std::vector<ResT> res;
                         moveAndTransform(startIt, endIt, outIt, transformer);

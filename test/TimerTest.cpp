@@ -9,7 +9,6 @@
 
 #include "util/Timer.h"
 
-using ad_utility::TimeoutTimer;
 using ad_utility::Timer;
 using namespace std::chrono_literals;
 
@@ -97,38 +96,6 @@ TEST(Timer, InitiallyStopped) {
   t.cont();
   std::this_thread::sleep_for(15ms);
   testTime(t, 15ms);
-}
-
-TEST(TimeoutTimer, Unlimited) {
-  auto timer = TimeoutTimer::unlimited();
-  for (size_t i = 0; i < 10; ++i) {
-    std::this_thread::sleep_for(1ms);
-    ASSERT_FALSE(timer.hasTimedOut());
-    ASSERT_NO_THROW(timer.checkTimeoutAndThrow("error1"));
-    // When no timeout occurs, the lambda is not executed.
-    ASSERT_NO_THROW(
-        timer.checkTimeoutAndThrow([]() -> std::string { throw 42; }));
-  }
-}
-
-TEST(TimeoutTimer, Limited) {
-  auto timer = TimeoutTimer{10ms, Timer::Started};
-  std::this_thread::sleep_for(5ms);
-  ASSERT_FALSE(timer.hasTimedOut());
-  ASSERT_NO_THROW(timer.checkTimeoutAndThrow("error1"));
-  ASSERT_NO_THROW(timer.checkTimeoutAndThrow([]() { return "error2"; }));
-  std::this_thread::sleep_for(7ms);
-
-  ASSERT_TRUE(timer.hasTimedOut());
-  ASSERT_THROW(timer.checkTimeoutAndThrow("hi"), ad_utility::TimeoutException);
-  try {
-    timer.checkTimeoutAndThrow([]() { return "Testing. "; });
-    FAIL() << "Expected a timeout exception, but no exception was thrown";
-  } catch (const ad_utility::TimeoutException& ex) {
-    ASSERT_STREQ(
-        ex.what(),
-        "Testing. A Timeout occured. The time limit was 0.010 seconds");
-  }
 }
 
 TEST(TimeBlockAndLog, TimeBlockAndLog) {

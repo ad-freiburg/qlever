@@ -21,10 +21,11 @@
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
-#include "util/ParallelMultiwayMerge.h"
+#include "util/ParallelMultiwayMerge.h
+#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeString.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Timer.h"
 
 // ___________________________________________________________________
 template <typename Comparator, typename InternalVocabularyAction>
@@ -178,7 +179,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       metaData_.langTaggedPredicates_.addIfWordMatches(
           top.iriOrLiteral(), lastTripleComponent_.value().index_);
       metaData_.numWordsTotal_++;
-      if (metaData_.numWordsTotal_ % 1'000'000 == 0) {
+      if (metaData_.numWordsTotal_ % 100'000'000 == 0) {
         LOG(INFO) << "Words merged: " << metaData_.numWordsTotal_ << std::endl;
       }
     }
@@ -229,6 +230,7 @@ inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
     ItemVec* elsPtr) {
   auto& els = *elsPtr;
   ad_utility::HashMap<uint64_t, uint64_t> res;
+  res.reserve(2 * els.size());
   bool first = true;
   std::string_view lastWord;
   size_t nextWordId = 0;
@@ -295,7 +297,6 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
                               byteBuffer.data().size());
     serializer.close();
   }
-  serializer.close();
   LOG(DEBUG) << "Done writing partial vocabulary\n";
 }
 
@@ -322,7 +323,7 @@ void writePartialIdMapToBinaryFileForMerging(
   writePartialVocabularyToFile(els, fileName);
 }
 
-// ___________________________________________________________
+// __________________________________________________________________________________________________
 inline ItemVec vocabMapsToVector(ItemMapArray& map) {
   ItemVec els;
   std::vector<size_t> offsets;
