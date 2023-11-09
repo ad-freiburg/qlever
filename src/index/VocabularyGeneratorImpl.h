@@ -24,6 +24,7 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeString.h"
+#include "util/Timer.h"
 
 // ___________________________________________________________________
 template <typename Comparator, typename InternalVocabularyAction>
