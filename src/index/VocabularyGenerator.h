@@ -126,8 +126,8 @@ class VocabularyMerger {
     }
     [[nodiscard]] std::string& iriOrLiteral() { return _entry.iriOrLiteral(); }
 
-    [[nodiscard]] const auto& id() const { return _entry._index; }
-    [[nodiscard]] auto& id() { return _entry._index; }
+    [[nodiscard]] const auto& id() const { return _entry.index_; }
+    [[nodiscard]] auto& id() { return _entry.index_; }
   };
 
   // write the queu words in the buffer to their corresponding idPairVecs.
@@ -202,7 +202,7 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName);
  * elements from all the hashMaps into a single vector No reordering or
  * deduplication is done, so result.size() == summed size of all the hash maps
  */
-ItemVec vocabMapsToVector(std::unique_ptr<ItemMapArray> map);
+ItemVec vocabMapsToVector(ItemMapArray& map);
 
 // _____________________________________________________________________________________________________________
 /**

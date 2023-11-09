@@ -12,6 +12,7 @@
 #include "util/Log.h"
 #include "util/Timer.h"
 #include "util/TupleHelpers.h"
+#include "util/UninitializedAllocator.h"
 
 namespace ad_pipeline {
 
@@ -26,10 +27,11 @@ namespace detail {
  */
 template <class T>
 struct Batch {
-  bool m_isPipelineGood = true;  // if set to false, this was the last (and
-                                 // possibly incomplete) batch, else there might
-                                 // be more content waiting in the pipeline.
-  std::vector<T> m_content;      // the actual payload
+  bool isPipelineGood_ = true;  // if set to false, this was the last (and
+                                // possibly incomplete) batch, else there might
+                                // be more content waiting in the pipeline.
+  std::vector<T, ad_utility::default_init_allocator<T>>
+      content_;  // the actual payload
 };
 
 /*
@@ -50,8 +52,8 @@ class Batcher {
   /// @brief Don't use these, call setupPipeline or setupParallelPipeline
   /// instead
   Batcher(size_t batchSize, Creator&& creator)
-      : _batchSize(batchSize),
-        _creator(std::make_unique<Creator>(std::move(creator))) {
+      : batchSize_(batchSize),
+        creator_(std::make_unique<Creator>(std::move(creator))) {
     orderNextBatch();
   }
 
@@ -59,20 +61,20 @@ class Batcher {
   /// @brief Don't use these, call setupPipeline or setupParallelPipeline
   /// instead
   Batcher(size_t batchSize, const Creator& creator)
-      : _batchSize(batchSize), _creator(std::make_unique<Creator>(creator)) {
+      : batchSize_(batchSize), creator_(std::make_unique<Creator>(creator)) {
     orderNextBatch();
   }
 
   /* Get the next batch of values. A batch contains exactly batchSize values
-   * unless this was the last batch. Then result.m_isPipelineGood will be false
+   * unless this was the last batch. Then result.isPipelineGood_ will be false
    * and the batch might have < batchSize elements
    */
   Batch<ValueT> pickupBatch() {
     try {
       Timer timer{Timer::InitialStatus::Started};
-      auto res = _fut.get();
+      auto res = fut_.get();
       orderNextBatch();
-      _waitingTime->fetch_add(timer.msecs());
+      waitingTime_->fetch_add(timer.msecs());
       return res;
     } catch (const std::future_error& e) {
       throw std::runtime_error(
@@ -84,26 +86,26 @@ class Batcher {
   // get the accumulated time that calls to pickupBatch had to block until they
   // could return the next batch
   std::vector<Timer::Duration> getWaitingTime() const {
-    return {std::chrono::milliseconds{*_waitingTime}};
+    return {std::chrono::milliseconds{*waitingTime_}};
   }
 
   // returns the batchSize. The last batch might be smaller
-  [[nodiscard]] size_t getBatchSize() const { return _batchSize; }
+  [[nodiscard]] size_t getBatchSize() const { return batchSize_; }
 
  private:
-  size_t _batchSize;
-  std::unique_ptr<Creator> _creator;
-  std::unique_ptr<std::atomic<size_t>> _waitingTime{
+  size_t batchSize_;
+  std::unique_ptr<Creator> creator_;
+  std::unique_ptr<std::atomic<size_t>> waitingTime_{
       std::make_unique<std::atomic<size_t>>(0)};
-  std::future<detail::Batch<ValueT>> _fut;
+  std::future<detail::Batch<ValueT>> fut_;
 
   // start assembling the next batch in parallel
   void orderNextBatch() {
-    // since the unique_ptr _creator owns the creator,
+    // since the unique_ptr creator_ owns the creator,
     // the captured pointer will stay valid even while this
     // class is moved.
-    _fut = std::async(std::launch::async,
-                      [bs = _batchSize, ptr = _creator.get()]() {
+    fut_ = std::async(std::launch::async,
+                      [bs = batchSize_, ptr = creator_.get()]() {
                         return produceBatchInternal(bs, ptr);
                       });
   }
@@ -120,22 +122,23 @@ class Batcher {
     if constexpr (requires { creator->getBatch(); }) {
       auto opt = creator->getBatch();
       if (!opt) {
-        res.m_isPipelineGood = false;
+        res.isPipelineGood_ = false;
         return res;
       }
-      res.m_isPipelineGood = true;
-      res.m_content = std::move(*opt);
+      res.isPipelineGood_ = true;
+      res.content_.reserve(opt->size());
+      std::ranges::move(*opt, std::back_inserter(res.content_));
       return res;
     } else {
-      res.m_isPipelineGood = true;
-      res.m_content.reserve(batchSize);
+      res.isPipelineGood_ = true;
+      res.content_.reserve(batchSize);
       for (size_t i = 0; i < batchSize; ++i) {
         auto opt = (*creator)();
         if (!opt) {
-          res.m_isPipelineGood = false;
+          res.isPipelineGood_ = false;
           return res;
         }
-        res.m_content.push_back(std::move(opt.value()));
+        res.content_.push_back(std::move(opt.value()));
       }
       return res;
     }
@@ -172,7 +175,7 @@ class BatchedPipeline {
 
   // the value type the previous pipeline stage delivers to us
   using InT = std::decay_t<
-      decltype(std::declval<PreviousStage&>().pickupBatch().m_content[0])>;
+      decltype(std::declval<PreviousStage&>().pickupBatch().content_[0])>;
 
   // the value type this BatchedPipeline produces
   using ResT = std::invoke_result_t<FirstTransformer, InT>;
@@ -183,9 +186,9 @@ class BatchedPipeline {
    * C++
    */
   BatchedPipeline(PreviousStage&& p, FirstTransformer t, Transformers... ts)
-      : _transformers(toUniquePtrTuple(t, ts...)),
-        _rawTransformers(toRawPtrTuple(_transformers)),
-        _previousStage(std::make_unique<PreviousStage>(std::move(p))) {
+      : transformers_(toUniquePtrTuple(t, ts...)),
+        rawTransformers_(toRawPtrTuple(transformers_)),
+        previousStage_(std::make_unique<PreviousStage>(std::move(p))) {
     orderNextBatch();
   }
 
@@ -193,9 +196,9 @@ class BatchedPipeline {
   Batch<ResT> pickupBatch() {
     try {
       Timer timer{Timer::InitialStatus::Started};
-      auto res = _fut.get();
+      auto res = fut_.get();
       orderNextBatch();
-      _waitingTime->fetch_add(timer.msecs());
+      waitingTime_->fetch_add(timer.msecs());
       return res;
     } catch (std::future_error& e) {
       throw std::runtime_error(
@@ -207,27 +210,27 @@ class BatchedPipeline {
   // asynchronously prepare the next Batch in a different thread
   void orderNextBatch() {
     auto lambda =
-        [p = _previousStage.get(),
-         batchSize = _previousStage->getBatchSize()](auto... transformerPtrs) {
+        [p = previousStage_.get(),
+         batchSize = previousStage_->getBatchSize()](auto... transformerPtrs) {
           return std::async(
               std::launch::async, [p, batchSize, transformerPtrs...]() {
                 return produceBatchInternal(p, batchSize, transformerPtrs...);
               });
         };
-    _fut = std::apply(lambda, _rawTransformers);
+    fut_ = std::apply(lambda, rawTransformers_);
   }
 
   // for this and all previous steps of the pipeline, get the total blocking
   // time in calls to produce batch
   std::vector<Timer::Duration> getWaitingTime() const {
-    auto res = _previousStage->getWaitingTime();
-    res.push_back(std::chrono::milliseconds(*_waitingTime));
+    auto res = previousStage_->getWaitingTime();
+    res.push_back(std::chrono::milliseconds(*waitingTime_));
     return res;
   }
 
   // Return the batch size
   [[nodiscard]] size_t getBatchSize() const {
-    return _previousStage->getBatchSize();
+    return previousStage_->getBatchSize();
   }
 
  private:
@@ -246,21 +249,18 @@ class BatchedPipeline {
                                           TransformerPtrs... transformers) {
     auto inBatch = previousStage->pickupBatch();
     Batch<ResT> result;
-    result.m_isPipelineGood = inBatch.m_isPipelineGood;
-    // currently each of the <parallelism> threads first creates its own Batch
-    // and later we merge. <TODO>(joka921) Doing this in place would require
-    // something like a std::vector without default construction on insert.
+    result.isPipelineGood_ = inBatch.isPipelineGood_;
     const size_t batchSize = inBatchSize / Parallelism;
-    auto futures = setupParallelismImpl(batchSize, inBatch.m_content,
-                                        std::make_index_sequence<Parallelism>{},
-                                        transformers...);
+    // We know the total size in advance, so we can preallocate the memory and
+    // the threads can directly write to the final result.
+    result.content_.resize(inBatch.content_.size());
+    auto futures = setupParallelismImpl(
+        batchSize, inBatch.content_, result.content_,
+        std::make_index_sequence<Parallelism>{}, transformers...);
     // if we had multiple threads, we have to merge the partial results in the
     // correct order.
     for (size_t i = 0; i < Parallelism; ++i) {
-      auto vec = futures[i].get();
-      result.m_content.insert(result.m_content.end(),
-                              std::make_move_iterator(vec.begin()),
-                              std::make_move_iterator(vec.end()));
+      futures[i].get();
     }
     return result;
   }
@@ -289,12 +289,11 @@ class BatchedPipeline {
 
   // For each element x in [beg, end): move it, apply *transformer to it and
   // append it to *res
-  template <typename It, typename ResVec, typename TransformerPtr>
-  static void moveAndTransform(It beg, It end, ResVec* res,
+  template <typename It, typename ResIt, typename TransformerPtr>
+  static void moveAndTransform(It beg, It end, ResIt res,
                                TransformerPtr transformer) {
-    res->reserve(end - beg);
     std::transform(std::make_move_iterator(beg), std::make_move_iterator(end),
-                   std::back_inserter(*res),
+                   res,
                    [transformer](typename std::decay_t<decltype(*beg)>&& x) {
                      return (*transformer)(std::move(x));
                    });
@@ -316,45 +315,51 @@ class BatchedPipeline {
    * @param transformer Pointer to the first transformer
    * @param transformers Pointers to the remaining transformers
    */
-  template <size_t... I, typename InVec, typename... TransformerPtrs>
-  static auto setupParallelismImpl(size_t batchSize, InVec& in,
+  template <size_t... I, typename InVec, typename OutVec,
+            typename... TransformerPtrs>
+  static auto setupParallelismImpl(size_t batchSize, InVec& in, OutVec& out,
                                    std::index_sequence<I...>,
                                    TransformerPtrs... transformers) {
+    AD_CORRECTNESS_CHECK(out.size() == in.size());
     if constexpr (sizeof...(I) == sizeof...(TransformerPtrs)) {
-      return std::array{(createIthFuture<I>(batchSize, in, transformers))...};
+      return std::array{
+          (createIthFuture<I>(batchSize, in, out, transformers))...};
     } else if constexpr (sizeof...(TransformerPtrs) == 1) {
       // only one transformer that is applied to several threads
       auto onlyTransformer =
           std::get<0>(std::forward_as_tuple(transformers...));
       return std::array{
-          (createIthFuture<I>(batchSize, in, onlyTransformer))...};
+          (createIthFuture<I>(batchSize, in, out, onlyTransformer))...};
     }
   }
 
-  template <size_t Idx, typename InVec, typename TransformerPtr>
-  static std::future<std::vector<ResT>> createIthFuture(
-      size_t batchSize, InVec& in, TransformerPtr transformer) {
-    auto [startIt, endIt] = getBatchRange(in.begin(), in.end(), batchSize, Idx);
+  template <size_t Idx, typename InVec, typename OutVec,
+            typename TransformerPtr>
+  static std::future<void> createIthFuture(size_t batchSize, InVec& in,
+                                           OutVec& out,
+                                           TransformerPtr transformer) {
+    auto [startIt, endIt] =
+        getBatchRange(std::begin(in), std::end(in), batchSize, Idx);
     // start a thread for the transformer.
     return std::async(std::launch::async,
-                      [transformer, startIt = startIt, endIt = endIt] {
+                      [transformer, startIt = startIt, endIt = endIt,
+                       outIt = out.begin() + (startIt - in.begin())] {
                         std::vector<ResT> res;
-                        moveAndTransform(startIt, endIt, &res, transformer);
-                        return res;
+                        moveAndTransform(startIt, endIt, outIt, transformer);
                       });
   }
 
  private:
-  std::unique_ptr<std::atomic<size_t>> _waitingTime{
+  std::unique_ptr<std::atomic<size_t>> waitingTime_{
       std::make_unique<std::atomic<size_t>>(0)};
   // the unique_ptrs to our Transformers
   using uniquePtrTuple = toUniquePtrTuple_t<FirstTransformer, Transformers...>;
   // raw non-owning pointers to the transformers
   using rawPtrTuple = toRawPtrTuple_t<uniquePtrTuple>;
-  uniquePtrTuple _transformers;
-  rawPtrTuple _rawTransformers;
-  std::unique_ptr<PreviousStage> _previousStage;
-  std::future<Batch<ResT>> _fut;
+  uniquePtrTuple transformers_;
+  rawPtrTuple rawTransformers_;
+  std::unique_ptr<PreviousStage> previousStage_;
+  std::future<Batch<ResT>> fut_;
 };
 
 /*
@@ -468,7 +473,7 @@ class BatchExtractor {
  public:
   /// The type of our elements after all transformations were applied
   using ValueT = std::decay_t<
-      decltype(std::declval<Pipeline>().pickupBatch().m_content[0])>;
+      decltype(std::declval<Pipeline>().pickupBatch().content_[0])>;
 
   /// Get the next completely transformed value from the pipeline. std::nullopt
   /// means that all elements have been extracted and the pipeline is exhausted.
@@ -476,27 +481,27 @@ class BatchExtractor {
   /// empty
   std::optional<ValueT> getNextValue() {
     // we return the elements in order
-    if (_buffer.size() == _bufferPosition && _isPipelineValid) {
+    if (buffer_.size() == bufferPosition_ && isPipelineValid_) {
       // we have to wait for the next parallel batch to be completed.
       Timer timer{Timer::InitialStatus::Started};
       {
-        auto res = _fut.get();
-        _isPipelineValid = res.m_isPipelineGood;
-        _buffer = std::move(res.m_content);
+        auto res = fut_.get();
+        isPipelineValid_ = res.isPipelineGood_;
+        buffer_ = std::move(res.content_);
       }
 
-      _waitingTime->fetch_add(timer.msecs());
-      _bufferPosition = 0;
-      if (_isPipelineValid) {
+      waitingTime_->fetch_add(timer.msecs());
+      bufferPosition_ = 0;
+      if (isPipelineValid_) {
         // if possible, directly submit the next parsing job
-        _fut = std::async(std::launch::async, [ptr = _pipeline.get()]() {
+        fut_ = std::async(std::launch::async, [ptr = pipeline_.get()]() {
           return ptr->pickupBatch();
         });
       }
     }
     // we now should have some values in our buffer
-    if (_bufferPosition < _buffer.size()) {
-      return std::move(_buffer[_bufferPosition++]);
+    if (bufferPosition_ < buffer_.size()) {
+      return std::move(buffer_[bufferPosition_++]);
     } else {
       // we can only reach this if the pipeline is exhausted and we have reached
       // past the last element.
@@ -509,28 +514,28 @@ class BatchExtractor {
    * pickupBatch were blocking. TODO<joka921>: how useful is this measure?
    */
   [[nodiscard]] std::vector<Timer::Duration> getWaitingTime() const {
-    auto res = _pipeline->getWaitingTime();
-    res.push_back(std::chrono::milliseconds(*_waitingTime));
+    auto res = pipeline_->getWaitingTime();
+    res.push_back(std::chrono::milliseconds(*waitingTime_));
     return res;
   }
 
   /// return the batchSize
-  [[nodiscard]] size_t getBatchSize() const { return _pipeline.getBatchSize(); }
+  [[nodiscard]] size_t getBatchSize() const { return pipeline_.getBatchSize(); }
 
  private:
-  std::unique_ptr<std::atomic<size_t>> _waitingTime{
+  std::unique_ptr<std::atomic<size_t>> waitingTime_{
       std::make_unique<std::atomic<size_t>>(0)};
-  std::unique_ptr<Pipeline> _pipeline;
-  std::future<detail::Batch<ValueT>> _fut;
-  std::vector<ValueT> _buffer;
-  size_t _bufferPosition = 0;
-  bool _isPipelineValid = true;
+  std::unique_ptr<Pipeline> pipeline_;
+  std::future<detail::Batch<ValueT>> fut_;
+  std::vector<ValueT, ad_utility::default_init_allocator<ValueT>> buffer_;
+  size_t bufferPosition_ = 0;
+  bool isPipelineValid_ = true;
 
   // Pipelines are move-only types
   explicit BatchExtractor(Pipeline&& pipeline)
-      : _pipeline(std::make_unique<Pipeline>(std::move(pipeline))) {
-    _fut = std::async(std::launch::async,
-                      [ptr = _pipeline.get()]() { return ptr->pickupBatch(); });
+      : pipeline_(std::make_unique<Pipeline>(std::move(pipeline))) {
+    fut_ = std::async(std::launch::async,
+                      [ptr = pipeline_.get()]() { return ptr->pickupBatch(); });
   }
   friend class detail::Interface;
 };

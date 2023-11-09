@@ -273,4 +273,11 @@ template <typename Fn, typename Ret, typename... Args>
 concept RegularInvocableWithExactReturnType =
     std::regular_invocable<Fn, Args...> &&
     std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
+
+// True iff `T` is a value type or an rvalue reference. Can be used to force
+// rvalue references for templated functions: For example: void f(auto&& x) //
+// might be lvalue, because the && denotes a forwarding reference. void f(Rvalue
+// auto&& x) // guaranteed rvalue reference, can safely be moved.
+template <typename T>
+concept Rvalue = std::is_rvalue_reference_v<T&&>;
 }  // namespace ad_utility
