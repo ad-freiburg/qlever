@@ -19,6 +19,7 @@ using namespace ad_tuple_helpers;
 using Timer = ad_utility::Timer;
 
 namespace detail {
+using AtomicMs = std::atomic<std::chrono::milliseconds::rep>;
 
 /* This is used as a return value for the pickupBatch calls of our pipeline
  * elements If the  is false this means that our
@@ -93,8 +94,7 @@ class Batcher {
  private:
   size_t _batchSize;
   std::unique_ptr<Creator> _creator;
-  std::unique_ptr<std::atomic<size_t>> _waitingTime{
-      std::make_unique<std::atomic<size_t>>(0)};
+  std::unique_ptr<AtomicMs> _waitingTime{std::make_unique<AtomicMs>(0)};
   std::future<detail::Batch<ValueT>> _fut;
 
   // start assembling the next batch in parallel
@@ -164,6 +164,8 @@ class Batcher {
 template <size_t Parallelism, class PreviousStage, class FirstTransformer,
           class... Transformers>
 class BatchedPipeline {
+  using AtomicMs = detail::AtomicMs;
+
  public:
   // either the same transformer is applied in all parallel Branches, or there
   // is exactly one transformer for all
@@ -345,8 +347,7 @@ class BatchedPipeline {
   }
 
  private:
-  std::unique_ptr<std::atomic<std::chrono::milliseconds::rep>> _waitingTime{
-      std::make_unique<std::atomic<std::chrono::milliseconds::rep>>(0)};
+  std::unique_ptr<AtomicMs> _waitingTime{std::make_unique<AtomicMs>(0)};
   // the unique_ptrs to our Transformers
   using uniquePtrTuple = toUniquePtrTuple_t<FirstTransformer, Transformers...>;
   // raw non-owning pointers to the transformers
@@ -465,6 +466,8 @@ class Interface;  // forward declaration needed below for friend declaration
  */
 template <class Pipeline>
 class BatchExtractor {
+  using AtomicMs = detail::AtomicMs;
+
  public:
   /// The type of our elements after all transformations were applied
   using ValueT = std::decay_t<
@@ -518,8 +521,7 @@ class BatchExtractor {
   [[nodiscard]] size_t getBatchSize() const { return _pipeline.getBatchSize(); }
 
  private:
-  std::unique_ptr<std::atomic<std::chrono::milliseconds::rep>> _waitingTime{
-      std::make_unique<std::atomic<std::chrono::milliseconds::rep>>(0)};
+  std::unique_ptr<AtomicMs> _waitingTime{std::make_unique<AtomicMs>(0)};
   std::unique_ptr<Pipeline> _pipeline;
   std::future<detail::Batch<ValueT>> _fut;
   std::vector<ValueT> _buffer;

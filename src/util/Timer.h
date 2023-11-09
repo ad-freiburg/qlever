@@ -126,8 +126,7 @@ class Timer {
 
  private:
   Duration timeSinceLastStart() const {
-    auto now = Clock::now();
-    return toDuration(now - timeOfStart_);
+    return toDuration(Clock::now() - timeOfStart_);
   }
 };
 

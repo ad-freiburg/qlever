@@ -111,6 +111,13 @@ class RuntimeInformation {
     details_[key] = value;
   }
 
+  /// Add a key-value pair to the `details` section of the output.
+  /// Overload that allows to pass common type `std::chrono::milliseconds` for
+  /// `value` without converting it first.
+  void addDetail(const std::string& key, std::chrono::milliseconds value) {
+    details_[key] = value.count();
+  }
+
   // Set the runtime information for a LIMIT or OFFSET operation as the new root
   // of the tree and make the old root the only child of the LIMIT operation.
   // The details of the LIMIT/OFFSET, the time (in ms) that was spent computing

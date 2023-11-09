@@ -719,7 +719,7 @@ IdTable Join::computeResultForTwoIndexScans() {
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
   auto [leftBlocksInternal, rightBlocksInternal] =
       IndexScan::lazyScanForJoinOfTwoScans(leftScan, rightScan);
-  runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs().count());
+  runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
   auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
   auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
@@ -769,7 +769,7 @@ IdTable Join::computeResultForIndexScanAndIdTable(const IdTable& idTable,
       permutationIdTable.col(), scan);
   auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
 
-  runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs().count());
+  runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
   auto doJoin = [&rowAdder](auto& left, auto& right) mutable {
     ad_utility::zipperJoinForBlocksWithoutUndef(left, right, std::less{},
