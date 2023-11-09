@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <string>
 
+#include "parser/Tokenizer.h"
 #include "parser/TurtleTokenId.h"
 #include "util/CtreHelpers.h"
 #include "util/Log.h"
@@ -140,7 +141,8 @@ struct TurtleTokenCtre {
   static constexpr fixed_string Comment = grp(CommentString);
 };
 
-class TokenizerCtre {
+class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
+  friend struct SkipWhitespaceAndCommentsMixin<TokenizerCtre>;
   FRIEND_TEST(TokenizerTest, Compilation);
   using string = std::string;
 
@@ -196,6 +198,7 @@ class TokenizerCtre {
     return innerResult;
   }
 
+  /*
   /// Skip any whitespace or comments at the beginning of the held characters
   void skipWhitespaceAndComments() {
     // Call `skipWhitespace` and `skipComments` in a loop until no more input
@@ -209,6 +212,7 @@ class TokenizerCtre {
       }
     }
   }
+   */
 
   /**
    * If there is a prefix match with the argument, move forward the beginning
@@ -237,6 +241,7 @@ class TokenizerCtre {
   /// string_view of the characters we are parsing from.
   std::string_view _data;
 
+  /*
   // ________________________________________________________________
   bool skipWhitespace() {
     auto v = view();
@@ -246,7 +251,8 @@ class TokenizerCtre {
     return numLeadingWhitespace > 0;
   }
 
-  // ___________________________________________________________________________________
+  //
+  ___________________________________________________________________________________
   bool skipComments() {
     auto v = view();
     if (v.starts_with('#')) {
@@ -262,6 +268,7 @@ class TokenizerCtre {
     }
     return false;
   }
+   */
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
 
   /*

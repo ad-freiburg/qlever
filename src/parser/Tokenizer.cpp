@@ -4,21 +4,6 @@
 
 #include "./Tokenizer.h"
 
-// ______________________________________________________
-void Tokenizer::skipWhitespaceAndComments() {
-  // Call `skipWhitespace` and `skipComments` in a loop until no more input was
-  // consumed. This is necessary because we might have multiple lines of
-  // comments that are spearated by whitespace.
-
-  while (true) {
-    bool a = skipWhitespace();
-    bool b = skipComments();
-    if (!(a || b)) {
-      return;
-    }
-  }
-}
-
 // _______________________________________________________
 std::pair<bool, std::string> Tokenizer::getNextToken(const RE2& reg) {
   std::string match = "";
@@ -62,61 +47,62 @@ std::tuple<bool, size_t, std::string> Tokenizer::getNextToken(
 // ______________________________________________________________________________________________________
 const RE2& Tokenizer::idToRegex(const TurtleTokenId reg) {
   switch (reg) {
-    case TurtleTokenId::TurtlePrefix:
+    using enum TurtleTokenId;
+    case TurtlePrefix:
       return _tokens.TurtlePrefix;
-    case TurtleTokenId::SparqlPrefix:
+    case SparqlPrefix:
       return _tokens.SparqlPrefix;
-    case TurtleTokenId::TurtleBase:
+    case TurtleBase:
       return _tokens.TurtleBase;
-    case TurtleTokenId::SparqlBase:
+    case SparqlBase:
       return _tokens.SparqlBase;
-    case TurtleTokenId::Dot:
+    case Dot:
       return _tokens.Dot;
-    case TurtleTokenId::Comma:
+    case Comma:
       return _tokens.Comma;
-    case TurtleTokenId::Semicolon:
+    case Semicolon:
       return _tokens.Semicolon;
-    case TurtleTokenId::OpenSquared:
+    case OpenSquared:
       return _tokens.OpenSquared;
-    case TurtleTokenId::CloseSquared:
+    case CloseSquared:
       return _tokens.CloseSquared;
-    case TurtleTokenId::OpenRound:
+    case OpenRound:
       return _tokens.OpenRound;
-    case TurtleTokenId::CloseRound:
+    case CloseRound:
       return _tokens.CloseRound;
-    case TurtleTokenId::A:
+    case A:
       return _tokens.A;
-    case TurtleTokenId::DoubleCircumflex:
+    case DoubleCircumflex:
       return _tokens.DoubleCircumflex;
-    case TurtleTokenId::True:
+    case True:
       return _tokens.True;
-    case TurtleTokenId::False:
+    case False:
       return _tokens.False;
-    case TurtleTokenId::Langtag:
+    case Langtag:
       return _tokens.Langtag;
-    case TurtleTokenId::Decimal:
+    case Decimal:
       return _tokens.Decimal;
-    case TurtleTokenId::Exponent:
+    case Exponent:
       return _tokens.Exponent;
-    case TurtleTokenId::Double:
+    case Double:
       return _tokens.Double;
-    case TurtleTokenId::Iriref:
+    case Iriref:
       return _tokens.Iriref;
-    case TurtleTokenId::PnameNS:
+    case PnameNS:
       return _tokens.PnameNS;
-    case TurtleTokenId::PnameLN:
+    case PnameLN:
       return _tokens.PnameLN;
-    case TurtleTokenId::PnLocal:
+    case PnLocal:
       return _tokens.PnLocal;
-    case TurtleTokenId::BlankNodeLabel:
+    case BlankNodeLabel:
       return _tokens.BlankNodeLabel;
-    case TurtleTokenId::WsMultiple:
+    case WsMultiple:
       return _tokens.WsMultiple;
-    case TurtleTokenId::Anon:
+    case Anon:
       return _tokens.Anon;
-    case TurtleTokenId::Comment:
+    case Comment:
       return _tokens.Comment;
-    case TurtleTokenId::Integer:
+    case Integer:
       return _tokens.Integer;
   }
   throw std::runtime_error(
