@@ -13,6 +13,7 @@
 #include "global/ValueIdComparators.h"
 
 using namespace std::string_literals;
+using namespace std::chrono_literals;
 using ad_utility::source_location;
 
 namespace {
@@ -234,4 +235,25 @@ TEST(OrderBy, simpleMemberFunctions) {
     EXPECT_EQ(42.0, s.getMultiplicity(0));
     EXPECT_EQ(84.0, s.getMultiplicity(1));
   }
+}
+
+TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
+  VectorTable input;
+  // Make sure the estimator estimates a couple of ms to sort this
+  for (int64_t i = 0; i < 1000; i++) {
+    input.push_back({0, i});
+  }
+  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+  OrderBy orderBy = makeOrderBy(std::move(inputTable), {{1, false}, {0, true}});
+  // Safe to do, because we know the underlying estimator is mutable
+  const_cast<SortPerformanceEstimator&>(
+      orderBy.getExecutionContext()->getSortPerformanceEstimator())
+      .computeEstimatesExpensively(
+          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000);
+
+  orderBy.recursivelySetTimeConstraint(0ms);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      orderBy.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
+      ad_utility::AbortException);
 }
