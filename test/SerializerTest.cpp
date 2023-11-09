@@ -20,7 +20,6 @@ using ad_utility::serialization::FileReadSerializer;
 using ad_utility::serialization::FileWriteSerializer;
 using ad_utility::serialization::VectorIncrementalSerializer;
 
-
 using ad_utility::serialization::ReadSerializer;
 using ad_utility::serialization::Serializer;
 using ad_utility::serialization::WriteSerializer;
