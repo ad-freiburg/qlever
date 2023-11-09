@@ -21,7 +21,7 @@
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
-#include "util/ParallelMultiwayMerge.h
+#include "util/ParallelMultiwayMerge.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeString.h"
