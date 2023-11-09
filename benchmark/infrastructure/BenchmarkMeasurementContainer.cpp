@@ -194,7 +194,7 @@ ResultTable::operator std::string() const {
       return entry ? "true"s : "false"s;
     } else {
       // Unsupported type.
-      AD_CONTRACT_CHECK(false);
+      AD_FAIL();
     }
   };
   auto entryToString = [&entryToStringVisitor](const EntryType& entry) {

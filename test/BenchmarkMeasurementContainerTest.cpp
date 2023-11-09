@@ -129,7 +129,7 @@ static Type createDummyValueEntryType() {
     return -42;
   } else {
     // Not a supported type.
-    AD_CORRECTNESS_CHECK(false);
+    AD_FAIL();
   }
 }
 
