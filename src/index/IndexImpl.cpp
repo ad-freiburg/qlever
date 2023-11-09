@@ -1331,7 +1331,7 @@ IdTable IndexImpl::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
     const Permutation::Enum& permutation,
-    ad_utility::SharedConcurrentTimeoutTimer timer) const {
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
   std::optional<Id> col1Id =
       col1String.has_value() ? col1String.value().get().toValueId(getVocab())
@@ -1340,13 +1340,14 @@ IdTable IndexImpl::scan(
     size_t numColumns = col1String.has_value() ? 1 : 2;
     return IdTable{numColumns, allocator_};
   }
-  return scan(col0Id.value(), col1Id, permutation, timer);
+  return scan(col0Id.value(), col1Id, permutation,
+              std::move(cancellationHandle));
 }
 // _____________________________________________________________________________
-IdTable IndexImpl::scan(Id col0Id, std::optional<Id> col1Id,
-                        Permutation::Enum p,
-                        ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return getPermutation(p).scan(col0Id, col1Id, timer);
+IdTable IndexImpl::scan(
+    Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+  return getPermutation(p).scan(col0Id, col1Id, std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________

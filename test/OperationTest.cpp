@@ -9,9 +9,13 @@
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
 #include "util/IdTableHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using namespace ad_utility::testing;
 using namespace ::testing;
+using ad_utility::CancellationException;
+using ad_utility::CancellationHandle;
+using ad_utility::CancellationState;
 
 // ________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
@@ -133,4 +137,43 @@ TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
       ElementsAre(
           ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
           ParsedAsJson(HasKeyMatching("status", Eq("fully materialized")))));
+}
+
+// _____________________________________________________________________________
+
+TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
+  auto qec = getQec();
+  auto handle = std::make_shared<CancellationHandle>();
+  ShallowParentOperation operation =
+      ShallowParentOperation::of<StallForeverOperation>(qec);
+  operation.recursivelySetCancellationHandle(handle);
+
+  ad_utility::JThread thread{[&]() {
+    std::this_thread::sleep_for(5ms);
+    handle->cancel(CancellationState::TIMEOUT);
+  }};
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      operation.computeResult(),
+      ::testing::HasSubstr("Cancelled due to timeout"),
+      ad_utility::AbortException);
+}
+
+// _____________________________________________________________________________
+
+TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
+  constexpr auto timeout = 5ms;
+  auto qec = getQec();
+  ShallowParentOperation operation =
+      ShallowParentOperation::of<StallForeverOperation>(qec);
+  operation.recursivelySetTimeConstraint(timeout);
+
+  auto childOperation = std::dynamic_pointer_cast<StallForeverOperation>(
+      operation.getChildren().at(0)->getRootOperation());
+
+  EXPECT_GT(operation.publicRemainingTime(), 0ms);
+  EXPECT_GT(childOperation->publicRemainingTime(), 0ms);
+  std::this_thread::sleep_for(timeout);
+  // Verify time is up for parent and child
+  EXPECT_EQ(operation.publicRemainingTime(), 0ms);
+  EXPECT_EQ(childOperation->publicRemainingTime(), 0ms);
 }

@@ -6,55 +6,49 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
-#include <type_traits>
-#include <variant>
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-#include "util/Timer.h"
-#include "util/json.h"
 
 namespace ad_benchmark {
-/*
-@brief Creates a lambda, that waits the given amount of milliseconds,
-before finishing. Note: 1000 milliseconds are 1 second.
-*/
-static auto createWaitLambda(const size_t& waitDuration) {
-  return [&waitDuration]() {
-    // This will measure, if at least the given amount of time has passed.
-    ad_utility::TimeoutTimer timer(std::chrono::milliseconds{waitDuration},
-                                   ad_utility::Timer::InitialStatus::Started);
-    // Just do nothing, while waiting.
-    while (!timer.hasTimedOut())
+/// Create a lambda that waits the given amount of time.
+static auto createWaitLambda(std::chrono::milliseconds waitDuration) {
+  return [waitDuration]() {
+    auto end = std::chrono::steady_clock::now() + waitDuration;
+    while (std::chrono::steady_clock::now() < end)
       ;
   };
 }
 
+using namespace std::chrono_literals;
+
 TEST(BenchmarkMeasurementContainerTest, ResultEntry) {
   // There's really no special cases.
   const std::string entryDescriptor{"entry"};
-  // The function should just wait 0.1 seconds.
-  constexpr size_t waitTimeinMillieseconds = 100;
+  // The function should just wait 0.01 seconds.
+  constexpr auto waitTime = 10ms;
 
   // The normal constructor.
   ResultEntry entryNormalConstructor(entryDescriptor,
-                                     createWaitLambda(waitTimeinMillieseconds));
+                                     createWaitLambda(waitTime));
 
   ASSERT_EQ(entryNormalConstructor.descriptor_, entryDescriptor);
 
-  // The time measurements can't be 100% accurat, so we give it a 'window'.
-  ASSERT_NEAR(waitTimeinMillieseconds / 1000.0,
-              entryNormalConstructor.measuredTime_, 0.01);
+  // The time measurements can't be 100% accurate, so we give it a 'window'.
+  ASSERT_NEAR(waitTime.count() / 1000.0, entryNormalConstructor.measuredTime_,
+              0.01);
 
   // The constructor with custom log descriptor.
   ResultEntry entryLogConstructor(entryDescriptor, "t",
-                                  createWaitLambda(waitTimeinMillieseconds));
+                                  createWaitLambda(waitTime));
 
-  // The time measurements can't be 100% accurat, so we give it a 'window'.
-  ASSERT_NEAR(waitTimeinMillieseconds / 1000.0,
-              entryLogConstructor.measuredTime_, 0.01);
+  // The time measurements can't be 100% accurate, so we give it a 'window'.
+  ASSERT_NEAR(waitTime.count() / 1000.0, entryLogConstructor.measuredTime_,
+              0.01);
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
+  // The function should just wait 0.01 seconds.
+  constexpr auto waitTime = 10ms;
   // There's really no special cases.
   ResultGroup group("group");
 
@@ -63,13 +57,14 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
   ASSERT_EQ(group.resultTables_.size(), 0);
 
   // Adding a measurement and checking, if it was added correctly.
-  ResultEntry& entry = group.addMeasurement("new entry", createWaitLambda(100));
+  ResultEntry& entry =
+      group.addMeasurement("new entry", createWaitLambda(waitTime));
 
   ASSERT_EQ(group.resultEntries_.size(), 1);
   ASSERT_EQ(entry.descriptor_, "new entry");
 
-  // The time measurements can't be 100% accurat, so we give it a 'window'.
-  ASSERT_NEAR(0.1, entry.measuredTime_, 0.01);
+  // The time measurements can't be 100% accurate, so we give it a 'window'.
+  ASSERT_NEAR(waitTime.count() / 1000.0, entry.measuredTime_, 0.01);
 
   // Adding a table and checking, if it was added correctly.
   const std::vector<std::string> rowNames = {"row1", "row2"};
@@ -161,15 +156,14 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   checkForm(table, "My table", "My table", rowNames, columnNames);
 
   // Add measured function to it.
-  table.addMeasurement(0, 1, createWaitLambda(100));
+  table.addMeasurement(0, 1, createWaitLambda(10ms));
 
   // Set custom entries.
-  table.setEntry(0, 2, (float)4.9);
+  table.setEntry(0, 2, 4.9f);
   table.setEntry(1, 1, "Custom entry");
 
   // Check the entries.
-  checkRow(table, 0, std::string{"row1"}, static_cast<float>(0.1),
-           static_cast<float>(4.9));
+  checkRow(table, 0, std::string{"row1"}, 0.01f, 4.9f);
   checkRow(table, 1, std::string{"row2"}, std::string{"Custom entry"});
   checkNeverSet(table, 1, 2);
 
@@ -182,8 +176,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   table.setEntry(2, 0, std::string{"row3"});
   checkForm(table, "My table", "My table", {"row1", "row2", "row3"},
             columnNames);
-  checkRow(table, 0, std::string{"row1"}, static_cast<float>(0.1),
-           static_cast<float>(4.9));
+  checkRow(table, 0, std::string{"row1"}, 0.01f, 4.9f);
   checkRow(table, 1, std::string{"row2"}, std::string{"Custom entry"});
 
   // Are the entries of the new row empty?
@@ -191,9 +184,9 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   checkNeverSet(table, 2, 2);
 
   // To those new fields work like the old ones?
-  table.addMeasurement(2, 1, createWaitLambda(290));
+  table.addMeasurement(2, 1, createWaitLambda(29ms));
   table.setEntry(2, 2, "Custom entry #2");
-  checkRow(table, 2, std::string{"row3"}, static_cast<float>(0.29),
+  checkRow(table, 2, std::string{"row3"}, 0.029f,
            std::string{"Custom entry #2"});
 
   // Does the constructor for the custom log name work?
