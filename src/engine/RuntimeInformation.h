@@ -23,12 +23,13 @@
 /// that information nicely formatted and to export it to JSON.
 class RuntimeInformation {
   using Milliseconds = std::chrono::milliseconds;
+
+ public:
   // Ideally we'd use `using namespace std::chrono_literals;` here,
   // but C++ forbids using this within a class, and we don't want
   // to clutter the global namespace.
   static constexpr auto ZERO = Milliseconds::zero();
 
- public:
   /// The computation status of an operation.
   enum struct Status {
     notStarted,
@@ -132,7 +133,7 @@ class RuntimeInformation {
 struct RuntimeInformationWholeQuery {
   // The time spent during query planning (this does not include the time spent
   // on `IndexScan`s that were executed during the query planning).
-  size_t timeQueryPlanning = 0;
+  std::chrono::milliseconds timeQueryPlanning = RuntimeInformation::ZERO;
   /// Output as json. The signature of this function is mandated by the json
   /// library to allow for implicit conversion.
   friend void to_json(nlohmann::ordered_json& j,

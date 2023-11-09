@@ -72,7 +72,7 @@ class Batcher {
       Timer timer{Timer::InitialStatus::Started};
       auto res = _fut.get();
       orderNextBatch();
-      _waitingTime->fetch_add(timer.msecs());
+      _waitingTime->fetch_add(timer.msecs().count());
       return res;
     } catch (const std::future_error& e) {
       throw std::runtime_error(
@@ -195,7 +195,7 @@ class BatchedPipeline {
       Timer timer{Timer::InitialStatus::Started};
       auto res = _fut.get();
       orderNextBatch();
-      _waitingTime->fetch_add(timer.msecs());
+      _waitingTime->fetch_add(timer.msecs().count());
       return res;
     } catch (std::future_error& e) {
       throw std::runtime_error(
@@ -345,8 +345,8 @@ class BatchedPipeline {
   }
 
  private:
-  std::unique_ptr<std::atomic<size_t>> _waitingTime{
-      std::make_unique<std::atomic<size_t>>(0)};
+  std::unique_ptr<std::atomic<std::chrono::milliseconds::rep>> _waitingTime{
+      std::make_unique<std::atomic<std::chrono::milliseconds::rep>>(0)};
   // the unique_ptrs to our Transformers
   using uniquePtrTuple = toUniquePtrTuple_t<FirstTransformer, Transformers...>;
   // raw non-owning pointers to the transformers
@@ -485,7 +485,7 @@ class BatchExtractor {
         _buffer = std::move(res.m_content);
       }
 
-      _waitingTime->fetch_add(timer.msecs());
+      _waitingTime->fetch_add(timer.msecs().count());
       _bufferPosition = 0;
       if (_isPipelineValid) {
         // if possible, directly submit the next parsing job
@@ -518,8 +518,8 @@ class BatchExtractor {
   [[nodiscard]] size_t getBatchSize() const { return _pipeline.getBatchSize(); }
 
  private:
-  std::unique_ptr<std::atomic<size_t>> _waitingTime{
-      std::make_unique<std::atomic<size_t>>(0)};
+  std::unique_ptr<std::atomic<std::chrono::milliseconds::rep>> _waitingTime{
+      std::make_unique<std::atomic<std::chrono::milliseconds::rep>>(0)};
   std::unique_ptr<Pipeline> _pipeline;
   std::future<detail::Batch<ValueT>> _fut;
   std::vector<ValueT> _buffer;

@@ -15,6 +15,7 @@
 #include "util/Timer.h"
 
 using namespace std::literals;
+using namespace std::chrono_literals;
 
 // Signal from one thread to another that a certain event has occured.
 // TODO<C++20>: In C++20 this can be a std::atomic_flag which has wait() and
@@ -88,7 +89,7 @@ TEST(ConcurrentCache, sequentialComputation) {
   auto result = a.computeOnce(3, waiting_function("3"s, 5));
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
-  ASSERT_GE(t.msecs(), 5);
+  ASSERT_GE(t.msecs(), 5ms);
   ASSERT_EQ(1ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
   // No other results currently being computed
@@ -103,7 +104,7 @@ TEST(ConcurrentCache, sequentialComputation) {
   ASSERT_EQ("3"s, *result2._resultPointer);
   ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::cachedNotPinned);
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
-  ASSERT_LE(t.msecs(), 5);
+  ASSERT_LE(t.msecs(), 5ms);
   ASSERT_EQ(1ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
@@ -117,7 +118,7 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   auto result = a.computeOncePinned(3, waiting_function("3"s, 5));
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
-  ASSERT_GE(t.msecs(), 5);
+  ASSERT_GE(t.msecs(), 5ms);
   ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   // No other results currently being computed
@@ -133,7 +134,7 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   ASSERT_EQ("3"s, *result2._resultPointer);
   ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::cachedPinned);
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
-  ASSERT_LE(t.msecs(), 5);
+  ASSERT_LE(t.msecs(), 5ms);
   ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
@@ -147,7 +148,7 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   auto result = a.computeOnce(3, waiting_function("3"s, 5));
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
-  ASSERT_GE(t.msecs(), 5);
+  ASSERT_GE(t.msecs(), 5ms);
   ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_EQ(1ul, a.numNonPinnedEntries());
   // No other results currently being computed
@@ -164,7 +165,7 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   ASSERT_EQ("3"s, *result2._resultPointer);
   ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::cachedNotPinned);
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
-  ASSERT_LE(t.msecs(), 5);
+  ASSERT_LE(t.msecs(), 5ms);
   ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
