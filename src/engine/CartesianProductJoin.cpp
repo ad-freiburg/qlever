@@ -85,16 +85,11 @@ bool CartesianProductJoin::knownEmptyResult() {
   return std::ranges::any_of(childView(), &Operation::knownEmptyResult);
 }
 
-// Copy each element from the `inputColumn` `groupSize` times to the
-// `targetColumn`. Repeat until the `targetColumn` is copletely filled. Skip the
-// first `offset` write operations to the `targetColumn`. Call `checkForTimeout`
-// after each write. If `StaticGroupSize != 0`, then the group size is known at
-// compile time which allows for more efficient loop processing for very small
-// group sizes.
-template <size_t StaticGroupSize = 0>
-static void writeResultColumn(std::span<Id> targetColumn,
-                              std::span<const Id> inputColumn, size_t groupSize,
-                              size_t offset, auto& checkForTimeout) {
+// ____________________________________________________________________________
+template <size_t StaticGroupSize>
+void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
+                                             std::span<const Id> inputColumn,
+                                             size_t groupSize, size_t offset) {
   if (StaticGroupSize != 0) {
     AD_CORRECTNESS_CHECK(StaticGroupSize == groupSize);
   }
@@ -117,7 +112,7 @@ static void writeResultColumn(std::span<Id> targetColumn,
           }
           targetColumn[numRowsWritten] = inputColumn[i];
           ++numRowsWritten;
-          checkForTimeout();
+          checkCancellation();
         }
       };
       if constexpr (StaticGroupSize == 0) {
@@ -183,7 +178,6 @@ ResultTable CartesianProductJoin::computeResult() {
 
   result.resize(totalSizeIncludingLimit);
 
-  auto checkForTimeout = checkTimeoutAfterNCallsFactory(1'000'000);
   if (totalSizeIncludingLimit != 0) {
     // A `groupSize` of N means that each row of the current result is copied N
     // times adjacent to each other.
@@ -196,8 +190,7 @@ ResultTable CartesianProductJoin::computeResult() {
       for (const auto& inputCol : input.getColumns()) {
         decltype(auto) resultCol = result.getColumn(resultColIdx);
         ad_utility::callFixedSize(groupSize, [&]<size_t I>() {
-          writeResultColumn<I>(resultCol, inputCol, groupSize, offset,
-                               checkForTimeout);
+          writeResultColumn<I>(resultCol, inputCol, groupSize, offset);
         });
         ++resultColIdx;
       }

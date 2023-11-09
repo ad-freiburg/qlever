@@ -282,10 +282,9 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     currentGroupBlock.push_back(std::pair<size_t, Id>(col, input(0, col)));
   }
   size_t blockStart = 0;
-  auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory(32000);
 
   for (size_t pos = 1; pos < input.size(); pos++) {
-    checkTimeoutAfterNCalls(currentGroupBlock.size());
+    checkCancellation();
     bool rowMatchesCurrentBlock =
         std::all_of(currentGroupBlock.begin(), currentGroupBlock.end(),
                     [&](const auto& columns) {

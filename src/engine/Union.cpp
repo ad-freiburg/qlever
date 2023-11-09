@@ -199,7 +199,7 @@ void Union::computeUnion(
   auto copyChunked = [this](auto beg, auto end, auto target) {
     size_t total = end - beg;
     for (size_t i = 0; i < total; i += chunkSize) {
-      checkTimeout();
+      checkCancellation();
       size_t actualEnd = std::min(i + chunkSize, total);
       std::copy(beg + i, beg + actualEnd, target + i);
     }
@@ -209,7 +209,7 @@ void Union::computeUnion(
   auto fillChunked = [this](auto beg, auto end, const auto& value) {
     size_t total = end - beg;
     for (size_t i = 0; i < total; i += chunkSize) {
-      checkTimeout();
+      checkCancellation();
       size_t actualEnd = std::min(i + chunkSize, total);
       std::fill(beg + i, beg + actualEnd, value);
     }

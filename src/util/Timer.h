@@ -133,80 +133,6 @@ class Timer {
   }
 };
 
-/// An exception signalling a timeout
-class TimeoutException : public std::exception {
- public:
-  TimeoutException(std::string message) : message_{std::move(message)} {}
-  const char* what() const noexcept override { return message_.c_str(); }
-
- private:
-  std::string message_;
-};
-
-/// A timer which also can be given a timeout value and queried whether it
-/// has timed out
-class TimeoutTimer : public Timer {
- public:
-  /// Factory function for a timer that never times out
-  static TimeoutTimer unlimited() { return TimeoutTimer(UnlimitedTag{}); }
-
-  template <ad_utility::isInstantiation<chr::duration> T>
-  TimeoutTimer(T timeLimit, Timer::InitialStatus status)
-      : Timer{status}, timeLimit_{toDuration(timeLimit)} {}
-
-  /// Did this timer already timeout
-  /// Can't be const because of the internals of the Timer class.
-  bool hasTimedOut() {
-    if (isUnlimited_) {
-      return false;
-    } else {
-      return value() > timeLimit_;
-    }
-  }
-
-  // Check if this timer has timed out. If the timer has timed out, throws a
-  // TimeoutException. Else, nothing happens.
-  void checkTimeoutAndThrow(std::string_view additionalMessage = {}) {
-    if (hasTimedOut()) {
-      double seconds =
-          std::chrono::duration_cast<Timer::Seconds>(timeLimit_).count();
-      std::stringstream numberStream;
-      // Seconds with three digits after the decimal point.
-      // TODO<C++20> : Use std::format for formatting, it is much more readable.
-      numberStream << std::setprecision(3) << std::fixed << seconds;
-      throw TimeoutException{absl::StrCat(
-          additionalMessage, "A Timeout occured. The time limit was "s,
-          std::move(numberStream).str(), " seconds"s)};
-    }
-  }
-
-  // Overload that does not take an error message directly, but a callable that
-  // creates the error message lazily when the timeout occurs. This can be used
-  // to make calling this function cheaper in the typical "no timeout" case.
-  template <typename F>
-  requires std::is_invocable_r_v<std::string_view, F>
-  void checkTimeoutAndThrow(F&& f) {
-    if (hasTimedOut()) {
-      checkTimeoutAndThrow(f());
-    }
-  }
-
-  Duration remainingTime() const {
-    if (isUnlimited_) {
-      return Duration::max();
-    }
-    auto passedTime = value();
-    return passedTime < timeLimit_ ? timeLimit_ - passedTime : Duration::zero();
-  }
-
- private:
-  Timer::Duration timeLimit_ = Timer::Duration::zero();
-  bool isUnlimited_ = false;  // never times out
-  class UnlimitedTag {};
-  explicit TimeoutTimer(UnlimitedTag)
-      : Timer{Timer::Started}, isUnlimited_{true} {}
-};
-
 namespace detail {
 // A helper struct that measures the time from its creation until its
 // destruction and logs the time together with a specified message
@@ -249,14 +175,5 @@ using detail::TimeBlockAndLog;
 
 }  // namespace timer
 using timer::TimeBlockAndLog;
-using timer::TimeoutException;
-using timer::TimeoutTimer;
 using timer::Timer;
-
-/// A threadsafe timeout timer
-using ConcurrentTimeoutTimer =
-    ad_utility::Synchronized<TimeoutTimer, std::mutex>;
-
-/// A shared ptr to a threadsafe timeout timer
-using SharedConcurrentTimeoutTimer = std::shared_ptr<ConcurrentTimeoutTimer>;
 }  // namespace ad_utility

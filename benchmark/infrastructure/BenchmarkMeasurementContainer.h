@@ -10,6 +10,7 @@
 #include <concepts>
 #include <memory>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
@@ -17,6 +18,7 @@
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/Timer.h"
+#include "util/TypeTraits.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
@@ -125,6 +127,16 @@ class ResultEntry : public BenchmarkMetadataGetter {
 
 // Describes a table of measured execution times of functions.
 class ResultTable : public BenchmarkMetadataGetter {
+ public:
+  /*
+  What type of entry a `ResultTable` can hold. The float is for the measured
+  time in seconds, the `monostate` for empty entries, and the rest for custom
+  entries by the user for better readability.
+  */
+  using EntryType =
+      std::variant<std::monostate, float, std::string, bool, size_t, int>;
+
+ private:
   // For identification.
   std::string descriptor_;
   /*
@@ -137,7 +149,6 @@ class ResultTable : public BenchmarkMetadataGetter {
   std::vector<std::string> columnNames_;
   // The entries in the table. Access is [row, column]. Can be the time in
   // seconds, a string, or empty.
-  using EntryType = std::variant<std::monostate, float, std::string>;
   std::vector<std::vector<EntryType>> entries_;
 
   // Needed for testing purposes.
@@ -210,16 +221,17 @@ class ResultTable : public BenchmarkMetadataGetter {
   @brief Returns the content of a table entry, if the the correct type was
   given. Otherwise, causes an error.
 
-  @tparam T What type the entry has. Must be either `float`, or `string`. If
+  @tparam T What type the entry has. Must be contained in `EntryType`. If
    you give the wrong one, or the entry was never set/added, then this
    function will cause an exception.
 
   @param row, column Which table entry to read. Starts with `(0,0)`.
   */
   template <typename T>
-  requires std::is_same_v<T, float> || std::is_same_v<T, std::string>
+  requires ad_utility::isTypeContainedIn<T, EntryType>
   T getEntry(const size_t row, const size_t column) const {
     AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
+    static_assert(!ad_utility::isSimilar<T, std::monostate>);
 
     // There is a chance, that the entry of the table does NOT have type T,
     // in which case this will cause an error. As this is a mistake on the

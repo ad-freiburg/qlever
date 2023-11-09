@@ -371,3 +371,5 @@ addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
 addLinkAndDiscoverTest(UpdateFetcherTest http)
 
 addLinkAndDiscoverTest(MessageSenderTest http)
+
+addLinkAndDiscoverTest(CancellationHandleTest util)
