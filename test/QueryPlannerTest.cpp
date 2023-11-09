@@ -1138,16 +1138,13 @@ TEST(QueryPlannerTest, TransitivePathLeftId) {
   TransitivePathSide left{std::nullopt, 0, getId("<s>"), 0};
   TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
   h::expect(
-    "SELECT ?y WHERE {"
-    "<s> <p>+ ?y }",
-    h::TransitivePath(
-      left, right, 1, std::numeric_limits<size_t>::max(),
-      scan("?_qlever_internal_variable_query_planner_0",
-           "<p>",
-           "?_qlever_internal_variable_query_planner_1")
-    ),
-    qec
-  );
+      "SELECT ?y WHERE {"
+      "<s> <p>+ ?y }",
+      h::TransitivePath(
+          left, right, 1, std::numeric_limits<size_t>::max(),
+          scan("?_qlever_internal_variable_query_planner_0", "<p>",
+               "?_qlever_internal_variable_query_planner_1")),
+      qec);
 }
 
 TEST(QueryPlannerTest, TransitivePathRightId) {
@@ -1159,16 +1156,13 @@ TEST(QueryPlannerTest, TransitivePathRightId) {
   TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
   TransitivePathSide right{std::nullopt, 1, getId("<o>"), 1};
   h::expect(
-    "SELECT ?y WHERE {"
-    "?x <p>+ <o> }",
-    h::TransitivePath(
-      left, right, 1, std::numeric_limits<size_t>::max(),
-      scan("?_qlever_internal_variable_query_planner_0",
-           "<p>",
-           "?_qlever_internal_variable_query_planner_1")
-    ),
-    qec
-  );
+      "SELECT ?y WHERE {"
+      "?x <p>+ <o> }",
+      h::TransitivePath(
+          left, right, 1, std::numeric_limits<size_t>::max(),
+          scan("?_qlever_internal_variable_query_planner_0", "<p>",
+               "?_qlever_internal_variable_query_planner_1")),
+      qec);
 }
 
 TEST(QueryPlannerTest, TransitivePathBindLeft) {
@@ -1199,6 +1193,44 @@ TEST(QueryPlannerTest, TransitivePathBindRight) {
           scan("?y", "<p>", "<o>"),
           scan("?_qlever_internal_variable_query_planner_0", "<p>",
                "?_qlever_internal_variable_query_planner_1")));
+}
+
+TEST(QueryPlannerTest, TransitivePathLeftBoundRightId) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<s> <p> <o>");
+
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, getId("<o>"), 1};
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "<s> <p> ?x."
+      "?x <p>* <o> }",
+      h::TransitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          scan("<s>", "<p>", "?x"),
+          scan("?_qlever_internal_variable_query_planner_0", "<p>",
+               "?_qlever_internal_variable_query_planner_1")),
+      qec);
+}
+
+TEST(QueryPlannerTest, TransitivePathRightBoundLeftId) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<s> <p> <o>");
+
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  TransitivePathSide left{std::nullopt, 0, getId("<s>"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?x"), 1};
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "<s> <p>* ?x."
+      "?x <p> <o> }",
+      h::TransitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          scan("?x", "<p>", "<o>"),
+          scan("?_qlever_internal_variable_query_planner_0", "<p>",
+               "?_qlever_internal_variable_query_planner_1")),
+      qec);
 }
 
 // __________________________________________________________________________
