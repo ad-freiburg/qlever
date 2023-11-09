@@ -71,15 +71,14 @@ ResultTable OrderBy::computeResult() {
   shared_ptr<const ResultTable> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
-  auto remainingTime = _timeoutTimer->wlock()->remainingTime();
   auto sortEstimateCancellationFactor =
       RuntimeParameters().get<"sort-estimate-cancellation-factor">();
   if (getExecutionContext()->getSortPerformanceEstimator().estimatedSortTime(
           subRes->size(), subRes->width()) >
-      remainingTime * sortEstimateCancellationFactor) {
+      remainingTime() * sortEstimateCancellationFactor) {
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation
-    throw ad_utility::TimeoutException(
+    throw ad_utility::CancellationException(
         "OrderBy operation was canceled, because time estimate exceeded "
         "remaining time by a factor of " +
         std::to_string(sortEstimateCancellationFactor));

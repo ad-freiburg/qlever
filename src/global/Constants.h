@@ -158,12 +158,6 @@ static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 126;
 static const uint8_t NO_PREFIX_CHAR =
     MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
 
-// After performing this many "basic operations", we check for timeouts
-static constexpr size_t NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS = 32000;
-// How many "basic operations" (see above) do we assume for a hashset or hashmap
-// operation
-static constexpr size_t NUM_OPERATIONS_HASHSET_LOOKUP = 32;
-
 // When initializing a sort performance estimator, at most this percentage of
 // the number of triples in the index is being sorted at once.
 static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;

@@ -7,52 +7,54 @@
 
 #include "engine/RuntimeInformation.h"
 
+using namespace std::chrono_literals;
+
 // ________________________________________________________________
 TEST(RuntimeInformation, addLimitOffsetRow) {
   RuntimeInformation rti;
   rti.descriptor_ = "BaseOperation";
-  rti.totalTime_ = 4.0;
+  rti.totalTime_ = 4ms;
   rti.sizeEstimate_ = 34;
 
-  rti.addLimitOffsetRow(LimitOffsetClause{23, 1, 4}, 20, true);
+  rti.addLimitOffsetRow(LimitOffsetClause{23, 1, 4}, 20ms, true);
   EXPECT_EQ(rti.descriptor_, "LIMIT 23 OFFSET 4");
-  EXPECT_EQ(rti.totalTime_, 24.0);
-  EXPECT_EQ(rti.getOperationTime(), 20.0);
+  EXPECT_EQ(rti.totalTime_, 24ms);
+  EXPECT_EQ(rti.getOperationTime(), 20ms);
 
   ASSERT_EQ(rti.children_.size(), 1u);
   auto& child = *rti.children_.at(0);
   EXPECT_EQ(child.descriptor_, "BaseOperation");
-  EXPECT_EQ(child.totalTime_, 4.0);
-  EXPECT_EQ(child.getOperationTime(), 4.0);
+  EXPECT_EQ(child.totalTime_, 4ms);
+  EXPECT_EQ(child.getOperationTime(), 4ms);
   EXPECT_TRUE(child.details_.at("not-written-to-cache-because-child-of-limit"));
 
-  rti.addLimitOffsetRow(LimitOffsetClause{std::nullopt, 1, 17}, 15, false);
+  rti.addLimitOffsetRow(LimitOffsetClause{std::nullopt, 1, 17}, 15ms, false);
   EXPECT_FALSE(rti.children_.at(0)->details_.at(
       "not-written-to-cache-because-child-of-limit"));
   EXPECT_EQ(rti.descriptor_, "OFFSET 17");
 
-  rti.addLimitOffsetRow(LimitOffsetClause{42, 1, 0}, 15, true);
+  rti.addLimitOffsetRow(LimitOffsetClause{42, 1, 0}, 15ms, true);
   EXPECT_EQ(rti.descriptor_, "LIMIT 42");
 }
 
 // ________________________________________________________________
 TEST(RuntimeInformation, getOperationTimeAndCostEstimate) {
   RuntimeInformation child1;
-  child1.totalTime_ = 3.0;
+  child1.totalTime_ = 3ms;
   child1.costEstimate_ = 12;
   RuntimeInformation child2;
-  child2.totalTime_ = 4.5;
+  child2.totalTime_ = 4ms;
   child2.costEstimate_ = 43;
 
   RuntimeInformation parent;
-  parent.totalTime_ = 10.0;
+  parent.totalTime_ = 10ms;
   parent.costEstimate_ = 100;
 
   parent.children_.push_back(std::make_shared<RuntimeInformation>(child1));
   parent.children_.push_back(std::make_shared<RuntimeInformation>(child2));
 
-  // 2.5 == 10.0 - 4.5 - 3.0
-  ASSERT_DOUBLE_EQ(parent.getOperationTime(), 2.5);
+  // 3 == 10 - 4 - 3
+  ASSERT_EQ(parent.getOperationTime(), 3ms);
 
   // 45 == 100 - 43 - 12
   ASSERT_EQ(parent.getOperationCostEstimate(), 45);
@@ -124,7 +126,7 @@ TEST(RuntimeInformation, toStringAndJson) {
   child.numRows_ = 7;
   child.columnNames_.emplace_back("?x");
   child.columnNames_.emplace_back("?y");
-  child.totalTime_ = 3.4;
+  child.totalTime_ = 3ms;
   child.cacheStatus_ = ad_utility::CacheStatus::cachedPinned;
   child.status_ = RuntimeInformation::Status::optimizedOut;
   child.addDetail("minor detail", 42);
@@ -134,7 +136,7 @@ TEST(RuntimeInformation, toStringAndJson) {
   parent.numCols_ = 6;
   parent.numRows_ = 4;
   parent.columnNames_.push_back("?alpha");
-  parent.totalTime_ = 6.2;
+  parent.totalTime_ = 6ms;
   parent.cacheStatus_ = ad_utility::CacheStatus::computed;
   parent.status_ = RuntimeInformation::Status::fullyMaterialized;
 
@@ -146,8 +148,8 @@ TEST(RuntimeInformation, toStringAndJson) {
             R"(├─ parent
 │  result_size: 4 x 6
 │  columns: ?alpha
-│  total_time: 6.20 ms
-│  operation_time: 2.80 ms
+│  total_time: 6 ms
+│  operation_time: 3 ms
 │  status: fully materialized
 │  cache_status: computed
 │  ┬
@@ -155,12 +157,12 @@ TEST(RuntimeInformation, toStringAndJson) {
 │  ├─ child
 │  │  result_size: 7 x 2
 │  │  columns: ?x, ?y
-│  │  total_time: 3.40 ms
-│  │  operation_time: 3.40 ms
+│  │  total_time: 3 ms
+│  │  operation_time: 3 ms
 │  │  status: optimized out
 │  │  cache_status: cached_pinned
-│  │  original_total_time: 0.00 ms
-│  │  original_operation_time: 0.00 ms
+│  │  original_total_time: 0 ms
+│  │  original_operation_time: 0 ms
 │  │    minor detail: 42
 )");
   nlohmann::ordered_json j = parent;
@@ -172,10 +174,10 @@ TEST(RuntimeInformation, toStringAndJson) {
 "column_names": [
     "?alpha"
 ],
-"total_time": 6.2,
-"operation_time": 2.8000000000000003,
-"original_total_time": 0.0,
-"original_operation_time": 0.0,
+"total_time": 6,
+"operation_time": 3,
+"original_total_time": 0,
+"original_operation_time": 0,
 "cache_status": "computed",
 "details": null,
 "estimated_total_cost": 0,
@@ -192,10 +194,10 @@ TEST(RuntimeInformation, toStringAndJson) {
             "?x",
             "?y"
         ],
-        "total_time": 3.4,
-        "operation_time": 3.4,
-        "original_total_time": 0.0,
-        "original_operation_time": 0.0,
+        "total_time": 3,
+        "operation_time": 3,
+        "original_total_time": 0,
+        "original_operation_time": 0,
         "cache_status": "cached_pinned",
         "details": {
             "minor detail": 42

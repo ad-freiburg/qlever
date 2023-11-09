@@ -18,7 +18,6 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
-#include "util/Timer.h"
 #include "util/http/HttpServer.h"
 #include "util/http/streamable_body.h"
 #include "util/http/websocket/QueryHub.h"
@@ -132,4 +131,21 @@ class Server {
   ///         on destruction.
   ad_utility::websocket::OwningQueryId getQueryId(
       const ad_utility::httpUtils::HttpRequest auto& request);
+
+  /// Schedule a task to trigger the timeout after the `timeLimit`.
+  /// The returned callback can be used to prevent this task from executing
+  /// either because the `cancellationHandle` has been aborted by some other
+  /// means or because the task has been completed successfully.
+  static auto cancelAfterDeadline(
+      const net::any_io_executor& executor,
+      std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
+      std::chrono::seconds timeLimit);
+
+  /// Create a cancellation handle, pass it to the operation and configure
+  /// it to get cancelled automatically if a time limit is passed by calling
+  /// `cancelAfterDeadline`. If `timeLimit` is empty, return a no-op lambda.
+  static std::function<void()> setupCancellationHandle(
+      const net::any_io_executor& executor,
+      const std::shared_ptr<Operation>& rootOperation,
+      std::optional<std::chrono::seconds> timeLimit);
 };
