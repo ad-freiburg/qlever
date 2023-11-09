@@ -372,4 +372,7 @@ addLinkAndDiscoverTest(UpdateFetcherTest http)
 
 addLinkAndDiscoverTest(MessageSenderTest http)
 
+addLinkAndDiscoverTest(CancellationHandleTest util)
+
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
+
