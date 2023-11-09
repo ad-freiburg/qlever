@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "./IndexTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -148,19 +149,21 @@ inline auto TransitivePath =
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`
-QueryExecutionTree parseAndPlan(std::string query) {
+QueryExecutionTree parseAndPlan(std::string query, QueryExecutionContext* qec) {
   ParsedQuery pq = SparqlParser::parseQuery(std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock a
   // queryExecutionContext.
-  return QueryPlanner{nullptr}.createExecutionTree(pq);
+  return QueryPlanner{qec}.createExecutionTree(pq);
 }
 
 // Check that the `QueryExecutionTree` that is obtained by parsing and planning
 // the `query` matches the `matcher`.
 void expect(std::string query, auto matcher,
+            std::optional<QueryExecutionContext*> optQec = std::nullopt,
             source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "expect");
-  auto qet = parseAndPlan(std::move(query));
+  QueryExecutionContext* qec = optQec.value_or(ad_utility::testing::getQec());
+  auto qet = parseAndPlan(std::move(query), qec);
   EXPECT_THAT(qet, matcher);
 }
 }  // namespace queryPlannerTestHelpers
