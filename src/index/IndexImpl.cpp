@@ -444,46 +444,88 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
   size_t i = 0;
   auto triplesGenerator = data.getRows();
   auto it = triplesGenerator.begin();
-  for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
-       partialNum++) {
-    std::string mmapFilename =
-        absl::StrCat(onDiskBase_, PARTIAL_MMAP_IDS, partialNum);
+    using Triple = typename TripleVec::value_type;
+
+    ad_utility::data_structures::ThreadSafeQueue<std::pair<std::vector<Triple>, std::shared_ptr<ad_utility::HashMap<Id, Id>>>> lookupQueue(30);
+    ad_utility::data_structures::ThreadSafeQueue<std::vector<Triple>> writeQueue(30);
+    std::vector<ad_utility::JThread> lookupThreads;
+    auto transformTriple = [&](Triple& curTriple, auto& idMap) {
+        // For all triple elements find their mapping from partial to global ids.
+        for (size_t k = 0; k < curTriple.size(); ++k) {
+            // TODO<joka921> The Maps should actually store `VocabIndex`es
+            if (curTriple[k].getDatatype() != Datatype::VocabIndex) {
+                continue;
+            }
+            auto iterator = idMap.find(curTriple[k]);
+            if (iterator == idMap.end()) {
+                LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k]
+                          << std::endl;
+                AD_FAIL();
+            }
+            // TODO<joka921> at some point we have to check for out of range.
+            curTriple[k] = iterator->second;
+        }
+    };
+
+    for (size_t z = 0; z < 10; ++z) {
+        lookupThreads.emplace_back([&]() {
+            while (auto opt = lookupQueue.pop()) {
+                const auto& idMap = *opt->second;
+                for (auto& triple : opt->first) {
+                    transformTriple(triple, idMap);
+                }
+                writeQueue.push(std::move(opt.value().first));
+            }
+        });
+    }
+
+    std::jthread writeThread{[&]() {
+        while (auto opt = writeQueue.pop()) {
+            for (const auto& triple : opt.value()) {
+                // update the Element
+                result.push(triple);
+                ++i;
+                if (i % 100'000'000 == 0) {
+                    LOG(INFO) << "Triples converted: " << i << std::endl;
+                }
+            }
+        }
+    }};
+    for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
+         partialNum++) {
+        std::string mmapFilename =
+                absl::StrCat(onDiskBase_, PARTIAL_MMAP_IDS, partialNum);
     LOG(DEBUG) << "Reading ID map from: " << mmapFilename << std::endl;
-    ad_utility::HashMap<Id, Id> idMap = IdMapFromPartialIdMapFile(mmapFilename);
+    auto idMap = std::make_shared<ad_utility::HashMap<Id, Id>>(IdMapFromPartialIdMapFile(mmapFilename));
     // Delete the temporary file in which we stored this map
     deleteTemporaryFile(mmapFilename);
 
+    static constexpr size_t bufferSize = 10'000;
+    std::vector<Triple> buffer;
+    buffer.reserve(bufferSize);
     // update the triples for which this partial vocabulary was responsible
     for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[partialNum];
          ++tmpNum) {
-      typename TripleVec::value_type curTriple = *it;
-      ++it;
-
-      // For all triple elements find their mapping from partial to global ids.
-      for (size_t k = 0; k < 3; ++k) {
-        // TODO<joka921> The Maps should actually store `VocabIndex`es
-        if (curTriple[k].getDatatype() != Datatype::VocabIndex) {
-          continue;
-        }
-        auto iterator = idMap.find(curTriple[k]);
-        if (iterator == idMap.end()) {
-          LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k]
-                    << std::endl;
-          AD_FAIL();
-        }
-        // TODO<joka921> at some point we have to check for out of range.
-        curTriple[k] = iterator->second;
-      }
-
-      // update the Element
-      result.push(curTriple);
-      ++i;
-      if (i % 100'000'000 == 0) {
-        LOG(INFO) << "Triples converted: " << i << std::endl;
+      buffer.push_back(*it);
+      if (buffer.size() >= bufferSize) {
+        lookupQueue.push({std::move(buffer), idMap});
+        buffer.clear();
+        buffer.reserve(bufferSize);
       }
     }
-  }
-  LOG(INFO) << "Done, total number of triples converted: " << i << std::endl;
+    if (!buffer.empty()) {
+      lookupQueue.push({std::move(buffer), idMap});
+      buffer.clear();
+      buffer.reserve(bufferSize);
+    }
+    }
+    lookupQueue.finish();
+    for (auto& thread : lookupThreads) {
+    thread.join();
+    }
+    writeQueue.finish();
+    writeThread.join();
+    LOG(INFO) << "Done, total number of triples converted: " << i << std::endl;
   return resultPtr;
 }
 
