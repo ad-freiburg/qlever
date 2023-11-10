@@ -81,40 +81,38 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 
   std::future<void> writeFuture;
 
-  auto mergedWords = ad_utility::parallelMultiwayMerge<QueueWord>(
+  auto mergedWords = ad_utility::parallelMultiwayMerge<QueueWord, true>(
       100, generators, lessThanForQueue);
   // start k-way merge
-  for (auto& buffer : mergedWords) {
-    for (QueueWord& top : buffer) {
-      // for the prefix compression vocabulary, we don't need the external
-      // vocabulary
-      // TODO<joka921> Don't include external literals at all in this
-      // vocabulary.
-      if (_noIdMapsAndIgnoreExternalVocab && top.isExternal()) {
-        break;
+  for (QueueWord& top : std::views::join(mergedWords)) {
+    // for the prefix compression vocabulary, we don't need the external
+    // vocabulary
+    // TODO<joka921> Don't include external literals at all in this
+    // vocabulary.
+    if (_noIdMapsAndIgnoreExternalVocab && top.isExternal()) {
+      break;
+    }
+
+    // accumulated the globally ordered queue words in a buffer.
+    sortedBuffer.push_back(std::move(top));
+
+    if (sortedBuffer.size() >= _bufferSize) {
+      // asynchronously write the next batch of sorted
+      // queue words
+      auto writeTask = [this, buf = std::move(sortedBuffer),
+                        &internalVocabularyAction, &lessThan]() {
+        this->writeQueueWordsToIdVec(buf, internalVocabularyAction, lessThan);
+      };
+      sortedBuffer.clear();
+      sortedBuffer.reserve(_bufferSize);
+      // wait for the last batch
+
+      LOG(TIMING) << "A new batch of words is ready" << std::endl;
+      if (writeFuture.valid()) {
+        writeFuture.get();
       }
-
-      // accumulated the globally ordered queue words in a buffer.
-      sortedBuffer.push_back(std::move(top));
-
-      if (sortedBuffer.size() >= _bufferSize) {
-        // asynchronously write the next batch of sorted
-        // queue words
-        auto writeTask = [this, buf = std::move(sortedBuffer),
-                          &internalVocabularyAction, &lessThan]() {
-          this->writeQueueWordsToIdVec(buf, internalVocabularyAction, lessThan);
-        };
-        sortedBuffer.clear();
-        sortedBuffer.reserve(_bufferSize);
-        // wait for the last batch
-
-        LOG(TIMING) << "A new batch of words is ready" << std::endl;
-        if (writeFuture.valid()) {
-          writeFuture.get();
-        }
-        writeFuture = std::async(writeTask);
-        // we have moved away our buffer, start over
-      }
+      writeFuture = std::async(writeTask);
+      // we have moved away our buffer, start over
     }
   }
 

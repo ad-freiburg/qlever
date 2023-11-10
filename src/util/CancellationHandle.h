@@ -59,8 +59,8 @@ class CancellationHandle {
   /// `detailSupplier` will not be evaluated.
   template <typename... ArgTypes>
   AD_ALWAYS_INLINE void throwIfCancelled(
-      const InvocableWithReturnType<std::string_view, ArgTypes...> auto&
-          detailSupplier,
+      const InvocableWithConvertibleReturnType<
+          std::string_view, ArgTypes...> auto& detailSupplier,
       ArgTypes&&... argTypes) const {
     auto state = cancellationState_.load(std::memory_order_relaxed);
     if (state == CancellationState::NOT_CANCELLED) [[likely]] {

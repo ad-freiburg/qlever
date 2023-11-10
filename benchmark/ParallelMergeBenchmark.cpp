@@ -9,10 +9,6 @@
 #include "util/Log.h"
 #include "util/ParallelMultiwayMerge.h"
 
-// On macOS on GitHub actions we currently have trouble with STXXL in this
-// Benchmark.
-#ifndef __APPLE__
-
 namespace ad_benchmark {
 
 class ParallelMergeBenchmark : public BenchmarkInterface {
@@ -40,8 +36,8 @@ class ParallelMergeBenchmark : public BenchmarkInterface {
     std::ranges::generate(inputs, generateRandomVec);
 
     auto run = [&]() {
-      auto merger =
-          ad_utility::parallelMultiwayMerge<size_t>(500, inputs, std::less<>{});
+      auto merger = ad_utility::parallelMultiwayMerge<size_t, false>(
+          500, inputs, std::less<>{});
       size_t result{};
       for (auto& i : merger) {
         for (auto el : i) {
@@ -57,4 +53,3 @@ class ParallelMergeBenchmark : public BenchmarkInterface {
 };
 AD_REGISTER_BENCHMARK(ParallelMergeBenchmark);
 }  // namespace ad_benchmark
-#endif
