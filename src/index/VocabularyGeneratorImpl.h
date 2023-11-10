@@ -83,18 +83,17 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 
   auto mergedWords = ad_utility::parallelMultiwayMerge<QueueWord, true>(
       BLOCKSIZE_VOCABULARY_MERGING, generators, lessThanForQueue);
-  // start k-way merge
-  for (QueueWord& top : std::views::join(mergedWords)) {
+  for (QueueWord& currentWord : std::views::join(mergedWords)) {
     // for the prefix compression vocabulary, we don't need the external
     // vocabulary
     // TODO<joka921> Don't include external literals at all in this
     // vocabulary.
-    if (_noIdMapsAndIgnoreExternalVocab && top.isExternal()) {
+    if (_noIdMapsAndIgnoreExternalVocab && currentWord.isExternal()) {
       break;
     }
 
     // accumulated the globally ordered queue words in a buffer.
-    sortedBuffer.push_back(std::move(top));
+    sortedBuffer.push_back(std::move(currentWord));
 
     if (sortedBuffer.size() >= _bufferSize) {
       // asynchronously write the next batch of sorted

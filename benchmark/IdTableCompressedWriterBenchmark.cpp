@@ -18,7 +18,7 @@
 namespace ad_benchmark {
 
 using A = std::array<Id, 3>;
-class ParallelMergeBenchmark : public BenchmarkInterface {
+class IdTableCompressedWriterBenchmark : public BenchmarkInterface {
   std::string name() const final {
     return "Benchmarks for external sorting and storage of IdTables";
   }
@@ -103,6 +103,6 @@ class ParallelMergeBenchmark : public BenchmarkInterface {
     return results;
   }
 };
-AD_REGISTER_BENCHMARK(ParallelMergeBenchmark);
+AD_REGISTER_BENCHMARK(IdTableCompressedWriterBenchmark);
 }  // namespace ad_benchmark
 #endif

@@ -70,7 +70,7 @@ cppcoro::generator<std::vector<T>> lazyBinaryMerge(
   auto it1 = makeItPair(range1);
   auto it2 = makeItPair(range2);
 
-  // Helper lambda to check if we are at the end of a range
+  // Helper lambda to check if we are at the end of a range.
   auto exhausted = [](const auto& itPair) {
     return itPair.first == itPair.second;
   };
@@ -87,11 +87,14 @@ cppcoro::generator<std::vector<T>> lazyBinaryMerge(
     return exhausted(itPair);
   };
 
+  // Push the smaller element one of `*it1` and `*it2` to the `buffer` and
+  // advance the corresponding iterator. Return true iff that iterator reaches
+  // the end after the increment.
   auto pushSmaller = [&comparison, &push, &it1, &it2]() {
     if (comparison(*it1.first, *it2.first)) {
       return push(it1);
     } else {
-      return (push(it2));
+      return push(it2);
     }
   };
 

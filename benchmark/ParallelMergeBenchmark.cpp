@@ -11,7 +11,7 @@
 
 namespace ad_benchmark {
 
-class ParallelMergeBenchmark : public BenchmarkInterface {
+class IdTableCompressedWriterBenchmark : public BenchmarkInterface {
   std::string name() const final {
     return "Benchmarks for parallel multiway merging";
   }
@@ -51,5 +51,5 @@ class ParallelMergeBenchmark : public BenchmarkInterface {
     return results;
   }
 };
-AD_REGISTER_BENCHMARK(ParallelMergeBenchmark);
+AD_REGISTER_BENCHMARK(IdTableCompressedWriterBenchmark);
 }  // namespace ad_benchmark
