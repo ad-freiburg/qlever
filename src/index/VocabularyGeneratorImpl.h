@@ -82,7 +82,7 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
   std::future<void> writeFuture;
 
   auto mergedWords = ad_utility::parallelMultiwayMerge<QueueWord, true>(
-      100, generators, lessThanForQueue);
+      BLOCKSIZE_VOCABULARY_MERGING, generators, lessThanForQueue);
   // start k-way merge
   for (QueueWord& top : std::views::join(mergedWords)) {
     // for the prefix compression vocabulary, we don't need the external

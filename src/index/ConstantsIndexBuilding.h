@@ -79,6 +79,11 @@ constexpr size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
 // time
 constexpr size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
 
+// The blocksize parameter of the parallel vocabulary merging. Higher values
+// mean higher memory consumption, wherease a too low value will impact the
+// performance negatively.
+static constexpr size_t BLOCKSIZE_VOCABULARY_MERGING = 50;
+
 // The uncompressed size in bytes of a block of the permutations.
 //
 // NOTE: This used to be `1 << 23` (over 8M), which is fairly large (we always
