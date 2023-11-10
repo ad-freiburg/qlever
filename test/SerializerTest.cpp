@@ -366,6 +366,25 @@ TEST(Serializer, Vector) {
   testWithAllSerializers(testNonTriviallyCopyableDatatype);
 }
 
+// Test that we can succesfully write `string_view`s to a serializer and
+// correctly read them as `string`s.
+TEST(Serializer, StringViewToString) {
+  auto testString = [](auto&& writer, auto makeReaderFromWriter) {
+    std::vector<std::string_view> v = {"bim", "bam",
+                                       "veryLongStringLongerThanShortString"};
+    std::vector<std::string> vAsString = {
+        "bim", "bam", "veryLongStringLongerThanShortString"};
+    writer | v;
+
+    auto reader = makeReaderFromWriter();
+    std::vector<std::string> w;
+    reader | w;
+    ASSERT_EQ(vAsString, w);
+  };
+
+  testWithAllSerializers(testString);
+}
+
 TEST(Serializer, CopyAndMove) {
   auto testWithMove = [](auto&& writer, auto makeReaderFromWriter) {
     using Writer = std::decay_t<decltype(writer)>;

@@ -291,3 +291,11 @@ TEST(TypeTraits, InvocableWithReturnType) {
             });
       });
 }
+
+TEST(TypeTraits, Rvalue) {
+  static_assert(Rvalue<int>);
+  static_assert(Rvalue<int&&>);
+  static_assert(Rvalue<const int>);
+  static_assert(!Rvalue<const int&>);
+  static_assert(!Rvalue<int&>);
+}

@@ -37,7 +37,8 @@ class Timer {
   using Milliseconds = chr::milliseconds;
   using Seconds = chr::duration<double>;
   using Duration = Microseconds;
-  using TimePoint = chr::time_point<chr::high_resolution_clock>;
+  using Clock = chr::steady_clock;
+  using TimePoint = chr::time_point<Clock>;
 
   // A simple enum used in the constructor to decide whether the timer is
   // immediately started or not.
@@ -64,11 +65,6 @@ class Timer {
     return chr::duration_cast<Seconds>(d).count();
   }
 
-  // Convert a `Duration` to milliseconds (as a plain `size_t`).
-  static size_t toMilliseconds(Duration d) {
-    return chr::duration_cast<Milliseconds>(d).count();
-  }
-
  private:
   // The timer value (initially zero)
   Duration value_ = Duration::zero();
@@ -91,7 +87,7 @@ class Timer {
   // Reset the timer value to zero and starts the measurement.
   inline void start() {
     value_ = Duration::zero();
-    timeOfStart_ = chr::high_resolution_clock::now();
+    timeOfStart_ = Clock::now();
     isRunning_ = true;
   }
 
@@ -99,7 +95,7 @@ class Timer {
   // the timer value (no effect if running)
   inline void cont() {
     if (isRunning_ == false) {
-      timeOfStart_ = chr::high_resolution_clock::now();
+      timeOfStart_ = Clock::now();
       isRunning_ = true;
     }
   }
@@ -121,15 +117,16 @@ class Timer {
     }
   }
 
-  size_t msecs() const { return toMilliseconds(value()); }
+  chr::milliseconds msecs() const {
+    return chr::duration_cast<Milliseconds>(value());
+  }
 
   // is the timer currently running
   bool isRunning() const { return isRunning_; }
 
  private:
   Duration timeSinceLastStart() const {
-    auto now = chr::high_resolution_clock::now();
-    return toDuration(now - timeOfStart_);
+    return toDuration(Clock::now() - timeOfStart_);
   }
 };
 
@@ -138,9 +135,9 @@ namespace detail {
 // destruction and logs the time together with a specified message
 // The callback can be used to change the logging mechanism. It must be
 // callable with a `size_t` (the number of milliseconds) and `message`.
-[[maybe_unused]] inline auto defaultLogger = [](size_t msecs,
+[[maybe_unused]] inline auto defaultLogger = [](chr::milliseconds msecs,
                                                 std::string_view message) {
-  LOG(TIMING) << message << " took " << msecs << "ms" << std::endl;
+  LOG(TIMING) << message << " took " << msecs.count() << "ms" << std::endl;
 };
 template <typename Callback = decltype(defaultLogger)>
 struct [[nodiscard(
@@ -158,10 +155,7 @@ struct [[nodiscard(
   // is not needed for the typical usage, so those operations are deleted.
   TimeBlockAndLog(const TimeBlockAndLog&) = delete;
   TimeBlockAndLog& operator=(const TimeBlockAndLog&) = delete;
-  ~TimeBlockAndLog() {
-    auto msecs = Timer::toMilliseconds(t_.value());
-    callback_(msecs, message_);
-  }
+  ~TimeBlockAndLog() { callback_(t_.msecs(), message_); }
 };
 }  // namespace detail
 

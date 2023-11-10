@@ -352,7 +352,7 @@ MATCHER_P2(IsPossiblyExternalString, content, isExternal, "") {
     return false;
   }
   const auto& el = std::get<PossiblyExternalizedIriOrLiteral>(arg);
-  return (el._iriOrLiteral == content) && (isExternal == el._isExternal);
+  return (el.iriOrLiteral_ == content) && (isExternal == el.isExternal_);
 }
 
 TEST(IndexTest, TripleToInternalRepresentation) {
@@ -361,10 +361,10 @@ TEST(IndexTest, TripleToInternalRepresentation) {
     TurtleTriple turtleTriple{"<subject>", "<predicate>", lit("\"literal\"")};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
-    ASSERT_TRUE(res._langtag.empty());
-    EXPECT_THAT(res._triple[0], IsPossiblyExternalString("<subject>", false));
-    EXPECT_THAT(res._triple[1], IsPossiblyExternalString("<predicate>", false));
-    EXPECT_THAT(res._triple[2], IsPossiblyExternalString("\"literal\"", false));
+    ASSERT_TRUE(res.langtag_.empty());
+    EXPECT_THAT(res.triple_[0], IsPossiblyExternalString("<subject>", false));
+    EXPECT_THAT(res.triple_[1], IsPossiblyExternalString("<predicate>", false));
+    EXPECT_THAT(res.triple_[2], IsPossiblyExternalString("\"literal\"", false));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
@@ -374,11 +374,11 @@ TEST(IndexTest, TripleToInternalRepresentation) {
                               lit("\"literal\"", "@fr")};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
-    ASSERT_EQ(res._langtag, "fr");
-    EXPECT_THAT(res._triple[0], IsPossiblyExternalString("<subject>", true));
-    EXPECT_THAT(res._triple[1], IsPossiblyExternalString("<predicate>", false));
+    ASSERT_EQ(res.langtag_, "fr");
+    EXPECT_THAT(res.triple_[0], IsPossiblyExternalString("<subject>", true));
+    EXPECT_THAT(res.triple_[1], IsPossiblyExternalString("<predicate>", false));
     // By default all languages other than English are externalized.
-    EXPECT_THAT(res._triple[2],
+    EXPECT_THAT(res.triple_[2],
                 IsPossiblyExternalString("\"literal\"@fr", true));
   }
   {
@@ -386,7 +386,7 @@ TEST(IndexTest, TripleToInternalRepresentation) {
     TurtleTriple turtleTriple{"<subject>", "<predicate>", 42.0};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
-    ASSERT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res._triple[2]));
+    ASSERT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res.triple_[2]));
   }
 }
 
