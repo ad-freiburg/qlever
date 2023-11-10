@@ -19,7 +19,7 @@ namespace detail {
 // to enable the usage of this lambda in combination with `std::bind_front` and
 // `std::ref`.
 template <bool moveElements, typename T>
-auto pushSingleElement = [](std::vector<T>& buffer, auto& el) {
+constexpr auto pushSingleElement = [](std::vector<T>& buffer, auto& el) {
   if constexpr (moveElements) {
     buffer.push_back(std::move(el));
   } else {
@@ -87,16 +87,18 @@ cppcoro::generator<std::vector<T>> lazyBinaryMerge(
     return exhausted(itPair);
   };
 
+  auto pushSmaller = [&comparison, &push, &it1, &it2]() {
+    if (comparison(*it1.first, *it2.first)) {
+      return push(it1);
+    } else {
+      return (push(it2));
+    }
+  };
+
   if (!exhausted(it1) && !exhausted(it2)) {
     while (true) {
-      if (comparison(*it1.first, *it2.first)) {
-        if (push(it1)) {
-          break;
-        }
-      } else {
-        if (push(it2)) {
-          break;
-        }
+      if (pushSmaller()) {
+        break;
       }
       if (buffer.size() >= blocksize) {
         co_yield buffer;

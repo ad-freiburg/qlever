@@ -35,11 +35,11 @@ class ParallelMergeBenchmark : public BenchmarkInterface {
     inputs.resize(numInputs);
     std::ranges::generate(inputs, generateRandomVec);
 
-    auto run = [&]() {
+    auto run = [&inputs]() {
       auto merger = ad_utility::parallelMultiwayMerge<size_t, false>(
           500, inputs, std::less<>{});
       size_t result{};
-      for (auto& i : merger) {
+      for (const auto& i : merger) {
         for (auto el : i) {
           result += el;
         }

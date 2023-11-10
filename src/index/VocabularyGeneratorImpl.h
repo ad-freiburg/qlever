@@ -52,7 +52,7 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 
   auto makeGenerator = [&](size_t fileIdx) -> cppcoro::generator<QueueWord> {
     ad_utility::serialization::FileReadSerializer infile{
-        basename + PARTIAL_VOCAB_FILE_NAME + std::to_string(fileIdx)};
+        absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIdx)};
     uint64_t numWords;
     infile >> numWords;
     TripleComponentWithIndex val;
