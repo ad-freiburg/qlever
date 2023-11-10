@@ -446,9 +446,8 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
   auto it = triplesGenerator.begin();
     using Triple = typename TripleVec::value_type;
 
-    ad_utility::data_structures::ThreadSafeQueue<std::pair<std::vector<Triple>, std::shared_ptr<ad_utility::HashMap<Id, Id>>>> lookupQueue(30);
-    ad_utility::data_structures::ThreadSafeQueue<std::vector<Triple>> writeQueue(30);
-    std::vector<ad_utility::JThread> lookupThreads;
+    ad_utility::TaskQueue<true> lookupQueue(30, 10, "looking up local to global IDs");
+    ad_utility::TaskQueue<true> writeQueu(30, 1, "Writing global Ids to file");
     auto transformTriple = [&](Triple& curTriple, auto& idMap) {
         // For all triple elements find their mapping from partial to global ids.
         for (size_t k = 0; k < curTriple.size(); ++k) {
@@ -467,30 +466,30 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
         }
     };
 
-    for (size_t z = 0; z < 10; ++z) {
-        lookupThreads.emplace_back([&]() {
-            while (auto opt = lookupQueue.pop()) {
-                const auto& idMap = *opt->second;
-                for (auto& triple : opt->first) {
-                    transformTriple(triple, idMap);
-                }
-                writeQueue.push(std::move(opt.value().first));
+    auto getWriteTask = [&result, &i](auto triples) {
+       return [&result, &i, triples =  std::move(triples)]() {
+               for (const auto& triple : triples) {
+                   // update the Element
+                   result.push(triple);
+                   ++i;
+                   if (i % 100'000'000 == 0) {
+                       LOG(INFO) << "Triples converted: " << i << std::endl;
+                   }
+               }
+           };
+       };
+    auto getLookupTask = [&lookupQueue, &writeQueu, &transformTriple,
+                          &getWriteTask](auto triples, auto idMap) {
+      return
+          [&writeQueu, triples = std::move(triples), idMap = std::move(idMap),
+           &lookupQueue, &getWriteTask, &transformTriple]() mutable {
+            for (auto& triple : triples) {
+              transformTriple(triple, *idMap);
             }
-        });
-    }
+            writeQueu.push(getWriteTask(std::move(triples)));
+          };
+    };
 
-    std::jthread writeThread{[&]() {
-        while (auto opt = writeQueue.pop()) {
-            for (const auto& triple : opt.value()) {
-                // update the Element
-                result.push(triple);
-                ++i;
-                if (i % 100'000'000 == 0) {
-                    LOG(INFO) << "Triples converted: " << i << std::endl;
-                }
-            }
-        }
-    }};
     for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
          partialNum++) {
         std::string mmapFilename =
@@ -508,23 +507,21 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
          ++tmpNum) {
       buffer.push_back(*it);
       if (buffer.size() >= bufferSize) {
-        lookupQueue.push({std::move(buffer), idMap});
+        lookupQueue.push(getLookupTask(std::move(buffer), idMap));
         buffer.clear();
         buffer.reserve(bufferSize);
       }
     }
     if (!buffer.empty()) {
-      lookupQueue.push({std::move(buffer), idMap});
-      buffer.clear();
+      lookupQueue.push(getLookupTask(std::move(buffer), idMap));
+        buffer.clear();
       buffer.reserve(bufferSize);
     }
     }
     lookupQueue.finish();
-    for (auto& thread : lookupThreads) {
-    thread.join();
-    }
-    writeQueue.finish();
-    writeThread.join();
+    writeQueu.finish();
+    LOG(INFO) << lookupQueue.getTimeStatistics();
+    LOG(INFO) << writeQueu.getTimeStatistics();
     LOG(INFO) << "Done, total number of triples converted: " << i << std::endl;
   return resultPtr;
 }
