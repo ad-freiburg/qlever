@@ -222,7 +222,7 @@ struct SkipWhitespaceAndCommentsMixin {
   }
 
  private:
-  // ________________________________________________________________
+  // _________________________________________________________________________
   bool skipWhitespace() {
     auto v = self().view();
     auto numLeadingWhitespace = v.find_first_not_of("\x20\x09\x0D\x0A");
@@ -231,7 +231,7 @@ struct SkipWhitespaceAndCommentsMixin {
     return numLeadingWhitespace > 0;
   }
 
-  // ___________________________________________________________________________________
+  // _________________________________________________________________________
   bool skipComments() {
     auto v = self().view();
     if (v.starts_with('#')) {

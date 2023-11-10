@@ -198,22 +198,6 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
     return innerResult;
   }
 
-  /*
-  /// Skip any whitespace or comments at the beginning of the held characters
-  void skipWhitespaceAndComments() {
-    // Call `skipWhitespace` and `skipComments` in a loop until no more input
-    // was consumed. This is necessary because we might have multiple lines of
-    // comments that are spearated by whitespace.
-    while (true) {
-      bool a = skipWhitespace();
-      bool b = skipComments();
-      if (!(a || b)) {
-        return;
-      }
-    }
-  }
-   */
-
   /**
    * If there is a prefix match with the argument, move forward the beginning
    * of _data and return true. Else return false.Can be used if we are not
@@ -241,34 +225,6 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
   /// string_view of the characters we are parsing from.
   std::string_view _data;
 
-  /*
-  // ________________________________________________________________
-  bool skipWhitespace() {
-    auto v = view();
-    auto numLeadingWhitespace = v.find_first_not_of("\x20\x09\x0D\x0A");
-    numLeadingWhitespace = std::min(numLeadingWhitespace, v.size());
-    _data.remove_prefix(numLeadingWhitespace);
-    return numLeadingWhitespace > 0;
-  }
-
-  //
-  ___________________________________________________________________________________
-  bool skipComments() {
-    auto v = view();
-    if (v.starts_with('#')) {
-      auto pos = v.find('\n');
-      if (pos == string::npos) {
-        // TODO<joka921>: This should rather yield an error.
-        LOG(INFO) << "Warning, unfinished comment found while parsing"
-                  << std::endl;
-      } else {
-        _data.remove_prefix(pos + 1);
-      }
-      return true;
-    }
-    return false;
-  }
-   */
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
 
   /*
