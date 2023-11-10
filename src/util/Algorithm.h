@@ -145,6 +145,19 @@ auto removeDuplicates(const Range& input) -> std::vector<
   return result;
 }
 
+// Return a new `std::input` that is obtained by applying the `function` to each
+// of the elements of the `input`.
+template <typename Array, typename Function>
+requires(ad_utility::isArray<std::decay_t<Array>> &&
+         std::invocable<Function, typename Array::value_type>)
+auto transformArray(Array&& input, Function function) {
+  return std::apply(
+      [&function](auto&&... vals) {
+        return std::array{std::invoke(function, AD_FWD(vals))...};
+      },
+      AD_FWD(input));
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_ALGORITHM_H
