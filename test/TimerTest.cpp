@@ -15,18 +15,15 @@ using namespace std::chrono_literals;
 // On macOS the timer seems to work, but the `sleep_for` is too imprecise.
 #ifndef __APPLE__
 
-void testTime(Timer::Duration duration, size_t msecs,
+void testTime(Timer::Duration duration, std::chrono::milliseconds msecs,
               std::chrono::milliseconds expected) {
   auto lowerBound = 0.9 * expected;
   auto upperBound = 1.1 * expected + 3ms;
   EXPECT_GE(duration, lowerBound);
   EXPECT_LE(duration, upperBound);
 
-  EXPECT_GE(msecs, lowerBound.count());
-  EXPECT_LE(msecs, upperBound.count());
-
-  EXPECT_GE(Timer::toSeconds(duration), 0.001 * lowerBound.count());
-  EXPECT_LE(Timer::toSeconds(duration), 0.001 * upperBound.count());
+  EXPECT_GE(msecs, lowerBound);
+  EXPECT_LE(msecs, upperBound);
 }
 
 void testTime(const ad_utility::Timer& timer,
@@ -75,7 +72,7 @@ TEST(Timer, BasicWorkflow) {
   t.reset();
   ASSERT_FALSE(t.isRunning());
   ASSERT_EQ(t.value(), Timer::Duration::zero());
-  ASSERT_EQ(t.msecs(), 0u);
+  ASSERT_EQ(t.msecs(), 0ms);
   std::this_thread::sleep_for(5ms);
 
   // Start leads to a running timer.
@@ -88,10 +85,10 @@ TEST(Timer, InitiallyStopped) {
   Timer t{Timer::Stopped};
   ASSERT_FALSE(t.isRunning());
   ASSERT_EQ(t.value(), Timer::Duration::zero());
-  ASSERT_EQ(t.msecs(), 0u);
+  ASSERT_EQ(t.msecs(), 0ms);
   std::this_thread::sleep_for(15ms);
   ASSERT_EQ(t.value(), Timer::Duration::zero());
-  ASSERT_EQ(t.msecs(), 0u);
+  ASSERT_EQ(t.msecs(), 0ms);
 
   t.cont();
   std::this_thread::sleep_for(15ms);
@@ -101,8 +98,9 @@ TEST(Timer, InitiallyStopped) {
 TEST(TimeBlockAndLog, TimeBlockAndLog) {
   std::string s;
   {
-    auto callback = [&s](size_t msecs, std::string_view message) {
-      s = absl::StrCat(message, ": ", msecs);
+    auto callback = [&s](std::chrono::milliseconds msecs,
+                         std::string_view message) {
+      s = absl::StrCat(message, ": ", msecs.count());
     };
     ad_utility::TimeBlockAndLog t{"message", callback};
     std::this_thread::sleep_for(25ms);

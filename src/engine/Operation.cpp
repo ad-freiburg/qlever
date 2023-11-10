@@ -10,10 +10,6 @@
 
 using namespace std::chrono_literals;
 
-std::chrono::milliseconds toMs(const ad_utility::Timer& timer) {
-  return std::chrono::duration_cast<std::chrono::milliseconds>(timer.value());
-}
-
 template <typename F>
 void Operation::forAllDescendants(F f) {
   static_assert(
@@ -123,7 +119,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
         ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
             [this, &timer]() {
               if (std::uncaught_exceptions()) {
-                updateRuntimeInformationOnFailure(toMs(timer));
+                updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
     auto computeLambda = [this, &timer] {
@@ -146,8 +142,9 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as
       // the last argument.
-      updateRuntimeInformationOnSuccess(
-          result, ad_utility::CacheStatus::computed, toMs(timer), std::nullopt);
+      updateRuntimeInformationOnSuccess(result,
+                                        ad_utility::CacheStatus::computed,
+                                        timer.msecs(), std::nullopt);
       // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
       // already perform it. An example for an operation that directly computes
       // the Limit is a full index scan with three variables.
@@ -156,7 +153,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
         // Note: both of the following calls have no effect and negligible
         // runtime if neither a LIMIT nor an OFFSET were specified.
         result.applyLimitOffset(_limit);
-        runtimeInfo().addLimitOffsetRow(_limit, toMs(limitTimer), true);
+        runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
       } else {
         AD_CONTRACT_CHECK(result.idTable().numRows() ==
                           _limit.actualSize(result.idTable().numRows()));
@@ -174,7 +171,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       return nullptr;
     }
 
-    updateRuntimeInformationOnSuccess(result, toMs(timer));
+    updateRuntimeInformationOnSuccess(result, timer.msecs());
     auto resultNumRows = result._resultPointer->resultTable()->size();
     auto resultNumCols = result._resultPointer->resultTable()->width();
     LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "

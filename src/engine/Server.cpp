@@ -415,8 +415,8 @@ json Server::composeErrorResponseJson(
   j["query"] = query;
   j["status"] = "ERROR";
   j["resultsize"] = 0;
-  j["time"]["total"] = Timer::toMilliseconds(requestTimer.value());
-  j["time"]["computeResult"] = Timer::toMilliseconds(requestTimer.value());
+  j["time"]["total"] = requestTimer.msecs().count();
+  j["time"]["computeResult"] = requestTimer.msecs().count();
   j["exception"] = errorMsg;
 
   if (metadata.has_value()) {
@@ -669,12 +669,12 @@ boost::asio::awaitable<void> Server::processQuery(
     qet.isRoot() = true;  // allow pinning of the final result
     absl::Cleanup cancelCancellationHandle{setupCancellationHandle(
         co_await net::this_coro::executor, qet.getRootOperation(), timeLimit)};
-    size_t timeForQueryPlanning = requestTimer.msecs();
+    auto timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
         qet.getRootOperation()->getRuntimeInfoWholeQuery();
     runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
-    LOG(INFO) << "Query planning done in " << timeForQueryPlanning << " ms"
-              << std::endl;
+    LOG(INFO) << "Query planning done in " << timeForQueryPlanning.count()
+              << " ms" << std::endl;
     LOG(TRACE) << qet.asString() << std::endl;
 
     // Common code for sending responses for the streamable media types
@@ -742,7 +742,7 @@ boost::asio::awaitable<void> Server::processQuery(
     //
     // TODO<joka921> Also log an identifier of the query.
     LOG(INFO) << "Done processing query and sending result"
-              << ", total time was " << requestTimer.msecs() << " ms"
+              << ", total time was " << requestTimer.msecs().count() << " ms"
               << std::endl;
     LOG(DEBUG) << "Runtime Info:\n"
                << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
