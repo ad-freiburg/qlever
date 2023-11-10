@@ -152,11 +152,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   // In case the coroutine is destroyed early we still want to have this
   // information.
   auto setTimer = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-      [&details, &popTimer]() {
-        details.blockingTime_ =
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                popTimer.value());
-      });
+      [&details, &popTimer]() { details.blockingTime_ = popTimer.msecs(); });
 
   auto queue = ad_utility::data_structures::queueManager<
       ad_utility::data_structures::OrderedThreadSafeQueue<IdTable>>(

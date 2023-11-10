@@ -120,7 +120,7 @@ class BackgroundStxxlSorter {
       _sorter.push(el);
     }
     _sorter.sort();
-    // Deallocate memory for `_buffer`, the output buffering is handled via a
+    // Deallocate memory for `buffer_`, the output buffering is handled via a
     // `bufferedAsyncView` which owns its own buffer.
     _buffer = decltype(_buffer){};
   }

@@ -195,7 +195,8 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
 // __________________________________________________________________________
 void to_json(nlohmann::ordered_json& j,
              const RuntimeInformationWholeQuery& rti) {
-  j = nlohmann::ordered_json{{"time_query_planning", rti.timeQueryPlanning}};
+  j = nlohmann::ordered_json{
+      {"time_query_planning", rti.timeQueryPlanning.count()}};
 }
 
 // __________________________________________________________________________
