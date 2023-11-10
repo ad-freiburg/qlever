@@ -263,8 +263,8 @@ ResultTable TransitivePath::computeResult() {
                     sideRes->idTable());
 
     return {std::move(idTable), resultSortedOn(),
-            subRes->getSharedLocalVocabFromNonEmptyOf(*sideRes.get(),
-                                                      *subRes.get())};
+            subRes->getSharedLocalVocabFromNonEmptyOf(*sideRes,
+                                                      *subRes)};
   };
 
   if (_lhs.isBoundVariable()) {
