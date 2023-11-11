@@ -14,6 +14,7 @@
 #include "util/Exception.h"
 #include "util/Synchronized.h"
 #include "util/UniqueCleanup.h"
+#include "util/json.h"
 
 namespace ad_utility::websocket {
 
@@ -23,6 +24,8 @@ class QueryId {
   explicit QueryId(std::string id) : id_{std::move(id)} {
     AD_CONTRACT_CHECK(!id_.empty());
   }
+
+  friend void to_json(nlohmann::json&, const QueryId&);
 
  public:
   /// Construct this object with the passed string
@@ -41,6 +44,10 @@ class QueryId {
   // Starting with gcc 12 and clang 15 this can be constexpr
   bool operator==(const QueryId&) const noexcept = default;
 };
+
+inline void to_json(nlohmann::json& json, const QueryId& queryId) {
+  json = queryId.id_;
+}
 
 /// This class is similar to QueryId, but it's instances are all unique within
 /// the registry it was created with. (It can not be created without a registry)
@@ -119,14 +126,14 @@ class QueryRegistry {
   }
 
   /// Member function that acquires a read lock and returns a vector
-  /// of all currently registered cancellation handles.
-  std::vector<SharedCancellationHandle> getAllCancellationHandles() const {
+  /// of all currently registered queries.
+  std::vector<QueryId> getActiveQueries() const {
     return registry_->withReadLock([](const auto& map) {
-      // TODO<C++23> Use ranges to transform map values into vector
-      std::vector<SharedCancellationHandle> result;
+      // TODO<C++23> Use ranges to transform map keys into vector
+      std::vector<QueryId> result;
       result.reserve(map.size());
       for (const auto& entry : map) {
-        result.emplace_back(entry.second);
+        result.emplace_back(entry.first);
       }
       return result;
     });

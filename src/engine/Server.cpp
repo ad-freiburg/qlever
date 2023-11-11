@@ -315,6 +315,10 @@ Awaitable<void> Server::process(
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
     response = createJsonResponse(RuntimeParameters().toMap(), request);
+  } else if (auto cmd =
+                 checkParameter("cmd", "dump-active-queries", accessTokenOk)) {
+    logCommand(cmd, "dump active queries");
+    response = createJsonResponse(queryRegistry_.getActiveQueries(), request);
   }
 
   // Ping with or without messsage.
