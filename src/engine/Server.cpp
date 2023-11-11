@@ -293,7 +293,8 @@ Awaitable<void> Server::process(
   std::optional<http::response<http::string_body>> response;
 
   // Execute commands (URL parameter with key "cmd").
-  auto logCommand = [](std::optional<std::string>& cmd, std::string actionMsg) {
+  auto logCommand = [](const std::optional<std::string>& cmd,
+                       std::string_view actionMsg) {
     LOG(INFO) << "Processing command \"" << cmd.value() << "\""
               << ": " << actionMsg << std::endl;
   };
