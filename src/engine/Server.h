@@ -149,5 +149,5 @@ class Server {
       const net::any_io_executor& executor,
       const ad_utility::websocket::QueryId& queryId,
       const std::shared_ptr<Operation>& rootOperation,
-      std::optional<std::chrono::seconds> timeLimit);
+      std::optional<std::chrono::seconds> timeLimit) const;
 };

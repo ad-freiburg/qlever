@@ -540,7 +540,7 @@ std::function<void()> Server::setupCancellationHandle(
     const net::any_io_executor& executor,
     const ad_utility::websocket::QueryId& queryId,
     const std::shared_ptr<Operation>& rootOperation,
-    std::optional<std::chrono::seconds> timeLimit) {
+    std::optional<std::chrono::seconds> timeLimit) const {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
   AD_CORRECTNESS_CHECK(cancellationHandle);
   rootOperation->recursivelySetCancellationHandle(
