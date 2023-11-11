@@ -629,8 +629,6 @@ TEST(ParserTest, testParse) {
               sc_sub_subquery.getSelectedVariablesAsStrings());
   }
 
-  // We currently only check, that the following two queries don't throw an
-  // exception.
   {
     namespace m = matchers;
     // Check Parse Construct (1)
