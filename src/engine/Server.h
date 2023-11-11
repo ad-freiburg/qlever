@@ -141,11 +141,13 @@ class Server {
       std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
       std::chrono::seconds timeLimit);
 
-  /// Create a cancellation handle, pass it to the operation and configure
-  /// it to get cancelled automatically if a time limit is passed by calling
-  /// `cancelAfterDeadline`. If `timeLimit` is empty, return a no-op lambda.
-  static std::function<void()> setupCancellationHandle(
+  /// Acquire the cancellation handle based on `queryId`, pass it to the
+  /// operation and configure it to get cancelled automatically if a time limit
+  /// is passed by calling `cancelAfterDeadline`. If `timeLimit` is empty,
+  /// return a no-op lambda.
+  std::function<void()> setupCancellationHandle(
       const net::any_io_executor& executor,
+      const ad_utility::websocket::QueryId& queryId,
       const std::shared_ptr<Operation>& rootOperation,
       std::optional<std::chrono::seconds> timeLimit);
 };

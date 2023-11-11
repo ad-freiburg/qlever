@@ -532,10 +532,10 @@ auto Server::cancelAfterDeadline(
 // ____________________________________________________________________________
 std::function<void()> Server::setupCancellationHandle(
     const net::any_io_executor& executor,
+    const ad_utility::websocket::QueryId& queryId,
     const std::shared_ptr<Operation>& rootOperation,
     std::optional<std::chrono::seconds> timeLimit) {
-  // TODO<RobinTF> register cancellation handle to allow manual cancellation
-  auto cancellationHandle = std::make_shared<ad_utility::CancellationHandle>();
+  auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
   rootOperation->recursivelySetCancellationHandle(
       std::move(cancellationHandle));
   if (timeLimit.has_value()) {
@@ -668,7 +668,8 @@ boost::asio::awaitable<void> Server::processQuery(
     auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
     absl::Cleanup cancelCancellationHandle{setupCancellationHandle(
-        co_await net::this_coro::executor, qet.getRootOperation(), timeLimit)};
+        co_await net::this_coro::executor, messageSender.getQueryId(),
+        qet.getRootOperation(), timeLimit)};
     auto timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
         qet.getRootOperation()->getRuntimeInfoWholeQuery();
