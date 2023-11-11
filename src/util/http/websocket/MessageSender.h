@@ -55,7 +55,9 @@ class MessageSender {
   /// Broadcast the string to all listeners of this query asynchronously.
   void operator()(std::string) const;
 
-  const QueryId& getQueryId() const noexcept { return distributor_->owningQueryId_.toQueryId(); }
+  const QueryId& getQueryId() const noexcept {
+    return distributor_->owningQueryId_.toQueryId();
+  }
 };
 
 }  // namespace ad_utility::websocket
