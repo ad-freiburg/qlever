@@ -14,6 +14,7 @@
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/websocket/QueryId.h"
 #include "util/jthread.h"
 
 using namespace std::literals;
@@ -35,6 +36,7 @@ class TestHttpServer {
   // Indicator whether the server has been shut down. We need this because
   // `HttpServer::shutDown` must only be called once.
   std::atomic<bool> hasBeenShutDown_ = false;
+  ad_utility::websocket::QueryRegistry registry_;
 
  public:
   // Create server on localhost. Port 0 instructs the operating system to choose
@@ -43,7 +45,7 @@ class TestHttpServer {
     const std::string& ipAddress = "0.0.0.0";
     int numServerThreads = 1;
     server_ = std::make_shared<HttpServer<HttpHandler>>(
-        0, ipAddress, numServerThreads, std::move(httpHandler));
+        registry_, 0, ipAddress, numServerThreads, std::move(httpHandler));
   }
 
   // Get port on which this server is running.

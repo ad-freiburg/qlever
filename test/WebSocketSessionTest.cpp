@@ -13,6 +13,7 @@
 
 using ad_utility::websocket::QueryHub;
 using ad_utility::websocket::QueryId;
+using ad_utility::websocket::QueryRegistry;
 using ad_utility::websocket::WebSocketSession;
 namespace net = boost::asio;
 namespace http = boost::beast::http;
@@ -53,6 +54,7 @@ TEST(WebSocketSession, EnsureCorrectPathAcceptAndRejectBehaviour) {
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
   QueryHub queryHub{ioContext};
+  QueryRegistry registry;
 
   auto distributor = co_await queryHub.createOrAcquireDistributorForSending(
       QueryId::idFromString("some-id"));
@@ -83,7 +85,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
     boost::beast::flat_buffer buffer;
     http::request<http::string_body> request;
     co_await http::async_read(stream, buffer, request, net::use_awaitable);
-    co_await WebSocketSession::handleSession(queryHub, request,
+    co_await WebSocketSession::handleSession(queryHub, registry, request,
                                              std::move(stream.socket()));
   };
 
@@ -94,6 +96,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
   QueryHub queryHub{ioContext};
+  QueryRegistry registry;
 
   tcp::socket server{ioContext};
   tcp::socket client{ioContext};
@@ -114,7 +117,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
     boost::beast::flat_buffer buffer;
     http::request<http::string_body> request;
     co_await http::async_read(stream, buffer, request, net::use_awaitable);
-    co_await WebSocketSession::handleSession(queryHub, request,
+    co_await WebSocketSession::handleSession(queryHub, registry, request,
                                              std::move(stream.socket()));
   };
 
@@ -125,6 +128,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
   QueryHub queryHub{ioContext};
+  QueryRegistry registry;
 
   auto distributor = co_await queryHub.createOrAcquireDistributorForSending(
       QueryId::idFromString("some-id"));
@@ -157,7 +161,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
     boost::beast::flat_buffer buffer;
     http::request<http::string_body> request;
     co_await http::async_read(stream, buffer, request, net::use_awaitable);
-    co_await WebSocketSession::handleSession(queryHub, request,
+    co_await WebSocketSession::handleSession(queryHub, registry, request,
                                              std::move(stream.socket()));
   };
 

@@ -131,8 +131,9 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
-  auto httpServer = HttpServer{port_, "0.0.0.0", static_cast<int>(numThreads_),
-                               std::move(httpSessionHandler)};
+  auto httpServer =
+      HttpServer{queryRegistry_, port_, "0.0.0.0",
+                 static_cast<int>(numThreads_), std::move(httpSessionHandler)};
   queryHub_ = &httpServer.getQueryHub();
 
   // Initialize the index
@@ -536,6 +537,7 @@ std::function<void()> Server::setupCancellationHandle(
     const std::shared_ptr<Operation>& rootOperation,
     std::optional<std::chrono::seconds> timeLimit) {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
+  AD_CORRECTNESS_CHECK(cancellationHandle);
   rootOperation->recursivelySetCancellationHandle(
       std::move(cancellationHandle));
   if (timeLimit.has_value()) {

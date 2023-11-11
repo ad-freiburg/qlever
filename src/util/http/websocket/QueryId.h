@@ -132,8 +132,16 @@ class QueryRegistry {
     });
   }
 
+  /// Returns the cancellation handle from the registry if it exists, nullptr
+  /// otherwise.
   SharedCancellationHandle getCancellationHandle(const QueryId& queryId) const {
-    return registry_->rlock()->at(queryId);
+    return registry_->withReadLock(
+        [&queryId](const auto& map) -> SharedCancellationHandle {
+          if (map.contains(queryId)) {
+            return map.at(queryId);
+          }
+          return nullptr;
+        });
   }
 };
 }  // namespace ad_utility::websocket

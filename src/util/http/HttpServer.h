@@ -57,12 +57,14 @@ class HttpServer {
   tcp::acceptor acceptor_{acceptorStrand_};
   std::atomic<bool> serverIsReady_ = false;
   ad_utility::websocket::QueryHub queryHub_{ioContext_};
+  const ad_utility::websocket::QueryRegistry& queryRegistry_;
 
  public:
-  /// Construct from the port and ip address, on which this server will listen,
-  /// as well as the HttpHandler. This constructor only initializes several
-  /// member functions
-  explicit HttpServer(unsigned short port,
+  /// Construct from the `queryRegistry`, port and ip address, on which this
+  /// server will listen, as well as the HttpHandler. This constructor only
+  /// initializes several member functions
+  explicit HttpServer(const ad_utility::websocket::QueryRegistry& queryRegistry,
+                      unsigned short port,
                       const std::string& ipAddress = "0.0.0.0",
                       int numServerThreads = 1,
                       HttpHandler handler = HttpHandler{})
@@ -70,7 +72,8 @@ class HttpServer {
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?
         numServerThreads_{std::max(2, numServerThreads)},
-        ioContext_{numServerThreads_} {
+        ioContext_{numServerThreads_},
+        queryRegistry_{queryRegistry} {
     try {
       tcp::endpoint endpoint{net::ip::make_address(ipAddress), port};
       // Open the acceptor.
@@ -236,7 +239,7 @@ class HttpServer {
             // prevent cleanup after socket has been moved from
             releaseConnection.cancel();
             co_await ad_utility::websocket::WebSocketSession::handleSession(
-                queryHub_, req, std::move(stream.socket()));
+                queryHub_, queryRegistry_, req, std::move(stream.socket()));
             co_return;
           }
         } else {
