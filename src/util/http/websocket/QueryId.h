@@ -4,12 +4,14 @@
 
 #pragma once
 
+#include <absl/container/flat_hash_map.h>
+
 #include <cstdint>
 #include <random>
 #include <type_traits>
 
+#include "util/CancellationHandle.h"
 #include "util/Exception.h"
-#include "util/HashSet.h"
 #include "util/Synchronized.h"
 #include "util/UniqueCleanup.h"
 
@@ -64,8 +66,9 @@ static_assert(!std::is_copy_assignable_v<OwningQueryId>);
 
 /// A factory class to create unique query ids within each individual instance.
 class QueryRegistry {
-  using SynchronizedType =
-      ad_utility::Synchronized<ad_utility::HashSet<QueryId>>;
+  using SharedCancellationHandle = std::shared_ptr<CancellationHandle>;
+  using SynchronizedType = ad_utility::Synchronized<
+      absl::flat_hash_map<QueryId, SharedCancellationHandle>>;
   // Technically no shared pointer is required because the registry lives
   // for the entire lifetime of the application, but since the instances of
   // `OwningQueryId` need to deregister themselves again they need some
@@ -83,7 +86,10 @@ class QueryRegistry {
   ///         std::optional if the id already existed before.
   std::optional<OwningQueryId> uniqueIdFromString(std::string id) {
     auto queryId = QueryId::idFromString(std::move(id));
-    bool success = registry_->wlock()->insert(queryId).second;
+    bool success =
+        registry_->wlock()
+            ->emplace(queryId, std::make_shared<CancellationHandle>())
+            .second;
     if (success) {
       // Avoid undefined behavior when the registry is no longer alive at the
       // time the `OwningQueryId` is destroyed.
@@ -110,6 +116,24 @@ class QueryRegistry {
       result = uniqueIdFromString(std::to_string(distrib(generator)));
     } while (!result.has_value());
     return std::move(result.value());
+  }
+
+  /// Member function that acquires a read lock and returns a vector
+  /// of all currently registered cancellation handles.
+  std::vector<SharedCancellationHandle> getAllCancellationHandles() const {
+    return registry_->withReadLock([](const auto& map) {
+      // TODO<C++23> Use ranges to transform map values into vector
+      std::vector<SharedCancellationHandle> result;
+      result.reserve(map.size());
+      for (const auto& entry : map) {
+        result.emplace_back(entry.second);
+      }
+      return result;
+    });
+  }
+
+  SharedCancellationHandle getCancellationHandle(const QueryId& queryId) const {
+    return registry_->rlock()->at(queryId);
   }
 };
 }  // namespace ad_utility::websocket
