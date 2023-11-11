@@ -40,8 +40,8 @@ net::awaitable<void> WebSocketSession::handleClientCommands() {
         if (auto cancellationHandle =
                 queryRegistry_.getCancellationHandle(queryId_)) {
           cancellationHandle->cancel(CancellationState::MANUAL);
+          break;
         }
-        break;
       }
     }
     buffer.clear();
