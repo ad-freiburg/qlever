@@ -65,6 +65,7 @@ TEST(WebSocketSession, EnsureCorrectPathAcceptAndRejectBehaviour) {
 #define return co_return
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
+  auto strand = net::make_strand(ioContext);
   QueryHub queryHub{ioContext};
   QueryRegistry registry;
 
@@ -73,8 +74,8 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
 
   co_await distributor->addQueryStatusUpdate("my-event");
 
-  tcp::socket server{ioContext};
-  tcp::socket client{ioContext};
+  tcp::socket server{strand};
+  tcp::socket client{strand};
   co_await connect(server, client);
 
   auto controllerActions = [&]() -> net::awaitable<void> {
@@ -101,17 +102,19 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
                                              std::move(stream.socket()));
   };
 
-  co_await (serverLogic() && controllerActions());
+  co_await net::co_spawn(strand, serverLogic() && controllerActions(),
+                         net::use_awaitable);
 }
 
 // _____________________________________________________________________________
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
+  auto strand = net::make_strand(ioContext);
   QueryHub queryHub{ioContext};
   QueryRegistry registry;
 
-  tcp::socket server{ioContext};
-  tcp::socket client{ioContext};
+  tcp::socket server{strand};
+  tcp::socket client{strand};
   co_await connect(server, client);
 
   auto controllerActions = [&]() -> net::awaitable<void> {
@@ -133,12 +136,14 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
                                              std::move(stream.socket()));
   };
 
-  co_await (serverLogic() && controllerActions());
+  co_await net::co_spawn(strand, serverLogic() && controllerActions(),
+                         net::use_awaitable);
 }
 
 // _____________________________________________________________________________
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
+  auto strand = net::make_strand(ioContext);
   QueryHub queryHub{ioContext};
   QueryRegistry registry;
 
@@ -147,8 +152,8 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
 
   co_await distributor->addQueryStatusUpdate("my-event");
 
-  tcp::socket server{ioContext};
-  tcp::socket client{ioContext};
+  tcp::socket server{strand};
+  tcp::socket client{strand};
   co_await connect(server, client);
 
   auto controllerActions = [&]() -> net::awaitable<void> {
@@ -177,12 +182,14 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
                                              std::move(stream.socket()));
   };
 
-  co_await (serverLogic() && controllerActions());
+  co_await net::co_spawn(strand, serverLogic() && controllerActions(),
+                         net::use_awaitable);
 }
 
 // _____________________________________________________________________________
 
 ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
+  auto strand = net::make_strand(ioContext);
   QueryHub queryHub{ioContext};
   QueryRegistry registry;
 
@@ -190,8 +197,8 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
   auto cancellationHandle =
       registry.getCancellationHandle(queryId->toQueryId());
 
-  tcp::socket server{ioContext};
-  tcp::socket client{ioContext};
+  tcp::socket server{strand};
+  tcp::socket client{strand};
   co_await connect(server, client);
 
   auto controllerActions = [&]() -> net::awaitable<void> {
@@ -224,5 +231,6 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
                                              std::move(stream.socket()));
   };
 
-  co_await (serverLogic() && controllerActions());
+  co_await net::co_spawn(strand, serverLogic() && controllerActions(),
+                         net::use_awaitable);
 }
