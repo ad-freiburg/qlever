@@ -126,6 +126,17 @@ TEST(QueryRegistry, verifyCancellationHandleIsCreated) {
 
 // _____________________________________________________________________________
 
+TEST(QueryRegistry, verifyCancellationHandleIsNullptrIfNotPresent) {
+  QueryRegistry registry{};
+
+  auto handle =
+      registry.getCancellationHandle(QueryId::idFromString("does not exist"));
+
+  EXPECT_EQ(handle, nullptr);
+}
+
+// _____________________________________________________________________________
+
 TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
   QueryRegistry registry{};
 

@@ -40,6 +40,9 @@ net::awaitable<void> WebSocketSession::handleClientCommands() {
         if (auto cancellationHandle =
                 queryRegistry_.getCancellationHandle(queryId_)) {
           cancellationHandle->cancel(CancellationState::MANUAL);
+
+          co_await ws_.async_close(beast::websocket::close_code::normal,
+                                   net::use_awaitable);
           break;
         }
       }
@@ -86,7 +89,9 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
   } catch (boost::system::system_error& error) {
     // Gracefully end if socket was closed
     if (error.code() == beast::websocket::error::closed ||
-        error.code() == net::error::operation_aborted) {
+        error.code() == net::error::operation_aborted ||
+        error.code() == net::error::eof ||
+        error.code() == net::error::connection_reset) {
       co_return;
     }
     // There was an unexpected error, rethrow

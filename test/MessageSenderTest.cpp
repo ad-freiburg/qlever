@@ -14,6 +14,7 @@
 using ad_utility::websocket::MessageSender;
 using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryHub;
+using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryRegistry;
 
 using namespace boost::asio::experimental::awaitable_operators;
@@ -73,4 +74,17 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
   using PayloadType = std::shared_ptr<const std::string>;
 
   EXPECT_THAT(result, VariantWith<PayloadType>(Pointee("Dre"s)));
+}
+
+// _____________________________________________________________________________
+
+ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
+  QueryRegistry queryRegistry;
+  OwningQueryId queryId = queryRegistry.uniqueId();
+  QueryId reference = queryId.toQueryId();
+  QueryHub queryHub{ioContext};
+
+  auto messageSender =
+      co_await MessageSender::create(std::move(queryId), queryHub);
+  EXPECT_EQ(reference, messageSender.getQueryId());
 }

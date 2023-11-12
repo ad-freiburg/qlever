@@ -202,6 +202,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
   co_await connect(server, client);
 
   auto controllerActions = [&]() -> net::awaitable<void> {
+    constexpr auto clientTimeout = std::chrono::milliseconds{50};
     boost::beast::websocket::stream<tcp::socket> webSocket{std::move(client)};
     co_await webSocket.async_handshake("localhost", "/watch/some-id",
                                        net::use_awaitable);
@@ -212,9 +213,17 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
     // Wrong keyword should be ignored
     co_await webSocket.async_write(toBuffer("other"), net::use_awaitable);
 
+    // Give server some time to process cancellation request
+    net::steady_timer timer1{strand, clientTimeout};
+    co_await timer1.async_wait(net::use_awaitable);
+
     EXPECT_FALSE(cancellationHandle->isCancelled());
 
     co_await webSocket.async_write(toBuffer("cancel"), net::use_awaitable);
+
+    // Give server some time to process cancellation request
+    net::steady_timer timer2{strand, clientTimeout};
+    co_await timer2.async_wait(net::use_awaitable);
 
     EXPECT_TRUE(cancellationHandle->isCancelled());
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
