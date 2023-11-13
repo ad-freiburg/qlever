@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <concepts>
 #include <ranges>
 
 #include "util/Exception.h"
@@ -197,6 +198,15 @@ constexpr auto cartesianPowerAsArray() {
 template <std::integral auto Upper, size_t Num>
 auto cartesianPowerAsIntegerArray() {
   return toIntegerSequence<cartesianPowerAsArray<Upper, Num>()>();
+}
+
+/*
+@brief Call the given lambda function with each of the given types `Ts` as
+explicit template parameter, keeping the same order.
+*/
+template <typename... Ts>
+constexpr void constExprForEachType(const auto& lambda) {
+  (lambda.template operator()<Ts>(), ...);
 }
 
 }  // namespace ad_utility

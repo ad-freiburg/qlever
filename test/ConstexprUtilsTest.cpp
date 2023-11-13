@@ -6,6 +6,8 @@
 
 #include "gtest/gtest.h"
 #include "util/ConstexprUtils.h"
+#include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 using namespace ad_utility;
 
@@ -169,4 +171,39 @@ TEST(ConstexprUtils, ConstexprSwitch) {
   // F1 can only be called with 0 and 1 as template arguments.
   static_assert(std::invocable<decltype(ConstexprSwitch<0, 1>), F1, int>);
   static_assert(!std::invocable<decltype(ConstexprSwitch<0, 1, 2>), F1, int>);
+}
+
+TEST(ConstexprUtils, ConstExprForEachType) {
+  /*
+  A lambda, that adds the string representation of a (supported) type to a
+  vector.
+  */
+  std::vector<std::string> typeToStringVector{};
+  auto typeToString = [&typeToStringVector]<typename T>() {
+    if constexpr (ad_utility::isSimilar<T, int>) {
+      typeToStringVector.emplace_back("int");
+    } else if constexpr (ad_utility::isSimilar<T, bool>) {
+      typeToStringVector.emplace_back("bool");
+    } else if constexpr (ad_utility::isSimilar<T, std::string>) {
+      typeToStringVector.emplace_back("std::string");
+    } else {
+      AD_FAIL();
+    }
+  };
+
+  // No types given should end in nothing happening.
+  constExprForEachType<>(typeToString);
+  ASSERT_TRUE(typeToStringVector.empty());
+
+  // Normal call.
+  constExprForEachType<int, bool, std::string, bool, bool, int, int, int>(
+      typeToString);
+  ASSERT_STREQ(typeToStringVector.at(0).c_str(), "int");
+  ASSERT_STREQ(typeToStringVector.at(1).c_str(), "bool");
+  ASSERT_STREQ(typeToStringVector.at(2).c_str(), "std::string");
+  ASSERT_STREQ(typeToStringVector.at(3).c_str(), "bool");
+  ASSERT_STREQ(typeToStringVector.at(4).c_str(), "bool");
+  ASSERT_STREQ(typeToStringVector.at(5).c_str(), "int");
+  ASSERT_STREQ(typeToStringVector.at(6).c_str(), "int");
+  ASSERT_STREQ(typeToStringVector.at(7).c_str(), "int");
 }
