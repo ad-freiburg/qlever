@@ -657,7 +657,7 @@ CompressedRelationMetadata CompressedRelationWriter::addRelation(
   bool relationHasExclusiveBlocks =
       sizeInBytes(col1And2Ids) > 0.8 * static_cast<double>(numBytesPerBlock_);
   if (relationHasExclusiveBlocks ||
-      sizeInBytes(col1And2Ids) + sizeInBytes(buffer_) >
+      sizeInBytes(col1And2Ids) + sizeInBytes(previousSmallRelationsBuffer_) >
           static_cast<double>(numBytesPerBlock_) * 1.5) {
     writeBufferedRelationsToSingleBlock();
   }
@@ -669,21 +669,23 @@ CompressedRelationMetadata CompressedRelationWriter::addRelation(
     metadata.offsetInBlock_ = std::numeric_limits<uint64_t>::max();
   } else {
     // Append to the current buffered block.
-    metadata.offsetInBlock_ = buffer_.numRows();
+    metadata.offsetInBlock_ = previousSmallRelationsBuffer_.numRows();
     static_assert(sizeof(col1And2Ids[0][0]) == sizeof(Id));
-    if (buffer_.numRows() == 0) {
+    if (previousSmallRelationsBuffer_.numRows() == 0) {
       currentBlockData_.firstTriple_ = {col0Id, col1And2Ids(0, 0),
                                         col1And2Ids(0, 1)};
     }
     currentBlockData_.lastTriple_ = {col0Id,
                                      col1And2Ids(col1And2Ids.numRows() - 1, 0),
                                      col1And2Ids(col1And2Ids.numRows() - 1, 1)};
-    AD_CORRECTNESS_CHECK(buffer_.numColumns() == col1And2Ids.numColumns());
-    auto bufferOldSize = buffer_.numRows();
-    buffer_.resize(buffer_.numRows() + col1And2Ids.numRows());
+    AD_CORRECTNESS_CHECK(previousSmallRelationsBuffer_.numColumns() == col1And2Ids.numColumns());
+    auto bufferOldSize = previousSmallRelationsBuffer_.numRows();
+    previousSmallRelationsBuffer_.resize(
+        previousSmallRelationsBuffer_.numRows() + col1And2Ids.numRows());
     for (size_t i = 0; i < col1And2Ids.numColumns(); ++i) {
       const auto& column = col1And2Ids.getColumn(i);
-      std::ranges::copy(column, buffer_.getColumn(i).begin() + bufferOldSize);
+      std::ranges::copy(column,
+          previousSmallRelationsBuffer_.getColumn(i).begin() + bufferOldSize);
     }
   }
   return metadata;
@@ -716,18 +718,18 @@ void CompressedRelationWriter::writeRelationToExclusiveBlocks(
 
 // ___________________________________________________________________________
 void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
-  if (buffer_.empty()) {
+  if (previousSmallRelationsBuffer_.empty()) {
     return;
   }
 
-  AD_CORRECTNESS_CHECK(buffer_.numColumns() == NumColumns);
+  AD_CORRECTNESS_CHECK(previousSmallRelationsBuffer_.numColumns() == NumColumns);
   // Convert from bytes to number of ID pairs.
-  size_t numRows = buffer_.numRows();
+  size_t numRows = previousSmallRelationsBuffer_.numRows();
 
   // TODO<joka921, C++23> This is
-  // `ranges::to<vector>(ranges::transform_view(buffer_.getColumns(),
+  // `ranges::to<vector>(ranges::transform_view(previousSmallRelationsBuffer_.getColumns(),
   // compressAndWriteColumn))`;
-  std::ranges::for_each(buffer_.getColumns(),
+  std::ranges::for_each(previousSmallRelationsBuffer_.getColumns(),
                         [this](const auto& column) mutable {
                           currentBlockData_.offsetsAndCompressedSize_.push_back(
                               compressAndWriteColumn(column));
@@ -739,7 +741,7 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   blockBuffer_.push_back(currentBlockData_);
   // Reset the data of the current block.
   currentBlockData_ = CompressedBlockMetadata{};
-  buffer_.clear();
+  previousSmallRelationsBuffer_.clear();
 }
 
 // _____________________________________________________________________________
@@ -917,4 +919,37 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   AD_CORRECTNESS_CHECK(!firstBlock.empty());
   AD_CORRECTNESS_CHECK(!lastBlock.empty());
   return {rowToTriple(firstBlock.front()), rowToTriple(lastBlock.back())};
+}
+
+C CompressedRelationWriter::writeBlock(IdTableView<0> buffer, size_t numRows) {
+  std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
+  for (const auto& column : data.getColumns()) {
+    offsets.push_back(compressAndWriteColumn(
+        {column.begin() + i, column.begin() + i + actualNumRowsPerBlock}));
+  }
+}
+
+void CompressedRelationWriter::addBlock(IdTableView<3> block) {
+  decltype(auto) firstCol = block.getColumn(0);
+  AD_CORRECTNESS_CHECK(!block.empty());
+  auto it = std::ranges::find_if_not(firstCol, [this](Id id){return id == currentRelation_;});
+  auto otherCols = block.asStaticView<0>().asColumnSubsetView(std::array{1ul, 2ul});
+  if (it == firstCol.begin()) {
+    writeBufferedRelationsToSingleBlock();
+  }
+  currentRelationsBuffer_.insertAtEnd(otherCols.begin(), otherCols.end());
+
+  // TODO<joka921> Count the distinct entries.
+
+  // TODO<joka921> compute the threshold as it was.
+  size_t threshold = 100'000;
+
+  if(it != firstCol.end()) {
+    if(currentRelationsBuffer_.size() >= threshold) {
+      writeBufferedRelationsToSingleBlock();
+    }
+    currentBlockData_
+
+  }
+
 }

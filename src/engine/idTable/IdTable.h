@@ -489,7 +489,7 @@ class IdTable {
   // creates a dynamic view from a dynamic table. This makes generic code that
   // is templated on the number of columns easier to write.
   template <size_t NewNumColumns>
-  requires isDynamic
+  requires (isDynamic || NewNumColumns == 0)
   IdTable<T, NewNumColumns, ColumnStorage, IsView::True> asStaticView() const {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     ViewSpans viewSpans(data().begin(), data().end());

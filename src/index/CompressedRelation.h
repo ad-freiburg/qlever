@@ -22,6 +22,7 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 
 // Forward declaration of the `IdTable` class.
 class IdTable;
@@ -38,7 +39,7 @@ using BufferedIdTable =
 
 // This type is used to buffer small relations that will be stored in the same
 // block.
-using SmallRelationsBuffer = columnBasedIdTable::IdTable<Id, NumColumns>;
+using SmallRelationsBuffer = IdTableStatic<NumColumns>;
 
 // Sometimes we do not read/decompress  all the columns of a block, so we have
 // to use a dynamic `IdTable`.
@@ -158,14 +159,20 @@ class CompressedRelationWriter {
   ad_utility::File outfile_;
   std::vector<CompressedBlockMetadata> blockBuffer_;
   CompressedBlockMetadata currentBlockData_;
-  SmallRelationsBuffer buffer_;
+  ad_utility::AllocatorWithLimit<Id> allocator_ = ad_utility::makeUnlimitedAllocator<Id>();
+  SmallRelationsBuffer previousSmallRelationsBuffer_{allocator_};
+  SmallRelationsBuffer currentRelationsBuffer_{allocator_};
+  bool currentRelationHasExclusiveBlock = false;
   size_t numBytesPerBlock_;
+
+  Id currentRelation_ = Id::makeUndefined();
 
  public:
   /// Create using a filename, to which the relation data will be written.
   explicit CompressedRelationWriter(ad_utility::File f, size_t numBytesPerBlock)
       : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock} {}
 
+  void addBlock(IdTableView<3> block);
   /**
    * Add a complete (single) relation.
    *
@@ -185,6 +192,7 @@ class CompressedRelationWriter {
   CompressedRelationMetadata addRelation(Id col0Id,
                                          const BufferedIdTable& col1And2Ids,
                                          size_t numDistinctCol1);
+
 
   /// Get all the CompressedBlockMetaData that were created by the calls to
   /// addRelation. This also closes the writer. The typical workflow is:
@@ -211,9 +219,9 @@ class CompressedRelationWriter {
     outfile_.close();
   }
 
-  // Compress the contents of `buffer_` into a single block and write it to
+  // Compress the contents of `previousSmallRelationsBuffer_` into a single block and write it to
   // outfile_. Update `currentBlockData_` with the meta data of the written
-  // block. Then clear `buffer_`.
+  // block. Then clear `previousSmallRelationsBuffer_`.
   void writeBufferedRelationsToSingleBlock();
 
   // Compress the relation from `data` into one or more blocks, depending on
