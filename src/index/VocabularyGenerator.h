@@ -105,7 +105,8 @@ class VocabularyMerger {
   template <typename Comp, typename InternalVocabularyAction>
   VocabularyMetaData mergeVocabulary(const std::string& fileIdx,
                                      size_t numFiles, Comp comparator,
-                                     InternalVocabularyAction& action);
+                                     InternalVocabularyAction& action,
+                                     ad_utility::MemorySize memToUse);
 
  private:
   // helper struct used in the priority queue for merging.
@@ -128,6 +129,11 @@ class VocabularyMerger {
 
     [[nodiscard]] const auto& id() const { return _entry.index_; }
     [[nodiscard]] auto& id() { return _entry.index_; }
+  };
+
+  constexpr static auto sizeOfQueueWord = [](const QueueWord& q) {
+    return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
+                                         q._entry.iriOrLiteral().size());
   };
 
   // write the queu words in the buffer to their corresponding idPairVecs.

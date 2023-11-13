@@ -37,7 +37,7 @@ class IdTableCompressedWriterBenchmark : public BenchmarkInterface {
 
     auto run = [&inputs]() {
       auto merger = ad_utility::parallelMultiwayMerge<size_t, false>(
-          500, inputs, std::less<>{});
+          4_GB, 500, inputs, std::less<>{});
       size_t result{};
       for (const auto& i : merger) {
         for (auto el : i) {

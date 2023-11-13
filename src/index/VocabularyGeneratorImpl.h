@@ -31,7 +31,8 @@
 template <typename Comparator, typename InternalVocabularyAction>
 VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, Comparator comparator,
-    InternalVocabularyAction& internalVocabularyAction) {
+    InternalVocabularyAction& internalVocabularyAction,
+    ad_utility::MemorySize memoryToUse) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal. All internal IRIs or literals come before all external ones.
   // TODO<joka921> Change this as soon as we have Interleaved Ids via the
@@ -81,8 +82,11 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 
   std::future<void> writeFuture;
 
-  auto mergedWords = ad_utility::parallelMultiwayMerge<QueueWord, true>(
-      BLOCKSIZE_VOCABULARY_MERGING, generators, lessThanForQueue);
+  auto mergedWords =
+      ad_utility::parallelMultiwayMerge<QueueWord, true,
+                                        decltype(sizeOfQueueWord)>(
+          0.8 * memoryToUse, BLOCKSIZE_VOCABULARY_MERGING, generators,
+          lessThanForQueue);
   for (QueueWord& currentWord : std::views::join(mergedWords)) {
     // for the prefix compression vocabulary, we don't need the external
     // vocabulary

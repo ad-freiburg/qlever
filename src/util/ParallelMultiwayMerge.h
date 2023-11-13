@@ -8,24 +8,29 @@
 #include "util/AsyncStream.h"
 #include "util/Generator.h"
 #include "util/TypeTraits.h"
+#include "util/ValueSizeGetters.h"
 #include "util/Views.h"
 
 namespace ad_utility {
 
 namespace detail {
 
+using namespace ad_utility::memory_literals;
+
 // Call `buffer.push_back(el)`. If `moveElements` is `true`, then `el` gets
 // moved. It is necessary to explicitly pass the type `T` stored in the vector
 // to enable the usage of this lambda in combination with `std::bind_front` and
 // `std::ref`.
-template <bool moveElements, typename T>
-constexpr auto pushSingleElement = [](std::vector<T>& buffer, auto& el) {
-  if constexpr (moveElements) {
-    buffer.push_back(std::move(el));
-  } else {
-    buffer.push_back(el);
-  }
-};
+template <bool moveElements, typename T, ValueSizeGetter<T> SizeGetter>
+constexpr auto pushSingleElement =
+    [](std::vector<T>& buffer, MemorySize& sz, auto& el) {
+      sz += SizeGetter{}(el);
+      if constexpr (moveElements) {
+        buffer.push_back(std::move(el));
+      } else {
+        buffer.push_back(el);
+      }
+    };
 
 // This concept is fulfilled if `Range` is a range that stores values of type
 // `T`.
@@ -46,18 +51,20 @@ concept RandomAccessRangeOfRanges =
 // ranges will be moved.
 // TODO<joka921> Maybe add a `buffering generator` that automatically stores the
 // buffers.
-template <typename T, bool moveElements>
+template <typename T, bool moveElements, ValueSizeGetter<T> SizeGetter>
 cppcoro::generator<std::vector<T>> lazyBinaryMerge(
-    size_t blocksize, RangeWithValue<T> auto range1,
+    MemorySize maxMem, size_t maxBlockSize, RangeWithValue<T> auto range1,
     RangeWithValue<T> auto range2,
     ad_utility::InvocableWithExactReturnType<bool, const T&, const T&> auto
         comparison) {
   // Set up the buffer as well as a lambda to clear and reserve it.
   std::vector<T> buffer;
+  MemorySize sizeOfCurrentBlock{};
 
-  auto clearBuffer = [&buffer, blocksize]() {
+  auto clearBuffer = [&buffer, maxBlockSize, &sizeOfCurrentBlock]() {
     buffer.clear();
-    buffer.reserve(blocksize);
+    buffer.reserve(maxBlockSize);
+    sizeOfCurrentBlock = 0_B;
   };
 
   clearBuffer();
@@ -75,8 +82,13 @@ cppcoro::generator<std::vector<T>> lazyBinaryMerge(
     return itPair.first == itPair.second;
   };
 
-  auto pushToBuffer = std::bind_front(
-      detail::pushSingleElement<moveElements, T>, std::ref(buffer));
+  auto pushToBuffer =
+      std::bind_front(detail::pushSingleElement<moveElements, T, SizeGetter>,
+                      std::ref(buffer), std::ref(sizeOfCurrentBlock));
+
+  auto blockLargeEnough = [&] {
+    return buffer.size() >= maxBlockSize || sizeOfCurrentBlock >= maxMem;
+  };
 
   // Push the next element from the range denoted by `itPair` to the `buffer`,
   // and advance the iterator. Return true if the range then is exhausted.
@@ -103,7 +115,7 @@ cppcoro::generator<std::vector<T>> lazyBinaryMerge(
       if (pushSmaller()) {
         break;
       }
-      if (buffer.size() >= blocksize) {
+      if (blockLargeEnough()) {
         co_yield buffer;
         clearBuffer();
       }
@@ -112,11 +124,11 @@ cppcoro::generator<std::vector<T>> lazyBinaryMerge(
 
   // One of the buffers might still have unmerged contents, simply append them.
   auto yieldRemainder =
-      [&buffer, blocksize, &clearBuffer,
+      [&buffer, &blockLargeEnough, &clearBuffer,
        &pushToBuffer](auto& itPair) -> cppcoro::generator<std::vector<T>> {
     for (auto& el : std::ranges::subrange(itPair.first, itPair.second)) {
       pushToBuffer(el);
-      if (buffer.size() >= blocksize) {
+      if (blockLargeEnough()) {
         co_yield buffer;
         clearBuffer();
       }
@@ -136,17 +148,20 @@ cppcoro::generator<std::vector<T>> lazyBinaryMerge(
 
 // Yield the elements of the `range` in blocks of the given `blocksize`.
 // TODO<joka921> This gets much simpler with the buffering generator.
-template <typename T, bool moveElements>
-cppcoro::generator<std::vector<T>> batchToVector(size_t blocksize,
+template <typename T, bool moveElements, ValueSizeGetter<T> SizeGetter>
+cppcoro::generator<std::vector<T>> batchToVector(MemorySize maxMem,
+                                                 size_t blocksize,
                                                  RangeWithValue<T> auto range) {
   std::vector<T> buffer;
   buffer.reserve(blocksize);
+  MemorySize curMem = 0_B;
   for (auto& el : range) {
-    detail::pushSingleElement<moveElements, T>(buffer, el);
-    if (buffer.size() >= blocksize) {
+    detail::pushSingleElement<moveElements, T, SizeGetter>(buffer, curMem, el);
+    if (buffer.size() >= blocksize || curMem >= maxMem) {
       co_yield buffer;
       buffer.clear();
       buffer.reserve(blocksize);
+      curMem = 0_B;
     }
   }
   if (!buffer.empty()) {
@@ -154,17 +169,17 @@ cppcoro::generator<std::vector<T>> batchToVector(size_t blocksize,
   }
 }
 
-}  // namespace detail
-
 // Merge the sorted ranges contained in the `rangeOfRanges` according to the
 // `comparison`. The parameter `blocksize` can be used to balance the
 // performance and memory consumption. A higher value will increase the memory
 // consumption while a too low value will hurt the performance.
 // TODO<joka921> Implement a more elegant mechanism to balance the memory
 // consumption and the number of used threads.
-template <typename T, bool moveElements>
-cppcoro::generator<std::vector<T>> parallelMultiwayMerge(
-    size_t blocksize, detail::RandomAccessRangeOfRanges<T> auto&& rangeOfRanges,
+template <typename T, bool moveElements,
+          ValueSizeGetter<T> SizeGetter = DefaultValueSizeGetter<T>>
+cppcoro::generator<std::vector<T>> parallelMultiwayMergeImpl(
+    MemorySize maxMem, size_t blocksize,
+    detail::RandomAccessRangeOfRanges<T> auto&& rangeOfRanges,
     InvocableWithExactReturnType<bool, const T&, const T&> auto comparison) {
   AD_CORRECTNESS_CHECK(!rangeOfRanges.empty());
   auto moveIf = [](auto& range) -> decltype(auto) {
@@ -175,11 +190,11 @@ cppcoro::generator<std::vector<T>> parallelMultiwayMerge(
     }
   };
   if (rangeOfRanges.size() == 1) {
-    return detail::batchToVector<T, moveElements>(
-        blocksize, moveIf(rangeOfRanges.front()));
+    return detail::batchToVector<T, moveElements, SizeGetter>(
+        maxMem, blocksize, moveIf(rangeOfRanges.front()));
   } else if (rangeOfRanges.size() == 2) {
-    return detail::lazyBinaryMerge<T, moveElements>(
-        blocksize, moveIf(rangeOfRanges[0]), moveIf(rangeOfRanges[1]),
+    return detail::lazyBinaryMerge<T, moveElements, SizeGetter>(
+        maxMem, blocksize, moveIf(rangeOfRanges[0]), moveIf(rangeOfRanges[1]),
         comparison);
   } else {
     size_t size = std::ranges::size(rangeOfRanges);
@@ -191,17 +206,38 @@ cppcoro::generator<std::vector<T>> parallelMultiwayMerge(
       return std::views::join(ad_utility::OwningView{AD_FWD(view)});
     };
 
-    auto parallelMerge = [join, blocksize, comparison](auto it, auto end) {
-      return join(parallelMultiwayMerge<T, moveElements>(
-          blocksize, std::ranges::subrange{it, end}, comparison));
+    auto parallelMerge = [join, blocksize, comparison, maxMem](auto it,
+                                                               auto end) {
+      return join(parallelMultiwayMergeImpl<T, moveElements, SizeGetter>(
+          maxMem, blocksize, std::ranges::subrange{it, end}, comparison));
     };
 
     return ad_utility::streams::runStreamAsync(
-        detail::lazyBinaryMerge<T, moveElements>(
-            blocksize, parallelMerge(beg, splitIt), parallelMerge(splitIt, end),
-            comparison),
+        detail::lazyBinaryMerge<T, moveElements, SizeGetter>(
+            maxMem, blocksize, parallelMerge(beg, splitIt),
+            parallelMerge(splitIt, end), comparison),
         2);
   }
+}
+}  // namespace detail
+
+// Merge the sorted ranges contained in the `rangeOfRanges` according to the
+// `comparison`. The parameter `blocksize` can be used to balance the
+// performance and memory consumption. A higher value will increase the memory
+// consumption while a too low value will hurt the performance.
+// TODO<joka921> Implement a more elegant mechanism to balance the memory
+// consumption and the number of used threads.
+template <typename T, bool moveElements,
+          ValueSizeGetter<T> SizeGetter = DefaultValueSizeGetter<T>>
+cppcoro::generator<std::vector<T>> parallelMultiwayMerge(
+    MemorySize maxMemTotal, size_t blocksize,
+    detail::RandomAccessRangeOfRanges<T> auto&& rangeOfRanges,
+    InvocableWithExactReturnType<bool, const T&, const T&> auto comparison) {
+  // There is one suboperation per input in the recursive tree, so we have to
+  // split the memory limit.
+  auto maxMem = maxMemTotal / std::ranges::size(rangeOfRanges);
+  return detail::parallelMultiwayMergeImpl<T, moveElements, SizeGetter>(
+      maxMem, blocksize, AD_FWD(rangeOfRanges), std::move(comparison));
 }
 }  // namespace ad_utility
 
