@@ -7,7 +7,7 @@
 #include <sstream>
 #include <string>
 
-#include "../../util/Concepts.h"
+#include "util/Concepts.h"
 
 class Literal {
   std::string _stringRepresentation;
@@ -25,9 +25,8 @@ class Literal {
 
  public:
   template <typename T>
-  requires(ad_utility::Streamable<T> &&
-           !std::same_as<std::remove_cvref_t<T>, Literal>)
-  explicit Literal(T&& t)
+  requires(!std::same_as<std::remove_cvref_t<T>, Literal> &&
+           ad_utility::Streamable<T>) explicit Literal(T&& t)
       : _stringRepresentation(toString(std::forward<T>(t))) {}
 
   explicit Literal(std::variant<int64_t, double> t) {
