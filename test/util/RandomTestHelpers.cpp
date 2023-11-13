@@ -5,8 +5,6 @@
 
 #include "../test/util/RandomTestHelpers.h"
 
-#include <functional>
-
 // ____________________________________________________________________________
 ad_utility::RandomSeed RandomSeedGenerator::operator()() {
   return ad_utility::RandomSeed::make(std::invoke(numberGenerator_));

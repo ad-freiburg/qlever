@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <functional>
 #include <random>
 
 #include "util/Random.h"
