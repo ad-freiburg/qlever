@@ -444,85 +444,112 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
   size_t i = 0;
   auto triplesGenerator = data.getRows();
   auto it = triplesGenerator.begin();
-    using Triple = typename TripleVec::value_type;
+  using Triple = typename TripleVec::value_type;
+  using Buffer = std::vector<Triple>;
+  using Map = ad_utility::HashMap<Id, Id>;
 
-    ad_utility::TaskQueue<true> lookupQueue(30, 10, "looking up local to global IDs");
-    ad_utility::TaskQueue<true> writeQueu(30, 1, "Writing global Ids to file");
-    auto transformTriple = [&](Triple& curTriple, auto& idMap) {
-        // For all triple elements find their mapping from partial to global ids.
-        for (size_t k = 0; k < curTriple.size(); ++k) {
-            // TODO<joka921> The Maps should actually store `VocabIndex`es
-            if (curTriple[k].getDatatype() != Datatype::VocabIndex) {
-                continue;
-            }
-            auto iterator = idMap.find(curTriple[k]);
-            if (iterator == idMap.end()) {
-                LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k]
-                          << std::endl;
-                AD_FAIL();
-            }
-            // TODO<joka921> at some point we have to check for out of range.
-            curTriple[k] = iterator->second;
+  ad_utility::TaskQueue<true> lookupQueue(30, 10,
+                                          "looking up local to global IDs");
+  ad_utility::TaskQueue<true> writeQueue(30, 1, "Writing global Ids to file");
+
+  // For all triple elements find their mapping from partial to global ids.
+  auto transformTriple = [](Triple& curTriple, auto& idMap) {
+    for (auto& id : curTriple) {
+      // TODO<joka921> The Maps should actually store `VocabIndex`es
+      if (id.getDatatype() != Datatype::VocabIndex) {
+        continue;
+      }
+      auto iterator = idMap.find(id);
+      if (iterator == idMap.end()) {
+        LOG(ERROR) << "Not found in partial vocabulary: " << curTriple[k]
+                   << std::endl;
+        AD_FAIL();
+      }
+      id = iterator->second;
+    }
+  };
+
+  // Return a lambda that pushes all the triples to the sorter. Must only be
+  // called single-threaded.
+  auto getWriteTask = [&result, &i](Buffer triples) {
+    return [&result, &i, triples = std::move(triples)]() {
+      for (const auto& triple : triples) {
+        // update the Element
+        result.push(triple);
+        ++i;
+        if (i % 100'000'000 == 0) {
+          LOG(INFO) << "Triples converted: " << i << std::endl;
         }
+      }
     };
+  };
 
-    auto getWriteTask = [&result, &i](auto triples) {
-       return [&result, &i, triples =  std::move(triples)]() {
-               for (const auto& triple : triples) {
-                   // update the Element
-                   result.push(triple);
-                   ++i;
-                   if (i % 100'000'000 == 0) {
-                       LOG(INFO) << "Triples converted: " << i << std::endl;
-                   }
-               }
-           };
-       };
-    auto getLookupTask = [&lookupQueue, &writeQueu, &transformTriple,
-                          &getWriteTask](auto triples, auto idMap) {
-      return
-          [&writeQueu, triples = std::move(triples), idMap = std::move(idMap),
-           &lookupQueue, &getWriteTask, &transformTriple]() mutable {
-            for (auto& triple : triples) {
-              transformTriple(triple, *idMap);
-            }
-            writeQueu.push(getWriteTask(std::move(triples)));
-          };
+  // Return a lambda that for each of the `triples` transforms its partial to
+  // global IDs using the `idMap`. The map is passed as a `shared_ptr` because
+  // multiple batches need access to the same map.
+  auto getLookupTask = [&writeQueue, &transformTriple, &getWriteTask](
+                           Buffer triples, std::shared_ptr<Map> idMap) {
+    return [&writeQueue, triples = std::move(triples), idMap = std::move(idMap),
+            &getWriteTask, &transformTriple]() mutable {
+      for (auto& triple : triples) {
+        transformTriple(triple, *idMap);
+      }
+      writeQueue.push(getWriteTask(std::move(triples)));
     };
+  };
 
-    for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
-         partialNum++) {
-        std::string mmapFilename =
-                absl::StrCat(onDiskBase_, PARTIAL_MMAP_IDS, partialNum);
-    LOG(DEBUG) << "Reading ID map from: " << mmapFilename << std::endl;
-    auto idMap = std::make_shared<ad_utility::HashMap<Id, Id>>(IdMapFromPartialIdMapFile(mmapFilename));
+
+  std::atomic<size_t> nextPartialVocabulary = 0;
+  // Return the mapping from partial to global Ids for the batch with idx `nextPartialVocabulary` and increase that
+  // counter by one. Return `nullopt` if there are no more partial vocabularies to read.
+  auto createNextVocab = [&nextPartialVocabulary, &actualLinesPerPartial,
+                          this]() -> std::optional<std::pair<size_t, Map>> {
+    auto idx = nextPartialVocabulary.fetch_add(1, std::memory_order_relaxed);
+    if (idx >= actualLinesPerPartial.size()) {
+      return std::nullopt;
+    }
+    std::string mmapFilename = absl::StrCat(onDiskBase_, PARTIAL_MMAP_IDS, idx);
+    auto map = IdMapFromPartialIdMapFile(mmapFilename);
     // Delete the temporary file in which we stored this map
     deleteTemporaryFile(mmapFilename);
+    return std::pair{idx, std::move(map)};
+  };
+
+  // Set up a generator that yields all the mappings in order, but reads them in parallel.
+  auto mappings = ad_utility::data_structures::queueManager<
+      ad_utility::data_structures::OrderedThreadSafeQueue<Map>>(
+      10, 5, createNextVocab);
+
+  // TODO<C++23> Use `views::enumerate`.
+  size_t batchIdx = 0;
+  for (auto& mapping : mappings) {
+    auto idMap = std::make_shared<Map>(std::move(mapping));
 
     static constexpr size_t bufferSize = 10'000;
     std::vector<Triple> buffer;
     buffer.reserve(bufferSize);
-    // update the triples for which this partial vocabulary was responsible
-    for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[partialNum];
+    auto pushBatch = [&buffer, bufferSize, &idMap]() {
+      lookupQueue.push(getLookupTask(std::move(buffer), idMap));
+      buffer.clear();
+      buffer.reserve(bufferSize);
+    };
+    // Update the triples that belong to this partial vocabulary.
+    for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[batchIdx];
          ++tmpNum) {
       buffer.push_back(*it);
       if (buffer.size() >= bufferSize) {
-        lookupQueue.push(getLookupTask(std::move(buffer), idMap));
-        buffer.clear();
-        buffer.reserve(bufferSize);
+        pushBatch();
       }
+      ++it;
     }
     if (!buffer.empty()) {
-      lookupQueue.push(getLookupTask(std::move(buffer), idMap));
-        buffer.clear();
-      buffer.reserve(bufferSize);
+      pushBatch();
     }
-    }
-    lookupQueue.finish();
-    writeQueu.finish();
-    LOG(INFO) << lookupQueue.getTimeStatistics();
-    LOG(INFO) << writeQueu.getTimeStatistics();
-    LOG(INFO) << "Done, total number of triples converted: " << i << std::endl;
+    ++batchIdx;
+  }
+  lookupQueue.finish();
+  writeQueue.finish();
+  LOG(INFO) << "Done, total number of triples converted: " << i << std::endl;
   return resultPtr;
 }
 
