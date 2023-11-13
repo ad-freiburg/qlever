@@ -4,7 +4,7 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <variant>
 
@@ -629,10 +629,8 @@ TEST(ParserTest, testParse) {
               sc_sub_subquery.getSelectedVariablesAsStrings());
   }
 
-  // We currently only check, that the following two queries don't throw an
-  // exception.
-  // TODO<RobinTF>  Also add checks for the correct semantics.
   {
+    namespace m = matchers;
     // Check Parse Construct (1)
     auto pq_1 = SparqlParser::parseQuery(
         "PREFIX foaf:   <http://xmlns.com/foaf/0.1/> \n"
@@ -640,12 +638,29 @@ TEST(ParserTest, testParse) {
         "CONSTRUCT { ?x foaf:name ?name } \n"
         "WHERE  { ?x org:employeeName ?name }");
 
+    EXPECT_THAT(pq_1,
+                m::ConstructQuery(
+                    {{Variable{"?x"}, Iri{"<http://xmlns.com/foaf/0.1/name>"},
+                      Variable{"?name"}}},
+                    m::GraphPattern(m::Triples({SparqlTriple{
+                        Variable{"?x"}, "<http://example.com/ns#employeeName>",
+                        Variable{"?name"}}}))));
+
     // Check Parse Construct (2)
     auto pq_2 = SparqlParser::parseQuery(
         "PREFIX foaf:    <http://xmlns.com/foaf/0.1/>\n"
         "PREFIX vcard:   <http://www.w3.org/2001/vcard-rdf/3.0#>\n"
         "CONSTRUCT   { <http://example.org/person#Alice> vcard:FN ?name }\n"
         "WHERE       { ?x foaf:name ?name } ");
+
+    EXPECT_THAT(pq_2,
+                m::ConstructQuery(
+                    {{Iri{"<http://example.org/person#Alice>"},
+                      Iri{"<http://www.w3.org/2001/vcard-rdf/3.0#FN>"},
+                      Variable{"?name"}}},
+                    m::GraphPattern(m::Triples({SparqlTriple{
+                        Variable{"?x"}, "<http://xmlns.com/foaf/0.1/name>",
+                        Variable{"?name"}}}))));
   }
 
   {
