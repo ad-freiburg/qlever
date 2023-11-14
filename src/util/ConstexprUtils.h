@@ -9,6 +9,7 @@
 
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/TypeTraits.h"
 
 // Various helper functions for compile-time programming.
 
@@ -43,8 +44,7 @@ constexpr auto pow(auto base, int exponent) {
  * @param loopBody The body of the for loop.
  */
 template <typename Function, size_t... ForLoopIndexes>
-void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
-                      const Function& loopBody) {
+void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&, const Function& loopBody) {
   ((loopBody.template operator()<ForLoopIndexes>()), ...);
 }
 
@@ -53,14 +53,10 @@ void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
 // `function.operator()<MatchingCase>(args...)`.
 template <auto FirstCase, std::same_as<decltype(FirstCase)> auto... Cases>
 auto ConstexprSwitch =
-    [](auto&& function,
-       const std::equality_comparable_with<decltype(FirstCase)> auto& value,
+    [](auto&& function, const std::equality_comparable_with<decltype(FirstCase)> auto& value,
        auto&&... args) -> decltype(auto) requires(requires {
   AD_FWD(function).template operator()<FirstCase>(AD_FWD(args)...);
-} && (... &&
-      requires {
-        AD_FWD(function).template operator()<Cases>(AD_FWD(args)...);
-      })) {
+} && (... && requires { AD_FWD(function).template operator()<Cases>(AD_FWD(args)...); })) {
   if (value == FirstCase) {
     return AD_FWD(function).template operator()<FirstCase>(AD_FWD(args)...);
   } else if constexpr (sizeof...(Cases) > 0) {
@@ -89,12 +85,11 @@ auto ConstexprSwitch =
 template <size_t MaxValue, typename Function>
 void RuntimeValueToCompileTimeValue(const size_t& value, Function function) {
   AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
-  ConstexprForLoop(std::make_index_sequence<MaxValue + 1>{},
-                   [&function, &value]<size_t Index>() {
-                     if (Index == value) {
-                       function.template operator()<Index>();
-                     }
-                   });
+  ConstexprForLoop(std::make_index_sequence<MaxValue + 1>{}, [&function, &value]<size_t Index>() {
+    if (Index == value) {
+      function.template operator()<Index>();
+    }
+  });
 }
 
 /*
@@ -144,8 +139,7 @@ namespace detail {
 // https://stackoverflow.com/questions/56799396/
 template <auto Array, size_t... indexes>
 constexpr auto toIntegerSequenceHelper(std::index_sequence<indexes...>) {
-  return ValueSequence<typename decltype(Array)::value_type,
-                       std::get<indexes>(Array)...>{};
+  return ValueSequence<typename decltype(Array)::value_type, std::get<indexes>(Array)...>{};
 }
 }  // namespace detail
 
@@ -156,8 +150,7 @@ constexpr auto toIntegerSequenceHelper(std::index_sequence<indexes...>) {
 // parameters. For an example usage see `CallFixedSize.h`
 template <auto Array>
 auto toIntegerSequence() {
-  return detail::toIntegerSequenceHelper<Array>(
-      std::make_index_sequence<Array.size()>{});
+  return detail::toIntegerSequenceHelper<Array>(std::make_index_sequence<Array.size()>{});
   // return typename detail::ToIntegerSequenceImpl<Array>::type{};
 }
 
@@ -166,8 +159,7 @@ auto toIntegerSequence() {
 // the range
 // `[0, ..., (maxValue)]`
 template <std::integral Int, size_t NumIntegers>
-constexpr std::array<Int, NumIntegers> integerToArray(Int value,
-                                                      Int numValues) {
+constexpr std::array<Int, NumIntegers> integerToArray(Int value, Int numValues) {
   std::array<Int, NumIntegers> res;
   for (auto& el : res | std::views::reverse) {
     el = value % numValues;
@@ -207,6 +199,20 @@ explicit template parameter, keeping the same order.
 template <typename... Ts>
 constexpr void constExprForEachType(const auto& lambda) {
   (lambda.template operator()<Ts>(), ...);
+}
+
+/*
+@brief Call the given lambda function with each type in the given `std::variant` type as explicit
+template parameter, keeping the same order.
+*/
+template <typename VariantType>
+requires isVariant<VariantType> constexpr void constExprForEachTypeInVariant(const auto& lambda) {
+  ConstexprForLoop(
+      std::make_index_sequence<std::variant_size_v<VariantType>>{},
+      [&lambda]<size_t index,
+                typename IndexType = std::variant_alternative_t<index, VariantType>>() {
+        lambda.template operator()<IndexType>();
+      });
 }
 
 }  // namespace ad_utility

@@ -7,6 +7,7 @@
 #include "gtest/gtest.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
+#include "util/GTestHelpers.h"
 #include "util/TypeTraits.h"
 
 using namespace ad_utility;
@@ -173,31 +174,47 @@ TEST(ConstexprUtils, ConstexprSwitch) {
   static_assert(!std::invocable<decltype(ConstexprSwitch<0, 1, 2>), F1, int>);
 }
 
-TEST(ConstexprUtils, ConstExprForEachType) {
-  /*
-  A lambda, that adds the string representation of a (supported) type to a
-  vector.
-  */
-  std::vector<std::string> typeToStringVector{};
-  auto typeToString = [&typeToStringVector]<typename T>() {
+/*
+@brief Create a lambda, that adds the string representation of a (supported)
+type to a given vector.
+
+@returns A lambda, that takes an explicit template type parameter and adds the
+string representation at the end of `*typeToStringVector`.
+*/
+auto typeToStringFactory(std::vector<std::string>* typeToStringVector) {
+  return [typeToStringVector]<typename T>() {
     if constexpr (ad_utility::isSimilar<T, int>) {
-      typeToStringVector.emplace_back("int");
+      typeToStringVector->emplace_back("int");
     } else if constexpr (ad_utility::isSimilar<T, bool>) {
-      typeToStringVector.emplace_back("bool");
+      typeToStringVector->emplace_back("bool");
     } else if constexpr (ad_utility::isSimilar<T, std::string>) {
-      typeToStringVector.emplace_back("std::string");
+      typeToStringVector->emplace_back("std::string");
     } else {
       AD_FAIL();
     }
   };
+}
 
-  // No types given should end in nothing happening.
-  constExprForEachType<>(typeToString);
-  ASSERT_TRUE(typeToStringVector.empty());
+/*
+@brief Test a normal call for a `constExprForEachType` function.
+
+@param callToForEachWrapper A lambda wrapper, that takes an explicit template
+parameter pack and a lambda function argument, which it passes to a
+`constExprForEachType` function in the correct form.
+*/
+void testConstExprForEachNormalCall(
+    const auto& callToForEachWrapper,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{generateLocationTrace(l, "testConstExprForEachNormalCall")};
+
+  std::vector<std::string> typeToStringVector{};
+  auto typeToString = typeToStringFactory(&typeToStringVector);
 
   // Normal call.
-  constExprForEachType<int, bool, std::string, bool, bool, int, int, int>(
-      typeToString);
+  callToForEachWrapper.template
+  operator()<int, bool, std::string, bool, bool, int, int, int>(typeToString);
+
   ASSERT_STREQ(typeToStringVector.at(0).c_str(), "int");
   ASSERT_STREQ(typeToStringVector.at(1).c_str(), "bool");
   ASSERT_STREQ(typeToStringVector.at(2).c_str(), "std::string");
@@ -206,4 +223,24 @@ TEST(ConstexprUtils, ConstExprForEachType) {
   ASSERT_STREQ(typeToStringVector.at(5).c_str(), "int");
   ASSERT_STREQ(typeToStringVector.at(6).c_str(), "int");
   ASSERT_STREQ(typeToStringVector.at(7).c_str(), "int");
+}
+
+TEST(ConstexprUtils, ConstExprForEachType) {
+  // Normal call.
+  testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
+    constExprForEachType<Ts...>(func);
+  });
+
+  // No types given should end in nothing happening.
+  std::vector<std::string> typeToStringVector{};
+  auto typeToString = typeToStringFactory(&typeToStringVector);
+  constExprForEachType<>(typeToString);
+  ASSERT_TRUE(typeToStringVector.empty());
+}
+
+TEST(ConstexprUtils, ConstExprForEachTypeInVariant) {
+  // Normal call.
+  testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
+    constExprForEachTypeInVariant<std::variant<Ts...>>(func);
+  });
 }
