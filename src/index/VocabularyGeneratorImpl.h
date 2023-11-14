@@ -82,6 +82,10 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 
   std::future<void> writeFuture;
 
+  // Some memory (that is hard to measure exactly) is used for the writing of a
+  // batch of merged words, so we only give 80% of the total memory to the
+  // merging. This is very approximate and should be investigated in more
+  // detail.
   auto mergedWords =
       ad_utility::parallelMultiwayMerge<QueueWord, true,
                                         decltype(sizeOfQueueWord)>(
