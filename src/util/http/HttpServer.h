@@ -170,7 +170,9 @@ class HttpServer {
         auto socket = co_await acceptor_.async_accept(
             coroExecutor, boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
-        net::co_spawn(coroExecutor, session(std::move(socket)), net::detached);
+        // TODO<joka921> For some reason the thread sanitizer complains here,
+        // but we currently need it to prevent blocking.
+        net::co_spawn(ioContext_, session(std::move(socket)), net::detached);
       } catch (const boost::system::system_error& b) {
         // If the server is shut down this will cause operations to abort.
         // This will most likely only happen in tests, but could also occur
