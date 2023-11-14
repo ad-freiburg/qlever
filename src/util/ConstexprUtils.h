@@ -215,4 +215,13 @@ requires isVariant<VariantType> constexpr void constExprForEachTypeInVariant(con
       });
 }
 
+/*
+@brief Call the given lambda function with each type in the given `std::tuple` type as explicit
+template parameter, keeping the same order.
+*/
+template <typename TupleType>
+requires isTuple<TupleType> constexpr void constExprForEachTypeInTuple(const auto& lambda) {
+  constExprForEachTypeInVariant<TupleToVariant<TupleType>>(lambda);
+}
+
 }  // namespace ad_utility

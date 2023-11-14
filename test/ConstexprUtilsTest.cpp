@@ -244,3 +244,10 @@ TEST(ConstexprUtils, ConstExprForEachTypeInVariant) {
     constExprForEachTypeInVariant<std::variant<Ts...>>(func);
   });
 }
+
+TEST(ConstexprUtils, ConstExprForEachTypeInTuple) {
+  // Normal call.
+  testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
+    constExprForEachTypeInTuple<std::tuple<Ts...>>(func);
+  });
+}
