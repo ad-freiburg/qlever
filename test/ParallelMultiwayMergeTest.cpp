@@ -10,6 +10,7 @@
 
 namespace {
 using namespace ad_utility;
+using namespace ad_utility::memory_literals;
 
 // Join a range of ranges into a single vector, e.g. `array<generator<size_t>>
 // -> vector<size_t>`.
@@ -25,7 +26,8 @@ auto join = []<typename Range>(Range&& range) {
 // merge are `numVecs` many `vector<size_t>` objects, each of which consists of
 // random numbers. The size of each vector is also random and taken from the
 // interval `[minVecSize, maxVecSize]`.
-template <size_t numVecs, size_t minVecSize, size_t maxVecSize>
+template <size_t blocksize, size_t numVecs, size_t minVecSize,
+          size_t maxVecSize>
 void testRandomInts() {
   auto generateRandomVec =
       [gen = ad_utility::FastRandomIntGenerator<uint64_t>{},
@@ -46,7 +48,7 @@ void testRandomInts() {
   std::vector<size_t> result;
   std::ranges::copy(std::views::join(ad_utility::OwningView{
                         ad_utility::parallelMultiwayMerge<size_t, false>(
-                            5, input, std::less<>{})}),
+                            1_GB, blocksize, input, std::less<>{})}),
                     std::back_inserter(result));
 
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
@@ -58,18 +60,18 @@ TEST(ParallelMultiwayMerge, binaryMerge) {
   using V = std::vector<size_t>;
   V v1{1, 3, 5};
   V v2{2, 4, 6};
-  auto result = join(parallelMultiwayMerge<size_t, false>(3, std::array{v1, v2},
-                                                          std::less<>{}));
+  auto result = join(parallelMultiwayMerge<size_t, false>(
+      1_GB, 3, std::array{v1, v2}, std::less<>{}));
   EXPECT_THAT(result, ::testing::ElementsAre(1, 2, 3, 4, 5, 6));
 
   v2 = V{};
-  result = join(parallelMultiwayMerge<size_t, false>(3, std::array{v1, v2},
-                                                     std::less<>{}));
+  result = join(parallelMultiwayMerge<size_t, false>(
+      1_GB, 3, std::array{v1, v2}, std::less<>{}));
   EXPECT_THAT(result, ::testing::ElementsAre(1, 3, 5));
 
   std::swap(v1, v2);
-  result = join(parallelMultiwayMerge<size_t, false>(3, std::array{v1, v2},
-                                                     std::less<>{}));
+  result = join(parallelMultiwayMerge<size_t, false>(
+      1_GB, 3, std::array{v1, v2}, std::less<>{}));
   EXPECT_THAT(result, ::testing::ElementsAre(1, 3, 5));
 }
 
@@ -81,30 +83,30 @@ TEST(ParallelMultiwayMerge, moveOfElements) {
   auto& [v1, v2] = arr;
   EXPECT_THAT(v1, ::testing::ElementsAre("alphaalpha", "deltadelta"));
   EXPECT_THAT(v2, ::testing::ElementsAre("betabeta", "epsilonepsilon"));
-  auto result =
-      join(parallelMultiwayMerge<std::string, false>(3, arr, std::less<>{}));
+  auto result = join(
+      parallelMultiwayMerge<std::string, false>(1_GB, 3, arr, std::less<>{}));
   EXPECT_THAT(result, ::testing::ElementsAre("alphaalpha", "betabeta",
                                              "deltadelta", "epsilonepsilon"));
 
-  // the strings weren't moved;
+  // The strings weren't moved.
   EXPECT_THAT(v1, ::testing::ElementsAre("alphaalpha", "deltadelta"));
   EXPECT_THAT(v2, ::testing::ElementsAre("betabeta", "epsilonepsilon"));
 
   result.clear();
-  result =
-      join(parallelMultiwayMerge<std::string, true>(3, arr, std::less<>{}));
+  result = join(
+      parallelMultiwayMerge<std::string, true>(1_GB, 3, arr, std::less<>{}));
   EXPECT_THAT(result, ::testing::ElementsAre("alphaalpha", "betabeta",
                                              "deltadelta", "epsilonepsilon"));
 
-  // The vectors were moved;
+  // The vectors were moved.
   EXPECT_TRUE(v1.empty());
   EXPECT_TRUE(v2.empty());
 }
 
 // _______________________________________________________________________________________________
 TEST(ParallelMultiwayMerge, randomInputs) {
-  testRandomInts<2000, 20, 50>();
-  testRandomInts<1, 40, 40>();
-  testRandomInts<2, 40, 50>();
-  testRandomInts<3, 30, 50>();
+  testRandomInts<12, 2000, 20, 50>();
+  testRandomInts<13, 1, 40, 40>();
+  testRandomInts<5, 2, 40, 50>();
+  testRandomInts<1, 3, 30, 50>();
 }

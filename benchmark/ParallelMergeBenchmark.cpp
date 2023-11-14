@@ -11,7 +11,7 @@
 
 namespace ad_benchmark {
 
-class ParallelMergeBenchmark : public BenchmarkInterface {
+class IdTableCompressedWriterBenchmark : public BenchmarkInterface {
   std::string name() const final {
     return "Benchmarks for parallel multiway merging";
   }
@@ -35,11 +35,11 @@ class ParallelMergeBenchmark : public BenchmarkInterface {
     inputs.resize(numInputs);
     std::ranges::generate(inputs, generateRandomVec);
 
-    auto run = [&]() {
+    auto run = [&inputs]() {
       auto merger = ad_utility::parallelMultiwayMerge<size_t, false>(
-          500, inputs, std::less<>{});
+          4_GB, 500, inputs, std::less<>{});
       size_t result{};
-      for (auto& i : merger) {
+      for (const auto& i : merger) {
         for (auto el : i) {
           result += el;
         }
@@ -51,5 +51,5 @@ class ParallelMergeBenchmark : public BenchmarkInterface {
     return results;
   }
 };
-AD_REGISTER_BENCHMARK(ParallelMergeBenchmark);
+AD_REGISTER_BENCHMARK(IdTableCompressedWriterBenchmark);
 }  // namespace ad_benchmark
