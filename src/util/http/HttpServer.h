@@ -166,13 +166,13 @@ class HttpServer {
         // thread sanitizer happy. The reason is, that the thread of execution
         // specified by the coroutine might change threads as the coroutine is
         // suspended and then resumed.
-        auto coroExecutor = co_await net::this_coro::executor;
-        auto socket = co_await acceptor_.async_accept(
-            coroExecutor, boost::asio::use_awaitable);
+        auto strand = net::make_strand(ioContext_);
+        auto socket =
+            co_await acceptor_.async_accept(strand, boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
         // TODO<joka921> For some reason the thread sanitizer complains here,
         // but we currently need it to prevent blocking.
-        net::co_spawn(ioContext_, session(std::move(socket)), net::detached);
+        net::co_spawn(strand, session(std::move(socket)), net::detached);
       } catch (const boost::system::system_error& b) {
         // If the server is shut down this will cause operations to abort.
         // This will most likely only happen in tests, but could also occur
