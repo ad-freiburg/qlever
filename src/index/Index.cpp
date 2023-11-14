@@ -222,7 +222,9 @@ void Index::setKeepTempFiles(bool keepTempFiles) {
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize& Index::memoryLimitIndexBuilding() { return pimpl_->memoryLimitIndexBuilding(); }
+ad_utility::MemorySize& Index::memoryLimitIndexBuilding() {
+  return pimpl_->memoryLimitIndexBuilding();
+}
 
 // ____________________________________________________________________________
 uint64_t& Index::blocksizePermutationsInBytes() {

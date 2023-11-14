@@ -359,8 +359,12 @@ class IndexImpl {
 
   void setKeepTempFiles(bool keepTempFiles);
 
-  ad_utility::MemorySize& memoryLimitIndexBuilding() { return memoryLimitIndexBuilding_; }
-  const ad_utility::MemorySize& memoryLimitIndexBuilding() const { return memoryLimitIndexBuilding_; }
+  ad_utility::MemorySize& memoryLimitIndexBuilding() {
+    return memoryLimitIndexBuilding_;
+  }
+  const ad_utility::MemorySize& memoryLimitIndexBuilding() const {
+    return memoryLimitIndexBuilding_;
+  }
 
   uint64_t& blocksizePermutationInBytes() {
     return blocksizePermutationInBytes_;

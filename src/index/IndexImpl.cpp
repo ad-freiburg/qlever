@@ -178,7 +178,8 @@ void IndexImpl::createFromFile(const string& filename) {
 
   ExternalSorter<SortBySPO> spoSorter{
       onDiskBase_ + ".spo-sorter.dat",
-      memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME, allocator_};
+      memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
+      allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
   auto uniqueSorter = ad_utility::uniqueView<decltype(psoSorter.sortedView()),
@@ -198,7 +199,8 @@ void IndexImpl::createFromFile(const string& filename) {
     // After the SPO permutation, create patterns if so desired.
     ExternalSorter<SortByOSP> ospSorter{
         onDiskBase_ + ".osp-sorter.dat",
-        memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME, allocator_};
+        memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
+        allocator_};
     size_t numSubjectsNormal = 0;
     auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
     if (usePatterns_) {
@@ -439,7 +441,8 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
   // Iterate over all partial vocabularies.
   auto resultPtr = std::make_unique<PsoSorter>(
       onDiskBase_ + ".pso-sorter.dat",
-      memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME, allocator_);
+      memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
+      allocator_);
   auto& result = *resultPtr;
   size_t i = 0;
   auto triplesGenerator = data.getRows();
@@ -450,12 +453,17 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
 
   ad_utility::TaskQueue<true> lookupQueue(30, 10,
                                           "looking up local to global IDs");
+  // This queue will be used to push the converted triples to the sorter. It is
+  // important that it has only one thread because it will not be used in a
+  // thread-safe way.
   ad_utility::TaskQueue<true> writeQueue(30, 1, "Writing global Ids to file");
 
   // For all triple elements find their mapping from partial to global ids.
   auto transformTriple = [](Triple& curTriple, auto& idMap) {
     for (auto& id : curTriple) {
-      // TODO<joka921> The Maps should actually store `VocabIndex`es
+      // TODO<joka92> Since the mapping only maps `VocabIndex->VocabIndex`,
+      // probably the mapping should also be defined as `HashMap<VocabIndex,
+      // VocabIndex>` instead of `HashMap<Id, Id>`
       if (id.getDatatype() != Datatype::VocabIndex) {
         continue;
       }
@@ -534,8 +542,8 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
       buffer.reserve(bufferSize);
     };
     // Update the triples that belong to this partial vocabulary.
-    for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[batchIdx];
-         ++tmpNum) {
+    for ([[maybe_unused]] auto idx :
+         ad_utility::integerRange(actualLinesPerPartial[batchIdx])) {
       buffer.push_back(*it);
       if (buffer.size() >= bufferSize) {
         pushBatch();
