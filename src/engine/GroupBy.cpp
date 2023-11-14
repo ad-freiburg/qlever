@@ -685,6 +685,7 @@ bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
 // _____________________________________________________________________________
 bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
   if (computeGroupByForSingleIndexScan(result)) {
+    // asdas
     return true;
   } else if (computeGroupByForFullIndexScan(result)) {
     return true;
