@@ -693,8 +693,7 @@ TEST(QueryPlannerTest, threeVarTriplesTCJ) {
       "SELECT ?s ?p ?o WHERE {"
       "?s ?p ?o . ?s ?p <x> }",
       h::MultiColumnJoin(h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}),
-                         h::IndexScan(Var{"?s"}, Var{"?p"}, "<x>")),
-      qec);
+                         h::IndexScan(Var{"?s"}, Var{"?p"}, "<x>")));
 }
 
 TEST(QueryPlannerTest, threeVarXthreeVarException) {
@@ -1193,44 +1192,6 @@ TEST(QueryPlannerTest, TransitivePathBindRight) {
           scan("?y", "<p>", "<o>"),
           scan("?_qlever_internal_variable_query_planner_0", "<p>",
                "?_qlever_internal_variable_query_planner_1")));
-}
-
-TEST(QueryPlannerTest, TransitivePathLeftBoundRightId) {
-  auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<s> <p> <o>");
-
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 1, getId("<o>"), 1};
-  h::expect(
-      "SELECT ?x ?y WHERE {"
-      "<s> <p> ?x."
-      "?x <p>* <o> }",
-      h::TransitivePath(
-          left, right, 0, std::numeric_limits<size_t>::max(),
-          scan("<s>", "<p>", "?x"),
-          scan("?_qlever_internal_variable_query_planner_0", "<p>",
-               "?_qlever_internal_variable_query_planner_1")),
-      qec);
-}
-
-TEST(QueryPlannerTest, TransitivePathRightBoundLeftId) {
-  auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<s> <p> <o>");
-
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  TransitivePathSide left{std::nullopt, 0, getId("<s>"), 0};
-  TransitivePathSide right{std::nullopt, 1, Variable("?x"), 1};
-  h::expect(
-      "SELECT ?x ?y WHERE {"
-      "<s> <p>* ?x."
-      "?x <p> <o> }",
-      h::TransitivePath(
-          left, right, 0, std::numeric_limits<size_t>::max(),
-          scan("?x", "<p>", "<o>"),
-          scan("?_qlever_internal_variable_query_planner_0", "<p>",
-               "?_qlever_internal_variable_query_planner_1")),
-      qec);
 }
 
 // __________________________________________________________________________

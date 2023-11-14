@@ -98,20 +98,7 @@ class TransitivePath : public Operation {
   std::shared_ptr<TransitivePath> bindRightSide(
       std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const;
 
-  /**
-   * @brief Return true if one of the sides was bound.
-   * Bound does **not** refer to a TransitivePath which has an Id on one side.
-   * Instead, a TransitivePath is only called "bound", iff. it has been bound
-   * by using the bindLeftOrRightSide function. This is important for the
-   * QueryPlanner, as it needs the isBound function to decide whether to bind
-   * a TransitivePath or not. If one side of the TransitivePath is an Id, then
-   * the other side may be bound. Also, it is not possible to bind a side
-   * which has an Id.
-   *
-   * @return true The TransitivePath has a bound side
-   * @return false The TransitivePath does not have a bound side
-   */
-  bool isBound() const;
+  bool isBoundOrId() const;
 
   /**
    * Getters, mainly necessary for testing

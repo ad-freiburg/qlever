@@ -238,7 +238,8 @@ void TransitivePath::computeTransitivePath(
 
 // _____________________________________________________________________________
 ResultTable TransitivePath::computeResult() {
-  if (_minDist == 0 && !isBound() && _lhs.isVariable() && _rhs.isVariable()) {
+  if (_minDist == 0 && !isBoundOrId() && _lhs.isVariable() &&
+      _rhs.isVariable()) {
     AD_THROW(
         "This query might have to evalute the empty path, which is currently "
         "not supported");
@@ -252,7 +253,8 @@ ResultTable TransitivePath::computeResult() {
   size_t subWidth = subRes->idTable().numColumns();
 
   auto computeForOneSide = [this, &idTable, subRes, subWidth](
-                               auto boundSide, auto otherSide) -> ResultTable {
+                               auto& boundSide,
+                               auto& otherSide) -> ResultTable {
     shared_ptr<const ResultTable> sideRes =
         boundSide.treeAndCol.value().first->getResult();
     size_t sideWidth = sideRes->idTable().numColumns();
@@ -263,8 +265,7 @@ ResultTable TransitivePath::computeResult() {
                     sideRes->idTable());
 
     return {std::move(idTable), resultSortedOn(),
-            subRes->getSharedLocalVocabFromNonEmptyOf(*sideRes,
-                                                      *subRes)};
+            subRes->getSharedLocalVocabFromNonEmptyOf(*sideRes, *subRes)};
   };
 
   if (_lhs.isBoundVariable()) {
@@ -344,8 +345,9 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
 }
 
 // _____________________________________________________________________________
-bool TransitivePath::isBound() const {
-  return _lhs.isBoundVariable() || _rhs.isBoundVariable();
+bool TransitivePath::isBoundOrId() const {
+  return _lhs.isBoundVariable() || _rhs.isBoundVariable() ||
+         !_lhs.isVariable() || !_rhs.isVariable();
 }
 
 // _____________________________________________________________________________

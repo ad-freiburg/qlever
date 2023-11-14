@@ -853,141 +853,25 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
     const TripleComponent& right) {
   AD_CORRECTNESS_CHECK(path._children.size() > 1);
 
-  // Split the child paths into groups that can not be null (have at least one
-  // node that can not be null). If all children can be null create a single
-  // group.
-  std::vector<std::array<size_t, 2>> nonNullChunks;
-  size_t start = 0;
-  while (start < path._children.size()) {
-    bool has_non_null = false;
-    bool has_null = false;
-    size_t end = start;
-    for (end = start; end < path._children.size(); end++) {
-      if (path._children[end]._can_be_null) {
-        has_null = true;
-      } else {
-        if (has_null && has_non_null) {
-          // We already have a non null node and we have the maximum
-          // number of null nodes while using the least possible number of
-          // non null nodes (for a greedy approach)
-          --end;
-          break;
-        }
-        has_non_null = true;
-      }
+  auto joinPattern = ParsedQuery::GraphPattern{};
+  TripleComponent innerLeft = left;
+  TripleComponent innerRight = generateUniqueVarName();
+  for (size_t i = 0; i < path._children.size(); i++) {
+    auto child = path._children[i];
+
+    if (i == path._children.size() - 1) {
+      innerRight = right;
     }
-    bool wasAtEnd = false;
-    if (end == path._children.size()) {
-      --end;
-      wasAtEnd = true;
-    }
-    if (wasAtEnd && nonNullChunks.size() > 0 && !has_non_null) {
-      // Avoid creating an empty chunk by expanding the previous one
-      nonNullChunks.back()[1] = end + 1;
-    } else {
-      nonNullChunks.push_back({start, end + 1});
-    }
-    start = end + 1;
+
+    auto pattern = seedFromPropertyPath(innerLeft, child, innerRight);
+    joinPattern._graphPatterns.insert(joinPattern._graphPatterns.end(),
+                                      pattern->_graphPatterns.begin(),
+                                      pattern->_graphPatterns.end());
+    innerLeft = innerRight;
+    innerRight = generateUniqueVarName();
   }
 
-  // Stores the pattern for every non null chunk
-  std::vector<ParsedQuery::GraphPattern> chunkPatterns;
-  chunkPatterns.reserve(nonNullChunks.size());
-
-  for (size_t chunkIdx = 0; chunkIdx < nonNullChunks.size(); ++chunkIdx) {
-    std::array<size_t, 2> chunk = nonNullChunks[chunkIdx];
-    size_t numChildren = chunk[1] - chunk[0];
-
-    // This vector maps the indices of child paths that can be null
-    // to a bit in a bitmask. This information is later used
-    // on to create a union over every possible combination of including and
-    // excluding the child paths that can be null.
-    std::vector<size_t> null_child_indices(numChildren, -1);
-    size_t num_null_children = 0;
-
-    for (size_t i = chunk[0]; i < chunk[1]; i++) {
-      if (path._children[i]._can_be_null) {
-        null_child_indices[i] = num_null_children;
-        ++num_null_children;
-      }
-    }
-    if (num_null_children > 10) {
-      AD_THROW(
-          "More than 10 consecutive children of a sequence path that can be "
-          "null are "
-          "not yet supported.");
-    }
-
-    // We need a union over every combination of joins that exclude any subset
-    // the child paths which are marked as can_be_null.
-    std::vector<ParsedQuery::GraphPattern> join_patterns;
-    join_patterns.reserve((1 << num_null_children));
-
-    std::vector<size_t> included_ids(numChildren);
-    for (uint64_t bitmask = 0; bitmask < (size_t(1) << num_null_children);
-         ++bitmask) {
-      included_ids.clear();
-      for (size_t i = chunk[0]; i < chunk[1]; i++) {
-        if (!path._children[i]._can_be_null ||
-            (bitmask & (1 << null_child_indices[i])) > 0) {
-          included_ids.push_back(i);
-        }
-      }
-      // Avoid creating an empty graph pattern
-      if (included_ids.empty()) {
-        continue;
-      }
-      TripleComponent l = left;
-      TripleComponent r;
-      if (included_ids.size() > 1) {
-        r = generateUniqueVarName();
-      } else {
-        r = right;
-      }
-
-      // Merge all the child plans into one graph pattern
-      // excluding those that can be null and are not marked in the bitmask
-      auto p = ParsedQuery::GraphPattern{};
-      for (size_t i = 0; i < included_ids.size(); i++) {
-        std::shared_ptr<ParsedQuery::GraphPattern> child =
-            seedFromPropertyPath(l, path._children[included_ids[i]], r);
-        p._graphPatterns.insert(p._graphPatterns.end(),
-                                child->_graphPatterns.begin(),
-                                child->_graphPatterns.end());
-        // Update the variables used on the left and right of the child path
-        l = r;
-        if (i + 2 < included_ids.size()) {
-          r = generateUniqueVarName();
-        } else {
-          r = right;
-        }
-      }
-      join_patterns.push_back(p);
-    }
-
-    if (join_patterns.size() == 1) {
-      chunkPatterns.push_back(std::move(join_patterns[0]));
-    } else {
-      chunkPatterns.push_back(uniteGraphPatterns(std::move(join_patterns)));
-    }
-  }
-
-  if (chunkPatterns.size() == 1) {
-    // todo<joka921> also remove these shared_ptrs
-    return std::make_shared<ParsedQuery::GraphPattern>(chunkPatterns[0]);
-  }
-
-  // Join the chunk patterns
-  std::shared_ptr<ParsedQuery::GraphPattern> fp =
-      std::make_shared<ParsedQuery::GraphPattern>();
-
-  for (ParsedQuery::GraphPattern& p : chunkPatterns) {
-    fp->_graphPatterns.insert(fp->_graphPatterns.begin(),
-                              std::make_move_iterator(p._graphPatterns.begin()),
-                              std::make_move_iterator(p._graphPatterns.end()));
-  }
-
-  return fp;
+  return std::make_shared<ParsedQuery::GraphPattern>(joinPattern);
 }
 
 // _____________________________________________________________________________
@@ -1967,7 +1851,7 @@ auto QueryPlanner::createJoinWithTransitivePath(
   const size_t otherCol = aIsTransPath ? jcs[0][1] : jcs[0][0];
   const size_t thisCol = aIsTransPath ? jcs[0][0] : jcs[0][1];
   // Do not bind the side of a path twice
-  if (transPathOperation->isBound()) {
+  if (transPathOperation->isBoundOrId()) {
     return std::nullopt;
   }
   // An unbound transitive path has at most two columns.
