@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <vector>
 
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -22,7 +23,6 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
-#include "engine/idTable/CompressedExternalIdTable.h"
 
 // Forward declaration of the `IdTable` class.
 class IdTable;
@@ -159,13 +159,17 @@ class CompressedRelationWriter {
   ad_utility::File outfile_;
   std::vector<CompressedBlockMetadata> blockBuffer_;
   CompressedBlockMetadata currentBlockData_;
-  ad_utility::AllocatorWithLimit<Id> allocator_ = ad_utility::makeUnlimitedAllocator<Id>();
+  ad_utility::AllocatorWithLimit<Id> allocator_ =
+      ad_utility::makeUnlimitedAllocator<Id>();
   SmallRelationsBuffer previousSmallRelationsBuffer_{allocator_};
   SmallRelationsBuffer currentRelationsBuffer_{allocator_};
   bool currentRelationHasExclusiveBlock = false;
   size_t numBytesPerBlock_;
 
   Id currentRelation_ = Id::makeUndefined();
+  size_t currentRelationPreviousSize_ = 0;
+
+  std::vector<CompressedRelationMetadata> finishedMetadata_;
 
  public:
   /// Create using a filename, to which the relation data will be written.
@@ -173,6 +177,9 @@ class CompressedRelationWriter {
       : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock} {}
 
   void addBlock(IdTableView<3> block);
+  void addBlockForRelation(Id col0Id, IdTableView<0> otherIds);
+  std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> writeBlock(
+      IdTableView<0> buffer, size_t numRows);
   /**
    * Add a complete (single) relation.
    *
@@ -192,7 +199,6 @@ class CompressedRelationWriter {
   CompressedRelationMetadata addRelation(Id col0Id,
                                          const BufferedIdTable& col1And2Ids,
                                          size_t numDistinctCol1);
-
 
   /// Get all the CompressedBlockMetaData that were created by the calls to
   /// addRelation. This also closes the writer. The typical workflow is:
@@ -214,14 +220,17 @@ class CompressedRelationWriter {
  private:
   /// Finish writing all relations which have previously been added, but might
   /// still be in some internal buffer.
+ public:
   void finish() {
+    finishCurrentRelation();
     writeBufferedRelationsToSingleBlock();
     outfile_.close();
   }
 
-  // Compress the contents of `previousSmallRelationsBuffer_` into a single block and write it to
-  // outfile_. Update `currentBlockData_` with the meta data of the written
-  // block. Then clear `previousSmallRelationsBuffer_`.
+ private:
+  // Compress the contents of `previousSmallRelationsBuffer_` into a single
+  // block and write it to outfile_. Update `currentBlockData_` with the meta
+  // data of the written block. Then clear `previousSmallRelationsBuffer_`.
   void writeBufferedRelationsToSingleBlock();
 
   // Compress the relation from `data` into one or more blocks, depending on
@@ -233,6 +242,18 @@ class CompressedRelationWriter {
   // size of the compressed column in the `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
       std::span<const Id> column);
+
+ public:
+  // TODO<joka921> make most private, document, etc.
+  size_t writeSmallRelation(Id col0Id, IdTableView<0> buf, size_t start,
+                            size_t end);
+  size_t writeExclusiveBlocksForRelation(Id col0Id, IdTableView<0> buf,
+                                         size_t start, size_t end);
+  void writeCompleteRelation(Id col0Id, IdTableView<0> buf, size_t start,
+                             size_t end);
+  void finishCurrentRelation();
+  void addBlockToCurrentRelation(IdTableView<0> buf, size_t begin, size_t end);
+  std::vector<CompressedRelationMetadata> moveFinishedMetadata();
 };
 
 using namespace std::string_view_literals;

@@ -577,6 +577,17 @@ class CompressedExternalIdTableSorter
     AD_CORRECTNESS_CHECK(numYielded == this->numElementsPushed_);
     mergeIsActive_.store(false);
   }
+  // Transition from the input phase, where `push()` may be called, to the
+  // output phase and return a generator that yields the sorted elements. This
+  // function may be called exactly once.
+  cppcoro::generator<IdTableStatic<NumStaticCols>> getSortedBlocks() {
+    mergeIsActive_.store(true);
+    for (auto& block : ad_utility::streams::runStreamAsync(
+             sortedBlocks(), std::max(1, numBufferedOutputBlocks_ - 2))) {
+      co_yield block;
+    }
+    mergeIsActive_.store(false);
+  }
 
  private:
   // Transition from the input phase, where `push()` may be called, to the

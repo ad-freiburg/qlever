@@ -513,24 +513,37 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
   std::optional<Id> currentRel;
-  BufferedIdTable buffer{
-      2,
-      std::array{
-          ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                         fileName1 + ".tmp.mmap-buffer-col0"},
-          ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                         fileName1 + ".tmp.mmap-buffer-col1"}}};
+  auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
+  IdTable buffer{2, alloc};
+  auto compare = [](const auto& a, const auto& b) {
+    return std::ranges::lexicographical_compare(a, b);
+  };
+  ad_utility::CompressedExternalIdTableSorter<decltype(compare), 2> sorter(
+      fileName1 + ".switched-sorter", 4_GB, alloc);
   size_t distinctCol1 = 0;
   Id lastLhs = ID_NO_VALUE;
   uint64_t totalNumTriples = 0;
-  auto addCurrentRelation = [&metaData1, &metaData2, &writer1, &writer2,
-                             &currentRel, &buffer, &distinctCol1]() {
-    auto md1 = writer1.addRelation(currentRel.value(), buffer, distinctCol1);
-    auto md2 = writeSwitchedRel(&writer2, currentRel.value(), &buffer);
-    md1.setCol2Multiplicity(md2.getCol1Multiplicity());
-    md2.setCol2Multiplicity(md1.getCol1Multiplicity());
-    metaData1.add(md1);
-    metaData2.add(md2);
+  auto addBlockForRelation = [&metaData1, &metaData2, &writer1, &writer2,
+                              &currentRel, &buffer, &distinctCol1]() {
+    writer1.addBlockForRelation(currentRel.value(), buffer.asStaticView<0>());
+    buffer.clear();
+  };
+  auto finishRelation = [&metaData1, &metaData2, &sorter, &writer2, &writer1,
+                         &currentRel, &buffer, &distinctCol1,
+                         &addBlockForRelation, this]() {
+    addBlockForRelation();
+    writeSwitchedRel(&writer2, currentRel.value(), sorter.getSortedBlocks());
+    sorter.clear();
+    auto mds1 = writer1.moveFinishedMetadata();
+    auto mds2 = writer2.moveFinishedMetadata();
+
+    // TODO<joka921> exchange the multiplicities etc.
+    for (auto md1 : mds1) {
+      metaData1.add(md1);
+    }
+    for (auto md2 : mds2) {
+      metaData2.add(md2);
+    }
   };
   for (const auto& triple : AD_FWD(sortedTriples)) {
     if (!currentRel.has_value()) {
@@ -540,18 +553,34 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     (..., perTripleCallbacks(triple));
     ++totalNumTriples;
     if (triple[c0] != currentRel) {
-      addCurrentRelation();
-      buffer.clear();
+      finishRelation();
       distinctCol1 = 1;
       currentRel = triple[c0];
     } else {
       distinctCol1 += triple[c1] != lastLhs;
     }
     buffer.push_back(std::array{triple[c1], triple[c2]});
+    sorter.push(std::array{triple[c2], triple[c1]});
     lastLhs = triple[c1];
+    if (buffer.size() > 1'000'000) {
+      addBlockForRelation();
+    }
   }
   if (from < totalNumTriples) {
-    addCurrentRelation();
+    finishRelation();
+  }
+
+  writer1.finish();
+  writer2.finish();
+  auto mds1 = writer1.moveFinishedMetadata();
+  auto mds2 = writer2.moveFinishedMetadata();
+
+  // TODO<joka921> exchange the multiplicities etc.
+  for (auto md1 : mds1) {
+    metaData1.add(md1);
+  }
+  for (auto md2 : mds2) {
+    metaData2.add(md2);
   }
 
   metaData1.blockData() = std::move(writer1).getFinishedBlocks();
@@ -561,31 +590,24 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
 }
 
 // __________________________________________________________________________
-CompressedRelationMetadata IndexImpl::writeSwitchedRel(
-    CompressedRelationWriter* out, Id currentRel, BufferedIdTable* bufPtr) {
-  // Sort according to the "switched" relation.
-  // TODO<joka921> The swapping is rather inefficient, as we have to iterate
-  // over the whole file. Maybe the `CompressedRelationWriter` should take
-  // the switched relations directly.
-  auto& buffer = *bufPtr;
-
-  AD_CONTRACT_CHECK(buffer.numColumns() == 2);
-  for (BufferedIdTable::row_reference row : buffer) {
-    std::swap(row[0], row[1]);
-  }
-  // std::ranges::sort(buffer, [](const auto& a, const auto& b) {
-  std::ranges::sort(buffer.begin(), buffer.end(),
-                    [](const auto& a, const auto& b) {
-                      return std::ranges::lexicographical_compare(a, b);
-                    });
+void IndexImpl::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
+                                 auto&& sortedBlocks) {
+  // AD_CONTRACT_CHECK(buffer.numColumns() == 2);
   Id lastLhs = std::numeric_limits<Id>::max();
 
+  for (auto& block : sortedBlocks) {
+    out->addBlockForRelation(currentRel, block.template asStaticView<0>());
+  }
+
+  // TODO<joka921> handle the multiplicity computation.
+  /*
   size_t distinctC1 = 0;
   for (const auto& el : buffer.getColumn(0)) {
     distinctC1 += el != lastLhs;
     lastLhs = el;
   }
   return out->addRelation(currentRel, buffer, distinctC1);
+   */
 }
 
 // ________________________________________________________________________
