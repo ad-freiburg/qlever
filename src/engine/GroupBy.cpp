@@ -316,7 +316,17 @@ ResultTable GroupBy::computeResult() {
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   }
 
-  std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
+  // Check if optimization for sorted join can be applied
+  auto sortedJoinParams = checkIfSortedJoin();
+
+  std::shared_ptr<const ResultTable> subresult;
+  if (sortedJoinParams.has_value()) {
+    // Skip sorting
+    subresult = _subtree->getRootOperation()->getChildren().at(0)->getResult();
+  } else {
+    subresult = _subtree->getResult();
+  }
+
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
   // Make a deep copy of the local vocab from `subresult` and then add to it (in
@@ -362,6 +372,12 @@ ResultTable GroupBy::computeResult() {
 
   size_t inWidth = subresult->idTable().numColumns();
   size_t outWidth = idTable.numColumns();
+
+  if (sortedJoinParams.has_value()) {
+    computeGroupByForSortedSubtree(&idTable, outWidth, aggregates, subresult,
+                                   sortedJoinParams->subtreeColumnIndex_, localVocab);
+    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+  }
 
   CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
                   subresult->idTable(), groupByCols, aggregates, &idTable,
@@ -672,75 +688,114 @@ bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
     return true;
   } else if (computeGroupByForFullIndexScan(result)) {
     return true;
-  } else if (computeGroupByForJoinWithFullScan(result)) {
-    return true;
   } else {
-    return computeGroupByForSortedSubtree(result);
+    return computeGroupByForJoinWithFullScan(result);
   }
 }
 
 // _____________________________________________________________________________
 std::optional<GroupBy::SortedJoinData>
-    GroupBy::checkIfSortedJoin(const Sort* sort) {
+    GroupBy::checkIfSortedJoin() {
+  auto* sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
+  if (!sort) {
+    return std::nullopt;
+  }
+
+  auto child = _subtree->getRootOperation()->getChildren().at(0);
+  auto* join = dynamic_cast<const Join*>(child->getRootOperation().get());
+  if (!join) {
+    return std::nullopt;
+  }
+
   if (_groupByVariables.size() != 1) {
     return std::nullopt;
   }
   const Variable& groupByVariable = _groupByVariables.front();
 
-  // This seems very strange, we already have join, so can't we extract
-  // the column from this?
-  auto* child = static_cast<const Operation*>(sort)->getChildren().at(0);
   auto columnIndex = child->getVariableColumn(groupByVariable);
 
   return SortedJoinData{ columnIndex };
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeGroupByForSortedSubtree(IdTable* result) {
-  auto sort = dynamic_cast<Sort*>(_subtree->getRootOperation().get());
-  if (!sort) {
-    return false;
+template <size_t OUT_WIDTH>
+void GroupBy::processGroups(IdTable* result, std::map<ValueId, IdTable>& columnMap,
+                            const std::vector<Aggregate>& aggregates, LocalVocab* localVocab) {
+  IdTableStatic<OUT_WIDTH> idTable = std::move(*result).toStatic<OUT_WIDTH>();
+
+  auto numRows = columnMap.size();
+  idTable.resize(numRows);
+
+  auto rowIdx = 0;
+
+  for (auto it = columnMap.begin(); it != columnMap.end();
+       ++it) {
+    // process Group
+    auto table = std::move(it->second);
+
+    auto blockStart = 0;
+    auto blockEnd = table.numRows();
+
+    idTable.at(rowIdx, 0) = it->first;
+
+    sparqlExpression::EvaluationContext evaluationContext(
+        *getExecutionContext(), _subtree->getVariableColumns(), table,
+        blockStart, blockEnd, getExecutionContext()->getAllocator(), *localVocab);
+
+    evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
+        _groupByVariables.begin(), _groupByVariables.end()};
+    evaluationContext._variableToColumnMapPreviousResults =
+        getInternallyVisibleVariableColumns();
+    evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
+    evaluationContext._isPartOfGroupBy = true;
+
+    for (const GroupBy::Aggregate& a : aggregates) {
+      processGroup<OUT_WIDTH>(
+          a, evaluationContext, blockStart, blockEnd,
+          &idTable, rowIdx, a._outCol, localVocab
+      );
+    }
+
+    rowIdx++;
   }
 
-  // Can the child be something other than Join?
-  auto childOperation = sort->getChildren().at(0)->getRootOperation().get();
-  auto join = dynamic_cast<Join*>(childOperation);
-  if (!join) {
-    return false;
-  }
+  *result = std::move(idTable).toDynamic();
+}
 
-  auto sortedJoinData = checkIfSortedJoin(sort);
-  if (!sortedJoinData.has_value()) {
-    return false;
-  }
-  const auto [columnIndex] = sortedJoinData.value();
+// _____________________________________________________________________________
+bool GroupBy::computeGroupByForSortedSubtree(IdTable* result, size_t outWidth,
+                                             std::vector<Aggregate> aggregates,
+                                             const std::shared_ptr<const ResultTable>& subresult,
+                                             size_t columnIndex,
+                                             LocalVocab& localVocab) {
+  // Fill map
+  std::map<ValueId, IdTable> columnMap;
 
-  sort->updateRuntimeInformationWhenOptimizedOut({});
-  auto joinResult = join->getResult();
-  if (joinResult->idTable().size() == 0) {
-    return true;
-  }
+  for (size_t i = 0; i < subresult->idTable().size(); ++i) {
+    auto id = subresult->idTable()(i, columnIndex);
 
-  result->setNumColumns(2);
-  auto idTable = std::move(*result).toStatic<2>();
+    auto columns = subresult->idTable().at(i);
 
-  std::map<ValueId, int64_t> columnCountMap;
-  for (size_t i = 0; i < joinResult->idTable().size(); ++i) {
-    auto id = joinResult->idTable()(i, columnIndex);
-    if (columnCountMap.contains(id)) {
-      columnCountMap.at(id)++;
+    std::vector<ValueId> newRow;
+    for (size_t j = 0; j < columns.numColumns(); j++) {
+      newRow.push_back(columns[j]);
+    }
+
+    auto numColumns = columns.numColumns();
+
+    if (columnMap.contains(id)) {
+      columnMap.at(id).push_back(newRow);
     } else {
-      columnCountMap.insert(std::make_pair(id, 1));
+      IdTable newTable{numColumns, getExecutionContext()->getAllocator()};
+      newTable.push_back(newRow);
+      columnMap.insert({id, std::move(newTable)});
     }
   }
 
-  for (auto it = columnCountMap.begin(); it != columnCountMap.end();
-       ++it) {
-    idTable.push_back({it->first, Id::makeFromInt(it->second)});
-  }
+  // Process groups
+  CALL_FIXED_SIZE(outWidth, &GroupBy::processGroups, this, result,
+                  columnMap, aggregates, &localVocab);
 
-
-  *result = std::move(idTable).toDynamic();
   return true;
 }
 

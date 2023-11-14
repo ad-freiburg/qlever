@@ -159,7 +159,7 @@ class GroupBy : public Operation {
 
   // First, check if the query represented by this GROUP BY is of the following
   // form:
-  //  SELECT ?x (COUNT (?x) as ?cnt) WHERE {
+  //  SELECT ?x (AGG(?x) as ?agg) WHERE {
   //    %arbitrary graph pattern that contains ?x, and at least one of ?y and ?z
   //    %arbitrary graph pattern that contains at least one of ?y and ?z,
   //      but not ?x
@@ -167,16 +167,24 @@ class GroupBy : public Operation {
   // Note that `?x` can also appear in the second triple, but then may not
   // appear in the first. The key requirement for this optimization is that
   // the grouped-by variable is not a join column.
-  bool computeGroupByForSortedSubtree(IdTable* result);
+  bool computeGroupByForSortedSubtree(IdTable* result, size_t outWidth,
+                                      std::vector<Aggregate> aggregates,
+                                      const std::shared_ptr<const ResultTable>& subresult,
+                                      size_t columnIndex,
+                                      LocalVocab& localVocab);
 
   struct SortedJoinData {
     size_t subtreeColumnIndex_;
   };
 
+  template <size_t OUT_WIDTH>
+  void processGroups(IdTable* result, std::map<ValueId, IdTable>& columnMap,
+                     const std::vector<Aggregate>& aggregates, LocalVocab* localVocab);
+
   // Check if the previously described optimization can be applied. The argument
   // Must be the single subtree of this GROUP BY, properly cast to a `const
   // Sort*`.
-  std::optional<SortedJoinData> checkIfSortedJoin(const Sort* sort);
+  std::optional<SortedJoinData> checkIfSortedJoin();
 
   // The check whether the optimization just described can be applied and its
   // actual computation are split up in two functions. This struct contains
