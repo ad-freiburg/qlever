@@ -374,7 +374,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     m._noIdMapsAndIgnoreExternalVocab = true;
     auto mergeResult = m.mergeVocabulary(
         onDiskBase_ + TMP_BASENAME_COMPRESSION, numFiles, std::less<>(),
-        internalVocabularyActionCompression, stxxlMemory());
+        internalVocabularyActionCompression, memoryLimitIndexBuilding());
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
@@ -404,7 +404,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       wordWriter.push(word.data(), word.size());
     };
     return v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
-                             internalVocabularyAction, stxxlMemory());
+                             internalVocabularyAction,
+                             memoryLimitIndexBuilding());
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
