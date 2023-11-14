@@ -461,8 +461,7 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
       }
       auto iterator = idMap.find(id);
       if (iterator == idMap.end()) {
-        LOG(ERROR) << "Not found in partial vocabulary: " << curTriple[k]
-                   << std::endl;
+        LOG(ERROR) << "Not found in partial vocabulary: " << id << std::endl;
         AD_FAIL();
       }
       id = iterator->second;
@@ -498,10 +497,10 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
     };
   };
 
-
   std::atomic<size_t> nextPartialVocabulary = 0;
-  // Return the mapping from partial to global Ids for the batch with idx `nextPartialVocabulary` and increase that
-  // counter by one. Return `nullopt` if there are no more partial vocabularies to read.
+  // Return the mapping from partial to global Ids for the batch with idx
+  // `nextPartialVocabulary` and increase that counter by one. Return `nullopt`
+  // if there are no more partial vocabularies to read.
   auto createNextVocab = [&nextPartialVocabulary, &actualLinesPerPartial,
                           this]() -> std::optional<std::pair<size_t, Map>> {
     auto idx = nextPartialVocabulary.fetch_add(1, std::memory_order_relaxed);
@@ -515,7 +514,8 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
     return std::pair{idx, std::move(map)};
   };
 
-  // Set up a generator that yields all the mappings in order, but reads them in parallel.
+  // Set up a generator that yields all the mappings in order, but reads them in
+  // parallel.
   auto mappings = ad_utility::data_structures::queueManager<
       ad_utility::data_structures::OrderedThreadSafeQueue<Map>>(
       10, 5, createNextVocab);
@@ -528,7 +528,7 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
     static constexpr size_t bufferSize = 10'000;
     std::vector<Triple> buffer;
     buffer.reserve(bufferSize);
-    auto pushBatch = [&buffer, bufferSize, &idMap]() {
+    auto pushBatch = [&buffer, &idMap, &lookupQueue, &getLookupTask]() {
       lookupQueue.push(getLookupTask(std::move(buffer), idMap));
       buffer.clear();
       buffer.reserve(bufferSize);
