@@ -937,7 +937,12 @@ CompressedRelationWriter::writeBlock(IdTableView<0> buffer, size_t numRows) {
 size_t CompressedRelationWriter::writeSmallRelation(Id col0Id,
                                                     IdTableView<0> buf,
                                                     size_t start, size_t end) {
+  AD_CORRECTNESS_CHECK(end > start);
   auto offsetInBlock = previousSmallRelationsBuffer_.size();
+  if (previousSmallRelationsBuffer_.numRows() == 0) {
+    currentBlockData_.firstTriple_ = {col0Id, buf(start, 0), buf(start, 1)};
+  }
+  currentBlockData_.lastTriple_ = {col0Id, buf(end - 1, 0), buf(end - 1, 1)};
   previousSmallRelationsBuffer_.insertAtEnd(buf.begin() + start,
                                             buf.end() + end);
   size_t threshold = 100'000;  // TODO<joka921> compute generically.
@@ -961,6 +966,7 @@ size_t CompressedRelationWriter::writeExclusiveBlocksForRelation(
           {column.begin() + i, column.begin() + i + actualNumRowsPerBlock}));
     }
 
+    AD_CORRECTNESS_CHECK(!offsets.empty());
     blockBuffer_.push_back(
         CompressedBlockMetadata{std::move(offsets),
                                 actualNumRowsPerBlock,
@@ -1024,11 +1030,12 @@ void CompressedRelationWriter::addBlockToCurrentRelation(IdTableView<0> buf,
     writeBufferedRelationsToSingleBlock();
     const size_t numRowsPerBlock =
         numBytesPerBlock_ / (NumColumns * sizeof(Id));
-    auto numCompleteBlocks = currentRelationsBuffer_.size() % numRowsPerBlock;
+    auto numCompleteBlocks = currentRelationsBuffer_.size() / numRowsPerBlock;
     auto numRowsInCompleteBlocks = numCompleteBlocks * numRowsPerBlock;
     if (numRowsInCompleteBlocks > 0) {
-      writeExclusiveBlocksForRelation(currentRelation_, buf, 0,
-                                      numRowsInCompleteBlocks);
+      writeExclusiveBlocksForRelation(currentRelation_,
+                                      currentRelationsBuffer_.asStaticView<0>(),
+                                      0, numRowsInCompleteBlocks);
       currentRelationPreviousSize_ += numRowsInCompleteBlocks;
       currentRelationsBuffer_.erase(
           currentRelationsBuffer_.begin(),

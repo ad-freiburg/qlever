@@ -394,6 +394,14 @@ class CompressedExternalIdTableBase {
         });
   }
 
+ public:
+  auto& getTransformedSingleBlock() {
+    AD_CORRECTNESS_CHECK(numBlocksPushed_ == 0);
+    blockTransformation_(this->currentBlock_);
+    return this->currentBlock_;
+  }
+
+ protected:
   // If there is less than one complete block (meaning that the number of calls
   // to `push` was `< blocksize_`), apply the transformation to `currentBlock_`
   // and return `false`. Else, push the `currentBlock_` via `pushBlock_`, block

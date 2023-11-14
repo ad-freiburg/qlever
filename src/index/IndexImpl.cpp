@@ -515,6 +515,7 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   std::optional<Id> currentRel;
   auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
   IdTable buffer{2, alloc};
+  size_t numBlocksCurrentRel = 0;
   auto compare = [](const auto& a, const auto& b) {
     return std::ranges::lexicographical_compare(a, b);
   };
@@ -523,16 +524,29 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   size_t distinctCol1 = 0;
   Id lastLhs = ID_NO_VALUE;
   uint64_t totalNumTriples = 0;
-  auto addBlockForRelation = [&metaData1, &metaData2, &writer1, &writer2,
-                              &currentRel, &buffer, &distinctCol1]() {
+  auto addBlockForRelation = [&numBlocksCurrentRel, &metaData1, &metaData2,
+                              &writer1, &writer2, &currentRel, &buffer,
+                              &distinctCol1]() {
     writer1.addBlockForRelation(currentRel.value(), buffer.asStaticView<0>());
     buffer.clear();
+    ++numBlocksCurrentRel;
   };
   auto finishRelation = [&metaData1, &metaData2, &sorter, &writer2, &writer1,
-                         &currentRel, &buffer, &distinctCol1,
-                         &addBlockForRelation, this]() {
-    addBlockForRelation();
-    writeSwitchedRel(&writer2, currentRel.value(), sorter.getSortedBlocks());
+                         &numBlocksCurrentRel, &currentRel, &buffer,
+                         &distinctCol1, &addBlockForRelation, this]() {
+    if (numBlocksCurrentRel > 0) {
+      addBlockForRelation();
+      writeSwitchedRel(&writer2, currentRel.value(), sorter.getSortedBlocks());
+    } else {
+      writer1.writeCompleteRelation(currentRel.value(),
+                                    buffer.asStaticView<0>(), 0, buffer.size());
+      // Todo the blocksize might not be the same
+      writeSwitchedRel(
+          &writer2, currentRel.value(),
+          std::array{std::move(sorter.getTransformedSingleBlock())});
+    }
+    buffer.clear();
+    numBlocksCurrentRel = 0;
     sorter.clear();
     auto mds1 = writer1.moveFinishedMetadata();
     auto mds2 = writer2.moveFinishedMetadata();
@@ -545,6 +559,7 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
       metaData2.add(md2);
     }
   };
+  size_t i = 0;
   for (const auto& triple : AD_FWD(sortedTriples)) {
     if (!currentRel.has_value()) {
       currentRel = triple[c0];
@@ -564,6 +579,10 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     lastLhs = triple[c1];
     if (buffer.size() > 1'000'000) {
       addBlockForRelation();
+    }
+    ++i;
+    if (i % 1'000'000 == 0) {
+      LOG(INFO) << "Triples processed: " << i << std::endl;
     }
   }
   if (from < totalNumTriples) {
