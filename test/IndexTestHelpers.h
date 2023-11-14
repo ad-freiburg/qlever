@@ -24,7 +24,7 @@ inline Index makeIndexWithTestSettings() {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  index.stxxlMemory() = 50_MB;
+  index.memoryLimitIndexBuilding() = 50_MB;
   return index;
 }
 
