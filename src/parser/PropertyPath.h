@@ -24,8 +24,7 @@ class PropertyPath {
     ZERO_OR_ONE
   };
 
-  PropertyPath()
-      : _operation(Operation::IRI) {}
+  PropertyPath() : _operation(Operation::IRI) {}
   explicit PropertyPath(Operation op)
       : _operation(op), _iri(), _can_be_null(false) {
     if (op == Operation::ZERO_OR_MORE || op == Operation::ZERO_OR_ONE) {
