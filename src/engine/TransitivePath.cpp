@@ -383,7 +383,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
       positions.push_back(rootEdges->second.begin());
       edgeCache.push_back(&rootEdges->second);
     }
-    if (_minDist == 0) {
+    if (_minDist == 0 && (!target.has_value() || currentStartNode == target.value())) {
       hull[currentStartNode].insert(currentStartNode);
     }
 
