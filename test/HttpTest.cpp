@@ -11,6 +11,7 @@
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
+#include "util/jthread.h"
 
 using namespace ad_utility::httpUtils;
 using namespace boost::beast::http;
@@ -40,11 +41,14 @@ TEST(HttpServer, HttpTest) {
   httpServer.runInOwnThread();
 
   // Create a client, and send a GET and a POST request in one session.
+  // The constants in those test loops can be increased to find threading issues
+  // using the thread sanitizer. However, these constants can't be higher by
+  // default because the checks on GitHub actions will run forwever if they are.
   {
-    std::vector<std::jthread> threads;
-    for (size_t i = 0; i < 1; ++i) {
+    std::vector<ad_utility::JThread> threads;
+    for (size_t i = 0; i < 2; ++i) {
       threads.emplace_back([&]() {
-        for (size_t j = 0; j < 100; ++j) {
+        for (size_t j = 0; j < 5; ++j) {
           {
             HttpClient httpClient("localhost",
                                   std::to_string(httpServer.getPort()));
