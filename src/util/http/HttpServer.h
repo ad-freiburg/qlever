@@ -161,17 +161,14 @@ class HttpServer {
       try {
         // Wait for a request (the code only continues after we have received
         // and accepted a request).
-        // Note: Although a single session is conceptually single-threaded, we
-        // still have to manually schedule it on the `coroExecutor` to make the
-        // thread sanitizer happy. The reason is, that the thread of execution
-        // specified by the coroutine might change threads as the coroutine is
-        // suspended and then resumed.
+
+        // Although a coroutine is conceptually single-threaded we still
+        // schedule onto an explicit strand because the Websocket implementation
+        // expects a strand.
         auto strand = net::make_strand(ioContext_);
         auto socket =
             co_await acceptor_.async_accept(strand, boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
-        // TODO<joka921> For some reason the thread sanitizer complains here,
-        // but we currently need it to prevent blocking.
         net::co_spawn(strand, session(std::move(socket)), net::detached);
       } catch (const boost::system::system_error& b) {
         // If the server is shut down this will cause operations to abort.
