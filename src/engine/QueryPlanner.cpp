@@ -402,7 +402,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           // TODO<joka921> Refactor the `TransitivePath` class s.t. we don't
           // have to specify a `Variable` that isn't used at all in the case of
           // a fixed subject or object.
-          auto getSideValue = [this](TripleComponent& side) {
+          auto getSideValue = [this](const TripleComponent& side) {
             std::variant<Id, Variable> value;
             if (isVariable(side)) {
               value = Variable{side.getVariable()};

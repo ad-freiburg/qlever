@@ -25,8 +25,7 @@ class PropertyPath {
   };
 
   PropertyPath() : _operation(Operation::IRI) {}
-  explicit PropertyPath(Operation op)
-      : _operation(op), _iri(), _can_be_null(false) {
+  explicit PropertyPath(Operation op) : _operation(op) {
     if (op == Operation::ZERO_OR_MORE || op == Operation::ZERO_OR_ONE) {
       _can_be_null = true;
     }
@@ -118,5 +117,5 @@ class PropertyPath {
    * True iff this property path is either a transitive path with minimum length
    * of 0, or if all of this transitive path's children can be null.
    */
-  bool _can_be_null;
+  bool _can_be_null = false;
 };

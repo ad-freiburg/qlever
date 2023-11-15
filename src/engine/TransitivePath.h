@@ -67,7 +67,7 @@ class TransitivePath : public Operation {
   std::shared_ptr<QueryExecutionTree> subtree_;
   TransitivePathSide lhs_;
   TransitivePathSide rhs_;
-  size_t resultWidth_;
+  size_t resultWidth_ = 2;
   size_t minDist_;
   size_t maxDist_;
   VariableToColumnMap variableColumns_;
@@ -238,7 +238,7 @@ class TransitivePath : public Operation {
    * startSideTable and will be skipped.
    */
   template <size_t WIDTH, size_t START_WIDTH>
-  static void fillTableWithHull(IdTableStatic<WIDTH>& table, Map& hull,
+  static void fillTableWithHull(IdTableStatic<WIDTH>& table, const Map& hull,
                                 std::vector<Id>& nodes, size_t startSideCol,
                                 size_t targetSideCol,
                                 const IdTable& startSideTable, size_t skipCol);
@@ -256,7 +256,7 @@ class TransitivePath : public Operation {
    * the hull
    */
   template <size_t WIDTH>
-  static void fillTableWithHull(IdTableStatic<WIDTH>& table, Map& hull,
+  static void fillTableWithHull(IdTableStatic<WIDTH>& table, const Map& hull,
                                 size_t startSideCol, size_t targetSideCol);
 
   /**

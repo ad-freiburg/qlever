@@ -21,7 +21,6 @@ TransitivePath::TransitivePath(QueryExecutionContext* qec,
       subtree_(std::move(child)),
       lhs_(std::move(leftSide)),
       rhs_(std::move(rightSide)),
-      resultWidth_(2),
       minDist_(minDist),
       maxDist_(maxDist) {
   if (lhs_.isVariable()) {
@@ -170,8 +169,8 @@ uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
   }
   // TODO(Florian): this is not necessarily a good estimator
   if (lhs_.isVariable()) {
-    return subtree_->getSizeEstimate() /
-           subtree_->getMultiplicity(lhs_.subCol_);
+    size_t multiplicity = static_cast<size_t>(getMultiplicity(lhs_.subCol_));
+    return subtree_->getSizeEstimate() / multiplicity;
   }
   return subtree_->getSizeEstimate();
 }
@@ -430,8 +429,8 @@ TransitivePath::Map TransitivePath::transitiveHull(
 
 // _____________________________________________________________________________
 template <size_t WIDTH, size_t START_WIDTH>
-void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map& hull,
-                                       std::vector<Id>& nodes,
+void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table,
+                                       const Map& hull, std::vector<Id>& nodes,
                                        size_t startSideCol,
                                        size_t targetSideCol,
                                        const IdTable& startSideTable,
@@ -462,8 +461,8 @@ void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map& hull,
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map& hull,
-                                       size_t startSideCol,
+void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table,
+                                       const Map& hull, size_t startSideCol,
                                        size_t targetSideCol) {
   size_t rowIndex = 0;
   for (auto const& [node, linkedNodes] : hull) {
