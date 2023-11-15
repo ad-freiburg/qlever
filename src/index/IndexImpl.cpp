@@ -534,7 +534,8 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   auto finishRelation = [&metaData1, &metaData2, &sorter, &writer2, &writer1,
                          &numBlocksCurrentRel, &currentRel, &buffer,
                          &distinctCol1, &addBlockForRelation, this]() {
-    if (numBlocksCurrentRel > 0) {
+    if (true) {
+    //if (numBlocksCurrentRel > 0) {
       addBlockForRelation();
       writeSwitchedRel(&writer2, currentRel.value(), sorter.getSortedBlocks());
     } else {
