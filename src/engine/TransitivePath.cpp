@@ -18,23 +18,23 @@ TransitivePath::TransitivePath(QueryExecutionContext* qec,
                                TransitivePathSide rightSide, size_t minDist,
                                size_t maxDist)
     : Operation(qec),
-      _subtree(std::move(child)),
-      _lhs(std::move(leftSide)),
-      _rhs(std::move(rightSide)),
-      _resultWidth(2),
-      _minDist(minDist),
-      _maxDist(maxDist) {
-  if (_lhs.isVariable()) {
-    _variableColumns[std::get<Variable>(_lhs.value)] =
+      subtree_(std::move(child)),
+      lhs_(std::move(leftSide)),
+      rhs_(std::move(rightSide)),
+      resultWidth_(2),
+      minDist_(minDist),
+      maxDist_(maxDist) {
+  if (lhs_.isVariable()) {
+    variableColumns_[std::get<Variable>(lhs_.value_)] =
         makeAlwaysDefinedColumn(0);
   }
-  if (_rhs.isVariable()) {
-    _variableColumns[std::get<Variable>(_rhs.value)] =
+  if (rhs_.isVariable()) {
+    variableColumns_[std::get<Variable>(rhs_.value_)] =
         makeAlwaysDefinedColumn(1);
   }
 
-  _lhs.outputCol = 0;
-  _rhs.outputCol = 1;
+  lhs_.outputCol_ = 0;
+  rhs_.outputCol_ = 1;
 }
 
 // _____________________________________________________________________________
@@ -43,19 +43,19 @@ std::string TransitivePath::asStringImpl(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << " minDist " << _minDist << " maxDist " << _maxDist << "\n";
+  os << " minDist " << minDist_ << " maxDist " << maxDist_ << "\n";
 
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
   os << "Left side:\n";
-  os << _lhs.asString(indent + 1);
+  os << lhs_.asString(indent + 1);
 
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
   os << "Right side:\n";
-  os << _rhs.asString(indent + 1);
+  os << rhs_.asString(indent + 1);
 
   return std::move(os).str();
 }
@@ -65,8 +65,8 @@ std::string TransitivePath::getDescriptor() const {
   std::ostringstream os;
   os << "TransitivePath ";
   // If not full transitive hull, show interval as [min, max].
-  if (_minDist > 1 || _maxDist < std::numeric_limits<size_t>::max()) {
-    os << "[" << _minDist << ", " << _maxDist << "] ";
+  if (minDist_ > 1 || maxDist_ < std::numeric_limits<size_t>::max()) {
+    os << "[" << minDist_ << ", " << maxDist_ << "] ";
   }
   auto getName = [this](ValueId id) {
     auto optStringAndType =
@@ -78,14 +78,14 @@ std::string TransitivePath::getDescriptor() const {
     }
   };
   // Left variable or entity name.
-  if (_lhs.isVariable()) {
-    os << std::get<Variable>(_lhs.value).name();
+  if (lhs_.isVariable()) {
+    os << std::get<Variable>(lhs_.value_).name();
   } else {
-    os << getName(std::get<Id>(_lhs.value));
+    os << getName(std::get<Id>(lhs_.value_));
   }
   // The predicate.
   auto scanOperation =
-      std::dynamic_pointer_cast<IndexScan>(_subtree->getRootOperation());
+      std::dynamic_pointer_cast<IndexScan>(subtree_->getRootOperation());
   if (scanOperation != nullptr) {
     os << " " << scanOperation->getPredicate() << " ";
   } else {
@@ -93,23 +93,23 @@ std::string TransitivePath::getDescriptor() const {
     os << R"( <???> )";
   }
   // Right variable or entity name.
-  if (_rhs.isVariable()) {
-    os << std::get<Variable>(_rhs.value).name();
+  if (rhs_.isVariable()) {
+    os << std::get<Variable>(rhs_.value_).name();
   } else {
-    os << getName(std::get<Id>(_rhs.value));
+    os << getName(std::get<Id>(rhs_.value_));
   }
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
-size_t TransitivePath::getResultWidth() const { return _resultWidth; }
+size_t TransitivePath::getResultWidth() const { return resultWidth_; }
 
 // _____________________________________________________________________________
 vector<ColumnIndex> TransitivePath::resultSortedOn() const {
-  if (_lhs.isSortedOnInputCol()) {
+  if (lhs_.isSortedOnInputCol()) {
     return {0};
   }
-  if (_rhs.isSortedOnInputCol()) {
+  if (rhs_.isSortedOnInputCol()) {
     return {1};
   }
   return {};
@@ -117,7 +117,7 @@ vector<ColumnIndex> TransitivePath::resultSortedOn() const {
 
 // _____________________________________________________________________________
 VariableToColumnMap TransitivePath::computeVariableToColumnMap() const {
-  return _variableColumns;
+  return variableColumns_;
 }
 
 // _____________________________________________________________________________
@@ -128,7 +128,7 @@ void TransitivePath::setTextLimit(size_t limit) {
 }
 
 // _____________________________________________________________________________
-bool TransitivePath::knownEmptyResult() { return _subtree->knownEmptyResult(); }
+bool TransitivePath::knownEmptyResult() { return subtree_->knownEmptyResult(); }
 
 // _____________________________________________________________________________
 float TransitivePath::getMultiplicity(size_t col) {
@@ -139,21 +139,21 @@ float TransitivePath::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
-  if (std::holds_alternative<Id>(_lhs.value) ||
-      std::holds_alternative<Id>(_rhs.value)) {
+  if (std::holds_alternative<Id>(lhs_.value_) ||
+      std::holds_alternative<Id>(rhs_.value_)) {
     // If the subject or object is fixed, assume that the number of matching
     // triples is 1000. This will usually be an overestimate, but it will do the
     // job of avoiding query plans that first generate large intermediate
     // results and only then merge them with a triple such as this. In the
-    // _lhs.isVar && _rhs.isVar case below, we assume a worst-case blowup of
+    // lhs_.isVar && rhs_.isVar case below, we assume a worst-case blowup of
     // 10000; see the comment there.
     return 1000;
   }
-  if (_lhs.treeAndCol.has_value()) {
-    return _lhs.treeAndCol.value().first->getSizeEstimate();
+  if (lhs_.treeAndCol_.has_value()) {
+    return lhs_.treeAndCol_.value().first->getSizeEstimate();
   }
-  if (_rhs.treeAndCol.has_value()) {
-    return _rhs.treeAndCol.value().first->getSizeEstimate();
+  if (rhs_.treeAndCol_.has_value()) {
+    return rhs_.treeAndCol_.value().first->getSizeEstimate();
   }
   // Set costs to something very large, so that we never compute the complete
   // transitive hull (unless the variables on both sides are not bound in any
@@ -165,14 +165,14 @@ uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
   // Wikidata, the predicate with the largest blowup when taking the
   // transitive hull is wdt:P2789 (connects with). The blowup is then from 90K
   // (without +) to 110M (with +), so about 1000 times larger.
-  if (_lhs.isVariable() && _rhs.isVariable()) {
-    return _subtree->getSizeEstimate() * 10000;
+  if (lhs_.isVariable() && rhs_.isVariable()) {
+    return subtree_->getSizeEstimate() * 10000;
   }
   // TODO(Florian): this is not necessarily a good estimator
-  if (_lhs.isVariable()) {
-    return _subtree->getSizeEstimate() / _subtree->getMultiplicity(_lhs.subCol);
+  if (lhs_.isVariable()) {
+    return subtree_->getSizeEstimate() / subtree_->getMultiplicity(lhs_.subCol_);
   }
-  return _subtree->getSizeEstimate();
+  return subtree_->getSizeEstimate();
 }
 
 // _____________________________________________________________________________
@@ -201,14 +201,14 @@ void TransitivePath::computeTransitivePathBound(
 
   Map hull;
   if (!targetSide.isVariable()) {
-    hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value));
+    hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value_));
   } else {
     hull = transitiveHull(edges, nodes, std::nullopt);
   }
 
   TransitivePath::fillTableWithHull<RES_WIDTH, SIDE_WIDTH>(
-      res, hull, nodes, startSide.outputCol, targetSide.outputCol,
-      startSideTable, startSide.treeAndCol.value().second);
+      res, hull, nodes, startSide.outputCol_, targetSide.outputCol_,
+      startSideTable, startSide.treeAndCol_.value().second);
 
   *dynRes = std::move(res).toDynamic();
 }
@@ -225,26 +225,26 @@ void TransitivePath::computeTransitivePath(
 
   Map hull;
   if (!targetSide.isVariable()) {
-    hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value));
+    hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value_));
   } else {
     hull = transitiveHull(edges, nodes, std::nullopt);
   }
 
-  TransitivePath::fillTableWithHull<RES_WIDTH>(res, hull, startSide.outputCol,
-                                               targetSide.outputCol);
+  TransitivePath::fillTableWithHull<RES_WIDTH>(res, hull, startSide.outputCol_,
+                                               targetSide.outputCol_);
 
   *dynRes = std::move(res).toDynamic();
 }
 
 // _____________________________________________________________________________
 ResultTable TransitivePath::computeResult() {
-  if (_minDist == 0 && !isBoundOrId() && _lhs.isVariable() &&
-      _rhs.isVariable()) {
+  if (minDist_ == 0 && !isBoundOrId() && lhs_.isVariable() &&
+      rhs_.isVariable()) {
     AD_THROW(
         "This query might have to evalute the empty path, which is currently "
         "not supported");
   }
-  shared_ptr<const ResultTable> subRes = _subtree->getResult();
+  shared_ptr<const ResultTable> subRes = subtree_->getResult();
 
   IdTable idTable{getExecutionContext()->getAllocator()};
 
@@ -256,33 +256,33 @@ ResultTable TransitivePath::computeResult() {
                                auto& boundSide,
                                auto& otherSide) -> ResultTable {
     shared_ptr<const ResultTable> sideRes =
-        boundSide.treeAndCol.value().first->getResult();
+        boundSide.treeAndCol_.value().first->getResult();
     size_t sideWidth = sideRes->idTable().numColumns();
 
-    CALL_FIXED_SIZE((std::array{_resultWidth, subWidth, sideWidth}),
+    CALL_FIXED_SIZE((std::array{resultWidth_, subWidth, sideWidth}),
                     &TransitivePath::computeTransitivePathBound, this, &idTable,
                     subRes->idTable(), boundSide, otherSide,
                     sideRes->idTable());
 
     return {std::move(idTable), resultSortedOn(),
-            subRes->getSharedLocalVocabFromNonEmptyOf(*sideRes, *subRes)};
+            ResultTable::getSharedLocalVocabFromNonEmptyOf(*sideRes, *subRes)};
   };
 
-  if (_lhs.isBoundVariable()) {
-    return computeForOneSide(_lhs, _rhs);
-  } else if (_rhs.isBoundVariable()) {
-    return computeForOneSide(_rhs, _lhs);
+  if (lhs_.isBoundVariable()) {
+    return computeForOneSide(lhs_, rhs_);
+  } else if (rhs_.isBoundVariable()) {
+    return computeForOneSide(rhs_, lhs_);
     // Right side is an Id
-  } else if (!_rhs.isVariable()) {
-    CALL_FIXED_SIZE((std::array{_resultWidth, subWidth}),
+  } else if (!rhs_.isVariable()) {
+    CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
                     &TransitivePath::computeTransitivePath, this, &idTable,
-                    subRes->idTable(), _rhs, _lhs);
+                    subRes->idTable(), rhs_, lhs_);
     // No side is a bound variable, the right side is an unbound variable
     // and the left side is either an unbound Variable or an ID.
   } else {
-    CALL_FIXED_SIZE((std::array{_resultWidth, subWidth}),
+    CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
                     &TransitivePath::computeTransitivePath, this, &idTable,
-                    subRes->idTable(), _lhs, _rhs);
+                    subRes->idTable(), lhs_, rhs_);
   }
 
   // NOTE: The only place, where the input to a transitive path operation is not
@@ -319,11 +319,11 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
   // made below (see `Operation::getInternallyVisibleVariableColumns` and
   // `Operation::getExternallyVariableColumns`).
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(
-      getExecutionContext(), _subtree, _lhs, _rhs, _minDist, _maxDist);
+      getExecutionContext(), subtree_, lhs_, rhs_, minDist_, maxDist_);
   if (isLeft) {
-    p->_lhs.treeAndCol = {leftOrRightOp, inputCol};
+    p->lhs_.treeAndCol_ = {leftOrRightOp, inputCol};
   } else {
-    p->_rhs.treeAndCol = {leftOrRightOp, inputCol};
+    p->rhs_.treeAndCol_ = {leftOrRightOp, inputCol};
   }
 
   // Note: The `variable` in the following structured binding is `const`, even
@@ -338,16 +338,16 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
 
     columnIndexWithType.columnIndex_ += columnIndex > inputCol ? 1 : 2;
 
-    p->_variableColumns[variable] = columnIndexWithType;
-    p->_resultWidth++;
+    p->variableColumns_[variable] = columnIndexWithType;
+    p->resultWidth_++;
   }
   return p;
 }
 
 // _____________________________________________________________________________
 bool TransitivePath::isBoundOrId() const {
-  return _lhs.isBoundVariable() || _rhs.isBoundVariable() ||
-         !_lhs.isVariable() || !_rhs.isVariable();
+  return lhs_.isBoundVariable() || rhs_.isBoundVariable() ||
+         !lhs_.isVariable() || !rhs_.isVariable();
 }
 
 // _____________________________________________________________________________
@@ -383,7 +383,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
       positions.push_back(rootEdges->second.begin());
       edgeCache.push_back(&rootEdges->second);
     }
-    if (_minDist == 0 &&
+    if (minDist_ == 0 &&
         (!target.has_value() || currentStartNode == target.value())) {
       hull[currentStartNode].insert(currentStartNode);
     }
@@ -407,9 +407,9 @@ TransitivePath::Map TransitivePath::transitiveHull(
       Id child = *pos;
       ++pos;
       size_t childDepth = positions.size();
-      if (childDepth <= _maxDist && marks.count(child) == 0) {
+      if (childDepth <= maxDist_ && marks.count(child) == 0) {
         // process the child
-        if (childDepth >= _minDist) {
+        if (childDepth >= minDist_) {
           marks.insert(child);
           if (!target.has_value() || child == target.value()) {
             hull[currentStartNode].insert(child);
@@ -429,7 +429,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
 
 // _____________________________________________________________________________
 template <size_t WIDTH, size_t START_WIDTH>
-void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
+void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map& hull,
                                        std::vector<Id>& nodes,
                                        size_t startSideCol,
                                        size_t targetSideCol,
@@ -461,7 +461,7 @@ void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
+void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table, Map& hull,
                                        size_t startSideCol,
                                        size_t targetSideCol) {
   size_t rowIndex = 0;
@@ -488,7 +488,7 @@ TransitivePath::setupMapAndNodes(const IdTable& sub,
 
   // Bound -> var|id
   std::span<const Id> startNodes = setupNodes<SIDE_WIDTH>(
-      startSideTable, startSide.treeAndCol.value().second);
+      startSideTable, startSide.treeAndCol_.value().second);
   nodes.insert(nodes.end(), startNodes.begin(), startNodes.end());
 
   return {std::move(edges), std::move(nodes)};
@@ -505,15 +505,15 @@ TransitivePath::setupMapAndNodes(const IdTable& sub,
 
   // id -> var|id
   if (!startSide.isVariable()) {
-    nodes.push_back(std::get<Id>(startSide.value));
+    nodes.push_back(std::get<Id>(startSide.value_));
     // var -> var
   } else {
     std::span<const Id> startNodes =
-        setupNodes<SUB_WIDTH>(sub, startSide.subCol);
+        setupNodes<SUB_WIDTH>(sub, startSide.subCol_);
     nodes.insert(nodes.end(), startNodes.begin(), startNodes.end());
-    if (_minDist == 0) {
+    if (minDist_ == 0) {
       std::span<const Id> targetNodes =
-          setupNodes<SUB_WIDTH>(sub, targetSide.subCol);
+          setupNodes<SUB_WIDTH>(sub, targetSide.subCol_);
       nodes.insert(nodes.end(), targetNodes.begin(), targetNodes.end());
     }
   }
@@ -528,8 +528,8 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
     const TransitivePathSide& targetSide) const {
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
   Map edges;
-  decltype(auto) startCol = sub.getColumn(startSide.subCol);
-  decltype(auto) targetCol = sub.getColumn(targetSide.subCol);
+  decltype(auto) startCol = sub.getColumn(startSide.subCol_);
+  decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
 
   for (size_t i = 0; i < sub.size(); i++) {
     checkCancellation();

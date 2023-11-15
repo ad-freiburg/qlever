@@ -192,8 +192,8 @@ TEST(TransitivePathTest, maxLength2) {
   expected.push_back({V(7), V(2)});
   expected.push_back({V(7), V(7)});
 
-  left.value = V(7);
-  right.value = Variable{"?target"};
+  left.value_ = V(7);
+  right.value_ = Variable{"?target"};
   T.computeTransitivePath<2, 2>(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
 
@@ -202,8 +202,8 @@ TEST(TransitivePathTest, maxLength2) {
   expected.push_back({V(0), V(2)});
   expected.push_back({V(7), V(2)});
 
-  left.value = Variable{"?start"};
-  right.value = V(2);
+  left.value_ = Variable{"?start"};
+  right.value_ = V(2);
   T.computeTransitivePath<2, 2>(&result, sub, right, left);
   assertSameUnorderedContent(expected, result);
 }

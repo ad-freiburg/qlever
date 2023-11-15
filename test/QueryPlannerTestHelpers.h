@@ -128,9 +128,9 @@ inline auto CartesianProductJoin =
     MatchTypeAndUnorderedChildren<::CartesianProductJoin>;
 
 inline auto TransitivePathSideMatcher = [](TransitivePathSide side) {
-  return AllOf(AD_FIELD(TransitivePathSide, value, Eq(side.value)),
-               AD_FIELD(TransitivePathSide, subCol, Eq(side.subCol)),
-               AD_FIELD(TransitivePathSide, outputCol, Eq(side.outputCol)));
+  return AllOf(AD_FIELD(TransitivePathSide, value_, Eq(side.value_)),
+               AD_FIELD(TransitivePathSide, subCol_, Eq(side.subCol_)),
+               AD_FIELD(TransitivePathSide, outputCol_, Eq(side.outputCol_)));
 };
 
 // Match a TransitivePath operation

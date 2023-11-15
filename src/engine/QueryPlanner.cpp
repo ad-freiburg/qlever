@@ -402,7 +402,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           // TODO<joka921> Refactor the `TransitivePath` class s.t. we don't
           // have to specify a `Variable` that isn't used at all in the case of
           // a fixed subject or object.
-          auto getSideValue = [this](TripleComponent side) {
+          auto getSideValue = [this](TripleComponent& side) {
             std::variant<Id, Variable> value;
             if (isVariable(side)) {
               value = Variable{side.getVariable()};
@@ -418,12 +418,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
             return value;
           };
 
-          left.subCol =
+          left.subCol_ =
               sub._qet->getVariableColumn(arg._innerLeft.getVariable());
-          left.value = getSideValue(arg._left);
-          right.subCol =
+          left.value_ = getSideValue(arg._left);
+          right.subCol_ =
               sub._qet->getVariableColumn(arg._innerRight.getVariable());
-          right.value = getSideValue(arg._right);
+          right.value_ = getSideValue(arg._right);
           size_t min = arg._min;
           size_t max = arg._max;
           auto plan = makeSubtreePlan<TransitivePath>(_qec, sub._qet, left,

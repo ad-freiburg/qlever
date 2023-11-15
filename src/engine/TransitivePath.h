@@ -15,17 +15,17 @@ struct TransitivePathSide {
   // treeAndCol contains the QueryExecutionTree of this side and the column
   // where the Ids of this side are located. This member only has a value if
   // this side was bound.
-  std::optional<TreeAndCol> treeAndCol;
+  std::optional<TreeAndCol> treeAndCol_;
   // Column of the sub table where the Ids of this side are located
-  size_t subCol;
-  std::variant<Id, Variable> value;
+  size_t subCol_;
+  std::variant<Id, Variable> value_;
   // The column in the ouput table where this side Ids are written to.
   // This member is set by the TransitivePath class
-  size_t outputCol = 0;
+  size_t outputCol_ = 0;
 
-  bool isVariable() const { return std::holds_alternative<Variable>(value); };
+  bool isVariable() const { return std::holds_alternative<Variable>(value_); };
 
-  bool isBoundVariable() const { return treeAndCol.has_value(); };
+  bool isBoundVariable() const { return treeAndCol_.has_value(); };
 
   std::string asString(size_t indent) const {
     std::ostringstream os;
@@ -33,26 +33,26 @@ struct TransitivePathSide {
       os << " ";
     }
     if (isVariable()) {
-      os << "Variable name: " << std::get<Variable>(value)._name;
+      os << "Variable name: " << std::get<Variable>(value_)._name;
     } else if (isBoundVariable()) {
-      os << "Id: " << std::get<Id>(value);
+      os << "Id: " << std::get<Id>(value_);
     }
 
-    os << ", Column: " << subCol;
+    os << ", Column: " << subCol_;
 
-    if (treeAndCol.has_value()) {
+    if (treeAndCol_.has_value()) {
       os << ", Subtree:\n";
-      os << treeAndCol.value().first->asString(indent) << "\n";
+      os << treeAndCol_.value().first->asString(indent) << "\n";
     }
     return std::move(os).str();
   }
 
   bool isSortedOnInputCol() const {
-    if (!treeAndCol.has_value()) {
+    if (!treeAndCol_.has_value()) {
       return false;
-    };
+    }
 
-    auto [tree, col] = treeAndCol.value();
+    auto [tree, col] = treeAndCol_.value();
     const std::vector<ColumnIndex>& sortedOn =
         tree->getRootOperation()->getResultSortedOn();
     // TODO<C++23> use std::ranges::starts_with
@@ -64,13 +64,13 @@ class TransitivePath : public Operation {
   using Map = ad_utility::HashMap<Id, ad_utility::HashSet<Id>>;
   using MapIt = Map::iterator;
 
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  TransitivePathSide _lhs;
-  TransitivePathSide _rhs;
-  size_t _resultWidth;
-  size_t _minDist;
-  size_t _maxDist;
-  VariableToColumnMap _variableColumns;
+  std::shared_ptr<QueryExecutionTree> subtree_;
+  TransitivePathSide lhs_;
+  TransitivePathSide rhs_;
+  size_t resultWidth_;
+  size_t minDist_;
+  size_t maxDist_;
+  VariableToColumnMap variableColumns_;
 
  public:
   TransitivePath(QueryExecutionContext* qec,
@@ -103,10 +103,10 @@ class TransitivePath : public Operation {
   /**
    * Getters, mainly necessary for testing
    */
-  size_t getMinDist() const { return _minDist; }
-  size_t getMaxDist() const { return _maxDist; }
-  const TransitivePathSide& getLeft() const { return _lhs; }
-  const TransitivePathSide& getRight() const { return _rhs; }
+  size_t getMinDist() const { return minDist_; }
+  size_t getMaxDist() const { return maxDist_; }
+  const TransitivePathSide& getLeft() const { return lhs_; }
+  const TransitivePathSide& getRight() const { return rhs_; }
 
  protected:
   virtual std::string asStringImpl(size_t indent = 0) const override;
@@ -134,13 +134,13 @@ class TransitivePath : public Operation {
     std::vector<QueryExecutionTree*> res;
     auto addChildren = [](std::vector<QueryExecutionTree*>& res,
                           TransitivePathSide side) {
-      if (side.treeAndCol.has_value()) {
-        res.push_back(side.treeAndCol.value().first.get());
+      if (side.treeAndCol_.has_value()) {
+        res.push_back(side.treeAndCol_.value().first.get());
       }
     };
-    addChildren(res, _lhs);
-    addChildren(res, _rhs);
-    res.push_back(_subtree.get());
+    addChildren(res, lhs_);
+    addChildren(res, rhs_);
+    res.push_back(subtree_.get());
     return res;
   }
 
@@ -238,7 +238,7 @@ class TransitivePath : public Operation {
    * startSideTable and will be skipped.
    */
   template <size_t WIDTH, size_t START_WIDTH>
-  static void fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
+  static void fillTableWithHull(IdTableStatic<WIDTH>& table, Map& hull,
                                 std::vector<Id>& nodes, size_t startSideCol,
                                 size_t targetSideCol,
                                 const IdTable& startSideTable, size_t skipCol);
@@ -256,7 +256,7 @@ class TransitivePath : public Operation {
    * the hull
    */
   template <size_t WIDTH>
-  static void fillTableWithHull(IdTableStatic<WIDTH>& table, Map hull,
+  static void fillTableWithHull(IdTableStatic<WIDTH>& table, Map& hull,
                                 size_t startSideCol, size_t targetSideCol);
 
   /**
