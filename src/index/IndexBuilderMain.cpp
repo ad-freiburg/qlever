@@ -149,7 +149,7 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
   if (stxxlMemoryGB.has_value()) {
-    index.stxxlMemory() = ad_utility::MemorySize::gigabytes(
+    index.memoryLimitIndexBuilding() = ad_utility::MemorySize::gigabytes(
         static_cast<size_t>(stxxlMemoryGB.value()));
   }
 

@@ -376,3 +376,4 @@ addLinkAndDiscoverTest(CancellationHandleTest util)
 
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
+addLinkAndDiscoverTest(ParallelMultiwayMergeTest)
