@@ -6,10 +6,7 @@
 // _____________________________________________________________________________
 PropertyPath::PropertyPath(Operation op, std::string iri,
                            std::initializer_list<PropertyPath> children)
-    : _operation(op),
-      _iri(std::move(iri)),
-      _children(children),
-      _can_be_null(false) {}
+    : _operation(op), _iri(std::move(iri)), _children(children) {}
 
 // _____________________________________________________________________________
 PropertyPath PropertyPath::makeModified(PropertyPath child,

@@ -169,7 +169,7 @@ uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
   }
   // TODO(Florian): this is not necessarily a good estimator
   if (lhs_.isVariable()) {
-    size_t multiplicity = static_cast<size_t>(getMultiplicity(lhs_.subCol_));
+    auto multiplicity = static_cast<size_t>(getMultiplicity(lhs_.subCol_));
     return subtree_->getSizeEstimate() / multiplicity;
   }
   return subtree_->getSizeEstimate();

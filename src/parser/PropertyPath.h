@@ -117,5 +117,5 @@ class PropertyPath {
    * True iff this property path is either a transitive path with minimum length
    * of 0, or if all of this transitive path's children can be null.
    */
-  bool _can_be_null = false;
+  bool can_be_null_ = false;
 };
