@@ -25,7 +25,6 @@ using std::vector;
 // Forward declarations for internal member function
 class IndexScan;
 class Join;
-class Sort;
 
 class GroupBy : public Operation {
  private:

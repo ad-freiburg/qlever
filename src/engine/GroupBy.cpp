@@ -317,7 +317,7 @@ ResultTable GroupBy::computeResult() {
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   }
 
-  // Check if optimization for sorted join can be applied
+  // Check if optimization for explicitly sorted child can be applied
   auto explicitlySortedParams = checkIfExplicitlySorted();
 
   bool useOptimization = true; // for debugging purposes
