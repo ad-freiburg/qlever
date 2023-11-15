@@ -48,7 +48,7 @@ void testRandomInts() {
   std::vector<size_t> result;
   std::ranges::copy(std::views::join(ad_utility::OwningView{
                         ad_utility::parallelMultiwayMerge<size_t, false>(
-                            1_GB, blocksize, input, std::less<>{})}),
+                            1_GB, input, std::less<>{}, blocksize)}),
                     std::back_inserter(result));
 
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
@@ -61,17 +61,17 @@ TEST(ParallelMultiwayMerge, binaryMerge) {
   V v1{1, 3, 5};
   V v2{2, 4, 6};
   auto result = join(parallelMultiwayMerge<size_t, false>(
-      1_GB, 3, std::array{v1, v2}, std::less<>{}));
+      1_GB, std::array{v1, v2}, std::less<>{}, 3));
   EXPECT_THAT(result, ::testing::ElementsAre(1, 2, 3, 4, 5, 6));
 
   v2 = V{};
-  result = join(parallelMultiwayMerge<size_t, false>(
-      1_GB, 3, std::array{v1, v2}, std::less<>{}));
+  result = join(parallelMultiwayMerge<size_t, false>(1_GB, std::array{v1, v2},
+                                                     std::less<>{}, 3));
   EXPECT_THAT(result, ::testing::ElementsAre(1, 3, 5));
 
   std::swap(v1, v2);
-  result = join(parallelMultiwayMerge<size_t, false>(
-      1_GB, 3, std::array{v1, v2}, std::less<>{}));
+  result = join(parallelMultiwayMerge<size_t, false>(1_GB, std::array{v1, v2},
+                                                     std::less<>{}, 3));
   EXPECT_THAT(result, ::testing::ElementsAre(1, 3, 5));
 }
 
@@ -84,7 +84,7 @@ TEST(ParallelMultiwayMerge, moveOfElements) {
   EXPECT_THAT(v1, ::testing::ElementsAre("alphaalpha", "deltadelta"));
   EXPECT_THAT(v2, ::testing::ElementsAre("betabeta", "epsilonepsilon"));
   auto result = join(
-      parallelMultiwayMerge<std::string, false>(1_GB, 3, arr, std::less<>{}));
+      parallelMultiwayMerge<std::string, false>(1_GB, arr, std::less<>{}, 3));
   EXPECT_THAT(result, ::testing::ElementsAre("alphaalpha", "betabeta",
                                              "deltadelta", "epsilonepsilon"));
 
@@ -94,7 +94,7 @@ TEST(ParallelMultiwayMerge, moveOfElements) {
 
   result.clear();
   result = join(
-      parallelMultiwayMerge<std::string, true>(1_GB, 3, arr, std::less<>{}));
+      parallelMultiwayMerge<std::string, true>(1_GB, arr, std::less<>{}, 3));
   EXPECT_THAT(result, ::testing::ElementsAre("alphaalpha", "betabeta",
                                              "deltadelta", "epsilonepsilon"));
 
