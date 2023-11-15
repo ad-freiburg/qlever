@@ -694,7 +694,7 @@ TEST(QueryPlannerTest, threeVarTriplesTCJ) {
       "?s ?p ?o . ?s ?p <x> }",
       h::MultiColumnJoin(h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}),
                          h::IndexScan(Var{"?s"}, Var{"?p"}, "<x>")),
-    qec);
+      qec);
 }
 
 TEST(QueryPlannerTest, threeVarXthreeVarException) {
