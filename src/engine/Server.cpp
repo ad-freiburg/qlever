@@ -650,8 +650,16 @@ boost::asio::awaitable<void> Server::processQuery(
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
     AD_CORRECTNESS_CHECK(queryHub_ != nullptr);
+    // Disabling the websocket mechanism for now, as it blocks the server
+    // threads.
+    // TODO<RobinTF> figure out what's going on there and then fix all these
+    // things.
+    /*
     auto messageSender = co_await ad_utility::websocket::MessageSender::create(
         getQueryId(request), *queryHub_);
+        */
+    auto messageSender = [](auto&&...) {};
+    LOG(INFO) << "Obtained a message sender" << std::endl;
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query.
     //
