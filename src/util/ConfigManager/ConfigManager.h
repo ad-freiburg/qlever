@@ -12,6 +12,7 @@
 #include <any>
 #include <concepts>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -41,6 +42,60 @@ Manages a bunch of `ConfigOption`s.
 */
 class ConfigManager {
   /*
+  Our hash map always saves either a configuration option, or a sub manager
+  (another `ConfigManager`).
+
+  This class makes the handeling more explicit and allows for more information
+  to be saved alongside the configuration options and sub managers.
+  For example: The order, in which they were created.
+  */
+  class HashMapEntry {
+   public:
+    using Data = std::variant<ConfigOption, ConfigManager>;
+
+   private:
+    std::unique_ptr<Data> data_;
+
+    // Describes the order of initialization.
+    static inline size_t numberOfInstances_{0};
+    size_t initializationId_;
+
+   public:
+    // Construct an instance of this class managing `data`.
+    explicit HashMapEntry(Data&& data);
+
+    // Does this instance hold a configuration option?
+    bool holdsConfigOption() const;
+
+    // Does this instance hold a sub manager?
+    bool holdsSubManager() const;
+
+    /*
+    Currently held configuration option, if there is one. Note: If there is a
+    pointer, it's never a `nullptr`.
+    */
+    std::optional<ConfigOption*> getConfigOption() const;
+
+    /*
+    Currently held sub manager, if there is one. Note: If there is a
+    pointer, it's never a `nullptr`.
+    */
+    std::optional<ConfigManager*> getSubManager() const;
+
+    // Return, how many instances of this class were initialized before this
+    // instance.
+    size_t getInitializationId() const;
+
+    // Wrapper for calling `std::visit` on the saved `Data`.
+    decltype(auto) visit(auto&& vis) const {
+      // Make sure, that it is not a null pointer.
+      AD_CORRECTNESS_CHECK(data_);
+
+      return std::visit(AD_FWD(vis), *data_);
+    }
+  };
+
+  /*
   The added configuration options. Configuration managers are used by the user
   to describe a json object literal more explicitly.
 
@@ -51,8 +106,6 @@ class ConfigManager {
   The string key describes their location in the json object literal, by
   representing a json pointer in string form.
   */
-  using HashMapEntry =
-      std::unique_ptr<std::variant<ConfigOption, ConfigManager>>;
   ad_utility::HashMap<std::string, HashMapEntry> configurationOptions_;
 
   /*
@@ -426,9 +479,12 @@ class ConfigManager {
     verifyPath(pathToOption);
 
     /*
-    The `unqiue_ptr` was created, by creating a new `ConfigOption` via it's
-    move constructor. Which is why, we can't just return the `ConfigOption`
-    we created here.
+    We can't just create a `ConfigOption` variable, pass it and return it,
+    because the hash map has ownership of the newly added `ConfigOption`.
+    Which was transfered via creating a new internal `ConfigOption` with move
+    constructors.
+    Which would mean, that our local `ConfigOption` isn't the `ConfigOption` we
+    want to return a reference to.
     */
     return ConstConfigOptionProxy<OptionType>(addConfigOption(
         pathToOption,
@@ -532,15 +588,13 @@ class ConfigManager {
   }
 
   /*
-  @brief Throw an exception, if the given entry of `configurationOptions_` is a
-  null pointer, or contains an empty sub manager, which would point to a logic
-  error.
+  @brief Throw an exception, if the given entry of `configurationOptions_`
+  contains an empty sub manager, which would point to a logic error.
 
   @param jsonPathToEntry For a better exception message.
-  @param entryPointer Pointer to the object managed by the pointer in the hash
-  map.
+  @param entry The object managed by the hash map.
   */
   static void verifyHashMapEntry(std::string_view jsonPathToEntry,
-                                 const HashMapEntry::pointer entryPointer);
+                                 const HashMapEntry& entry);
 };
 }  // namespace ad_utility

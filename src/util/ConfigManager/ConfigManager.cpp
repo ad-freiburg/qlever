@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -25,6 +23,7 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -38,16 +37,58 @@
 
 namespace ad_utility {
 // ____________________________________________________________________________
-void ConfigManager::verifyHashMapEntry(
-    std::string_view jsonPathToEntry,
-    const HashMapEntry::pointer entryPointer) {
-  // Make sure, that it is not a null pointer.
-  AD_CORRECTNESS_CHECK(entryPointer != nullptr);
+ConfigManager::HashMapEntry::HashMapEntry(Data&& data)
+    : data_{std::make_unique<Data>(std::move(data))},
+      initializationId_{numberOfInstances_++} {}
 
+// ____________________________________________________________________________
+bool ConfigManager::HashMapEntry::holdsConfigOption() const {
+  // Make sure, that it is not a null pointer.
+  AD_CORRECTNESS_CHECK(data_);
+
+  return std::holds_alternative<ConfigOption>(*data_);
+}
+
+// ____________________________________________________________________________
+bool ConfigManager::HashMapEntry::holdsSubManager() const {
+  // Make sure, that it is not a null pointer.
+  AD_CORRECTNESS_CHECK(data_);
+
+  return std::holds_alternative<ConfigManager>(*data_);
+}
+
+// ____________________________________________________________________________
+std::optional<ConfigOption*> ConfigManager::HashMapEntry::getConfigOption()
+    const {
+  if (holdsConfigOption()) {
+    return std::get_if<ConfigOption>(data_.get());
+  } else {
+    return std::nullopt;
+  }
+}
+
+// ____________________________________________________________________________
+size_t ConfigManager::HashMapEntry::getInitializationId() const {
+  return initializationId_;
+}
+
+// ____________________________________________________________________________
+std::optional<ConfigManager*> ConfigManager::HashMapEntry::getSubManager()
+    const {
+  if (holdsSubManager()) {
+    return std::get_if<ConfigManager>(data_.get());
+  } else {
+    return std::nullopt;
+  }
+}
+
+// ____________________________________________________________________________
+void ConfigManager::verifyHashMapEntry(std::string_view jsonPathToEntry,
+                                       const HashMapEntry& entry) {
   // An empty sub manager tends to point to a logic error on the user
   // side.
-  if (const ConfigManager* ptr = std::get_if<ConfigManager>(entryPointer);
-      ptr != nullptr && ptr->configurationOptions_.empty()) {
+  if (const std::optional<ConfigManager*>& ptr = entry.getSubManager();
+      ptr.has_value() && ptr.value()->configurationOptions_.empty()) {
     throw std::runtime_error(
         absl::StrCat("The sub manager at '", jsonPathToEntry,
                      "' is empty. Either fill it, or delete it."));
@@ -64,32 +105,31 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
   std::vector<std::pair<std::string, ReturnReference>> collectedOptions;
 
   /*
-  Takes one entry of an instance of `configurationOptions_`, checks, that the
-  pointer isn't empty, and returns the pair with the pointer dereferenced.
+  Takes one entry of an instance of `configurationOptions_`, checks it with
+  `verifyHashMapEntry` and passes it on.
   */
-  auto checkNonEmptyAndDereference = [&pathPrefix](const auto& pair) {
-    const auto& [jsonPath, pointerToVariant] = pair;
+  auto verifyEntry = [&pathPrefix](const auto& pair) {
+    const auto& [jsonPath, hashMapEntry] = pair;
 
     // Check the hash map entry.
-    verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath),
-                       pointerToVariant.get());
+    verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath), hashMapEntry);
 
-    // Return a dereferenced reference.
-    return std::tie(jsonPath, *pointerToVariant);
+    // Return a reference.
+    return std::tie(jsonPath, hashMapEntry);
   };
 
   /*
   Takes one entry of an instance of `configurationOptions`, that was transformed
-  with `checkNonEmptyAndDereference`, and adds the config options, that can be
-  found inside it, together with the paths to them, to `collectedOptions`.
+  with `verifyEntry`, and adds the config options, that can be found inside it,
+  together with the paths to them, to `collectedOptions`.
   */
   auto addHashMapEntryToCollectedOptions = [&collectedOptions,
                                             &pathPrefix](const auto pair) {
-    const auto& [jsonPath, variantObject] = pair;
+    const auto& [jsonPath, hashMapEntry] = pair;
 
     const std::string& pathToCurrentEntry = absl::StrCat(pathPrefix, jsonPath);
 
-    std::visit(
+    hashMapEntry.visit(
         [&collectedOptions, &pathToCurrentEntry]<typename T>(T& var) {
           // A normal `ConfigOption` can be directly added. For a
           // `ConfigManager` we have to recursively collect the options.
@@ -105,13 +145,12 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
             std::ranges::move(recursiveResults,
                               std::back_inserter(collectedOptions));
           }
-        },
-        variantObject);
+        });
   };
 
   // Collect all the options in the given `configurationOptions`.
   std::ranges::for_each(configurationOptions, addHashMapEntryToCollectedOptions,
-                        checkNonEmptyAndDereference);
+                        verifyEntry);
 
   return collectedOptions;
 }
@@ -272,12 +311,10 @@ ConfigOption& ConfigManager::addConfigOption(
   verifyPath(pathToOption);
 
   // Add the configuration option and return the inserted element.
-  return std::get<ConfigOption>(
-      *configurationOptions_
-           .insert({createJsonPointerString(pathToOption),
-                    std::make_unique<HashMapEntry::element_type>(
-                        std::move(option))})
-           .first->second);
+  return *(configurationOptions_.insert({createJsonPointerString(pathToOption),
+                                         HashMapEntry(std::move(option))}))
+              .first->second.getConfigOption()
+              .value();
 }
 
 // ____________________________________________________________________________
@@ -290,11 +327,10 @@ ConfigManager& ConfigManager::addSubManager(
   const std::string jsonPath = createJsonPointerString(path);
 
   // Add the configuration manager and return the inserted element.
-  return std::get<ConfigManager>(
-      *configurationOptions_
-           .emplace(jsonPath, std::make_unique<HashMapEntry::element_type>(
-                                  ConfigManager{}))
-           .first->second);
+  return *(configurationOptions_.emplace(jsonPath,
+                                         HashMapEntry(ConfigManager{})))
+              .first->second.getSubManager()
+              .value();
 }
 
 // ____________________________________________________________________________
@@ -574,14 +610,12 @@ ConfigManager::validators(std::string_view pathPrefix) const {
   */
   auto isNonEmptySubManager = [&pathPrefix](const auto& pair) {
     // Easier access.
-    const auto& [jsonPath, pointerToVariant] = pair;
+    const auto& [jsonPath, hashMapEntry] = pair;
 
-    // Is the entry not a null pointer? If yes, and if it's a `ConfigManager`,
-    // is the `ConfigManager` not empty?
-    verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath),
-                       pointerToVariant.get());
+    // If the entry is a `ConfigManager`, is the `ConfigManager` not empty?
+    verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath), hashMapEntry);
 
-    return std::holds_alternative<ConfigManager>(*pointerToVariant);
+    return hashMapEntry.holdsSubManager();
   };
 
   // Collect the validators from the sub managers.
@@ -589,11 +623,11 @@ ConfigManager::validators(std::string_view pathPrefix) const {
       std::views::filter(configurationOptions_, isNonEmptySubManager),
       [&pathPrefix, &allValidators](const auto& pair) {
         // Easier access.
-        const auto& [jsonPath, pointerToVariant] = pair;
+        const auto& [jsonPath, hashMapEntry] = pair;
 
         appendVector(allValidators,
-                     std::get<ConfigManager>(*pointerToVariant)
-                         .validators(absl::StrCat(pathPrefix, jsonPath)));
+                     hashMapEntry.getSubManager().value()->validators(
+                         absl::StrCat(pathPrefix, jsonPath)));
       });
 
   return allValidators;
