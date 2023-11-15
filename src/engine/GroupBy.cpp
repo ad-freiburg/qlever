@@ -13,6 +13,7 @@
 #include "engine/Sort.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "parser/Alias.h"
@@ -317,10 +318,11 @@ ResultTable GroupBy::computeResult() {
   }
 
   // Check if optimization for sorted join can be applied
-  auto sortedJoinParams = checkIfSortedJoin();
+  auto explicitlySortedParams = checkIfExplicitlySorted();
 
+  bool useOptimization = true; // for debugging purposes
   std::shared_ptr<const ResultTable> subresult;
-  if (sortedJoinParams.has_value()) {
+  if (useOptimization && explicitlySortedParams.has_value()) {
     // Skip sorting
     subresult = _subtree->getRootOperation()->getChildren().at(0)->getResult();
   } else {
@@ -373,9 +375,11 @@ ResultTable GroupBy::computeResult() {
   size_t inWidth = subresult->idTable().numColumns();
   size_t outWidth = idTable.numColumns();
 
-  if (sortedJoinParams.has_value()) {
-    computeGroupByForSortedSubtree(&idTable, outWidth, aggregates, subresult,
-                                   sortedJoinParams->subtreeColumnIndex_, localVocab);
+  if (useOptimization && explicitlySortedParams.has_value()) {
+    CALL_FIXED_SIZE(outWidth, &GroupBy::computeGroupByForSortedSubtree,
+                    this, &idTable, aggregates, subresult->idTable(),
+                    explicitlySortedParams->subtreeColumnIndex_, localVocab);
+
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   }
 
@@ -685,7 +689,6 @@ bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
 // _____________________________________________________________________________
 bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
   if (computeGroupByForSingleIndexScan(result)) {
-    // asdas
     return true;
   } else if (computeGroupByForFullIndexScan(result)) {
     return true;
@@ -695,108 +698,119 @@ bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
 }
 
 // _____________________________________________________________________________
-std::optional<GroupBy::SortedJoinData>
-    GroupBy::checkIfSortedJoin() {
+std::optional<GroupBy::ExplicitlySortedData>
+    GroupBy::checkIfExplicitlySorted() {
   auto* sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
   if (!sort) {
-    return std::nullopt;
-  }
-
-  auto child = _subtree->getRootOperation()->getChildren().at(0);
-  auto* join = dynamic_cast<const Join*>(child->getRootOperation().get());
-  if (!join) {
     return std::nullopt;
   }
 
   if (_groupByVariables.size() != 1) {
     return std::nullopt;
   }
-  const Variable& groupByVariable = _groupByVariables.front();
 
+  const Variable& groupByVariable = _groupByVariables.front();
+  auto child = _subtree->getRootOperation()->getChildren().at(0);
   auto columnIndex = child->getVariableColumn(groupByVariable);
 
-  return SortedJoinData{ columnIndex };
+  return ExplicitlySortedData{ columnIndex };
 }
 
 // _____________________________________________________________________________
 template <size_t OUT_WIDTH>
-void GroupBy::processGroups(IdTable* result, std::map<ValueId, IdTable>& columnMap,
-                            const std::vector<Aggregate>& aggregates, LocalVocab* localVocab) {
-  IdTableStatic<OUT_WIDTH> idTable = std::move(*result).toStatic<OUT_WIDTH>();
+bool GroupBy::computeGroupByForSortedSubtree(IdTable* result,
+                                             std::vector<Aggregate> aggregates,
+                                             const IdTable& subresult,
+                                             size_t columnIndex,
+                                             LocalVocab& localVocab) {
+  // TODO: Use an interface for AggregationData
+  ad_utility::HashMap<ValueId, AverageAggregationData> map;
 
-  auto numRows = columnMap.size();
-  idTable.resize(numRows);
+  // Initialize evaluation context
+  sparqlExpression::EvaluationContext evaluationContext(
+      *getExecutionContext(), _subtree->getVariableColumns(),
+      subresult,getExecutionContext()->getAllocator(), localVocab);
 
-  auto rowIdx = 0;
+  evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
+      _groupByVariables.begin(), _groupByVariables.end()};
+  // TODO: Save previous results (?)
+  evaluationContext._variableToColumnMapPreviousResults =
+      getInternallyVisibleVariableColumns();
+  evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
+  evaluationContext._isPartOfGroupBy = true;
 
-  for (auto it = columnMap.begin(); it != columnMap.end();
-       ++it) {
-    // process Group
-    auto table = std::move(it->second);
+  for (size_t i = 0; i < subresult.size(); ++i) {
+    auto id = subresult(i, columnIndex);
 
-    auto blockStart = 0;
-    auto blockEnd = table.numRows();
+    // We always calculate for a single row
+    evaluationContext._beginIndex = i;
+    evaluationContext._endIndex = i + 1;
 
-    idTable.at(rowIdx, 0) = it->first;
+    ValueId resultEntry;
 
-    sparqlExpression::EvaluationContext evaluationContext(
-        *getExecutionContext(), _subtree->getVariableColumns(), table,
-        blockStart, blockEnd, getExecutionContext()->getAllocator(), *localVocab);
+    // Evaluate child expression
+    auto expr = aggregates.at(0)._expression.getPimpl();
+    auto exprChildren = expr->children();
 
-    evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
-        _groupByVariables.begin(), _groupByVariables.end()};
-    evaluationContext._variableToColumnMapPreviousResults =
-        getInternallyVisibleVariableColumns();
-    evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
-    evaluationContext._isPartOfGroupBy = true;
+    sparqlExpression::ExpressionResult expressionResult =
+        exprChildren[0]->evaluate(&evaluationContext);
 
-    for (const GroupBy::Aggregate& a : aggregates) {
-      processGroup<OUT_WIDTH>(
-          a, evaluationContext, blockStart, blockEnd,
-          &idTable, rowIdx, a._outCol, localVocab
-      );
+    // Extract ValueId
+    auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
+                       T&& singleResult) mutable {
+      // If the expression is a variable, get value directly
+      constexpr static bool isVariable = std::is_same_v<T, Variable>;
+      if constexpr (isVariable) {
+        std::span<const ValueId> results = sparqlExpression::detail::getIdsFromVariable(singleResult,
+                                                                                        &evaluationContext);
+        resultEntry = results.front();
+        return;
+      }
+      constexpr static bool isStrongId = std::is_same_v<T, Id>;
+      AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T> ||
+                        sparqlExpression::isVectorResult<T>);
+      if constexpr (isStrongId) {
+        resultEntry = singleResult;
+      } else if constexpr (sparqlExpression::isConstantResult<T>) {
+        resultEntry = sparqlExpression::detail::constantExpressionResultToId(
+            AD_FWD(singleResult), localVocab);
+      } else if constexpr (sparqlExpression::isVectorResult<T>) {
+        resultEntry = sparqlExpression::detail::constantExpressionResultToId(
+            std::move(singleResult[0]), localVocab);
+      } else {
+        // Can this happen? What expressions return something other than
+        // constants or vectors with a single element?
+        AD_FAIL();
+      }
+    };
+
+    std::visit(visitor, std::move(expressionResult));
+
+    // TODO: Check datatype, use getXYZ and cast accordingly
+    if (map.contains(id)) {
+      map.at(id).increment(resultEntry.getInt());
+    } else {
+      map.insert({id, {(double) resultEntry.getInt(), 1}});
     }
+  }
 
-    rowIdx++;
+  // Sort by groupBy column
+  std::vector<ValueId> sortedKeys;
+  for (auto it = map.begin(); it != map.end(); it++) {
+    auto & val = *it;
+    sortedKeys.push_back(val.first);
+  }
+  std::sort(sortedKeys.begin(), sortedKeys.end());
+
+  // Create result table
+  IdTableStatic<OUT_WIDTH> idTable = std::move(*result).toStatic<OUT_WIDTH>();
+  for (auto it = sortedKeys.begin(); it != sortedKeys.end(); it++) {
+    auto & val = *it;
+    auto aggResult = ValueId::makeFromDouble(map.at(val).calculateResult());
+    idTable.push_back({val, aggResult});
   }
 
   *result = std::move(idTable).toDynamic();
-}
-
-// _____________________________________________________________________________
-bool GroupBy::computeGroupByForSortedSubtree(IdTable* result, size_t outWidth,
-                                             std::vector<Aggregate> aggregates,
-                                             const std::shared_ptr<const ResultTable>& subresult,
-                                             size_t columnIndex,
-                                             LocalVocab& localVocab) {
-  // Fill map
-  std::map<ValueId, IdTable> columnMap;
-
-  for (size_t i = 0; i < subresult->idTable().size(); ++i) {
-    auto id = subresult->idTable()(i, columnIndex);
-
-    auto columns = subresult->idTable().at(i);
-
-    std::vector<ValueId> newRow;
-    for (size_t j = 0; j < columns.numColumns(); j++) {
-      newRow.push_back(columns[j]);
-    }
-
-    auto numColumns = columns.numColumns();
-
-    if (columnMap.contains(id)) {
-      columnMap.at(id).push_back(newRow);
-    } else {
-      IdTable newTable{numColumns, getExecutionContext()->getAllocator()};
-      newTable.push_back(newRow);
-      columnMap.insert({id, std::move(newTable)});
-    }
-  }
-
-  // Process groups
-  CALL_FIXED_SIZE(outWidth, &GroupBy::processGroups, this, result,
-                  columnMap, aggregates, &localVocab);
-
   return true;
 }
 

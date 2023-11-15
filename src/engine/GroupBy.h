@@ -157,34 +157,41 @@ class GroupBy : public Operation {
   // `?z`.
   bool computeGroupByForJoinWithFullScan(IdTable* result);
 
-  // First, check if the query represented by this GROUP BY is of the following
-  // form:
-  //  SELECT ?x (AGG(?x) as ?agg) WHERE {
-  //    %arbitrary graph pattern that contains ?x, and at least one of ?y and ?z
-  //    %arbitrary graph pattern that contains at least one of ?y and ?z,
-  //      but not ?x
-  //  } GROUP BY ?x
-  // Note that `?x` can also appear in the second triple, but then may not
-  // appear in the first. The key requirement for this optimization is that
-  // the grouped-by variable is not a join column.
-  bool computeGroupByForSortedSubtree(IdTable* result, size_t outWidth,
+  // TODO: Update documentation
+  template <size_t OUT_WIDTH>
+  bool computeGroupByForSortedSubtree(IdTable* result,
                                       std::vector<Aggregate> aggregates,
-                                      const std::shared_ptr<const ResultTable>& subresult,
+                                      const IdTable& subresult,
                                       size_t columnIndex,
                                       LocalVocab& localVocab);
 
-  struct SortedJoinData {
+  struct ExplicitlySortedData {
     size_t subtreeColumnIndex_;
   };
 
-  template <size_t OUT_WIDTH>
-  void processGroups(IdTable* result, std::map<ValueId, IdTable>& columnMap,
-                     const std::vector<Aggregate>& aggregates, LocalVocab* localVocab);
+  // Will be the implementation of an interface containing an
+  // "incrementor" function, a result function, a child expression
+  // or expression is passed to "increment" function, along with evalContext?
+  struct AverageAggregationData {
+    double _sum;
+    int _count;
+    void increment(double intermediate) {
+      _sum += intermediate;
+      _count++;
+    };
+    double calculateResult() const { return _sum / _count; }
+  };
+
+  struct CountAggregationData {
+    int _count;
+    void increment(double intermediate) { _count++; }
+    double calculateResult() const { return _count; }
+  };
 
   // Check if the previously described optimization can be applied. The argument
   // Must be the single subtree of this GROUP BY, properly cast to a `const
   // Sort*`.
-  std::optional<SortedJoinData> checkIfSortedJoin();
+  std::optional<ExplicitlySortedData> checkIfExplicitlySorted();
 
   // The check whether the optimization just described can be applied and its
   // actual computation are split up in two functions. This struct contains
