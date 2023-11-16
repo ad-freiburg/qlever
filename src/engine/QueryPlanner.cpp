@@ -1195,11 +1195,33 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   string word = node._wordPart.value();
   SubtreePlan plan(_qec);
   if (node._triple._p._iri == CONTAINS_ENTITY_PREDICATE) {
-    Variable evar = *(node._variables.begin()) == node._cvar.value()
-                        ? *(++node._variables.begin())
-                        : *(node._variables.begin());
-    plan = makeSubtreePlan<EntityIndexScanForWord>(_qec, node._cvar.value(),
-                                                   evar, word);
+    if (node._variables.size() == 2) {
+      Variable evar = *(node._variables.begin()) == node._cvar.value()
+                          ? *(++node._variables.begin())
+                          : *(node._variables.begin());
+      plan = makeSubtreePlan<EntityIndexScanForWord>(_qec, node._cvar.value(),
+                                                     evar, word);
+    } else {
+      // convert entity name to variable name by adding the prefix ?ql_entity_
+      // and deleting all non alphabetical characters
+      string name = "?ql_entity_";
+      for (char c : node._triple._o.toString()) {
+        if (isalpha(c)) {
+          name.push_back(c);
+        }
+      }
+      Variable entityVar{name};
+      VocabIndex idx;
+      bool success =
+          _qec->getIndex().getVocab().getId(node._triple._o.toString(), &idx);
+      if (!success) {
+        LOG(ERROR) << "ERROR: entity \"" << node._triple._o.toString() << "\" "
+                   << "not found in Vocab. Terminating\n";
+        AD_FAIL();
+      }
+      plan = makeSubtreePlan<EntityIndexScanForWord>(_qec, node._cvar.value(),
+                                                     entityVar, word, idx);
+    }
   } else {
     plan =
         makeSubtreePlan<TextIndexScanForWord>(_qec, node._cvar.value(), word);

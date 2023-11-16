@@ -13,10 +13,12 @@ class EntityIndexScanForWord : public Operation {
   const Variable textRecordVar_;
   const Variable entityVar_;
   const string word_;
+  const std::optional<VocabIndex> fixedEntityId_;
 
  public:
-  EntityIndexScanForWord(QueryExecutionContext* qec, Variable cvar,
-                         Variable evar, string word);
+  EntityIndexScanForWord(
+      QueryExecutionContext* qec, Variable cvar, Variable evar, string word,
+      std::optional<VocabIndex> fixedEntityId = std::nullopt);
 
   virtual ~EntityIndexScanForWord() = default;
 

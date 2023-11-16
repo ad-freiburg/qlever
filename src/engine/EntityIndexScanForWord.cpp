@@ -1,13 +1,14 @@
 #include "engine/EntityIndexScanForWord.h"
 
 // _____________________________________________________________________________
-EntityIndexScanForWord::EntityIndexScanForWord(QueryExecutionContext* qec,
-                                               Variable cvar, Variable evar,
-                                               string word)
+EntityIndexScanForWord::EntityIndexScanForWord(
+    QueryExecutionContext* qec, Variable cvar, Variable evar, string word,
+    std::optional<VocabIndex> fixedEntityId /*=std::nullopt*/)
     : Operation(qec),
       textRecordVar_(std::move(cvar)),
       entityVar_(std::move(evar)),
-      word_(std::move(word)) {}
+      word_(std::move(word)),
+      fixedEntityId_(std::move(fixedEntityId)) {}
 
 // _____________________________________________________________________________
 ResultTable EntityIndexScanForWord::computeResult() {
@@ -17,6 +18,17 @@ ResultTable EntityIndexScanForWord::computeResult() {
       getExecutionContext()->getIndex().getUnadjustedEntityPostingsForTerm(
           word_);
 
+  if (fixedEntityId_.has_value()) {
+    Index::WordEntityPostings filteredWep;
+    for (size_t i = 0; i < wep.eids_.size(); i++) {
+      if (wep.eids_[i].getVocabIndex() == fixedEntityId_.value()) {
+        filteredWep.cids_.push_back(wep.cids_[i]);
+        filteredWep.eids_.push_back(wep.eids_[i]);
+        filteredWep.scores_.push_back(wep.scores_[i]);
+      }
+    }
+    wep = std::move(filteredWep);
+  }
   idTable.resize(wep.cids_.size());
   decltype(auto) cidColumn = idTable.getColumn(0);
   std::ranges::transform(wep.cids_, cidColumn.begin(),
