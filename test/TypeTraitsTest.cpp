@@ -105,7 +105,7 @@ TEST(TypeTraits, TupleCat) {
 }
 
 // There is a lot of overlap between the concepts.
-TEST(TypeTraits, InvocableWithReturnType) {
+TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   /*
   Currently, `std::invocable` and `std::regular_invocable` are the same.
   Therefore, having separate tests would be an unnecessary code increase.

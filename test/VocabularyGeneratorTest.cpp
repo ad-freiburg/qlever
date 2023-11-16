@@ -173,7 +173,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
       file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
     };
     res = m.mergeVocabulary(_basePath, 2, TripleComponentComparator(),
-                            internalVocabularyAction);
+                            internalVocabularyAction, 1_GB);
   }
 
   // No language tags in text file
@@ -223,7 +223,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };
       m.mergeVocabulary(basename, 1, v.getCaseComparator(),
-                        internalVocabularyAction);
+                        internalVocabularyAction, 1_GB);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
     EXPECT_EQ(V(0), idMap[V(5)]);
@@ -275,7 +275,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };
       m.mergeVocabulary(basename, 1, v.getCaseComparator(),
-                        internalVocabularyAction);
+                        internalVocabularyAction, 1_GB);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
     EXPECT_EQ(V(0), idMap[V(6)]);
