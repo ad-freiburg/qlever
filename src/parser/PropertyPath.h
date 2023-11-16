@@ -27,7 +27,7 @@ class PropertyPath {
   PropertyPath() : _operation(Operation::IRI) {}
   explicit PropertyPath(Operation op) : _operation(op) {
     if (op == Operation::ZERO_OR_MORE || op == Operation::ZERO_OR_ONE) {
-      _can_be_null = true;
+      can_be_null_ = true;
     }
   }
   PropertyPath(Operation op, std::string iri,

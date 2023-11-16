@@ -105,15 +105,15 @@ std::string PropertyPath::asString() const {
 
 // _____________________________________________________________________________
 void PropertyPath::computeCanBeNull() {
-  _can_be_null = !_children.empty();
+  can_be_null_ = !_children.empty();
   for (PropertyPath& p : _children) {
     p.computeCanBeNull();
-    _can_be_null &= p._can_be_null;
+    can_be_null_ &= p.can_be_null_;
   }
 
   if (_operation == Operation::ZERO_OR_MORE ||
       _operation == Operation::ZERO_OR_ONE) {
-    _can_be_null = true;
+    can_be_null_ = true;
   }
 }
 
