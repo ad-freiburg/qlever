@@ -42,12 +42,6 @@ class Variable {
   // Convert `?someVariable` into `?ql_matchingword_someVariable_someTerm`
   Variable getMatchingWordVariable(std::string_view term) const;
 
-  // Convert `?someVariable` into `?ql_entity_someVariable`
-  Variable getEntityVariable() const;
-
-  // Convert `?someVariable` into `?ql_score_someVariable`
-  Variable getScoreVariable() const;
-
   bool operator==(const Variable&) const = default;
 
   // Make the type hashable for absl, see

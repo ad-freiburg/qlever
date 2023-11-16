@@ -4,11 +4,11 @@
 
 #include "./Operation.h"
 
-// This operation filters all entries of a text-variable out that do not contain
-// a certain word or a certain prefix.
+// This operation retrieves all text records from the fulltext index that
+// contain a certain word or prefix.
 class TextIndexScanForWord : public Operation {
  private:
-  const Variable cvar_;
+  const Variable textRecordVar_;
   const string word_;
   bool isPrefix_ = false;
 

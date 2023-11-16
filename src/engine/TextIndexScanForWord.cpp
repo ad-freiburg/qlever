@@ -4,7 +4,7 @@
 TextIndexScanForWord::TextIndexScanForWord(QueryExecutionContext* qec,
                                            Variable cvar, string word)
     : Operation(qec),
-      cvar_(std::move(cvar)),
+      textRecordVar_(std::move(cvar)),
       word_(std::move(word)),
       isPrefix_(word_.ends_with('*')) {}
 
@@ -36,10 +36,10 @@ VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
     vcmap[var] = makeAlwaysDefinedColumn(index);
     ++index;
   };
-  addDefinedVar(cvar_);
+  addDefinedVar(textRecordVar_);
   if (isPrefix_) {
     addDefinedVar(
-        cvar_.getMatchingWordVariable(word_.substr(0, word_.size() - 1)));
+        textRecordVar_.getMatchingWordVariable(word_.substr(0, word_.size() - 1)));
   }
   return vcmap;
 }
@@ -54,7 +54,7 @@ vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
 
 // _____________________________________________________________________________
 string TextIndexScanForWord::getDescriptor() const {
-  return "TextIndexScanForWord on " + cvar_.name() + " with word " + word_;
+  return "TextIndexScanForWord on " + textRecordVar_.name() + " with word " + word_;
 }
 
 // _____________________________________________________________________________
@@ -64,7 +64,7 @@ string TextIndexScanForWord::asStringImpl(size_t indent) const {
     os << " ";
   }
   os << "WORD INDEX SCAN: "
-     << " with word: \"" << word_ << "\" and variable: \"" << cvar_.name()
+     << " with word: \"" << word_ << "\" and variable: \"" << textRecordVar_.name()
      << " \"";
   ;
   return std::move(os).str();

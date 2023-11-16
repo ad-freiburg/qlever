@@ -4,10 +4,14 @@
 
 #include "./Operation.h"
 
+// This operation retrieves all text records and their corresponding
+// entities from the fulltext index that contain a certain word or prefix.
+// The entities are saved to the entityVar_. If the operation is called on a
+// fixed entity instead, it only returns entries that contain this entity.
 class EntityIndexScanForWord : public Operation {
  private:
-  const Variable cvar_;
-  const Variable evar_;
+  const Variable textRecordVar_;
+  const Variable entityVar_;
   const string word_;
 
  public:

@@ -56,7 +56,7 @@ class QueryPlanner {
             // TextNodeData>`.
             _triple(std::move(t)),
             _cvar(cvar),
-            _wordPart({word}) {
+            _wordPart(word) {
         _variables.insert(cvar);
         if (isVariable(_triple._s)) {
           _variables.insert(_triple._s.getVariable());
@@ -92,7 +92,7 @@ class QueryPlanner {
         // together?
         if (n._cvar.has_value()) {
           out << " cvar " << n._cvar.value().name() << " wordPart "
-              << absl::StrJoin(n._wordPart.value(), " ");
+              << n._wordPart.value();
         }
         return out;
       }
@@ -101,7 +101,7 @@ class QueryPlanner {
       SparqlTriple _triple;
       ad_utility::HashSet<Variable> _variables;
       std::optional<Variable> _cvar = std::nullopt;
-      std::optional<std::vector<std::string>> _wordPart = std::nullopt;
+      std::optional<std::string> _wordPart = std::nullopt;
     };
 
     // Allows for manually building triple graphs for testing

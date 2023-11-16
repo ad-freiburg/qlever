@@ -5,8 +5,8 @@ EntityIndexScanForWord::EntityIndexScanForWord(QueryExecutionContext* qec,
                                                Variable cvar, Variable evar,
                                                string word)
     : Operation(qec),
-      cvar_(std::move(cvar)),
-      evar_(std::move(evar)),
+      textRecordVar_(std::move(cvar)),
+      entityVar_(std::move(evar)),
       word_(std::move(word)) {}
 
 // _____________________________________________________________________________
@@ -22,7 +22,7 @@ ResultTable EntityIndexScanForWord::computeResult() {
   std::ranges::transform(wep.cids_, cidColumn.begin(),
                          &Id::makeFromTextRecordIndex);
   decltype(auto) eidColumn = idTable.getColumn(1);
-  std::ranges::copy(wep.eids_.begin(), wep.eids_.end(), eidColumn.begin());
+  std::ranges::copy(wep.eids_, eidColumn.begin());
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
@@ -35,8 +35,8 @@ VariableToColumnMap EntityIndexScanForWord::computeVariableToColumnMap() const {
     vcmap[var] = makeAlwaysDefinedColumn(index);
     ++index;
   };
-  addDefinedVar(cvar_);
-  addDefinedVar(evar_);
+  addDefinedVar(textRecordVar_);
+  addDefinedVar(entityVar_);
   return vcmap;
 }
 
@@ -50,8 +50,8 @@ vector<ColumnIndex> EntityIndexScanForWord::resultSortedOn() const {
 
 // _____________________________________________________________________________
 string EntityIndexScanForWord::getDescriptor() const {
-  return "EntityIndexScanForWord on text-variable " + cvar_.name() +
-         " and entity-variable " + evar_.name() + " with word " + word_;
+  return "EntityIndexScanForWord on text-variable " + textRecordVar_.name() +
+         " and entity-variable " + entityVar_.name() + " with word " + word_;
 }
 
 // _____________________________________________________________________________
@@ -61,8 +61,9 @@ string EntityIndexScanForWord::asStringImpl(size_t indent) const {
     os << " ";
   }
   os << "ENTITY INDEX SCAN FOR WORD: "
-     << " with word: \"" << word_ << "\" and text-variable: \"" << cvar_.name()
-     << "\" and entity-variable: \"" << evar_.name() << " \"";
+     << " with word: \"" << word_ << "\" and text-variable: \""
+     << textRecordVar_.name() << "\" and entity-variable: \""
+     << entityVar_.name() << " \"";
   ;
   return std::move(os).str();
 }

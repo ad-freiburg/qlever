@@ -1039,15 +1039,14 @@ Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
 // _____________________________________________________________________________
 Index::WordEntityPostings IndexImpl::getUnadjustedEntityPostingsForTerm(
     const string& term) const {
+  //TODO: function should return idTable directly
   LOG(DEBUG) << "Getting unadjusted entity postings for term: " << term << '\n';
-  Index::WordEntityPostings resultWep;
   auto optTbmd = getTextBlockMetadataForWordOrPrefix(term);
   if (!optTbmd.has_value()) {
-    return resultWep;
+    return {};
   }
   const auto& tbmd = optTbmd.value().tbmd_;
-  resultWep = readWordEntityCl(tbmd);
-  return resultWep;
+  return readWordEntityCl(tbmd);
 }
 
 // _____________________________________________________________________________

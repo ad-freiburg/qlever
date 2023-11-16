@@ -670,7 +670,7 @@ void QueryPlanner::addNodeToTripleGraph(const TripleGraph::Node& node,
   for (auto& addedNodevar : addedNode._variables) {
     for (size_t i = 0; i < addedNode._id; ++i) {
       auto& otherNode = *tg._nodeMap[i];
-      if (otherNode._variables.count(addedNodevar) > 0) {
+      if (otherNode._variables.contains(addedNodevar)) {
         // There is an edge between *it->second and the node with id "id".
         tg._adjLists[addedNode._id].push_back(otherNode._id);
         tg._adjLists[otherNode._id].push_back(addedNode._id);
@@ -683,9 +683,7 @@ void QueryPlanner::addNodeToTripleGraph(const TripleGraph::Node& node,
 QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const p::BasicGraphPattern* pattern) const {
   TripleGraph tg;
-  if (pattern->_triples.size() > 64) {
-    AD_THROW("At most 64 triples allowed at the moment.");
-  }
+  size_t numNodesInTripleGraph = 0;
   ad_utility::HashMap<Variable, string> optTermForCvar;
   vector<const SparqlTriple*> entityTriples;
   // Add one or more nodes for each triple.
@@ -697,15 +695,17 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
       optTermForCvar[t._s.getVariable()] =
           terms[_qec->getIndex().getIndexOfBestSuitedElTerm(terms)];
       // Add one node for each word
-      for (std::string word : terms) {
+      for (size_t i = 0; i < terms.size(); i++) {
         addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(),
-                                               t._s.getVariable(), word, t),
+                                               t._s.getVariable(), terms[i], t),
                              tg);
+        numNodesInTripleGraph++;
       }
     } else if (t._p._iri == CONTAINS_ENTITY_PREDICATE) {
       entityTriples.push_back(&t);
     } else {
       addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(), t), tg);
+      numNodesInTripleGraph++;
     }
   }
   for (const SparqlTriple* t : entityTriples) {
@@ -713,6 +713,10 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(),
                                            t->_s.getVariable(), term, *t),
                          tg);
+    numNodesInTripleGraph++;
+  }
+  if (numNodesInTripleGraph > 64) {
+    AD_THROW("At most 64 triples allowed at the moment.");
   }
   return tg;
 }
@@ -1187,14 +1191,16 @@ Variable QueryPlanner::generateUniqueVarName() {
 // _____________________________________________________________________________
 QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
     const QueryPlanner::TripleGraph::Node& node) const {
-  string word = node._wordPart.value()[0];
+  AD_CONTRACT_CHECK(node._wordPart.has_value());
+  string word = node._wordPart.value();
   SubtreePlan plan(_qec);
-  if (node._variables.size() == 2) {
-    plan = makeSubtreePlan<EntityIndexScanForWord>(
-        _qec, node._cvar.value(), *(++node._variables.begin()), word);
+  if (node._triple._p._iri == CONTAINS_ENTITY_PREDICATE) {
+    Variable evar = *(node._variables.begin()) == node._cvar.value()
+                        ? *(++node._variables.begin())
+                        : *(node._variables.begin());
+    plan = makeSubtreePlan<EntityIndexScanForWord>(_qec, node._cvar.value(),
+                                                   evar, word);
   } else {
-    AD_CONTRACT_CHECK(node._wordPart.has_value());
-    AD_CONTRACT_CHECK(node._wordPart.value().size() == 1);
     plan =
         makeSubtreePlan<TextIndexScanForWord>(_qec, node._cvar.value(), word);
   }
@@ -1269,8 +1275,7 @@ string QueryPlanner::TripleGraph::asString() const {
     } else {
       os << i << " {TextOP for "
          << _nodeMap.find(i)->second->_cvar.value().name() << ", wordPart: \""
-         << absl::StrJoin(_nodeMap.find(i)->second->_wordPart.value(), " ")
-         << "\"} : (";
+         << _nodeMap.find(i)->second->_wordPart.value() << "\"} : (";
     }
 
     for (size_t j = 0; j < _adjLists[i].size(); ++j) {
