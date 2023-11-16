@@ -219,8 +219,8 @@ class Operation {
   // as lightweight as possible because of that. The `detailSupplier` allows to
   // pass a message to add to any potential exception that might be thrown.
   AD_ALWAYS_INLINE void checkCancellation(
-      const ad_utility::InvocableWithReturnType<std::string_view> auto&
-          detailSupplier) const {
+      const ad_utility::InvocableWithConvertibleReturnType<
+          std::string_view> auto& detailSupplier) const {
     cancellationHandle_->throwIfCancelled(detailSupplier);
   }
 

@@ -21,6 +21,7 @@
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
+#include "util/ParallelMultiwayMerge.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeString.h"
@@ -30,7 +31,8 @@
 template <typename Comparator, typename InternalVocabularyAction>
 VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, Comparator comparator,
-    InternalVocabularyAction& internalVocabularyAction) {
+    InternalVocabularyAction& internalVocabularyAction,
+    ad_utility::MemorySize memoryToUse) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal. All internal IRIs or literals come before all external ones.
   // TODO<joka921> Change this as soon as we have Interleaved Ids via the
@@ -42,50 +44,37 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     }
     return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
   };
-
-  // For the priority queue we have to invert the comparison, because
-  // `std::priority_queue` sorts descending by default.
-  auto greaterThanForQueue = [&lessThan](const QueueWord& p1,
-                                         const QueueWord& p2) {
-    return lessThan(p2._entry, p1._entry);
+  auto lessThanForQueue = [&lessThan](const QueueWord& p1,
+                                      const QueueWord& p2) {
+    return lessThan(p1._entry, p2._entry);
   };
 
-  std::vector<ad_utility::serialization::FileReadSerializer> infiles;
-  std::vector<uint64_t> numWordsLeftInPartialVocabulary;
+  std::vector<cppcoro::generator<QueueWord>> generators;
 
+  auto makeGenerator = [&](size_t fileIdx) -> cppcoro::generator<QueueWord> {
+    ad_utility::serialization::FileReadSerializer infile{
+        absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIdx)};
+    uint64_t numWords;
+    infile >> numWords;
+    TripleComponentWithIndex val;
+    for ([[maybe_unused]] auto idx : ad_utility::integerRange(numWords)) {
+      infile >> val;
+      QueueWord word{std::move(val), fileIdx};
+      co_yield word;
+    }
+  };
   if (!_noIdMapsAndIgnoreExternalVocab) {
     outfileExternal_ =
         ad_utility::makeOfstream(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
   }
-  std::vector<bool> endOfFile(numFiles, false);
-
-  // Priority queue for the k-way merge
-  std::priority_queue<QueueWord, std::vector<QueueWord>,
-                      decltype(greaterThanForQueue)>
-      queue(greaterThanForQueue);
-
-  auto pushWordFromPartialVocabularyToQueue = [&](size_t i) {
-    if (numWordsLeftInPartialVocabulary[i] > 0) {
-      TripleComponentWithIndex tripleComponent;
-      infiles[i] >> tripleComponent;
-      queue.push(QueueWord(std::move(tripleComponent), i));
-      numWordsLeftInPartialVocabulary[i]--;
-    }
-  };
 
   // Open and prepare all infiles and mmap output vectors.
-  infiles.reserve(numFiles);
+  generators.reserve(numFiles);
   for (size_t i = 0; i < numFiles; i++) {
-    infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME +
-                         std::to_string(i));
-    numWordsLeftInPartialVocabulary.emplace_back();
-    // Read the number of words in the partial vocabulary.
-    infiles.back() >> numWordsLeftInPartialVocabulary.back();
+    generators.push_back(makeGenerator(i));
     if (!_noIdMapsAndIgnoreExternalVocab) {
       idVecs_.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
     }
-    // Read the first entry of the vocabulary and add it to the queue.
-    pushWordFromPartialVocabularyToQueue(i);
   }
 
   std::vector<QueueWord> sortedBuffer;
@@ -93,19 +82,25 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 
   std::future<void> writeFuture;
 
-  // start k-way merge
-  while (!queue.empty()) {
+  // Some memory (that is hard to measure exactly) is used for the writing of a
+  // batch of merged words, so we only give 80% of the total memory to the
+  // merging. This is very approximate and should be investigated in more
+  // detail.
+  auto mergedWords =
+      ad_utility::parallelMultiwayMerge<QueueWord, true,
+                                        decltype(sizeOfQueueWord)>(
+          0.8 * memoryToUse, generators, lessThanForQueue);
+  for (QueueWord& currentWord : std::views::join(mergedWords)) {
     // for the prefix compression vocabulary, we don't need the external
     // vocabulary
-    // TODO<joka921> Don't include external literals at all in this vocabulary.
-    if (_noIdMapsAndIgnoreExternalVocab && queue.top().isExternal()) {
+    // TODO<joka921> Don't include external literals at all in this
+    // vocabulary.
+    if (_noIdMapsAndIgnoreExternalVocab && currentWord.isExternal()) {
       break;
     }
 
     // accumulated the globally ordered queue words in a buffer.
-    sortedBuffer.push_back(std::move(queue.top()));
-    queue.pop();
-    auto i = sortedBuffer.back()._partialFileId;
+    sortedBuffer.push_back(std::move(currentWord));
 
     if (sortedBuffer.size() >= _bufferSize) {
       // asynchronously write the next batch of sorted
@@ -125,9 +120,6 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
       writeFuture = std::async(writeTask);
       // we have moved away our buffer, start over
     }
-
-    // add next word from the same infile to the priority queue
-    pushWordFromPartialVocabularyToQueue(i);
   }
 
   // wait for the active write tasks to finish
