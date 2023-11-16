@@ -630,7 +630,7 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
     ad_utility::Timer& requestTimer, uint64_t maxSend) {
   shared_ptr<const ResultTable> resultTable = qet.getResult();
   resultTable->logResultSize();
-  auto timeResultComputation = requestTimer.value();
+  auto timeResultComputation = requestTimer.msecs();
 
   size_t resultSize = resultTable->size();
 
@@ -669,10 +669,9 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
                       std::move(resultTable));
   }
   j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
-  j["time"]["total"] = std::to_string(requestTimer.msecs()) + "ms";
+  j["time"]["total"] = std::to_string(requestTimer.msecs().count()) + "ms";
   j["time"]["computeResult"] =
-      std::to_string(ad_utility::Timer::toMilliseconds(timeResultComputation)) +
-      "ms";
+      std::to_string(timeResultComputation.count()) + "ms";
 
   return j;
 }

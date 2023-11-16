@@ -21,13 +21,15 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
-        compiler-version: [11, 12, 13, 16]
+        compiler-version: [11, 12, 13, 16, 17]
         warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
         expensive-tests: [true]
         exclude:
           - compiler: gcc
             compiler-version: 16
+          - compiler: gcc
+            compiler-version: 17
           - compiler: clang
             compiler-version: 11
           - compiler: clang
@@ -77,7 +79,7 @@ jobs:
       run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-13 g++-13
       if :  matrix.compiler == 'gcc' && matrix.compiler-version == 13
       
-    - name: Install clang 16
+    - name: Install clang
       # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
       # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted
       # immediately after.
@@ -85,9 +87,9 @@ jobs:
         wget https://apt.llvm.org/llvm.sh
         sudo chmod +x llvm.sh
         sed   's/apt-key del/echo/' llvm.sh -iy
-        sudo ./llvm.sh 16
-        sudo apt install -y clang-16
-      if :  matrix.compiler == 'clang' && matrix.compiler-version == 16
+        sudo ./llvm.sh ${{matrix.compiler-version}}
+        sudo apt install -y clang-${{matrix.compiler-version}}
+      if :  matrix.compiler == 'clang'
 
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu

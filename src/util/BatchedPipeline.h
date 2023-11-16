@@ -20,6 +20,7 @@ using namespace ad_tuple_helpers;
 using Timer = ad_utility::Timer;
 
 namespace detail {
+using AtomicMs = std::atomic<std::chrono::milliseconds::rep>;
 
 /* This is used as a return value for the pickupBatch calls of our pipeline
  * elements If the  is false this means that our
@@ -74,7 +75,7 @@ class Batcher {
       Timer timer{Timer::InitialStatus::Started};
       auto res = fut_.get();
       orderNextBatch();
-      waitingTime_->fetch_add(timer.msecs());
+      waitingTime_->fetch_add(timer.msecs().count());
       return res;
     } catch (const std::future_error& e) {
       throw std::runtime_error(
@@ -95,8 +96,7 @@ class Batcher {
  private:
   size_t batchSize_;
   std::unique_ptr<Creator> creator_;
-  std::unique_ptr<std::atomic<size_t>> waitingTime_{
-      std::make_unique<std::atomic<size_t>>(0)};
+  std::unique_ptr<AtomicMs> waitingTime_{std::make_unique<AtomicMs>(0)};
   std::future<detail::Batch<ValueT>> fut_;
 
   // start assembling the next batch in parallel
@@ -167,6 +167,8 @@ class Batcher {
 template <size_t Parallelism, class PreviousStage, class FirstTransformer,
           class... Transformers>
 class BatchedPipeline {
+  using AtomicMs = detail::AtomicMs;
+
  public:
   // either the same transformer is applied in all parallel Branches, or there
   // is exactly one transformer for all
@@ -198,7 +200,7 @@ class BatchedPipeline {
       Timer timer{Timer::InitialStatus::Started};
       auto res = fut_.get();
       orderNextBatch();
-      waitingTime_->fetch_add(timer.msecs());
+      waitingTime_->fetch_add(timer.msecs().count());
       return res;
     } catch (std::future_error& e) {
       throw std::runtime_error(
@@ -350,8 +352,7 @@ class BatchedPipeline {
   }
 
  private:
-  std::unique_ptr<std::atomic<size_t>> waitingTime_{
-      std::make_unique<std::atomic<size_t>>(0)};
+  std::unique_ptr<AtomicMs> waitingTime_{std::make_unique<AtomicMs>(0)};
   // the unique_ptrs to our Transformers
   using uniquePtrTuple = toUniquePtrTuple_t<FirstTransformer, Transformers...>;
   // raw non-owning pointers to the transformers
@@ -470,6 +471,8 @@ class Interface;  // forward declaration needed below for friend declaration
  */
 template <class Pipeline>
 class BatchExtractor {
+  using AtomicMs = detail::AtomicMs;
+
  public:
   /// The type of our elements after all transformations were applied
   using ValueT = std::decay_t<
@@ -490,7 +493,7 @@ class BatchExtractor {
         buffer_ = std::move(res.content_);
       }
 
-      waitingTime_->fetch_add(timer.msecs());
+      waitingTime_->fetch_add(timer.msecs().count());
       bufferPosition_ = 0;
       if (isPipelineValid_) {
         // if possible, directly submit the next parsing job
@@ -523,8 +526,7 @@ class BatchExtractor {
   [[nodiscard]] size_t getBatchSize() const { return pipeline_.getBatchSize(); }
 
  private:
-  std::unique_ptr<std::atomic<size_t>> waitingTime_{
-      std::make_unique<std::atomic<size_t>>(0)};
+  std::unique_ptr<AtomicMs> waitingTime_{std::make_unique<AtomicMs>(0)};
   std::unique_ptr<Pipeline> pipeline_;
   std::future<detail::Batch<ValueT>> fut_;
   std::vector<ValueT, ad_utility::default_init_allocator<ValueT>> buffer_;

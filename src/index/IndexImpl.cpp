@@ -308,8 +308,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       }
       LOG(TIMING) << "WaitTimes for Pipeline in msecs\n";
       for (const auto& t : p.getWaitingTime()) {
-        LOG(TIMING) << ad_utility::Timer::toMilliseconds(t) << " msecs"
-                    << std::endl;
+        LOG(TIMING)
+            << std::chrono::duration_cast<std::chrono::milliseconds>(t).count()
+            << " msecs" << std::endl;
       }
 
       parser->printAndResetQueueStatistics();
@@ -326,7 +327,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     }
     LOG(TIMING)
         << "Time spent waiting for the writing of a previous vocabulary: "
-        << sortFutureTimer.msecs() << "ms." << std::endl;
+        << sortFutureTimer.msecs().count() << "ms." << std::endl;
     auto moveMap = [](std::optional<ItemMapManager>&& el) {
       return std::move(el.value()).moveMap();
     };
