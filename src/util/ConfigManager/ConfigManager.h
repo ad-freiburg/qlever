@@ -496,20 +496,28 @@ class ConfigManager {
   @brief A vector to all the configuratio options, held by this manager,
   represented with their json paths and reference to them. Options held by a sub
   manager, are also included with the path to the sub manager as prefix.
+
+  @param sortByInitialization If true, the order of the returned `ConfigOption`
+  is by initialization order. If false, the order is random.
   */
-  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions();
-  std::vector<std::pair<std::string, const ConfigOption&>>
-  configurationOptions() const;
+  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions(
+      const bool sortByInitialization);
+  std::vector<std::pair<std::string, const ConfigOption&>> configurationOptions(
+      const bool sortByInitialization) const;
 
   /*
   @brief Return all `ConfigOptionValidatorManager` held by this manager and its
   sub managers.
 
-  @param patPrefix Prefix for the paths in the exception message. Needed, so
+  @param sortByInitialization If true, the order of the returned
+  `ConfigOptionValidatorManager` is by initialization order. If false, the order
+  is random.
+  @param pathPrefix Prefix for the paths in the exception message. Needed, so
   that a sub manager can include its own path in the error messages.
   */
   std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
-  validators(std::string_view pathPrefix = "") const;
+  validators(const bool sortByInitialization,
+             std::string_view pathPrefix = "") const;
 
   /*
   @brief The implementation for `configurationOptions`.
@@ -517,6 +525,8 @@ class ConfigManager {
   @tparam ReturnReference Should be either `ConfigOption&`, or `const
   ConfigOption&`.
 
+  @param sortByInitialization If true, the order of the returned `ConfigOption`
+  is by initialization order. If false, the order is random.
   @param pathPrefix This prefix will be added to all configuration option json
   paths, that will be returned.
   */
@@ -525,6 +535,7 @@ class ConfigManager {
            std::same_as<ReturnReference, const ConfigOption&>
   static std::vector<std::pair<std::string, ReturnReference>>
   configurationOptionsImpl(auto& configurationOptions,
+                           const bool sortByInitialization,
                            std::string_view pathPrefix = "");
 
   /*

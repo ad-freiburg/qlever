@@ -101,8 +101,20 @@ requires std::same_as<ReturnReference, ConfigOption&> ||
          std::same_as<ReturnReference, const ConfigOption&>
 std::vector<std::pair<std::string, ReturnReference>>
 ConfigManager::configurationOptionsImpl(auto& configurationOptions,
+                                        const bool sortByInitialization,
                                         std::string_view pathPrefix) {
   std::vector<std::pair<std::string, ReturnReference>> collectedOptions;
+
+  // A list of all the keys in the hash map, so that we can sort our access
+  // order, if wanted.
+  auto keyView = std::views::keys(configurationOptions);
+  std::vector<std::string_view> hashKeys(keyView.begin(), keyView.end());
+  if (sortByInitialization) {
+    std::ranges::sort(
+        hashKeys, {}, [&configurationOptions](std::string_view key) {
+          return configurationOptions.at(key).getInitializationId();
+        });
+  }
 
   /*
   Takes one entry of an instance of `configurationOptions_`, checks it with
@@ -123,14 +135,15 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
   with `verifyEntry`, and adds the config options, that can be found inside it,
   together with the paths to them, to `collectedOptions`.
   */
-  auto addHashMapEntryToCollectedOptions = [&collectedOptions,
-                                            &pathPrefix](const auto pair) {
-    const auto& [jsonPath, hashMapEntry] = pair;
+  auto addHashMapEntryToCollectedOptions =
+      [&collectedOptions, &pathPrefix, &sortByInitialization](const auto pair) {
+        const auto& [jsonPath, hashMapEntry] = pair;
 
-    const std::string& pathToCurrentEntry = absl::StrCat(pathPrefix, jsonPath);
+        const std::string& pathToCurrentEntry =
+            absl::StrCat(pathPrefix, jsonPath);
 
-    hashMapEntry.visit(
-        [&collectedOptions, &pathToCurrentEntry]<typename T>(T& var) {
+        hashMapEntry.visit([&collectedOptions, &pathToCurrentEntry,
+                            &sortByInitialization]<typename T>(T& var) {
           // A normal `ConfigOption` can be directly added. For a
           // `ConfigManager` we have to recursively collect the options.
           if constexpr (isSimilar<T, ConfigOption>) {
@@ -140,32 +153,39 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
 
             // Move the recursive results.
             auto recursiveResults = configurationOptionsImpl<ReturnReference>(
-                var.configurationOptions_, pathToCurrentEntry);
+                var.configurationOptions_, sortByInitialization,
+                pathToCurrentEntry);
             collectedOptions.reserve(recursiveResults.size());
             std::ranges::move(recursiveResults,
                               std::back_inserter(collectedOptions));
           }
         });
-  };
+      };
 
   // Collect all the options in the given `configurationOptions`.
-  std::ranges::for_each(configurationOptions, addHashMapEntryToCollectedOptions,
-                        verifyEntry);
+  std::ranges::for_each(
+      std::views::transform(
+          hashKeys,
+          [&configurationOptions](std::string_view key) -> decltype(auto) {
+            return *configurationOptions.find(key);
+          }),
+      addHashMapEntryToCollectedOptions, verifyEntry);
 
   return collectedOptions;
 }
 
 // ____________________________________________________________________________
 std::vector<std::pair<std::string, ConfigOption&>>
-ConfigManager::configurationOptions() {
-  return configurationOptionsImpl<ConfigOption&>(configurationOptions_, "");
+ConfigManager::configurationOptions(const bool sortByInitialization) {
+  return configurationOptionsImpl<ConfigOption&>(configurationOptions_,
+                                                 sortByInitialization, "");
 }
 
 // ____________________________________________________________________________
 std::vector<std::pair<std::string, const ConfigOption&>>
-ConfigManager::configurationOptions() const {
-  return configurationOptionsImpl<const ConfigOption&>(configurationOptions_,
-                                                       "");
+ConfigManager::configurationOptions(const bool sortByInitialization) const {
+  return configurationOptionsImpl<const ConfigOption&>(
+      configurationOptions_, sortByInitialization, "");
 }
 
 // ____________________________________________________________________________
@@ -382,7 +402,7 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   // All the configuration options together with their paths.
   const auto allConfigOptions{[this]() {
     std::vector<std::pair<std::string, ConfigOption&>> allConfigOption =
-        configurationOptions();
+        configurationOptions(false);
 
     // `absl::flat_hash_map` doesn't allow the values to be l-value references,
     // but `std::unordered_map` does.
@@ -470,7 +490,7 @@ std::string ConfigManager::printConfigurationDoc(
     bool printCurrentJsonConfiguration) const {
   // All the configuration options together with their paths.
   const std::vector<std::pair<std::string, const ConfigOption&>>
-      allConfigOptions = configurationOptions();
+      allConfigOptions = configurationOptions(true);
 
   // Handeling, for when there are no configuration options.
   if (allConfigOptions.empty()) {
@@ -524,7 +544,7 @@ std::string ConfigManager::printConfigurationDoc(
 
   // List of the validators.
   const std::string& listOfAllValidators = ad_utility::lazyStrJoin(
-      ad_utility::transform(validators(),
+      ad_utility::transform(validators(true),
                             [](const ConfigOptionValidatorManager& validator) {
                               return absl::StrCat("- ",
                                                   validator.getDescription());
@@ -566,7 +586,7 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
     const {
   // All the configuration options together with their paths.
   const std::vector<std::pair<std::string, const ConfigOption&>>
-      allConfigOptions = configurationOptions();
+      allConfigOptions = configurationOptions(true);
 
   // For only looking at the configuration options in our map.
   auto onlyConfigurationOptionsView = std::views::values(allConfigOptions);
@@ -597,7 +617,8 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
 
 // ____________________________________________________________________________
 std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
-ConfigManager::validators(std::string_view pathPrefix) const {
+ConfigManager::validators(const bool sortByInitialization,
+                          std::string_view pathPrefix) const {
   // For the collected validators. Initialized with the validators inside this
   // manager.
   std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
@@ -621,13 +642,14 @@ ConfigManager::validators(std::string_view pathPrefix) const {
   // Collect the validators from the sub managers.
   std::ranges::for_each(
       std::views::filter(configurationOptions_, isNonEmptySubManager),
-      [&pathPrefix, &allValidators](const auto& pair) {
+      [&pathPrefix, &allValidators, &sortByInitialization](const auto& pair) {
         // Easier access.
         const auto& [jsonPath, hashMapEntry] = pair;
 
-        appendVector(allValidators,
-                     hashMapEntry.getSubManager().value()->validators(
-                         absl::StrCat(pathPrefix, jsonPath)));
+        appendVector(
+            allValidators,
+            hashMapEntry.getSubManager().value()->validators(
+                sortByInitialization, absl::StrCat(pathPrefix, jsonPath)));
       });
 
   return allValidators;
@@ -635,13 +657,14 @@ ConfigManager::validators(std::string_view pathPrefix) const {
 
 // ____________________________________________________________________________
 void ConfigManager::verifyWithValidators() const {
-  std::ranges::for_each(
-      validators(), [](auto& validator) { validator.get().checkValidator(); });
+  std::ranges::for_each(validators(false), [](auto& validator) {
+    validator.get().checkValidator();
+  });
 };
 
 // ____________________________________________________________________________
 bool ConfigManager::containsOption(const ConfigOption& opt) const {
-  const auto allOptions = configurationOptions();
+  const auto allOptions = configurationOptions(false);
   return ad_utility::contains(
       std::views::values(allOptions) |
           std::views::transform(
