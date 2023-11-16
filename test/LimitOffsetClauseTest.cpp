@@ -43,7 +43,7 @@ TEST(LimitOffsetClause, upperBound) {
 }
 
 TEST(LimitOffsetClause, randomTestingOfInvariants) {
-  FastRandomIntGenerator<uint64_t> r;
+  ad_utility::FastRandomIntGenerator<uint64_t> r;
   for (size_t i = 0; i < 10'000; ++i) {
     LimitOffsetClause l;
     l._limit = r();

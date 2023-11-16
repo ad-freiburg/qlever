@@ -18,7 +18,7 @@
 namespace ad_benchmark {
 
 using A = std::array<Id, 3>;
-class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
+class IdTableCompressedWriterBenchmark : public BenchmarkInterface {
   std::string name() const final {
     return "Benchmarks for external sorting and storage of IdTables";
   }
@@ -30,7 +30,7 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
     BenchmarkResults results{};
 
     auto generateRandomRow =
-        [gen = FastRandomIntGenerator<uint64_t>{}]() mutable {
+        [gen = ad_utility::FastRandomIntGenerator<uint64_t>{}]() mutable {
           std::array<Id, numCols> arr;
           for (auto& id : arr) {
             id = Id::fromBits(gen() >> 40);
@@ -103,6 +103,6 @@ class IdTableCompressedWriterBenchmarks : public BenchmarkInterface {
     return results;
   }
 };
-AD_REGISTER_BENCHMARK(IdTableCompressedWriterBenchmarks);
+AD_REGISTER_BENCHMARK(IdTableCompressedWriterBenchmark);
 }  // namespace ad_benchmark
 #endif

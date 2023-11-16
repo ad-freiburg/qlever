@@ -37,7 +37,8 @@ class Timer {
   using Milliseconds = chr::milliseconds;
   using Seconds = chr::duration<double>;
   using Duration = Microseconds;
-  using TimePoint = chr::time_point<chr::high_resolution_clock>;
+  using Clock = chr::steady_clock;
+  using TimePoint = chr::time_point<Clock>;
 
   // A simple enum used in the constructor to decide whether the timer is
   // immediately started or not.
@@ -64,11 +65,6 @@ class Timer {
     return chr::duration_cast<Seconds>(d).count();
   }
 
-  // Convert a `Duration` to milliseconds (as a plain `size_t`).
-  static size_t toMilliseconds(Duration d) {
-    return chr::duration_cast<Milliseconds>(d).count();
-  }
-
  private:
   // The timer value (initially zero)
   Duration value_ = Duration::zero();
@@ -91,7 +87,7 @@ class Timer {
   // Reset the timer value to zero and starts the measurement.
   inline void start() {
     value_ = Duration::zero();
-    timeOfStart_ = chr::high_resolution_clock::now();
+    timeOfStart_ = Clock::now();
     isRunning_ = true;
   }
 
@@ -99,7 +95,7 @@ class Timer {
   // the timer value (no effect if running)
   inline void cont() {
     if (isRunning_ == false) {
-      timeOfStart_ = chr::high_resolution_clock::now();
+      timeOfStart_ = Clock::now();
       isRunning_ = true;
     }
   }
@@ -121,90 +117,17 @@ class Timer {
     }
   }
 
-  size_t msecs() const { return toMilliseconds(value()); }
+  chr::milliseconds msecs() const {
+    return chr::duration_cast<Milliseconds>(value());
+  }
 
   // is the timer currently running
   bool isRunning() const { return isRunning_; }
 
  private:
   Duration timeSinceLastStart() const {
-    auto now = chr::high_resolution_clock::now();
-    return toDuration(now - timeOfStart_);
+    return toDuration(Clock::now() - timeOfStart_);
   }
-};
-
-/// An exception signalling a timeout
-class TimeoutException : public std::exception {
- public:
-  TimeoutException(std::string message) : message_{std::move(message)} {}
-  const char* what() const noexcept override { return message_.c_str(); }
-
- private:
-  std::string message_;
-};
-
-/// A timer which also can be given a timeout value and queried whether it
-/// has timed out
-class TimeoutTimer : public Timer {
- public:
-  /// Factory function for a timer that never times out
-  static TimeoutTimer unlimited() { return TimeoutTimer(UnlimitedTag{}); }
-
-  template <ad_utility::isInstantiation<chr::duration> T>
-  TimeoutTimer(T timeLimit, Timer::InitialStatus status)
-      : Timer{status}, timeLimit_{toDuration(timeLimit)} {}
-
-  /// Did this timer already timeout
-  /// Can't be const because of the internals of the Timer class.
-  bool hasTimedOut() {
-    if (isUnlimited_) {
-      return false;
-    } else {
-      return value() > timeLimit_;
-    }
-  }
-
-  // Check if this timer has timed out. If the timer has timed out, throws a
-  // TimeoutException. Else, nothing happens.
-  void checkTimeoutAndThrow(std::string_view additionalMessage = {}) {
-    if (hasTimedOut()) {
-      double seconds =
-          std::chrono::duration_cast<Timer::Seconds>(timeLimit_).count();
-      std::stringstream numberStream;
-      // Seconds with three digits after the decimal point.
-      // TODO<C++20> : Use std::format for formatting, it is much more readable.
-      numberStream << std::setprecision(3) << std::fixed << seconds;
-      throw TimeoutException{absl::StrCat(
-          additionalMessage, "A Timeout occured. The time limit was "s,
-          std::move(numberStream).str(), " seconds"s)};
-    }
-  }
-
-  // Overload that does not take an error message directly, but a callable that
-  // creates the error message lazily when the timeout occurs. This can be used
-  // to make calling this function cheaper in the typical "no timeout" case.
-  template <typename F>
-  requires std::is_invocable_r_v<std::string_view, F>
-  void checkTimeoutAndThrow(F&& f) {
-    if (hasTimedOut()) {
-      checkTimeoutAndThrow(f());
-    }
-  }
-
-  Duration remainingTime() const {
-    if (isUnlimited_) {
-      return Duration::max();
-    }
-    auto passedTime = value();
-    return passedTime < timeLimit_ ? timeLimit_ - passedTime : Duration::zero();
-  }
-
- private:
-  Timer::Duration timeLimit_ = Timer::Duration::zero();
-  bool isUnlimited_ = false;  // never times out
-  class UnlimitedTag {};
-  explicit TimeoutTimer(UnlimitedTag)
-      : Timer{Timer::Started}, isUnlimited_{true} {}
 };
 
 namespace detail {
@@ -212,9 +135,9 @@ namespace detail {
 // destruction and logs the time together with a specified message
 // The callback can be used to change the logging mechanism. It must be
 // callable with a `size_t` (the number of milliseconds) and `message`.
-[[maybe_unused]] inline auto defaultLogger = [](size_t msecs,
+[[maybe_unused]] inline auto defaultLogger = [](chr::milliseconds msecs,
                                                 std::string_view message) {
-  LOG(TIMING) << message << " took " << msecs << "ms" << std::endl;
+  LOG(TIMING) << message << " took " << msecs.count() << "ms" << std::endl;
 };
 template <typename Callback = decltype(defaultLogger)>
 struct [[nodiscard(
@@ -232,10 +155,7 @@ struct [[nodiscard(
   // is not needed for the typical usage, so those operations are deleted.
   TimeBlockAndLog(const TimeBlockAndLog&) = delete;
   TimeBlockAndLog& operator=(const TimeBlockAndLog&) = delete;
-  ~TimeBlockAndLog() {
-    auto msecs = Timer::toMilliseconds(t_.value());
-    callback_(msecs, message_);
-  }
+  ~TimeBlockAndLog() { callback_(t_.msecs(), message_); }
 };
 }  // namespace detail
 
@@ -249,14 +169,5 @@ using detail::TimeBlockAndLog;
 
 }  // namespace timer
 using timer::TimeBlockAndLog;
-using timer::TimeoutException;
-using timer::TimeoutTimer;
 using timer::Timer;
-
-/// A threadsafe timeout timer
-using ConcurrentTimeoutTimer =
-    ad_utility::Synchronized<TimeoutTimer, std::mutex>;
-
-/// A shared ptr to a threadsafe timeout timer
-using SharedConcurrentTimeoutTimer = std::shared_ptr<ConcurrentTimeoutTimer>;
 }  // namespace ad_utility

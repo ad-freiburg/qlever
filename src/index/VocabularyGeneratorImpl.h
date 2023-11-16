@@ -13,22 +13,26 @@
 #include <utility>
 #include <vector>
 
-#include "../parser/RdfEscaping.h"
-#include "../util/Conversions.h"
-#include "../util/Exception.h"
-#include "../util/HashMap.h"
-#include "../util/Log.h"
-#include "../util/Serializer/FileSerializer.h"
-#include "../util/Serializer/SerializeString.h"
-#include "./ConstantsIndexBuilding.h"
-#include "./Vocabulary.h"
-#include "./VocabularyGenerator.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/Vocabulary.h"
+#include "index/VocabularyGenerator.h"
+#include "parser/RdfEscaping.h"
+#include "util/Conversions.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
+#include "util/Log.h"
+#include "util/ParallelMultiwayMerge.h"
+#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/SerializeString.h"
+#include "util/Timer.h"
 
 // ___________________________________________________________________
 template <typename Comparator, typename InternalVocabularyAction>
 VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, Comparator comparator,
-    InternalVocabularyAction& internalVocabularyAction) {
+    InternalVocabularyAction& internalVocabularyAction,
+    ad_utility::MemorySize memoryToUse) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal. All internal IRIs or literals come before all external ones.
   // TODO<joka921> Change this as soon as we have Interleaved Ids via the
@@ -38,52 +42,39 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     if (t1.isExternal() != t2.isExternal()) {
       return t2.isExternal();
     }
-    return comparator(t1._iriOrLiteral, t2._iriOrLiteral);
+    return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
+  };
+  auto lessThanForQueue = [&lessThan](const QueueWord& p1,
+                                      const QueueWord& p2) {
+    return lessThan(p1._entry, p2._entry);
   };
 
-  // For the priority queue we have to invert the comparison, because
-  // `std::priority_queue` sorts descending by default.
-  auto greaterThanForQueue = [&lessThan](const QueueWord& p1,
-                                         const QueueWord& p2) {
-    return lessThan(p2._entry, p1._entry);
+  std::vector<cppcoro::generator<QueueWord>> generators;
+
+  auto makeGenerator = [&](size_t fileIdx) -> cppcoro::generator<QueueWord> {
+    ad_utility::serialization::FileReadSerializer infile{
+        absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIdx)};
+    uint64_t numWords;
+    infile >> numWords;
+    TripleComponentWithIndex val;
+    for ([[maybe_unused]] auto idx : ad_utility::integerRange(numWords)) {
+      infile >> val;
+      QueueWord word{std::move(val), fileIdx};
+      co_yield word;
+    }
   };
-
-  std::vector<ad_utility::serialization::FileReadSerializer> infiles;
-  std::vector<uint64_t> numWordsLeftInPartialVocabulary;
-
   if (!_noIdMapsAndIgnoreExternalVocab) {
     outfileExternal_ =
         ad_utility::makeOfstream(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
   }
-  std::vector<bool> endOfFile(numFiles, false);
-
-  // Priority queue for the k-way merge
-  std::priority_queue<QueueWord, std::vector<QueueWord>,
-                      decltype(greaterThanForQueue)>
-      queue(greaterThanForQueue);
-
-  auto pushWordFromPartialVocabularyToQueue = [&](size_t i) {
-    if (numWordsLeftInPartialVocabulary[i] > 0) {
-      TripleComponentWithIndex tripleComponent;
-      infiles[i] >> tripleComponent;
-      queue.push(QueueWord(std::move(tripleComponent), i));
-      numWordsLeftInPartialVocabulary[i]--;
-    }
-  };
 
   // Open and prepare all infiles and mmap output vectors.
-  infiles.reserve(numFiles);
+  generators.reserve(numFiles);
   for (size_t i = 0; i < numFiles; i++) {
-    infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME +
-                         std::to_string(i));
-    numWordsLeftInPartialVocabulary.emplace_back();
-    // Read the number of words in the partial vocabulary.
-    infiles.back() >> numWordsLeftInPartialVocabulary.back();
+    generators.push_back(makeGenerator(i));
     if (!_noIdMapsAndIgnoreExternalVocab) {
       idVecs_.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
     }
-    // Read the first entry of the vocabulary and add it to the queue.
-    pushWordFromPartialVocabularyToQueue(i);
   }
 
   std::vector<QueueWord> sortedBuffer;
@@ -91,19 +82,25 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 
   std::future<void> writeFuture;
 
-  // start k-way merge
-  while (!queue.empty()) {
+  // Some memory (that is hard to measure exactly) is used for the writing of a
+  // batch of merged words, so we only give 80% of the total memory to the
+  // merging. This is very approximate and should be investigated in more
+  // detail.
+  auto mergedWords =
+      ad_utility::parallelMultiwayMerge<QueueWord, true,
+                                        decltype(sizeOfQueueWord)>(
+          0.8 * memoryToUse, generators, lessThanForQueue);
+  for (QueueWord& currentWord : std::views::join(mergedWords)) {
     // for the prefix compression vocabulary, we don't need the external
     // vocabulary
-    // TODO<joka921> Don't include external literals at all in this vocabulary.
-    if (_noIdMapsAndIgnoreExternalVocab && queue.top().isExternal()) {
+    // TODO<joka921> Don't include external literals at all in this
+    // vocabulary.
+    if (_noIdMapsAndIgnoreExternalVocab && currentWord.isExternal()) {
       break;
     }
 
     // accumulated the globally ordered queue words in a buffer.
-    sortedBuffer.push_back(std::move(queue.top()));
-    queue.pop();
-    auto i = sortedBuffer.back()._partialFileId;
+    sortedBuffer.push_back(std::move(currentWord));
 
     if (sortedBuffer.size() >= _bufferSize) {
       // asynchronously write the next batch of sorted
@@ -123,9 +120,6 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
       writeFuture = std::async(writeTask);
       // we have moved away our buffer, start over
     }
-
-    // add next word from the same infile to the priority queue
-    pushWordFromPartialVocabularyToQueue(i);
   }
 
   // wait for the active write tasks to finish
@@ -185,9 +179,9 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       }
 
       metaData_.internalEntities_.addIfWordMatches(
-          top.iriOrLiteral(), lastTripleComponent_.value()._index);
+          top.iriOrLiteral(), lastTripleComponent_.value().index_);
       metaData_.langTaggedPredicates_.addIfWordMatches(
-          top.iriOrLiteral(), lastTripleComponent_.value()._index);
+          top.iriOrLiteral(), lastTripleComponent_.value().index_);
       metaData_.numWordsTotal_++;
       if (metaData_.numWordsTotal_ % 100'000'000 == 0) {
         LOG(INFO) << "Words merged: " << metaData_.numWordsTotal_ << std::endl;
@@ -196,7 +190,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     // Write pair of local and global ID to buffer.
     writeBuf.emplace_back(
         top._partialFileId,
-        std::pair{top.id(), lastTripleComponent_.value()._index});
+        std::pair{top.id(), lastTripleComponent_.value().index_});
 
     if (writeBuf.size() >= bufSize) {
       auto task = [this, buf = std::move(writeBuf)]() {
@@ -240,17 +234,18 @@ inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
     ItemVec* elsPtr) {
   auto& els = *elsPtr;
   ad_utility::HashMap<uint64_t, uint64_t> res;
+  res.reserve(2 * els.size());
   bool first = true;
-  std::string lastWord;
+  std::string_view lastWord;
   size_t nextWordId = 0;
   for (auto& el : els) {
     if (!first && lastWord != el.first) {
       nextWordId++;
       lastWord = el.first;
     }
-    AD_CONTRACT_CHECK(!res.count(el.second.m_id));
-    res[el.second.m_id] = nextWordId;
-    el.second.m_id = nextWordId;
+    AD_CONTRACT_CHECK(!res.count(el.second.id_));
+    res[el.second.id_] = nextWordId;
+    el.second.id_ = nextWordId;
     first = false;
   }
   return res;
@@ -286,6 +281,8 @@ inline void writeMappedIdsToExtVec(
 inline void writePartialVocabularyToFile(const ItemVec& els,
                                          const string& fileName) {
   LOG(DEBUG) << "Writing partial vocabulary to: " << fileName << "\n";
+  ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
+  byteBuffer.reserve(1'000'000'000);
   ad_utility::serialization::FileWriteSerializer serializer{fileName};
   uint64_t size = els.size();  // really make sure that this has 64bits;
   serializer << size;
@@ -294,10 +291,16 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
     const auto& [id, splitVal] = idAndSplitVal;
-    TripleComponentWithIndex entry{word, splitVal.isExternalized_, id};
-    serializer << entry;
+    byteBuffer << word;
+    byteBuffer << splitVal.isExternalized_;
+    byteBuffer << id;
   }
-  serializer.close();
+  {
+    ad_utility::TimeBlockAndLog t{"performing the actual write"};
+    serializer.serializeBytes(byteBuffer.data().data(),
+                              byteBuffer.data().size());
+    serializer.close();
+  }
   LOG(DEBUG) << "Done writing partial vocabulary\n";
 }
 
@@ -310,10 +313,10 @@ void writePartialIdMapToBinaryFileForMerging(
   ItemVec els;
   size_t totalEls = std::accumulate(
       map->begin(), map->end(), 0,
-      [](const auto& x, const auto& y) { return x + y.size(); });
+      [](const auto& x, const auto& y) { return x + y.map_.size(); });
   els.reserve(totalEls);
   for (const auto& singleMap : *map) {
-    els.insert(end(els), begin(singleMap), end(singleMap));
+    els.insert(end(els), begin(singleMap.map_), end(singleMap.map_));
   }
   LOG(TRACE) << "Sorting ..." << std::endl;
 
@@ -325,16 +328,33 @@ void writePartialIdMapToBinaryFileForMerging(
 }
 
 // __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(std::unique_ptr<ItemMapArray> map) {
+inline ItemVec vocabMapsToVector(ItemMapArray& map) {
   ItemVec els;
-  size_t totalEls = std::accumulate(
-      map->begin(), map->end(), 0,
-      [](const auto& x, const auto& y) { return x + y.size(); });
-  els.reserve(totalEls);
-  for (auto& singleMap : *map) {
-    els.insert(end(els), std::make_move_iterator(begin(singleMap)),
-               std::make_move_iterator(end(singleMap)));
+  std::vector<size_t> offsets;
+  size_t totalEls =
+      std::accumulate(map.begin(), map.end(), 0,
+                      [&offsets](const auto& x, const auto& y) mutable {
+                        offsets.push_back(x);
+                        return x + y.map_.size();
+                      });
+  els.resize(totalEls);
+  std::vector<std::future<void>> futures;
+  size_t i = 0;
+  for (auto& singleMap : map) {
+    futures.push_back(
+        std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
+          using T = ItemVec::value_type;
+          std::ranges::transform(singleMap.map_, els.begin() + offsets[i],
+                                 [](auto& el) -> T {
+                                   return {el.first, std::move(el.second)};
+                                 });
+        }));
+    ++i;
   }
+  for (auto& fut : futures) {
+    fut.get();
+  }
+
   return els;
 }
 
@@ -346,7 +366,7 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
       ad_utility::parallel_sort(begin(els), end(els), comp,
-                                ad_utility::parallel_tag(NUM_SORT_THREADS));
+                                ad_utility::parallel_tag(10));
     } else {
       std::sort(begin(els), end(els), comp);
     }

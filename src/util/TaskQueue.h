@@ -28,6 +28,7 @@ class TaskQueue {
  private:
   using Task = std::function<void()>;
   using Timer = ad_utility::Timer;
+  using AtomicMs = std::atomic<std::chrono::milliseconds::rep>;
 
   std::vector<ad_utility::JThread> _threads;
   std::queue<Task> _queuedTasks;
@@ -40,7 +41,7 @@ class TaskQueue {
   std::atomic<bool> _shutdownQueue = false;
   std::string _name;
   // Keep track of the time spent waiting in the push/pop operation
-  std::atomic<size_t> _pushTime = 0, _popTime = 0;
+  AtomicMs _pushTime = 0, _popTime = 0;
 
  public:
   /// Construct from the maximum size of the queue, and the number of worker
@@ -129,13 +130,13 @@ class TaskQueue {
   // value(void) as well as for functions with a return value. See the
   // applications above.
   template <typename F>
-  decltype(auto) executeAndUpdateTimer(F&& f, std::atomic<size_t>& duration) {
+  decltype(auto) executeAndUpdateTimer(F&& f, AtomicMs& duration) {
     if constexpr (TrackTimes) {
       struct T {
         ad_utility::Timer _t{ad_utility::Timer::Started};
-        std::atomic<size_t>& _target;
-        T(std::atomic<size_t>& target) : _target(target) {}
-        ~T() { _target += _t.msecs(); }
+        AtomicMs& _target;
+        T(AtomicMs& target) : _target(target) {}
+        ~T() { _target += _t.msecs().count(); }
       };
       T timeHandler{duration};
       return f();

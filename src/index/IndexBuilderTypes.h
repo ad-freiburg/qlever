@@ -1,52 +1,54 @@
 //  Copyright 2020, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
+//                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 // Common classes / Typedefs that are used during Index Creation
 
-#include "../global/Constants.h"
-#include "../global/Id.h"
-#include "../util/Conversions.h"
-#include "../util/HashMap.h"
-#include "../util/Serializer/Serializer.h"
-#include "../util/TupleHelpers.h"
-#include "../util/TypeTraits.h"
-#include "./ConstantsIndexBuilding.h"
-#include "./StringSortComparator.h"
-
 #ifndef QLEVER_INDEXBUILDERTYPES_H
 #define QLEVER_INDEXBUILDERTYPES_H
+
+#include <memory_resource>
+
+#include "global/Constants.h"
+#include "global/Id.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/StringSortComparator.h"
+#include "util/Conversions.h"
+#include "util/HashMap.h"
+#include "util/Serializer/Serializer.h"
+#include "util/TupleHelpers.h"
+#include "util/TypeTraits.h"
 
 // An IRI or a literal together with the information, whether it should be part
 // of the external vocabulary
 struct PossiblyExternalizedIriOrLiteral {
   PossiblyExternalizedIriOrLiteral(std::string iriOrLiteral,
                                    bool isExternal = false)
-      : _iriOrLiteral{std::move(iriOrLiteral)}, _isExternal{isExternal} {}
+      : iriOrLiteral_{std::move(iriOrLiteral)}, isExternal_{isExternal} {}
   PossiblyExternalizedIriOrLiteral() = default;
-  std::string _iriOrLiteral;
-  bool _isExternal = false;
+  std::string iriOrLiteral_;
+  bool isExternal_ = false;
 
   AD_SERIALIZE_FRIEND_FUNCTION(PossiblyExternalizedIriOrLiteral) {
-    serializer | arg._iriOrLiteral;
-    serializer | arg._isExternal;
+    serializer | arg.iriOrLiteral_;
+    serializer | arg.isExternal_;
   }
 };
 
 struct TripleComponentWithIndex {
-  std::string _iriOrLiteral;
-  bool _isExternal = false;
-  uint64_t _index = 0;
+  std::string iriOrLiteral_;
+  bool isExternal_ = false;
+  uint64_t index_ = 0;
 
-  [[nodiscard]] const auto& isExternal() const { return _isExternal; }
-  [[nodiscard]] auto& isExternal() { return _isExternal; }
-  [[nodiscard]] const auto& iriOrLiteral() const { return _iriOrLiteral; }
-  [[nodiscard]] auto& iriOrLiteral() { return _iriOrLiteral; }
+  [[nodiscard]] const auto& isExternal() const { return isExternal_; }
+  [[nodiscard]] auto& isExternal() { return isExternal_; }
+  [[nodiscard]] const auto& iriOrLiteral() const { return iriOrLiteral_; }
+  [[nodiscard]] auto& iriOrLiteral() { return iriOrLiteral_; }
 
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
-    serializer | arg._iriOrLiteral;
-    serializer | arg._isExternal;
-    serializer | arg._index;
+    serializer | arg.iriOrLiteral_;
+    serializer | arg.isExternal_;
+    serializer | arg.index_;
   }
 };
 
@@ -64,13 +66,68 @@ inline Triple makeTriple(std::array<std::string, 3>&& t) {
 
 /// The index of a word and the corresponding `SplitVal`.
 struct LocalVocabIndexAndSplitVal {
-  uint64_t m_id;
-  TripleComponentComparator::SplitVal m_splitVal;
+  uint64_t id_;
+  TripleComponentComparator::SplitValNonOwningWithSortKey splitVal_;
 };
 
-using ItemMap = ad_utility::HashMap<std::string, LocalVocabIndexAndSplitVal>;
-using ItemMapArray = std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS>;
-using ItemVec = std::vector<std::pair<std::string, LocalVocabIndexAndSplitVal>>;
+// During the first phase of the index building we use hash maps from strings
+// (entries in the vocabulary) to their `LocalVocabIndexAndSplitVal` (see
+// above). In the hash map we will only store pointers (`string_view` as the
+// key, and the `LocalVocabIndexAndSplitVal` also is a non-owning pointer type)
+// and manage the memory separately, s.t. we can deallocate all the strings of a
+// single phase at once as soon as we are finished with them.
+
+// Allocator type for the hash map
+using ItemAlloc = std::pmr::polymorphic_allocator<
+    std::pair<const std::string_view, LocalVocabIndexAndSplitVal>>;
+
+// The actual hash map type.
+using ItemMap = ad_utility::HashMap<
+    std::string_view, LocalVocabIndexAndSplitVal,
+    absl::container_internal::hash_default_hash<std::string_view>,
+    absl::container_internal::hash_default_eq<std::string_view>, ItemAlloc>;
+
+// A vector that stores the same values as the hash map.
+using ItemVec =
+    std::vector<std::pair<std::string_view, LocalVocabIndexAndSplitVal>>;
+
+// A buffer that very efficiently handles a set of strings that is deallocated
+// at once when the buffer goes out of scope.
+class MonotonicBuffer {
+  std::unique_ptr<std::pmr::monotonic_buffer_resource> buffer_ =
+      std::make_unique<std::pmr::monotonic_buffer_resource>();
+  std::unique_ptr<std::pmr::polymorphic_allocator<char>> charAllocator_ =
+      std::make_unique<std::pmr::polymorphic_allocator<char>>(buffer_.get());
+
+ public:
+  // Access to the underlying allocator.
+  std::pmr::polymorphic_allocator<char>& charAllocator() {
+    return *charAllocator_;
+  }
+  // Append a string to the buffer and return a `string_view` that points into
+  // the buffer.
+  std::string_view addString(std::string_view input) {
+    auto ptr = charAllocator_->allocate(input.size());
+    std::ranges::copy(input, ptr);
+    return {ptr, ptr + input.size()};
+  }
+};
+
+// The hash map (which only stores pointers) together with the `MonotonicBuffer`
+// that manages the actual strings.
+struct ItemMapAndBuffer {
+  ItemMap map_;
+  MonotonicBuffer buffer_;
+
+  explicit ItemMapAndBuffer(ItemAlloc alloc) : map_{alloc} {}
+  ItemMapAndBuffer(ItemMapAndBuffer&&) noexcept = default;
+  // We have to delete the move-assignment as it would have the wrong semantics
+  // (the monotonic buffer wouldn't be moved, this is one of the oddities of the
+  // `std::pmr` types.
+  ItemMapAndBuffer& operator=(ItemMapAndBuffer&&) noexcept = delete;
+};
+
+using ItemMapArray = std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS>;
 
 /**
  * Manage a HashMap of string->Id to create unique Ids for strings.
@@ -80,14 +137,13 @@ using ItemVec = std::vector<std::pair<std::string, LocalVocabIndexAndSplitVal>>;
 // Align each ItemMapManager on its own cache line to avoid false sharing.
 struct alignas(256) ItemMapManager {
   /// Construct by assigning the minimum ID that should be returned by the map.
-  explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp)
-      : _map(), _minId(minId), m_comp(cmp) {}
-  /// Minimum Id is 0
-  ItemMapManager() = default;
+  explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp,
+                          ItemAlloc alloc)
+      : map_(alloc), minId_(minId), comparator_(cmp) {}
 
   /// Move the held HashMap out as soon as we are done inserting and only need
-  /// the actual vocabulary
-  ItemMap&& moveMap() && { return std::move(_map); }
+  /// the actual vocabulary.
+  ItemMapAndBuffer&& moveMap() && { return std::move(map_); }
 
   /// If the key was seen before, return its preassigned ID. Else assign the
   /// next free ID to the string, store and return it.
@@ -96,16 +152,23 @@ struct alignas(256) ItemMapManager {
       return std::get<Id>(keyOrId);
     }
     const auto& key = std::get<PossiblyExternalizedIriOrLiteral>(keyOrId);
-    if (!_map.count(key._iriOrLiteral)) {
-      uint64_t res = _map.size() + _minId;
-      _map[key._iriOrLiteral] = {
-          res, m_comp->extractAndTransformComparable(
-                   key._iriOrLiteral, TripleComponentComparator::Level::TOTAL,
-                   key._isExternal)};
+    auto& map = map_.map_;
+    auto& buffer = map_.buffer_;
+    auto it = map.find(key.iriOrLiteral_);
+    if (it == map.end()) {
+      uint64_t res = map.size() + minId_;
+      // We have to first add the string to the buffer, otherwise we don't have
+      // a persistent `string_view` to add to the `map`.
+      auto keyView = buffer.addString(key.iriOrLiteral_);
+      map.try_emplace(
+          keyView, LocalVocabIndexAndSplitVal{
+                       res, comparator_->extractAndTransformComparableNonOwning(
+                                key.iriOrLiteral_,
+                                TripleComponentComparator::Level::TOTAL,
+                                key.isExternal_, &buffer.charAllocator())});
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
-      return Id::makeFromVocabIndex(
-          VocabIndex::make(_map[key._iriOrLiteral].m_id));
+      return Id::makeFromVocabIndex(VocabIndex::make(it->second.id_));
     }
   }
 
@@ -113,23 +176,23 @@ struct alignas(256) ItemMapManager {
   std::array<Id, 3> getId(const Triple& t) {
     return {getId(t[0]), getId(t[1]), getId(t[2])};
   }
-  ItemMap _map;
-  uint64_t _minId = 0;
-  const TripleComponentComparator* m_comp = nullptr;
+  ItemMapAndBuffer map_;
+  uint64_t minId_ = 0;
+  const TripleComponentComparator* comparator_ = nullptr;
 };
 
 /// Combines a triple (three strings) together with the (possibly empty)
 /// language tag of its object.
 struct LangtagAndTriple {
-  std::string _langtag;
-  Triple _triple;
+  std::string langtag_;
+  Triple triple_;
 };
 
 /**
  * @brief Get the tuple of lambda functions that is needed for the String-> Id
  * step of the Index building Pipeline
  *
- * return a tuple of <Parallelism> lambda functions, each lambda does the
+ * return a tuple of <NumThreads> lambda functions, each lambda does the
  * following
  *
  * given an index idx, returns a lambda that
@@ -153,19 +216,26 @@ struct LangtagAndTriple {
  * ranges for the individual HashMaps
  * @return A Tuple of lambda functions (see above)
  */
-template <size_t Parallelism>
-auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
-                     size_t maxNumberOfTriples,
-                     const TripleComponentComparator* comp) {
+template <size_t NumThreads>
+auto getIdMapLambdas(
+    std::array<std::optional<ItemMapManager>, NumThreads>* itemArrayPtr,
+    size_t maxNumberOfTriples, const TripleComponentComparator* comp,
+    auto* indexPtr, ItemAlloc alloc) {
   // that way the different ids won't interfere
   auto& itemArray = *itemArrayPtr;
-  for (size_t j = 0; j < Parallelism; ++j) {
-    itemArray[j] = ItemMapManager(j * 100 * maxNumberOfTriples, comp);
+  for (size_t j = 0; j < NumThreads; ++j) {
+    itemArray[j].emplace(j * 100 * maxNumberOfTriples, comp, alloc);
+    // This `reserve` is for a guaranteed upper bound that stays the same during
+    // the whole index building. That's why we use the `CachingMemoryResource`
+    // as an underlying memory pool for the allocator of the hash map to make
+    // the allocation and deallocation of these hash maps (that are newly
+    // created for each batch) much cheaper (see `CachingMemoryResource.h` and
+    // `IndexImpl.cpp`).
+    itemArray[j]->map_.map_.reserve(5 * maxNumberOfTriples / NumThreads);
     // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
     // This is not necessary for the actual QLever code, but certain unit tests
     // currently fail without it.
-    itemArray[j].getId(LANGUAGE_PREDICATE);
-    itemArray[j]._map.reserve(2 * maxNumberOfTriples);
+    itemArray[j]->getId(LANGUAGE_PREDICATE);
   }
   using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
 
@@ -177,23 +247,24 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
    * tag)
    * - All Ids are assigned according to itemArray[idx]
    */
-  const auto itemMapLamdaCreator = [&itemArray](const size_t idx) {
-    return [&map = itemArray[idx]](LangtagAndTriple&& lt) {
+  const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
+    return [&map = *itemArray[idx], indexPtr](ad_utility::Rvalue auto&& tr) {
+      auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       OptionalIds res;
       // get Ids for the actual triple and store them in the result.
-      res[0] = map.getId(lt._triple);
-      if (!lt._langtag.empty()) {  // the object of the triple was a literal
+      res[0] = map.getId(lt.triple_);
+      if (!lt.langtag_.empty()) {  // the object of the triple was a literal
                                    // with a language tag
         // get the Id for the corresponding langtag Entity
         auto langTagId =
-            map.getId(ad_utility::convertLangtagToEntityUri(lt._langtag));
+            map.getId(ad_utility::convertLangtagToEntityUri(lt.langtag_));
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
             map.getId(ad_utility::convertToLanguageTaggedPredicate(
-                std::get<PossiblyExternalizedIriOrLiteral>(lt._triple[1])
-                    ._iriOrLiteral,
-                lt._langtag));
-        auto& spoIds = *(res[0]);  // ids of original triple
+                std::get<PossiblyExternalizedIriOrLiteral>(lt.triple_[1])
+                    .iriOrLiteral_,
+                lt.langtag_));
+        auto& spoIds = *res[0];  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.
         // extra triple <subject> @language@<predicate> <object>
@@ -210,8 +281,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
   // setup a tuple with one lambda function per map in the itemArray
   // (the first lambda will assign ids according to itemArray[1]...
   auto itemMapLambdaTuple =
-      ad_tuple_helpers::setupTupleFromCallable<Parallelism>(
-          itemMapLamdaCreator);
+      ad_tuple_helpers::setupTupleFromCallable<NumThreads>(itemMapLamdaCreator);
   return itemMapLambdaTuple;
 }
 #endif  // QLEVER_INDEXBUILDERTYPES_H
