@@ -238,16 +238,14 @@ TEST(ConstexprUtils, ConstExprForEachType) {
   ASSERT_TRUE(typeToStringVector.empty());
 }
 
-TEST(ConstexprUtils, ConstExprForEachTypeInVariant) {
-  // Normal call.
+TEST(ConstexprUtils, forEachTypeInTemplateType) {
+  // Normal call with `std::variant`.
   testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
-    constExprForEachTypeInVariant<std::variant<Ts...>>(func);
+    forEachTypeInTemplateType<std::variant<Ts...>>(func);
   });
-}
 
-TEST(ConstexprUtils, ConstExprForEachTypeInTuple) {
-  // Normal call.
+  // Normal call with `std::tuple`.
   testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
-    constExprForEachTypeInTuple<std::tuple<Ts...>>(func);
+    forEachTypeInTemplateType<std::tuple<Ts...>>(func);
   });
 }
