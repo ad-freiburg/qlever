@@ -1039,7 +1039,7 @@ Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
 // _____________________________________________________________________________
 Index::WordEntityPostings IndexImpl::getUnadjustedEntityPostingsForTerm(
     const string& term) const {
-  //TODO: function should return idTable directly
+  // TODO: function should return idTable directly
   LOG(DEBUG) << "Getting unadjusted entity postings for term: " << term << '\n';
   auto optTbmd = getTextBlockMetadataForWordOrPrefix(term);
   if (!optTbmd.has_value()) {

@@ -38,8 +38,8 @@ VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
   };
   addDefinedVar(textRecordVar_);
   if (isPrefix_) {
-    addDefinedVar(
-        textRecordVar_.getMatchingWordVariable(word_.substr(0, word_.size() - 1)));
+    addDefinedVar(textRecordVar_.getMatchingWordVariable(
+        word_.substr(0, word_.size() - 1)));
   }
   return vcmap;
 }
@@ -54,7 +54,8 @@ vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
 
 // _____________________________________________________________________________
 string TextIndexScanForWord::getDescriptor() const {
-  return "TextIndexScanForWord on " + textRecordVar_.name() + " with word " + word_;
+  return "TextIndexScanForWord on " + textRecordVar_.name() + " with word " +
+         word_;
 }
 
 // _____________________________________________________________________________
@@ -64,8 +65,8 @@ string TextIndexScanForWord::asStringImpl(size_t indent) const {
     os << " ";
   }
   os << "WORD INDEX SCAN: "
-     << " with word: \"" << word_ << "\" and variable: \"" << textRecordVar_.name()
-     << " \"";
+     << " with word: \"" << word_ << "\" and variable: \""
+     << textRecordVar_.name() << " \"";
   ;
   return std::move(os).str();
 }

@@ -119,8 +119,8 @@ inline Index makeTestIndex(
 inline QueryExecutionContext* getQec(
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,
-    bool usePrefixCompression = true,
-    size_t blocksizePermutationsInBytes = 32, bool createTextIndex = false) {
+    bool usePrefixCompression = true, size_t blocksizePermutationsInBytes = 32,
+    bool createTextIndex = false) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
