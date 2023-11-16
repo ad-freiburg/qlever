@@ -206,7 +206,7 @@ auto cartesianPowerAsIntegerArray() {
 explicit template parameter, keeping the same order.
 */
 template <typename... Ts>
-constexpr void constExprForEachType(const auto& lambda) {
+constexpr void forEachTypeInParameterPack(const auto& lambda) {
   (lambda.template operator()<Ts>(), ...);
 }
 
@@ -222,7 +222,9 @@ struct forEachTypeInTemplateTypeImpl;
 
 template <template <typename...> typename Template, typename... Ts>
 struct forEachTypeInTemplateTypeImpl<Template<Ts...>> {
-  void operator()(const auto& lambda) { constExprForEachType<Ts...>(lambda); }
+  void operator()(const auto& lambda) {
+    forEachTypeInParameterPack<Ts...>(lambda);
+  }
 };
 }  // namespace detail
 

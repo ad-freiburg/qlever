@@ -225,16 +225,16 @@ void testConstExprForEachNormalCall(
   ASSERT_STREQ(typeToStringVector.at(7).c_str(), "int");
 }
 
-TEST(ConstexprUtils, ConstExprForEachType) {
+TEST(ConstexprUtils, ForEachTypeInParameterPack) {
   // Normal call.
   testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
-    constExprForEachType<Ts...>(func);
+    forEachTypeInParameterPack<Ts...>(func);
   });
 
   // No types given should end in nothing happening.
   std::vector<std::string> typeToStringVector{};
   auto typeToString = typeToStringFactory(&typeToStringVector);
-  constExprForEachType<>(typeToString);
+  forEachTypeInParameterPack<>(typeToString);
   ASSERT_TRUE(typeToStringVector.empty());
 }
 
