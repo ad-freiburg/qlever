@@ -746,7 +746,7 @@ bool GroupBy::computeGroupByForSortedSubtree(IdTable* result,
     evaluationContext._beginIndex = i;
     evaluationContext._endIndex = i + 1;
 
-    ValueId resultEntry;
+    sparqlExpression::detail::IntOrDouble resultValue;
 
     // Evaluate child expression
     auto expr = aggregates.at(0)._expression.getPimpl();
@@ -758,40 +758,28 @@ bool GroupBy::computeGroupByForSortedSubtree(IdTable* result,
     // Extract ValueId
     auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                        T&& singleResult) mutable {
-      // If the expression is a variable, get value directly
-      constexpr static bool isVariable = std::is_same_v<T, Variable>;
-      if constexpr (isVariable) {
-        std::span<const ValueId> results = sparqlExpression::detail::getIdsFromVariable(singleResult,
-                                                                                        &evaluationContext);
-        resultEntry = results.front();
-        return;
-      }
-      constexpr static bool isStrongId = std::is_same_v<T, Id>;
-      AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T> ||
-                        sparqlExpression::isVectorResult<T>);
-      if constexpr (isStrongId) {
-        resultEntry = singleResult;
-      } else if constexpr (sparqlExpression::isConstantResult<T>) {
-        resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-            AD_FWD(singleResult), localVocab);
-      } else if constexpr (sparqlExpression::isVectorResult<T>) {
-        resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-            std::move(singleResult[0]), localVocab);
-      } else {
-        // Can this happen? What expressions return something other than
-        // constants or vectors with a single element?
-        AD_FAIL();
+      auto generator = sparqlExpression::detail::makeGenerator(
+                  std::forward<T>(singleResult), 1,
+                      &evaluationContext);
+
+      using NVG = sparqlExpression::detail::NumericValueGetter;
+
+      // At the moment this will be just a single result.
+      for (auto val : generator) {
+        sparqlExpression::detail::NumericValue numVal = NVG()(val, &evaluationContext);
+
+        if (const int64_t* pInt = std::get_if<int64_t>(&numVal))
+          resultValue = *pInt;
+        else if (const double* pDouble = std::get_if<double>(&numVal))
+          resultValue = *pDouble;
+        else
+          AD_FAIL();
       }
     };
 
     std::visit(visitor, std::move(expressionResult));
 
-    // TODO: Check datatype, use getXYZ and cast accordingly
-    if (map.contains(id)) {
-      map.at(id).increment(resultEntry.getInt());
-    } else {
-      map.insert({id, {(double) resultEntry.getInt(), 1}});
-    }
+    map[id].increment(resultValue);
   }
 
   // Sort by groupBy column

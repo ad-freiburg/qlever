@@ -15,6 +15,7 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "gtest/gtest.h"
 #include "parser/Alias.h"
 #include "parser/ParsedQuery.h"
@@ -172,17 +173,20 @@ class GroupBy : public Operation {
   // "incrementor" function, a result function, a child expression
   // or expression is passed to "increment" function, along with evalContext?
   struct AverageAggregationData {
-    double _sum;
-    int _count;
-    void increment(double intermediate) {
-      _sum += intermediate;
+    double _sum = 0;
+    int64_t _count = 0;
+    void increment(sparqlExpression::detail::IntOrDouble intermediate) {
+      if (const int64_t* intval = std::get_if<int64_t>(&intermediate))
+        _sum += (double)*intval;
+      else if (const double* dval = std::get_if<double>(&intermediate))
+        _sum += *dval;
       _count++;
     };
     double calculateResult() const { return _sum / _count; }
   };
 
   struct CountAggregationData {
-    int _count;
+    int64_t _count = 0;
     void increment(double intermediate) { _count++; }
     double calculateResult() const { return _count; }
   };
