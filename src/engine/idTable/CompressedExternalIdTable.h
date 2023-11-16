@@ -569,13 +569,17 @@ class CompressedExternalIdTableSorter
   // Transition from the input phase, where `push()` can be called, to the
   // output phase and return a generator that yields the sorted elements. This
   // function must be called exactly once.
+  /*
   cppcoro::generator<
       const typename IdTableStatic<NumStaticCols>::const_row_reference>
-  sortedView() {
+      */
+  auto sortedView() {
+    return std::views::join(ad_utility::OwningView{getSortedBlocks()});
+    /*
     size_t numYielded = 0;
     mergeIsActive_.store(true);
     for (const auto& block : ad_utility::streams::runStreamAsync(
-             sortedBlocks(), std::max(1, numBufferedOutputBlocks_ - 2))) {
+             sortedBlocks(), std::max(1, numBufferedOutputBlocks_ - 2), true)) {
       for (typename IdTableStatic<NumStaticCols>::const_row_reference row :
            block) {
         ++numYielded;
@@ -584,14 +588,18 @@ class CompressedExternalIdTableSorter
     }
     AD_CORRECTNESS_CHECK(numYielded == this->numElementsPushed_);
     mergeIsActive_.store(false);
+     */
   }
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return a generator that yields the sorted elements. This
   // function may be called exactly once.
-  cppcoro::generator<IdTableStatic<NumStaticCols>> getSortedBlocks() {
+  template <size_t N = NumStaticCols>
+  requires(N == NumStaticCols || N == 0)
+  cppcoro::generator<IdTableStatic<N>> getSortedBlocks() {
     mergeIsActive_.store(true);
     for (auto& block : ad_utility::streams::runStreamAsync(
-             sortedBlocks(), std::max(1, numBufferedOutputBlocks_ - 2))) {
+             sortedBlocks<N>(), std::max(1, numBufferedOutputBlocks_ - 2),
+             true)) {
       co_yield block;
     }
     mergeIsActive_.store(false);
@@ -601,10 +609,12 @@ class CompressedExternalIdTableSorter
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return a generator that yields the sorted elements. This
   // function may be called exactly once.
-  cppcoro::generator<IdTableStatic<NumStaticCols>> sortedBlocks() {
+  template <size_t N = NumStaticCols>
+  requires(N == NumStaticCols || N == 0)
+  cppcoro::generator<IdTableStatic<N>> sortedBlocks() {
     if (!this->transformAndPushLastBlock()) {
       // There was only one block, return it.
-      co_yield this->currentBlock_;
+      co_yield std::move(this->currentBlock_).template toStatic<N>();
       co_return;
     }
     auto rowGenerators =
@@ -645,7 +655,7 @@ class CompressedExternalIdTableSorter
       }
       if (result.size() >= blockSizeOutput) {
         numPopped += result.numRows();
-        co_yield result;
+        co_yield std::move(result).template toStatic<N>();
         // The `result` will be moved away, so we have to reset it again.
         result = IdTableStatic<NumStaticCols>(this->writer_.numColumns(),
                                               this->writer_.allocator());
@@ -653,7 +663,7 @@ class CompressedExternalIdTableSorter
       }
     }
     numPopped += result.numRows();
-    co_yield result;
+    co_yield std::move(result).template toStatic<N>();
     AD_CORRECTNESS_CHECK(numPopped == this->numElementsPushed_);
   }
 

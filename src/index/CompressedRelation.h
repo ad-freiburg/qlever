@@ -222,7 +222,8 @@ class CompressedRelationWriter {
   /// still be in some internal buffer.
  public:
   void finish() {
-    finishCurrentRelation();
+    // TODO<joka921> Check that the remainder of the interface is safe.
+    // finishCurrentRelation();
     writeBufferedRelationsToSingleBlock();
     outfile_.close();
   }
@@ -249,11 +250,29 @@ class CompressedRelationWriter {
                             size_t end);
   size_t writeExclusiveBlocksForRelation(Id col0Id, IdTableView<0> buf,
                                          size_t start, size_t end);
-  void writeCompleteRelation(Id col0Id, IdTableView<0> buf, size_t start,
-                             size_t end);
-  void finishCurrentRelation();
+  CompressedRelationMetadata writeCompleteRelation(Id col0Id,
+                                                   size_t numDistinctC1,
+                                                   IdTableView<0> buf,
+                                                   size_t start, size_t end);
+  CompressedRelationMetadata finishCurrentRelation(size_t numDistinctC1);
   void addBlockToCurrentRelation(IdTableView<0> buf, size_t begin, size_t end);
   std::vector<CompressedRelationMetadata> moveFinishedMetadata();
+
+  static
+      // _____________________________________________________________________________
+      std::pair<std::vector<CompressedBlockMetadata>,
+                std::vector<CompressedBlockMetadata>>
+      createPermutationPairImpl(
+          const std::string& basename, CompressedRelationWriter& writer1,
+          CompressedRelationWriter& writer2,
+          cppcoro::generator<IdTableStatic<0>> sortedTriples, size_t c0,
+          size_t c1, size_t c2,
+          std::function<void(std::span<const CompressedRelationMetadata>)>
+              metadataCallback1,
+          std::function<void(std::span<const CompressedRelationMetadata>)>
+              metadataCallback2,
+          std::vector<std::function<void(const IdTableStatic<0>&)>>
+              perBlockCallbacks);
 };
 
 using namespace std::string_view_literals;

@@ -12,6 +12,7 @@
 #include "./Generator.h"
 #include "./OnDestructionDontThrowDuringStackUnwinding.h"
 #include "./ThreadSafeQueue.h"
+#include "util/Timer.h"
 
 namespace ad_utility::streams {
 
@@ -26,7 +27,7 @@ using ad_utility::data_structures::ThreadSafeQueue;
  */
 template <typename Range>
 cppcoro::generator<typename Range::value_type> runStreamAsync(
-    Range range, size_t bufferLimit) {
+    Range range, size_t bufferLimit, bool logTime = false) {
   using value_type = typename Range::value_type;
   ThreadSafeQueue<value_type> queue{bufferLimit};
   std::exception_ptr exception = nullptr;
@@ -56,8 +57,16 @@ cppcoro::generator<typename Range::value_type> runStreamAsync(
         }
       });
 
+  ad_utility::Timer t{ad_utility::Timer::Started};
   while (std::optional<value_type> value = queue.pop()) {
+    t.stop();
     co_yield value.value();
+    t.cont();
+  }
+  t.stop();
+  if (logTime) {
+    LOG(INFO) << "Waiting time for async stream was " << t.msecs().count()
+              << "ms" << std::endl;
   }
 }
 }  // namespace ad_utility::streams

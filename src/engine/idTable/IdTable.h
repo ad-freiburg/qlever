@@ -457,7 +457,8 @@ class IdTable {
   //       generic code that is templated on the number of columns easier to
   //       write.
   template <int NewNumColumns>
-  requires(isDynamic && !isView)
+  requires((isDynamic || NewNumColumns == NumColumns || NewNumColumns == 0) &&
+           !isView)
   IdTable<T, NewNumColumns, ColumnStorage> toStatic() && {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     auto result = IdTable<T, NewNumColumns, ColumnStorage>{
@@ -527,6 +528,8 @@ class IdTable {
   void setColumnSubset(std::span<const ColumnIndex> subset) requires isDynamic {
     // First check that the `subset` is indeed a subset of the column
     // indices.
+    // TODO<joka921> should probably be an expensive check?
+    // or can we make it simpler to swap two columns?
     std::vector<ColumnIndex> check{subset.begin(), subset.end()};
     std::ranges::sort(check);
     AD_CONTRACT_CHECK(std::unique(check.begin(), check.end()) == check.end());
@@ -539,6 +542,11 @@ class IdTable {
     });
     data() = std::move(newData);
     numColumns_ = subset.size();
+  }
+
+  void swapColumns(ColumnIndex c1, ColumnIndex c2) {
+    AD_EXPENSIVE_CHECK(c1 < numColumns() && c2 < numColumns());
+    std::swap(data()[c1], data()[c2]);
   }
 
   // Helper `struct` that stores a pointer to this table and has an `operator()`

@@ -182,13 +182,21 @@ void IndexImpl::createFromFile(const string& filename) {
       allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
+  // TODO<joka921> reintroduce the unique sorter
+  /*
   auto uniqueSorter = ad_utility::uniqueView<decltype(psoSorter.sortedView()),
                                              IdTableStatic<3>::row_type>(
       psoSorter.sortedView());
+      */
 
   size_t numPredicatesNormal = 0;
+  /*
   createPermutationPair(
       std::move(uniqueSorter), pso_, pos_, spoSorter.makePushCallback(),
+      makeNumEntitiesCounter(numPredicatesNormal, 1), countActualTriples);
+      */
+  createPermutationPair(
+      psoSorter.getSortedBlocks<0>(), pso_, pos_, spoSorter.makePushCallback(),
       makeNumEntitiesCounter(numPredicatesNormal, 1), countActualTriples);
   configurationJson_["num-predicates-normal"] = numPredicatesNormal;
   configurationJson_["num-triples-normal"] = numTriplesNormal;
@@ -208,15 +216,19 @@ void IndexImpl::createFromFile(const string& filename) {
       auto pushTripleToPatterns = [&patternCreator,
                                    &isInternalId](const auto& triple) {
         if (!std::ranges::any_of(triple, isInternalId)) {
-          patternCreator.processTriple(static_cast<std::array<Id, 3>>(triple));
+          // patternCreator.processTriple(static_cast<std::array<Id,
+          // 3>>(triple));
+          //  TODO<joka921>
+          patternCreator.processTriple(
+              std::array<Id, 3>{triple[0], triple[1], triple[2]});
         }
       };
-      createPermutationPair(spoSorter.sortedView(), spo_, sop_,
+      createPermutationPair(spoSorter.getSortedBlocks<0>(), spo_, sop_,
                             ospSorter.makePushCallback(), pushTripleToPatterns,
                             numSubjectCounter);
       patternCreator.finish();
     } else {
-      createPermutationPair(spoSorter.sortedView(), spo_, sop_,
+      createPermutationPair(spoSorter.getSortedBlocks<0>(), spo_, sop_,
                             ospSorter.makePushCallback(), numSubjectCounter);
     }
     spoSorter.clear();
@@ -226,7 +238,7 @@ void IndexImpl::createFromFile(const string& filename) {
     // For the last pair of permutations we don't need a next sorter, so we have
     // no fourth argument.
     size_t numObjectsNormal = 0;
-    createPermutationPair(ospSorter.sortedView(), osp_, ops_,
+    createPermutationPair(ospSorter.getSortedBlocks<0>(), osp_, ops_,
                           makeNumEntitiesCounter(numObjectsNormal, 2));
     configurationJson_["num-objects-normal"] = numObjectsNormal;
     configurationJson_["has-all-permutations"] = true;
@@ -582,6 +594,32 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   CompressedRelationWriter writer2{ad_utility::File(fileName2, "w"),
                                    blocksizePermutationInBytes_};
 
+  auto callback1 = [&](std::span<const CompressedRelationMetadata> mds) {
+    for (const auto& md : mds) {
+      metaData1.add(md);
+    }
+  };
+  auto callback2 = [&](std::span<const CompressedRelationMetadata> mds) {
+    for (const auto& md : mds) {
+      metaData1.add(md);
+    }
+  };
+
+  auto liftCallback = [](auto callback) {
+    return [callback](const auto& block) mutable {
+      for (const auto& triple : block) {
+        callback(triple);
+      }
+    };
+  };
+  std::vector<std::function<void(const IdTableStatic<0>&)>> callbacks{
+      liftCallback(perTripleCallbacks)...};
+
+  auto [blocks1, blocks2] = CompressedRelationWriter::createPermutationPairImpl(
+      fileName1, writer1, writer2, std::move(sortedTriples), c0, c1, c2,
+      callback1, callback2, std::move(callbacks));
+
+  /*
   // Iterate over the vector and identify "relation" boundaries, where a
   // "relation" is the sequence of sortedTriples equal first component. For PSO
   // and POS, this is a predicate (of which "relation" is a synonym).
@@ -589,7 +627,7 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   size_t from = 0;
   std::optional<Id> currentRel;
   auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
-  IdTable buffer{2, alloc};
+  IdTableStatic<2> buffer{2, alloc};
   size_t numBlocksCurrentRel = 0;
   auto compare = [](const auto& a, const auto& b) {
     return std::ranges::lexicographical_compare(a, b);
@@ -599,41 +637,54 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   size_t distinctCol1 = 0;
   Id lastLhs = ID_NO_VALUE;
   uint64_t totalNumTriples = 0;
+  static constexpr size_t blocksize = 1'000'000;
+  std::future<void> smallBlocksFuture;
   auto addBlockForRelation = [&numBlocksCurrentRel, &metaData1, &metaData2,
                               &writer1, &writer2, &currentRel, &buffer,
-                              &distinctCol1]() {
-    writer1.addBlockForRelation(currentRel.value(), buffer.asStaticView<0>());
-    buffer.clear();
+                              &distinctCol1, &sorter] {
+      //ad_utility::Timer t{ad_utility::Timer::Started};
+      auto fut1 = std::async(std::launch::async,
+  [&](){writer1.addBlockForRelation(currentRel.value(),
+  buffer.asStaticView<0>());});
+    // Only use the sorter if we have blocks.
+
+      auto fut2 = std::async(std::launch::async, [&]() {
+        for (const auto& row : buffer) {
+          sorter.push(std::array{row[1], row[0]});
+        }
+      });
+      fut1.get();
+      fut2.get();
+      buffer.clear();
+    buffer.reserve(blocksize);
+    //LOG(INFO) << "Adding a large block took " << t.msecs().count() << "ms" <<
+  std::endl;
     ++numBlocksCurrentRel;
   };
   auto finishRelation = [&metaData1, &metaData2, &sorter, &writer2, &writer1,
                          &numBlocksCurrentRel, &currentRel, &buffer,
-                         &distinctCol1, &addBlockForRelation, this]() {
-    if (true) {
-    //if (numBlocksCurrentRel > 0) {
+                         &distinctCol1, &addBlockForRelation, this, &compare]()
+  {
+    //if (true) {
+    // TODO<joka921> exchange the multiplicities etc.
+
+    if (numBlocksCurrentRel > 0) {
+        ad_utility::Timer t{ad_utility::Timer::Started};
       addBlockForRelation();
-      writeSwitchedRel(&writer2, currentRel.value(), sorter.getSortedBlocks());
-    } else {
-      writer1.writeCompleteRelation(currentRel.value(),
-                                    buffer.asStaticView<0>(), 0, buffer.size());
-      // Todo the blocksize might not be the same
-      writeSwitchedRel(
-          &writer2, currentRel.value(),
-          std::array{std::move(sorter.getTransformedSingleBlock())});
+      metaData1.add(writer1.finishCurrentRelation(distinctCol1));
+      metaData2.add(writeSwitchedRel(&writer2, currentRel.value(),
+  sorter.getSortedBlocks())); sorter.clear(); LOG(INFO) << "finishing a large
+  relation took "  << t.msecs().count() << std::endl; } else {
+      metaData1.add(writer1.writeCompleteRelation(currentRel.value(),
+  distinctCol1, buffer.asStaticView<0>(), 0, buffer.size()));
+      buffer.swapColumns(0, 1);
+      std::ranges::sort(buffer, compare);
+      // TODO<joka921> Compute multiplicity here
+      metaData2.add(writer2.writeCompleteRelation(currentRel.value(), 301239,
+  buffer.asStaticView<0>(), 0, buffer.size()));
     }
     buffer.clear();
     numBlocksCurrentRel = 0;
-    sorter.clear();
-    auto mds1 = writer1.moveFinishedMetadata();
-    auto mds2 = writer2.moveFinishedMetadata();
-
-    // TODO<joka921> exchange the multiplicities etc.
-    for (auto md1 : mds1) {
-      metaData1.add(md1);
-    }
-    for (auto md2 : mds2) {
-      metaData2.add(md2);
-    }
   };
   size_t i = 0;
   for (const auto& triple : AD_FWD(sortedTriples)) {
@@ -651,50 +702,42 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
       distinctCol1 += triple[c1] != lastLhs;
     }
     buffer.push_back(std::array{triple[c1], triple[c2]});
-    sorter.push(std::array{triple[c2], triple[c1]});
     lastLhs = triple[c1];
-    if (buffer.size() > 1'000'000) {
+    if (buffer.size() > blocksize) {
       addBlockForRelation();
     }
     ++i;
-    if (i % 1'000'000 == 0) {
+    if (i % 10'000'000 == 0) {
       LOG(INFO) << "Triples processed: " << i << std::endl;
     }
   }
-  if (from < totalNumTriples) {
+  if (!buffer.empty() || numBlocksCurrentRel > 0) {
     finishRelation();
   }
 
   writer1.finish();
   writer2.finish();
-  auto mds1 = writer1.moveFinishedMetadata();
-  auto mds2 = writer2.moveFinishedMetadata();
-
-  // TODO<joka921> exchange the multiplicities etc.
-  for (auto md1 : mds1) {
-    metaData1.add(md1);
-  }
-  for (auto md2 : mds2) {
-    metaData2.add(md2);
-  }
-
   metaData1.blockData() = std::move(writer1).getFinishedBlocks();
   metaData2.blockData() = std::move(writer2).getFinishedBlocks();
+*/
+  metaData1.blockData() = std::move(blocks1);
+  metaData2.blockData() = std::move(blocks2);
 
   return std::make_pair(std::move(metaData1), std::move(metaData2));
 }
 
 // __________________________________________________________________________
-void IndexImpl::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
-                                 auto&& sortedBlocks) {
+CompressedRelationMetadata IndexImpl::writeSwitchedRel(
+    CompressedRelationWriter* out, Id currentRel, auto&& sortedBlocks) {
   // AD_CONTRACT_CHECK(buffer.numColumns() == 2);
   Id lastLhs = std::numeric_limits<Id>::max();
 
   for (auto& block : sortedBlocks) {
     out->addBlockForRelation(currentRel, block.template asStaticView<0>());
   }
-
   // TODO<joka921> handle the multiplicity computation.
+  return out->finishCurrentRelation(13409);
+
   /*
   size_t distinctC1 = 0;
   for (const auto& el : buffer.getColumn(0)) {
