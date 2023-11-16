@@ -227,9 +227,10 @@ cppcoro::generator<std::vector<T>> parallelMultiwayMergeImpl(
 template <typename T, bool moveElements,
           ValueSizeGetter<T> SizeGetter = DefaultValueSizeGetter<T>>
 cppcoro::generator<std::vector<T>> parallelMultiwayMerge(
-    MemorySize memoryLimit, size_t blocksize,
+    MemorySize memoryLimit,
     detail::RandomAccessRangeOfRanges<T> auto&& rangeOfRanges,
-    InvocableWithExactReturnType<bool, const T&, const T&> auto comparison) {
+    InvocableWithExactReturnType<bool, const T&, const T&> auto comparison,
+    size_t blocksize = 100) {
   // There is one suboperation per input in the recursion tree, so we have to
   // divide the memory limit.
   auto maxMemPerNode = memoryLimit / std::ranges::size(rangeOfRanges);
