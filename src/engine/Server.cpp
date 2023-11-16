@@ -652,7 +652,6 @@ boost::asio::awaitable<void> Server::processQuery(
     AD_CORRECTNESS_CHECK(queryHub_ != nullptr);
     auto messageSender = co_await ad_utility::websocket::MessageSender::create(
         getQueryId(request), *queryHub_);
-    LOG(INFO) << "Obtained a message sender" << std::endl;
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query.
     //
