@@ -162,8 +162,6 @@ class CompressedRelationWriter {
   ad_utility::AllocatorWithLimit<Id> allocator_ =
       ad_utility::makeUnlimitedAllocator<Id>();
   SmallRelationsBuffer previousSmallRelationsBuffer_{allocator_};
-  SmallRelationsBuffer currentRelationsBuffer_{allocator_};
-  bool currentRelationHasExclusiveBlock = false;
   size_t numBytesPerBlock_;
 
   Id currentRelation_ = Id::makeUndefined();
@@ -176,10 +174,7 @@ class CompressedRelationWriter {
   explicit CompressedRelationWriter(ad_utility::File f, size_t numBytesPerBlock)
       : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock} {}
 
-  void addBlock(IdTableView<3> block);
   void addBlockForRelation(Id col0Id, IdTableView<0> otherIds);
-  std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> writeBlock(
-      IdTableView<0> buffer, size_t numRows);
   /**
    * Add a complete (single) relation.
    *

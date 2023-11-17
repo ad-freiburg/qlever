@@ -595,11 +595,12 @@ class CompressedExternalIdTableSorter
   // function may be called exactly once.
   template <size_t N = NumStaticCols>
   requires(N == NumStaticCols || N == 0)
-  cppcoro::generator<IdTableStatic<N>> getSortedBlocks() {
+  cppcoro::generator<IdTableStatic<N>> getSortedBlocks(
+      std::optional<size_t> blocksize = std::nullopt) {
     mergeIsActive_.store(true);
     for (auto& block : ad_utility::streams::runStreamAsync(
-             sortedBlocks<N>(), std::max(1, numBufferedOutputBlocks_ - 2),
-             true)) {
+             sortedBlocks<N>(blocksize),
+             std::max(1, numBufferedOutputBlocks_ - 2), true)) {
       co_yield block;
     }
     mergeIsActive_.store(false);
@@ -611,7 +612,8 @@ class CompressedExternalIdTableSorter
   // function may be called exactly once.
   template <size_t N = NumStaticCols>
   requires(N == NumStaticCols || N == 0)
-  cppcoro::generator<IdTableStatic<N>> sortedBlocks() {
+  cppcoro::generator<IdTableStatic<N>> sortedBlocks(
+      std::optional<size_t> blocksize = std::nullopt) {
     if (!this->transformAndPushLastBlock()) {
       // There was only one block, return it.
       co_yield std::move(this->currentBlock_).template toStatic<N>();
@@ -621,7 +623,7 @@ class CompressedExternalIdTableSorter
         this->writer_.template getAllRowGenerators<NumStaticCols>();
 
     const size_t blockSizeOutput =
-        computeBlockSizeForMergePhase(rowGenerators.size());
+        blocksize.value_or(computeBlockSizeForMergePhase(rowGenerators.size()));
 
     using P = std::pair<decltype(rowGenerators[0].begin()),
                         decltype(rowGenerators[0].end())>;

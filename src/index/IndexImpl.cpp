@@ -601,7 +601,7 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   };
   auto callback2 = [&](std::span<const CompressedRelationMetadata> mds) {
     for (const auto& md : mds) {
-      metaData1.add(md);
+      metaData2.add(md);
     }
   };
 
@@ -619,107 +619,6 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
       fileName1, writer1, writer2, std::move(sortedTriples), c0, c1, c2,
       callback1, callback2, std::move(callbacks));
 
-  /*
-  // Iterate over the vector and identify "relation" boundaries, where a
-  // "relation" is the sequence of sortedTriples equal first component. For PSO
-  // and POS, this is a predicate (of which "relation" is a synonym).
-  LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
-  size_t from = 0;
-  std::optional<Id> currentRel;
-  auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
-  IdTableStatic<2> buffer{2, alloc};
-  size_t numBlocksCurrentRel = 0;
-  auto compare = [](const auto& a, const auto& b) {
-    return std::ranges::lexicographical_compare(a, b);
-  };
-  ad_utility::CompressedExternalIdTableSorter<decltype(compare), 2> sorter(
-      fileName1 + ".switched-sorter", 4_GB, alloc);
-  size_t distinctCol1 = 0;
-  Id lastLhs = ID_NO_VALUE;
-  uint64_t totalNumTriples = 0;
-  static constexpr size_t blocksize = 1'000'000;
-  std::future<void> smallBlocksFuture;
-  auto addBlockForRelation = [&numBlocksCurrentRel, &metaData1, &metaData2,
-                              &writer1, &writer2, &currentRel, &buffer,
-                              &distinctCol1, &sorter] {
-      //ad_utility::Timer t{ad_utility::Timer::Started};
-      auto fut1 = std::async(std::launch::async,
-  [&](){writer1.addBlockForRelation(currentRel.value(),
-  buffer.asStaticView<0>());});
-    // Only use the sorter if we have blocks.
-
-      auto fut2 = std::async(std::launch::async, [&]() {
-        for (const auto& row : buffer) {
-          sorter.push(std::array{row[1], row[0]});
-        }
-      });
-      fut1.get();
-      fut2.get();
-      buffer.clear();
-    buffer.reserve(blocksize);
-    //LOG(INFO) << "Adding a large block took " << t.msecs().count() << "ms" <<
-  std::endl;
-    ++numBlocksCurrentRel;
-  };
-  auto finishRelation = [&metaData1, &metaData2, &sorter, &writer2, &writer1,
-                         &numBlocksCurrentRel, &currentRel, &buffer,
-                         &distinctCol1, &addBlockForRelation, this, &compare]()
-  {
-    //if (true) {
-    // TODO<joka921> exchange the multiplicities etc.
-
-    if (numBlocksCurrentRel > 0) {
-        ad_utility::Timer t{ad_utility::Timer::Started};
-      addBlockForRelation();
-      metaData1.add(writer1.finishCurrentRelation(distinctCol1));
-      metaData2.add(writeSwitchedRel(&writer2, currentRel.value(),
-  sorter.getSortedBlocks())); sorter.clear(); LOG(INFO) << "finishing a large
-  relation took "  << t.msecs().count() << std::endl; } else {
-      metaData1.add(writer1.writeCompleteRelation(currentRel.value(),
-  distinctCol1, buffer.asStaticView<0>(), 0, buffer.size()));
-      buffer.swapColumns(0, 1);
-      std::ranges::sort(buffer, compare);
-      // TODO<joka921> Compute multiplicity here
-      metaData2.add(writer2.writeCompleteRelation(currentRel.value(), 301239,
-  buffer.asStaticView<0>(), 0, buffer.size()));
-    }
-    buffer.clear();
-    numBlocksCurrentRel = 0;
-  };
-  size_t i = 0;
-  for (const auto& triple : AD_FWD(sortedTriples)) {
-    if (!currentRel.has_value()) {
-      currentRel = triple[c0];
-    }
-    // Call each of the `perTripleCallbacks` for the current triple
-    (..., perTripleCallbacks(triple));
-    ++totalNumTriples;
-    if (triple[c0] != currentRel) {
-      finishRelation();
-      distinctCol1 = 1;
-      currentRel = triple[c0];
-    } else {
-      distinctCol1 += triple[c1] != lastLhs;
-    }
-    buffer.push_back(std::array{triple[c1], triple[c2]});
-    lastLhs = triple[c1];
-    if (buffer.size() > blocksize) {
-      addBlockForRelation();
-    }
-    ++i;
-    if (i % 10'000'000 == 0) {
-      LOG(INFO) << "Triples processed: " << i << std::endl;
-    }
-  }
-  if (!buffer.empty() || numBlocksCurrentRel > 0) {
-    finishRelation();
-  }
-
-  writer1.finish();
-  writer2.finish();
-  metaData1.blockData() = std::move(writer1).getFinishedBlocks();
-  metaData2.blockData() = std::move(writer2).getFinishedBlocks();
-*/
   metaData1.blockData() = std::move(blocks1);
   metaData2.blockData() = std::move(blocks2);
 
