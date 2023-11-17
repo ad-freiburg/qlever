@@ -40,7 +40,11 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: >
-            ${{ github.repository_owner }}/${{ github.repository }}:${{ github.sha }},
-            ${{ github.repository_owner }}/${{ github.repository }}:${{ github.ref }},
-            ${{ github.repository_owner }}/${{ github.repository }}:latest
+            joburo:${{ github.sha }},
+            joburo:${{ github.ref }},
+            joburo:latest
+            # Uncomment these lines before setting up the pull request
+            # ${{ github.repository }}:${{ github.sha }},
+            # ${{ github.repository }}:${{ github.ref }},
+            # ${{ github.repository }}:latest
 
