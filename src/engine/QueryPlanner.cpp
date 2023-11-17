@@ -1202,15 +1202,6 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
       plan = makeSubtreePlan<EntityIndexScanForWord>(_qec, node._cvar.value(),
                                                      evar, word);
     } else {
-      // convert entity name to variable name by adding the prefix ?ql_entity_
-      // and deleting all non alphabetical characters
-      string name = "?ql_entity_";
-      for (char c : node._triple._o.toString()) {
-        if (isalpha(c)) {
-          name.push_back(c);
-        }
-      }
-      Variable entityVar{name};
       VocabIndex idx;
       bool success =
           _qec->getIndex().getVocab().getId(node._triple._o.toString(), &idx);
@@ -1219,8 +1210,10 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
                    << "not found in Vocab. Terminating\n";
         AD_FAIL();
       }
-      plan = makeSubtreePlan<EntityIndexScanForWord>(_qec, node._cvar.value(),
-                                                     entityVar, word, idx);
+      plan = makeSubtreePlan<EntityIndexScanForWord>(
+          _qec, node._cvar.value(),
+          node._cvar.value().getFixedEntityVariable(node._triple._o.toString()),
+          word, idx);
     }
   } else {
     plan =

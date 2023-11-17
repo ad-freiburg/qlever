@@ -35,6 +35,8 @@ ResultTable EntityIndexScanForWord::computeResult() {
                          &Id::makeFromTextRecordIndex);
   decltype(auto) eidColumn = idTable.getColumn(1);
   std::ranges::copy(wep.eids_, eidColumn.begin());
+  decltype(auto) scoreColumn = idTable.getColumn(2);
+  std::ranges::transform(wep.scores_, scoreColumn.begin(), &Id::makeFromInt);
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
@@ -49,11 +51,12 @@ VariableToColumnMap EntityIndexScanForWord::computeVariableToColumnMap() const {
   };
   addDefinedVar(textRecordVar_);
   addDefinedVar(entityVar_);
+  addDefinedVar(entityVar_.getScoreVariable());
   return vcmap;
 }
 
 // _____________________________________________________________________________
-size_t EntityIndexScanForWord::getResultWidth() const { return 2; }
+size_t EntityIndexScanForWord::getResultWidth() const { return 3; }
 
 // _____________________________________________________________________________
 vector<ColumnIndex> EntityIndexScanForWord::resultSortedOn() const {

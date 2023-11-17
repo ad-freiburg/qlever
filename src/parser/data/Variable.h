@@ -39,6 +39,13 @@ class Variable {
   // Convert `?someVariable` into `?ql_textscore_someVariable`
   Variable getTextScoreVariable() const;
 
+  // Convert `?someVariable` into `?ql_score_someVariable`
+  Variable getScoreVariable() const;
+
+  // Convert `<entityName>` into `?ql_entity_entityName` and discard all non
+  // alphabetical characters
+  Variable getFixedEntityVariable(std::string_view entityName) const;
+
   // Convert `?someVariable` into `?ql_matchingword_someVariable_someTerm`
   Variable getMatchingWordVariable(std::string_view term) const;
 
