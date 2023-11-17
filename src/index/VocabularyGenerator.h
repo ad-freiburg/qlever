@@ -91,9 +91,9 @@ class VocabularyMerger {
 
   // _______________________________________________________________
   // merge the partial vocabularies in the  binary files
-  // basename + PARTIAL_VOCAB_FILE_NAME + to_string(i)
+  // fileIdx + PARTIAL_VOCAB_FILE_NAME + to_string(i)
   // where 0 <= i < numFiles
-  // Directly Writes .vocabulary file at basename (no more need to pass
+  // Directly Writes .vocabulary file at fileIdx (no more need to pass
   // through Vocabulary class
   // Writes file "externalTextFile" which can be used to directly write external
   // Literals
@@ -103,9 +103,10 @@ class VocabularyMerger {
   // This automatically resets the inner members after finishing, to leave the
   // external interface stateless
   template <typename Comp, typename InternalVocabularyAction>
-  VocabularyMetaData mergeVocabulary(const std::string& basename,
+  VocabularyMetaData mergeVocabulary(const std::string& fileIdx,
                                      size_t numFiles, Comp comparator,
-                                     InternalVocabularyAction& action);
+                                     InternalVocabularyAction& action,
+                                     ad_utility::MemorySize memToUse);
 
  private:
   // helper struct used in the priority queue for merging.
@@ -128,6 +129,11 @@ class VocabularyMerger {
 
     [[nodiscard]] const auto& id() const { return _entry.index_; }
     [[nodiscard]] auto& id() { return _entry.index_; }
+  };
+
+  constexpr static auto sizeOfQueueWord = [](const QueueWord& q) {
+    return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
+                                         q._entry.iriOrLiteral().size());
   };
 
   // write the queu words in the buffer to their corresponding idPairVecs.

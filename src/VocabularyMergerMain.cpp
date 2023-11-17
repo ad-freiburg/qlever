@@ -25,5 +25,5 @@ int main(int argc, char** argv) {
     file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
   };
   m.mergeVocabulary(basename, numFiles, TripleComponentComparator(),
-                    internalVocabularyAction);
+                    internalVocabularyAction, 4_GB);
 }

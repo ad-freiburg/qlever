@@ -131,7 +131,13 @@ TEST(Serializer, Serializability) {
 
   // See the definitions above as for why or why not these are serializable.
   static_assert(isReadSerializable<B>);
+  // C is not read serializable on clang 17, probably because of a bug in
+  // relation with templated friend functions which are defined outside the
+  // class. This bug has been reported at
+  // https://github.com/llvm/llvm-project/issues/71595
+#if !(defined(__clang__) && (__clang_major__ == 17))
   static_assert(isReadSerializable<C>);
+#endif
   static_assert(!isReadSerializable<D>);
   static_assert(!isReadSerializable<F>);
   static_assert(isReadSerializable<G>);

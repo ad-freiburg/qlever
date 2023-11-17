@@ -217,7 +217,8 @@ using First = typename detail::FirstWrapper<Ts...>::type;
 
 /// Concept for `std::is_invocable_r_v`.
 template <typename Func, typename R, typename... ArgTypes>
-concept InvocableWithReturnType = std::is_invocable_r_v<R, Func, ArgTypes...>;
+concept InvocableWithConvertibleReturnType =
+    std::is_invocable_r_v<R, Func, ArgTypes...>;
 
 /*
 The following concepts are similar to `std::is_invocable_r_v` with the following
