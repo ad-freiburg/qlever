@@ -1061,6 +1061,7 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     resultTriple[2] = std::move(triple.object_).toRdfLiteral();
   }
 
+  bool externalizeObjectDueToPredicate = false;
   for (size_t i = 0; i < 3; ++i) {
     auto& el = resultTriple[i];
     if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(el)) {
@@ -1070,9 +1071,21 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
     auto& iriOrLiteral = component.iriOrLiteral_;
     iriOrLiteral = vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
-    if (vocab_.shouldBeExternalized(iriOrLiteral)) {
+
+    // UNIPROT HACK: On top of what is specified in the `setting.json` file,
+    // also externalize all literals from triples with these two predicates.
+    // TODO: Have an option `predicates-external` for this in the
+    // `settings.json`.
+    if (i == 1 &&
+        (iriOrLiteral == "<http://www.w3.org/1999/02/22-rdf-syntax-ns#value>" ||
+         iriOrLiteral == "<http://purl.uniprot.org/core/md5Checksum>")) {
+      externalizeObjectDueToPredicate = true;
+    }
+    if (vocab_.shouldBeExternalized(iriOrLiteral) ||
+        (i == 2 && externalizeObjectDueToPredicate)) {
       component.isExternal_ = true;
     }
+
     // Only the third element (the object) might contain a language tag.
     if (i == 2 && isLiteral(iriOrLiteral)) {
       result.langtag_ = decltype(vocab_)::getLanguage(iriOrLiteral);
