@@ -54,8 +54,7 @@ void Operation::recursivelySetCancellationHandle(
     SharedCancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(cancellationHandle);
   forAllDescendants([&cancellationHandle](auto child) {
-    child->getRootOperation()->recursivelySetCancellationHandle(
-        cancellationHandle);
+    child->getRootOperation()->cancellationHandle_ = cancellationHandle;
   });
   cancellationHandle_ = std::move(cancellationHandle);
 }
@@ -66,7 +65,7 @@ void Operation::recursivelySetTimeConstraint(
     std::chrono::steady_clock::time_point deadline) {
   deadline_ = deadline;
   forAllDescendants([deadline](auto child) {
-    child->getRootOperation()->recursivelySetTimeConstraint(deadline);
+    child->getRootOperation()->deadline_ = deadline;
   });
 }
 
