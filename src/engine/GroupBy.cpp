@@ -739,61 +739,76 @@ bool GroupBy::computeGroupByForSortedSubtree(IdTable* result,
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
   evaluationContext._isPartOfGroupBy = true;
 
-  for (size_t i = 0; i < subresult.size(); ++i) {
-    auto id = subresult(i, columnIndex);
+  size_t blockSize = 65536;
 
-    // We always calculate for a single row
-    evaluationContext._beginIndex = i;
-    evaluationContext._endIndex = i + 1;
+  auto numBlocks = (size_t) ceil(((double) subresult.size()) / blockSize);
 
-    sparqlExpression::detail::IntOrDouble resultValue;
+  size_t overallResults = 0;
 
-    // Evaluate child expression
+  for (size_t i = 0; i < numBlocks; ++i) {
+    evaluationContext._beginIndex = i * blockSize;
+    evaluationContext._endIndex = std::min((i + 1) * blockSize, subresult.size());
+
+    auto currentBlockSize = evaluationContext._endIndex - evaluationContext._beginIndex;
+
+    std::vector<sparqlExpression::detail::IntOrDouble> resultValues;
+
+    // Is this slower than emplace_back?
+    // Calling IntOrDouble constructor twice VS. resizing of vector on the go
+    resultValues.resize(currentBlockSize);
+
+    // Evaluate child expression on block
     auto expr = aggregates.at(0)._expression.getPimpl();
     auto exprChildren = expr->children();
 
     sparqlExpression::ExpressionResult expressionResult =
         exprChildren[0]->evaluate(&evaluationContext);
 
-    // Extract ValueId
     auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                        T&& singleResult) mutable {
       auto generator = sparqlExpression::detail::makeGenerator(
-                  std::forward<T>(singleResult), 1,
-                      &evaluationContext);
+          std::forward<T>(singleResult), currentBlockSize,
+          &evaluationContext);
 
       using NVG = sparqlExpression::detail::NumericValueGetter;
 
-      // At the moment this will be just a single result.
+      size_t k = 0;
       for (auto val : generator) {
         sparqlExpression::detail::NumericValue numVal = NVG()(val, &evaluationContext);
 
         if (const int64_t* pInt = std::get_if<int64_t>(&numVal))
-          resultValue = *pInt;
+          resultValues[k] = *pInt;
         else if (const double* pDouble = std::get_if<double>(&numVal))
-          resultValue = *pDouble;
+          resultValues[k] = *pDouble;
         else
           AD_FAIL();
+        ++k;
       }
+      overallResults += k;
     };
 
     std::visit(visitor, std::move(expressionResult));
 
-    map[id].increment(resultValue);
+    for (size_t j = 0; j < currentBlockSize; ++j) {
+      auto rowIndex = i * blockSize + j;
+      auto id = subresult(rowIndex, columnIndex);
+      map[id].increment(resultValues[j]);
+    }
   }
+
+  // Make sure we calculated something for each row of subresult
+  AD_CORRECTNESS_CHECK(overallResults == subresult.size());
 
   // Sort by groupBy column
   std::vector<ValueId> sortedKeys;
-  for (auto it = map.begin(); it != map.end(); it++) {
-    auto & val = *it;
+  for (auto & val : map) {
     sortedKeys.push_back(val.first);
   }
   std::sort(sortedKeys.begin(), sortedKeys.end());
 
   // Create result table
   IdTableStatic<OUT_WIDTH> idTable = std::move(*result).toStatic<OUT_WIDTH>();
-  for (auto it = sortedKeys.begin(); it != sortedKeys.end(); it++) {
-    auto & val = *it;
+  for (auto & val : sortedKeys) {
     auto aggResult = ValueId::makeFromDouble(map.at(val).calculateResult());
     idTable.push_back({val, aggResult});
   }
