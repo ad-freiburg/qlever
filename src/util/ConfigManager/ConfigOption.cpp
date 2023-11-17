@@ -118,12 +118,8 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
           data_)) {
     // Does the json represent one of the types in our `AvailableTypes`? If yes,
     // we can create a better exception message.
-    ad_utility::ConstexprForLoop(
-        std::make_index_sequence<std::variant_size_v<AvailableTypes>>{},
-        [&isValueTypeSubType, &json,
-         this ]<size_t TypeIndex,
-                typename AlternativeType =
-                    std::variant_alternative_t<TypeIndex, AvailableTypes>>() {
+    forEachTypeInTemplateType<AvailableTypes>(
+        [&isValueTypeSubType, &json, this]<typename AlternativeType>() {
           if (isValueTypeSubType.template operator()<AlternativeType>(
                   json, isValueTypeSubType)) {
             throw ConfigOptionSetWrongJsonTypeException(

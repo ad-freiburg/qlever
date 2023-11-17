@@ -4,6 +4,7 @@
 
 #pragma once
 #include "util/ConfigManager/ConfigOption.h"
+#include "util/ConstexprUtils.h"
 
 /*
 @brief Call the function with each of the alternatives in
@@ -15,10 +16,6 @@ arguments. Should be passed per deduction.
 */
 template <typename Function>
 static void doForTypeInConfigOptionValueType(Function function) {
-  ad_utility::ConstexprForLoop(
-      std::make_index_sequence<std::variant_size_v<ad_utility::ConfigOption::AvailableTypes>>{},
-      [&function]<size_t index, typename IndexType = std::variant_alternative_t<
-                                    index, ad_utility::ConfigOption::AvailableTypes>>() {
-        function.template operator()<IndexType>();
-      });
+  ad_utility::forEachTypeInTemplateType<
+      ad_utility::ConfigOption::AvailableTypes>(function);
 }
