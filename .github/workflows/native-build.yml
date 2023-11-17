@@ -48,7 +48,7 @@ jobs:
             build-type: Release
             expensive-tests: false
           - compiler: clang
-            compiler-version: 16
+            compiler-version: 17
             build-type: Debug
             expensive-tests: false
             ubsan-flags: " -fsanitize=thread -O1 -g"

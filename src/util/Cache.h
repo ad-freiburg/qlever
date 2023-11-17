@@ -20,6 +20,7 @@
 #include "util/ConstexprUtils.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/TypeTraits.h"
+#include "util/ValueSizeGetters.h"
 
 namespace ad_utility {
 
@@ -29,15 +30,6 @@ using std::shared_ptr;
 using namespace ad_utility::memory_literals;
 
 static constexpr auto size_t_max = std::numeric_limits<size_t>::max();
-
-/*
-Concept for `ValueSizeGetter`. Must be default initializable, regular invocable
-with the given value type as const l-value reference and return a `MemorySize`.
-*/
-template <typename T, typename ValueType>
-concept ValueSizeGetter =
-    std::default_initializable<T> &&
-    RegularInvocableWithSimilarReturnType<T, MemorySize, const ValueType&>;
 
 /*
  @brief Associative array for almost arbitrary keys and values that acts as a
