@@ -17,22 +17,20 @@ class PropertyPath {
   enum class Operation {
     SEQUENCE,
     ALTERNATIVE,
-    TRANSITIVE,
-    TRANSITIVE_MIN,  // e.g. +
-    TRANSITIVE_MAX,  // e.g. *n or ?
     INVERSE,
-    IRI
+    IRI,
+    ZERO_OR_MORE,
+    ONE_OR_MORE,
+    ZERO_OR_ONE
   };
 
-  PropertyPath()
-      : _operation(Operation::IRI),
-        _limit(0),
-        _iri(),
-        _children(),
-        _can_be_null(false) {}
-  explicit PropertyPath(Operation op)
-      : _operation(op), _limit(0), _iri(), _children(), _can_be_null(false) {}
-  PropertyPath(Operation op, uint16_t limit, std::string iri,
+  PropertyPath() : _operation(Operation::IRI) {}
+  explicit PropertyPath(Operation op) : _operation(op) {
+    if (op == Operation::ZERO_OR_MORE || op == Operation::ZERO_OR_ONE) {
+      can_be_null_ = true;
+    }
+  }
+  PropertyPath(Operation op, std::string iri,
                std::initializer_list<PropertyPath> children);
 
   static PropertyPath fromIri(std::string iri) {
@@ -74,28 +72,27 @@ class PropertyPath {
     return makeWithChildren({std::move(child)}, Operation::INVERSE);
   }
 
-  static PropertyPath makeWithChildLimit(PropertyPath child,
-                                         uint_fast16_t limit,
-                                         PropertyPath::Operation op) {
-    PropertyPath p = makeWithChildren({std::move(child)}, op);
-    p._limit = limit;
-    return p;
+  /**
+   * @brief Make a PropertyPath based on the given child and apply the path
+   * modifier. The path modifier may be one of: ? + *
+   *
+   * @param child The PropertyPath child
+   * @param modifier A PropertyPath modifier (? + *)
+   * @return PropertyPath With given modifier as Operation and given child
+   */
+  static PropertyPath makeModified(PropertyPath child,
+                                   std::string_view modifier);
+
+  static PropertyPath makeZeroOrMore(PropertyPath child) {
+    return makeWithChildren({std::move(child)}, Operation::ZERO_OR_MORE);
   }
 
-  static PropertyPath makeTransitiveMin(PropertyPath child,
-                                        uint_fast16_t limit) {
-    return makeWithChildLimit(std::move(child), limit,
-                              Operation::TRANSITIVE_MIN);
+  static PropertyPath makeOneOrMore(PropertyPath child) {
+    return makeWithChildren({std::move(child)}, Operation::ONE_OR_MORE);
   }
 
-  static PropertyPath makeTransitiveMax(PropertyPath child,
-                                        uint_fast16_t limit) {
-    return makeWithChildLimit(std::move(child), limit,
-                              Operation::TRANSITIVE_MAX);
-  }
-
-  static PropertyPath makeTransitive(PropertyPath child) {
-    return makeWithChildren({std::move(child)}, Operation::TRANSITIVE);
+  static PropertyPath makeZeroOrOne(PropertyPath child) {
+    return makeWithChildren({std::move(child)}, Operation::ZERO_OR_ONE);
   }
 
   bool operator==(const PropertyPath& other) const = default;
@@ -110,8 +107,6 @@ class PropertyPath {
   [[nodiscard]] const std::string& getIri() const;
 
   Operation _operation;
-  // For the limited transitive operations
-  uint_fast16_t _limit;
 
   // In case of an iri
   std::string _iri;
@@ -122,5 +117,5 @@ class PropertyPath {
    * True iff this property path is either a transitive path with minimum length
    * of 0, or if all of this transitive path's children can be null.
    */
-  bool _can_be_null;
+  bool can_be_null_ = false;
 };
