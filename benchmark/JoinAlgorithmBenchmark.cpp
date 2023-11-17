@@ -646,7 +646,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     decltype(auto) maxTimeSingleMeasurement = config.addOption(
         "maxTimeSingleMeasurement",
         "The maximal amount of time, in seconds, any function "
-        "measurement is allowed to take. `0` for unlimited time.",
+        "measurement is allowed to take. `0` for unlimited time. Note: This "
+        "can only be checked, after a measurement was taken.",
         &maxTimeSingleMeasurement_, 0.f);
 
     // Helper function for generating lambdas for validators.
