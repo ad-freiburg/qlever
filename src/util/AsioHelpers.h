@@ -6,7 +6,7 @@
 #define QLEVER_ASIOHELPERS_H
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/asio/dispatch.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include "util/Exception.h"
@@ -19,12 +19,16 @@ namespace net = boost::asio;
 /// this coroutine was co_spawned on.
 /// IMPORTANT: If the coroutine is cancelled, no guarantees are given. Make
 /// sure to keep that in mind when handling cancellation errors!
+// TODO<RobinTF, joka921> When using `net::dispatch()` instead of `net::post()`
+// and the `awaitable` itself dispatches to a strand, then this strand is not
+// left in all cases when leaving this function. Further investigate whether we
+// lack understanding here or whether this is a bug in `Boost::ASIO`.
 template <typename T>
 inline net::awaitable<T> resumeOnOriginalExecutor(net::awaitable<T> awaitable) {
   std::exception_ptr exceptionPtr;
   try {
     T result = co_await std::move(awaitable);
-    co_await net::dispatch(net::use_awaitable);
+    co_await net::post(net::use_awaitable);
     co_return result;
   } catch (...) {
     exceptionPtr = std::current_exception();
@@ -33,7 +37,7 @@ inline net::awaitable<T> resumeOnOriginalExecutor(net::awaitable<T> awaitable) {
   if (cancellationState.cancelled() == net::cancellation_type::none) {
     // use_awaitable always resumes the coroutine on the executor the coroutine
     // was co_spawned on
-    co_await net::dispatch(net::use_awaitable);
+    co_await net::post(net::use_awaitable);
   }
   AD_CORRECTNESS_CHECK(exceptionPtr);
   std::rethrow_exception(exceptionPtr);
@@ -55,7 +59,7 @@ inline net::awaitable<void> resumeOnOriginalExecutor(
       net::cancellation_type::none) {
     // use_awaitable always resumes the coroutine on the executor the coroutine
     // was co_spawned on
-    co_await net::dispatch(net::use_awaitable);
+    co_await net::post(net::use_awaitable);
   }
   if (exceptionPtr) {
     std::rethrow_exception(exceptionPtr);
