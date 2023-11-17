@@ -22,6 +22,7 @@
 #include "util/Serializer/SerializeArray.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
+#include "util/TaskQueue.h"
 #include "util/TypeTraits.h"
 
 // Forward declaration of the `IdTable` class.
@@ -156,8 +157,8 @@ AD_SERIALIZE_FUNCTION(CompressedRelationMetadata) {
 /// build.
 class CompressedRelationWriter {
  private:
-  ad_utility::File outfile_;
-  std::vector<CompressedBlockMetadata> blockBuffer_;
+  ad_utility::Synchronized<ad_utility::File> outfile_;
+  ad_utility::Synchronized<std::vector<CompressedBlockMetadata>> blockBuffer_;
   CompressedBlockMetadata currentBlockData_;
   ad_utility::AllocatorWithLimit<Id> allocator_ =
       ad_utility::makeUnlimitedAllocator<Id>();
@@ -169,12 +170,14 @@ class CompressedRelationWriter {
 
   std::vector<CompressedRelationMetadata> finishedMetadata_;
 
+  ad_utility::TaskQueue<false> blockWriteQueue_{20, 10};
+
  public:
   /// Create using a filename, to which the relation data will be written.
   explicit CompressedRelationWriter(ad_utility::File f, size_t numBytesPerBlock)
       : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock} {}
 
-  void addBlockForRelation(Id col0Id, IdTableView<0> otherIds);
+  void addBlockForRelation(Id col0Id, std::shared_ptr<IdTable> otherIds);
   /**
    * Add a complete (single) relation.
    *
@@ -200,7 +203,13 @@ class CompressedRelationWriter {
   /// add all relations and then call this method.
   auto getFinishedBlocks() && {
     finish();
-    return std::move(blockBuffer_);
+    auto unsortedBlocks = std::move(*(blockBuffer_.wlock()));
+    std::ranges::sort(
+        unsortedBlocks, {}, [](const CompressedBlockMetadata& bl) {
+          return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
+                          bl.firstTriple_.col2Id_);
+        });
+    return unsortedBlocks;
   }
 
   // Compute the multiplicity of given the number of elements and the number of
@@ -220,7 +229,8 @@ class CompressedRelationWriter {
     // TODO<joka921> Check that the remainder of the interface is safe.
     // finishCurrentRelation();
     writeBufferedRelationsToSingleBlock();
-    outfile_.close();
+    blockWriteQueue_.finish();
+    outfile_.wlock()->close();
   }
 
  private:
@@ -250,7 +260,8 @@ class CompressedRelationWriter {
                                                    IdTableView<0> buf,
                                                    size_t start, size_t end);
   CompressedRelationMetadata finishCurrentRelation(size_t numDistinctC1);
-  void addBlockToCurrentRelation(IdTableView<0> buf, size_t begin, size_t end);
+  void addBlockToCurrentRelation(std::shared_ptr<IdTable> buf, size_t begin,
+                                 size_t end);
   std::vector<CompressedRelationMetadata> moveFinishedMetadata();
 
   static

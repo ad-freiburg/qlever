@@ -600,7 +600,7 @@ class CompressedExternalIdTableSorter
     mergeIsActive_.store(true);
     for (auto& block : ad_utility::streams::runStreamAsync(
              sortedBlocks<N>(blocksize),
-             std::max(1, numBufferedOutputBlocks_ - 2), true)) {
+             std::max(1, numBufferedOutputBlocks_ - 2))) {
       co_yield block;
     }
     mergeIsActive_.store(false);

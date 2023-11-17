@@ -582,6 +582,7 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
                                      const string& fileName2,
                                      auto&& sortedTriples, size_t c0, size_t c1,
                                      size_t c2, auto&&... perTripleCallbacks) {
+  LOG(INFO) << "Creating a pair of index permutations ..." << std::endl;
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
   if constexpr (MetaData::_isMmapBased) {
