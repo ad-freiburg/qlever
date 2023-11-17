@@ -45,7 +45,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: >
-            joburo/qlever:${{ steps.sha.outputs.sha_short }},
-            joburo/qlever:${{ github.ref_name }},
-            joburo/qlever:latest
+            adfreiburg/qlever:${{ steps.sha.outputs.sha_short }},
+            adfreiburg/qlever:${{ github.ref_name }},
+            adfreiburg/qlever:latest
 
