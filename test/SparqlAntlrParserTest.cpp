@@ -629,9 +629,9 @@ TEST(SparqlParser, propertyPaths) {
   auto Iri = &PropertyPath::fromIri;
   auto Sequence = &PropertyPath::makeSequence;
   auto Alternative = &PropertyPath::makeAlternative;
-  auto Transitive = &PropertyPath::makeTransitive;
-  auto TransitiveMin = &PropertyPath::makeTransitiveMin;
-  auto TransitiveMax = &PropertyPath::makeTransitiveMax;
+  auto ZeroOrMore = &PropertyPath::makeZeroOrMore;
+  auto OneOrMore = &PropertyPath::makeOneOrMore;
+  auto ZeroOrOne = &PropertyPath::makeZeroOrOne;
   using PrefixMap = SparqlQleverVisitor::PrefixMap;
   // Test all the base cases.
   // "a" is a special case. It is a valid PropertyPath.
@@ -660,33 +660,31 @@ TEST(SparqlParser, propertyPaths) {
                   {{"a", "<http://www.example.com/>"}});
   expectPathOrVar("(a:a)", Iri("<http://www.example.com/a>"),
                   {{"a", "<http://www.example.com/>"}});
-  expectPathOrVar("a:a+", TransitiveMin({Iri("<http://www.example.com/a>")}, 1),
+  expectPathOrVar("a:a+", OneOrMore({Iri("<http://www.example.com/a>")}),
                   {{"a", "<http://www.example.com/>"}});
   {
-    PropertyPath expected =
-        TransitiveMax({Iri("<http://www.example.com/a>")}, 1);
-    expected._can_be_null = true;
+    PropertyPath expected = ZeroOrOne({Iri("<http://www.example.com/a>")});
+    expected.can_be_null_ = true;
     expectPathOrVar("a:a?", expected, {{"a", "<http://www.example.com/>"}});
   }
   {
-    PropertyPath expected = Transitive({Iri("<http://www.example.com/a>")});
-    expected._can_be_null = true;
+    PropertyPath expected = ZeroOrMore({Iri("<http://www.example.com/a>")});
+    expected.can_be_null_ = true;
     expectPathOrVar("a:a*", expected, {{"a", "<http://www.example.com/>"}});
   }
   // Test a bigger example that contains everything.
   {
-    PropertyPath expected = Alternative(
-        {Sequence({
-             Iri("<http://www.example.com/a/a>"),
-             Transitive({Iri("<http://www.example.com/b/b>")}),
-         }),
-         Iri("<http://www.example.com/c/c>"),
-         TransitiveMin(
-             {Sequence({Iri("<http://www.example.com/a/a>"),
-                        Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")})},
-             1)});
+    PropertyPath expected =
+        Alternative({Sequence({
+                         Iri("<http://www.example.com/a/a>"),
+                         ZeroOrMore({Iri("<http://www.example.com/b/b>")}),
+                     }),
+                     Iri("<http://www.example.com/c/c>"),
+                     OneOrMore({Sequence({Iri("<http://www.example.com/a/a>"),
+                                          Iri("<http://www.example.com/b/b>"),
+                                          Iri("<a/b/c>")})})});
     expected.computeCanBeNull();
-    expected._can_be_null = false;
+    expected.can_be_null_ = false;
     expectPathOrVar("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+", expected,
                     {{"a", "<http://www.example.com/a/>"},
                      {"b", "<http://www.example.com/b/>"},
