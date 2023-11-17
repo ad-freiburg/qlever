@@ -33,6 +33,9 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Get short sha
+        id: sha
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
@@ -40,11 +43,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: >
-            joburo:${{ github.sha }},
-            joburo:${{ github.ref }},
-            joburo:latest
-            # Uncomment these lines before setting up the pull request
-            # ${{ github.repository }}:${{ github.sha }},
-            # ${{ github.repository }}:${{ github.ref }},
-            # ${{ github.repository }}:latest
+            joburo/qlever:${{ steps.sha.outputs.sha_short }},
+            joburo/qlever:${{ github.ref_name }},
+            joburo/qlever:latest
 
