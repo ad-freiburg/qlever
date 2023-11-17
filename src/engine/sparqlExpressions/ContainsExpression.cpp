@@ -4,7 +4,7 @@
 
 #include "./ContainsExpression.h"
 
-#include <util/Rtree.h>
+#include <util/RtreeBasicGeometry.h>
 
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/ValueIdComparators.h"
@@ -14,9 +14,9 @@ using namespace std::literals;
 
 class BoundingBoxType {
  public:
-  Rtree::BoundingBox value{};
+  BasicGeometry::BoundingBox value{};
 
-  explicit BoundingBoxType(Rtree::BoundingBox boundingBox) {
+  explicit BoundingBoxType(BasicGeometry::BoundingBox boundingBox) {
     this->value = boundingBox;
   }
 };
@@ -95,7 +95,7 @@ ContainsExpression::ContainsExpression(SparqlExpression::Ptr child,
       maxY = std::stod(boundingBoxEntriesAsString[3]);
 
       boundingBox_ =
-          new BoundingBoxType(Rtree::createBoundingBox(minX, minY, maxX, maxY));
+          new BoundingBoxType(BasicGeometry::CreateBoundingBox(minX, minY, maxX, maxY));
     } catch (const std::invalid_argument& e) {
       errorMessage = e.what();
     } catch (const std::out_of_range& e) {

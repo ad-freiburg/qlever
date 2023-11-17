@@ -25,6 +25,7 @@
 #include "util/HashMap.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/TupleHelpers.h"
+#include "util/RtreeFileReader.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
@@ -410,18 +411,18 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto internalVocabularyAction = [&wordWriter, &convertOfs](
                                         const auto& word, const auto& index) {
       wordWriter.push(word.data(), word.size());
-      std::optional<Rtree::BoundingBox> boundingBox =
-          Rtree::ConvertWordToRtreeEntry(word);
+      std::optional<BasicGeometry::BoundingBox> boundingBox =
+          BasicGeometry::ConvertWordToRtreeEntry(word);
       if (boundingBox) {
-        Rtree::SaveEntry(boundingBox.value(), index, convertOfs);
+        FileReaderWithoutIndex::SaveEntry(boundingBox.value(), index, convertOfs);
       }
     };
     auto externalVocabularyAction = [&convertOfs](const auto& word,
                                                   const auto& index) {
-      std::optional<Rtree::BoundingBox> boundingBox =
-          Rtree::ConvertWordToRtreeEntry(word);
+      std::optional<BasicGeometry::BoundingBox> boundingBox =
+          BasicGeometry::ConvertWordToRtreeEntry(word);
       if (boundingBox) {
-        Rtree::SaveEntry(boundingBox.value(), index, convertOfs);
+        FileReaderWithoutIndex::SaveEntry(boundingBox.value(), index, convertOfs);
       }
     };
 
@@ -445,13 +446,13 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(INFO) << "Building the Rtree..." << std::endl;
   try {
     Rtree rtree = Rtree(1300000000000);
-    rtree.BuildTree(onDiskBase_ + ".vocabulary", 16, "./rtree_build");
+    rtree.BuildTree(onDiskBase_, ".vocabulary.boundingbox", 16, "./rtree_build");
     LOG(INFO) << "Finished building the Rtree" << std::endl;
   } catch (const std::exception& e) {
     LOG(INFO) << e.what() << std::endl;
   }
 
-  res.idTriples = std::move(idTriples);
+  res.idTriples = std::move(*idTriples.wlock());
   res.actualPartialSizes = std::move(actualPartialSizes);
 
   LOG(INFO) << "Removing temporary files ..." << std::endl;

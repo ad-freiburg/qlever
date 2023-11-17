@@ -5,129 +5,103 @@
 #ifndef QLEVER_RTREEFILEREADER_H
 #define QLEVER_RTREEFILEREADER_H
 
-#include <util/Rtree.h>
-
-#include <boost/geometry.hpp>
-#include <boost/serialization/split_free.hpp>
-#include <boost/serialization/version.hpp>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <limits>
-#include <optional>
-#include <vector>
+#include "./Rtree.h"
+#include "./RtreeNode.h"
 
 class FileReader {
  public:
-  explicit FileReader(const std::string& filename) : file(filename) {}
+  // ___________________________________________________________________________
+  // Save a single datapoint of the Rtree, together with its position in the x
+  // and y sorting to disk
+  static void SaveEntryWithOrderIndex(RTreeValueWithOrderIndex treeValue,
+                                      std::ofstream& convertOfs);
+  // ___________________________________________________________________________
+  // Load all datapoints of the Rtree, together with its x and y sorting into
+  // ram
+  static multiBoxWithOrderIndex LoadEntriesWithOrderIndex(
+      const std::filesystem::path& file);
+  // ___________________________________________________________________________
+  // Save the current node in the building process to disk and return the position of the node in the file
+  static uint64_t SaveNode(RtreeNode& node, std::ofstream& nodesOfs);
+  // ___________________________________________________________________________
+  // Load a specific RtreeNode to query in its children
+  static RtreeNode LoadNode(uint64_t id, std::ifstream& lookupIfs, std::ifstream& nodesIfs);
 
-  class iterator : public std::iterator<std::input_iterator_tag, std::string> {
+  explicit FileReader(const std::filesystem::path& filename) : file_(filename) {}
+
+  class iterator : public std::iterator<std::input_iterator_tag, std::filesystem::path> {
    public:
-    explicit iterator(std::ifstream& in) : input(in) {
+    explicit iterator(std::ifstream& in) : input_(in) {
       ++(*this);  // Read the first element
     }
 
-    iterator() : input(nullstream) {}  // End iterator constructor
+    iterator() : input_(nullstream_) {}  // End iterator constructor
 
-    iterator& operator++() {
-      double minX;
-      double minY;
-      double maxX;
-      double maxY;
-      uint64_t id;
-      uint64_t orderX;
-      uint64_t orderY;
-      if (input && input.read(reinterpret_cast<char*>(&minX), sizeof(double)) &&
-          input.read(reinterpret_cast<char*>(&minY), sizeof(double)) &&
-          input.read(reinterpret_cast<char*>(&maxX), sizeof(double)) &&
-          input.read(reinterpret_cast<char*>(&maxY), sizeof(double)) &&
-          input.read(reinterpret_cast<char*>(&id), sizeof(uint64_t)) &&
-          input.read(reinterpret_cast<char*>(&orderX), sizeof(uint64_t)) &&
-          input.read(reinterpret_cast<char*>(&orderY), sizeof(uint64_t))) {
-        Rtree::BoundingBox box =
-            Rtree::createBoundingBox(minX, minY, maxX, maxY);
-        currentElement = {{box, id}, orderX, orderY};
-        valid = true;
-      } else {
-        valid = false;
-      }
-      return *this;
-    }
+    iterator& operator++();
 
-    const RTreeValueWithOrderIndex& operator*() const { return currentElement; }
+    const RTreeValueWithOrderIndex& operator*() const { return currentElement_; }
 
     bool operator!=(const iterator& other) const {
-      return valid != other.valid;
+      return valid_ != other.valid_;
     }
 
    private:
-    std::ifstream& input;
-    std::ifstream nullstream;  // A dummy stream for the end iterator
-    RTreeValueWithOrderIndex currentElement;
-    bool valid{};
+    std::ifstream& input_;
+    std::ifstream nullstream_;  // A dummy stream for the end iterator
+    RTreeValueWithOrderIndex currentElement_;
+    bool valid_{};
   };
 
-  iterator begin() { return iterator(file); }
+  iterator begin() { return iterator(file_); }
 
   static iterator end() { return {}; }
 
  private:
-  std::ifstream file;
+  std::ifstream file_;
 };
 
 class FileReaderWithoutIndex {
  public:
-  explicit FileReaderWithoutIndex(const std::string& filename)
-      : file(filename) {}
+  // ___________________________________________________________________________
+  // Save a single datapoint for the Rtree to disk
+  static void SaveEntry(BasicGeometry::BoundingBox boundingBox, uint64_t index,
+                        std::ofstream& convertOfs);
+  // ___________________________________________________________________________
+  // Load all datapoints of the Rtree in file into ram
+  static multiBoxGeo LoadEntries(const std::filesystem::path& file);
 
-  class iterator : public std::iterator<std::input_iterator_tag, std::string> {
+  explicit FileReaderWithoutIndex(const std::filesystem::path& filename)
+      : file_(filename) {}
+
+  class iterator : public std::iterator<std::input_iterator_tag, std::filesystem::path> {
    public:
-    explicit iterator(std::ifstream& in) : input(in) {
+    explicit iterator(std::ifstream& in) : input_(in) {
       ++(*this);  // Read the first element
     }
 
-    iterator() : input(nullstream) {}  // End iterator constructor
+    iterator() : input_(nullstream_) {}  // End iterator constructor
 
-    iterator& operator++() {
-      double minX;
-      double minY;
-      double maxX;
-      double maxY;
-      uint64_t id;
-      if (input && input.read(reinterpret_cast<char*>(&minX), sizeof(double)) &&
-          input.read(reinterpret_cast<char*>(&minY), sizeof(double)) &&
-          input.read(reinterpret_cast<char*>(&maxX), sizeof(double)) &&
-          input.read(reinterpret_cast<char*>(&maxY), sizeof(double)) &&
-          input.read(reinterpret_cast<char*>(&id), sizeof(uint64_t))) {
-        Rtree::BoundingBox box =
-            Rtree::createBoundingBox(minX, minY, maxX, maxY);
-        currentElement = {box, id};
-        valid = true;
-      } else {
-        valid = false;
-      }
-      return *this;
-    }
+    iterator& operator++();
 
-    const RTreeValue& operator*() const { return currentElement; }
+    const RTreeValue& operator*() const { return currentElement_; }
 
     bool operator!=(const iterator& other) const {
-      return valid != other.valid;
+      return valid_ != other.valid_;
     }
 
    private:
-    std::ifstream& input;
-    std::ifstream nullstream;  // A dummy stream for the end iterator
-    RTreeValue currentElement;
-    bool valid{};
+    std::ifstream& input_;
+    std::ifstream nullstream_;  // A dummy stream for the end iterator
+    RTreeValue currentElement_;
+    bool valid_{};
   };
 
-  iterator begin() { return iterator(file); }
+  iterator begin() { return iterator(file_); }
 
   static iterator end() { return {}; }
 
  private:
-  std::ifstream file;
+  std::ifstream file_;
 };
 
 #endif  // QLEVER_RTREEFILEREADER_H
