@@ -244,17 +244,12 @@ static void addMeasurementsToRowOfBenchmarkTable(
   table->setEntry(row, NUM_ROWS_OF_JOIN_RESULT_COLUMN_NUM, numberRowsOfResult);
 }
 
-// `T` must be a function, that returns something of type `ReturnType`, when
-// called with arguments of types `Args`.
-template <typename T, typename ReturnType, typename... Args>
-concept invocableWithReturnType =
-    std::invocable<T, Args...> &&
-    std::same_as<ReturnType, std::invoke_result_t<T, Args...>>;
-
 // `T` must be an invocable object, which can be invoked with `const size_t&`
 // and returns an instance of `ReturnType`.
 template <typename T, typename ReturnType>
-concept growthFunction = invocableWithReturnType<T, ReturnType, const size_t&>;
+concept growthFunction =
+    ad_utility::RegularInvocableWithExactReturnType<T, ReturnType,
+                                                    const size_t&>;
 
 // Is `T` of the given type, or a function, that takes `size_t` and return
 // the given type?
@@ -323,12 +318,13 @@ chance to be picked.) This adjusts the number of elements in the sample
 size to `Amount of rows * ratio`, which affects the possibility of
 duplicates. Important: `Amount of rows * ratio` must be a natural number.
  */
-template <invocableWithReturnType<bool, const ResultTable&> StopFunction,
-          isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<size_t> T2,
-          isTypeOrGrowthFunction<size_t> T3, isTypeOrGrowthFunction<size_t> T4,
-          isTypeOrGrowthFunction<size_t> T5,
-          isTypeOrGrowthFunction<float> T6 = float,
-          isTypeOrGrowthFunction<float> T7 = float>
+template <
+    ad_utility::RegularInvocableWithExactReturnType<bool, const ResultTable&>
+        StopFunction,
+    isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<size_t> T2,
+    isTypeOrGrowthFunction<size_t> T3, isTypeOrGrowthFunction<size_t> T4,
+    isTypeOrGrowthFunction<size_t> T5, isTypeOrGrowthFunction<float> T6 = float,
+    isTypeOrGrowthFunction<float> T7 = float>
 requires exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>
 static ResultTable& makeGrowingBenchmarkTable(
     BenchmarkResults* results, const std::string_view tableDescriptor,
@@ -935,9 +931,11 @@ the benchmark table.
 smaller and bigger `IdTable` has. Used for calculating/approximating the memory
 space, that this result table takes up.
 */
-template <invocableWithReturnType<ad_utility::MemorySize, const size_t&>
+template <ad_utility::RegularInvocableWithExactReturnType<
+              ad_utility::MemorySize, const size_t&>
               SmallerTableMemorySizeFunction,
-          invocableWithReturnType<ad_utility::MemorySize, const size_t&>
+          ad_utility::RegularInvocableWithExactReturnType<
+              ad_utility::MemorySize, const size_t&>
               BiggerTableMemorySizeFunction>
 auto createDefaultStoppingLambda(
     const std::optional<float>& maxTime,
@@ -963,8 +961,8 @@ auto createDefaultStoppingLambda(
     // up to much memory space.
     auto checkMemorySizeOfTable =
         [](const size_t& benchmarkTableRowNumber,
-           invocableWithReturnType<ad_utility::MemorySize, const size_t&> auto
-               memorySizeFunction,
+           ad_utility::RegularInvocableWithExactReturnType<
+               ad_utility::MemorySize, const size_t&> auto memorySizeFunction,
            const std::optional<ad_utility::MemorySize> maxMemory) {
           return maxMemory.has_value()
                      ? memorySizeFunction(benchmarkTableRowNumber) <=
