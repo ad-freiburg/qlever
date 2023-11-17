@@ -2,29 +2,40 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Noah Nock <noah.v.nock@gmail.com>
 
-
 #ifndef QLEVER_RTREEBASICGEOMETRY_H
 #define QLEVER_RTREEBASICGEOMETRY_H
 
-#include "./Rtree.h"
 #include <boost/geometry.hpp>
 #include <boost/serialization/split_free.hpp>
+
+#include "./Rtree.h"
 #include "ctre/ctre.h"
 
 class BasicGeometry {
  public:
-  typedef boost::geometry::model::point<double, 2, boost::geometry::cs::spherical_equatorial<boost::geometry::degree>>
+  typedef boost::geometry::model::point<
+      double, 2,
+      boost::geometry::cs::spherical_equatorial<boost::geometry::degree>>
       Point;
   typedef boost::geometry::model::box<Point> BoundingBox;
 
-  static double GetMinX(BoundingBox boundingBox) { return boundingBox.min_corner().get<0>(); }
-  static double GetMinY(BoundingBox boundingBox) { return boundingBox.min_corner().get<1>(); }
-  static double GetMaxX(BoundingBox boundingBox) { return boundingBox.max_corner().get<0>(); }
-  static double GetMaxY(BoundingBox boundingBox) { return boundingBox.max_corner().get<1>(); }
+  static double GetMinX(BoundingBox boundingBox) {
+    return boundingBox.min_corner().get<0>();
+  }
+  static double GetMinY(BoundingBox boundingBox) {
+    return boundingBox.min_corner().get<1>();
+  }
+  static double GetMaxX(BoundingBox boundingBox) {
+    return boundingBox.max_corner().get<0>();
+  }
+  static double GetMaxY(BoundingBox boundingBox) {
+    return boundingBox.max_corner().get<1>();
+  }
 
   // ___________________________________________________________________________
   // Create a bounding box, based on the corner coordinates
-  static BasicGeometry::BoundingBox CreateBoundingBox(double pointOneX, double pointOneY,
+  static BasicGeometry::BoundingBox CreateBoundingBox(double pointOneX,
+                                                      double pointOneY,
                                                       double pointTwoX,
                                                       double pointTwoY) {
     return {{pointOneX, pointOneY}, {pointTwoX, pointTwoY}};
@@ -33,8 +44,9 @@ class BasicGeometry {
   // ___________________________________________________________________________
   // Take two bounding boxes and combine them into one bounding box containing
   // both
-  static BasicGeometry::BoundingBox CombineBoundingBoxes(const BasicGeometry::BoundingBox& b1,
-                                                         const BasicGeometry::BoundingBox& b2) {
+  static BasicGeometry::BoundingBox CombineBoundingBoxes(
+      const BasicGeometry::BoundingBox& b1,
+      const BasicGeometry::BoundingBox& b2) {
     auto minX = [](BasicGeometry::BoundingBox b) -> double {
       return b.min_corner().get<0>();
     };
@@ -69,37 +81,38 @@ class BasicGeometry {
   // Rtree
   static std::optional<BoundingBox> ConvertWordToRtreeEntry(
       const std::string& wkt) {
-  /**
-   * Convert a single wkt literal to a boundingbox.
-   * Get the bounding box of either a multipolygon, polygon or a linestring
-   */
-if (!wkt.starts_with("\"MULTIPOLYGON") && !wkt.starts_with("\"POLYGON") &&
-   !wkt.starts_with("\"LINESTRING")) {
-   return {};
-}
+    /**
+     * Convert a single wkt literal to a boundingbox.
+     * Get the bounding box of either a multipolygon, polygon or a linestring
+     */
+    if (!wkt.starts_with("\"MULTIPOLYGON") && !wkt.starts_with("\"POLYGON") &&
+        !wkt.starts_with("\"LINESTRING")) {
+      return {};
+    }
 
-double maxDouble = std::numeric_limits<double>::max();
+    double maxDouble = std::numeric_limits<double>::max();
 
-double minX = maxDouble;
-double maxX = -maxDouble;
-double minY = maxDouble;
-double maxY = -maxDouble;
+    double minX = maxDouble;
+    double maxX = -maxDouble;
+    double minY = maxDouble;
+    double maxY = -maxDouble;
 
-// Iterate over matches and capture x and y coordinates
-for (auto match :
-       ctre::range<R"( *([\-|\+]?[0-9]+(?:[.][0-9]+)?) +([\-|\+]?[0-9]+(?:[.][0-9]+)?))">(
-               wkt)) {
-   double x = std::stod(std::string(match.get<1>()));
-   double y = std::stod(std::string(match.get<2>()));
+    // Iterate over matches and capture x and y coordinates
+    for (
+        auto match : ctre::range<
+            R"( *([\-|\+]?[0-9]+(?:[.][0-9]+)?) +([\-|\+]?[0-9]+(?:[.][0-9]+)?))">(
+            wkt)) {
+      double x = std::stod(std::string(match.get<1>()));
+      double y = std::stod(std::string(match.get<2>()));
 
-   if (x < minX) minX = x;
-   if (x > maxX) maxX = x;
-   if (y < minY) minY = y;
-   if (y > maxY) maxY = y;
-}
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
 
-return {BasicGeometry::CreateBoundingBox(minX, minY, maxX, maxY)};
-}
+    return {BasicGeometry::CreateBoundingBox(minX, minY, maxX, maxY)};
+  }
 };
 
 // ___________________________________________________________________________
@@ -149,9 +162,10 @@ void load(Archive& a, BasicGeometry::BoundingBox& b,
   a >> maxX;
   double maxY = 0;
   a >> maxY;
-  b = BasicGeometry::BoundingBox(BasicGeometry::Point(minX, minY), BasicGeometry::Point(maxX, maxY));
+  b = BasicGeometry::BoundingBox(BasicGeometry::Point(minX, minY),
+                                 BasicGeometry::Point(maxX, maxY));
 }
 }  // namespace boost::serialization
 BOOST_SERIALIZATION_SPLIT_FREE(BasicGeometry::BoundingBox);
 
-#endif //QLEVER_RTREEBASICGEOMETRY_H
+#endif  // QLEVER_RTREEBASICGEOMETRY_H

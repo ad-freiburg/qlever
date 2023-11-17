@@ -7,7 +7,8 @@
 
 #include "./Rtree.h"
 
-OrderedBoxes SortInput(const std::string& onDiskBase, const std::string& fileSuffix, size_t M,
+OrderedBoxes SortInput(const std::string& onDiskBase,
+                       const std::string& fileSuffix, size_t M,
                        uintmax_t maxBuildingRamUsage, bool workInRam);
 
 #endif  // QLEVER_RTREESORTER_H

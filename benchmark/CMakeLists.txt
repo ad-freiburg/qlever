@@ -28,3 +28,5 @@ endfunction()
 addAndLinkBenchmark(BenchmarkExamples)
 
 addAndLinkBenchmark(IdTableCompressedWriterBenchmark engine testUtil gtest gmock)
+
+addAndLinkBenchmark(ParallelMergeBenchmark)

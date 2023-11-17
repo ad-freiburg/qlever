@@ -2,19 +2,22 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Noah Nock <noah.v.nock@gmail.com>
 
-#include "./Rtree.h"
 #include "./RtreeFileReader.h"
 
+#include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/serialization/vector.hpp>
-#include <boost/archive/binary_iarchive.hpp>
 
-FileReader::iterator &FileReader::iterator::operator++() {
-  BasicGeometry::BoundingBox  box;
+#include "./Rtree.h"
+
+FileReader::iterator& FileReader::iterator::operator++() {
+  BasicGeometry::BoundingBox box;
   uint64_t id;
   uint64_t orderX;
   uint64_t orderY;
-  if (input_ && input_.read(reinterpret_cast<char*>(&box), sizeof(BasicGeometry::BoundingBox)) &&
+  if (input_ &&
+      input_.read(reinterpret_cast<char*>(&box),
+                  sizeof(BasicGeometry::BoundingBox)) &&
       input_.read(reinterpret_cast<char*>(&id), sizeof(uint64_t)) &&
       input_.read(reinterpret_cast<char*>(&orderX), sizeof(uint64_t)) &&
       input_.read(reinterpret_cast<char*>(&orderY), sizeof(uint64_t))) {
@@ -26,10 +29,13 @@ FileReader::iterator &FileReader::iterator::operator++() {
   return *this;
 }
 
-FileReaderWithoutIndex::iterator &FileReaderWithoutIndex::iterator::operator++() {
+FileReaderWithoutIndex::iterator&
+FileReaderWithoutIndex::iterator::operator++() {
   BasicGeometry::BoundingBox box;
   uint64_t id;
-  if (input_ && input_.read(reinterpret_cast<char*>(&box), sizeof(BasicGeometry::BoundingBox)) &&
+  if (input_ &&
+      input_.read(reinterpret_cast<char*>(&box),
+                  sizeof(BasicGeometry::BoundingBox)) &&
       input_.read(reinterpret_cast<char*>(&id), sizeof(uint64_t))) {
     currentElement_ = {box, id};
     valid_ = true;
@@ -65,25 +71,28 @@ RtreeNode FileReader::LoadNode(uint64_t id, std::ifstream& lookupIfs,
   return newNode;
 }
 
-void FileReaderWithoutIndex::SaveEntry(BasicGeometry::BoundingBox boundingBox, uint64_t index,
+void FileReaderWithoutIndex::SaveEntry(BasicGeometry::BoundingBox boundingBox,
+                                       uint64_t index,
                                        std::ofstream& convertOfs) {
   /**
-     * Save a single entry (which was e.g. converted by ConvertWordToRtreeEntry)
-     * to the disk
+   * Save a single entry (which was e.g. converted by ConvertWordToRtreeEntry)
+   * to the disk
    */
   static_assert(std::is_trivially_copyable_v<BasicGeometry::BoundingBox>);
-  convertOfs.write(reinterpret_cast<const char*>(&boundingBox), sizeof(BasicGeometry::BoundingBox));
+  convertOfs.write(reinterpret_cast<const char*>(&boundingBox),
+                   sizeof(BasicGeometry::BoundingBox));
   convertOfs.write(reinterpret_cast<const char*>(&index), sizeof(uint64_t));
 }
 
 void FileReader::SaveEntryWithOrderIndex(RTreeValueWithOrderIndex treeValue,
                                          std::ofstream& convertOfs) {
   /**
-     * Save a single entry, containing its postion in the x- and y-sorting
+   * Save a single entry, containing its postion in the x- and y-sorting
    */
 
   static_assert(std::is_trivially_copyable_v<BasicGeometry::BoundingBox>);
-  convertOfs.write(reinterpret_cast<const char*>(&treeValue.box), sizeof(BasicGeometry::BoundingBox));
+  convertOfs.write(reinterpret_cast<const char*>(&treeValue.box),
+                   sizeof(BasicGeometry::BoundingBox));
   convertOfs.write(reinterpret_cast<const char*>(&treeValue.id),
                    sizeof(uint64_t));
   convertOfs.write(reinterpret_cast<const char*>(&treeValue.orderX),
@@ -92,7 +101,8 @@ void FileReader::SaveEntryWithOrderIndex(RTreeValueWithOrderIndex treeValue,
                    sizeof(uint64_t));
 }
 
-multiBoxGeo FileReaderWithoutIndex::LoadEntries(const std::filesystem::path& file) {
+multiBoxGeo FileReaderWithoutIndex::LoadEntries(
+    const std::filesystem::path& file) {
   multiBoxGeo boxes;
 
   for (const RTreeValue& element : FileReaderWithoutIndex(file)) {

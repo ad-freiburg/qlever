@@ -30,7 +30,8 @@ class RtreeNode {
 
  public:
   RtreeNode();
-  explicit RtreeNode(uint64_t id, BasicGeometry::BoundingBox boundingBox = {}, bool isLastInnerNode = false, multiBoxGeo children = {});
+  explicit RtreeNode(uint64_t id, BasicGeometry::BoundingBox boundingBox = {},
+                     bool isLastInnerNode = false, multiBoxGeo children = {});
   [[nodiscard]] uint64_t GetId() const;
   [[nodiscard]] BasicGeometry::BoundingBox GetBoundingBox() const;
   void AddChild(RtreeNode& child);
@@ -42,8 +43,8 @@ class RtreeNode {
 BOOST_CLASS_VERSION(RtreeNode, 1)
 
 // ___________________________________________________________________________
-// Subclass of the RtreeNode only needed while constructing the Rtree (it keeps track
-// of the remaining OrderedBoxes of the subtree)
+// Subclass of the RtreeNode only needed while constructing the Rtree (it keeps
+// track of the remaining OrderedBoxes of the subtree)
 class ConstructionNode : public RtreeNode {
  private:
   OrderedBoxes orderedBoxes_;
@@ -54,5 +55,4 @@ class ConstructionNode : public RtreeNode {
   void AddChildrenToItem();
 };
 
-
-#endif //QLEVER_NODE_H
+#endif  // QLEVER_NODE_H

@@ -139,8 +139,6 @@ void Minus::computeMinus(
    */
   auto writeResult = [&result, &a](size_t ia) { result.push_back(a[ia]); };
 
-  auto checkTimeout = checkTimeoutAfterNCallsFactory();
-
   size_t ia = 0, ib = 0;
   while (ia < a.size() && ib < b.size()) {
     // Join columns 0 are the primary sort columns
@@ -148,14 +146,14 @@ void Minus::computeMinus(
       // Write a result
       writeResult(ia);
       ia++;
-      checkTimeout();
+      checkCancellation();
       if (ia >= a.size()) {
         goto finish;
       }
     }
     while (b(ib, joinColumns[0][1]) < a(ia, joinColumns[0][0])) {
       ib++;
-      checkTimeout();
+      checkCancellation();
       if (ib >= b.size()) {
         goto finish;
       }
@@ -189,7 +187,7 @@ void Minus::computeMinus(
         default:
           AD_FAIL();
       }
-      checkTimeout();
+      checkCancellation();
     }
   }
 finish:

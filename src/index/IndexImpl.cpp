@@ -21,11 +21,12 @@
 #include "index/VocabularyGenerator.h"
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
+#include "util/CachingMemoryResource.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
+#include "util/RtreeFileReader.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/TupleHelpers.h"
-#include "util/RtreeFileReader.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
@@ -265,15 +266,18 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   // Each of these futures corresponds to the processing and writing of one
   // batch of triples and partial vocabulary.
   std::array<std::future<void>, 3> writePartialVocabularyFuture;
+
+  ad_utility::CachingMemoryResource cachingMemoryResource;
+  ItemAlloc itemAlloc(&cachingMemoryResource);
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
     std::vector<std::array<Id, 3>> localWriter;
 
-    std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
+    std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
     {
-      auto p = ad_pipeline::setupParallelPipeline<3, NUM_PARALLEL_ITEM_MAPS>(
+      auto p = ad_pipeline::setupParallelPipeline<NUM_PARALLEL_ITEM_MAPS>(
           parserBatchSize_,
           // when called, returns an optional to the next triple. If
           // `linesPerPartial` triples were parsed, return std::nullopt. when
@@ -282,17 +286,12 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
           // as a first step in the parallel Pipeline.
           ParserBatcher(parser, linesPerPartial,
                         [&]() { parserExhausted = true; }),
-          // convert each triple to the internal representation (e.g. special
-          // values for Numbers, externalized literals, etc.)
-          [this](TurtleTriple&& t) -> LangtagAndTriple {
-            return tripleToInternalRepresentation(std::move(t));
-          },
-
           // get the Ids for the original triple and the possibly added language
           // Tag triples using the provided HashMaps via itemArray. See
           // documentation of the function for more details
-          getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(
-              &itemArray, linesPerPartial, &(vocab_.getCaseComparator())));
+          getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(&itemArray, linesPerPartial,
+                                                  &(vocab_.getCaseComparator()),
+                                                  this, itemAlloc));
 
       while (auto opt = p.getNextValue()) {
         i++;
@@ -308,8 +307,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       }
       LOG(TIMING) << "WaitTimes for Pipeline in msecs\n";
       for (const auto& t : p.getWaitingTime()) {
-        LOG(TIMING) << ad_utility::Timer::toMilliseconds(t) << " msecs"
-                    << std::endl;
+        LOG(TIMING)
+            << std::chrono::duration_cast<std::chrono::milliseconds>(t).count()
+            << " msecs" << std::endl;
       }
 
       parser->printAndResetQueueStatistics();
@@ -326,11 +326,12 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     }
     LOG(TIMING)
         << "Time spent waiting for the writing of a previous vocabulary: "
-        << sortFutureTimer.msecs() << "ms." << std::endl;
-    std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS> convertedMaps;
-    for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
-      convertedMaps[j] = std::move(itemArray[j]).moveMap();
-    }
+        << sortFutureTimer.msecs().count() << "ms." << std::endl;
+    auto moveMap = [](std::optional<ItemMapManager>&& el) {
+      return std::move(el.value()).moveMap();
+    };
+    std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS> convertedMaps =
+        ad_utility::transformArray(std::move(itemArray), moveMap);
     auto oldItemPtr = std::make_unique<ItemMapArray>(std::move(convertedMaps));
     for (auto it = writePartialVocabularyFuture.begin() + 1;
          it < writePartialVocabularyFuture.end(); ++it) {
@@ -354,7 +355,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(INFO) << "Done, total number of triples read: " << i
             << " [may contain duplicates]" << std::endl;
   LOG(INFO) << "Number of QLever-internal triples created: "
-            << ((*idTriples.wlock())->size() - i) << " [may contain duplicates]"
+            << (*idTriples.wlock())->size() << " [may contain duplicates]"
             << std::endl;
 
   size_t sizeInternalVocabulary = 0;
@@ -378,7 +379,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto mergeResult =
         m.mergeVocabulary(onDiskBase_ + TMP_BASENAME_COMPRESSION, numFiles,
                           std::less<>(), internalVocabularyActionCompression,
-                          externalVocabularyActionCompression);
+                          externalVocabularyActionCompression, stxxlMemory());
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
@@ -414,7 +415,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       std::optional<BasicGeometry::BoundingBox> boundingBox =
           BasicGeometry::ConvertWordToRtreeEntry(word);
       if (boundingBox) {
-        FileReaderWithoutIndex::SaveEntry(boundingBox.value(), index, convertOfs);
+        FileReaderWithoutIndex::SaveEntry(boundingBox.value(), index,
+                                          convertOfs);
       }
     };
     auto externalVocabularyAction = [&convertOfs](const auto& word,
@@ -422,13 +424,14 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       std::optional<BasicGeometry::BoundingBox> boundingBox =
           BasicGeometry::ConvertWordToRtreeEntry(word);
       if (boundingBox) {
-        FileReaderWithoutIndex::SaveEntry(boundingBox.value(), index, convertOfs);
+        FileReaderWithoutIndex::SaveEntry(boundingBox.value(), index,
+                                          convertOfs);
       }
     };
 
-    VocabularyMerger::VocabularyMetaData result =
-        v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
-                          internalVocabularyAction, externalVocabularyAction);
+    VocabularyMerger::VocabularyMetaData result = v.mergeVocabulary(
+        onDiskBase_, numFiles, sortPred, internalVocabularyAction,
+        externalVocabularyAction, stxxlMemory());
 
     convertOfs.close();
 
@@ -446,7 +449,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(INFO) << "Building the Rtree..." << std::endl;
   try {
     Rtree rtree = Rtree(1300000000000);
-    rtree.BuildTree(onDiskBase_, ".vocabulary.boundingbox", 16, "./rtree_build");
+    rtree.BuildTree(onDiskBase_, ".vocabulary.boundingbox", 16,
+                    "./rtree_build");
     LOG(INFO) << "Finished building the Rtree" << std::endl;
   } catch (const std::exception& e) {
     LOG(INFO) << e.what() << std::endl;
@@ -963,7 +967,7 @@ void IndexImpl::readConfiguration() {
 LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     TurtleTriple&& triple) const {
   LangtagAndTriple result{"", {}};
-  auto& resultTriple = result._triple;
+  auto& resultTriple = result.triple_;
   resultTriple[0] = std::move(triple.subject_);
   resultTriple[1] = std::move(triple.predicate_);
 
@@ -987,14 +991,14 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
       continue;
     }
     auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
-    auto& iriOrLiteral = component._iriOrLiteral;
+    auto& iriOrLiteral = component.iriOrLiteral_;
     iriOrLiteral = vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
     if (vocab_.shouldBeExternalized(iriOrLiteral)) {
-      component._isExternal = true;
+      component.isExternal_ = true;
     }
     // Only the third element (the object) might contain a language tag.
     if (i == 2 && isLiteral(iriOrLiteral)) {
-      result._langtag = decltype(vocab_)::getLanguage(iriOrLiteral);
+      result.langtag_ = decltype(vocab_)::getLanguage(iriOrLiteral);
     }
   }
   return result;
@@ -1153,54 +1157,72 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
                  items = std::move(items), vocab = &vocab_, partialFilename,
                  partialCompressionFilename, numFiles,
                  vocabPrefixCompressed = vocabPrefixCompressed_]() mutable {
-    auto vec = vocabMapsToVector(std::move(items));
+    auto vec = [&]() {
+      ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
+      return vocabMapsToVector(*items);
+    }();
     const auto identicalPred = [&c = vocab->getCaseComparator()](
                                    const auto& a, const auto& b) {
-      return c(a.second.m_splitVal, b.second.m_splitVal,
+      return c(a.second.splitVal_, b.second.splitVal_,
                decltype(vocab_)::SortLevel::TOTAL);
     };
-    LOG(TIMING) << "Start sorting of vocabulary with #elements: " << vec.size()
-                << std::endl;
-    sortVocabVector(&vec, identicalPred, true);
-    LOG(TIMING) << "Finished sorting of vocabulary" << std::endl;
-    auto mapping = createInternalMapping(&vec);
-    LOG(TIMING) << "Finished creating of Mapping vocabulary" << std::endl;
-    auto sz = vec.size();
+    {
+      ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
+      sortVocabVector(&vec, identicalPred, true);
+    }
+    auto mapping = [&]() {
+      ad_utility::TimeBlockAndLog l{"creating internal mapping"};
+      return createInternalMapping(&vec);
+    }();
+    LOG(TRACE) << "Finished creating of Mapping vocabulary" << std::endl;
     // since now adjacent duplicates also have the same Ids, it suffices to
     // compare those
-    vec.erase(std::unique(vec.begin(), vec.end(),
-                          [](const auto& a, const auto& b) {
-                            return a.second.m_id == b.second.m_id;
-                          }),
-              vec.end());
-    LOG(TRACE) << "Removed " << sz - vec.size()
-               << " Duplicates from the local partial vocabularies\n";
+    {
+      ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
+      vec.erase(std::unique(vec.begin(), vec.end(),
+                            [](const auto& a, const auto& b) {
+                              return a.second.id_ == b.second.id_;
+                            }),
+                vec.end());
+    }
     // The writing to the STXXL vector has to be done in order, to
     // make the update from local to global ids work.
-    globalWritePtr->withWriteLockAndOrdered(
-        [&](auto& writerPtr) {
-          writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
-        },
-        numFiles);
-    writePartialVocabularyToFile(vec, partialFilename);
+
+    auto writeTriplesFuture = std::async(
+        std::launch::async,
+        [&globalWritePtr, &localIds, &mapping, &numFiles]() {
+          globalWritePtr->withWriteLockAndOrdered(
+              [&](auto& writerPtr) {
+                writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
+              },
+              numFiles);
+        });
+    {
+      ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
+      writePartialVocabularyToFile(vec, partialFilename);
+    }
     if (vocabPrefixCompressed) {
       // sort according to the actual byte values
-      LOG(TIMING) << "Start sorting of vocabulary for prefix compression"
-                  << std::endl;
-      sortVocabVector(
-          &vec, [](const auto& a, const auto& b) { return a.first < b.first; },
-          false);
-      LOG(TIMING) << "Finished sorting of vocabulary for prefix compression"
-                  << std::endl;
-      LOG(TIMING) << "Remove externalized words from prefix compression"
-                  << std::endl;
+      LOG(TRACE) << "Start sorting of vocabulary for prefix compression"
+                 << std::endl;
       std::erase_if(vec, [](const auto& a) {
-        return a.second.m_splitVal.isExternalized_;
+        return a.second.splitVal_.isExternalized_;
       });
+      {
+        ad_utility::TimeBlockAndLog l{"sorting for compression"};
+        sortVocabVector(
+            &vec,
+            [](const auto& a, const auto& b) { return a.first < b.first; },
+            true);
+      }
       writePartialVocabularyToFile(vec, partialCompressionFilename);
     }
-    LOG(TIMING) << "Finished writing the partial vocabulary" << std::endl;
+    LOG(TRACE) << "Finished writing the partial vocabulary" << std::endl;
     vec.clear();
+    {
+      ad_utility::TimeBlockAndLog l{"writing to global file"};
+      writeTriplesFuture.get();
+    }
   };
 
   return std::async(std::launch::async, std::move(lambda));
@@ -1373,7 +1395,7 @@ IdTable IndexImpl::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
     const Permutation::Enum& permutation,
-    ad_utility::SharedConcurrentTimeoutTimer timer) const {
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
   std::optional<Id> col1Id =
       col1String.has_value() ? col1String.value().get().toValueId(getVocab())
@@ -1382,13 +1404,14 @@ IdTable IndexImpl::scan(
     size_t numColumns = col1String.has_value() ? 1 : 2;
     return IdTable{numColumns, allocator_};
   }
-  return scan(col0Id.value(), col1Id, permutation, timer);
+  return scan(col0Id.value(), col1Id, permutation,
+              std::move(cancellationHandle));
 }
 // _____________________________________________________________________________
-IdTable IndexImpl::scan(Id col0Id, std::optional<Id> col1Id,
-                        Permutation::Enum p,
-                        ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return getPermutation(p).scan(col0Id, col1Id, timer);
+IdTable IndexImpl::scan(
+    Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+  return getPermutation(p).scan(col0Id, col1Id, std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________

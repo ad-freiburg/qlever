@@ -9,11 +9,11 @@
 #define EOF std::char_traits<char>::eof()
 #endif
 #include <boost/serialization/version.hpp>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
-#include <variant>
 #include <optional>
-#include <cstdio>
+#include <variant>
 
 #include "./RtreeBasicGeometry.h"
 
@@ -54,13 +54,14 @@ class Rtree {
 
  public:
   // ___________________________________________________________________________
-  // Build the whole Rtree with the raw data in onDiskBase + fileSuffix + ".tmp",
-  // M as branching factor and folder as Rtree destination
-  void BuildTree(const std::string& onDiskBase, const std::string& fileSuffix, size_t M,
-                 const std::string& folder) const;
+  // Build the whole Rtree with the raw data in onDiskBase + fileSuffix +
+  // ".tmp", M as branching factor and folder as Rtree destination
+  void BuildTree(const std::string& onDiskBase, const std::string& fileSuffix,
+                 size_t M, const std::string& folder) const;
   // ___________________________________________________________________________
   // Search for an intersection of query with any elements of the Rtree
-  static multiBoxGeo SearchTree(BasicGeometry::BoundingBox query, const std::string& folder);
+  static multiBoxGeo SearchTree(BasicGeometry::BoundingBox query,
+                                const std::string& folder);
   explicit Rtree(uintmax_t maxBuildingRamUsage);
 };
 
@@ -91,9 +92,9 @@ class OrderedBoxes {
   SplitResult GetBestSplit();
   // ___________________________________________________________________________
   // Actually splitting the rectangles at the given split by splitResult
-  std::pair<BasicGeometry::BoundingBox, BasicGeometry::BoundingBox> PerformSplit(
-      SplitResult splitResult, SplitBuffers& splitBuffers, size_t M,
-      size_t S, uint64_t maxBuildingRamUsage = 0);
+  std::pair<BasicGeometry::BoundingBox, BasicGeometry::BoundingBox>
+  PerformSplit(SplitResult splitResult, SplitBuffers& splitBuffers, size_t M,
+               size_t S, uint64_t maxBuildingRamUsage = 0);
 
  public:
   [[nodiscard]] bool WorkInRam() const;

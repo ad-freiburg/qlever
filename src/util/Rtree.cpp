@@ -3,8 +3,9 @@
 //  Author: Noah Nock <noah.v.nock@gmail.com>
 
 #include "./Rtree.h"
-#include "./RtreeNode.h"
+
 #include "./RtreeFileReader.h"
+#include "./RtreeNode.h"
 
 multiBoxGeo Rtree::SearchTree(BasicGeometry::BoundingBox query,
                               const std::string& folder) {
@@ -27,7 +28,8 @@ multiBoxGeo Rtree::SearchTree(BasicGeometry::BoundingBox query,
         if (currentNode.GetIsLastInnerNode()) {
           results.push_back(child);
         } else {
-          RtreeNode newNode = FileReader::LoadNode(child.id, lookupIfs, nodesIfs);
+          RtreeNode newNode =
+              FileReader::LoadNode(child.id, lookupIfs, nodesIfs);
           nodes.push(newNode);
         }
       }

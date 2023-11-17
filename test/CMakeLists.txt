@@ -324,13 +324,17 @@ addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
 addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
 
-addLinkAndDiscoverTest(ConfigManagerTest configManager)
+addLinkAndDiscoverTest(ConfigManagerTest configManager testUtil)
 
 addLinkAndDiscoverTest(ConfigOptionTest configManager)
+
+addLinkAndDiscoverTest(ValidatorTest configManager testUtil)
 
 addLinkAndDiscoverTest(ConfigOptionProxyTest configManager)
 
 addLinkAndDiscoverTest(ConfigUtilTest configManager)
+
+addLinkAndDiscoverTest(RandomTest)
 
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 
@@ -369,3 +373,9 @@ addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
 addLinkAndDiscoverTest(UpdateFetcherTest http)
 
 addLinkAndDiscoverTest(MessageSenderTest http)
+
+addLinkAndDiscoverTest(CancellationHandleTest util)
+
+addLinkAndDiscoverTest(CachingMemoryResourceTest)
+
+addLinkAndDiscoverTest(ParallelMultiwayMergeTest)

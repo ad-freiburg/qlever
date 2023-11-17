@@ -3,6 +3,7 @@ add_subdirectory(MemorySize)
 add_subdirectory(http)
 add_library(util GeoSparqlHelpers.cpp
         antlr/ANTLRErrorHandling.cpp ParseException.cpp Conversions.cpp Date.cpp antlr/GenerateAntlrExceptionMetadata.cpp
+        CancellationHandle.cpp
         Rtree.h
         Rtree.cpp
         RtreeBuild.cpp

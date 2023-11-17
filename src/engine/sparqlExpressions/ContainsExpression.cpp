@@ -94,8 +94,8 @@ ContainsExpression::ContainsExpression(SparqlExpression::Ptr child,
       maxX = std::stod(boundingBoxEntriesAsString[2]);
       maxY = std::stod(boundingBoxEntriesAsString[3]);
 
-      boundingBox_ =
-          new BoundingBoxType(BasicGeometry::CreateBoundingBox(minX, minY, maxX, maxY));
+      boundingBox_ = new BoundingBoxType(
+          BasicGeometry::CreateBoundingBox(minX, minY, maxX, maxY));
     } catch (const std::invalid_argument& e) {
       errorMessage = e.what();
     } catch (const std::out_of_range& e) {

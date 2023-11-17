@@ -2,12 +2,20 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (joka921) <kalmbach@cs.uni-freiburg.de>
 
-#include "./IndexTestHelpers.h"
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include "IndexTestHelpers.h"
 #include "engine/NeutralElementOperation.h"
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
+#include "engine/ValuesForTesting.h"
+#include "util/IdTableHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using namespace ad_utility::testing;
+using namespace ::testing;
+using ad_utility::CancellationException;
+using ad_utility::CancellationHandle;
+using ad_utility::CancellationState;
 
 // ________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
@@ -78,4 +86,94 @@ TEST(OperationTest, getResultOnlyCached) {
   // Clear the (global) cache again to not possibly interfere with other unit
   // tests.
   qec->getQueryTreeCache().clearAll();
+}
+
+// _____________________________________________________________________________
+
+/// Fixture to work with a generic operation
+class OperationTestFixture : public testing::Test {
+ protected:
+  std::vector<std::string> jsonHistory;
+
+  Index index =
+      makeTestIndex("OperationTest", std::nullopt, true, true, true, 32);
+  QueryResultCache cache;
+  QueryExecutionContext qec{
+      index, &cache, makeAllocator(), SortPerformanceEstimator{},
+      [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
+  IdTable table = makeIdTableFromVector({{}, {}, {}});
+  ValuesForTesting operation{&qec, std::move(table), {}};
+};
+
+// _____________________________________________________________________________
+
+TEST_F(OperationTestFixture,
+       verifyOperationStatusChangesToInProgressAndComputed) {
+  // Ignore result, we only care about the side effects
+  operation.getResult(true);
+
+  EXPECT_THAT(
+      jsonHistory,
+      ElementsAre(
+          ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
+          ParsedAsJson(HasKeyMatching("status", Eq("in progress"))),
+          // Note: Currently the implementation triggers twice if a value
+          // is not cached. This is not a requirement, just an implementation
+          // detail that we account for here.
+          ParsedAsJson(HasKeyMatching("status", Eq("fully materialized"))),
+          ParsedAsJson(HasKeyMatching("status", Eq("fully materialized")))));
+}
+
+// _____________________________________________________________________________
+
+TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
+  // Run twice and clear history to get cached values
+  operation.getResult(true);
+  jsonHistory.clear();
+  operation.getResult(true);
+
+  EXPECT_THAT(
+      jsonHistory,
+      ElementsAre(
+          ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
+          ParsedAsJson(HasKeyMatching("status", Eq("fully materialized")))));
+}
+
+// _____________________________________________________________________________
+
+TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
+  auto qec = getQec();
+  auto handle = std::make_shared<CancellationHandle>();
+  ShallowParentOperation operation =
+      ShallowParentOperation::of<StallForeverOperation>(qec);
+  operation.recursivelySetCancellationHandle(handle);
+
+  ad_utility::JThread thread{[&]() {
+    std::this_thread::sleep_for(5ms);
+    handle->cancel(CancellationState::TIMEOUT);
+  }};
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      operation.computeResult(),
+      ::testing::HasSubstr("Cancelled due to timeout"),
+      ad_utility::AbortException);
+}
+
+// _____________________________________________________________________________
+
+TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
+  constexpr auto timeout = 5ms;
+  auto qec = getQec();
+  ShallowParentOperation operation =
+      ShallowParentOperation::of<StallForeverOperation>(qec);
+  operation.recursivelySetTimeConstraint(timeout);
+
+  auto childOperation = std::dynamic_pointer_cast<StallForeverOperation>(
+      operation.getChildren().at(0)->getRootOperation());
+
+  EXPECT_GT(operation.publicRemainingTime(), 0ms);
+  EXPECT_GT(childOperation->publicRemainingTime(), 0ms);
+  std::this_thread::sleep_for(timeout);
+  // Verify time is up for parent and child
+  EXPECT_EQ(operation.publicRemainingTime(), 0ms);
+  EXPECT_EQ(childOperation->publicRemainingTime(), 0ms);
 }

@@ -65,8 +65,8 @@ BenchmarkResults runAllBenchmarks(){
   results.addMeasurement(identifier, dummyFunctionToMeasure);
 
   /*
-  Create an empty table with a set number of rows and columns. Doesn't
-  measure anything.
+  Create an empty table with a number of rows and columns. Doesn't measure anything.
+  The number of columns can not be changed after creation, but the number of rows can.
   Important: The row names aren't saved in a seperate container, but INSIDE the
   first column of the table.
   */
@@ -76,7 +76,7 @@ BenchmarkResults runAllBenchmarks(){
   // You can add measurements to the table as entries, but you can also
   // read and set entries.
   table.addMeasurement(0, 2, dummyFunctionToMeasure); // Row 0, column 1.
-  table.setEntry(0, 1, "A custom entry can be a float, or a string.");
+  table.setEntry(0, 1, "A custom entry can be any type in 'ad_benchmark::ResultTable::EntryType', except 'std::monostate'.");
   table.getEntry(0, 2); // The measured time of the dummy function.
 
   // Replacing a row name.
@@ -119,11 +119,11 @@ Setting metadata is handled by the `BenchmarkMetadata` class. The set metadata i
 
 You can find instances of `BenchmarkMetadata` for your usage at 4 locations:
 
-- At `metadata_` of created `ResultEntry` objects, in order to give metadata information about the benchmark measurement.
+- At `metadata()` of created `ResultEntry` objects, in order to give metadata information about the benchmark measurement.
 
-- At `metadata_` of created `ResultGroup` objects, in order to give metadata information about the group.
+- At `metadata()` of created `ResultGroup` objects, in order to give metadata information about the group.
 
-- At `metadata_` of created `ResultTable` objects, in order to give metadata information about the table.
+- At `metadata()` of created `ResultTable` objects, in order to give metadata information about the table.
 
 - Writing a `getMetadata` function, like in the `BenchmarkInterface`, in order to give more general metadata information about your benchmark class. This is mostly, so that you don't have to constantly repeat metadata information, that are true for all the things you are measuring, in other places. For example, this would be a good place to give the name of an algorithm, if your whole benchmark class is about measuring the runtimes of one. Or you could give the time, at which those benchmark measurements were taken.
 

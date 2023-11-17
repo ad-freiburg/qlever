@@ -3,6 +3,7 @@
 //  Author: Noah Nock <noah.v.nock@gmail.com>
 
 #include "./RtreeNode.h"
+
 #include "./RtreeFileReader.h"
 
 ConstructionNode::ConstructionNode(uint64_t id, OrderedBoxes orderedBoxes)
@@ -14,8 +15,8 @@ ConstructionNode::ConstructionNode(uint64_t id, OrderedBoxes orderedBoxes)
 
 void ConstructionNode::AddChildrenToItem() {
   /**
-     * Add all children of a certain node at once.
-     * This is used when a leaf node is reached.
+   * Add all children of a certain node at once.
+   * This is used when a leaf node is reached.
    */
   if (this->GetOrderedBoxes().WorkInRam()) {
     for (RTreeValueWithOrderIndex box :
@@ -32,7 +33,9 @@ void ConstructionNode::AddChildrenToItem() {
   }
 }
 
-OrderedBoxes& ConstructionNode::GetOrderedBoxes() { return this->orderedBoxes_; }
+OrderedBoxes& ConstructionNode::GetOrderedBoxes() {
+  return this->orderedBoxes_;
+}
 
 void RtreeNode::AddChild(RtreeNode& child) {
   BasicGeometry::BoundingBox box = child.GetBoundingBox();
@@ -41,15 +44,20 @@ void RtreeNode::AddChild(RtreeNode& child) {
   this->children_.push_back(entry);
 }
 
-BasicGeometry::BoundingBox RtreeNode::GetBoundingBox() const { return this->boundingBox_; }
+BasicGeometry::BoundingBox RtreeNode::GetBoundingBox() const {
+  return this->boundingBox_;
+}
 
-void RtreeNode::SetIsLastInnerNode(bool isLast) { this->isLastInnerNode_ = isLast; }
+void RtreeNode::SetIsLastInnerNode(bool isLast) {
+  this->isLastInnerNode_ = isLast;
+}
 
 uint64_t RtreeNode::GetId() const { return this->id_; }
 
 RtreeNode::RtreeNode() = default;
 
-RtreeNode::RtreeNode(uint64_t id, BasicGeometry::BoundingBox boundingBox, bool isLastInnerNode, multiBoxGeo children) {
+RtreeNode::RtreeNode(uint64_t id, BasicGeometry::BoundingBox boundingBox,
+                     bool isLastInnerNode, multiBoxGeo children) {
   this->id_ = id;
   this->boundingBox_ = boundingBox;
   this->children_ = std::move(children);

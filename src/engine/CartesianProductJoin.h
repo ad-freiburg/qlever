@@ -80,6 +80,17 @@ class CartesianProductJoin : public Operation {
  private:
   //! Compute the result of the query-subtree rooted at this element..
   ResultTable computeResult() override;
+
+  // Copy each element from the `inputColumn` `groupSize` times to the
+  // `targetColumn`. Repeat until the `targetColumn` is copletely filled. Skip
+  // the first `offset` write operations to the `targetColumn`. Call
+  // `checkCancellation` after each write. If `StaticGroupSize != 0`, then the
+  // group size is known at compile time which allows for more efficient loop
+  // processing for very small group sizes.
+  template <size_t StaticGroupSize = 0>
+  void writeResultColumn(std::span<Id> targetColumn,
+                         std::span<const Id> inputColumn, size_t groupSize,
+                         size_t offset);
 };
 
 #endif  // QLEVER_CARTESIANPRODUCTJOIN_H

@@ -28,5 +28,5 @@ int main(int argc, char** argv) {
   auto externalVocabularyAction = []([[maybe_unused]] const auto& word,
                                      [[maybe_unused]] const auto& index) {};
   m.mergeVocabulary(basename, numFiles, TripleComponentComparator(),
-                    internalVocabularyAction, externalVocabularyAction);
+                    internalVocabularyAction, externalVocabularyAction, 4_GB);
 }
