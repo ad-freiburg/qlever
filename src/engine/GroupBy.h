@@ -169,27 +169,38 @@ class GroupBy : public Operation {
     size_t subtreeColumnIndex_;
   };
 
-  // Will be the implementation of an interface containing an
-  // "incrementor" function, a result function, a child expression
-  // or expression is passed to "increment" function, along with evalContext?
   struct AverageAggregationData {
+    bool _error = false;
     double _sum = 0;
     int64_t _count = 0;
-    void increment(sparqlExpression::detail::IntOrDouble intermediate) {
+    void increment(sparqlExpression::detail::NumericValue intermediate) {
       if (const int64_t* intval = std::get_if<int64_t>(&intermediate))
         _sum += (double)*intval;
       else if (const double* dval = std::get_if<double>(&intermediate))
         _sum += *dval;
+      else
+        _error = true;
       _count++;
     };
-    double calculateResult() const { return _sum / _count; }
+    ValueId calculateResult() const {
+      if (_error) return ValueId::makeUndefined();
+      else return ValueId::makeFromDouble(_sum / (double) _count);
+    }
   };
 
+  // TODO
   struct CountAggregationData {
+    bool _error = false;
     int64_t _count = 0;
     void increment(double intermediate) { _count++; }
     double calculateResult() const { return _count; }
   };
+
+  template <size_t OUT_WIDTH>
+  bool createResultForSortedSubtree(IdTable* result,
+                                    const ad_utility::HashMap<ValueId,
+                                                              std::vector<AverageAggregationData>> & map,
+                                    size_t numAggregates);
 
   // Check if the previously described optimization can be applied. The argument
   // Must be the single subtree of this GROUP BY, properly cast to a `const

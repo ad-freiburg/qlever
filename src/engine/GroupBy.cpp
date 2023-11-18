@@ -14,6 +14,7 @@
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "engine/sparqlExpressions/AggregateExpression.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "parser/Alias.h"
@@ -718,13 +719,43 @@ std::optional<GroupBy::ExplicitlySortedData>
 
 // _____________________________________________________________________________
 template <size_t OUT_WIDTH>
+bool GroupBy::createResultForSortedSubtree(IdTable* result,
+                                           const ad_utility::HashMap<ValueId,
+                                             std::vector<AverageAggregationData>> & map,
+                                           size_t numAggregates) {
+  // Sort by groupBy column
+  std::vector<ValueId> sortedKeys;
+  for (const auto & val : map) {
+    sortedKeys.push_back(val.first);
+  }
+  std::sort(sortedKeys.begin(), sortedKeys.end());
+
+  // Create result table
+  IdTableStatic<OUT_WIDTH> idTable = std::move(*result).toStatic<OUT_WIDTH>();
+
+  size_t rowIndex = 0;
+  for (const auto & val : sortedKeys) {
+    idTable.emplace_back();
+    idTable(rowIndex, 0) = val;
+    for (size_t i = 0; i < numAggregates; ++i) {
+      idTable(rowIndex, i + 1) = map.at(val).at(i).calculateResult();
+    }
+    ++rowIndex;
+  }
+
+  *result = std::move(idTable).toDynamic();
+  return true;
+}
+
+// _____________________________________________________________________________
+template <size_t OUT_WIDTH>
 bool GroupBy::computeGroupByForSortedSubtree(IdTable* result,
                                              std::vector<Aggregate> aggregates,
                                              const IdTable& subresult,
                                              size_t columnIndex,
                                              LocalVocab& localVocab) {
   // TODO: Use an interface for AggregationData
-  ad_utility::HashMap<ValueId, AverageAggregationData> map;
+  ad_utility::HashMap<ValueId, std::vector<AverageAggregationData>> map;
 
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext(
@@ -740,10 +771,9 @@ bool GroupBy::computeGroupByForSortedSubtree(IdTable* result,
   evaluationContext._isPartOfGroupBy = true;
 
   size_t blockSize = 65536;
-
   auto numBlocks = (size_t) ceil(((double) subresult.size()) / blockSize);
 
-  size_t overallResults = 0;
+  size_t rowIndex = 0;
 
   for (size_t i = 0; i < numBlocks; ++i) {
     evaluationContext._beginIndex = i * blockSize;
@@ -751,70 +781,60 @@ bool GroupBy::computeGroupByForSortedSubtree(IdTable* result,
 
     auto currentBlockSize = evaluationContext._endIndex - evaluationContext._beginIndex;
 
-    std::vector<sparqlExpression::detail::IntOrDouble> resultValues;
+    vector<sparqlExpression::SparqlExpression*> results;
 
-    // Is this slower than emplace_back?
-    // Calling IntOrDouble constructor twice VS. resizing of vector on the go
-    resultValues.resize(currentBlockSize);
+    size_t aggregateIndex = 0;
+    auto currentRowIndex = rowIndex;
 
-    // Evaluate child expression on block
-    auto expr = aggregates.at(0)._expression.getPimpl();
-    auto exprChildren = expr->children();
+    for (auto & aggregate : aggregates) {
+      // Evaluate child expression on block
+      auto expr = aggregate._expression.getPimpl();
 
-    sparqlExpression::ExpressionResult expressionResult =
-        exprChildren[0]->evaluate(&evaluationContext);
+      // Only allow AVG for now
+      if (dynamic_cast<sparqlExpression::AvgExpression*>(expr) == nullptr)
+        AD_FAIL();
 
-    auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
-                       T&& singleResult) mutable {
-      auto generator = sparqlExpression::detail::makeGenerator(
-          std::forward<T>(singleResult), currentBlockSize,
-          &evaluationContext);
+      auto exprChildren = expr->children();
 
-      using NVG = sparqlExpression::detail::NumericValueGetter;
+      sparqlExpression::ExpressionResult expressionResult =
+          exprChildren[0]->evaluate(&evaluationContext);
 
-      size_t k = 0;
-      for (auto val : generator) {
-        sparqlExpression::detail::NumericValue numVal = NVG()(val, &evaluationContext);
+      auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
+                         T&& singleResult) mutable {
+        auto generator = sparqlExpression::detail::makeGenerator(
+            std::forward<T>(singleResult), currentBlockSize,
+            &evaluationContext);
 
-        if (const int64_t* pInt = std::get_if<int64_t>(&numVal))
-          resultValues[k] = *pInt;
-        else if (const double* pDouble = std::get_if<double>(&numVal))
-          resultValues[k] = *pDouble;
-        else
-          AD_FAIL();
-        ++k;
-      }
-      overallResults += k;
-    };
+        using NVG = sparqlExpression::detail::NumericValueGetter;
 
-    std::visit(visitor, std::move(expressionResult));
+        for (const auto & val : generator) {
+          sparqlExpression::detail::NumericValue numVal = NVG()(val, &evaluationContext);
+          auto id = subresult(rowIndex, columnIndex);
 
-    for (size_t j = 0; j < currentBlockSize; ++j) {
-      auto rowIndex = i * blockSize + j;
-      auto id = subresult(rowIndex, columnIndex);
-      map[id].increment(resultValues[j]);
+          if (map[id].size() <= aggregateIndex)
+            map[id].emplace_back().increment(numVal);
+          else
+            map[id].at(aggregateIndex).increment(numVal);
+
+          ++rowIndex;
+        }
+
+      };
+
+      std::visit(visitor, std::move(expressionResult));
+      ++aggregateIndex;
+
+      // Only if we have reached the last aggregate can we move on to the
+      // next set of rows
+      if (aggregateIndex != aggregates.size())
+        rowIndex = currentRowIndex;
     }
   }
 
   // Make sure we calculated something for each row of subresult
-  AD_CORRECTNESS_CHECK(overallResults == subresult.size());
+  AD_CORRECTNESS_CHECK(rowIndex == subresult.size());
 
-  // Sort by groupBy column
-  std::vector<ValueId> sortedKeys;
-  for (auto & val : map) {
-    sortedKeys.push_back(val.first);
-  }
-  std::sort(sortedKeys.begin(), sortedKeys.end());
-
-  // Create result table
-  IdTableStatic<OUT_WIDTH> idTable = std::move(*result).toStatic<OUT_WIDTH>();
-  for (auto & val : sortedKeys) {
-    auto aggResult = ValueId::makeFromDouble(map.at(val).calculateResult());
-    idTable.push_back({val, aggResult});
-  }
-
-  *result = std::move(idTable).toDynamic();
-  return true;
+  return createResultForSortedSubtree<OUT_WIDTH>(result, map, aggregates.size());
 }
 
 // _____________________________________________________________________________
