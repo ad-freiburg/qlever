@@ -4,14 +4,13 @@
 
 #pragma once
 
-#include <absl/container/flat_hash_map.h>
-
 #include <cstdint>
 #include <random>
 #include <type_traits>
 
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
+#include "util/HashMap.h"
 #include "util/Synchronized.h"
 #include "util/UniqueCleanup.h"
 #include "util/json.h"
@@ -75,7 +74,7 @@ static_assert(!std::is_copy_assignable_v<OwningQueryId>);
 class QueryRegistry {
   using SharedCancellationHandle = std::shared_ptr<CancellationHandle>;
   using SynchronizedType = ad_utility::Synchronized<
-      absl::flat_hash_map<QueryId, SharedCancellationHandle>>;
+      ad_utility::HashMap<QueryId, SharedCancellationHandle>>;
   // Technically no shared pointer is required because the registry lives
   // for the entire lifetime of the application, but since the instances of
   // `OwningQueryId` need to deregister themselves again they need some
@@ -129,7 +128,7 @@ class QueryRegistry {
   /// of all currently registered queries.
   std::vector<QueryId> getActiveQueries() const {
     return registry_->withReadLock([](const auto& map) {
-      // TODO<C++23> Use ranges to transform map keys into vector
+      // TODO<C++23> Use `ranges::to` to transform map keys into vector
       std::vector<QueryId> result;
       result.reserve(map.size());
       for (const auto& entry : map) {
@@ -142,13 +141,10 @@ class QueryRegistry {
   /// Returns the cancellation handle from the registry if it exists, nullptr
   /// otherwise.
   SharedCancellationHandle getCancellationHandle(const QueryId& queryId) const {
-    return registry_->withReadLock(
-        [&queryId](const auto& map) -> SharedCancellationHandle {
-          if (map.contains(queryId)) {
-            return map.at(queryId);
-          }
-          return nullptr;
-        });
+    return registry_->withReadLock([&queryId](const auto& map) {
+      auto it = map.find(queryId);
+      return it != map.end() ? it->second : nullptr;
+    });
   }
 };
 }  // namespace ad_utility::websocket
