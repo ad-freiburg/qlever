@@ -26,6 +26,7 @@ class WebSocketSession {
   websocket ws_;
   const QueryRegistry& queryRegistry_;
   QueryId queryId_;
+  bool cancelOnClose_ = false;
 
   /// Wait for input from the client in a loop. Processing will happen in a
   /// future version of Qlever.
@@ -38,6 +39,8 @@ class WebSocketSession {
   /// Accept the websocket handshake and delegate further handling to
   /// `waitForServerEvents` and `handleClientCommands`
   net::awaitable<void> acceptAndWait(const http::request<http::string_body>&);
+
+  bool tryToCancelQuery() const;
 
   /// Construct an instance of this class
   WebSocketSession(UpdateFetcher updateFetcher, tcp::socket socket,

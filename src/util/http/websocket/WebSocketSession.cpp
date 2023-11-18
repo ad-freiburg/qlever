@@ -28,6 +28,18 @@ std::string extractQueryId(std::string_view path) {
 
 // _____________________________________________________________________________
 
+bool WebSocketSession::tryToCancelQuery() const {
+  if (auto cancellationHandle =
+          queryRegistry_.getCancellationHandle(queryId_)) {
+    cancellationHandle->cancel(CancellationState::MANUAL);
+
+    return true;
+  }
+  return false;
+}
+
+// _____________________________________________________________________________
+
 net::awaitable<void> WebSocketSession::handleClientCommands() {
   beast::flat_buffer buffer;
 
@@ -35,16 +47,14 @@ net::awaitable<void> WebSocketSession::handleClientCommands() {
     co_await ws_.async_read(buffer, net::use_awaitable);
     if (ws_.got_text()) {
       auto data = buffer.data();
-      if (std::string_view{static_cast<char*>(data.data()), data.size()} ==
-          "cancel") {
-        if (auto cancellationHandle =
-                queryRegistry_.getCancellationHandle(queryId_)) {
-          cancellationHandle->cancel(CancellationState::MANUAL);
-
-          co_await ws_.async_close(beast::websocket::close_code::normal,
-                                   net::use_awaitable);
-          break;
-        }
+      std::string_view dataAsString{static_cast<char*>(data.data()),
+                                    data.size()};
+      if (dataAsString == "cancel_on_close") {
+        cancelOnClose_ = true;
+      } else if (dataAsString == "cancel" && tryToCancelQuery()) {
+        co_await ws_.async_close(beast::websocket::close_code::normal,
+                                 net::use_awaitable);
+        break;
       }
     }
     buffer.clear();
@@ -87,6 +97,9 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
     co_await (waitForServerEvents() && handleClientCommands());
 
   } catch (boost::system::system_error& error) {
+    if (cancelOnClose_) {
+      tryToCancelQuery();
+    }
     // Gracefully end if socket was closed
     if (error.code() == beast::websocket::error::closed ||
         error.code() == net::error::operation_aborted ||
