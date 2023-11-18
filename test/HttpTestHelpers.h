@@ -23,8 +23,11 @@ using namespace std::literals;
 template <typename HttpHandler>
 class TestHttpServer {
  private:
+  using WebSocketHandlerType = std::function<net::awaitable<void>(
+      const http::request<http::string_body>&, tcp::socket)>;
+
   // The server.
-  std::shared_ptr<HttpServer<HttpHandler>> server_;
+  std::shared_ptr<HttpServer<HttpHandler, WebSocketHandlerType>> server_;
 
   // The own thread in which the server is running.
   //
@@ -44,8 +47,18 @@ class TestHttpServer {
   explicit TestHttpServer(HttpHandler httpHandler) {
     const std::string& ipAddress = "0.0.0.0";
     int numServerThreads = 1;
-    server_ = std::make_shared<HttpServer<HttpHandler>>(
-        registry_, 0, ipAddress, numServerThreads, std::move(httpHandler));
+    auto webSocketSessionSupplier = [this](net::io_context& ioContext) {
+      ad_utility::websocket::QueryHub queryHub{ioContext};
+      return [this, queryHub = std::move(queryHub)](
+                 const http::request<http::string_body>& request,
+                 tcp::socket socket) mutable {
+        return ad_utility::websocket::WebSocketSession::handleSession(
+            queryHub, registry_, request, std::move(socket));
+      };
+    };
+    server_ = std::make_shared<HttpServer<HttpHandler, WebSocketHandlerType>>(
+        0, ipAddress, numServerThreads, std::move(httpHandler),
+        std::move(webSocketSessionSupplier));
   }
 
   // Get port on which this server is running.
@@ -63,7 +76,8 @@ class TestHttpServer {
   // is thrown, the whole process does not simply terminate.
   void runInOwnThread() {
     std::exception_ptr exception_ptr = nullptr;
-    std::shared_ptr<HttpServer<HttpHandler>> serverCopy = server_;
+    std::shared_ptr<HttpServer<HttpHandler, WebSocketHandlerType>> serverCopy =
+        server_;
     serverThread_ =
         std::make_unique<ad_utility::JThread>([&exception_ptr, serverCopy]() {
           try {

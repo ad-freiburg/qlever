@@ -42,12 +42,17 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
  * A very basic HttpHandler, which simply serves files from a directory, can be
  * obtained via `ad_utility::httpUtils::makeFileServer()`.
  */
-template <typename HttpHandler>
+template <typename HttpHandler,
+          ad_utility::InvocableWithExactReturnType<
+              net::awaitable<void>, const http::request<http::string_body>&,
+              tcp::socket>
+              WebSocketHandler>
 class HttpServer {
  private:
   HttpHandler httpHandler_;
   int numServerThreads_;
   net::io_context ioContext_;
+  WebSocketHandler webSocketHandler_;
   // All code that uses the `acceptor_` must run within this strand.
   // Note that the `acceptor_` might be concurrently accessed by the `listener`
   // and the `shutdown` function, the latter of which is currently only used in
@@ -56,24 +61,23 @@ class HttpServer {
       net::make_strand(ioContext_);
   tcp::acceptor acceptor_{acceptorStrand_};
   std::atomic<bool> serverIsReady_ = false;
-  ad_utility::websocket::QueryHub queryHub_{ioContext_};
-  const ad_utility::websocket::QueryRegistry& queryRegistry_;
 
  public:
   /// Construct from the `queryRegistry`, port and ip address, on which this
   /// server will listen, as well as the HttpHandler. This constructor only
   /// initializes several member functions
-  explicit HttpServer(const ad_utility::websocket::QueryRegistry& queryRegistry,
-                      unsigned short port,
-                      const std::string& ipAddress = "0.0.0.0",
-                      int numServerThreads = 1,
-                      HttpHandler handler = HttpHandler{})
+  explicit HttpServer(
+      unsigned short port, const std::string& ipAddress = "0.0.0.0",
+      int numServerThreads = 1, HttpHandler handler = HttpHandler{},
+      ad_utility::InvocableWithConvertibleReturnType<WebSocketHandler,
+                                                     net::io_context&> auto
+          webSocketHandlerSupplier = {})
       : httpHandler_{std::move(handler)},
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?
         numServerThreads_{std::max(2, numServerThreads)},
         ioContext_{numServerThreads_},
-        queryRegistry_{queryRegistry} {
+        webSocketHandler_{std::invoke(webSocketHandlerSupplier, ioContext_)} {
     try {
       tcp::endpoint endpoint{net::ip::make_address(ipAddress), port};
       // Open the acceptor.
@@ -87,8 +91,6 @@ class HttpServer {
       throw;
     }
   }
-
-  ad_utility::websocket::QueryHub& getQueryHub() noexcept { return queryHub_; }
 
   /// Run the server using the specified number of threads. Note that this
   /// function never returns, unless the Server crashes. The second argument
@@ -237,8 +239,8 @@ class HttpServer {
           } else {
             // prevent cleanup after socket has been moved from
             releaseConnection.cancel();
-            co_await ad_utility::websocket::WebSocketSession::handleSession(
-                queryHub_, queryRegistry_, req, std::move(stream.socket()));
+            co_await std::invoke(webSocketHandler_, req,
+                                 std::move(stream.socket()));
             co_return;
           }
         } else {
