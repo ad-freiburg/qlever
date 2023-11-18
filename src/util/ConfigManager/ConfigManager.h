@@ -407,6 +407,7 @@ class ConfigManager {
   FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
   FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
   FRIEND_TEST(ConfigManagerTest, ContainsOption);
+  FRIEND_TEST(ConfigManagerTest, CollectionFunctionsSorting);
 
   /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
