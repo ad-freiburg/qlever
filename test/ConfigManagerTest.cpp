@@ -1978,8 +1978,8 @@ struct ConfigOptionsAndValidatorsOrder {
   // Appends the content of an different `ConfigOptionsAndValidatorsOrder`.
   template <typename T>
   requires isSimilar<T, ConfigOptionsAndValidatorsOrder> void append(T&& order) {
-    appendVector(configOptions_, AD_FWD(order.configOptions_));
-    appendVector(validators_, AD_FWD(order.validators_));
+    appendVector(configOptions_, AD_FWD(order).configOptions_);
+    appendVector(validators_, AD_FWD(order).validators_);
   }
 };
 
