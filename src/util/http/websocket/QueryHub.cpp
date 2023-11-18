@@ -38,7 +38,7 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
               AD_CORRECTNESS_CHECK(wasErased);
             })));
         // We may block the current strand, but we won't block the `ioContext_`
-        // until the task is executed
+        // while the task is being executed
         while (future.wait_for(std::chrono::seconds(0)) !=
                std::future_status::ready) {
           ioContext_.poll_one();
