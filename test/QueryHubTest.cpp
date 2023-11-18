@@ -104,6 +104,8 @@ ASYNC_TEST(QueryHub, simulateLifecycleWithDifferentQueryIds) {
 
 // _____________________________________________________________________________
 
+namespace ad_utility::websocket {
+
 ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnSignalEnd, 3) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
@@ -112,7 +114,7 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnSignalEnd, 3) {
       co_await queryHub.createOrAcquireDistributorForSending(queryId);
 
   co_await net::dispatch(
-      net::bind_executor(queryHub.getStrand(), net::use_awaitable));
+      net::bind_executor(queryHub.globalStrand_, net::use_awaitable));
   auto future =
       net::co_spawn(ioContext, distributor1->signalEnd(), net::use_future);
 
@@ -125,6 +127,8 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnSignalEnd, 3) {
 
   future.wait();
 }
+
+}  // namespace ad_utility::websocket
 
 // _____________________________________________________________________________
 
@@ -139,7 +143,7 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
   std::weak_ptr<const QueryToSocketDistributor> comparison = distributor;
 
   co_await net::dispatch(
-      net::bind_executor(queryHub.getStrand(), net::use_awaitable));
+      net::bind_executor(queryHub.globalStrand_, net::use_awaitable));
   auto future = net::post(ioContext,
                           std::packaged_task<void()>(
                               [distributor = std::move(distributor)]() mutable {

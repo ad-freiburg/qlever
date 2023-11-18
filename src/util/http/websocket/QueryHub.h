@@ -44,6 +44,10 @@ class QueryHub {
   QueryHub_testCorrectReschedulingForEmptyPointerOnDestruct_coroutine(
       net::io_context&);
 
+  friend net::awaitable<void>
+  QueryHub_testCorrectReschedulingForEmptyPointerOnSignalEnd_coroutine(
+      net::io_context&);
+
   /// Implementation of createOrAcquireDistributorForSending and
   /// createOrAcquireDistributorForReceiving, without thread safety,
   /// exposed for testing
@@ -74,9 +78,6 @@ class QueryHub {
   /// be called arbitrarily often during the lifetime of a single query session.
   net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
       createOrAcquireDistributorForReceiving(QueryId);
-
-  /// Expose strand for testing
-  auto getStrand() const { return globalStrand_; }
 };
 }  // namespace ad_utility::websocket
 
