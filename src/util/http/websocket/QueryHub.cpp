@@ -11,8 +11,7 @@ namespace ad_utility::websocket {
 template <bool isSender>
 net::awaitable<std::shared_ptr<
     QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
-QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
-  co_await net::post(net::bind_executor(globalStrand_, net::use_awaitable));
+QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
   while (socketDistributors_.contains(queryId)) {
     auto& reference = socketDistributors_.at(queryId);
     if (auto ptr = reference.pointer_.lock()) {
@@ -48,6 +47,17 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
   socketDistributors_.emplace(queryId,
                               WeakReferenceHolder{distributor, isSender});
   co_return distributor;
+}
+
+// _____________________________________________________________________________
+
+template <bool isSender>
+net::awaitable<std::shared_ptr<
+    QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
+QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
+  co_await net::post(net::bind_executor(globalStrand_, net::use_awaitable));
+  co_return co_await createOrAcquireDistributorInternalUnsafe<isSender>(
+      std::move(queryId));
 }
 
 // _____________________________________________________________________________

@@ -128,6 +128,8 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnSignalEnd, 3) {
 
 // _____________________________________________________________________________
 
+namespace ad_utility::websocket {
+
 ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
@@ -150,12 +152,14 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
   // sporadically fail
   std::this_thread::sleep_for(std::chrono::milliseconds(2));
   distributor =
-      co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
+      co_await queryHub.createOrAcquireDistributorInternalUnsafe<false>(
+          queryId);
   EXPECT_FALSE(!comparison.owner_before(distributor) &&
                !distributor.owner_before(comparison));
   co_await net::post(net::use_awaitable);
   future.wait();
 }
+}  // namespace ad_utility::websocket
 
 // _____________________________________________________________________________
 
