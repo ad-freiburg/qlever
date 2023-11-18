@@ -95,7 +95,7 @@ net::awaitable<void> WebSocketSession::handleSession(
   auto executor = co_await net::this_coro::executor;
   AD_CONTRACT_CHECK(
       executor.target<net::strand<net::io_context::executor_type>>());
-  co_await net::dispatch(net::use_awaitable);
+  co_await net::post(net::use_awaitable);
 
   auto queryIdString = extractQueryId(request.target());
   AD_CORRECTNESS_CHECK(!queryIdString.empty());

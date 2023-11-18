@@ -49,28 +49,32 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
   OwningQueryId queryId = queryRegistry.uniqueId();
   QueryHub queryHub{ioContext};
 
-  auto distributor = co_await queryHub.createOrAcquireDistributorForReceiving(
-      queryId.toQueryId());
+  {
+    auto distributor = co_await queryHub.createOrAcquireDistributorForReceiving(
+        queryId.toQueryId());
 
-  auto updateWrapper =
-      co_await MessageSender::create(std::move(queryId), queryHub);
+    auto updateWrapper =
+        co_await MessageSender::create(std::move(queryId), queryHub);
 
-  updateWrapper("Still");
-  updateWrapper("Dre");
+    updateWrapper("Still");
+    updateWrapper("Dre");
 
-  net::deadline_timer timer{ioContext, boost::posix_time::seconds(2)};
+    net::deadline_timer timer{ioContext, boost::posix_time::seconds(2)};
 
-  auto result = co_await (distributor->waitForNextDataPiece(0) ||
-                          timer.async_wait(net::use_awaitable));
+    auto result = co_await (distributor->waitForNextDataPiece(0) ||
+                            timer.async_wait(net::use_awaitable));
 
-  using PayloadType = std::shared_ptr<const std::string>;
+    using PayloadType = std::shared_ptr<const std::string>;
 
-  EXPECT_THAT(result, VariantWith<PayloadType>(Pointee("Still"s)));
+    EXPECT_THAT(result, VariantWith<PayloadType>(Pointee("Still"s)));
 
-  result = co_await (distributor->waitForNextDataPiece(1) ||
-                     timer.async_wait(net::use_awaitable));
+    result = co_await (distributor->waitForNextDataPiece(1) ||
+                       timer.async_wait(net::use_awaitable));
 
-  using PayloadType = std::shared_ptr<const std::string>;
+    EXPECT_THAT(result, VariantWith<PayloadType>(Pointee("Dre"s)));
+  }
 
-  EXPECT_THAT(result, VariantWith<PayloadType>(Pointee("Dre"s)));
+  // Make sure we wait for the destructor of the distributor to unregister
+  // itself asynchronously from the query hub before destroying the query hub
+  co_await net::post(net::use_awaitable);
 }

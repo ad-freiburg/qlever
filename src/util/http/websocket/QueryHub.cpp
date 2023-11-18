@@ -12,7 +12,7 @@ template <bool isSender>
 net::awaitable<std::shared_ptr<
     QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
 QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
-  co_await net::dispatch(net::bind_executor(globalStrand_, net::use_awaitable));
+  co_await net::post(net::bind_executor(globalStrand_, net::use_awaitable));
   while (socketDistributors_.contains(queryId)) {
     auto& reference = socketDistributors_.at(queryId);
     if (auto ptr = reference.pointer_.lock()) {
@@ -38,7 +38,7 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
               bool wasErased = socketDistributors_.erase(queryId);
               AD_CORRECTNESS_CHECK(wasErased);
             })));
-        // Make sure we never block, just run some tasks on the `ioContext_`
+        // We may block the current strand, but we won't block the `ioContext_`
         // until the task is executed
         while (future.wait_for(std::chrono::seconds(0)) !=
                std::future_status::ready) {
