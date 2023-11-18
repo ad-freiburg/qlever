@@ -75,4 +75,13 @@ QueryHub::createOrAcquireDistributorForReceiving(QueryId queryId) {
   return resumeOnOriginalExecutor(
       createOrAcquireDistributorInternal<false>(std::move(queryId)));
 }
+
+// _____________________________________________________________________________
+
+// Clang does not seem to keep this instantiation around when called directly,
+// so we need to explicitly instantiate it here for the
+// QueryHub_testCorrectReschedulingForEmptyPointerOnDestruct test to compile
+// properly
+template net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
+    QueryHub::createOrAcquireDistributorInternalUnsafe<false>(QueryId);
 }  // namespace ad_utility::websocket

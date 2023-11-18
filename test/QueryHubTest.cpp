@@ -163,6 +163,7 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
   co_await net::post(net::use_awaitable);
   future.wait();
 }
+
 }  // namespace ad_utility::websocket
 
 // _____________________________________________________________________________
