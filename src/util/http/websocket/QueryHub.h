@@ -44,10 +44,6 @@ class QueryHub {
   QueryHub_testCorrectReschedulingForEmptyPointerOnDestruct_coroutine(
       net::io_context&);
 
-  friend net::awaitable<void>
-  QueryHub_testCorrectReschedulingForEmptyPointerOnSignalEnd_coroutine(
-      net::io_context&);
-
   /// Implementation of createOrAcquireDistributorForSending and
   /// createOrAcquireDistributorForReceiving, without thread safety,
   /// exposed for testing
