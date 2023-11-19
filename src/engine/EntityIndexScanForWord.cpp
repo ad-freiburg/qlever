@@ -65,8 +65,9 @@ VariableToColumnMap EntityIndexScanForWord::computeVariableToColumnMap() const {
   addDefinedVar(textRecordVar_);
   if (hasFixedEntity_) {
     string s = std::move(fixedEntity_.value());
-    s.erase(remove_if(s.begin(), s.end(), isalpha), s.end());
-    Variable fixedEntityVar{s};
+    s.erase(remove_if(s.begin(), s.end(), std::not1(std::ptr_fun(isalpha))),
+            s.end());
+    Variable fixedEntityVar{"?" + s};
     addDefinedVar(fixedEntityVar.getScoreVariable());
   } else {
     addDefinedVar(entityVar_.value());
