@@ -328,12 +328,15 @@ class IndexImpl {
   Index::WordEntityPostings getContextEntityScoreListsForWords(
       const string& words) const;
 
+  // Returns a superset of textRecords and their corresponding words
+  // and scores. Each textRecord has to contain the term.
   Index::WordEntityPostings getWordPostingsForTerm(const string& term) const;
 
   Index::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
 
-  Index::WordEntityPostings getUnadjustedEntityPostingsForTerm(
-      const string& term) const;
+  // Returns a superset of textRecords and their corresponding entities and
+  // scores. Each textRecord has to contain the term.
+  Index::WordEntityPostings getEntityMentionsForWord(const string& term) const;
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 

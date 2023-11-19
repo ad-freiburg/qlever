@@ -190,8 +190,7 @@ class Index {
 
   WordEntityPostings getEntityPostingsForTerm(const std::string& term) const;
 
-  Index::WordEntityPostings getUnadjustedEntityPostingsForTerm(
-      const string& term) const;
+  Index::WordEntityPostings getEntityMentionsForWord(const string& term) const;
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 

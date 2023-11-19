@@ -1037,7 +1037,7 @@ Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
 }
 
 // _____________________________________________________________________________
-Index::WordEntityPostings IndexImpl::getUnadjustedEntityPostingsForTerm(
+Index::WordEntityPostings IndexImpl::getEntityMentionsForWord(
     const string& term) const {
   // TODO: function should return idTable directly
   LOG(DEBUG) << "Getting unadjusted entity postings for term: " << term << '\n';

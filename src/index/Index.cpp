@@ -187,9 +187,9 @@ Index::WordEntityPostings Index::getEntityPostingsForTerm(
 }
 
 // ____________________________________________________________________________
-Index::WordEntityPostings Index::getUnadjustedEntityPostingsForTerm(
+Index::WordEntityPostings Index::getEntityMentionsForWord(
     const string& term) const {
-  return pimpl_->getUnadjustedEntityPostingsForTerm(term);
+  return pimpl_->getEntityMentionsForWord(term);
 }
 
 // ____________________________________________________________________________

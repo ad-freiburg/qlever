@@ -18,8 +18,7 @@ ResultTable EntityIndexScanForWord::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
   Index::WordEntityPostings wep =
-      getExecutionContext()->getIndex().getUnadjustedEntityPostingsForTerm(
-          word_);
+      getExecutionContext()->getIndex().getEntityMentionsForWord(word_);
 
   if (hasFixedEntity_) {
     VocabIndex idx;

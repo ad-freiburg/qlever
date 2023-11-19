@@ -685,6 +685,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   TripleGraph tg;
   size_t numNodesInTripleGraph = 0;
   ad_utility::HashMap<Variable, string> optTermForCvar;
+  ad_utility::HashMap<Variable, vector<string>> potentialTermsForCvar;
   vector<const SparqlTriple*> entityTriples;
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
@@ -692,10 +693,9 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
       string s = t._o.toString();
       std::vector<std::string> terms = std::vector<std::string>(
           absl::StrSplit(s.substr(1, s.size() - 2), ' '));
-      optTermForCvar[t._s.getVariable()] =
-          terms[_qec->getIndex().getIndexOfBestSuitedElTerm(terms)];
       // Add one node for each word
       for (size_t i = 0; i < terms.size(); i++) {
+        potentialTermsForCvar[t._s.getVariable()].push_back(terms[i]);
         addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(),
                                                t._s.getVariable(), terms[i], t),
                              tg);
@@ -709,10 +709,27 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     }
   }
   for (const SparqlTriple* t : entityTriples) {
-    string term = optTermForCvar[t->_s.getVariable()];
-    addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(),
-                                           t->_s.getVariable(), term, *t),
-                         tg);
+    Variable currentVar = t->_s.getVariable();
+    if (!optTermForCvar.contains(currentVar)) {
+      if (potentialTermsForCvar.contains(currentVar)) {
+        optTermForCvar[currentVar] =
+            potentialTermsForCvar[currentVar]
+                                 [_qec->getIndex().getIndexOfBestSuitedElTerm(
+                                     potentialTermsForCvar[currentVar])];
+      } else {
+        if (t->_p._iri == CONTAINS_WORD_PREDICATE) {
+          AD_THROW("ql:contains-word is missing a word or prefix.");
+        } else {
+          AD_THROW(
+              "Missing ql:contains-word statement. A ql:contains-entity "
+              "statement always also needs corresponding ql:contains-word "
+              "statement.");
+        }
+      }
+    }
+    string term = optTermForCvar[currentVar];
+    addNodeToTripleGraph(
+        TripleGraph::Node(tg._nodeStorage.size(), currentVar, term, *t), tg);
     numNodesInTripleGraph++;
   }
   if (numNodesInTripleGraph > 64) {
