@@ -53,8 +53,13 @@ class ConfigOptions : public BenchmarkInterface {
 
     manager.addOption("date", "The current date.", &dateString_, "22.3.2023"s);
 
-    manager.addOption("numSigns", "The number of street signs.",
-                      &numberOfStreetSigns_, 10);
+    auto numSigns = manager.addOption("numSigns", "The number of street signs.",
+                                      &numberOfStreetSigns_, 10);
+    manager.addValidator([](const int& num) { return num >= 0; },
+                         "The number of street signs must be at least 0!",
+                         "Negative numbers, or floating point numbers, are not "
+                         "allowed for the configuration option \"numSigns\".",
+                         numSigns);
 
     manager.addOption("CoinFlipTry", "The number of succesful coin flips.",
                       &wonOnTryX_, {false, false, false, false, false});
@@ -79,7 +84,8 @@ class BMSingleMeasurements : public ConfigOptions {
     BenchmarkResults results{};
 
     // Setup.
-    const size_t number = SlowRandomIntGenerator<size_t>(10, 1'000)();
+    const size_t number =
+        ad_utility::SlowRandomIntGenerator<size_t>(10, 1'000)();
     auto exponentiate = [](const size_t numberToExponentiate) {
       return numberToExponentiate * numberToExponentiate;
     };

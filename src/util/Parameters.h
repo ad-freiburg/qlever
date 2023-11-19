@@ -37,16 +37,12 @@ struct ParameterBase {
 template <typename FunctionType, typename ToType>
 concept ParameterFromStringType =
     std::default_initializable<FunctionType> &&
-    std::invocable<FunctionType, const std::string&> &&
-    ad_utility::isSimilar<
-        ToType, std::invoke_result_t<FunctionType, const std::string&>>;
+    InvocableWithSimilarReturnType<FunctionType, ToType, const std::string&>;
 
 template <typename FunctionType, typename FromType>
 concept ParameterToStringType =
     std::default_initializable<FunctionType> &&
-    std::invocable<FunctionType, FromType> &&
-    ad_utility::isSimilar<std::string,
-                          std::invoke_result_t<FunctionType, FromType>>;
+    InvocableWithSimilarReturnType<FunctionType, std::string, FromType>;
 
 /// Abstraction for a parameter that connects a (compile time) `Name` to a
 /// runtime value.

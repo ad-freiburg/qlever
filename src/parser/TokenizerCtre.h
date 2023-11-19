@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <string>
 
+#include "parser/Tokenizer.h"
 #include "parser/TurtleTokenId.h"
 #include "util/CtreHelpers.h"
 #include "util/Log.h"
@@ -140,7 +141,8 @@ struct TurtleTokenCtre {
   static constexpr fixed_string Comment = grp(CommentString);
 };
 
-class TokenizerCtre {
+class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
+  friend struct SkipWhitespaceAndCommentsMixin<TokenizerCtre>;
   FRIEND_TEST(TokenizerTest, Compilation);
   using string = std::string;
 
@@ -196,13 +198,6 @@ class TokenizerCtre {
     return innerResult;
   }
 
-  /// Skip any whitespace or comments at the beginning of the held characters
-  void skipWhitespaceAndComments() {
-    skipWhitespace();
-    skipComments();
-    skipWhitespace();
-  }
-
   /**
    * If there is a prefix match with the argument, move forward the beginning
    * of _data and return true. Else return false.Can be used if we are not
@@ -230,28 +225,6 @@ class TokenizerCtre {
   /// string_view of the characters we are parsing from.
   std::string_view _data;
 
-  // ________________________________________________________________
-  void skipWhitespace() {
-    auto v = view();
-    auto pos = v.find_first_not_of("\x20\x09\x0D\x0A");
-    pos = std::min(pos, v.size());
-    _data.remove_prefix(pos);
-  }
-
-  // ___________________________________________________________________________________
-  void skipComments() {
-    auto v = view();
-    if (v.starts_with('#')) {
-      auto pos = v.find('\n');
-      if (pos == string::npos) {
-        // TODO<joka921>: This should rather yield an error.
-        LOG(INFO) << "Warning, unfinished comment found while parsing"
-                  << std::endl;
-      } else {
-        _data.remove_prefix(pos + 1);
-      }
-    }
-  }
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
 
   /*

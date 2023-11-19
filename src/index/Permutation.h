@@ -8,6 +8,7 @@
 
 #include "global/Constants.h"
 #include "index/IndexMetaData.h"
+#include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Log.h"
 
@@ -32,7 +33,6 @@ class Permutation {
 
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
-  using TimeoutTimer = ad_utility::SharedConcurrentTimeoutTimer;
 
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
@@ -51,8 +51,9 @@ class Permutation {
   // If `col1Id` is specified, only the col2 is returned for triples that
   // additionally have the specified col1. .This is just a thin wrapper around
   // `CompressedRelationMetaData::scan`.
-  IdTable scan(Id col0Id, std::optional<Id> col1Id,
-               const TimeoutTimer& timer = nullptr) const;
+  IdTable scan(
+      Id col0Id, std::optional<Id> col1Id,
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;
@@ -74,7 +75,7 @@ class Permutation {
   IdTableGenerator lazyScan(
       Id col0Id, std::optional<Id> col1Id,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
-      const TimeoutTimer& timer = nullptr) const;
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Return the metadata for the relation specified by the `col0Id`
   // along with the metadata for all the blocks that contain this relation (also

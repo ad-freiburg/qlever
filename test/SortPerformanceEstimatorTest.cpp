@@ -21,7 +21,7 @@ TEST(SortPerformanceEstimator, TestManyEstimates) {
   auto t =
       SortPerformanceEstimator{allocator, std::numeric_limits<size_t>::max()};
 
-  SlowRandomIntGenerator<int> dice(1, 6);
+  ad_utility::SlowRandomIntGenerator<int> dice(1, 6);
 
   for (size_t numColumns = 1; numColumns < 15; numColumns++) {
     bool isFirst = true;

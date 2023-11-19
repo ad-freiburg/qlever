@@ -49,7 +49,7 @@ TEST(Views, UniqueView) {
   std::vector<int> ints;
   const uint64_t numInts = 50'000;
   ints.reserve(numInts);
-  SlowRandomIntGenerator<int> r;
+  ad_utility::SlowRandomIntGenerator<int> r;
   for (size_t i = 0; i < numInts; ++i) {
     ints.push_back(r());
   }
