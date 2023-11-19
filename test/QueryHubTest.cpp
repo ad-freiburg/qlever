@@ -109,6 +109,7 @@ namespace ad_utility::websocket {
 ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
+  std::atomic_flag flag{};
 
   auto distributor =
       co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
@@ -116,17 +117,20 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
 
   co_await net::dispatch(
       net::bind_executor(queryHub.globalStrand_, net::use_awaitable));
-  auto future = net::post(ioContext,
-                          std::packaged_task<void()>(
-                              [distributor = std::move(distributor)]() mutable {
-                                // Invoke destructor while the strand of
-                                // queryHub is still in use
-                                distributor.reset();
-                              }));
+  auto future = net::post(
+      ioContext, std::packaged_task<void()>(
+                     [distributor = std::move(distributor), &flag]() mutable {
+                       // Invoke destructor while the strand of
+                       // queryHub is still in use
+                       flag.test_and_set();
+                       flag.notify_all();
+                       distributor.reset();
+                     }));
 
-  // Wait until destructor of distributor blocks, increase time if tests
-  // sporadically fail
-  std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  // Wait until destructor of distributor blocks, add short sleep if tests
+  // sporadically fail, because technically the flag would need to be triggered
+  // inside the destructor, not before it.
+  flag.wait(false);
   distributor =
       co_await queryHub.createOrAcquireDistributorInternalUnsafe<false>(
           queryId);
