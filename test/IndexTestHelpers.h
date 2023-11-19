@@ -66,8 +66,8 @@ inline Index makeTestIndex(
     const std::string& indexBasename,
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,
-    bool usePrefixCompression = true,
-    size_t blocksizePermutationsInBytes = 32) {
+    bool usePrefixCompression = true, size_t blocksizePermutationsInBytes = 32,
+    bool createTextIndex = false) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
@@ -97,11 +97,17 @@ inline Index makeTestIndex(
     index.setUsePatterns(usePatterns);
     index.setPrefixCompression(usePrefixCompression);
     index.createFromFile(inputFilename);
+    if (createTextIndex) {
+      index.addTextFromContextFile("", true);
+    }
   }
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setUsePatterns(usePatterns);
   index.setLoadAllPermutations(loadAllPermutations);
   index.createFromOnDiskIndex(indexBasename);
+  if (createTextIndex) {
+    index.addTextFromOnDiskIndex();
+  }
   ad_utility::setGlobalLoggingStream(&std::cout);
   return index;
 }
@@ -113,8 +119,8 @@ inline Index makeTestIndex(
 inline QueryExecutionContext* getQec(
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,
-    bool usePrefixCompression = true,
-    size_t blocksizePermutationsInBytes = 32) {
+    bool usePrefixCompression = true, size_t blocksizePermutationsInBytes = 32,
+    bool createTextIndex = false) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -171,7 +177,7 @@ inline QueryExecutionContext* getQec(
                      std::make_unique<Index>(makeTestIndex(
                          testIndexBasename, turtleInput, loadAllPermutations,
                          usePatterns, usePrefixCompression,
-                         blocksizePermutationsInBytes)),
+                         blocksizePermutationsInBytes, createTextIndex)),
                      std::make_unique<QueryResultCache>()});
   }
   return contextMap.at(key).qec_.get();

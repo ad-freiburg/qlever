@@ -1037,6 +1037,19 @@ Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
 }
 
 // _____________________________________________________________________________
+Index::WordEntityPostings IndexImpl::getEntityMentionsForWord(
+    const string& term) const {
+  // TODO: function should return idTable directly
+  LOG(DEBUG) << "Getting unadjusted entity postings for term: " << term << '\n';
+  auto optTbmd = getTextBlockMetadataForWordOrPrefix(term);
+  if (!optTbmd.has_value()) {
+    return {};
+  }
+  const auto& tbmd = optTbmd.value().tbmd_;
+  return readWordEntityCl(tbmd);
+}
+
+// _____________________________________________________________________________
 template <typename T, typename MakeFromUint64t>
 vector<T> IndexImpl::readGapComprList(size_t nofElements, off_t from,
                                       size_t nofBytes,

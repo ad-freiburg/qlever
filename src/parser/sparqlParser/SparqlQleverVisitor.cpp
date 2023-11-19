@@ -1041,7 +1041,6 @@ vector<TripleWithPropertyPath> Visitor::visit(
     if (auto* var = std::get_if<Variable>(&subject)) {
       if (auto* propertyPath = std::get_if<PropertyPath>(&predicate)) {
         if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
-          addVisibleVariable(var->getTextScoreVariable());
           string name = object.toSparql();
           if (!((name.starts_with('"') && name.ends_with('"')) ||
                 (name.starts_with('\'') && name.ends_with('\'')))) {
@@ -1057,8 +1056,6 @@ vector<TripleWithPropertyPath> Visitor::visit(
             addVisibleVariable(
                 var->getMatchingWordVariable(s.substr(0, s.size() - 1)));
           }
-        } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
-          addVisibleVariable(var->getTextScoreVariable());
         }
       }
     }

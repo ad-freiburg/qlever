@@ -48,27 +48,24 @@ class QueryPlanner {
         }
       }
 
-      Node(size_t id, const Variable& cvar, std::vector<std::string> words,
-           const vector<SparqlTriple>& trips)
+      Node(size_t id, const Variable& cvar, const std::string& word,
+           SparqlTriple t)
           : _id(id),
             // TODO<joka921> What is this triple used for? If it is just a
             // dummy, then we can replace it by a `variant<Triple,
             // TextNodeData>`.
-            _triple(cvar, PropertyPath::fromIri(INTERNAL_TEXT_MATCH_PREDICATE),
-                    TripleComponent::UNDEF{}),
+            _triple(std::move(t)),
             _cvar(cvar),
-            _wordPart(std::move(words)) {
+            _wordPart(word) {
         _variables.insert(cvar);
-        for (const auto& t : trips) {
-          if (isVariable(t._s)) {
-            _variables.insert(t._s.getVariable());
-          }
-          if (isVariable(t._p)) {
-            _variables.insert(Variable{t._p._iri});
-          }
-          if (isVariable(t._o)) {
-            _variables.insert(t._o.getVariable());
-          }
+        if (isVariable(_triple._s)) {
+          _variables.insert(_triple._s.getVariable());
+        }
+        if (isVariable(_triple._p)) {
+          _variables.insert(Variable{_triple._p._iri});
+        }
+        if (isVariable(_triple._o)) {
+          _variables.insert(_triple._o.getVariable());
         }
       }
 
@@ -83,6 +80,8 @@ class QueryPlanner {
                _wordPart == other._wordPart && _variables == other._variables;
       }
 
+      bool isTextNode() const { return _cvar.has_value(); }
+
       friend std::ostream& operator<<(std::ostream& out, const Node& n) {
         out << "id: " << n._id << " triple: " << n._triple.asString()
             << " vars_ ";
@@ -93,7 +92,7 @@ class QueryPlanner {
         // together?
         if (n._cvar.has_value()) {
           out << " cvar " << n._cvar.value().name() << " wordPart "
-              << absl::StrJoin(n._wordPart.value(), " ");
+              << n._wordPart.value();
         }
         return out;
       }
@@ -102,7 +101,7 @@ class QueryPlanner {
       SparqlTriple _triple;
       ad_utility::HashSet<Variable> _variables;
       std::optional<Variable> _cvar = std::nullopt;
-      std::optional<std::vector<std::string>> _wordPart = std::nullopt;
+      std::optional<std::string> _wordPart = std::nullopt;
     };
 
     // Allows for manually building triple graphs for testing
@@ -123,8 +122,6 @@ class QueryPlanner {
 
     vector<size_t> bfsLeaveOut(size_t startNode,
                                ad_utility::HashSet<size_t> leaveOut) const;
-
-    void collapseTextCliques();
 
    private:
     vector<std::pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
@@ -218,6 +215,8 @@ class QueryPlanner {
 
   [[nodiscard]] TripleGraph createTripleGraph(
       const parsedQuery::BasicGraphPattern* pattern) const;
+
+  void addNodeToTripleGraph(const TripleGraph::Node&, TripleGraph&) const;
 
   void setEnablePatternTrick(bool enablePatternTrick);
 

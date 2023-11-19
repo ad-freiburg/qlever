@@ -187,6 +187,17 @@ Index::WordEntityPostings Index::getEntityPostingsForTerm(
 }
 
 // ____________________________________________________________________________
+Index::WordEntityPostings Index::getEntityMentionsForWord(
+    const string& term) const {
+  return pimpl_->getEntityMentionsForWord(term);
+}
+
+// ____________________________________________________________________________
+size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
+  return pimpl_->getIndexOfBestSuitedElTerm(terms);
+}
+
+// ____________________________________________________________________________
 std::string Index::getTextExcerpt(TextRecordIndex cid) const {
   return pimpl_->getTextExcerpt(cid);
 }
