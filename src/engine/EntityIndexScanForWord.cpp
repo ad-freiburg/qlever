@@ -2,13 +2,16 @@
 
 // _____________________________________________________________________________
 EntityIndexScanForWord::EntityIndexScanForWord(
-    QueryExecutionContext* qec, Variable cvar, Variable evar, string word,
-    std::optional<VocabIndex> fixedEntityId /*=std::nullopt*/)
+    QueryExecutionContext* qec, Variable textRecordVar,
+    std::optional<Variable> entityVar, string word,
+    std::optional<string> fixedEntity /*=std::nullopt*/)
     : Operation(qec),
-      textRecordVar_(std::move(cvar)),
-      entityVar_(std::move(evar)),
+      qec_(std::move(qec)),
+      textRecordVar_(std::move(textRecordVar)),
+      entityVar_(std::move(entityVar)),
       word_(std::move(word)),
-      fixedEntityId_(std::move(fixedEntityId)) {}
+      fixedEntity_(std::move(fixedEntity)),
+      hasFixedEntity_(fixedEntity.has_value()) {}
 
 // _____________________________________________________________________________
 ResultTable EntityIndexScanForWord::computeResult() {
@@ -18,10 +21,18 @@ ResultTable EntityIndexScanForWord::computeResult() {
       getExecutionContext()->getIndex().getUnadjustedEntityPostingsForTerm(
           word_);
 
-  if (fixedEntityId_.has_value()) {
+  if (hasFixedEntity_) {
+    VocabIndex idx;
+    bool success =
+        qec_->getIndex().getVocab().getId(fixedEntity_.value(), &idx);
+    if (!success) {
+      LOG(ERROR) << "ERROR: entity \"" << fixedEntity_.value() << "\" "
+                 << "not found in Vocab. Terminating\n";
+      AD_FAIL();
+    }
     Index::WordEntityPostings filteredWep;
     for (size_t i = 0; i < wep.eids_.size(); i++) {
-      if (wep.eids_[i].getVocabIndex() == fixedEntityId_.value()) {
+      if (wep.eids_[i].getVocabIndex() == idx) {
         filteredWep.cids_.push_back(wep.cids_[i]);
         filteredWep.eids_.push_back(wep.eids_[i]);
         filteredWep.scores_.push_back(wep.scores_[i]);
@@ -33,9 +44,11 @@ ResultTable EntityIndexScanForWord::computeResult() {
   decltype(auto) cidColumn = idTable.getColumn(0);
   std::ranges::transform(wep.cids_, cidColumn.begin(),
                          &Id::makeFromTextRecordIndex);
-  decltype(auto) eidColumn = idTable.getColumn(1);
-  std::ranges::copy(wep.eids_, eidColumn.begin());
-  decltype(auto) scoreColumn = idTable.getColumn(2);
+  if (!hasFixedEntity_) {
+    decltype(auto) eidColumn = idTable.getColumn(1);
+    std::ranges::copy(wep.eids_, eidColumn.begin());
+  }
+  decltype(auto) scoreColumn = idTable.getColumn(1 + !hasFixedEntity_);
   std::ranges::transform(wep.scores_, scoreColumn.begin(), &Id::makeFromInt);
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
@@ -50,13 +63,22 @@ VariableToColumnMap EntityIndexScanForWord::computeVariableToColumnMap() const {
     ++index;
   };
   addDefinedVar(textRecordVar_);
-  addDefinedVar(entityVar_);
-  addDefinedVar(entityVar_.getScoreVariable());
+  if (hasFixedEntity_) {
+    string s = std::move(fixedEntity_.value());
+    s.erase(remove_if(s.begin(), s.end(), isalpha), s.end());
+    Variable fixedEntityVar{s};
+    addDefinedVar(fixedEntityVar.getScoreVariable());
+  } else {
+    addDefinedVar(entityVar_.value());
+    addDefinedVar(entityVar_.value().getScoreVariable());
+  }
   return vcmap;
 }
 
 // _____________________________________________________________________________
-size_t EntityIndexScanForWord::getResultWidth() const { return 3; }
+size_t EntityIndexScanForWord::getResultWidth() const {
+  return 2 + !hasFixedEntity_;
+}
 
 // _____________________________________________________________________________
 vector<ColumnIndex> EntityIndexScanForWord::resultSortedOn() const {
@@ -66,7 +88,10 @@ vector<ColumnIndex> EntityIndexScanForWord::resultSortedOn() const {
 // _____________________________________________________________________________
 string EntityIndexScanForWord::getDescriptor() const {
   return "EntityIndexScanForWord on text-variable " + textRecordVar_.name() +
-         " and entity-variable " + entityVar_.name() + " with word " + word_;
+         " and " +
+         (hasFixedEntity_ ? ("fixed-entity " + fixedEntity_.value())
+                          : ("entity-variable " + entityVar_.value().name())) +
+         " with word " + word_;
 }
 
 // _____________________________________________________________________________
@@ -76,9 +101,8 @@ string EntityIndexScanForWord::asStringImpl(size_t indent) const {
     os << " ";
   }
   os << "ENTITY INDEX SCAN FOR WORD: "
-     << " with word: \"" << word_ << "\" and text-variable: \""
-     << textRecordVar_.name() << "\" and entity-variable: \""
-     << entityVar_.name() << " \"";
+     << " with word: \"" << word_ << "\" and fixed-entity: \""
+     << (hasFixedEntity_ ? fixedEntity_.value() : "no fixed-entity") << " \"";
   ;
   return std::move(os).str();
 }

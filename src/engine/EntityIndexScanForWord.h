@@ -10,15 +10,17 @@
 // fixed entity instead, it only returns entries that contain this entity.
 class EntityIndexScanForWord : public Operation {
  private:
+  const QueryExecutionContext* qec_;
   const Variable textRecordVar_;
-  const Variable entityVar_;
+  const std::optional<Variable> entityVar_;
   const string word_;
-  const std::optional<VocabIndex> fixedEntityId_;
+  const std::optional<string> fixedEntity_;
+  const bool hasFixedEntity_ = false;
 
  public:
-  EntityIndexScanForWord(
-      QueryExecutionContext* qec, Variable cvar, Variable evar, string word,
-      std::optional<VocabIndex> fixedEntityId = std::nullopt);
+  EntityIndexScanForWord(QueryExecutionContext* qec, Variable textRecordVar,
+                         std::optional<Variable> entityVar, string word,
+                         std::optional<string> fixedEntity = std::nullopt);
 
   virtual ~EntityIndexScanForWord() = default;
 

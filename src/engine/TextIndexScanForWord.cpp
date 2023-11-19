@@ -2,9 +2,9 @@
 
 // _____________________________________________________________________________
 TextIndexScanForWord::TextIndexScanForWord(QueryExecutionContext* qec,
-                                           Variable cvar, string word)
+                                           Variable textRecordVar, string word)
     : Operation(qec),
-      textRecordVar_(std::move(cvar)),
+      textRecordVar_(std::move(textRecordVar)),
       word_(std::move(word)),
       isPrefix_(word_.ends_with('*')) {}
 
@@ -65,8 +65,6 @@ string TextIndexScanForWord::asStringImpl(size_t indent) const {
     os << " ";
   }
   os << "WORD INDEX SCAN: "
-     << " with word: \"" << word_ << "\" and variable: \""
-     << textRecordVar_.name() << " \"";
-  ;
+     << " with word: \"" << word_ << "\"";
   return std::move(os).str();
 }

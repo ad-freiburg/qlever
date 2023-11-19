@@ -63,19 +63,6 @@ Variable Variable::getScoreVariable() const {
 }
 
 // _____________________________________________________________________________
-Variable Variable::getFixedEntityVariable(std::string_view entityName) const {
-  // convert entity name to variable name by adding the prefix ?ql_entity_
-  // and deleting all non alphabetical characters
-  string name = "?ql_entity_";
-  for (char c : entityName) {
-    if (isalpha(c)) {
-      name.push_back(c);
-    }
-  }
-  return Variable{name};
-}
-
-// _____________________________________________________________________________
 Variable Variable::getMatchingWordVariable(std::string_view term) const {
   return Variable{
       absl::StrCat(MATCHINGWORD_VARIABLE_PREFIX, name().substr(1), "_", term)};

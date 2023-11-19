@@ -13,7 +13,8 @@ class TextIndexScanForWord : public Operation {
   bool isPrefix_ = false;
 
  public:
-  TextIndexScanForWord(QueryExecutionContext* qec, Variable cvar, string word);
+  TextIndexScanForWord(QueryExecutionContext* qec, Variable textRecordVar,
+                       string word);
 
   virtual ~TextIndexScanForWord() = default;
 

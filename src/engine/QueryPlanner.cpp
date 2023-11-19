@@ -1202,18 +1202,10 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
       plan = makeSubtreePlan<EntityIndexScanForWord>(_qec, node._cvar.value(),
                                                      evar, word);
     } else {
-      VocabIndex idx;
-      bool success =
-          _qec->getIndex().getVocab().getId(node._triple._o.toString(), &idx);
-      if (!success) {
-        LOG(ERROR) << "ERROR: entity \"" << node._triple._o.toString() << "\" "
-                   << "not found in Vocab. Terminating\n";
-        AD_FAIL();
-      }
+      // Fixed entity case
       plan = makeSubtreePlan<EntityIndexScanForWord>(
-          _qec, node._cvar.value(),
-          node._cvar.value().getFixedEntityVariable(node._triple._o.toString()),
-          word, idx);
+          _qec, node._cvar.value(), std::nullopt, word,
+          node._triple._o.toString());
     }
   } else {
     plan =
