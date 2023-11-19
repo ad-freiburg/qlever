@@ -127,10 +127,12 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
                        distributor.reset();
                      }));
 
-  // Wait until destructor of distributor blocks, add short sleep if tests
-  // sporadically fail, because technically the flag would need to be triggered
-  // inside the destructor, not before it.
+  // Wait until destructor of distributor blocks, increase sleep duration if
+  // tests sporadically fail, because technically the flag needs to be
+  // triggered inside the destructor, not before it.
   flag.wait(false);
+  std::this_thread::sleep_for(std::chrono::milliseconds{1});
+
   distributor =
       co_await queryHub.createOrAcquireDistributorInternalUnsafe<false>(
           queryId);
