@@ -410,6 +410,28 @@ class ConfigManager {
   FRIEND_TEST(ConfigManagerTest, CollectionFunctionsSorting);
 
   /*
+  @brief Collect all `HashMapEntry` contained in the given
+  `configurationOptions`, including the ones in sub managern and return them
+  together with their json paths.
+  Note: Also checks integrity of all entries via `verifyHashMapEntry`.
+
+  @param sortByInitialization If true, the order of the returned `HashMapEntry`
+  is by initialization order. If false, the order is random.
+  @param pathPrefix This prefix will be added to all json paths, that will be
+  returned.
+  @param predicate Only the `HashMapEntry` for which a true is returned, will be
+  given back.
+  */
+  // TODO Can the default values be done in a nicer way?
+  template <ad_utility::InvocableWithExactReturnType<bool, const HashMapEntry&>
+                Predicate = decltype([](const HashMapEntry&) { return true; })>
+  static std::vector<std::pair<std::string, const HashMapEntry&>>
+  allHashMapEntries(
+      const ad_utility::HashMap<std::string, HashMapEntry>& entries,
+      const bool sortByInitialization = false, std::string_view pathPrefix = "",
+      Predicate&& predicate = {});
+
+  /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
   based on the given keys.
   */
@@ -512,26 +534,26 @@ class ConfigManager {
   @param sortByInitialization If true, the order of the returned
   `ConfigOptionValidatorManager` is by initialization order. If false, the order
   is random.
-  @param pathPrefix Prefix for the paths in the exception message. Needed, so
-  that a sub manager can include its own path in the error messages.
   */
   std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
-  validators(const bool sortByInitialization,
-             std::string_view pathPrefix = "") const;
+  validators(const bool sortByInitialization) const;
 
   /*
-  @brief The implementation for `configurationOptions`..
+  @brief The implementation for `configurationOptions`.
+
+  @tparam ReturnReference Should be either `ConfigOption&`, or `const
+  ConfigOption&`.
 
   @param sortByInitialization If true, the order of the returned `ConfigOption`
   is by initialization order. If false, the order is random.
-  @param pathPrefix This prefix will be added to all configuration option json
-  paths, that will be returned.
   */
-  static std::vector<std::pair<std::string, const HashMapEntry&>>
+  template <typename ReturnReference>
+  requires std::same_as<ReturnReference, ConfigOption&> ||
+           std::same_as<ReturnReference, const ConfigOption&>
+  static std::vector<std::pair<std::string, ReturnReference>>
   configurationOptionsImpl(const ad_utility::HashMap<std::string, HashMapEntry>&
                                configurationOptions,
-                           const bool sortByInitialization,
-                           std::string_view pathPrefix = "");
+                           const bool sortByInitialization);
 
   /*
   @brief Call all the validators to check, if the current value is valid.
