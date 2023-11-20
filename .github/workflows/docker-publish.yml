@@ -2,13 +2,11 @@ name: Docker Publish
 
 on:
   workflow_run:
-    workflows : ["docker-build"]
+    workflows : ["Docker build"]
     branches: ["master"]
     types:
       - completed
   push:
-    branches:
-      - "master"
     tags:
       - "v*.*.*"
 
