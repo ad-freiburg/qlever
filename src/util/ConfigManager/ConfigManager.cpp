@@ -22,6 +22,7 @@
 #include <variant>
 
 #include "util/Algorithm.h"
+#include "util/ComparisonWithNan.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
@@ -30,6 +31,7 @@
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/ConfigManager/generated/ConfigShorthandParser.h"
 #include "util/Exception.h"
+#include "util/Forward.h"
 #include "util/StringUtils.h"
 #include "util/TypeTraits.h"
 #include "util/antlr/ANTLRErrorHandling.h"
@@ -96,25 +98,18 @@ void ConfigManager::verifyHashMapEntry(std::string_view jsonPathToEntry,
 }
 
 // ____________________________________________________________________________
-template <typename ReturnReference>
-requires std::same_as<ReturnReference, ConfigOption&> ||
-         std::same_as<ReturnReference, const ConfigOption&>
-std::vector<std::pair<std::string, ReturnReference>>
-ConfigManager::configurationOptionsImpl(auto& configurationOptions,
-                                        const bool sortByInitialization,
-                                        std::string_view pathPrefix) {
-  std::vector<std::pair<std::string, ReturnReference>> collectedOptions;
-
-  // A list of all the keys in the hash map, so that we can sort our access
-  // order, if wanted.
-  auto keyView = std::views::keys(configurationOptions);
-  std::vector<std::string_view> hashKeys(keyView.begin(), keyView.end());
-  if (sortByInitialization) {
-    std::ranges::sort(
-        hashKeys, {}, [&configurationOptions](std::string_view key) {
-          return configurationOptions.at(key).getInitializationId();
-        });
-  }
+std::vector<std::pair<std::string, const ConfigManager::HashMapEntry&>>
+ConfigManager::configurationOptionsImpl(
+    const ad_utility::HashMap<std::string, HashMapEntry>& configurationOptions,
+    const bool sortByInitialization, std::string_view pathPrefix) {
+  /*
+  In order to keep hold of all management information, we collect the
+  `HashMapEntry`s, that contain `ConfigOption`s and transform them, before
+  returning them.
+  */
+  std::vector<
+      std::pair<std::string, std::reference_wrapper<const HashMapEntry>>>
+      collectedOptions;
 
   /*
   Takes one entry of an instance of `configurationOptions_`, checks it with
@@ -135,57 +130,64 @@ ConfigManager::configurationOptionsImpl(auto& configurationOptions,
   with `verifyEntry`, and adds the config options, that can be found inside it,
   together with the paths to them, to `collectedOptions`.
   */
-  auto addHashMapEntryToCollectedOptions =
-      [&collectedOptions, &pathPrefix, &sortByInitialization](const auto pair) {
-        const auto& [jsonPath, hashMapEntry] = pair;
+  auto addHashMapEntryToCollectedOptions = [&collectedOptions,
+                                            &pathPrefix](const auto pair) {
+    const auto& [jsonPath, hashMapEntry] = pair;
 
-        const std::string& pathToCurrentEntry =
-            absl::StrCat(pathPrefix, jsonPath);
+    const std::string& pathToCurrentEntry = absl::StrCat(pathPrefix, jsonPath);
 
-        hashMapEntry.visit([&collectedOptions, &pathToCurrentEntry,
-                            &sortByInitialization]<typename T>(T& var) {
-          // A normal `ConfigOption` can be directly added. For a
-          // `ConfigManager` we have to recursively collect the options.
-          if constexpr (isSimilar<T, ConfigOption>) {
-            collectedOptions.emplace_back(pathToCurrentEntry, var);
-          } else {
-            static_assert(isSimilar<T, ConfigManager>);
-
-            // Move the recursive results.
-            auto recursiveResults = configurationOptionsImpl<ReturnReference>(
-                var.configurationOptions_, sortByInitialization,
-                pathToCurrentEntry);
-            collectedOptions.reserve(recursiveResults.size());
-            std::ranges::move(recursiveResults,
-                              std::back_inserter(collectedOptions));
-          }
-        });
-      };
+    // A normal `ConfigOption` can be directly added. For a
+    // `ConfigManager` we have to recursively collect the options.
+    if (hashMapEntry.holdsConfigOption()) {
+      collectedOptions.emplace_back(pathToCurrentEntry, hashMapEntry);
+    } else if (hashMapEntry.holdsSubManager()) {
+      // Move the recursive results.
+      auto recursiveResults = configurationOptionsImpl(
+          hashMapEntry.getSubManager().value()->configurationOptions_, false,
+          pathToCurrentEntry);
+      collectedOptions.reserve(recursiveResults.size());
+      std::ranges::move(recursiveResults, std::back_inserter(collectedOptions));
+    }
+  };
 
   // Collect all the options in the given `configurationOptions`.
-  std::ranges::for_each(
-      std::views::transform(
-          hashKeys,
-          [&configurationOptions](std::string_view key) -> decltype(auto) {
-            return *configurationOptions.find(key);
-          }),
-      addHashMapEntryToCollectedOptions, verifyEntry);
+  std::ranges::for_each(configurationOptions, addHashMapEntryToCollectedOptions,
+                        verifyEntry);
 
-  return collectedOptions;
+  // Sort the collected `ConfigOption`s, if wanted.
+  if (sortByInitialization) {
+    std::ranges::sort(collectedOptions, {}, [](const auto& pair) {
+      const auto& [jsonPath, hashMapEntry] = pair;
+      return hashMapEntry.get().getInitializationId();
+    });
+  }
+
+  return ad_utility::transform(std::move(collectedOptions), [](auto&& pair) {
+    return std::pair<std::string, const ConfigManager::HashMapEntry&>(
+        AD_FWD(pair).first, pair.second.get());
+  });
 }
 
 // ____________________________________________________________________________
 std::vector<std::pair<std::string, ConfigOption&>>
 ConfigManager::configurationOptions(const bool sortByInitialization) {
-  return configurationOptionsImpl<ConfigOption&>(configurationOptions_,
-                                                 sortByInitialization, "");
+  return ad_utility::transform(
+      configurationOptionsImpl(configurationOptions_, sortByInitialization, ""),
+      [](auto&& pair) {
+        return std::pair<std::string, ConfigOption&>(
+            AD_FWD(pair).first, *pair.second.getConfigOption().value());
+      });
 }
 
 // ____________________________________________________________________________
 std::vector<std::pair<std::string, const ConfigOption&>>
 ConfigManager::configurationOptions(const bool sortByInitialization) const {
-  return configurationOptionsImpl<const ConfigOption&>(
-      configurationOptions_, sortByInitialization, "");
+  return ad_utility::transform(
+      configurationOptionsImpl(configurationOptions_, sortByInitialization, ""),
+      [](auto&& pair) {
+        return std::pair<std::string, const ConfigOption&>(
+            AD_FWD(pair).first, *pair.second.getConfigOption().value());
+      });
 }
 
 // ____________________________________________________________________________

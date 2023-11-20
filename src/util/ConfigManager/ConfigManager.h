@@ -520,21 +520,16 @@ class ConfigManager {
              std::string_view pathPrefix = "") const;
 
   /*
-  @brief The implementation for `configurationOptions`.
-
-  @tparam ReturnReference Should be either `ConfigOption&`, or `const
-  ConfigOption&`.
+  @brief The implementation for `configurationOptions`..
 
   @param sortByInitialization If true, the order of the returned `ConfigOption`
   is by initialization order. If false, the order is random.
   @param pathPrefix This prefix will be added to all configuration option json
   paths, that will be returned.
   */
-  template <typename ReturnReference>
-  requires std::same_as<ReturnReference, ConfigOption&> ||
-           std::same_as<ReturnReference, const ConfigOption&>
-  static std::vector<std::pair<std::string, ReturnReference>>
-  configurationOptionsImpl(auto& configurationOptions,
+  static std::vector<std::pair<std::string, const HashMapEntry&>>
+  configurationOptionsImpl(const ad_utility::HashMap<std::string, HashMapEntry>&
+                               configurationOptions,
                            const bool sortByInitialization,
                            std::string_view pathPrefix = "");
 
