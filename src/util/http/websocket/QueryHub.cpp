@@ -37,8 +37,10 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
               bool wasErased = socketDistributors_.erase(queryId);
               AD_CORRECTNESS_CHECK(wasErased);
             })));
-        // We may block the current strand, but we won't block the `ioContext_`
-        // while the task is being executed
+        // As long as the destructor would have to block anyway, perform work
+        // on the `ioContext_`. This avoids blocking in case the destructor
+        // already runs inside the `ioContext_`.
+        // Note: When called on a strand this may block the current strand.
         while (future.wait_for(std::chrono::seconds(0)) !=
                std::future_status::ready) {
           ioContext_.poll_one();

@@ -74,7 +74,8 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
     EXPECT_THAT(result, VariantWith<PayloadType>(Pointee("Dre"s)));
   }
 
-  // Make sure we wait for the destructor of the distributor to unregister
-  // itself asynchronously from the query hub before destroying the query hub
+  // The destructor of `MessageSender` calls `signalEnd` on the distributor
+  // instance asynchronously, so we need to wait for it to be executed before
+  // destroying the backing `QueryHub` instance.
   co_await net::post(net::use_awaitable);
 }
