@@ -3,9 +3,10 @@
 // Author: Andre Schlegel (September of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
+#include "util/ConfigManager/Validator.h"
+
 #include <functional>
 
-#include "util/ConfigManager/Validator.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
