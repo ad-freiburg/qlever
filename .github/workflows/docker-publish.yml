@@ -7,7 +7,7 @@ on:
     types:
       - completed
   push:
-   branches:
+    branches:
       - "master"
     tags:
       - "v*.*.*"
