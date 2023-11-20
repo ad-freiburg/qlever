@@ -642,15 +642,22 @@ ConfigManager::validators(const bool sortByInitialization,
   // Collect the validators from the sub managers.
   std::ranges::for_each(
       std::views::filter(configurationOptions_, isNonEmptySubManager),
-      [&pathPrefix, &allValidators, &sortByInitialization](const auto& pair) {
+      [&pathPrefix, &allValidators](const auto& pair) {
         // Easier access.
         const auto& [jsonPath, hashMapEntry] = pair;
 
-        appendVector(
-            allValidators,
-            hashMapEntry.getSubManager().value()->validators(
-                sortByInitialization, absl::StrCat(pathPrefix, jsonPath)));
+        appendVector(allValidators,
+                     hashMapEntry.getSubManager().value()->validators(
+                         false, absl::StrCat(pathPrefix, jsonPath)));
       });
+
+  // Sort the validators, if wanted.
+  if (sortByInitialization) {
+    std::ranges::sort(allValidators, {},
+                      [](const ConfigOptionValidatorManager& validator) {
+                        return validator.getInitializationId();
+                      });
+  }
 
   return allValidators;
 }

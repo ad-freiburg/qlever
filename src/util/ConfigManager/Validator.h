@@ -98,6 +98,10 @@ class ConfigOptionValidatorManager {
   // A descripton of the invariant, this validator imposes.
   std::string descriptor_;
 
+  // Describes the order of initialization.
+  static inline size_t numberOfInstances_{0};
+  size_t initializationId_;
+
  public:
   /*
   @brief Create a `ConfigOptionValidatorManager`, which will call the given
@@ -121,16 +125,17 @@ class ConfigOptionValidatorManager {
   requires(std::invocable<TranslationFunction,
                           const ExceptionValidatorParameterTypes> &&
            ...) &&
-          ExceptionValidatorFunction<
-              ExceptionValidatorFunc,
-              std::invoke_result_t<TranslationFunction,
-                                   ExceptionValidatorParameterTypes>...> &&
-          (sizeof...(ExceptionValidatorParameterTypes) > 0)
+              ExceptionValidatorFunction<
+                  ExceptionValidatorFunc,
+                  std::invoke_result_t<TranslationFunction,
+                                       ExceptionValidatorParameterTypes>...> &&
+              (sizeof...(ExceptionValidatorParameterTypes) > 0)
   ConfigOptionValidatorManager(
       ExceptionValidatorFunc exceptionValidatorFunction, std::string descriptor,
       TranslationFunction translationFunction,
       const ExceptionValidatorParameterTypes... configOptionsToBeChecked)
-      : descriptor_{std::move(descriptor)} {
+      : descriptor_{std::move(descriptor)},
+        initializationId_{numberOfInstances_++} {
     wrappedValidatorFunction_ = [translationFunction =
                                      std::move(translationFunction),
                                  exceptionValidatorFunction =
@@ -209,6 +214,10 @@ class ConfigOptionValidatorManager {
   saved validator function, imposes upon the configuration options.
   */
   std::string_view getDescription() const;
+
+  // Return, how many instances of this class were initialized before this
+  // instance.
+  size_t getInitializationId() const;
 };
 
 }  // namespace ad_utility
