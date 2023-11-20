@@ -424,12 +424,12 @@ class ConfigManager {
   */
   // TODO Can the default values be done in a nicer way?
   template <ad_utility::InvocableWithExactReturnType<bool, const HashMapEntry&>
-                Predicate = decltype([](const HashMapEntry&) { return true; })>
+                Predicate>
   static std::vector<std::pair<std::string, const HashMapEntry&>>
   allHashMapEntries(
       const ad_utility::HashMap<std::string, HashMapEntry>& entries,
-      const bool sortByInitialization = false, std::string_view pathPrefix = "",
-      Predicate&& predicate = {});
+      const bool sortByInitialization, std::string_view pathPrefix,
+      Predicate&& predicate);
 
   /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
