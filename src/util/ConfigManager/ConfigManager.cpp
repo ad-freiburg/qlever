@@ -97,13 +97,14 @@ void ConfigManager::verifyHashMapEntry(std::string_view jsonPathToEntry,
 }
 
 // ____________________________________________________________________________
+template <ad_utility::InvocableWithExactReturnType<
+    bool, const ConfigManager::HashMapEntry&>
+              Predicate>
 std::vector<std::pair<std::string, const ConfigManager::HashMapEntry&>>
 ConfigManager::allHashMapEntries(
-    const ad_utility::HashMap<std::string, ConfigManager::HashMapEntry>&
-        entries,
+    const ad_utility::HashMap<std::string, HashMapEntry>& entries,
     const bool sortByInitialization, std::string_view pathPrefix,
-    ad_utility::InvocableWithExactReturnType<
-        bool, const ConfigManager::HashMapEntry&> auto&& predicate) {
+    const Predicate& predicate) {
   // `std::reference_wrapper` works with `std::ranges::sort`. `const
   // HashMapEntry&` does not.
   std::vector<

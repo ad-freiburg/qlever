@@ -422,14 +422,13 @@ class ConfigManager {
   @param predicate Only the `HashMapEntry` for which a true is returned, will be
   given back.
   */
-  // TODO Can the default values be done in a nicer way?
   template <ad_utility::InvocableWithExactReturnType<bool, const HashMapEntry&>
                 Predicate>
   static std::vector<std::pair<std::string, const HashMapEntry&>>
   allHashMapEntries(
       const ad_utility::HashMap<std::string, HashMapEntry>& entries,
       const bool sortByInitialization, std::string_view pathPrefix,
-      Predicate&& predicate);
+      const Predicate& predicate);
 
   /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
