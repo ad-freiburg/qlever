@@ -58,7 +58,7 @@ class ConfigManager {
 
     // Describes the order of initialization.
     static inline size_t numberOfInstances_{0};
-    size_t initializationId_;
+    size_t initializationId_{numberOfInstances_++};
 
    public:
     // Construct an instance of this class managing `data`.

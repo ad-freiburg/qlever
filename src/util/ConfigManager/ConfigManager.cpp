@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -26,6 +24,7 @@
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -41,8 +40,7 @@
 namespace ad_utility {
 // ____________________________________________________________________________
 ConfigManager::HashMapEntry::HashMapEntry(Data&& data)
-    : data_{std::make_unique<Data>(std::move(data))},
-      initializationId_{numberOfInstances_++} {}
+    : data_{std::make_unique<Data>(std::move(data))} {}
 
 // ____________________________________________________________________________
 bool ConfigManager::HashMapEntry::holdsConfigOption() const {
