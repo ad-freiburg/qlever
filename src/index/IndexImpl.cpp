@@ -182,9 +182,10 @@ void IndexImpl::createFromFile(const string& filename) {
       allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
-  auto uniqueSorter = ad_utility::uniqueBlockView<decltype(psoSorter.getSortedBlocks<0>()),
-                                             IdTableStatic<0>::row_type>(
-      psoSorter.getSortedBlocks<0>());
+  auto uniqueSorter =
+      ad_utility::uniqueBlockView<decltype(psoSorter.getSortedBlocks<0>()),
+                                  IdTableStatic<0>::row_type>(
+          psoSorter.getSortedBlocks<0>());
 
   size_t numPredicatesNormal = 0;
   createPermutationPair(
@@ -617,43 +618,10 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
       fileName1, writer1, writer2, std::move(sortedTriples), c0, c1, c2,
       callback1, callback2, std::move(callbacks));
 
-  /*
-  std::cerr << "dumping metaData1" << std::endl;
-  for (auto el: metaData1.data()) {
-    std::cerr << el.col0Id_ << ' ' << el.numRows_ << ' ' << el.offsetInBlock_ << std::endl;
-  }
-  std::cerr << "dumping metaData2" << std::endl;
-  for (auto el: metaData2.data()) {
-    std::cerr << el.col0Id_ << ' ' << el.numRows_ << ' ' << el.offsetInBlock_ << std::endl;
-  }
-   */
-
   metaData1.blockData() = std::move(blocks1);
   metaData2.blockData() = std::move(blocks2);
 
   return std::make_pair(std::move(metaData1), std::move(metaData2));
-}
-
-// __________________________________________________________________________
-CompressedRelationMetadata IndexImpl::writeSwitchedRel(
-    CompressedRelationWriter* out, Id currentRel, auto&& sortedBlocks) {
-  // AD_CONTRACT_CHECK(buffer.numColumns() == 2);
-  Id lastLhs = std::numeric_limits<Id>::max();
-
-  for (auto& block : sortedBlocks) {
-    out->addBlockForRelation(currentRel, block.template asStaticView<0>());
-  }
-  // TODO<joka921> handle the multiplicity computation.
-  return out->finishCurrentRelation(13409);
-
-  /*
-  size_t distinctC1 = 0;
-  for (const auto& el : buffer.getColumn(0)) {
-    distinctC1 += el != lastLhs;
-    lastLhs = el;
-  }
-  return out->addRelation(currentRel, buffer, distinctC1);
-   */
 }
 
 // ________________________________________________________________________

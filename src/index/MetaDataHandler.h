@@ -89,10 +89,9 @@ class MetaDataWrapperDense {
   // ____________________________________________________________
   void set(Id id, const value_type& value) {
     // Either this is a push or an overwrite of a previous metadata.
-    if(_vec.size() == 0 || _vec.back().col0Id_ < id) {
+    if (_vec.size() == 0 || _vec.back().col0Id_ < id) {
       _vec.push_back(value);
-    }
-    else {
+    } else {
       auto it = lower_bound_non_const(id);
       AD_CONTRACT_CHECK(it != _vec.end() && it->col0Id_ == id);
       *it = value;

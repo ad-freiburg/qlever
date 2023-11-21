@@ -78,22 +78,35 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     for (const auto& input : inputs) {
       std::string bufferFilename =
           testCaseName + ".buffers." + std::to_string(i) + ".dat";
-      BufferedIdTable buffer{
-          2,
-          std::array{ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                                    bufferFilename + ".0"},
-                     ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                                    bufferFilename + ".1"}}};
+      IdTable buffer{2, ad_utility::makeUnlimitedAllocator<Id>()};
+      size_t numBlocks = 0;
+
+      auto addBlock = [&]() {
+        if (buffer.empty()) {
+          return;
+        }
+        writer.addBlockForRelation(
+            V(input.col0_), std::make_shared<IdTable>(std::move(buffer)));
+        buffer.clear();
+        ++numBlocks;
+      };
       for (const auto& arr : input.col1And2_) {
         buffer.push_back({V(arr[0]), V(arr[1])});
+        if (buffer.numRows() > writer.blocksize()) {
+          addBlock();
+        }
       }
-      // The last argument is the number of distinct elements in `col1`. We
-      // store a dummy value here that we can check later.
-      auto md = writer.addRelation(V(input.col0_), buffer, i + 1);
-      metaData.push_back(md);
+      if (numBlocks > 0 || buffer.numRows() > 0.8 * writer.blocksize()) {
+        addBlock();
+        // The last argument is the number of distinct elements in `col1`. We
+        // store a dummy value here that we can check later.
+        metaData.push_back(writer.finishCurrentRelation(i + 1));
+      } else {
+        metaData.push_back(writer.writeSmallRelation(V(input.col0_), i + 1,
+                                                     buffer.asStaticView<0>()));
+      }
       buffer.clear();
-      ASSERT_THROW(writer.addRelation(V(input.col0_), buffer, i + 1),
-                   ad_utility::Exception);
+      numBlocks = 0;
       ++i;
     }
   }

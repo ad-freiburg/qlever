@@ -91,8 +91,10 @@ struct CompressedBlockMetadata {
     Id col2Id_;
     bool operator==(const PermutedTriple&) const = default;
 
-    friend std::ostream& operator<<(std::ostream& str, const PermutedTriple& trip) {
-      str << "Triple: " << trip.col0Id_ << ' ' << trip.col2Id_ << ' ' << trip.col2Id_ << std::endl;
+    friend std::ostream& operator<<(std::ostream& str,
+                                    const PermutedTriple& trip) {
+      str << "Triple: " << trip.col0Id_ << ' ' << trip.col2Id_ << ' '
+          << trip.col2Id_ << std::endl;
       return str;
     }
 
@@ -164,7 +166,9 @@ class CompressedRelationWriter {
  private:
   ad_utility::Synchronized<ad_utility::File> outfile_;
   ad_utility::Synchronized<std::vector<CompressedBlockMetadata>> blockBuffer_;
-  CompressedBlockMetadata currentBlockData_;
+  Id currentBlockFirstCol0_ = Id::makeUndefined();
+  Id currentBlockLastCol0_ = Id::makeUndefined();
+
   ad_utility::AllocatorWithLimit<Id> allocator_ =
       ad_utility::makeUnlimitedAllocator<Id>();
   SmallRelationsBuffer previousSmallRelationsBuffer_{allocator_};
@@ -172,8 +176,6 @@ class CompressedRelationWriter {
 
   Id currentRelation_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
-
-  std::vector<CompressedRelationMetadata> finishedMetadata_;
 
   ad_utility::TaskQueue<false> blockWriteQueue_{20, 10};
 
@@ -183,25 +185,6 @@ class CompressedRelationWriter {
       : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock} {}
 
   void addBlockForRelation(Id col0Id, std::shared_ptr<IdTable> otherIds);
-  /**
-   * Add a complete (single) relation.
-   *
-   * \param col0Id The ID of the relation, that is, the value of X for a
-   * permutation XYZ.
-   *
-   * \param col1And2Ids The sorted data of the relation, that is, the sequence
-   * of all pairs of Y and Z for the given X.
-   *
-   * \param numDistinctCol1 The number of distinct values for X (from which we
-   * can also calculate the average multiplicity and whether the relation is
-   * functional, so we don't need to store that
-   * explicitly).
-   *
-   * \return The Metadata of the relation that was added.
-   */
-  CompressedRelationMetadata addRelation(Id col0Id,
-                                         const BufferedIdTable& col1And2Ids,
-                                         size_t numDistinctCol1);
 
   /// Get all the CompressedBlockMetaData that were created by the calls to
   /// addRelation. This also closes the writer. The typical workflow is:
@@ -226,6 +209,8 @@ class CompressedRelationWriter {
   static float computeMultiplicity(size_t numElements,
                                    size_t numDistinctElements);
 
+  size_t blocksize() const { return numBytesPerBlock_ / (2 * sizeof(Id)); }
+
  private:
   /// Finish writing all relations which have previously been added, but might
   /// still be in some internal buffer.
@@ -247,28 +232,23 @@ class CompressedRelationWriter {
   // Compress the relation from `data` into one or more blocks, depending on
   // its size. Write the blocks to `outfile_` and append all the created
   // block metadata to `blockBuffer_`.
-  void writeRelationToExclusiveBlocks(Id col0Id, const BufferedIdTable& data);
+  // void writeRelationToExclusiveBlocks(Id col0Id, const BufferedIdTable&
+  // data);
 
   // Compress the `column` and write it to the `outfile_`. Return the offset and
   // size of the compressed column in the `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
       std::span<const Id> column);
 
+  void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id,
+                             std::shared_ptr<IdTable> buf);
+
  public:
   // TODO<joka921> make most private, document, etc.
-  size_t writeSmallRelation(Id col0Id, IdTableView<0> buf, size_t start,
-                            size_t end);
-  size_t writeExclusiveBlocksForRelation(Id col0Id, IdTableView<0> buf,
-                                         size_t start, size_t end);
-  CompressedRelationMetadata writeCompleteRelation(Id col0Id,
-                                                   size_t numDistinctC1,
-                                                   IdTableView<0> buf,
-                                                   size_t start, size_t end);
-  CompressedRelationMetadata finishCurrentRelation(size_t numDistinctC1);
-  void addBlockToCurrentRelation(std::shared_ptr<IdTable> buf, size_t begin,
-                                 size_t end);
-  std::vector<CompressedRelationMetadata> moveFinishedMetadata();
+  CompressedRelationMetadata writeSmallRelation(Id col0Id, size_t numDistinctC1,
+                                                IdTableView<0> buf);
 
+  CompressedRelationMetadata finishCurrentRelation(size_t numDistinctC1);
   static
       // _____________________________________________________________________________
       std::pair<std::vector<CompressedBlockMetadata>,

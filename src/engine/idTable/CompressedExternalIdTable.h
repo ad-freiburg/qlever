@@ -17,6 +17,7 @@
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/ParallelMultiwayMerge.h"
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
 #include "util/http/beast.h"
@@ -363,6 +364,7 @@ class CompressedExternalIdTableBase {
       compressAndWriteFuture_.get();
     }
     writer_.clear();
+    numBlocksPushed_ = 0;
   }
 
  protected:

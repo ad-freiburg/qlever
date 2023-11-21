@@ -94,7 +94,7 @@ void testLazyScanThrows(const std::string& kg, const SparqlTriple& tripleLeft,
   auto qec = getQec(kg);
   IndexScan s1{qec, Permutation::PSO, tripleLeft};
   IndexScan s2{qec, Permutation::PSO, tripleRight};
-  //EXPECT_ANY_THROW(IndexScan::lazyScanForJoinOfTwoScans(s1, s2));
+  // EXPECT_ANY_THROW(IndexScan::lazyScanForJoinOfTwoScans(s1, s2));
 }
 
 // Test that a lazy partial scan for a join of the `scanTriple` with a
@@ -139,7 +139,7 @@ void testLazyScanWithColumnThrows(
     [[maybe_unused]] auto scan =
         IndexScan::lazyScanForJoinOfColumnWithScan(column, s1);
   };
-  //EXPECT_ANY_THROW(makeScan());
+  EXPECT_ANY_THROW(makeScan());
 }
 }  // namespace
 
