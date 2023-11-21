@@ -182,18 +182,10 @@ class GroupBy : public Operation {
         _error = true;
       _count++;
     };
-    ValueId calculateResult() const {
+    [[nodiscard]] ValueId calculateResult() const {
       if (_error) return ValueId::makeUndefined();
       else return ValueId::makeFromDouble(_sum / (double) _count);
     }
-  };
-
-  // TODO
-  struct CountAggregationData {
-    bool _error = false;
-    int64_t _count = 0;
-    void increment(double intermediate) { _count++; }
-    double calculateResult() const { return _count; }
   };
 
   template <size_t OUT_WIDTH>
@@ -205,7 +197,7 @@ class GroupBy : public Operation {
   // Check if the previously described optimization can be applied. The argument
   // Must be the single subtree of this GROUP BY, properly cast to a `const
   // Sort*`.
-  std::optional<ExplicitlySortedData> checkIfExplicitlySorted();
+  std::optional<ExplicitlySortedData> checkIfExplicitlySorted(std::vector<Aggregate> aggregates);
 
   // The check whether the optimization just described can be applied and its
   // actual computation are split up in two functions. This struct contains

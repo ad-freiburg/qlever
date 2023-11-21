@@ -11,6 +11,7 @@
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/Sort.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -328,7 +329,13 @@ struct GroupBySpecialCount : ::testing::Test {
   Variable varY{"?y"};
   Variable varZ{"?z"};
   Variable varA{"?a"};
-  QueryExecutionContext* qec = getQec();
+
+  std::string turtleInput = "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
+      "<x> "
+      "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
+      "\"zz\"@en";
+
+  QueryExecutionContext* qec = getQec(turtleInput);
   SparqlTriple xyzTriple{Variable{"?x"}, "?y", Variable{"?z"}};
   Tree xyzScanSortedByX =
       makeExecutionTree<IndexScan>(qec, Permutation::Enum::SOP, xyzTriple);
@@ -365,7 +372,22 @@ struct GroupBySpecialCount : ::testing::Test {
                                               bool distinct = false) {
     return SparqlExpressionPimpl{std::make_unique<CountExpression>(
                                      distinct, makeVariableExpression(var)),
-                                 "COUNT(?someVariable}"};
+                                 "COUNT(?someVariable)"};
+  }
+
+  static SparqlExpressionPimpl makeAvgPimpl(const Variable& var) {
+    return SparqlExpressionPimpl{std::make_unique<AvgExpression >(
+                                 false, makeVariableExpression(var)),
+                                 "AVG(?someVariable)"};
+  }
+
+  static SparqlExpressionPimpl makeAvgCountPimpl(const Variable& var) {
+    auto countExpression = std::make_unique<CountExpression>(
+        false, makeVariableExpression(var)
+    );
+    return SparqlExpressionPimpl{std::make_unique<AvgExpression >(
+                                 false, std::move(countExpression)),
+                                 "AVG(COUNT(?someVariable))"};
   }
 
   SparqlExpressionPimpl varxExpressionPimpl = makeVariablePimpl(varX);
@@ -418,6 +440,48 @@ TEST_F(GroupBySpecialCount, getPermutationForThreeVariableTriple) {
   // Not a three variable triple.
   ASSERT_EQ(std::nullopt,
             GroupBy::getPermutationForThreeVariableTriple(*xScan, varX, varX));
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupBySpecialCount, checkIfExplicitlySorted) {
+  auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
+                            const auto& join, const auto& aggregates) {
+    auto groupBy = GroupBy{qec, groupByVariables, aliases, join};
+    ASSERT_FALSE(groupBy.checkIfExplicitlySorted(aggregates));
+  };
+
+  std::vector<Variable> variablesXAndY{varX, varY};
+
+  std::vector<ColumnIndex> sortedColumnsVector = {0};
+  Tree validJoinWhenGroupingByXPlusSort =
+      makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumnsVector);
+
+  SparqlExpressionPimpl avgXPimpl = makeAvgPimpl(varX);
+  SparqlExpressionPimpl avgCountXPimpl = makeAvgCountPimpl(varX);
+
+  std::vector<Alias> aliasesAvgX{Alias{avgXPimpl, Variable{"?avg"}}};
+  std::vector<Alias> aliasesAvgCountX{Alias{avgCountXPimpl, Variable("?avgcount")}};
+
+  std::vector<GroupBy::Aggregate> countAggregate = {{ countXPimpl, 1 }};
+  std::vector<GroupBy::Aggregate> avgAggregate = {{avgXPimpl, 1}};
+  std::vector<GroupBy::Aggregate> avgCountAggregate = {{avgCountXPimpl, 1}};
+
+  // Must have exactly one variable to group by.
+  testFailure(emptyVariables, aliasesAvgX, validJoinWhenGroupingByXPlusSort, avgAggregate);
+  testFailure(variablesXAndY, aliasesAvgX, validJoinWhenGroupingByXPlusSort, avgAggregate);
+  // Must be AVG aggregate (for now)
+  testFailure(variablesOnlyX, aliasesCountX, validJoinWhenGroupingByXPlusSort, countAggregate);
+  // Top operation must be SORT
+  testFailure(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX, avgAggregate);
+  // Can not be a nested aggregate
+  testFailure(variablesOnlyX, aliasesAvgCountX, validJoinWhenGroupingByXPlusSort, avgCountAggregate);
+
+  // Everything is valid for the following example.
+  GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByXPlusSort};
+  auto optimizedAggregateData =
+      groupBy.checkIfExplicitlySorted(avgAggregate);
+  ASSERT_TRUE(optimizedAggregateData.has_value());
+  ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
 }
 
 // _____________________________________________________________________________

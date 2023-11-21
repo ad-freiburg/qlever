@@ -318,8 +318,18 @@ ResultTable GroupBy::computeResult() {
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   }
 
+  std::vector<Aggregate> aggregates;
+  aggregates.reserve(_aliases.size() + _groupByVariables.size());
+
+  // parse the aggregate aliases
+  const auto& varColMap = getInternallyVisibleVariableColumns();
+  for (const Alias& alias : _aliases) {
+    aggregates.push_back(
+        Aggregate{alias._expression, varColMap.at(alias._target).columnIndex_});
+  }
+
   // Check if optimization for explicitly sorted child can be applied
-  auto explicitlySortedParams = checkIfExplicitlySorted();
+  auto explicitlySortedParams = checkIfExplicitlySorted(aggregates);
 
   bool useOptimization = true; // for debugging purposes
   std::shared_ptr<const ResultTable> subresult;
@@ -346,9 +356,6 @@ ResultTable GroupBy::computeResult() {
 
   idTable.setNumColumns(getResultWidth());
 
-  std::vector<Aggregate> aggregates;
-  aggregates.reserve(_aliases.size() + _groupByVariables.size());
-
   // parse the group by columns
   const auto& subtreeVarCols = _subtree->getVariableColumns();
   for (const auto& var : _groupByVariables) {
@@ -358,13 +365,6 @@ ResultTable GroupBy::computeResult() {
     }
 
     groupByColumns.push_back(it->second.columnIndex_);
-  }
-
-  // parse the aggregate aliases
-  const auto& varColMap = getInternallyVisibleVariableColumns();
-  for (const Alias& alias : _aliases) {
-    aggregates.push_back(
-        Aggregate{alias._expression, varColMap.at(alias._target).columnIndex_});
   }
 
   std::vector<size_t> groupByCols;
@@ -700,14 +700,27 @@ bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
 
 // _____________________________________________________________________________
 std::optional<GroupBy::ExplicitlySortedData>
-    GroupBy::checkIfExplicitlySorted() {
+    GroupBy::checkIfExplicitlySorted(std::vector<Aggregate> aggregates) {
   auto* sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
   if (!sort) {
     return std::nullopt;
   }
 
+  // Only allow one group by variable
   if (_groupByVariables.size() != 1) {
     return std::nullopt;
+  }
+
+  for (auto & aggregate : aggregates) {
+    auto expr = aggregate._expression.getPimpl();
+
+    // Only allow AVG for now
+    if (dynamic_cast<sparqlExpression::AvgExpression*>(expr) == nullptr)
+      return std::nullopt;
+
+    // Check that there are no nested aggregates
+    if (expr->children().front()->containsAggregate())
+      return std::nullopt;
   }
 
   const Variable& groupByVariable = _groupByVariables.front();
@@ -789,13 +802,7 @@ bool GroupBy::computeGroupByForSortedSubtree(IdTable* result,
     for (auto & aggregate : aggregates) {
       // Evaluate child expression on block
       auto expr = aggregate._expression.getPimpl();
-
-      // Only allow AVG for now
-      if (dynamic_cast<sparqlExpression::AvgExpression*>(expr) == nullptr)
-        AD_FAIL();
-
       auto exprChildren = expr->children();
-
       sparqlExpression::ExpressionResult expressionResult =
           exprChildren[0]->evaluate(&evaluationContext);
 
