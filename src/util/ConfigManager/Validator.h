@@ -100,7 +100,7 @@ class ConfigOptionValidatorManager {
 
   // Describes the order of initialization.
   static inline size_t numberOfInstances_{0};
-  size_t initializationId_;
+  size_t initializationId_{numberOfInstances_++};
 
  public:
   /*
@@ -125,17 +125,16 @@ class ConfigOptionValidatorManager {
   requires(std::invocable<TranslationFunction,
                           const ExceptionValidatorParameterTypes> &&
            ...) &&
-              ExceptionValidatorFunction<
-                  ExceptionValidatorFunc,
-                  std::invoke_result_t<TranslationFunction,
-                                       ExceptionValidatorParameterTypes>...> &&
-              (sizeof...(ExceptionValidatorParameterTypes) > 0)
+          ExceptionValidatorFunction<
+              ExceptionValidatorFunc,
+              std::invoke_result_t<TranslationFunction,
+                                   ExceptionValidatorParameterTypes>...> &&
+          (sizeof...(ExceptionValidatorParameterTypes) > 0)
   ConfigOptionValidatorManager(
       ExceptionValidatorFunc exceptionValidatorFunction, std::string descriptor,
       TranslationFunction translationFunction,
       const ExceptionValidatorParameterTypes... configOptionsToBeChecked)
-      : descriptor_{std::move(descriptor)},
-        initializationId_{numberOfInstances_++} {
+      : descriptor_{std::move(descriptor)} {
     wrappedValidatorFunction_ = [translationFunction =
                                      std::move(translationFunction),
                                  exceptionValidatorFunction =
