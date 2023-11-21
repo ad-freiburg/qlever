@@ -44,6 +44,6 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: >
-            ${{ secrets.DOCKERHUB_USERNAME }}/qlever:${{ if github.ref_name == 'master' && steps.sha.outputs.sha_short || github.ref_name }},
+            ${{ secrets.DOCKERHUB_USERNAME }}/qlever:${{ github.ref_name == 'master' && steps.sha.outputs.sha_short || github.ref_name }},
             ${{ secrets.DOCKERHUB_USERNAME }}/qlever:latest
 
