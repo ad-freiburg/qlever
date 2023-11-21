@@ -127,9 +127,12 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
                        distributor.reset();
                      }));
 
-  // Wait until destructor of distributor blocks, increase sleep duration if
-  // tests sporadically fail, because technically the flag needs to be
-  // triggered inside the destructor, not before it.
+  // Conceptually we'd have to wait until the destructor of the distributor
+  // schedules a task on the strand of the query hub. However, because the boost
+  // asio API does not provide this flexibility, we instead have to rely on
+  // a small sleep to give the destructor enough time to do the scheduling.
+  // Increase the amount of milliseconds if this test starts to sporadically
+  // fail.
   flag.wait(false);
   std::this_thread::sleep_for(std::chrono::milliseconds{1});
 
