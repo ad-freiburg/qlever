@@ -89,7 +89,13 @@ ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
   QueryId reference = queryId.toQueryId();
   QueryHub queryHub{ioContext};
 
-  auto messageSender =
-      co_await MessageSender::create(std::move(queryId), queryHub);
-  EXPECT_EQ(reference, messageSender.getQueryId());
+  {
+    auto messageSender =
+        co_await MessageSender::create(std::move(queryId), queryHub);
+    EXPECT_EQ(reference, messageSender.getQueryId());
+  }
+  // The destructor of `MessageSender` calls `signalEnd` on the underlying
+  // distributor instance asynchronously, so we need to wait for it to be
+  // executed before destroying the backing `QueryHub` instance.
+  co_await net::post(net::use_awaitable);
 }
