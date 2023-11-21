@@ -139,16 +139,12 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
           *queryHub_, queryRegistry_, request, std::move(socket));
     };
   };
-  using WebSocketHandlerType =
-      std::invoke_result_t<decltype(webSocketSessionSupplier),
-                           net::io_context&>;
 
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
-  auto httpServer =
-      HttpServer<decltype(httpSessionHandler), WebSocketHandlerType>{
-          port_, "0.0.0.0", static_cast<int>(numThreads_),
-          std::move(httpSessionHandler), std::move(webSocketSessionSupplier)};
+  auto httpServer = HttpServer{port_, "0.0.0.0", static_cast<int>(numThreads_),
+                               std::move(httpSessionHandler),
+                               std::move(webSocketSessionSupplier)};
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations);

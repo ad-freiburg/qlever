@@ -288,4 +288,10 @@ class HttpServer {
   }
 };
 
+template <typename HttpHandler, typename WebSocketHandlerSupplier>
+HttpServer(unsigned short, const std::string&, int, HttpHandler,
+           WebSocketHandlerSupplier)
+    -> HttpServer<HttpHandler, std::invoke_result_t<WebSocketHandlerSupplier,
+                                                    net::io_context&>>;
+
 #endif  // QLEVER_HTTPSERVER_H

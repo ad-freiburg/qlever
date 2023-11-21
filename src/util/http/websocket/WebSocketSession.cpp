@@ -9,6 +9,7 @@
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <optional>
 
+#include "util/Algorithm.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/websocket/QueryHub.h"
 #include "util/http/websocket/QueryId.h"
@@ -98,11 +99,11 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
     if (cancelOnClose_) {
       tryToCancelQuery();
     }
+    static const std::array<boost::system::error_code, 4> allowedCodes{
+        beast::websocket::error::closed, net::error::operation_aborted,
+        net::error::eof, net::error::connection_reset};
     // Gracefully end if socket was closed
-    if (error.code() == beast::websocket::error::closed ||
-        error.code() == net::error::operation_aborted ||
-        error.code() == net::error::eof ||
-        error.code() == net::error::connection_reset) {
+    if (ad_utility::contains(allowedCodes, error.code())) {
       co_return;
     }
     // There was an unexpected error, rethrow
