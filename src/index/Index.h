@@ -5,6 +5,8 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
 
+#include <util/Rtree.h>
+
 #include <array>
 #include <optional>
 #include <string>
@@ -103,6 +105,8 @@ class Index {
   using TextVocab =
       Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
   [[nodiscard]] const TextVocab& getTextVocab() const;
+
+  const Rtree& getRtree() const;
 
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---

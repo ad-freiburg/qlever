@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "absl/strings/str_join.h"
+#include "engine/sparqlExpressions/ContainsExpression.h"
 #include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
@@ -122,7 +123,14 @@ ExpressionPtr Visitor::processIriFunctionCall(
       checkNumArgs(1);
       return sparqlExpression::makeTanExpression(std::move(argList[0]));
     }
+  } else if (checkPrefix(GEO_RTREE_PREFIX)) {
+    if (functionName == "boundingBoxContains") {
+      checkNumArgs(2);
+      return std::make_unique<ContainsExpression>(std::move(argList[0]),
+                                                  std::move(argList[1]));
+    }
   }
+
   reportNotSupported(ctx, "Function \"" + iri + "\" is");
 }
 
@@ -1021,7 +1029,7 @@ ObjectList Visitor::visit(Parser::ObjectListContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::ObjectRContext* ctx) {
+ad_utility::sparql_types::Node Visitor::visit(Parser::ObjectRContext* ctx) {
   return visit(ctx->graphNode());
 }
 
@@ -1232,13 +1240,14 @@ uint64_t Visitor::visit(Parser::IntegerContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::TriplesNodeContext* ctx) {
+ad_utility::sparql_types::Node Visitor::visit(Parser::TriplesNodeContext* ctx) {
   return visitAlternative<Node>(ctx->collection(),
                                 ctx->blankNodePropertyList());
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::BlankNodePropertyListContext* ctx) {
+ad_utility::sparql_types::Node Visitor::visit(
+    Parser::BlankNodePropertyListContext* ctx) {
   VarOrTerm var{GraphTerm{newBlankNode()}};
   Triples triples;
   auto propertyList = visit(ctx->propertyListNotEmpty());
@@ -1262,7 +1271,7 @@ void Visitor::visit(Parser::BlankNodePropertyListPathContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::CollectionContext* ctx) {
+ad_utility::sparql_types::Node Visitor::visit(Parser::CollectionContext* ctx) {
   Triples triples;
   VarOrTerm nextElement{
       GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}}};
@@ -1294,7 +1303,7 @@ void Visitor::visit(Parser::CollectionPathContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::GraphNodeContext* ctx) {
+ad_utility::sparql_types::Node Visitor::visit(Parser::GraphNodeContext* ctx) {
   if (ctx->varOrTerm()) {
     return {visit(ctx->varOrTerm()), Triples{}};
   } else {

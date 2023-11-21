@@ -24,6 +24,7 @@
 #include "util/CachingMemoryResource.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
+#include "util/RtreeFileReader.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/TupleHelpers.h"
 
@@ -366,14 +367,19 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto compressionOutfile = ad_utility::makeOfstream(
         onDiskBase_ + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyActionCompression =
-        [&compressionOutfile](const auto& word) {
+        [&compressionOutfile](const auto& word,
+                              [[maybe_unused]] const auto& index) {
           compressionOutfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
                              << '\n';
         };
+    auto externalVocabularyActionCompression =
+        []([[maybe_unused]] const auto& word,
+           [[maybe_unused]] const auto& index) {};
     m._noIdMapsAndIgnoreExternalVocab = true;
-    auto mergeResult = m.mergeVocabulary(
-        onDiskBase_ + TMP_BASENAME_COMPRESSION, numFiles, std::less<>(),
-        internalVocabularyActionCompression, stxxlMemory());
+    auto mergeResult =
+        m.mergeVocabulary(onDiskBase_ + TMP_BASENAME_COMPRESSION, numFiles,
+                          std::less<>(), internalVocabularyActionCompression,
+                          externalVocabularyActionCompression, stxxlMemory());
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
@@ -399,11 +405,37 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     };
     auto wordWriter =
         vocab_.makeUncompressingWordWriter(onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
-    auto internalVocabularyAction = [&wordWriter](const auto& word) {
+
+    std::ofstream convertOfs = std::ofstream(
+        onDiskBase_ + ".vocabulary.boundingbox.tmp", std::ios::binary);
+
+    auto internalVocabularyAction = [&wordWriter, &convertOfs](
+                                        const auto& word, const auto& index) {
       wordWriter.push(word.data(), word.size());
+      std::optional<BasicGeometry::BoundingBox> boundingBox =
+          BasicGeometry::ConvertWordToRtreeEntry(word);
+      if (boundingBox) {
+        FileReaderWithoutIndex::SaveEntry(boundingBox.value(), index,
+                                          convertOfs);
+      }
     };
-    return v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
-                             internalVocabularyAction, stxxlMemory());
+    auto externalVocabularyAction = [&convertOfs](const auto& word,
+                                                  const auto& index) {
+      std::optional<BasicGeometry::BoundingBox> boundingBox =
+          BasicGeometry::ConvertWordToRtreeEntry(word);
+      if (boundingBox) {
+        FileReaderWithoutIndex::SaveEntry(boundingBox.value(), index,
+                                          convertOfs);
+      }
+    };
+
+    VocabularyMerger::VocabularyMetaData result = v.mergeVocabulary(
+        onDiskBase_, numFiles, sortPred, internalVocabularyAction,
+        externalVocabularyAction, stxxlMemory());
+
+    convertOfs.close();
+
+    return result;
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
@@ -412,6 +444,17 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(INFO) << "Number of words in external vocabulary: "
             << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
             << std::endl;
+
+  res.idTriples = std::move(*idTriples.wlock());
+  LOG(INFO) << "Building the Rtree..." << std::endl;
+  try {
+    Rtree rtree = Rtree(10000000000);
+    uint64_t treeSize = rtree.BuildTree(onDiskBase_, ".vocabulary.boundingbox", 16,
+                    "./rtree_build");
+    LOG(INFO) << "Finished building the Rtree with " << treeSize << " elements." << std::endl;
+  } catch (const std::exception& e) {
+    LOG(INFO) << e.what() << std::endl;
+  }
 
   res.idTriples = std::move(*idTriples.wlock());
   res.actualPartialSizes = std::move(actualPartialSizes);
@@ -683,6 +726,8 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
         avgNumDistinctPredicatesPerSubject_, numDistinctSubjectPredicatePairs_,
         patterns_, hasPattern_);
   }
+
+  // Load the Rtree TODO
 }
 
 // _____________________________________________________________________________

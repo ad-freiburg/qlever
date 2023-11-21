@@ -29,6 +29,7 @@
 #include <util/Forward.h>
 #include <util/HashMap.h>
 #include <util/MmapVector.h>
+#include <util/Rtree.h>
 #include <util/json.h>
 
 #include <array>
@@ -124,6 +125,7 @@ class IndexImpl {
   size_t totalVocabularySize_ = 0;
   bool vocabPrefixCompressed_ = true;
   Index::TextVocab textVocab_;
+  Rtree rtree_ = Rtree(4000000000);
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
@@ -232,6 +234,8 @@ class IndexImpl {
   auto& getNonConstVocabForTesting() { return vocab_; }
 
   const auto& getTextVocab() const { return textVocab_; };
+
+  const auto& getRtree() const { return rtree_; };
 
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---
