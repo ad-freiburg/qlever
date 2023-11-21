@@ -3,28 +3,24 @@
 // Author: Andre Schlegel (April of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include <chrono>
-#include <type_traits>
-#include <variant>
+#include <string>
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-#include "util/Timer.h"
-#include "util/json.h"
+#include "util/Exception.h"
+
+using namespace std::chrono_literals;
+using namespace std::string_literals;
 
 namespace ad_benchmark {
-/*
-@brief Creates a lambda, that waits the given amount of milliseconds,
-before finishing. Note: 1000 milliseconds are 1 second.
-*/
-static auto createWaitLambda(const size_t& waitDuration) {
-  return [&waitDuration]() {
-    // This will measure, if at least the given amount of time has passed.
-    ad_utility::TimeoutTimer timer(std::chrono::milliseconds{waitDuration},
-                                   ad_utility::Timer::InitialStatus::Started);
-    // Just do nothing, while waiting.
-    while (!timer.hasTimedOut())
+/// Create a lambda that waits the given amount of time.
+static auto createWaitLambda(std::chrono::milliseconds waitDuration) {
+  return [waitDuration]() {
+    auto end = std::chrono::steady_clock::now() + waitDuration;
+    while (std::chrono::steady_clock::now() < end)
       ;
   };
 }
@@ -32,29 +28,31 @@ static auto createWaitLambda(const size_t& waitDuration) {
 TEST(BenchmarkMeasurementContainerTest, ResultEntry) {
   // There's really no special cases.
   const std::string entryDescriptor{"entry"};
-  // The function should just wait 0.1 seconds.
-  constexpr size_t waitTimeinMillieseconds = 100;
+  // The function should just wait 0.01 seconds.
+  constexpr auto waitTime = 10ms;
 
   // The normal constructor.
   ResultEntry entryNormalConstructor(entryDescriptor,
-                                     createWaitLambda(waitTimeinMillieseconds));
+                                     createWaitLambda(waitTime));
 
   ASSERT_EQ(entryNormalConstructor.descriptor_, entryDescriptor);
 
-  // The time measurements can't be 100% accurat, so we give it a 'window'.
-  ASSERT_NEAR(waitTimeinMillieseconds / 1000.0,
-              entryNormalConstructor.measuredTime_, 0.01);
+  // The time measurements can't be 100% accurate, so we give it a 'window'.
+  ASSERT_NEAR(waitTime.count() / 1000.0, entryNormalConstructor.measuredTime_,
+              0.01);
 
   // The constructor with custom log descriptor.
   ResultEntry entryLogConstructor(entryDescriptor, "t",
-                                  createWaitLambda(waitTimeinMillieseconds));
+                                  createWaitLambda(waitTime));
 
-  // The time measurements can't be 100% accurat, so we give it a 'window'.
-  ASSERT_NEAR(waitTimeinMillieseconds / 1000.0,
-              entryLogConstructor.measuredTime_, 0.01);
+  // The time measurements can't be 100% accurate, so we give it a 'window'.
+  ASSERT_NEAR(waitTime.count() / 1000.0, entryLogConstructor.measuredTime_,
+              0.01);
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
+  // The function should just wait 0.01 seconds.
+  constexpr auto waitTime = 10ms;
   // There's really no special cases.
   ResultGroup group("group");
 
@@ -63,13 +61,14 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
   ASSERT_EQ(group.resultTables_.size(), 0);
 
   // Adding a measurement and checking, if it was added correctly.
-  ResultEntry& entry = group.addMeasurement("new entry", createWaitLambda(100));
+  ResultEntry& entry =
+      group.addMeasurement("new entry", createWaitLambda(waitTime));
 
   ASSERT_EQ(group.resultEntries_.size(), 1);
   ASSERT_EQ(entry.descriptor_, "new entry");
 
-  // The time measurements can't be 100% accurat, so we give it a 'window'.
-  ASSERT_NEAR(0.1, entry.measuredTime_, 0.01);
+  // The time measurements can't be 100% accurate, so we give it a 'window'.
+  ASSERT_NEAR(waitTime.count() / 1000.0, entry.measuredTime_, 0.01);
 
   // Adding a table and checking, if it was added correctly.
   const std::vector<std::string> rowNames = {"row1", "row2"};
@@ -82,6 +81,47 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
   ASSERT_EQ(table.numColumns(), 1);
   ASSERT_EQ(table.getEntry<std::string>(0, 0), rowNames.at(0));
   ASSERT_EQ(table.getEntry<std::string>(1, 0), rowNames.at(1));
+}
+
+/*
+@brief Call the function with each of the alternatives in
+`ad_benchmark::ResultTable::EntryType`, except `std::monostate`, as template
+parameter.
+
+@tparam Function The loop body should be a templated function, with one
+`typename` template argument and no more. It also shouldn't take any function
+arguments. Should be passed per deduction.
+*/
+template <typename Function>
+static void doForTypeInResultTableEntryType(Function function) {
+  ad_utility::forEachTypeInTemplateType<ResultTable::EntryType>(
+      [&function]<typename IndexType>() {
+        // `std::monostate` is not important for these kinds of tests.
+        if constexpr (!ad_utility::isSimilar<IndexType, std::monostate>) {
+          function.template operator()<IndexType>();
+        }
+      });
+}
+
+// Helper function for creating `ad_benchmark::ResultTable::EntryType` dummy
+// values.
+template <typename Type>
+requires ad_utility::isTypeContainedIn<Type, ResultTable::EntryType>
+static Type createDummyValueEntryType() {
+  if constexpr (ad_utility::isSimilar<Type, float>) {
+    return 4.2f;
+  } else if constexpr (ad_utility::isSimilar<Type, std::string>) {
+    return "test"s;
+  } else if constexpr (ad_utility::isSimilar<Type, bool>) {
+    return true;
+  } else if constexpr (ad_utility::isSimilar<Type, size_t>) {
+    return 17361644613946UL;
+  } else if constexpr (ad_utility::isSimilar<Type, int>) {
+    return -42;
+  } else {
+    // Not a supported type.
+    AD_FAIL();
+  }
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultTable) {
@@ -119,8 +159,9 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
         table.entries_.at(row).at(column)));
 
     // Does trying to access it anyway cause an error?
-    ASSERT_ANY_THROW(table.getEntry<std::string>(row, column));
-    ASSERT_ANY_THROW(table.getEntry<float>(row, column));
+    doForTypeInResultTableEntryType([&table, &row, &column]<typename T>() {
+      ASSERT_ANY_THROW(table.getEntry<T>(row, column));
+    });
   };
 
   /*
@@ -131,10 +172,20 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
                                  const auto&... wantedContent) {
     size_t column = 0;
     auto check = [&table, &rowNumber, &column,
-                  &assertEqual](const auto& wantedContent) mutable {
-      assertEqual(wantedContent,
-                  table.getEntry<std::decay_t<decltype(wantedContent)>>(
-                      rowNumber, column++));
+                  &assertEqual]<typename T>(const T& wantedContent) mutable {
+      // `getEntry` should ONLY work with `T`
+      doForTypeInResultTableEntryType(
+          [&table, &rowNumber, &column, &assertEqual,
+           &wantedContent]<typename PossiblyWrongType>() {
+            if constexpr (ad_utility::isSimilar<PossiblyWrongType, T>) {
+              assertEqual(wantedContent,
+                          table.getEntry<std::decay_t<T>>(rowNumber, column));
+            } else {
+              ASSERT_ANY_THROW(
+                  table.getEntry<PossiblyWrongType>(rowNumber, column));
+            }
+          });
+      column++;
     };
     ((check(wantedContent)), ...);
   };
@@ -160,44 +211,59 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   // Was it created correctly?
   checkForm(table, "My table", "My table", rowNames, columnNames);
 
-  // Add measured function to it.
-  table.addMeasurement(0, 1, createWaitLambda(100));
-
-  // Set custom entries.
-  table.setEntry(0, 2, (float)4.9);
-  table.setEntry(1, 1, "Custom entry");
-
-  // Check the entries.
-  checkRow(table, 0, std::string{"row1"}, static_cast<float>(0.1),
-           static_cast<float>(4.9));
-  checkRow(table, 1, std::string{"row2"}, std::string{"Custom entry"});
-  checkNeverSet(table, 1, 2);
-
-  // Trying to get entries with the wrong type, should cause an error.
-  ASSERT_ANY_THROW(table.getEntry<std::string>(0, 2));
-  ASSERT_ANY_THROW(table.getEntry<float>(1, 1));
-
-  // Can we add a new row, without changing things?
-  table.addRow();
-  table.setEntry(2, 0, std::string{"row3"});
-  checkForm(table, "My table", "My table", {"row1", "row2", "row3"},
-            columnNames);
-  checkRow(table, 0, std::string{"row1"}, static_cast<float>(0.1),
-           static_cast<float>(4.9));
-  checkRow(table, 1, std::string{"row2"}, std::string{"Custom entry"});
-
-  // Are the entries of the new row empty?
-  checkNeverSet(table, 2, 1);
-  checkNeverSet(table, 2, 2);
-
-  // To those new fields work like the old ones?
-  table.addMeasurement(2, 1, createWaitLambda(290));
-  table.setEntry(2, 2, "Custom entry #2");
-  checkRow(table, 2, std::string{"row3"}, static_cast<float>(0.29),
-           std::string{"Custom entry #2"});
-
   // Does the constructor for the custom log name work?
   checkForm(ResultTable("My table", "T", rowNames, columnNames), "My table",
             "T", rowNames, columnNames);
+
+  // Add measured function to it.
+  table.addMeasurement(0, 1, createWaitLambda(10ms));
+
+  // Check, if it works with custom entries.
+  doForTypeInResultTableEntryType(
+      [&table, &checkNeverSet, &checkRow]<typename T1>() {
+        doForTypeInResultTableEntryType([&table, &checkNeverSet,
+                                         &checkRow]<typename T2>() {
+          // Set custom entries.
+          table.setEntry(0, 2, createDummyValueEntryType<T1>());
+          table.setEntry(1, 1, createDummyValueEntryType<T2>());
+
+          // Check the entries.
+          checkRow(table, 0, "row1"s, 0.01f, createDummyValueEntryType<T1>());
+          checkRow(table, 1, "row2"s, createDummyValueEntryType<T2>());
+          checkNeverSet(table, 1, 2);
+        });
+      });
+
+  // For keeping track of the new row names.
+  std::vector<std::string> addRowRowNames(rowNames);
+  // Testing `addRow`.
+  doForTypeInResultTableEntryType([&table, &checkNeverSet, &checkRow,
+                                   &checkForm, &columnNames,
+                                   &addRowRowNames]<typename T>() {
+    // What is the index of the new row?
+    const size_t indexNewRow = table.numRows();
+
+    // Can we add a new row, without changing things?
+    table.addRow();
+    addRowRowNames.emplace_back(absl::StrCat("row", indexNewRow + 1));
+    table.setEntry(indexNewRow, 0, addRowRowNames.back());
+    checkForm(table, "My table", "My table", addRowRowNames, columnNames);
+    checkRow(table, 0, "row1"s, 0.01f);
+    checkRow(table, 1, "row2"s);
+    checkNeverSet(table, 1, 2);
+
+    // Are the entries of the new row empty?
+    checkNeverSet(table, indexNewRow, 1);
+    checkNeverSet(table, indexNewRow, 2);
+
+    // To those new fields work like the old ones?
+    table.addMeasurement(indexNewRow, 1, createWaitLambda(29ms));
+    table.setEntry(indexNewRow, 2, createDummyValueEntryType<T>());
+    checkRow(table, indexNewRow, addRowRowNames.back(), 0.029f,
+             createDummyValueEntryType<T>());
+  });
+
+  // Just a simple existence test for printing.
+  const auto tableAsString = static_cast<std::string>(table);
 }
 }  // namespace ad_benchmark

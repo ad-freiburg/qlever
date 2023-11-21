@@ -6,7 +6,7 @@
 #define QLEVER_ASIOHELPERS_H
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/asio/dispatch.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include "util/Exception.h"
@@ -15,24 +15,29 @@ namespace ad_utility {
 
 namespace net = boost::asio;
 
-/// Helper function that ensures that co_await resumes on the same
-/// executor it started with.
+/// Helper function that ensures that co_await resumes on the executor
+/// this coroutine was co_spawned on.
 /// IMPORTANT: If the coroutine is cancelled, no guarantees are given. Make
 /// sure to keep that in mind when handling cancellation errors!
+// TODO<RobinTF, joka921> When using `net::dispatch()` instead of `net::post()`
+// and the `awaitable` itself dispatches to a strand, then this strand is not
+// left in all cases when leaving this function. Further investigate whether we
+// lack understanding here or whether this is a bug in `Boost::ASIO`.
 template <typename T>
-inline net::awaitable<T> sameExecutor(net::awaitable<T> awaitable) {
-  auto initialExecutor = co_await net::this_coro::executor;
+inline net::awaitable<T> resumeOnOriginalExecutor(net::awaitable<T> awaitable) {
   std::exception_ptr exceptionPtr;
   try {
     T result = co_await std::move(awaitable);
-    co_await net::dispatch(initialExecutor, net::use_awaitable);
+    co_await net::post(net::use_awaitable);
     co_return result;
   } catch (...) {
     exceptionPtr = std::current_exception();
   }
   auto cancellationState = co_await net::this_coro::cancellation_state;
   if (cancellationState.cancelled() == net::cancellation_type::none) {
-    co_await net::dispatch(initialExecutor, net::use_awaitable);
+    // use_awaitable always resumes the coroutine on the executor the coroutine
+    // was co_spawned on
+    co_await net::post(net::use_awaitable);
   }
   AD_CORRECTNESS_CHECK(exceptionPtr);
   std::rethrow_exception(exceptionPtr);
@@ -40,10 +45,10 @@ inline net::awaitable<T> sameExecutor(net::awaitable<T> awaitable) {
 
 // _____________________________________________________________________________
 
-/// Helper function that ensures that co_await resumes on the same
-/// executor it started with. Overload for void.
-inline net::awaitable<void> sameExecutor(net::awaitable<void> awaitable) {
-  auto initialExecutor = co_await net::this_coro::executor;
+/// Helper function that ensures that co_await resumes on the executor
+/// this coroutine was co_spawned on. Overload for void.
+inline net::awaitable<void> resumeOnOriginalExecutor(
+    net::awaitable<void> awaitable) {
   std::exception_ptr exceptionPtr;
   try {
     co_await std::move(awaitable);
@@ -52,7 +57,9 @@ inline net::awaitable<void> sameExecutor(net::awaitable<void> awaitable) {
   }
   if ((co_await net::this_coro::cancellation_state).cancelled() ==
       net::cancellation_type::none) {
-    co_await net::dispatch(initialExecutor, net::use_awaitable);
+    // use_awaitable always resumes the coroutine on the executor the coroutine
+    // was co_spawned on
+    co_await net::post(net::use_awaitable);
   }
   if (exceptionPtr) {
     std::rethrow_exception(exceptionPtr);

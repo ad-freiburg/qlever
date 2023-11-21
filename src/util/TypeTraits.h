@@ -215,4 +215,70 @@ template <typename... Ts>
 requires(sizeof...(Ts) > 0)
 using First = typename detail::FirstWrapper<Ts...>::type;
 
+/// Concept for `std::is_invocable_r_v`.
+template <typename Func, typename R, typename... ArgTypes>
+concept InvocableWithConvertibleReturnType =
+    std::is_invocable_r_v<R, Func, ArgTypes...>;
+
+/*
+The following concepts are similar to `std::is_invocable_r_v` with the following
+difference: `std::is_invocable_r_v` only checks that the return type of a
+function is convertible to the specified type, but the following concepts check
+for an exact match of the return type (`InvocableWithExactReturnType`) or a
+similar return type (`invocablewithsimilarreturntype`), meaning that the types
+are the same when ignoring `const`, `volatile`, and reference qualifiers.
+*/
+
+/*
+@brief Require `Fn` to be invocable with `Args...` and the return type to be
+`isSimilar` to `Ret`.
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept InvocableWithSimilarReturnType =
+    std::invocable<Fn, Args...> &&
+    isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
+
+/*
+@brief Require `Fn` to be invocable with `Args...` and the return type to be
+ `Ret`.
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept InvocableWithExactReturnType =
+    std::invocable<Fn, Args...> &&
+    std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
+
+/*
+@brief Require `Fn` to be regular invocable with `Args...` and the return type
+to be `isSimilar` to `Ret`.
+
+Note: Currently, the difference between invocable and regular invocable is
+purely semantic. In other words, we can not, currently, actually check, if an
+invocable type is regular invocable, or not.
+For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept RegularInvocableWithSimilarReturnType =
+    std::regular_invocable<Fn, Args...> &&
+    isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
+
+/*
+@brief Require `Fn` to be regular invocable with `Args...` and the return type
+to be `Ret`.
+
+Note: Currently, the difference between invocable and regular invocable is
+purely semantic. In other words, we can not, currently, actually check, if an
+invocable type is regular invocable, or not.
+For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept RegularInvocableWithExactReturnType =
+    std::regular_invocable<Fn, Args...> &&
+    std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
+
+// True iff `T` is a value type or an rvalue reference. Can be used to force
+// rvalue references for templated functions: For example: void f(auto&& x) //
+// might be lvalue, because the && denotes a forwarding reference. void f(Rvalue
+// auto&& x) // guaranteed rvalue reference, can safely be moved.
+template <typename T>
+concept Rvalue = std::is_rvalue_reference_v<T&&>;
 }  // namespace ad_utility

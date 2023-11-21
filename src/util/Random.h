@@ -13,29 +13,33 @@
 #include <type_traits>
 #include <vector>
 
+#include "global/TypedIndex.h"
+
+namespace ad_utility {
+// The seed type for random number generators.
+using RandomSeed = ad_utility::TypedIndex<unsigned int, "Seed">;
+
 /**
- * A simple and fast Pseudo-Random-Number-Generator called Xoroshiro128+, for
- * details see
+ * A simple and fast Pseudo-Random-Number-Generator called Xoroshiro128+,
+ * for details see
  * https://thompsonsed.co.uk/random-number-generators-for-c-performance-tested
  * Limiting the range of the generated numbers is currently not supported.
- * Requires that `Int` is an integral type that fits into 64 bits. If used with
- * a type that does not fulfill this property, the template will not match
- * (because of the std::enable_if) and there will be a compile-time error.
+ * Requires that `Int` is an integral type that fits into 64 bits. If used
+ * with a type that does not fulfill this property, the template will not
+ * match (because of the std::enable_if) and there will be a compile-time
+ * error.
  */
 template <typename Int>
 requires(std::is_integral_v<Int> && sizeof(Int) <= sizeof(uint64_t))
 class FastRandomIntGenerator {
  public:
-  FastRandomIntGenerator() {
+  explicit FastRandomIntGenerator(
+      RandomSeed seed = RandomSeed::make(std::random_device{}())) {
     // Randomly initialize the shuffleTable
-    std::random_device seeder{};
-    // `std::random_device` only yields 32 bit values, so we need two of them
-    // for each entry of `_shuffleTable`
-    static_assert(sizeof(decltype(seeder())) == 4);
+    std::mt19937_64 randomEngine{seed.get()};
+    std::uniform_int_distribution<uint64_t> distribution;
     for (auto& el : _shuffleTable) {
-      el = seeder();
-      el <<= 32;
-      el |= seeder();
+      el = distribution(randomEngine);
     }
   }
 
@@ -69,14 +73,16 @@ class FastRandomIntGenerator {
 template <typename Int, typename = std::enable_if_t<std::is_integral_v<Int>>>
 class SlowRandomIntGenerator {
  public:
-  explicit SlowRandomIntGenerator(Int min = std::numeric_limits<Int>::min(),
-                                  Int max = std::numeric_limits<Int>::max())
-      : _randomEngine{std::random_device{}()}, _distribution{min, max} {}
+  explicit SlowRandomIntGenerator(
+      Int min = std::numeric_limits<Int>::min(),
+      Int max = std::numeric_limits<Int>::max(),
+      RandomSeed seed = RandomSeed::make(std::random_device{}()))
+      : _randomEngine{seed.get()}, _distribution{min, max} {}
 
   Int operator()() { return _distribution(_randomEngine); }
 
  private:
-  std::default_random_engine _randomEngine;
+  std::mt19937_64 _randomEngine;
   std::uniform_int_distribution<Int> _distribution;
 };
 
@@ -87,20 +93,23 @@ class RandomDoubleGenerator {
  public:
   explicit RandomDoubleGenerator(
       double min = std::numeric_limits<double>::min(),
-      double max = std::numeric_limits<double>::max())
-      : _randomEngine{std::random_device{}()}, _distribution{min, max} {}
+      double max = std::numeric_limits<double>::max(),
+      RandomSeed seed = RandomSeed::make(std::random_device{}()))
+      : _randomEngine{seed.get()}, _distribution{min, max} {}
 
   double operator()() { return _distribution(_randomEngine); }
 
  private:
-  std::default_random_engine _randomEngine;
+  std::mt19937_64 _randomEngine;
   std::uniform_real_distribution<double> _distribution;
 };
 
 /// Randomly shuffle range denoted by `[begin, end)`
 template <typename RandomIt>
-void randomShuffle(RandomIt begin, RandomIt end) {
-  std::random_device rd;
-  std::mt19937 g(rd());
+void randomShuffle(RandomIt begin, RandomIt end,
+                   RandomSeed seed = RandomSeed::make(std::random_device{}())) {
+  std::mt19937 g(seed.get());
   std::shuffle(begin, end, g);
 }
+
+}  // namespace ad_utility

@@ -1161,15 +1161,8 @@ PropertyPath Visitor::visit(Parser::PathEltContext* ctx) {
   PropertyPath p = visit(ctx->pathPrimary());
 
   if (ctx->pathMod()) {
-    // TODO move case distinction +/*/? into PropertyPath.
-    if (ctx->pathMod()->getText() == "+") {
-      p = PropertyPath::makeTransitiveMin(p, 1);
-    } else if (ctx->pathMod()->getText() == "?") {
-      p = PropertyPath::makeTransitiveMax(p, 1);
-    } else {
-      AD_CORRECTNESS_CHECK(ctx->pathMod()->getText() == "*");
-      p = PropertyPath::makeTransitive(p);
-    }
+    std::string modifier = ctx->pathMod()->getText();
+    p = PropertyPath::makeModified(p, modifier);
   }
   return p;
 }
@@ -1674,6 +1667,12 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeMonthExpression);
   } else if (functionName == "day") {
     return createUnary(&makeDayExpression);
+  } else if (functionName == "hours") {
+    return createUnary(&makeHoursExpression);
+  } else if (functionName == "minutes") {
+    return createUnary(&makeMinutesExpression);
+  } else if (functionName == "seconds") {
+    return createUnary(&makeSecondsExpression);
   } else if (functionName == "rand") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<RandomExpression>();

@@ -17,14 +17,20 @@
 #include "engine/VariableToColumnMap.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/Variable.h"
+#include "util/CancellationHandle.h"
+#include "util/CompilerExtensions.h"
 #include "util/Exception.h"
 #include "util/Log.h"
-#include "util/Timer.h"
+#include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
 
 class Operation {
+  using SharedCancellationHandle =
+      std::shared_ptr<ad_utility::CancellationHandle>;
+  using Milliseconds = std::chrono::milliseconds;
+
  public:
   // Default Constructor.
   Operation() : _executionContext(nullptr) {}
@@ -112,10 +118,18 @@ class Operation {
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
 
-  RuntimeInformation& getRuntimeInfo() { return _runtimeInfo; }
+  RuntimeInformation& runtimeInfo() const { return *_runtimeInfo; }
+
+  std::shared_ptr<RuntimeInformation> getRuntimeInfoPointer() {
+    return _runtimeInfo;
+  }
+
   RuntimeInformationWholeQuery& getRuntimeInfoWholeQuery() {
     return _runtimeInfoWholeQuery;
   }
+
+  /// Notify the `QueryExecutionContext` of the latest `RuntimeInformation`.
+  void signalQueryUpdate() const;
 
   /**
    * @brief Get the result for the subtree rooted at this element. Use existing
@@ -134,11 +148,20 @@ class Operation {
   shared_ptr<const ResultTable> getResult(bool isRoot = false,
                                           bool onlyReadFromCache = false);
 
-  // Use the same timeout timer for all children of an operation (= query plan
-  // rooted at that operation). As soon as one child times out, the whole
-  // operation times out.
-  void recursivelySetTimeoutTimer(
-      const ad_utility::SharedConcurrentTimeoutTimer& timer);
+  // Use the same cancellation handle for all children of an operation (= query
+  // plan rooted at that operation). As soon as one child is aborted, the whole
+  // operation is aborted out.
+  void recursivelySetCancellationHandle(
+      SharedCancellationHandle cancellationHandle);
+
+  template <typename Rep, typename Period>
+  void recursivelySetTimeConstraint(
+      std::chrono::duration<Rep, Period> duration) {
+    recursivelySetTimeConstraint(std::chrono::steady_clock::now() + duration);
+  }
+
+  void recursivelySetTimeConstraint(
+      std::chrono::steady_clock::time_point deadline);
 
   // True iff this operation directly implement a `LIMIT` clause on its result.
   [[nodiscard]] virtual bool supportsLimit() const { return false; }
@@ -151,7 +174,8 @@ class Operation {
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
-  virtual void createRuntimeInfoFromEstimates() final;
+  virtual void createRuntimeInfoFromEstimates(
+      std::shared_ptr<const RuntimeInformation> root) final;
 
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
@@ -189,34 +213,31 @@ class Operation {
     return _warnings;
   }
 
-  // Check if there is still time left and throw a TimeoutException otherwise.
-  // This will be called at strategic places on code that potentially can take a
-  // (too) long time.
-  void checkTimeout() const;
-
-  // Handles the timeout of this operation.
-  ad_utility::SharedConcurrentTimeoutTimer _timeoutTimer =
-      std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-          ad_utility::TimeoutTimer::unlimited());
-
-  // Returns a lambda with the following behavior: For every call, increase the
-  // internal counter i by countIncrease. If the counter exceeds countMax, check
-  // for timeout and reset the counter to zero. That way, the expensive timeout
-  // check is called only rarely. Note that we sometimes need to "simulate"
-  // several operations at a time, hence the countIncrease.
-  auto checkTimeoutAfterNCallsFactory(
-      size_t numOperationsBetweenTimeoutChecks =
-          NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS) const {
-    return [numOperationsBetweenTimeoutChecks, i = 0ull,
-            this](size_t countIncrease = 1) mutable {
-      i += countIncrease;
-      if (i >= numOperationsBetweenTimeoutChecks) {
-        _timeoutTimer->wlock()->checkTimeoutAndThrow(
-            [this]() { return "Timeout in " + getDescriptor(); });
-        i = 0;
-      }
-    };
+  // Check if the cancellation flag has been set and throw an exception if
+  // that's the case. This will be called at strategic places on code that
+  // potentially can take a (too) long time. This function is designed to be
+  // as lightweight as possible because of that. The `detailSupplier` allows to
+  // pass a message to add to any potential exception that might be thrown.
+  AD_ALWAYS_INLINE void checkCancellation(
+      const ad_utility::InvocableWithConvertibleReturnType<
+          std::string_view> auto& detailSupplier) const {
+    cancellationHandle_->throwIfCancelled(detailSupplier);
   }
+
+  // Same as checkCancellation, but with the descriptor of this operation
+  // as string.
+  AD_ALWAYS_INLINE void checkCancellation() const {
+    cancellationHandle_->throwIfCancelled(&Operation::getDescriptor, this);
+  }
+
+  std::chrono::milliseconds remainingTime() const;
+
+  /// Pointer to the cancellation handle of this operation.
+  SharedCancellationHandle cancellationHandle_ =
+      std::make_shared<SharedCancellationHandle::element_type>();
+
+  std::chrono::steady_clock::time_point deadline_ =
+      std::chrono::steady_clock::time_point::max();
 
   // Get the mapping from variables to column indices. This mapping may only be
   // used internally, because the actually visible variables might be different
@@ -232,7 +253,7 @@ class Operation {
   // it has either been succesfully computed or read from the cache.
   virtual void updateRuntimeInformationOnSuccess(
       const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
-      size_t timeInMilliseconds) final;
+      Milliseconds duration) final;
 
   // Similar to the function above, but the components are specified manually.
   // If nullopt is specified for the last argument, then the `_runtimeInfo` is
@@ -241,7 +262,7 @@ class Operation {
   // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
       const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
-      size_t timeInMilliseconds,
+      Milliseconds duration,
       std::optional<RuntimeInformation> runtimeInfo) final;
 
  public:
@@ -254,7 +275,7 @@ class Operation {
   // children were evaluated nevertheless. For an example usage of this feature
   // see `GroupBy.cpp`
   virtual void updateRuntimeInformationWhenOptimizedOut(
-      std::vector<RuntimeInformation> children,
+      std::vector<std::shared_ptr<RuntimeInformation>> children,
       RuntimeInformation::Status status =
           RuntimeInformation::Status::optimizedOut);
 
@@ -270,7 +291,7 @@ class Operation {
  private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.
-  void updateRuntimeInformationOnFailure(size_t timeInMilliseconds);
+  void updateRuntimeInformationOnFailure(Milliseconds duration);
 
   // Compute the variable to column index mapping. Is used internally by
   // `getInternallyVisibleVariableColumns`.
@@ -284,7 +305,11 @@ class Operation {
   template <typename F>
   void forAllDescendants(F f) const;
 
-  RuntimeInformation _runtimeInfo;
+  std::shared_ptr<RuntimeInformation> _runtimeInfo =
+      std::make_shared<RuntimeInformation>();
+  /// Pointer to the head of the `RuntimeInformation`.
+  /// Used in `signalQueryUpdate()`, reset in `createRuntimeInfoFromEstimates()`
+  std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
   RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 
   // Collect all the warnings that were created during the creation or

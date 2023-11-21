@@ -157,11 +157,6 @@ class QueryExecutionTree {
     return _rootOperation->collectWarnings();
   }
 
-  void recursivelySetTimeoutTimer(
-      ad_utility::SharedConcurrentTimeoutTimer timer) {
-    _rootOperation->recursivelySetTimeoutTimer(std::move(timer));
-  }
-
   template <typename F>
   void forAllDescendants(F f) {
     static_assert(

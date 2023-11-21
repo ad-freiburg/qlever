@@ -35,7 +35,7 @@ std::pair<std::string, const char*> Date::toStringAndType() const {
     constexpr static std::string_view formatString = "%04d-%02d";
     dateString = absl::StrFormat(formatString, getYear(), getMonth());
     type = XSD_GYEARMONTH_TYPE;
-  } else if (getHour() == -1) {
+  } else if (!hasTime()) {
     constexpr static std::string_view formatString = "%04d-%02d-%02d";
     dateString = absl::StrFormat(formatString, getYear(), getMonth(), getDay());
     type = XSD_DATE_TYPE;
