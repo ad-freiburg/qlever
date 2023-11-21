@@ -88,9 +88,15 @@ class MetaDataWrapperDense {
 
   // ____________________________________________________________
   void set(Id id, const value_type& value) {
-    // Assert that the ids are ascending.
-    AD_CONTRACT_CHECK(_vec.size() == 0 || _vec.back().col0Id_ < id);
-    _vec.push_back(value);
+    // Either this is a push or an overwrite of a previous metadata.
+    if(_vec.size() == 0 || _vec.back().col0Id_ < id) {
+      _vec.push_back(value);
+    }
+    else {
+      auto it = lower_bound_non_const(id);
+      AD_CONTRACT_CHECK(it != _vec.end() && it->col0Id_ == id);
+      *it = value;
+    }
   }
 
   // __________________________________________________________
@@ -111,6 +117,12 @@ class MetaDataWrapperDense {
 
  private:
   ConstIterator lower_bound(Id id) const {
+    auto cmp = [](const auto& metaData, Id id) {
+      return metaData.col0Id_ < id;
+    };
+    return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
+  }
+  Iterator lower_bound_non_const(Id id) {
     auto cmp = [](const auto& metaData, Id id) {
       return metaData.col0Id_ < id;
     };

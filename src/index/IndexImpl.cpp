@@ -182,22 +182,19 @@ void IndexImpl::createFromFile(const string& filename) {
       allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
-  // TODO<joka921> reintroduce the unique sorter
-  /*
-  auto uniqueSorter = ad_utility::uniqueView<decltype(psoSorter.sortedView()),
-                                             IdTableStatic<3>::row_type>(
-      psoSorter.sortedView());
-      */
+  auto uniqueSorter = ad_utility::uniqueBlockView<decltype(psoSorter.getSortedBlocks<0>()),
+                                             IdTableStatic<0>::row_type>(
+      psoSorter.getSortedBlocks<0>());
 
   size_t numPredicatesNormal = 0;
-  /*
   createPermutationPair(
       std::move(uniqueSorter), pso_, pos_, spoSorter.makePushCallback(),
       makeNumEntitiesCounter(numPredicatesNormal, 1), countActualTriples);
-      */
+  /*
   createPermutationPair(
       psoSorter.getSortedBlocks<0>(), pso_, pos_, spoSorter.makePushCallback(),
       makeNumEntitiesCounter(numPredicatesNormal, 1), countActualTriples);
+      */
   configurationJson_["num-predicates-normal"] = numPredicatesNormal;
   configurationJson_["num-triples-normal"] = numTriplesNormal;
   writeConfiguration();
@@ -619,6 +616,17 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   auto [blocks1, blocks2] = CompressedRelationWriter::createPermutationPairImpl(
       fileName1, writer1, writer2, std::move(sortedTriples), c0, c1, c2,
       callback1, callback2, std::move(callbacks));
+
+  /*
+  std::cerr << "dumping metaData1" << std::endl;
+  for (auto el: metaData1.data()) {
+    std::cerr << el.col0Id_ << ' ' << el.numRows_ << ' ' << el.offsetInBlock_ << std::endl;
+  }
+  std::cerr << "dumping metaData2" << std::endl;
+  for (auto el: metaData2.data()) {
+    std::cerr << el.col0Id_ << ' ' << el.numRows_ << ' ' << el.offsetInBlock_ << std::endl;
+  }
+   */
 
   metaData1.blockData() = std::move(blocks1);
   metaData2.blockData() = std::move(blocks2);

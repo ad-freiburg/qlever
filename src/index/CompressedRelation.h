@@ -91,6 +91,11 @@ struct CompressedBlockMetadata {
     Id col2Id_;
     bool operator==(const PermutedTriple&) const = default;
 
+    friend std::ostream& operator<<(std::ostream& str, const PermutedTriple& trip) {
+      str << "Triple: " << trip.col0Id_ << ' ' << trip.col2Id_ << ' ' << trip.col2Id_ << std::endl;
+      return str;
+    }
+
     friend std::true_type allowTrivialSerialization(PermutedTriple, auto);
   };
   PermutedTriple firstTriple_;
