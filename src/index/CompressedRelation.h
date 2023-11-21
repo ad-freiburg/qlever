@@ -91,6 +91,7 @@ struct CompressedBlockMetadata {
     Id col2Id_;
     bool operator==(const PermutedTriple&) const = default;
 
+    // Formatted output for debugging.
     friend std::ostream& operator<<(std::ostream& str,
                                     const PermutedTriple& trip) {
       str << "Triple: " << trip.col0Id_ << ' ' << trip.col2Id_ << ' '
@@ -166,38 +167,44 @@ class CompressedRelationWriter {
  private:
   ad_utility::Synchronized<ad_utility::File> outfile_;
   ad_utility::Synchronized<std::vector<CompressedBlockMetadata>> blockBuffer_;
+  // If multiple small relations are stored in the same block, keep track of the
+  // first and last `col0Id`.
   Id currentBlockFirstCol0_ = Id::makeUndefined();
   Id currentBlockLastCol0_ = Id::makeUndefined();
 
   ad_utility::AllocatorWithLimit<Id> allocator_ =
       ad_utility::makeUnlimitedAllocator<Id>();
-  SmallRelationsBuffer previousSmallRelationsBuffer_{allocator_};
+  // A buffer for small relations that will be stored in the same block.
+  SmallRelationsBuffer smallRelationsBuffer_{allocator_};
+  // TODO<joka921> make this `MemorySize`.
   size_t numBytesPerBlock_;
 
+  // When we store a large relation with multiple blocks then we keep track of
+  // its `col0Id`, mostly for sanity checks.
   Id currentRelation_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
 
   ad_utility::TaskQueue<false> blockWriteQueue_{20, 10};
+
+  // A dummy value for multiplicities that can only later be determined.
+  static constexpr float multiplicityDummy = 42.4242;
 
  public:
   /// Create using a filename, to which the relation data will be written.
   explicit CompressedRelationWriter(ad_utility::File f, size_t numBytesPerBlock)
       : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock} {}
 
-  void addBlockForRelation(Id col0Id, std::shared_ptr<IdTable> otherIds);
-
   /// Get all the CompressedBlockMetaData that were created by the calls to
   /// addRelation. This also closes the writer. The typical workflow is:
   /// add all relations and then call this method.
-  auto getFinishedBlocks() && {
+  std::vector<CompressedBlockMetadata> getFinishedBlocks() && {
     finish();
-    auto unsortedBlocks = std::move(*(blockBuffer_.wlock()));
-    std::ranges::sort(
-        unsortedBlocks, {}, [](const CompressedBlockMetadata& bl) {
-          return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
-                          bl.firstTriple_.col2Id_);
-        });
-    return unsortedBlocks;
+    auto blocks = std::move(*(blockBuffer_.wlock()));
+    std::ranges::sort(blocks, {}, [](const CompressedBlockMetadata& bl) {
+      return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
+                      bl.firstTriple_.col2Id_);
+    });
+    return blocks;
   }
 
   // Compute the multiplicity of given the number of elements and the number of
@@ -209,31 +216,26 @@ class CompressedRelationWriter {
   static float computeMultiplicity(size_t numElements,
                                    size_t numDistinctElements);
 
+  // Return the blocksize (in number of triples) of this writer. Note that the
+  // actual sizes of blocks will slightly vary due to new relations starting in
+  // new blocks etc.
   size_t blocksize() const { return numBytesPerBlock_ / (2 * sizeof(Id)); }
 
- private:
+ public:
   /// Finish writing all relations which have previously been added, but might
   /// still be in some internal buffer.
- public:
   void finish() {
-    // TODO<joka921> Check that the remainder of the interface is safe.
-    // finishCurrentRelation();
+    AD_CORRECTNESS_CHECK(currentRelationPreviousSize_ == 0);
     writeBufferedRelationsToSingleBlock();
     blockWriteQueue_.finish();
     outfile_.wlock()->close();
   }
 
  private:
-  // Compress the contents of `previousSmallRelationsBuffer_` into a single
+  // Compress the contents of `smallRelationsBuffer_` into a single
   // block and write it to outfile_. Update `currentBlockData_` with the meta
-  // data of the written block. Then clear `previousSmallRelationsBuffer_`.
+  // data of the written block. Then clear `smallRelationsBuffer_`.
   void writeBufferedRelationsToSingleBlock();
-
-  // Compress the relation from `data` into one or more blocks, depending on
-  // its size. Write the blocks to `outfile_` and append all the created
-  // block metadata to `blockBuffer_`.
-  // void writeRelationToExclusiveBlocks(Id col0Id, const BufferedIdTable&
-  // data);
 
   // Compress the `column` and write it to the `outfile_`. Return the offset and
   // size of the compressed column in the `outfile_`.
@@ -245,10 +247,12 @@ class CompressedRelationWriter {
 
  public:
   // TODO<joka921> make most private, document, etc.
-  CompressedRelationMetadata writeSmallRelation(Id col0Id, size_t numDistinctC1,
-                                                IdTableView<0> buf);
+  CompressedRelationMetadata addSmallRelation(Id col0Id, size_t numDistinctC1,
+                                              IdTableView<0> relation);
 
   CompressedRelationMetadata finishCurrentRelation(size_t numDistinctC1);
+
+  void addBlockForRelation(Id col0Id, std::shared_ptr<IdTable> relation);
   static
       // _____________________________________________________________________________
       std::pair<std::vector<CompressedBlockMetadata>,

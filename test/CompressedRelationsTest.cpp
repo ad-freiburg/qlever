@@ -102,8 +102,8 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
         // store a dummy value here that we can check later.
         metaData.push_back(writer.finishCurrentRelation(i + 1));
       } else {
-        metaData.push_back(writer.writeSmallRelation(V(input.col0_), i + 1,
-                                                     buffer.asStaticView<0>()));
+        metaData.push_back(writer.addSmallRelation(V(input.col0_), i + 1,
+                                                   buffer.asStaticView<0>()));
       }
       buffer.clear();
       numBlocks = 0;

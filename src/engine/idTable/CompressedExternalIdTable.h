@@ -17,7 +17,6 @@
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/ParallelMultiwayMerge.h"
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
 #include "util/http/beast.h"
@@ -396,13 +395,6 @@ class CompressedExternalIdTableBase {
         });
   }
 
- public:
-  auto& getTransformedSingleBlock() {
-    AD_CORRECTNESS_CHECK(numBlocksPushed_ == 0);
-    blockTransformation_(this->currentBlock_);
-    return this->currentBlock_;
-  }
-
  protected:
   // If there is less than one complete block (meaning that the number of calls
   // to `push` was `< blocksize_`), apply the transformation to `currentBlock_`
@@ -569,32 +561,16 @@ class CompressedExternalIdTableSorter
                                         blocksizeCompression, comp) {}
 
   // Transition from the input phase, where `push()` can be called, to the
-  // output phase and return a generator that yields the sorted elements. This
-  // function must be called exactly once.
-  /*
-  cppcoro::generator<
-      const typename IdTableStatic<NumStaticCols>::const_row_reference>
-      */
+  // output phase and return a generator that yields the sorted elements one by
+  // one. Either this function or the following function must be called exactly
+  // once.
   auto sortedView() {
     return std::views::join(ad_utility::OwningView{getSortedBlocks()});
-    /*
-    size_t numYielded = 0;
-    mergeIsActive_.store(true);
-    for (const auto& block : ad_utility::streams::runStreamAsync(
-             sortedBlocks(), std::max(1, numBufferedOutputBlocks_ - 2), true)) {
-      for (typename IdTableStatic<NumStaticCols>::const_row_reference row :
-           block) {
-        ++numYielded;
-        co_yield row;
-      }
-    }
-    AD_CORRECTNESS_CHECK(numYielded == this->numElementsPushed_);
-    mergeIsActive_.store(false);
-     */
   }
-  // Transition from the input phase, where `push()` may be called, to the
-  // output phase and return a generator that yields the sorted elements. This
-  // function may be called exactly once.
+
+  // Similar to `sortedView` (see above), but the elements are yielded in
+  // blocks. The size of the blocks is `blocksize` if specified, otherwise it
+  // will be automatically determined from the given memory limit.
   template <size_t N = NumStaticCols>
   requires(N == NumStaticCols || N == 0)
   cppcoro::generator<IdTableStatic<N>> getSortedBlocks(
