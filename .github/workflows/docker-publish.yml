@@ -45,9 +45,9 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           push: true
+          # If this is a push on master, publish with short commit sha
+          # else use the ref name, which has to be the tag in this case.
           tags: >
-            # If this is a push on master, publish with short commit sha
-            # else use the ref name, which has to be the tag in this case.
             ${{ secrets.DOCKERHUB_USERNAME }}/qlever:${{ github.ref_name == 'master' && steps.sha.outputs.sha_short || github.ref_name }},
             ${{ secrets.DOCKERHUB_USERNAME }}/qlever:latest
 
