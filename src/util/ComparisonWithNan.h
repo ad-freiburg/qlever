@@ -3,7 +3,6 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #pragma once
-
 #include <cmath>
 #include <type_traits>
 

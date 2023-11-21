@@ -448,10 +448,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   res.idTriples = std::move(*idTriples.wlock());
   LOG(INFO) << "Building the Rtree..." << std::endl;
   try {
-    Rtree rtree = Rtree(1300000000000);
-    rtree.BuildTree(onDiskBase_, ".vocabulary.boundingbox", 16,
+    Rtree rtree = Rtree(10000000000);
+    uint64_t treeSize = rtree.BuildTree(onDiskBase_, ".vocabulary.boundingbox", 16,
                     "./rtree_build");
-    LOG(INFO) << "Finished building the Rtree" << std::endl;
+    LOG(INFO) << "Finished building the Rtree with " << treeSize << " elements." << std::endl;
   } catch (const std::exception& e) {
     LOG(INFO) << e.what() << std::endl;
   }

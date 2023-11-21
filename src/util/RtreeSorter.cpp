@@ -101,70 +101,111 @@ static void centerOrdering(multiBoxWithOrderIndex& boxes, size_t dim) {
   }
 }
 
-OrderedBoxes SortInput(const std::string& onDiskBase,
-                       const std::string& fileSuffix, size_t M,
-                       uintmax_t maxBuildingRamUsage, bool workInRam) {
+RTreeValueWithOrderIndex handleD0ElementsWithoutIndex(RTreeValue& element, uint64_t i, BasicGeometry::BoundingBox& boundingBox) {
+  RTreeValueWithOrderIndex entry = {{element.box, element.id}, i, 0};
+  if (i == 0) {
+    boundingBox = element.box;
+  } else {
+    boundingBox =
+        BasicGeometry::CombineBoundingBoxes(boundingBox, element.box);  // TODO
+  }
+  return entry;
+}
+
+void handleD1Elements(RTreeValueWithOrderIndex& element, uint64_t i, uint64_t S, size_t M, multiBoxWithOrderIndex& r1Small) {
+  element.orderY = i;
+
+  if (BasicGeometry::IsBorderOfSplitCandidate(i, S, M)) {
+    // index i * S - 1 or i * S
+    r1Small.push_back(element);
+  }
+}
+
+void handleD0Elements(RTreeValueWithOrderIndex& element, uint64_t i, uint64_t S, size_t M, multiBoxWithOrderIndex& r0Small) {
+  if (BasicGeometry::IsBorderOfSplitCandidate(i, S, M)) {
+    // index i * S - 1 or i * S
+    r0Small.push_back(element);
+  }
+}
+
+OrderedBoxes InternalSort(const std::string& onDiskBase, const std::string& fileSuffix, size_t M) {
+  OrderedBoxes orderedInputRectangles;
+  multiBoxGeo RectanglesD0 = FileReaderWithoutIndex::LoadEntries(onDiskBase + fileSuffix + ".tmp");
+  centerOrdering(RectanglesD0, 0);
+
+  size_t currentS = std::ceil(((float) RectanglesD0.size()) / ((float) M));
+  if (RectanglesD0.size() <= M * M) {
+    // in this case S can just be M
+    currentS = M;
+  }
+
+  multiBoxWithOrderIndex R0Small = multiBoxWithOrderIndex();
+  multiBoxWithOrderIndex R1Small = multiBoxWithOrderIndex();
+
+  BasicGeometry::BoundingBox boundingBox = BasicGeometry::CreateBoundingBox(0, 0, 0, 0);
+  multiBoxWithOrderIndex RectanglesD1WithOrder = multiBoxWithOrderIndex();
+  for (uint64_t i = 0; i < RectanglesD0.size(); i++) {
+    RTreeValueWithOrderIndex entry = handleD0ElementsWithoutIndex(RectanglesD0[i], i, boundingBox);
+    RectanglesD1WithOrder.push_back(entry);
+  }
+
+  centerOrdering(RectanglesD1WithOrder, 1);
+
+  R1Small.push_back((RectanglesD1WithOrder)[0]);
+  RTreeValueWithOrderIndex maxElementDim1 = (RectanglesD1WithOrder)[RectanglesD1WithOrder.size() - 1];
+  maxElementDim1.orderY = RectanglesD1WithOrder.size() - 1;
+  R1Small.push_back(maxElementDim1);
+  for (uint64_t i = 0; i < RectanglesD1WithOrder.size(); i++) {
+    handleD1Elements(RectanglesD1WithOrder[i], i, currentS, M, R1Small);
+  }
+
+  multiBoxWithOrderIndex RectanglesD0WithOrder = multiBoxWithOrderIndex(RectanglesD1WithOrder);
+  centerOrdering(RectanglesD0WithOrder, 0);
+
+  R0Small.push_back((RectanglesD0WithOrder)[0]);
+  RTreeValueWithOrderIndex maxElementDim0 = (RectanglesD0WithOrder)[RectanglesD0WithOrder.size() - 1];
+  maxElementDim0.orderY = RectanglesD0WithOrder.size() - 1;
+  R0Small.push_back(maxElementDim0);
+  for (uint64_t i = 0; i < RectanglesD0WithOrder.size(); i++) {
+    handleD0Elements(RectanglesD0WithOrder[i], i, currentS, M, R0Small);
+  }
+
+  RectanglesForOrderedBoxes d0WithOrder;
+  d0WithOrder.rectangles = RectanglesD0WithOrder;
+  d0WithOrder.rectanglesSmall = R0Small;
+  RectanglesForOrderedBoxes d1WithOrder;
+  d1WithOrder.rectangles = RectanglesD1WithOrder;
+  d1WithOrder.rectanglesSmall = R1Small;
+  orderedInputRectangles.SetOrderedBoxesToRam(d0WithOrder, d1WithOrder, boundingBox);
+  return orderedInputRectangles;
+}
+
+OrderedBoxes ExternalSort(const std::string& onDiskBase,
+                          const std::string& fileSuffix, size_t M,
+                          uintmax_t maxBuildingRamUsage) {
   OrderedBoxes orderedInputRectangles;
   std::filesystem::path file = onDiskBase + fileSuffix + ".tmp";
 
-  auto maxRamForSorter = std::ceil(((double)maxBuildingRamUsage < 9999999999.0
-                                        ? (double)maxBuildingRamUsage
-                                        : 9999999999.0) /
-                                   3.0);
-  ad_utility::BackgroundStxxlSorter<RTreeValue, SortRuleLambda<0>>
-      sorterRectsD0Basic =
-          ad_utility::BackgroundStxxlSorter<RTreeValue, SortRuleLambda<0>>(
-              (size_t)maxRamForSorter);
-  multiBoxGeo rectsD0Basic;
+  auto maxRamForSorter = std::ceil(std::min((double)maxBuildingRamUsage / 3.0, 9999999999.0 / 3.0));
+  ad_utility::BackgroundStxxlSorter<RTreeValue, SortRuleLambda<0>> sorterRectsD0Basic =
+      ad_utility::BackgroundStxxlSorter<RTreeValue, SortRuleLambda<0>>((size_t)maxRamForSorter);;
 
-  if (workInRam) {
-    rectsD0Basic = FileReaderWithoutIndex::LoadEntries(file);
-    centerOrdering(rectsD0Basic, 0);
-  } else {
-    for (const RTreeValue& rectD0Element : FileReaderWithoutIndex(file)) {
-      sorterRectsD0Basic.push(rectD0Element);
-    }
+  for (const RTreeValue& rectD0Element : FileReaderWithoutIndex(file)) {
+    sorterRectsD0Basic.push(rectD0Element);
   }
 
   uint64_t xSize = 0;
   BasicGeometry::BoundingBox boundingBox =
       BasicGeometry::CreateBoundingBox(0, 0, 0, 0);
 
-  ad_utility::BackgroundStxxlSorter<RTreeValueWithOrderIndex,
-                                    SortRuleLambdaWithIndex<1>>
-      sorterRectsD1 =
+  ad_utility::BackgroundStxxlSorter<RTreeValueWithOrderIndex, SortRuleLambdaWithIndex<1>> sorterRectsD1 =
           ad_utility::BackgroundStxxlSorter<RTreeValueWithOrderIndex,
-                                            SortRuleLambdaWithIndex<1>>(
-              (size_t)maxRamForSorter);
-  multiBoxWithOrderIndex RectanglesD1WithOrder = multiBoxWithOrderIndex();
+                                        SortRuleLambdaWithIndex<1>>((size_t)maxRamForSorter);
 
-  if (workInRam) {
-    for (RTreeValue element : rectsD0Basic) {
-      RTreeValueWithOrderIndex entry = {{element.box, element.id}, xSize, 0};
-      RectanglesD1WithOrder.push_back(entry);
-
-      if (xSize == 0) {
-        boundingBox = element.box;
-      } else {
-        boundingBox =
-            BasicGeometry::CombineBoundingBoxes(boundingBox, element.box);
-      }
-      xSize++;
-    }
-    centerOrdering(RectanglesD1WithOrder, 1);
-  } else {
-    for (RTreeValue element : sorterRectsD0Basic.sortedView()) {
-      RTreeValueWithOrderIndex entry = {{element.box, element.id}, xSize, 0};
-      sorterRectsD1.push(entry);
-
-      if (xSize == 0) {
-        boundingBox = element.box;
-      } else {
-        boundingBox =
-            BasicGeometry::CombineBoundingBoxes(boundingBox, element.box);
-      }
-      xSize++;
-    }
+  for (RTreeValue element : sorterRectsD0Basic.sortedView()) {
+    RTreeValueWithOrderIndex entry = handleD0ElementsWithoutIndex(element, xSize, boundingBox);
+    sorterRectsD1.push(entry);
+    xSize++;
   }
   sorterRectsD0Basic.clear();
 
@@ -177,52 +218,26 @@ OrderedBoxes SortInput(const std::string& onDiskBase,
   uint64_t ySize = 0;
   std::ofstream r1File =
       std::ofstream(onDiskBase + fileSuffix + ".d1.tmp", std::ios::binary);
-  ad_utility::BackgroundStxxlSorter<RTreeValueWithOrderIndex,
-                                    SortRuleLambdaWithIndex<0>>
-      sorterRectsD0 =
+  ad_utility::BackgroundStxxlSorter<RTreeValueWithOrderIndex, SortRuleLambdaWithIndex<0>> sorterRectsD0 =
           ad_utility::BackgroundStxxlSorter<RTreeValueWithOrderIndex,
-                                            SortRuleLambdaWithIndex<0>>(
-              (size_t)maxRamForSorter);
-  multiBoxWithOrderIndex RectanglesD0WithOrder = multiBoxWithOrderIndex();
+                                        SortRuleLambdaWithIndex<0>>((size_t)maxRamForSorter);
   multiBoxWithOrderIndex r1Small = multiBoxWithOrderIndex();
   // placeholder
   r1Small.emplace_back();
   r1Small.emplace_back();
+
   RTreeValueWithOrderIndex minD1;
   RTreeValueWithOrderIndex maxD1;
-
-  auto processD1Element = [&ySize, currentS, M, &r1Small, &minD1,
-                           &maxD1](RTreeValueWithOrderIndex& element) {
-    element.orderY = ySize;
-
-    if (BasicGeometry::IsBorderOfSplitCandidate(ySize, currentS, M)) {
-      // index i * S - 1 or i * S
-      r1Small.push_back(element);
-    }
-
+  for (RTreeValueWithOrderIndex element : sorterRectsD1.sortedView()) {
+    handleD1Elements(element, ySize, currentS, M, r1Small);
+    FileReader::SaveEntryWithOrderIndex(element, r1File);
+    sorterRectsD0.push(element);
     if (ySize == 0) {
       minD1 = element;
     }
 
     maxD1 = element;
-
     ySize++;
-  };
-
-  if (workInRam) {
-    for (RTreeValueWithOrderIndex element : RectanglesD1WithOrder) {
-      processD1Element(element);
-
-      RectanglesD0WithOrder.push_back(element);
-    }
-    centerOrdering(RectanglesD0WithOrder, 0);
-  } else {
-    for (RTreeValueWithOrderIndex element : sorterRectsD1.sortedView()) {
-      processD1Element(element);
-
-      FileReader::SaveEntryWithOrderIndex(element, r1File);
-      sorterRectsD0.push(element);
-    }
   }
 
   r1File.close();
@@ -239,34 +254,17 @@ OrderedBoxes SortInput(const std::string& onDiskBase,
   // placeholder
   r0Small.emplace_back();
   r0Small.emplace_back();
+
   RTreeValueWithOrderIndex minD0;
   RTreeValueWithOrderIndex maxD0;
-
-  auto processD0Element = [&currentX, currentS, M, &r0Small, &minD0,
-                           &maxD0](RTreeValueWithOrderIndex& element) {
-    if (BasicGeometry::IsBorderOfSplitCandidate(currentX, currentS, M)) {
-      // index i * S - 1 or i * S
-      r0Small.push_back(element);
-    }
-
+  for (RTreeValueWithOrderIndex element : sorterRectsD0.sortedView()) {
+    FileReader::SaveEntryWithOrderIndex(element, r0File);
+    handleD0Elements(element, currentX, currentS, M, r0Small);
     if (currentX == 0) {
       minD0 = element;
     }
     maxD0 = element;
-
     currentX++;
-  };
-
-  if (workInRam) {
-    for (RTreeValueWithOrderIndex element : RectanglesD0WithOrder) {
-      processD0Element(element);
-    }
-  } else {
-    for (RTreeValueWithOrderIndex element : sorterRectsD0.sortedView()) {
-      FileReader::SaveEntryWithOrderIndex(element, r0File);
-
-      processD0Element(element);
-    }
   }
 
   r0File.close();
@@ -280,17 +278,20 @@ OrderedBoxes SortInput(const std::string& onDiskBase,
   RectanglesForOrderedBoxes rectsD1;
   rectsD0.rectanglesSmall = std::move(r0Small);
   rectsD1.rectanglesSmall = std::move(r1Small);
-  if (workInRam) {
-    rectsD0.rectangles = std::move(RectanglesD0WithOrder);
-    rectsD1.rectangles = std::move(RectanglesD1WithOrder);
-    orderedInputRectangles.SetOrderedBoxesToRam(rectsD0, rectsD1, boundingBox);
-  } else {
-    rectsD0.rectangles = onDiskBase + fileSuffix + ".d0.tmp";
-    rectsD1.rectangles = onDiskBase + fileSuffix + ".d1.tmp";
-    orderedInputRectangles.SetOrderedBoxesToDisk(rectsD0, rectsD1, xSize,
-                                                 boundingBox);
-  }
+  rectsD0.rectangles = onDiskBase + fileSuffix + ".d0.tmp";
+  rectsD1.rectangles = onDiskBase + fileSuffix + ".d1.tmp";
+  orderedInputRectangles.SetOrderedBoxesToDisk(rectsD0, rectsD1, xSize,
+                                               boundingBox);
   return orderedInputRectangles;
+}
+
+OrderedBoxes SortInput(const std::string& onDiskBase,
+                       const std::string& fileSuffix, size_t M,
+                       uintmax_t maxBuildingRamUsage, bool workInRam) {
+  if (workInRam) {
+    return InternalSort(onDiskBase, fileSuffix, M);
+  }
+  return ExternalSort(onDiskBase, fileSuffix, M, maxBuildingRamUsage);
 }
 
 /*OrderedBoxes SortInput(const std::filesystem::path& onDiskBase, size_t M,

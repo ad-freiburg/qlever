@@ -68,6 +68,15 @@ class BasicGeometry {
     return {{globalMinX, globalMinY}, {globalMaxX, globalMaxY}};
   }
 
+  static bool BoundingBoxesAreEqual(BasicGeometry::BoundingBox b1,
+                             BasicGeometry::BoundingBox b2) {
+    if (BasicGeometry::GetMinX(b1) != BasicGeometry::GetMinX(b2)) return false;
+    if (BasicGeometry::GetMinY(b1) != BasicGeometry::GetMinY(b2)) return false;
+    if (BasicGeometry::GetMaxX(b1) != BasicGeometry::GetMaxX(b2)) return false;
+    if (BasicGeometry::GetMaxY(b1) != BasicGeometry::GetMaxY(b2)) return false;
+    return true;
+  }
+
   static bool IsBorderOfSplitCandidate(uint64_t current, uint64_t splitSize,
                                        uint64_t M) {
     if (((current + 1) % splitSize == 0 && (current + 1) / splitSize < M) ||
@@ -126,6 +135,13 @@ struct RTreeValue {
   [[nodiscard]] double MinY() const { return box.min_corner().get<1>(); }
   [[nodiscard]] double MaxY() const { return box.max_corner().get<1>(); }
 
+  bool operator==(const RTreeValue& other) const
+  {
+    if (id != other.id) return false;
+    if (!BasicGeometry::BoundingBoxesAreEqual(box, other.box)) return false;
+    return true;
+  }
+
   template <class Archive>
   void serialize(Archive& a, [[maybe_unused]] const unsigned int version) {
     a& box;
@@ -140,6 +156,15 @@ struct RTreeValue {
 struct RTreeValueWithOrderIndex : RTreeValue {
   uint64_t orderX = 0;
   uint64_t orderY = 0;
+
+  bool operator==(const RTreeValueWithOrderIndex& other) const
+  {
+    if (id != other.id) return false;
+    if (!BasicGeometry::BoundingBoxesAreEqual(box, other.box)) return false;
+    if (orderX != other.orderX) return false;
+    if (orderY != other.orderY) return false;
+    return true;
+  }
 };
 
 namespace boost::serialization {

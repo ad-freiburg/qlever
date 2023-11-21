@@ -38,6 +38,15 @@ class RtreeNode {
   void SetIsLastInnerNode(bool isLast);
   [[nodiscard]] bool GetIsLastInnerNode() const;
   multiBoxGeo GetChildren();
+
+  bool operator==(const RtreeNode& other) const
+  {
+    if (id_ != other.id_) return false;
+    if (!BasicGeometry::BoundingBoxesAreEqual(boundingBox_, other.boundingBox_)) return false;
+    if (isLastInnerNode_ != other.isLastInnerNode_) return false;
+    if (children_ != other.children_) return false;
+    return true;
+  }
 };
 
 BOOST_CLASS_VERSION(RtreeNode, 1)

@@ -60,7 +60,7 @@ static std::vector<OrderedBoxes> TGSRecursive(
   return result;
 }
 
-void Rtree::BuildTree(const std::string& onDiskBase,
+uint64_t Rtree::BuildTree(const std::string& onDiskBase,
                       const std::string& fileSuffix, size_t M,
                       const std::string& folder) const {
   const std::filesystem::path file = onDiskBase + fileSuffix + ".tmp";
@@ -74,9 +74,15 @@ void Rtree::BuildTree(const std::string& onDiskBase,
           4 <
       this->maxBuildingRamUsage_;
 
+  std::cout << "Sorting" << (workInRam ? " in ram..." : "on disk...") << std::endl;
   OrderedBoxes orderedInputRectangles =
       SortInput(onDiskBase, fileSuffix, M, maxBuildingRamUsage_, workInRam);
+  uint64_t totalSize = orderedInputRectangles.GetSize();
+  //OrderedBoxes orderedInputRectangles = InternalSort(onDiskBase, fileSuffix, M);
   std::cout << "Finished initial sorting" << std::endl;
+  std::cout << orderedInputRectangles.GetSize() << std::endl;
+  std::cout << orderedInputRectangles.rectsD0_.rectanglesSmall.size() << std::endl;
+  std::cout << orderedInputRectangles.rectsD1_.rectanglesSmall.size() << std::endl;
 
   // prepare the files
   std::filesystem::create_directory(folder);
@@ -137,6 +143,8 @@ void Rtree::BuildTree(const std::string& onDiskBase,
     lookupOfs.write(reinterpret_cast<const char*>(&nodePtr), sizeof(uint64_t));
   }
   lookupOfs.close();
+
+  return totalSize;
 }
 
 bool OrderedBoxes::WorkInRam() const { return this->workInRam_; }

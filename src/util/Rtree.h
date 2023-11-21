@@ -56,7 +56,7 @@ class Rtree {
   // ___________________________________________________________________________
   // Build the whole Rtree with the raw data in onDiskBase + fileSuffix +
   // ".tmp", M as branching factor and folder as Rtree destination
-  void BuildTree(const std::string& onDiskBase, const std::string& fileSuffix,
+  uint64_t BuildTree(const std::string& onDiskBase, const std::string& fileSuffix,
                  size_t M, const std::string& folder) const;
   // ___________________________________________________________________________
   // Search for an intersection of query with any elements of the Rtree
@@ -69,7 +69,7 @@ class Rtree {
 // Data structure handling the datapoints of the Rtree sorted in x and y
 // direction (either on ram or on disk)
 class OrderedBoxes {
- private:
+ public: // TODO
   bool workInRam_{};
   uint64_t size_{};
   BasicGeometry::BoundingBox boundingBox_{};
