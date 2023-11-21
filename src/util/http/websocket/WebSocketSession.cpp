@@ -52,8 +52,6 @@ net::awaitable<void> WebSocketSession::handleClientCommands() {
       if (dataAsString == "cancel_on_close") {
         cancelOnClose_ = true;
       } else if (dataAsString == "cancel" && tryToCancelQuery()) {
-        co_await ws_.async_close(beast::websocket::close_code::normal,
-                                 net::use_awaitable);
         break;
       }
     }
