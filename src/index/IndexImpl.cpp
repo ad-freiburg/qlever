@@ -470,10 +470,7 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
         continue;
       }
       auto iterator = idMap.find(id);
-      if (iterator == idMap.end()) {
-        LOG(ERROR) << "Not found in partial vocabulary: " << id << std::endl;
-        AD_FAIL();
-      }
+      AD_CORRECTNESS_CHECK(iterator != idMap.end());
       id = iterator->second;
     }
   };
@@ -535,10 +532,11 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
   for (auto& mapping : mappings) {
     auto idMap = std::make_shared<Map>(std::move(mapping));
 
-    static constexpr size_t bufferSize = 10'000;
+    const size_t bufferSize = BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS;
     std::vector<Triple> buffer;
     buffer.reserve(bufferSize);
-    auto pushBatch = [&buffer, &idMap, &lookupQueue, &getLookupTask]() {
+    auto pushBatch = [&buffer, &idMap, &lookupQueue, &getLookupTask,
+                      bufferSize]() {
       lookupQueue.push(getLookupTask(std::move(buffer), idMap));
       buffer.clear();
       buffer.reserve(bufferSize);
