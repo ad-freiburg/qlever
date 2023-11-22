@@ -9,9 +9,10 @@
 #include <exception>
 #include <thread>
 
-#include "./Generator.h"
-#include "./OnDestructionDontThrowDuringStackUnwinding.h"
-#include "./ThreadSafeQueue.h"
+#include "util/Generator.h"
+#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/ThreadSafeQueue.h"
+#include "util/Log.h"
 #include "util/Timer.h"
 
 namespace ad_utility::streams {
@@ -25,9 +26,9 @@ using ad_utility::data_structures::ThreadSafeQueue;
  * element from the range is expensive, but very inefficient if retrieving
  * elements is cheap because of the synchronization overhead.
  */
-template <typename Range>
+template <typename Range, bool logTime = (LOGLEVEL >= TIMING)>
 cppcoro::generator<typename Range::value_type> runStreamAsync(
-    Range range, size_t bufferLimit, bool logTime = false) {
+    Range range, size_t bufferLimit) {
   using value_type = typename Range::value_type;
   ThreadSafeQueue<value_type> queue{bufferLimit};
   std::exception_ptr exception = nullptr;
@@ -57,16 +58,23 @@ cppcoro::generator<typename Range::value_type> runStreamAsync(
         }
       });
 
-  ad_utility::Timer t{ad_utility::Timer::Started};
+  auto ifTiming = [](std::invocable auto function) {
+    if constexpr (logTime) {
+      std::invoke(function);
+    }
+  };
+
+  std::optional<ad_utility::Timer> t{ad_utility::Timer::Started};
+  ifTiming([&t] { t.emplace(ad_utility::Timer::Started); });
   while (std::optional<value_type> value = queue.pop()) {
-    t.stop();
+    ifTiming([&t] { t->stop(); });
     co_yield value.value();
-    t.cont();
+    ifTiming([&t] { t->cont(); });
   }
-  t.stop();
-  if (logTime) {
-    LOG(INFO) << "Waiting time for async stream was " << t.msecs().count()
+  ifTiming([&t] {
+    t->stop();
+    LOG(INFO) << "Waiting time for async stream was " << t->msecs().count()
               << "ms" << std::endl;
-  }
+  });
 }
 }  // namespace ad_utility::streams

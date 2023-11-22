@@ -79,8 +79,8 @@ cppcoro::generator<ValueType> uniqueView(SortedView view) {
             << std::endl;
 }
 
-/// Takes a view and yields the elements of the same view, but skips over
-/// consecutive duplicates.
+// Takes a view of blocks and yields the elements of the same view, but removed
+// consecutive duplicates inside the blocks and across block boundaries.
 template <typename SortedBlockView,
           typename ValueType = SortedBlockView::value_type::value_type>
 cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
