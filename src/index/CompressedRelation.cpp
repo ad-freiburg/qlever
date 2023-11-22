@@ -933,16 +933,17 @@ template <
     typename T,
     ad_utility::InvocableWithExactReturnType<void, std::vector<T>&&> Function>
 struct Batcher {
+  size_t blocksize_;
   Function function_;
   std::vector<T> vec_;
 
-  Batcher(Function function) : function_{std::move(function)} {}
+  Batcher(Function function, size_t blocksize) : function_{std::move(function)}, blocksize_{blocksize} {}
   void operator()(T t) {
     vec_.push_back(std::move(t));
-    if (vec_.size() > 100'000) {
+    if (vec_.size() > blocksize_) {
       function_(std::move(vec_));
       vec_.clear();
-      vec_.reserve(100'000);
+      vec_.reserve(blocksize_);
     }
   }
   ~Batcher() {
@@ -965,8 +966,8 @@ class MetadataWriter {
   B batcher2_;
 
  public:
-  MetadataWriter(MetadataCallback callback1, MetadataCallback callback2)
-      : batcher1_{std::move(callback1)}, batcher2_{std::move(callback2)} {}
+  MetadataWriter(MetadataCallback callback1, MetadataCallback callback2, size_t blocksize)
+      : batcher1_{std::move(callback1), blocksize}, batcher2_{std::move(callback2), blocksize} {}
   void operator()(CompressedRelationMetadata md1,
                   CompressedRelationMetadata md2) {
     md1.multiplicityCol2_ = md2.multiplicityCol1_;
@@ -989,7 +990,7 @@ CompressedRelationWriter::createPermutationPair(
   auto& [writer1, callback1] = writerAndCallback1;
   auto& [writer2, callback2] = writerAndCallback2;
 MetadataWriter writeMetadata{std::move(callback1),
-                               std::move(callback2)};
+                               std::move(callback2), writer1.blocksize()};
   const size_t blocksize = writer1.blocksize();
   AD_CORRECTNESS_CHECK(writer2.blocksize() == writer1.blocksize());
 

@@ -428,3 +428,5 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   metadataAndBlocksB.col1Id_ = V(7);
   test({std::vector{block4, block5}, std::vector{blockB3}});
 }
+
+TEST(CompressedRelationReader)

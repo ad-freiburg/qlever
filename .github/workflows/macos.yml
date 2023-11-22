@@ -67,6 +67,8 @@ jobs:
     - name: Install and run conan
       working-directory: ${{github.workspace}}/build
       run: >
+        clang-16 --version
+        clang++-16 --version
         clang --version;
         clang++ --version;
         gcc --version;
