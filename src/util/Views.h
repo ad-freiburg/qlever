@@ -87,19 +87,19 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
     SortedBlockView view) {
   size_t numInputs = 0;
   size_t numUnique = 0;
-  std::optional<ValueType> previousValue_ = std::nullopt;
+  std::optional<ValueType> previousValue = std::nullopt;
 
   for (auto& block : view) {
     if (block.empty()) {
       continue;
     }
     numInputs += block.size();
-    auto beg = previousValue_
+    auto beg = previousValue
                    ? std::ranges::find_if(
-                         block, [&p = previousValue_.value()](
+                         block, [&p = previousValue.value()](
                                     const auto& el) { return el != p; })
                    : block.begin();
-    previousValue_ = *(block.end() - 1);
+    previousValue = *(block.end() - 1);
     auto it = std::unique(beg, block.end());
     block.erase(it, block.end());
     block.erase(block.begin(), beg);

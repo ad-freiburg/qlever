@@ -854,7 +854,7 @@ CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
   // buffered small relations together with the new relations would exceed `1.5
   // * blocksize` then we start a new block for the current relation. Note:
   // there are some unit tests that rely on this factor being `1.5`.
-  if (numRows + smallRelationsBuffer_.numRows() >
+  if (static_cast<double>(numRows + smallRelationsBuffer_.numRows()) >
       static_cast<double>(blocksize()) * 1.5) {
     writeBufferedRelationsToSingleBlock();
   }
@@ -909,23 +909,7 @@ void CompressedRelationWriter::addBlockForLargeRelation(
                         std::move(relation));
 }
 
-// __________________________________________________________________________
-CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
-    Id col0Id, auto&& sortedBlocks) {
-  size_t numDistinctC1 = 0;
-  Id lastRel = std::numeric_limits<Id>::max();
-
-  for (auto& block : sortedBlocks) {
-    for (Id col1 : block.getColumn(0)) {
-      numDistinctC1 += col1 != lastRel;
-      lastRel = col1;
-    }
-    addBlockForLargeRelation(
-        col0Id, std::make_shared<IdTable>(std::move(block).toDynamic()));
-  }
-  return finishLargeRelation(numDistinctC1);
-}
-
+namespace {
 // Collect elements of type `T` in batches of size 100'000 and apply the
 // `Function` to each batch. For the last batch (which might be smaller)  the
 // function is applied in the destructor.
@@ -933,11 +917,12 @@ template <
     typename T,
     ad_utility::InvocableWithExactReturnType<void, std::vector<T>&&> Function>
 struct Batcher {
-  size_t blocksize_;
   Function function_;
+  size_t blocksize_;
   std::vector<T> vec_;
 
-  Batcher(Function function, size_t blocksize) : function_{std::move(function)}, blocksize_{blocksize} {}
+  Batcher(Function function, size_t blocksize)
+      : function_{std::move(function)}, blocksize_{blocksize} {}
   void operator()(T t) {
     vec_.push_back(std::move(t));
     if (vec_.size() > blocksize_) {
@@ -951,6 +936,9 @@ struct Batcher {
       function_(std::move(vec_));
     }
   }
+  // No copy or move operations (neither needed nor easy to get right).
+  Batcher(const Batcher&) = delete;
+  Batcher& operator=(const Batcher&) = delete;
 };
 
 using MetadataCallback = CompressedRelationWriter::MetadataCallback;
@@ -966,8 +954,10 @@ class MetadataWriter {
   B batcher2_;
 
  public:
-  MetadataWriter(MetadataCallback callback1, MetadataCallback callback2, size_t blocksize)
-      : batcher1_{std::move(callback1), blocksize}, batcher2_{std::move(callback2), blocksize} {}
+  MetadataWriter(MetadataCallback callback1, MetadataCallback callback2,
+                 size_t blocksize)
+      : batcher1_{std::move(callback1), blocksize},
+        batcher2_{std::move(callback2), blocksize} {}
   void operator()(CompressedRelationMetadata md1,
                   CompressedRelationMetadata md2) {
     md1.multiplicityCol2_ = md2.multiplicityCol1_;
@@ -977,20 +967,52 @@ class MetadataWriter {
   }
 };
 
+// A simple class to count distinct IDs in a sorted sequence.
+class DistinctIdCounter {
+  Id lastSeen_ = std::numeric_limits<Id>::max();
+  size_t count_ = 0;
+
+ public:
+  void operator()(Id id) {
+    count_ += static_cast<size_t>(id != lastSeen_);
+    lastSeen_ = id;
+  }
+  size_t getAndReset() {
+    size_t count = count_;
+    lastSeen_ = std::numeric_limits<Id>::max();
+    count_ = 0;
+    return count;
+  }
+};
+}  // namespace
+
+// __________________________________________________________________________
+CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
+    Id col0Id, auto&& sortedBlocks) {
+  DistinctIdCounter distinctCol1Counter;
+  for (auto& block : sortedBlocks) {
+    std::ranges::for_each(block.getColumn(0), std::ref(distinctCol1Counter));
+    addBlockForLargeRelation(
+        col0Id, std::make_shared<IdTable>(std::move(block).toDynamic()));
+  }
+  return finishLargeRelation(distinctCol1Counter.getAndReset());
+}
+
 // _____________________________________________________________________________
 std::pair<std::vector<CompressedBlockMetadata>,
           std::vector<CompressedBlockMetadata>>
 CompressedRelationWriter::createPermutationPair(
     const std::string& basename, WriterAndCallback writerAndCallback1,
-      WriterAndCallback writerAndCallback2,
-      cppcoro::generator<IdTableStatic<0>> sortedTriples, std::array<size_t, 3> permutation,
-      std::vector<std::function<void(const IdTableStatic<0>&)>>
-      perBlockCallbacks) {
+    WriterAndCallback writerAndCallback2,
+    cppcoro::generator<IdTableStatic<0>> sortedTriples,
+    std::array<size_t, 3> permutation,
+    const std::vector<std::function<void(const IdTableStatic<0>&)>>&
+        perBlockCallbacks) {
   auto [c0, c1, c2] = permutation;
   auto& [writer1, callback1] = writerAndCallback1;
   auto& [writer2, callback2] = writerAndCallback2;
-MetadataWriter writeMetadata{std::move(callback1),
-                               std::move(callback2), writer1.blocksize()};
+  MetadataWriter writeMetadata{std::move(callback1), std::move(callback2),
+                               writer1.blocksize()};
   const size_t blocksize = writer1.blocksize();
   AD_CORRECTNESS_CHECK(writer2.blocksize() == writer1.blocksize());
 
@@ -1016,8 +1038,7 @@ MetadataWriter writeMetadata{std::move(callback1),
   ad_utility::CompressedExternalIdTableSorter<decltype(compare), 2> sorter(
       basename + ".switched-sorter", 4_GB, alloc);
 
-  size_t numDistinctCol1 = 0;
-  Id lastLhs = ID_NO_VALUE;
+  DistinctIdCounter distinctCol1Counter;
   auto addBlockForLargeRelation = [&numBlocksCurrentRel, &writer1, &currentCol0,
                                    &relation, &sorter, &blocksize] {
     if (relation.empty()) {
@@ -1035,34 +1056,33 @@ MetadataWriter writeMetadata{std::move(callback1),
   };
 
   auto finishRelation = [&sorter, &writer2, &writer1, &numBlocksCurrentRel,
-                         &currentCol0, &relation, &numDistinctCol1,
+                         &currentCol0, &relation, &distinctCol1Counter,
                          &addBlockForLargeRelation, &compare, &blocksize,
                          &writeMetadata, &largeSwitchedRelationTimer]() {
-    if (numBlocksCurrentRel > 0 || relation.numRows() > 0.8 * blocksize) {
+    if (numBlocksCurrentRel > 0 || static_cast<double>(relation.numRows()) >
+                                       0.8 * static_cast<double>(blocksize)) {
       // The relation is large;
       addBlockForLargeRelation();
-      auto md1 = writer1.finishLargeRelation(numDistinctCol1);
+      auto md1 = writer1.finishLargeRelation(distinctCol1Counter.getAndReset());
       largeSwitchedRelationTimer.cont();
-      auto md2 = writer2.addCompleteLargeRelation(currentCol0.value(),
-                                          sorter.getSortedBlocks(blocksize));
+      auto md2 = writer2.addCompleteLargeRelation(
+          currentCol0.value(), sorter.getSortedBlocks(blocksize));
       largeSwitchedRelationTimer.stop();
       sorter.clear();
       writeMetadata(md1, md2);
     } else {
       // Small relations are written in one go.
-      auto md1 = writer1.addSmallRelation(currentCol0.value(), numDistinctCol1,
+      auto md1 = writer1.addSmallRelation(currentCol0.value(),
+                                          distinctCol1Counter.getAndReset(),
                                           relation.asStaticView<0>());
       // We don't use the parallel sorter to create the switched relation as its
       // overhead is far too high for small relations.
       relation.swapColumns(0, 1);
       std::ranges::sort(relation, compare);
-      size_t numDistinctC1 = 0;
-      Id lastC1 = Id::makeUndefined();
-      for (Id id : relation.getColumn(0)) {
-        numDistinctC1 += id != lastC1;
-        lastC1 = id;
-      }
-      auto md2 = writer2.addSmallRelation(currentCol0.value(), numDistinctC1,
+      std::ranges::for_each(relation.getColumn(0),
+                            std::ref(distinctCol1Counter));
+      auto md2 = writer2.addSmallRelation(currentCol0.value(),
+                                          distinctCol1Counter.getAndReset(),
                                           relation.asStaticView<0>());
       writeMetadata(md1, md2);
     }
@@ -1083,13 +1103,10 @@ MetadataWriter writeMetadata{std::move(callback1),
     for (const auto& triple : block) {
       if (triple[c0] != currentCol0) {
         finishRelation();
-        numDistinctCol1 = 1;
         currentCol0 = triple[c0];
-      } else {
-        numDistinctCol1 += triple[c1] != lastLhs;
       }
+      distinctCol1Counter(triple[c1]);
       relation.push_back(std::array{triple[c1], triple[c2]});
-      lastLhs = triple[c1];
       if (relation.size() >= blocksize) {
         addBlockForLargeRelation();
       }
@@ -1118,11 +1135,12 @@ MetadataWriter writeMetadata{std::move(callback1),
   writer2.finish();
   tripleCallbackQueue.finish();
   LOG(TIMING) << "Time spent waiting for the input "
-            << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
-            << std::endl;
+              << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
+              << std::endl;
   LOG(TIMING) << "Time spent waiting for large switched relations "
-            << ad_utility::Timer::toSeconds(largeSwitchedRelationTimer.msecs())
-            << "s" << std::endl;
+              << ad_utility::Timer::toSeconds(
+                     largeSwitchedRelationTimer.msecs())
+              << "s" << std::endl;
   return std::pair{std::move(writer1).getFinishedBlocks(),
                    std::move(writer2).getFinishedBlocks()};
 }

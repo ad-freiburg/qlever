@@ -10,9 +10,9 @@
 #include <thread>
 
 #include "util/Generator.h"
+#include "util/Log.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ThreadSafeQueue.h"
-#include "util/Log.h"
 #include "util/Timer.h"
 
 namespace ad_utility::streams {

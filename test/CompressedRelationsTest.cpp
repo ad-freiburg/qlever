@@ -50,7 +50,7 @@ void checkThatTablesAreEqual(
   }
 }
 
-} // end of anonymous namespace, the following function is a friend function and thus needs to be exposed.
+}  // namespace
 
 // Run a set of tests on a permutation that is defined by the `inputs`. The
 // `inputs` must be ordered wrt the `col0_`. `testCaseName` is used to create
@@ -58,8 +58,8 @@ void checkThatTablesAreEqual(
 // of the `CompressedRelationMetaData`. `blocksize` is the size of the blocks
 // in which the permutation will be compressed and stored on disk.
 /*void testCompressedRelations(const std::vector<RelationInput>& inputs, */
-void testCompressedRelations(const auto& inputs,
-                             std::string testCaseName, size_t blocksize) {
+void testCompressedRelations(const auto& inputs, std::string testCaseName,
+                             size_t blocksize) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
   AD_CONTRACT_CHECK(std::ranges::is_sorted(

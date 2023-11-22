@@ -102,7 +102,8 @@ TEST(Views, UniqueBlock) {
   while (i < intsWithDuplicates.size()) {
     auto vecSize = vecSizeGenerator();
     size_t nextI = std::min(i + vecSize, intsWithDuplicates.size());
-    inputs.emplace_back(intsWithDuplicates.begin() + i, intsWithDuplicates.begin() + nextI);
+    inputs.emplace_back(intsWithDuplicates.begin() + i,
+                        intsWithDuplicates.begin() + nextI);
     i = nextI;
   }
 
