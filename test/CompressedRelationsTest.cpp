@@ -85,7 +85,7 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
         if (buffer.empty()) {
           return;
         }
-        writer.addBlockForRelation(
+        writer.addBlockForLargeRelation(
             V(input.col0_), std::make_shared<IdTable>(std::move(buffer)));
         buffer.clear();
         ++numBlocks;
@@ -100,7 +100,7 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
         addBlock();
         // The last argument is the number of distinct elements in `col1`. We
         // store a dummy value here that we can check later.
-        metaData.push_back(writer.finishCurrentRelation(i + 1));
+        metaData.push_back(writer.finishLargeRelation(i + 1));
       } else {
         metaData.push_back(writer.addSmallRelation(V(input.col0_), i + 1,
                                                    buffer.asStaticView<0>()));

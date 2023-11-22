@@ -245,14 +245,31 @@ class CompressedRelationWriter {
   void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id,
                              std::shared_ptr<IdTable> buf);
 
- public:
-  // TODO<joka921> make most private, document, etc.
+  // Add a small relation that will be stored in a single block, possibly
+  // together with other small relations.
   CompressedRelationMetadata addSmallRelation(Id col0Id, size_t numDistinctC1,
                                               IdTableView<0> relation);
 
-  CompressedRelationMetadata finishCurrentRelation(size_t numDistinctC1);
+  // Add a new block for a large relation that is to be stored in multiple
+  // blocks. This function may only be called if one of the following holds:
+  // * This is the first call to `addBlockForLargeRelation` or
+  // `addSmallRelation`.
+  // * The previously called function was `addSmallRelation` or
+  // `finishLargeRelation`.
+  // * The previously called function was `addBlockForLargeRelation` with the
+  // same `col0Id`.
+  void addBlockForLargeRelation(Id col0Id, std::shared_ptr<IdTable> relation);
 
-  void addBlockForRelation(Id col0Id, std::shared_ptr<IdTable> relation);
+  // This function must be called after all blocks of a large relation have been
+  // added via `addBlockForLargeRelation` before any other function may be
+  // called. This includes the `finish()` function and therefore also the
+  // destructor, which will throw an exception if a necessary call to
+  // `finishLargeRelation` was missing.
+  CompressedRelationMetadata finishLargeRelation(size_t numDistinctC1);
+
+ public:
+  // TODO<joka921> Comment and move to the public section.
+  // Also clean up the interface.
   static
       // _____________________________________________________________________________
       std::pair<std::vector<CompressedBlockMetadata>,

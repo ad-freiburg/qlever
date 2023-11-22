@@ -879,7 +879,7 @@ CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
 }
 
 // _____________________________________________________________________________
-CompressedRelationMetadata CompressedRelationWriter::finishCurrentRelation(
+CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
     size_t numDistinctC1) {
   AD_CORRECTNESS_CHECK(currentRelationPreviousSize_ != 0);
   CompressedRelationMetadata md;
@@ -890,14 +890,14 @@ CompressedRelationMetadata CompressedRelationWriter::finishCurrentRelation(
       CompressedRelationMetadata{currentRelation_, currentRelationPreviousSize_,
                                  multiplicityCol1, multiplicityCol1, offset};
   currentRelationPreviousSize_ = 0;
-  // The following is used in `addBlockForRelation` to assert that
-  // `finishCurrentRelation` was called before a new relation was started.
+  // The following is used in `addBlockForLargeRelation` to assert that
+  // `finishLargeRelation` was called before a new relation was started.
   currentRelation_ = Id::makeUndefined();
   return md;
 }
 
 // _____________________________________________________________________________
-void CompressedRelationWriter::addBlockForRelation(
+void CompressedRelationWriter::addBlockForLargeRelation(
     Id col0Id, std::shared_ptr<IdTable> relation) {
   AD_CORRECTNESS_CHECK(!relation->empty());
   AD_CORRECTNESS_CHECK(currentRelation_ == col0Id ||
@@ -921,11 +921,11 @@ static CompressedRelationMetadata addCompleteLargeRelation(
       numDistinctC1 += col1 != lastRel;
       lastRel = col1;
     }
-    out->addBlockForRelation(
+    out->addBlockForLargeRelation(
         col0Id, std::make_shared<IdTable>(std::move(block).toDynamic()));
   }
   // TODO<joka921> handle the multiplicity computation.
-  return out->finishCurrentRelation(numDistinctC1);
+  return out->finishLargeRelation(numDistinctC1);
 }
 
 // Collect elements of type `T` in batches of size 100'000 and apply the
@@ -1028,7 +1028,7 @@ CompressedRelationWriter::createPermutationPairImpl(
     for (const auto& row : relation) {
       sorter.push(std::array{row[1], row[0]});
     }
-    writer1.addBlockForRelation(
+    writer1.addBlockForLargeRelation(
         currentCol0.value(),
         std::make_shared<IdTable>(std::move(relation).toDynamic()));
     relation.clear();
@@ -1043,7 +1043,7 @@ CompressedRelationWriter::createPermutationPairImpl(
     if (numBlocksCurrentRel > 0 || relation.numRows() > 0.8 * blocksize) {
       // The relation is large;
       addBlockForLargeRelation();
-      auto md1 = writer1.finishCurrentRelation(numDistinctCol1);
+      auto md1 = writer1.finishLargeRelation(numDistinctCol1);
       largeSwitchedRelationTimer.cont();
       auto md2 = addCompleteLargeRelation(&writer2, currentCol0.value(),
                                           sorter.getSortedBlocks(blocksize));
