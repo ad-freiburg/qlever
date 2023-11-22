@@ -93,9 +93,11 @@ net::awaitable<void> WebSocketSession::handleSession(
     tcp::socket socket) {
   // Make sure access to new websocket is on a strand and therefore thread safe
   auto executor = co_await net::this_coro::executor;
-  AD_CONTRACT_CHECK(
-      executor.target<net::strand<net::io_context::executor_type>>());
-  co_await net::dispatch(net::use_awaitable);
+  auto strandExecutor =
+      executor.target<net::strand<net::io_context::executor_type>>();
+  AD_CONTRACT_CHECK(strandExecutor);
+  AD_CONTRACT_CHECK(strandExecutor->running_in_this_thread());
+  AD_CONTRACT_CHECK(socket.get_executor() == *strandExecutor);
 
   auto queryIdString = extractQueryId(request.target());
   AD_CORRECTNESS_CHECK(!queryIdString.empty());

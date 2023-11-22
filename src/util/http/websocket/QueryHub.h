@@ -39,8 +39,20 @@ class QueryHub {
   net::strand<net::any_io_executor> globalStrand_;
   absl::flat_hash_map<QueryId, WeakReferenceHolder> socketDistributors_{};
 
+  // Expose internal API for testing
+  friend net::awaitable<void>
+  QueryHub_testCorrectReschedulingForEmptyPointerOnDestruct_coroutine(
+      net::io_context&);
+
   /// Implementation of createOrAcquireDistributorForSending and
-  /// createOrAcquireDistributorForReceiving
+  /// createOrAcquireDistributorForReceiving, without thread safety,
+  /// exposed for testing
+  template <bool isSender>
+  net::awaitable<
+      std::shared_ptr<ConditionalConst<isSender, QueryToSocketDistributor>>>
+      createOrAcquireDistributorInternalUnsafe(QueryId);
+
+  /// createOrAcquireDistributorInternalUnsafe, but dispatched on global strand
   template <bool isSender>
   net::awaitable<
       std::shared_ptr<ConditionalConst<isSender, QueryToSocketDistributor>>>
@@ -62,9 +74,6 @@ class QueryHub {
   /// be called arbitrarily often during the lifetime of a single query session.
   net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
       createOrAcquireDistributorForReceiving(QueryId);
-
-  /// Expose strand for testing
-  auto getStrand() const { return globalStrand_; }
 };
 }  // namespace ad_utility::websocket
 
