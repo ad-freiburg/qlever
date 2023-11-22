@@ -233,7 +233,7 @@ uint64_t& Index::blocksizePermutationsInBytes() {
 
 // ____________________________________________________________________________
 const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
-  return pimpl_->memoryLimitIndexBuilding();
+  return std::as_const(*pimpl_).memoryLimitIndexBuilding();
 }
 
 // ____________________________________________________________________________

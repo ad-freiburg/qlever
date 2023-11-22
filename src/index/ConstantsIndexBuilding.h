@@ -87,7 +87,7 @@ static constexpr size_t BLOCKSIZE_VOCABULARY_MERGING = 100;
 // A buffer size used during the second pass of the Index build.
 // It is not const, so we can set it to a much lower value for unit tests to
 // increase the test coverage.
-static inline size_t BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10'000;
+inline size_t BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10'000;
 
 // The uncompressed size in bytes of a block of the permutations.
 //
