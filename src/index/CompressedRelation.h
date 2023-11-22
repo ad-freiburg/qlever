@@ -181,7 +181,7 @@ class CompressedRelationWriter {
 
   // When we store a large relation with multiple blocks then we keep track of
   // its `col0Id`, mostly for sanity checks.
-  Id currentRelation_ = Id::makeUndefined();
+  Id currentCol0_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
 
   ad_utility::TaskQueue<false> blockWriteQueue_{20, 10};
@@ -217,7 +217,6 @@ class CompressedRelationWriter {
    * the `permutation` (which corresponds to the `writerAndCallback1`.
    * @param permutation The permutation to be build (as a permutation of the
    * array `[0, 1, 2]`). The `sortedTriples` must be sorted by this permutation.
-   * ids within this vocabulary.
    */
   static std::pair<std::vector<CompressedBlockMetadata>,
                    std::vector<CompressedBlockMetadata>>
@@ -276,8 +275,11 @@ class CompressedRelationWriter {
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
       std::span<const Id> column);
 
+  // Compress the given `block` and write it to the file. The `firstCol0Id` and
+  // `lastCol0Id` are needed to setup the block's metadata which is appended to
+  // the internal buffer.
   void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id,
-                             std::shared_ptr<IdTable> buf);
+                             std::shared_ptr<IdTable> block);
 
   // Add a small relation that will be stored in a single block, possibly
   // together with other small relations.
@@ -296,9 +298,10 @@ class CompressedRelationWriter {
 
   // This function must be called after all blocks of a large relation have been
   // added via `addBlockForLargeRelation` before any other function may be
-  // called. This includes the `finish()` function and therefore also the
-  // destructor, which will throw an exception if a necessary call to
-  // `finishLargeRelation` was missing.
+  // called. In particular, it has to be called after the last block of the last
+  // relation was added (in case this relation is large). Otherwise, an
+  // assertion inside the `finish()` function (which is also called by the
+  // destructor) will fail.
   CompressedRelationMetadata finishLargeRelation(size_t numDistinctC1);
 
   // Add a complete large relation by calling `addBlockForLargeRelation` for
