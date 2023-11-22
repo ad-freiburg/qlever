@@ -1075,7 +1075,7 @@ CompressedRelationWriter::createPermutationPair(
       // Small relations are written in one go.
       auto md1 = writer1.addSmallRelation(
           currentCol0.value(), distinctCol1Counter.getAndReset(),
-          writerAndCallback2.callback_.asStaticView<0>());
+          relation.asStaticView<0>());
       // We don't use the parallel sorter to create the switched relation as its
       // overhead is far too high for small relations.
       relation.swapColumns(0, 1);
