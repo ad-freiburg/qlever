@@ -382,11 +382,7 @@ static ResultTable& makeGrowingBenchmarkTable(
   };
 
   // For creating a new random seed for every new row.
-  auto seedGenerator = [numberGenerator =
-                            ad_utility::FastRandomIntGenerator<unsigned int>(
-                                std::move(randomSeed))]() mutable {
-    return ad_utility::RandomSeed::make(std::invoke(numberGenerator));
-  };
+  RandomSeedGenerator seedGenerator{std::move(randomSeed)};
 
   /*
   Now on to creating the benchmark table. Because we don't know, how many row
