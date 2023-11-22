@@ -952,9 +952,7 @@ struct Batcher {
   }
 };
 
-// TODO<joka921> Move this alias to the `.h` file
-using MetadataCallback =
-    std::function<void(std::span<const CompressedRelationMetadata>)>;
+using MetadataCallback = CompressedRelationWriter::MetadataCallback;
 
 // A class that is called for all pairs of `CompressedRelationMetadata` for the
 // same `col0Id` and the "twin permutations" (e.g. PSO and POS). The
@@ -989,7 +987,7 @@ CompressedRelationWriter::createPermutationPair(
       perBlockCallbacks) {
   auto [c0, c1, c2] = permutation;
   auto& [writer1, callback1] = writerAndCallback1;
-  auto& [writer2, callback2] = writerAndCallback1;
+  auto& [writer2, callback2] = writerAndCallback2;
 MetadataWriter writeMetadata{std::move(callback1),
                                std::move(callback2)};
   const size_t blocksize = writer1.blocksize();
@@ -1118,10 +1116,10 @@ MetadataWriter writeMetadata{std::move(callback1),
   writer1.finish();
   writer2.finish();
   tripleCallbackQueue.finish();
-  LOG(INFO) << "Time spent waiting for the input "
+  LOG(TIMING) << "Time spent waiting for the input "
             << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
             << std::endl;
-  LOG(INFO) << "Time spent waiting for large switched relations "
+  LOG(TIMING) << "Time spent waiting for large switched relations "
             << ad_utility::Timer::toSeconds(largeSwitchedRelationTimer.msecs())
             << "s" << std::endl;
   return std::pair{std::move(writer1).getFinishedBlocks(),

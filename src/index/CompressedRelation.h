@@ -193,6 +193,33 @@ class CompressedRelationWriter {
   /// Create using a filename, to which the relation data will be written.
   explicit CompressedRelationWriter(ad_utility::File f, size_t numBytesPerBlock)
       : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock} {}
+  // Two helper types used to make the interface of the function `createPermutationPair` below safer and more explicit.
+  using MetadataCallback =
+      std::function<void(std::span<const CompressedRelationMetadata>)>;
+
+  struct WriterAndCallback {
+    CompressedRelationWriter& writer_;
+    MetadataCallback  callback_;
+  };
+
+  /**
+   * @brief Write two permutations that only differ by the order of the col1 and col2 (e.g. POS and PSO).
+   * @param basename filename/path that will be used as a prefix for names of temporary files.
+   * @param writerAndCallback1 A writer for the first permutation together with a callback that is called for each of the created metadata.
+   * @param writerAndCallback2  The same as `writerAndCallback1`, but for the other permutation.
+   * @param sortedTriples The inputs as blocks of triples (plus possibly additional columns). The first three columns must be sorted according to the `permutation` (which corresponds to the `writerAndCallback1`.
+   * @param permutation The permutation to be build (as a permutation of the array `[0, 1, 2]`). The `sortedTriples` must be sorted by this permutation.
+   * ids within this vocabulary.
+   */
+  static std::pair<std::vector<CompressedBlockMetadata>,
+      std::vector<CompressedBlockMetadata>>
+  createPermutationPair(
+      const std::string& basename, WriterAndCallback writerAndCallback1,
+      WriterAndCallback writerAndCallback2,
+      cppcoro::generator<IdTableStatic<0>> sortedTriples,
+      std::array<size_t, 3> permutation,
+      std::vector<std::function<void(const IdTableStatic<0>&)>>
+      perBlockCallbacks);
 
   /// Get all the CompressedBlockMetaData that were created by the calls to
   /// addRelation. This also closes the writer. The typical workflow is:
@@ -221,7 +248,7 @@ class CompressedRelationWriter {
   // new blocks etc.
   size_t blocksize() const { return numBytesPerBlock_ / (2 * sizeof(Id)); }
 
- public:
+ private:
   /// Finish writing all relations which have previously been added, but might
   /// still be in some internal buffer.
   void finish() {
@@ -231,7 +258,6 @@ class CompressedRelationWriter {
     outfile_.wlock()->close();
   }
 
- private:
   // Compress the contents of `smallRelationsBuffer_` into a single
   // block and write it to outfile_. Update `currentBlockData_` with the meta
   // data of the written block. Then clear `smallRelationsBuffer_`.
@@ -267,6 +293,10 @@ class CompressedRelationWriter {
   // `finishLargeRelation` was missing.
   CompressedRelationMetadata finishLargeRelation(size_t numDistinctC1);
 
+  // Add a complete large relation by calling `addBlockForLargeRelation` for
+  // each block in the `sortedBlocks` and then calling `finishLargeRelation`.
+  // The number of distinct col1 entries will be computed from the blocks
+  // directly.
   CompressedRelationMetadata addCompleteLargeRelation(Id col0Id, auto&& sortedBlocks);
 
   // This is the function in `CompressedRelationsTest.cpp` that tests the
@@ -275,34 +305,6 @@ class CompressedRelationWriter {
                                       std::string testCaseName,
                                       size_t blocksize);
 
- public:
-  // Two helper types used to make the interface of the function `createPermutationPair` below safer and more explicit.
-  using MetadataCallback =
-      std::function<void(std::span<const CompressedRelationMetadata>)>;
-
-  struct WriterAndCallback {
-    CompressedRelationWriter& writer_;
-    MetadataCallback  callback_;
-  };
-
-  /**
-   * @brief Write two permutations that only differ by the order of the col1 and col2 (e.g. POS and PSO).
-   * @param basename filename/path that will be used as a prefix for names of temporary files.
-   * @param writerAndCallback1 A writer for the first permutation together with a callback that is called for each of the created metadata.
-   * @param writerAndCallback2  The same as `writerAndCallback1`, but for the other permutation.
-   * @param sortedTriples The inputs as blocks of triples (plus possibly additional columns). The first three columns must be sorted according to the `permutation` (which corresponds to the `writerAndCallback1`.
-   * @param permutation The permutation to be build (as a permutation of the array `[0, 1, 2]`). The `sortedTriples` must be sorted by this permutation.
-   * ids within this vocabulary.
-   */
-  static std::pair<std::vector<CompressedBlockMetadata>,
-                   std::vector<CompressedBlockMetadata>>
-  createPermutationPair(
-      const std::string& basename, WriterAndCallback writerAndCallback1,
-      WriterAndCallback writerAndCallback2,
-      cppcoro::generator<IdTableStatic<0>> sortedTriples,
-      std::array<size_t, 3> permutation,
-      std::vector<std::function<void(const IdTableStatic<0>&)>>
-          perBlockCallbacks);
 };
 
 using namespace std::string_view_literals;
