@@ -57,7 +57,7 @@ class ConfigManager {
     std::unique_ptr<Data> data_;
 
     // Describes the order of initialization.
-    static inline size_t numberOfInstances_{0};
+    static inline std::atomic_size_t numberOfInstances_{0};
     size_t initializationId_{numberOfInstances_++};
 
    public:

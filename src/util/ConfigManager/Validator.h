@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <concepts>
 #include <functional>
 #include <optional>
@@ -99,7 +100,7 @@ class ConfigOptionValidatorManager {
   std::string descriptor_;
 
   // Describes the order of initialization.
-  static inline size_t numberOfInstances_{0};
+  static inline std::atomic_size_t numberOfInstances_{0};
   size_t initializationId_{numberOfInstances_++};
 
  public:
