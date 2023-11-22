@@ -77,7 +77,8 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
         fileAsJson.end());
   }
 
-  ad_utility::makeOfstream(fileName) << benchmarkClassAndBenchmarkResultsAsJson;
+  ad_utility::makeOfstream(fileName)
+      << benchmarkClassAndBenchmarkResultsAsJson << std::endl;
 }
 
 /*
