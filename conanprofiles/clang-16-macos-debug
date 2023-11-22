@@ -9,3 +9,4 @@ os=Macos
 [buildenv]
 CC=clang
 CXX=clang++
+prefix=/usr/local/opt/llvm@16/
