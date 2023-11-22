@@ -1009,9 +1009,10 @@ CompressedRelationWriter::createPermutationPair(
     const std::vector<std::function<void(const IdTableStatic<0>&)>>&
         perBlockCallbacks) {
   auto [c0, c1, c2] = permutation;
-  auto& [writer1, callback1] = writerAndCallback1;
-  auto& [writer2, callback2] = writerAndCallback2;
-  MetadataWriter writeMetadata{std::move(callback1), std::move(callback2),
+  auto& writer1 = writerAndCallback1.writer_;
+  auto& writer2 = writerAndCallback2.writer_;
+  MetadataWriter writeMetadata{std::move(writerAndCallback1.callback_),
+                               std::move(writerAndCallback2.callback_),
                                writer1.blocksize()};
   const size_t blocksize = writer1.blocksize();
   AD_CORRECTNESS_CHECK(writer2.blocksize() == writer1.blocksize());
@@ -1072,9 +1073,9 @@ CompressedRelationWriter::createPermutationPair(
       writeMetadata(md1, md2);
     } else {
       // Small relations are written in one go.
-      auto md1 = writer1.addSmallRelation(currentCol0.value(),
-                                          distinctCol1Counter.getAndReset(),
-                                          relation.asStaticView<0>());
+      auto md1 = writer1.addSmallRelation(
+          currentCol0.value(), distinctCol1Counter.getAndReset(),
+          writerAndCallback2.callback_.asStaticView<0>());
       // We don't use the parallel sorter to create the switched relation as its
       // overhead is far too high for small relations.
       relation.swapColumns(0, 1);

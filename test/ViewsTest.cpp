@@ -107,7 +107,8 @@ TEST(Views, UniqueBlock) {
     i = nextI;
   }
 
-  auto unique = std::views::join(ad_utility::uniqueBlockView(inputs));
+  auto unique = std::views::join(
+      ad_utility::OwningView{ad_utility::uniqueBlockView(inputs)});
   std::vector<int> result;
   for (const auto& element : unique) {
     result.push_back(element);
