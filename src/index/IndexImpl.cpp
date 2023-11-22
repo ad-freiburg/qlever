@@ -588,17 +588,6 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   CompressedRelationWriter writer2{ad_utility::File(fileName2, "w"),
                                    blocksizePermutationInBytes_};
 
-  auto callback1 = [&](std::span<const CompressedRelationMetadata> mds) {
-    for (const auto& md : mds) {
-      metaData1.add(md);
-    }
-  };
-  auto callback2 = [&](std::span<const CompressedRelationMetadata> mds) {
-    for (const auto& md : mds) {
-      metaData2.add(md);
-    }
-  };
-
   auto liftCallback = [](auto callback) {
     return [callback](const auto& block) mutable {
       for (const auto& triple : block) {
@@ -606,12 +595,15 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
       }
     };
   };
+  auto callback1 = liftCallback([&](const auto& md) { metaData1.add(md); });
+  auto callback2 = liftCallback([&](const auto& md) { metaData2.add(md); });
+
   std::vector<std::function<void(const IdTableStatic<0>&)>> callbacks{
       liftCallback(perTripleCallbacks)...};
 
-  auto [blocks1, blocks2] = CompressedRelationWriter::createPermutationPairImpl(
-      fileName1, writer1, writer2, std::move(sortedTriples), c0, c1, c2,
-      callback1, callback2, std::move(callbacks));
+  auto [blocks1, blocks2] = CompressedRelationWriter::createPermutationPair(
+      fileName1, {writer1, callback1}, {writer2, callback2},
+      std::move(sortedTriples), {c0, c1, c2}, std::move(callbacks));
 
   metaData1.blockData() = std::move(blocks1);
   metaData2.blockData() = std::move(blocks2);

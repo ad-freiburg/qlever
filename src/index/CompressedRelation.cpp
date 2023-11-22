@@ -910,9 +910,8 @@ void CompressedRelationWriter::addBlockForLargeRelation(
 }
 
 // __________________________________________________________________________
-// TODO<joka921> Comment.
-static CompressedRelationMetadata addCompleteLargeRelation(
-    CompressedRelationWriter* out, Id col0Id, auto&& sortedBlocks) {
+CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
+    Id col0Id, auto&& sortedBlocks) {
   size_t numDistinctC1 = 0;
   Id lastRel = std::numeric_limits<Id>::max();
 
@@ -921,11 +920,10 @@ static CompressedRelationMetadata addCompleteLargeRelation(
       numDistinctC1 += col1 != lastRel;
       lastRel = col1;
     }
-    out->addBlockForLargeRelation(
+    addBlockForLargeRelation(
         col0Id, std::make_shared<IdTable>(std::move(block).toDynamic()));
   }
-  // TODO<joka921> handle the multiplicity computation.
-  return out->finishLargeRelation(numDistinctC1);
+  return finishLargeRelation(numDistinctC1);
 }
 
 // Collect elements of type `T` in batches of size 100'000 and apply the
@@ -983,16 +981,17 @@ class MetadataWriter {
 // _____________________________________________________________________________
 std::pair<std::vector<CompressedBlockMetadata>,
           std::vector<CompressedBlockMetadata>>
-CompressedRelationWriter::createPermutationPairImpl(
-    const std::string& basename, CompressedRelationWriter& writer1,
-    CompressedRelationWriter& writer2,
-    cppcoro::generator<IdTableStatic<0>> sortedTriples, size_t c0, size_t c1,
-    size_t c2, MetadataCallback metadataCallback1,
-    MetadataCallback metadataCallback2,
-    std::vector<std::function<void(const IdTableStatic<0>&)>>
-        perBlockCallbacks) {
-  MetadataWriter writeMetadata{std::move(metadataCallback1),
-                               std::move(metadataCallback2)};
+CompressedRelationWriter::createPermutationPair(
+    const std::string& basename, WriterAndCallback writerAndCallback1,
+      WriterAndCallback writerAndCallback2,
+      cppcoro::generator<IdTableStatic<0>> sortedTriples, std::array<size_t, 3> permutation,
+      std::vector<std::function<void(const IdTableStatic<0>&)>>
+      perBlockCallbacks) {
+  auto [c0, c1, c2] = permutation;
+  auto& [writer1, callback1] = writerAndCallback1;
+  auto& [writer2, callback2] = writerAndCallback1;
+MetadataWriter writeMetadata{std::move(callback1),
+                               std::move(callback2)};
   const size_t blocksize = writer1.blocksize();
   AD_CORRECTNESS_CHECK(writer2.blocksize() == writer1.blocksize());
 
@@ -1045,7 +1044,7 @@ CompressedRelationWriter::createPermutationPairImpl(
       addBlockForLargeRelation();
       auto md1 = writer1.finishLargeRelation(numDistinctCol1);
       largeSwitchedRelationTimer.cont();
-      auto md2 = addCompleteLargeRelation(&writer2, currentCol0.value(),
+      auto md2 = writer2.addCompleteLargeRelation(currentCol0.value(),
                                           sorter.getSortedBlocks(blocksize));
       largeSwitchedRelationTimer.stop();
       sorter.clear();
@@ -1080,7 +1079,7 @@ CompressedRelationWriter::createPermutationPairImpl(
       continue;
     }
     if (!currentCol0.has_value()) {
-      /**/ currentCol0 = block.at(0)[c0];
+      currentCol0 = block.at(0)[c0];
     }
     for (const auto& triple : block) {
       if (triple[c0] != currentCol0) {
