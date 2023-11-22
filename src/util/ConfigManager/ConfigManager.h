@@ -93,6 +93,11 @@ class ConfigManager {
 
       return std::visit(AD_FWD(vis), *data_);
     }
+
+   private:
+    // Implementation for `holdsConfigOption` and `holdsSubManager`.
+    template <typename T>
+    requires isTypeContainedIn<T, Data> bool implHolds() const;
   };
 
   /*

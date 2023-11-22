@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -26,6 +24,7 @@
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -44,19 +43,23 @@ ConfigManager::HashMapEntry::HashMapEntry(Data&& data)
     : data_{std::make_unique<Data>(std::move(data))} {}
 
 // ____________________________________________________________________________
-bool ConfigManager::HashMapEntry::holdsConfigOption() const {
+template <typename T>
+requires isTypeContainedIn<T, ConfigManager::HashMapEntry::Data>
+bool ConfigManager::HashMapEntry::implHolds() const {
   // Make sure, that it is not a null pointer.
   AD_CORRECTNESS_CHECK(data_);
 
-  return std::holds_alternative<ConfigOption>(*data_);
+  return std::holds_alternative<T>(*data_);
+}
+
+// ____________________________________________________________________________
+bool ConfigManager::HashMapEntry::holdsConfigOption() const {
+  return implHolds<ConfigOption>();
 }
 
 // ____________________________________________________________________________
 bool ConfigManager::HashMapEntry::holdsSubManager() const {
-  // Make sure, that it is not a null pointer.
-  AD_CORRECTNESS_CHECK(data_);
-
-  return std::holds_alternative<ConfigManager>(*data_);
+  return implHolds<ConfigManager>();
 }
 
 // ____________________________________________________________________________
