@@ -183,20 +183,24 @@ class GroupBy : public Operation {
       _count++;
     };
     [[nodiscard]] ValueId calculateResult() const {
-      if (_error) return ValueId::makeUndefined();
-      else return ValueId::makeFromDouble(_sum / (double) _count);
+      if (_error)
+        return ValueId::makeUndefined();
+      else
+        return ValueId::makeFromDouble(_sum / (double)_count);
     }
   };
 
   template <size_t OUT_WIDTH, size_t numAggregates>
-  bool createResultForSortedSubtree(IdTable* result,
-                                    const ad_utility::HashMap<ValueId,
-                                                              std::array<AverageAggregationData, numAggregates>> & map);
+  bool createResultForSortedSubtree(
+      IdTable* result,
+      const ad_utility::HashMap<
+          ValueId, std::array<AverageAggregationData, numAggregates>>& map);
 
   // Check if the previously described optimization can be applied. The argument
   // Must be the single subtree of this GROUP BY, properly cast to a `const
   // Sort*`.
-  std::optional<ExplicitlySortedData> checkIfExplicitlySorted(std::vector<Aggregate> aggregates);
+  std::optional<ExplicitlySortedData> checkIfExplicitlySorted(
+      std::vector<Aggregate> aggregates);
 
   // The check whether the optimization just described can be applied and its
   // actual computation are split up in two functions. This struct contains

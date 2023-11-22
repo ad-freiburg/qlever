@@ -145,7 +145,7 @@ struct bl {
   bool operator()(const auto& s) const {
     if (s == "true") return 1;
     if (s == "false") return 0;
-    return (bool) std::stoi(s);
+    return (bool)std::stoi(s);
   }
 };
 

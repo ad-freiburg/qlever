@@ -12,9 +12,9 @@
 #include "engine/Join.h"
 #include "engine/Sort.h"
 #include "engine/Values.h"
+#include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
-#include "engine/sparqlExpressions/AggregateExpression.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "parser/Alias.h"
@@ -330,19 +330,20 @@ ResultTable GroupBy::computeResult() {
   // Check if optimization for explicitly sorted child can be applied
   auto explicitlySortedParams = checkIfExplicitlySorted(aggregates);
 
-  auto useOptimization =
-      RuntimeParameters().get<"use-group-by-optimization">();
+  auto useOptimization = RuntimeParameters().get<"use-group-by-optimization">();
 
   std::shared_ptr<const ResultTable> subresult;
   if (useOptimization && explicitlySortedParams.has_value()) {
     // Skip sorting
     subresult = _subtree->getRootOperation()->getChildren().at(0)->getResult();
     // Update runtime information
-    auto runTimeInfoChildren = _subtree->getRootOperation()->getChildren()
-                                   .at(0)->getRootOperation()->getRuntimeInfoPointer();
+    auto runTimeInfoChildren = _subtree->getRootOperation()
+                                   ->getChildren()
+                                   .at(0)
+                                   ->getRootOperation()
+                                   ->getRuntimeInfoPointer();
     _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-        {runTimeInfoChildren},
-        RuntimeInformation::Status::optimizedOut);
+        {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
   } else {
     subresult = _subtree->getResult();
   }
@@ -384,8 +385,9 @@ ResultTable GroupBy::computeResult() {
   size_t outWidth = idTable.numColumns();
 
   if (useOptimization && explicitlySortedParams.has_value()) {
-    CALL_FIXED_SIZE((std::array{outWidth, aggregates.size()}), &GroupBy::computeGroupByForSortedSubtree,
-                    this, &idTable, aggregates, subresult->idTable(),
+    CALL_FIXED_SIZE((std::array{outWidth, aggregates.size()}),
+                    &GroupBy::computeGroupByForSortedSubtree, this, &idTable,
+                    aggregates, subresult->idTable(),
                     explicitlySortedParams->subtreeColumnIndex_, localVocab);
 
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
@@ -706,8 +708,8 @@ bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
 }
 
 // _____________________________________________________________________________
-std::optional<GroupBy::ExplicitlySortedData>
-    GroupBy::checkIfExplicitlySorted(std::vector<Aggregate> aggregates) {
+std::optional<GroupBy::ExplicitlySortedData> GroupBy::checkIfExplicitlySorted(
+    std::vector<Aggregate> aggregates) {
   auto* sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
   if (!sort) {
     return std::nullopt;
@@ -718,7 +720,7 @@ std::optional<GroupBy::ExplicitlySortedData>
     return std::nullopt;
   }
 
-  for (auto & aggregate : aggregates) {
+  for (auto& aggregate : aggregates) {
     auto expr = aggregate._expression.getPimpl();
 
     // Only allow AVG for now
@@ -726,25 +728,25 @@ std::optional<GroupBy::ExplicitlySortedData>
       return std::nullopt;
 
     // Check that there are no nested aggregates
-    if (expr->children().front()->containsAggregate())
-      return std::nullopt;
+    if (expr->children().front()->containsAggregate()) return std::nullopt;
   }
 
   const Variable& groupByVariable = _groupByVariables.front();
   auto child = _subtree->getRootOperation()->getChildren().at(0);
   auto columnIndex = child->getVariableColumn(groupByVariable);
 
-  return ExplicitlySortedData{ columnIndex };
+  return ExplicitlySortedData{columnIndex};
 }
 
 // _____________________________________________________________________________
 template <size_t OUT_WIDTH, size_t numAggregates>
-bool GroupBy::createResultForSortedSubtree(IdTable* result,
-                                           const ad_utility::HashMap<ValueId,
-                                             std::array<AverageAggregationData, numAggregates>> & map) {
+bool GroupBy::createResultForSortedSubtree(
+    IdTable* result,
+    const ad_utility::HashMap<
+        ValueId, std::array<AverageAggregationData, numAggregates>>& map) {
   // Sort by groupBy column
   std::vector<ValueId> sortedKeys;
-  for (const auto & val : map) {
+  for (const auto& val : map) {
     sortedKeys.push_back(val.first);
   }
   std::sort(sortedKeys.begin(), sortedKeys.end());
@@ -753,7 +755,7 @@ bool GroupBy::createResultForSortedSubtree(IdTable* result,
   IdTableStatic<OUT_WIDTH> idTable = std::move(*result).toStatic<OUT_WIDTH>();
 
   size_t rowIndex = 0;
-  for (const auto & val : sortedKeys) {
+  for (const auto& val : sortedKeys) {
     idTable.emplace_back();
     idTable(rowIndex, 0) = val;
     for (size_t i = 0; i < numAggregates; ++i) {
@@ -782,12 +784,13 @@ bool GroupBy::computeGroupByForSortedSubtree(IdTable* result,
   // TODO: Use a variant for AggregationData
   ad_utility::HashMap<KeyType, ValueType,
                       absl::container_internal::hash_default_hash<KeyType>,
-                      absl::container_internal::hash_default_eq<KeyType>> map;
+                      absl::container_internal::hash_default_eq<KeyType>>
+      map;
 
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(),
-      subresult,getExecutionContext()->getAllocator(), localVocab);
+      *getExecutionContext(), _subtree->getVariableColumns(), subresult,
+      getExecutionContext()->getAllocator(), localVocab);
 
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};
@@ -798,15 +801,17 @@ bool GroupBy::computeGroupByForSortedSubtree(IdTable* result,
   evaluationContext._isPartOfGroupBy = true;
 
   size_t blockSize = 65536;
-  auto numBlocks = (size_t) ceil(((double) subresult.size()) / blockSize);
+  auto numBlocks = (size_t)ceil(((double)subresult.size()) / blockSize);
 
   size_t rowIndex = 0;
 
   for (size_t i = 0; i < numBlocks; ++i) {
     evaluationContext._beginIndex = i * blockSize;
-    evaluationContext._endIndex = std::min((i + 1) * blockSize, subresult.size());
+    evaluationContext._endIndex =
+        std::min((i + 1) * blockSize, subresult.size());
 
-    auto currentBlockSize = evaluationContext._endIndex - evaluationContext._beginIndex;
+    auto currentBlockSize =
+        evaluationContext._endIndex - evaluationContext._beginIndex;
 
     size_t aggregateIndex = 0;
     auto currentRowIndex = rowIndex;
@@ -816,20 +821,18 @@ bool GroupBy::computeGroupByForSortedSubtree(IdTable* result,
 
     // Create elements in map
     for (size_t j = 0; j < currentBlockSize; ++j) {
-      auto id = subresult(evaluationContext._beginIndex + j,
-                          columnIndex);
-      (void) map[id];
+      auto id = subresult(evaluationContext._beginIndex + j, columnIndex);
+      (void)map[id];
     }
 
     // Get pointers to values
     // (valid for this iteration as no new elements added)
     for (size_t j = 0; j < currentBlockSize; ++j) {
-      auto id = subresult(evaluationContext._beginIndex + j,
-                          columnIndex);
+      auto id = subresult(evaluationContext._beginIndex + j, columnIndex);
       hashEntrys.emplace_back(&(map.at(id)));
     }
 
-    for (auto & aggregate : aggregates) {
+    for (auto& aggregate : aggregates) {
       // Evaluate child expression on block
       auto expr = aggregate._expression.getPimpl();
       auto exprChildren = expr->children();
@@ -844,8 +847,9 @@ bool GroupBy::computeGroupByForSortedSubtree(IdTable* result,
 
         using NVG = sparqlExpression::detail::NumericValueGetter;
 
-        for (const auto & val : generator) {
-          sparqlExpression::detail::NumericValue numVal = NVG()(val, &evaluationContext);
+        for (const auto& val : generator) {
+          sparqlExpression::detail::NumericValue numVal =
+              NVG()(val, &evaluationContext);
 
           auto hashEntryIndex = rowIndex - evaluationContext._beginIndex;
           hashEntrys[hashEntryIndex]->at(aggregateIndex).increment(numVal);
@@ -859,8 +863,7 @@ bool GroupBy::computeGroupByForSortedSubtree(IdTable* result,
 
       // Only if we have reached the last aggregate can we move on to the
       // next set of rows
-      if (aggregateIndex != aggregates.size())
-        rowIndex = currentRowIndex;
+      if (aggregateIndex != aggregates.size()) rowIndex = currentRowIndex;
     }
   }
 
