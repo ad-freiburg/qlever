@@ -12,8 +12,8 @@
 
 namespace ad_utility::websocket {
 
-net::awaitable<void> QueryToSocketDistributor::dispatchToStrand() const {
-  return net::dispatch(net::bind_executor(strand_, net::use_awaitable));
+net::awaitable<void> QueryToSocketDistributor::postToStrand() const {
+  return net::post(net::bind_executor(strand_, net::use_awaitable));
 }
 
 // _____________________________________________________________________________
@@ -42,7 +42,7 @@ void QueryToSocketDistributor::wakeUpWaitingListeners() {
 net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
     std::string payload) {
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
-  co_await dispatchToStrand();
+  co_await postToStrand();
   AD_CONTRACT_CHECK(!finished_);
   data_.push_back(std::move(sharedPayload));
   wakeUpWaitingListeners();
@@ -51,7 +51,7 @@ net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
 // _____________________________________________________________________________
 
 net::awaitable<void> QueryToSocketDistributor::signalEnd() {
-  co_await dispatchToStrand();
+  co_await postToStrand();
   AD_CONTRACT_CHECK(!finished_);
   finished_ = true;
   wakeUpWaitingListeners();
@@ -63,7 +63,7 @@ net::awaitable<void> QueryToSocketDistributor::signalEnd() {
 
 net::awaitable<std::shared_ptr<const std::string>>
 QueryToSocketDistributor::waitForNextDataPiece(size_t index) const {
-  co_await dispatchToStrand();
+  co_await postToStrand();
 
   if (index < data_.size()) {
     co_return data_.at(index);
