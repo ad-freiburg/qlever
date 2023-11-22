@@ -72,6 +72,7 @@ jobs:
           # Build your program with the given configuration
         # Sourcing the conanrun.sh even for building is required to make gtest_discover_tests pass reliably.
         run: >
+          df -h;
           source ${{github.workspace}}/build/conanrun.sh;
           cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j $(nproc)
 
