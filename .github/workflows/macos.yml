@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         # Debugging the Stxxl build
-        build-type: [Release]
+        build-type: [Debug]
     runs-on: macos-12
     steps:
     - uses: actions/checkout@v3
@@ -57,13 +57,13 @@ jobs:
         cache-name: cache-conan-modules
       with:
         path: ~/.conan2
-        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt') }}
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt') }}-${{matrix.build_type}}
     - name: Create build directory
       run: mkdir ${{github.workspace}}/build
     - name: Install and run conan
       working-directory: ${{github.workspace}}/build
       run: >
-        conan install .. -pr:b=../conanprofiles/clang-16-macos -pr:h=../conanprofiles/clang-16-macos -of=. --build=missing;
+        conan install .. -pr:b=../conanprofiles/clang-16-macos-debug -pr:h=../conanprofiles/clang-16-macos-debug -of=. --build=missing;
     - name: Configure CMake
       # For std::ranges::join_view we need the -fexperimental-library flag on libc++16, which on Mac requires to manually tinker with the linking flags.
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DCMAKE_CXX_COMPILER=clang++ -DADDITIONAL_COMPILER_FLAGS="-fexperimental-library" -DADDITIONAL_LINKER_FLAGS="-L$(brew --prefix llvm)/lib/c++"
