@@ -158,7 +158,7 @@ class GroupBy : public Operation {
   bool computeGroupByForJoinWithFullScan(IdTable* result);
 
   // TODO: Update documentation
-  template <size_t OUT_WIDTH>
+  template <size_t OUT_WIDTH, size_t numAggregates>
   bool computeGroupByForSortedSubtree(IdTable* result,
                                       std::vector<Aggregate> aggregates,
                                       const IdTable& subresult,
@@ -188,11 +188,10 @@ class GroupBy : public Operation {
     }
   };
 
-  template <size_t OUT_WIDTH>
+  template <size_t OUT_WIDTH, size_t numAggregates>
   bool createResultForSortedSubtree(IdTable* result,
                                     const ad_utility::HashMap<ValueId,
-                                                              std::vector<AverageAggregationData>> & map,
-                                    size_t numAggregates);
+                                                              std::array<AverageAggregationData, numAggregates>> & map);
 
   // Check if the previously described optimization can be applied. The argument
   // Must be the single subtree of this GROUP BY, properly cast to a `const

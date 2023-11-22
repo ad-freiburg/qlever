@@ -141,6 +141,13 @@ struct dbl {
 struct szt {
   size_t operator()(const auto& s) const { return std::stoull(s); }
 };
+struct bl {
+  bool operator()(const auto& s) const {
+    if (s == "true") return 1;
+    if (s == "false") return 0;
+    return (bool) std::stoi(s);
+  }
+};
 
 struct toString {
   std::string operator()(const auto& s) const { return std::to_string(s); }
@@ -169,6 +176,9 @@ using SizeT = Parameter<size_t, szt, toString, Name>;
 
 template <ParameterName Name>
 using String = Parameter<std::string, std::identity, std::identity, Name>;
+
+template <ParameterName Name>
+using Bool = Parameter<bool, bl, toString, Name>;
 
 template <ParameterName Name>
 using MemorySizeParameter =
