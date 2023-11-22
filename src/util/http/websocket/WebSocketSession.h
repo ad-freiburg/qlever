@@ -28,8 +28,10 @@ class WebSocketSession {
   QueryId queryId_;
   bool cancelOnClose_ = false;
 
-  /// Wait for input from the client in a loop. Processing will happen in a
-  /// future version of Qlever.
+  /// Wait for input from the client in a loop. If the client sends the string
+  /// "cancel" this will attempt to cancel the current query. If the string is
+  /// "cancel_on_close", it will attempt to cancel it when the websocket closes
+  /// instead. Any other command will be ignored.
   net::awaitable<void> handleClientCommands();
 
   /// Wait for updates of the given query and send them to the client when they
@@ -40,6 +42,7 @@ class WebSocketSession {
   /// `waitForServerEvents` and `handleClientCommands`
   net::awaitable<void> acceptAndWait(const http::request<http::string_body>&);
 
+  /// If the query is active, trigger cancellation.
   bool tryToCancelQuery() const;
 
   /// Construct an instance of this class

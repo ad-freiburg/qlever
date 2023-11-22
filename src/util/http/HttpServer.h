@@ -41,6 +41,11 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
  *
  * A very basic HttpHandler, which simply serves files from a directory, can be
  * obtained via `ad_utility::httpUtils::makeFileServer()`.
+ *
+ * \tparam WebSocketHandler A callable type that receives a `http::request<...>`
+ * and the underlying socket that was used to receive the request and returns
+ * a `net::awaitable<void>`. It is only called if the request is a valid
+ * websocket upgrade request and the URL represents a valid path.
  */
 template <typename HttpHandler,
           ad_utility::InvocableWithExactReturnType<
@@ -288,6 +293,8 @@ class HttpServer {
   }
 };
 
+/// Deduction guide, so you don't have to specify the types explicitly
+/// when creating an instance of this class.
 template <typename HttpHandler, typename WebSocketHandlerSupplier>
 HttpServer(unsigned short, const std::string&, int, HttpHandler,
            WebSocketHandlerSupplier)
