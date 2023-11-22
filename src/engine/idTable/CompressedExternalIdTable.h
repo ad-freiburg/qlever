@@ -395,7 +395,6 @@ class CompressedExternalIdTableBase {
         });
   }
 
- protected:
   // If there is less than one complete block (meaning that the number of calls
   // to `push` was `< blocksize_`), apply the transformation to `currentBlock_`
   // and return `false`. Else, push the `currentBlock_` via `pushBlock_`, block

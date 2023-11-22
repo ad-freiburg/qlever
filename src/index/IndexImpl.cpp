@@ -191,11 +191,6 @@ void IndexImpl::createFromFile(const string& filename) {
   createPermutationPair(
       std::move(uniqueSorter), pso_, pos_, spoSorter.makePushCallback(),
       makeNumEntitiesCounter(numPredicatesNormal, 1), countActualTriples);
-  /*
-  createPermutationPair(
-      psoSorter.getSortedBlocks<0>(), pso_, pos_, spoSorter.makePushCallback(),
-      makeNumEntitiesCounter(numPredicatesNormal, 1), countActualTriples);
-      */
   configurationJson_["num-predicates-normal"] = numPredicatesNormal;
   configurationJson_["num-triples-normal"] = numTriplesNormal;
   writeConfiguration();

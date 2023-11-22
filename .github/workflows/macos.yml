@@ -63,6 +63,10 @@ jobs:
     - name: Install and run conan
       working-directory: ${{github.workspace}}/build
       run: >
+        clang --version;
+        clang++ --version;
+        gcc --version;
+        g++ --version;
         conan install .. -pr:b=../conanprofiles/clang-16-macos-debug -pr:h=../conanprofiles/clang-16-macos-debug -of=. --build=missing;
     - name: Configure CMake
       # For std::ranges::join_view we need the -fexperimental-library flag on libc++16, which on Mac requires to manually tinker with the linking flags.
