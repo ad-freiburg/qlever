@@ -48,6 +48,7 @@ jobs:
         echo 'export CPPFLAGS="-I/usr/local/opt/llvm@16/include"' >> ~/.bash_profile
         echo  CPPFLAGS="/usr/local/opt/llvm@16/include" >> $GITHUB_ENV 
         source ~/.bash_profile
+        brew reinstall gcc
     - name: Print clang version
       run: clang++ --version
 
