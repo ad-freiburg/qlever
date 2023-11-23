@@ -157,49 +157,68 @@ class GroupBy : public Operation {
   // `?z`.
   bool computeGroupByForJoinWithFullScan(IdTable* result);
 
-  // TODO: Update documentation
+  // Create a HashMap containing the results of each aggregation for each group.
   template <size_t OUT_WIDTH, size_t numAggregates>
-  bool computeGroupByForSortedSubtree(IdTable* result,
-                                      std::vector<Aggregate> aggregates,
-                                      const IdTable& subresult,
-                                      size_t columnIndex,
-                                      LocalVocab& localVocab);
+  bool computeGroupByForHashMapOptimization(IdTable* result,
+                                            std::vector<Aggregate> aggregates,
+                                            const IdTable& subresult,
+                                            size_t columnIndex,
+                                            LocalVocab* localVocab);
 
-  struct ExplicitlySortedData {
+  // Required data to perform HashMap optimization.
+  struct HashMapOptimizationData {
     size_t subtreeColumnIndex_;
   };
 
+  // Data to perform the AVG aggregation using the HashMap optimization.
   struct AverageAggregationData {
-    bool _error = false;
-    double _sum = 0;
-    int64_t _count = 0;
+    bool error_ = false;
+    double sum_ = 0;
+    int64_t count_ = 0;
     void increment(sparqlExpression::detail::NumericValue intermediate) {
       if (const int64_t* intval = std::get_if<int64_t>(&intermediate))
-        _sum += (double)*intval;
+        sum_ += (double)*intval;
       else if (const double* dval = std::get_if<double>(&intermediate))
-        _sum += *dval;
+        sum_ += *dval;
       else
-        _error = true;
-      _count++;
+        error_ = true;
+      count_++;
     };
     [[nodiscard]] ValueId calculateResult() const {
-      if (_error)
+      if (error_)
         return ValueId::makeUndefined();
       else
-        return ValueId::makeFromDouble(_sum / (double)_count);
+        return ValueId::makeFromDouble(sum_ / (double)count_);
     }
   };
 
-  template <size_t OUT_WIDTH, size_t numAggregates>
-  bool createResultForSortedSubtree(
-      IdTable* result,
-      const ad_utility::HashMap<
-          ValueId, std::array<AverageAggregationData, numAggregates>>& map);
+  using KeyType = ValueId;
+  template <size_t numAggregates>
+  using ValueType = std::array<AverageAggregationData, numAggregates>;
+  using HashType = absl::container_internal::hash_default_hash<KeyType>;
+  using EqType = absl::container_internal::hash_default_eq<KeyType>;
+  template <size_t numAggregates>
+  using AllocType = ad_utility::AllocatorWithLimit<
+      std::pair<const KeyType, ValueType<numAggregates>>>;
+  template <size_t numAggregates>
+  using HashMapType =
+      ad_utility::HashMap<KeyType, ValueType<numAggregates>, HashType, EqType,
+                          AllocType<numAggregates>>;
 
-  // Check if the previously described optimization can be applied. The argument
-  // Must be the single subtree of this GROUP BY, properly cast to a `const
-  // Sort*`.
-  std::optional<ExplicitlySortedData> checkIfExplicitlySorted(
+  // Sort the HashMap by key and create result table.
+  template <size_t OUT_WIDTH, size_t numAggregates>
+  bool createResultFromHashMap(IdTable* result,
+                               const HashMapType<numAggregates>& map);
+
+  // Check if hash map optimization is applicable. This is the case when
+  // the following conditions hold true:
+  // - Runtime parameter is set
+  // - Child operation is SORT
+  // - Only top-level aggregations
+  // - All aggregates are AVG
+  // - Maximum 5 aggregates
+  // - Only one grouped variable
+  std::optional<HashMapOptimizationData> checkIfHashMapOptimizationPossible(
       std::vector<Aggregate> aggregates);
 
   // The check whether the optimization just described can be applied and its

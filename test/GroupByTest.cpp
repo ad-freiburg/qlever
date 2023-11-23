@@ -332,8 +332,8 @@ struct GroupByOptimizations : ::testing::Test {
 
   std::string turtleInput =
       "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
-      "<a> <is-a> <f> . <a> <is> 20 . <b> <is-a> <f> . <b> <is> 40 . <c> "
-      "<is-a> <g> . <c> <is> 100 ."
+      "<a> <is-a> <f> . <a> <is> 20 . <b> <is-a> <f> . <b> <is> 40.0 . <c> "
+      "<is-a> <g> . <c> <is> 100 . <x> <is-a> <f> . <x> <is> \"A\" . "
       "<x> "
       "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
       "\"zz\"@en";
@@ -445,11 +445,11 @@ TEST_F(GroupByOptimizations, getPermutationForThreeVariableTriple) {
 }
 
 // _____________________________________________________________________________
-TEST_F(GroupByOptimizations, checkIfExplicitlySorted) {
+TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& join, const auto& aggregates) {
     auto groupBy = GroupBy{qec, groupByVariables, aliases, join};
-    ASSERT_FALSE(groupBy.checkIfExplicitlySorted(aggregates));
+    ASSERT_FALSE(groupBy.checkIfHashMapOptimizationPossible(aggregates));
   };
 
   std::vector<Variable> variablesXAndY{varX, varY};
@@ -483,11 +483,17 @@ TEST_F(GroupByOptimizations, checkIfExplicitlySorted) {
   // Can not be a nested aggregate
   testFailure(variablesOnlyX, aliasesAvgCountX,
               validJoinWhenGroupingByXPlusSort, avgCountAggregate);
+  // Optimization has to be enabled
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  testFailure(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByXPlusSort,
+              avgAggregate);
 
   // Everything is valid for the following example.
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
   GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX,
                   validJoinWhenGroupingByXPlusSort};
-  auto optimizedAggregateData = groupBy.checkIfExplicitlySorted(avgAggregate);
+  auto optimizedAggregateData =
+      groupBy.checkIfHashMapOptimizationPossible(avgAggregate);
   ASSERT_TRUE(optimizedAggregateData.has_value());
   ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
 }
@@ -515,13 +521,13 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
   std::vector<GroupBy::Aggregate> avgAggregate = {{avgYPimpl, 1}};
 
   // Calculate result with optimization
-  RuntimeParameters().set<"use-group-by-optimization">(true);
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
   GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, sortedJoin};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 
   // Clear cache, calculate result without optimization
   qec->clearCacheUnpinnedOnly();
-  RuntimeParameters().set<"use-group-by-optimization">(false);
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
   GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY,
                                      sortedJoin};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
@@ -615,7 +621,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
           validForOptimization.computeOptimizedGroupByIfPossible(&result));
     }
 
-    // There are 5 triples with `<x>` as a subject, 0 triples with `<xa>` as a
+    // There are 7 triples with `<x>` as a subject, 0 triples with `<xa>` as a
     // subject, and 1 triple with `y` as a subject.
     ASSERT_EQ(result.numColumns(), 2u);
     ASSERT_EQ(result.size(), 2u);
@@ -625,7 +631,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
     qec->getIndex().getId("<y>", &idOfY);
 
     ASSERT_EQ(result(0, 0), idOfX);
-    ASSERT_EQ(result(0, 1), Id::makeFromInt(5));
+    ASSERT_EQ(result(0, 1), Id::makeFromInt(7));
     ASSERT_EQ(result(1, 0), idOfY);
     ASSERT_EQ(result(1, 1), Id::makeFromInt(1));
   };
@@ -681,8 +687,8 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
 
     ASSERT_EQ(result.size(), 1);
     ASSERT_EQ(result.numColumns(), 1);
-    // The test index currently consists of 13 triples.
-    ASSERT_EQ(result(0, 0), Id::makeFromInt(13));
+    // The test index currently consists of 15 triples.
+    ASSERT_EQ(result(0, 0), Id::makeFromInt(15));
   };
   testWithBothInterfaces(true);
   testWithBothInterfaces(false);
@@ -782,7 +788,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
       EXPECT_EQ(result(0, 1), Id::makeFromInt(2));
       EXPECT_EQ(result(1, 1), Id::makeFromInt(2));
       EXPECT_EQ(result(2, 1), Id::makeFromInt(2));
-      EXPECT_EQ(result(3, 1), Id::makeFromInt(5));
+      EXPECT_EQ(result(3, 1), Id::makeFromInt(7));
       EXPECT_EQ(result(4, 1), Id::makeFromInt(1));
       // TODO<joka921> This should be 1.
       // There is one triple added <z> @en@<label> "zz"@en which is
