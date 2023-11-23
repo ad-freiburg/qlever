@@ -991,30 +991,42 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
 void IndexImpl::readIndexBuilderSettingsFromFile() {
   ad_utility::ConfigManager config{};
 
-  // TODO Write a description.
   std::vector<std::string> prefixesExternal;
-  config.addOption("prefixes-external", "", &prefixesExternal, {});
+  config.addOption("prefixes-external",
+                   "Literals or IRIs that start with any of these prefixes "
+                   "will be stored in the external vocabulary. For example "
+                   "`[\"<\"] will externalize all IRIs",
+                   &prefixesExternal, {});
 
-  // TODO Write a description.
   std::vector<std::string> languagesInternal;
-  config.addOption("languages-internal", "", &languagesInternal, {"en"});
+  config.addOption("languages-internal",
+                   "Literals with one of these langauge tag will be stored in "
+                   "the internal vocabulary by default",
+                   &languagesInternal, {"en"});
 
+  // TODO<joka921, schlegan> It would be nice to add a description to this
+  // submanager directly, e.g. "The locale used for all operations that depend
+  // on the lexicographical order of strings, e.g. ORDER BY"
   decltype(auto) localeManager = config.addSubManager({"locale"s});
-  // TODO Write a description.
+
+  // Should be self-explanatory with the default value.
   std::string lang;
   decltype(auto) langOption =
       localeManager.addOption("language", "", &lang, LOCALE_DEFAULT_LANG);
 
-  // TODO Write a description.
+  // Should be self-explanatory with the default value.
   std::string country;
   decltype(auto) countryOption =
       localeManager.addOption("country", "", &country, LOCALE_DEFAULT_COUNTRY);
 
-  // TODO Write a description.
   bool ignorePunctuation;
-  decltype(auto) ignorePunctuationOption =
-      localeManager.addOption("ignore-punctuation", "", &ignorePunctuation,
-                              LOCALE_DEFAULT_IGNORE_PUNCTUATION);
+  decltype(auto) ignorePunctuationOption = localeManager.addOption(
+      "ignore-punctuation",
+      "If set to true, then punctuation characters will only be considered on "
+      "the last level of comparisons. This will for example lead to the order "
+      "\"aa\", \"a.a\", \"ab\" (the first two are basically equal and the dot "
+      "is only used as a tie break)",
+      &ignorePunctuation, LOCALE_DEFAULT_IGNORE_PUNCTUATION);
 
   // Validator for the entries under `locale`. Either they all must use the
   // default value, or all must be set at runtime.
@@ -1030,20 +1042,36 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
       "All three options under 'locale' must be set, or none of them.",
       langOption, countryOption, ignorePunctuationOption);
 
-  // TODO Write a description.
-  config.addOption("ascii-prefixes-only", "", &onlyAsciiTurtlePrefixes_,
-                   onlyAsciiTurtlePrefixes_);
+  config.addOption(
+      "ascii-prefixes-only",
+      "Activate a faster parsing mode that is relaxed in two ways: 1. It "
+      "doesn't work if certain corner cases of the Turtle specification are "
+      "used (e.g. certain non-alphanumeric non-ascii characters in prefixes "
+      "and IRIs). 2. It allows certain patterns that are actually not valid "
+      "turtle, for example spaces in IRIs. As parsing is not a bottleneck "
+      "anymore, we recommend setting this to `false` and making sure that the "
+      "input is valid according to the official RDF Turtle specification",
+      &onlyAsciiTurtlePrefixes_, onlyAsciiTurtlePrefixes_);
 
-  // TODO Write a description.
-  config.addOption("parallel-parsing", "", &useParallelParser_,
-                   useParallelParser_);
+  config.addOption(
+      "parallel-parsing",
+      "Enable the parallel parser, which assumes the following properties of "
+      "the Turtle input: 1. All prefix definitions are at the beginning of the "
+      "file, 2. All ends of triple blocks (denoted by a dot) are followed by a "
+      "newline (possibly with other whitespace inbetween), and a dot followed "
+      "by a newline always denotes the end of a triple block (especially there "
+      "are no multiline literals). This is true for most reasonably formatted "
+      "turtle files",
+      &useParallelParser_, useParallelParser_);
 
-  // TODO Write a description.
-  config.addOption("num-triples-per-batch", "", &numTriplesPerBatch_,
-                   static_cast<size_t>(NUM_TRIPLES_PER_PARTIAL_VOCAB));
+  config.addOption(
+      "num-triples-per-batch",
+      "The batch size of the first phase of the index build. Lower values will "
+      "reduce the RAM consumption of this phase while a too low value might "
+      "hurt the performance of the index builder",
+      &numTriplesPerBatch_, static_cast<size_t>(NUM_TRIPLES_PER_PARTIAL_VOCAB));
 
-  // TODO Write a description.
-  config.addOption("parser-batch-size", "", &parserBatchSize_,
+  config.addOption("parser-batch-size", "The internal batch size of the turtle parser. Typically there is no need to change this parameter.", &parserBatchSize_,
                    PARSER_BATCH_SIZE);
 
   // TODO Write a description.
