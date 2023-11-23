@@ -526,9 +526,12 @@ std::string ConfigManager::printConfigurationDoc(
     return "No configuration options were defined.";
   }
 
-  // Setup for printing the locations of the option in json format, so that
-  // people can easier understand, where everything is.
-  nlohmann::json configuratioOptionsVisualization;
+  /*
+  Setup for printing the locations of the option in json format, so that
+  people can easier understand, where everything is.
+  Note: This json remembers the insertion order.
+  */
+  nlohmann::ordered_json configuratioOptionsVisualization;
 
   /*
   Add the paths of `configOptions_` and have them point to either:
@@ -539,9 +542,11 @@ std::string ConfigManager::printConfigurationDoc(
   - An example value, of the correct type.
   */
   for (const auto& [path, option] : allConfigOptions) {
-    // Pointer to the position of this option in
-    // `configuratioOptionsVisualization`.
-    const nlohmann::json::json_pointer jsonOptionPointer{path};
+    /*
+    Pointer to the position of this option in
+    `configuratioOptionsVisualization`.
+    */
+    const nlohmann::ordered_json::json_pointer jsonOptionPointer{path};
 
     if (printCurrentJsonConfiguration) {
       // We can only use the value, if we are sure, that the value was
