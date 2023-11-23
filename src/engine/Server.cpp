@@ -135,8 +135,9 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
     auto queryHub =
         std::make_shared<ad_utility::websocket::QueryHub>(ioContext);
     // Make sure the `queryHub` does not outlive the ioContext it has a
-    // reference to, by only using a weak ptr here. Note: It must be only
-    // converted back to a shared_ptr inside a task running on the io_context.
+    // reference to, by only storing a `weak_ptr` in the `queryHub_`. Note: This
+    // `weak_ptr` may only be converted back to a `shared_ptr` inside a task
+    // running on the `io_context`.
     queryHub_ = queryHub;
     return [this, queryHub = std::move(queryHub)](
                const http::request<http::string_body>& request,

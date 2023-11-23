@@ -44,20 +44,17 @@ class TestHttpServer {
   // Create server on localhost. Port 0 instructs the operating system to choose
   // a free port of its choice.
   explicit TestHttpServer(HttpHandler httpHandler) {
-    const std::string& ipAddress = "0.0.0.0";
-    int numServerThreads = 1;
     auto webSocketSessionSupplier = [](net::io_context& ioContext) {
-      ad_utility::websocket::QueryHub queryHub{ioContext};
-      ad_utility::websocket::QueryRegistry registry;
-      return [queryHub = std::move(queryHub), registry = std::move(registry)](
+      using namespace ad_utility::websocket;
+      return [queryHub = QueryHub{ioContext}, registry = QueryRegistry{}](
                  const http::request<http::string_body>& request,
                  tcp::socket socket) mutable {
-        return ad_utility::websocket::WebSocketSession::handleSession(
-            queryHub, registry, request, std::move(socket));
+        return WebSocketSession::handleSession(queryHub, registry, request,
+                                               std::move(socket));
       };
     };
     server_ = std::make_shared<HttpServer<HttpHandler, WebSocketHandlerType>>(
-        0, ipAddress, numServerThreads, std::move(httpHandler),
+        0, "0.0.0.0", 1, std::move(httpHandler),
         std::move(webSocketSessionSupplier));
   }
 

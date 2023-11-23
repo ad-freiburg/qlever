@@ -72,7 +72,7 @@ class HttpServer {
   /// server will listen, as well as the HttpHandler. This constructor only
   /// initializes several member functions
   explicit HttpServer(
-      unsigned short port, const std::string& ipAddress = "0.0.0.0",
+      unsigned short port, std::string_view ipAddress = "0.0.0.0",
       int numServerThreads = 1, HttpHandler handler = HttpHandler{},
       ad_utility::InvocableWithConvertibleReturnType<WebSocketHandler,
                                                      net::io_context&> auto
