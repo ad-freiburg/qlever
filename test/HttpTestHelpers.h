@@ -46,11 +46,10 @@ class TestHttpServer {
   explicit TestHttpServer(HttpHandler httpHandler) {
     const std::string& ipAddress = "0.0.0.0";
     int numServerThreads = 1;
-    auto webSocketSessionSupplier = [this](net::io_context& ioContext) {
+    auto webSocketSessionSupplier = [](net::io_context& ioContext) {
       ad_utility::websocket::QueryHub queryHub{ioContext};
       ad_utility::websocket::QueryRegistry registry;
-      return [this, queryHub = std::move(queryHub),
-              registry = std::move(registry)](
+      return [queryHub = std::move(queryHub), registry = std::move(registry)](
                  const http::request<http::string_body>& request,
                  tcp::socket socket) mutable {
         return ad_utility::websocket::WebSocketSession::handleSession(
