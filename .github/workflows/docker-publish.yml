@@ -47,6 +47,8 @@ jobs:
           push: true
           # If this is a push on master, publish with short commit sha
           # else use the ref name, which has to be the tag in this case.
+          # We have to explicitly add the "qlever:latest" tag for it to work correctly,
+          # see e.g. https://stackoverflow.com/questions/27643017/do-i-need-to-manually-tag-latest-when-pushing-to-docker-public-repository
           tags: >
             ${{ secrets.DOCKERHUB_USERNAME }}/qlever:${{ github.ref_name == 'master' && steps.sha.outputs.sha_short || github.ref_name }},
             ${{ secrets.DOCKERHUB_USERNAME }}/qlever:latest
