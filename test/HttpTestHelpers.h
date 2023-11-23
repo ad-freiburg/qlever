@@ -75,30 +75,24 @@ class TestHttpServer {
   // NOTE 2: Catch all exceptions in the server thread so that if an exception
   // is thrown, the whole process does not simply terminate.
   void runInOwnThread() {
-    std::exception_ptr exception_ptr = nullptr;
-    std::shared_ptr<HttpServer<HttpHandler, WebSocketHandlerType>> serverCopy =
-        server_;
+    auto runnerTask =
+        std::packaged_task<void()>{[server = server_]() { server->run(); }};
+    auto runnerFuture = runnerTask.get_future();
     serverThread_ =
-        std::make_unique<ad_utility::JThread>([&exception_ptr, serverCopy]() {
-          try {
-            serverCopy->run();
-          } catch (...) {
-            exception_ptr = std::current_exception();
-          }
-        });
+        std::make_unique<ad_utility::JThread>(std::move(runnerTask));
     auto waitTimeUntilServerIsUp = 100ms;
-    std::this_thread::sleep_for(waitTimeUntilServerIsUp);
-    if (exception_ptr || !server_->serverIsReady()) {
+    auto status = runnerFuture.wait_for(waitTimeUntilServerIsUp);
+    if (status == std::future_status::ready) {
+      // Propagate exception
+      runnerFuture.get();
+    }
+    if (!server_->serverIsReady()) {
       // Detach the server thread (the `run()` above never returns), so that we
       // can exit this test.
       serverThread_->detach();
-      if (exception_ptr) {
-        std::rethrow_exception(exception_ptr);
-      } else {
-        throw std::runtime_error(absl::StrCat("HttpServer was not up after ",
-                                              waitTimeUntilServerIsUp.count(),
-                                              "ms, this should not happen"));
-      }
+      throw std::runtime_error(absl::StrCat("HttpServer was not up after ",
+                                            waitTimeUntilServerIsUp.count(),
+                                            "ms, this should not happen"));
     }
   }
 
@@ -107,9 +101,8 @@ class TestHttpServer {
   // NOTE: This works by causing the `httpServer->run()` running in the server
   // thread to return, so that the thread can complete.
   void shutDown() {
-    if (!hasBeenShutDown_) {
+    if (server_->serverIsReady() && !hasBeenShutDown_.exchange(true)) {
       server_->shutDown();
-      hasBeenShutDown_ = true;
     }
   }
 
