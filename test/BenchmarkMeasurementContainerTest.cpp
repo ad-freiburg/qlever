@@ -94,10 +94,8 @@ arguments. Should be passed per deduction.
 */
 template <typename Function>
 static void doForTypeInResultTableEntryType(Function function) {
-  ad_utility::ConstexprForLoop(
-      std::make_index_sequence<std::variant_size_v<ResultTable::EntryType>>{},
-      [&function]<size_t index, typename IndexType = std::variant_alternative_t<
-                                    index, ResultTable::EntryType>>() {
+  ad_utility::forEachTypeInTemplateType<ResultTable::EntryType>(
+      [&function]<typename IndexType>() {
         // `std::monostate` is not important for these kinds of tests.
         if constexpr (!ad_utility::isSimilar<IndexType, std::monostate>) {
           function.template operator()<IndexType>();

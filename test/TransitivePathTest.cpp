@@ -39,7 +39,77 @@ void assertSameUnorderedContent(const IdTable& a, const IdTable& b) {
 }
 }  // namespace
 
-TEST(TransitivePathTest, computeTransitivePath) {
+TEST(TransitivePathTest, idToId) {
+  IdTable sub(2, makeAllocator());
+  sub.push_back({V(0), V(1)});
+  sub.push_back({V(1), V(2)});
+  sub.push_back({V(1), V(3)});
+  sub.push_back({V(2), V(3)});
+
+  IdTable result(2, makeAllocator());
+
+  IdTable expected(2, makeAllocator());
+  expected.push_back({V(0), V(3)});
+
+  TransitivePathSide left(std::nullopt, 0, V(0), 0);
+  TransitivePathSide right(std::nullopt, 1, V(3), 1);
+  TransitivePath T(nullptr, nullptr, left, right, 1,
+                   std::numeric_limits<size_t>::max());
+
+  T.computeTransitivePath<2, 2>(&result, sub, left, right);
+  assertSameUnorderedContent(expected, result);
+}
+
+TEST(TransitivePathTest, idToVar) {
+  IdTable sub(2, makeAllocator());
+  sub.push_back({V(0), V(1)});
+  sub.push_back({V(1), V(2)});
+  sub.push_back({V(1), V(3)});
+  sub.push_back({V(2), V(3)});
+
+  IdTable result(2, makeAllocator());
+
+  IdTable expected(2, makeAllocator());
+  expected.push_back({V(0), V(1)});
+  expected.push_back({V(0), V(2)});
+  expected.push_back({V(0), V(3)});
+
+  TransitivePathSide left(std::nullopt, 0, V(0), 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  TransitivePath T(nullptr, nullptr, left, right, 1,
+                   std::numeric_limits<size_t>::max());
+
+  T.computeTransitivePath<2, 2>(&result, sub, left, right);
+  assertSameUnorderedContent(expected, result);
+}
+
+TEST(TransitivePathTest, varTovar) {
+  IdTable sub(2, makeAllocator());
+  sub.push_back({V(0), V(1)});
+  sub.push_back({V(1), V(2)});
+  sub.push_back({V(1), V(3)});
+  sub.push_back({V(2), V(3)});
+
+  IdTable result(2, makeAllocator());
+
+  IdTable expected(2, makeAllocator());
+  expected.push_back({V(0), V(1)});
+  expected.push_back({V(0), V(2)});
+  expected.push_back({V(0), V(3)});
+  expected.push_back({V(1), V(2)});
+  expected.push_back({V(1), V(3)});
+  expected.push_back({V(2), V(3)});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  TransitivePath T(nullptr, nullptr, right, left, 1,
+                   std::numeric_limits<size_t>::max());
+
+  T.computeTransitivePath<2, 2>(&result, sub, left, right);
+  assertSameUnorderedContent(expected, result);
+}
+
+TEST(TransitivePathTest, unlimitedMaxLength) {
   IdTable sub(2, makeAllocator());
   sub.push_back({V(0), V(2)});
   sub.push_back({V(2), V(4)});
@@ -72,15 +142,30 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({V(7), V(7)});
   expected.push_back({V(10), V(11)});
 
-  TransitivePath T(nullptr, nullptr, false, false, 0, 0, V(0), V(0),
-                   Variable{"?bim"}, Variable{"?bam"}, 0, 0);
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  TransitivePath T(nullptr, nullptr, left, right, 1,
+                   std::numeric_limits<size_t>::max());
 
-  T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, V(0), V(0), 1,
-                             std::numeric_limits<size_t>::max());
+  T.computeTransitivePath<2, 2>(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
+}
 
-  result.clear();
-  expected.clear();
+TEST(TransitivePathTest, maxLength2) {
+  IdTable sub(2, makeAllocator());
+  sub.push_back({V(0), V(2)});
+  sub.push_back({V(2), V(4)});
+  sub.push_back({V(4), V(7)});
+  sub.push_back({V(0), V(7)});
+  sub.push_back({V(3), V(3)});
+  sub.push_back({V(7), V(0)});
+  // Disconnected component.
+  sub.push_back({V(10), V(11)});
+
+  IdTable result(2, makeAllocator());
+
+  IdTable expected(2, makeAllocator());
+
   expected.push_back({V(0), V(2)});
   expected.push_back({V(0), V(4)});
   expected.push_back({V(0), V(7)});
@@ -95,7 +180,10 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({V(7), V(7)});
   expected.push_back({V(10), V(11)});
 
-  T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, V(0), V(0), 1, 2);
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  TransitivePath T(nullptr, nullptr, left, right, 1, 2);
+  T.computeTransitivePath<2, 2>(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
 
   result.clear();
@@ -104,7 +192,9 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({V(7), V(2)});
   expected.push_back({V(7), V(7)});
 
-  T.computeTransitivePath<2>(&result, sub, false, true, 0, 1, V(7), V(0), 1, 2);
+  left.value_ = V(7);
+  right.value_ = Variable{"?target"};
+  T.computeTransitivePath<2, 2>(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
 
   result.clear();
@@ -112,6 +202,8 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({V(0), V(2)});
   expected.push_back({V(7), V(2)});
 
-  T.computeTransitivePath<2>(&result, sub, true, false, 0, 1, V(0), V(2), 1, 2);
+  left.value_ = Variable{"?start"};
+  right.value_ = V(2);
+  T.computeTransitivePath<2, 2>(&result, sub, right, left);
   assertSameUnorderedContent(expected, result);
 }

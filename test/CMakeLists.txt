@@ -332,7 +332,7 @@ addLinkAndDiscoverTest(ConfigOptionProxyTest configManager)
 
 addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
-addLinkAndDiscoverTest(RandomTest)
+addLinkAndDiscoverTest(RandomTest testUtil)
 
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 

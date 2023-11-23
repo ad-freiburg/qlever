@@ -4,10 +4,12 @@
 
 #pragma once
 
+#include <concepts>
 #include <ranges>
 
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/TypeTraits.h"
 
 // Various helper functions for compile-time programming.
 
@@ -197,6 +199,42 @@ constexpr auto cartesianPowerAsArray() {
 template <std::integral auto Upper, size_t Num>
 auto cartesianPowerAsIntegerArray() {
   return toIntegerSequence<cartesianPowerAsArray<Upper, Num>()>();
+}
+
+/*
+@brief Call the given lambda function with each of the given types `Ts` as
+explicit template parameter, keeping the same order.
+*/
+template <typename... Ts>
+constexpr void forEachTypeInParameterPack(const auto& lambda) {
+  (lambda.template operator()<Ts>(), ...);
+}
+
+/*
+Implementation for `forEachTypeInTemplateType`.
+
+In order to go through the types inside a templated type, we need to use
+template type specialization.
+*/
+namespace detail {
+template <class T>
+struct forEachTypeInTemplateTypeImpl;
+
+template <template <typename...> typename Template, typename... Ts>
+struct forEachTypeInTemplateTypeImpl<Template<Ts...>> {
+  void operator()(const auto& lambda) const {
+    forEachTypeInParameterPack<Ts...>(lambda);
+  }
+};
+}  // namespace detail
+
+/*
+@brief Call the given lambda function with each type in the given instantiated
+template type as explicit template parameter, keeping the same order.
+*/
+template <typename TemplateType>
+constexpr void forEachTypeInTemplateType(const auto& lambda) {
+  detail::forEachTypeInTemplateTypeImpl<TemplateType>{}(lambda);
 }
 
 }  // namespace ad_utility
