@@ -249,8 +249,9 @@ Awaitable<void> Server::process(
   // the key and value determines the kind of action, as well as parameters
   // like "index-decription=...", where the key determines the kind of action.
   auto checkParameter =
-      [&parameters](const std::string key, std::optional<std::string> value,
-                    bool accessAllowed = true) -> std::optional<std::string> {
+      [&parameters](
+          std::string_view key, std::optional<std::string_view> value,
+          bool accessAllowed = true) -> std::optional<std::string_view> {
     // If the key is not found, always return std::nullopt.
     if (!parameters.contains(key)) {
       return std::nullopt;
@@ -264,7 +265,7 @@ Awaitable<void> Server::process(
     }
     // Now that we have the value, check if there is a problem with the access.
     // If yes, we abort the query processing at this point.
-    if (accessAllowed == false) {
+    if (!accessAllowed) {
       throw std::runtime_error(absl::StrCat("Access to \"", key, "=",
                                             value.value(), "\" denied",
                                             " (requires a valid access token)",
@@ -306,7 +307,7 @@ Awaitable<void> Server::process(
   std::optional<http::response<http::string_body>> response;
 
   // Execute commands (URL parameter with key "cmd").
-  auto logCommand = [](const std::optional<std::string>& cmd,
+  auto logCommand = [](const std::optional<std::string_view>& cmd,
                        std::string_view actionMsg) {
     LOG(INFO) << "Processing command \"" << cmd.value() << "\""
               << ": " << actionMsg << std::endl;
@@ -352,7 +353,7 @@ Awaitable<void> Server::process(
           checkParameter("index-description", std::nullopt, accessTokenOk)) {
     LOG(INFO) << "Setting index description to: \"" << description.value()
               << "\"" << std::endl;
-    index_.setKbName(description.value());
+    index_.setKbName(std::string{description.value()});
     response = createJsonResponse(composeStatsJson(), request);
   }
 
@@ -361,7 +362,7 @@ Awaitable<void> Server::process(
           checkParameter("text-description", std::nullopt, accessTokenOk)) {
     LOG(INFO) << "Setting text description to: \"" << description.value()
               << "\"" << std::endl;
-    index_.setTextName(description.value());
+    index_.setTextName(std::string{description.value()});
     response = createJsonResponse(composeStatsJson(), request);
   }
 
@@ -370,7 +371,7 @@ Awaitable<void> Server::process(
     if (auto value = checkParameter(key, std::nullopt, accessTokenOk)) {
       LOG(INFO) << "Setting runtime parameter \"" << key << "\""
                 << " to value \"" << value.value() << "\"" << std::endl;
-      RuntimeParameters().set(key, value.value());
+      RuntimeParameters().set(key, std::string{value.value()});
       response = createJsonResponse(RuntimeParameters().toMap(), request);
     }
   }
