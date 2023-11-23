@@ -222,7 +222,9 @@ void Index::setKeepTempFiles(bool keepTempFiles) {
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize& Index::stxxlMemory() { return pimpl_->stxxlMemory(); }
+ad_utility::MemorySize& Index::memoryLimitIndexBuilding() {
+  return pimpl_->memoryLimitIndexBuilding();
+}
 
 // ____________________________________________________________________________
 uint64_t& Index::blocksizePermutationsInBytes() {
@@ -230,8 +232,8 @@ uint64_t& Index::blocksizePermutationsInBytes() {
 }
 
 // ____________________________________________________________________________
-const ad_utility::MemorySize& Index::stxxlMemory() const {
-  return pimpl_->stxxlMemory();
+const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
+  return std::as_const(*pimpl_).memoryLimitIndexBuilding();
 }
 
 // ____________________________________________________________________________
