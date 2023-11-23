@@ -886,12 +886,12 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
   auto offset = std::numeric_limits<size_t>::max();
   auto multiplicityCol1 =
       computeMultiplicity(currentRelationPreviousSize_, numDistinctC1);
-  md = CompressedRelationMetadata{currentCol0_, currentRelationPreviousSize_,
+  md = CompressedRelationMetadata{currentCol0Id_, currentRelationPreviousSize_,
                                   multiplicityCol1, multiplicityCol1, offset};
   currentRelationPreviousSize_ = 0;
   // The following is used in `addBlockForLargeRelation` to assert that
   // `finishLargeRelation` was called before a new relation was started.
-  currentCol0_ = Id::makeUndefined();
+  currentCol0Id_ = Id::makeUndefined();
   return md;
 }
 
@@ -899,11 +899,12 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 void CompressedRelationWriter::addBlockForLargeRelation(
     Id col0Id, std::shared_ptr<IdTable> relation) {
   AD_CORRECTNESS_CHECK(!relation->empty());
-  AD_CORRECTNESS_CHECK(currentCol0_ == col0Id || currentCol0_.isUndefined());
-  currentCol0_ = col0Id;
+  AD_CORRECTNESS_CHECK(currentCol0Id_ == col0Id ||
+                       currentCol0Id_.isUndefined());
+  currentCol0Id_ = col0Id;
   currentRelationPreviousSize_ += relation->numRows();
   writeBufferedRelationsToSingleBlock();
-  compressAndWriteBlock(currentCol0_, currentCol0_, std::move(relation));
+  compressAndWriteBlock(currentCol0Id_, currentCol0Id_, std::move(relation));
 }
 
 namespace {

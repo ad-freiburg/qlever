@@ -59,7 +59,7 @@ void checkThatTablesAreEqual(
 // in which the permutation will be compressed and stored on disk.
 /*void testCompressedRelations(const std::vector<RelationInput>& inputs, */
 void testCompressedRelations(const auto& inputs, std::string testCaseName,
-                             size_t blocksize) {
+                             ad_utility::MemorySize blocksize) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
   AD_CONTRACT_CHECK(std::ranges::is_sorted(
@@ -197,9 +197,9 @@ namespace {
 // blocks.
 void testWithDifferentBlockSizes(const std::vector<RelationInput>& inputs,
                                  std::string testCaseName) {
-  testCompressedRelations(inputs, testCaseName, 37);
-  testCompressedRelations(inputs, testCaseName, 237);
-  testCompressedRelations(inputs, testCaseName, 4096);
+  testCompressedRelations(inputs, testCaseName, 37_B);
+  testCompressedRelations(inputs, testCaseName, 237_B);
+  testCompressedRelations(inputs, testCaseName, 4096_B);
 }
 }  // namespace
 

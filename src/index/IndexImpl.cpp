@@ -209,9 +209,6 @@ void IndexImpl::createFromFile(const string& filename) {
       auto pushTripleToPatterns = [&patternCreator,
                                    &isInternalId](const auto& triple) {
         if (!std::ranges::any_of(triple, isInternalId)) {
-          // patternCreator.processTriple(static_cast<std::array<Id,
-          // 3>>(triple));
-          //  TODO<joka921>
           patternCreator.processTriple(
               std::array<Id, 3>{triple[0], triple[1], triple[2]});
         }
@@ -569,67 +566,63 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
 }
 
 // _____________________________________________________________________________
-std::optional<std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
-                        IndexImpl::IndexMetaDataMmapDispatcher::WriteType>>
+std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
+          IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
 IndexImpl::createPermutationPairImpl(const string& fileName1,
                                      const string& fileName2,
-                                     auto&& sortedTriples, size_t c0, size_t c1,
-                                     size_t c2, auto&&... perTripleCallbacks) {
+                                     auto&& sortedTriples,
+                                     std::array<size_t, 3> permutation,
+                                     auto&&... perTripleCallbacks) {
   LOG(INFO) << "Creating a pair of index permutations ..." << std::endl;
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
-  if constexpr (MetaData::_isMmapBased) {
-    metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
-    metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
-  }
+  static_assert(MetaData::_isMmapBased);
+  metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
+  metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
 
   CompressedRelationWriter writer1{ad_utility::File(fileName1, "w"),
-                                   blocksizePermutationInBytes_};
+                                   blocksizePermutation_};
   CompressedRelationWriter writer2{ad_utility::File(fileName2, "w"),
-                                   blocksizePermutationInBytes_};
+                                   blocksizePermutation_};
 
+  // lift a callback that works on single elements to a callback that works on
+  // blocks.
   auto liftCallback = [](auto callback) {
     return [callback](const auto& block) mutable {
-      for (const auto& triple : block) {
-        callback(triple);
-      }
+      std::ranges::for_each(block, callback);
     };
   };
-  auto callback1 = liftCallback([&](const auto& md) { metaData1.add(md); });
-  auto callback2 = liftCallback([&](const auto& md) { metaData2.add(md); });
+  auto callback1 =
+      liftCallback([&metaData1](const auto& md) { metaData1.add(md); });
+  auto callback2 =
+      liftCallback([&metaData2](const auto& md) { metaData2.add(md); });
 
-  std::vector<std::function<void(const IdTableStatic<0>&)>> callbacks{
+  std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
 
-  auto [blocks1, blocks2] = CompressedRelationWriter::createPermutationPair(
-      fileName1, {writer1, callback1}, {writer2, callback2},
-      std::move(sortedTriples), {c0, c1, c2}, std::move(callbacks));
+  std::tie(metaData1.blockData(), metaData2.blockData()) =
+      CompressedRelationWriter::createPermutationPair(
+          fileName1, {writer1, callback1}, {writer2, callback2},
+          AD_FWD(sortedTriples), permutation, perBlockCallbacks);
 
-  metaData1.blockData() = std::move(blocks1);
-  metaData2.blockData() = std::move(blocks2);
-
-  return std::make_pair(std::move(metaData1), std::move(metaData2));
+  return {std::move(metaData1), std::move(metaData2)};
 }
 
 // ________________________________________________________________________
-std::optional<std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
-                        IndexImpl::IndexMetaDataMmapDispatcher::WriteType>>
+std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
+          IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
 IndexImpl::createPermutations(auto&& sortedTriples, const Permutation& p1,
                               const Permutation& p2,
                               auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl(
       onDiskBase_ + ".index" + p1.fileSuffix_,
       onDiskBase_ + ".index" + p2.fileSuffix_, AD_FWD(sortedTriples),
-      p1.keyOrder_[0], p1.keyOrder_[1], p1.keyOrder_[2],
-      AD_FWD(perTripleCallbacks)...);
+      p1.keyOrder_, AD_FWD(perTripleCallbacks)...);
 
-  if (metaData.has_value()) {
-    auto& mdv = metaData.value();
-    LOG(INFO) << "Statistics for " << p1.readableName_ << ": "
-              << mdv.first.statistics() << std::endl;
-    LOG(INFO) << "Statistics for " << p2.readableName_ << ": "
-              << mdv.second.statistics() << std::endl;
-  }
+  LOG(INFO) << "Statistics for " << p1.readableName_ << ": "
+            << metaData.first.statistics() << std::endl;
+  LOG(INFO) << "Statistics for " << p2.readableName_ << ": "
+            << metaData.second.statistics() << std::endl;
 
   return metaData;
 }
@@ -639,22 +632,21 @@ void IndexImpl::createPermutationPair(auto&& sortedTriples,
                                       const Permutation& p1,
                                       const Permutation& p2,
                                       auto&&... perTripleCallbacks) {
-  auto metaData = createPermutations(AD_FWD(sortedTriples), p1, p2,
-                                     AD_FWD(perTripleCallbacks)...);
+  auto [metaData1, metaData2] = createPermutations(
+      AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
   // NOTE: When `setKbName` was called, it set the name of pso_.meta_,
   // pso_.meta_, ... which however are not used during index building.
   // `getKbName` simple reads one of these names.
-  metaData.value().first.setName(getKbName());
-  metaData.value().second.setName(getKbName());
-  if (metaData) {
-    LOG(INFO) << "Writing meta data for " << p1.readableName_ << " and "
-              << p2.readableName_ << " ..." << std::endl;
-    ad_utility::File f1(onDiskBase_ + ".index" + p1.fileSuffix_, "r+");
-    metaData.value().first.appendToFile(&f1);
-    ad_utility::File f2(onDiskBase_ + ".index" + p2.fileSuffix_, "r+");
-    metaData.value().second.appendToFile(&f2);
-  }
+  auto writeMetadata = [this](auto& metaData, const auto& permutation) {
+    metaData.setName(getKbName());
+    ad_utility::File f(onDiskBase_ + ".index" + permutation.fileSuffix_, "r+");
+    metaData.appendToFile(&f);
+  };
+  LOG(INFO) << "Writing meta data for " << p1.readableName_ << " and "
+            << p2.readableName_ << " ..." << std::endl;
+  writeMetadata(metaData1, p1);
+  writeMetadata(metaData2, p2);
 }
 
 // _____________________________________________________________________________

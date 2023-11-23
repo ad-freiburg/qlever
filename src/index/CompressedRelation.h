@@ -176,12 +176,11 @@ class CompressedRelationWriter {
       ad_utility::makeUnlimitedAllocator<Id>();
   // A buffer for small relations that will be stored in the same block.
   SmallRelationsBuffer smallRelationsBuffer_{allocator_};
-  // TODO<joka921> make this `MemorySize`.
-  size_t numBytesPerBlock_;
+  ad_utility::MemorySize numBytesPerBlock_;
 
   // When we store a large relation with multiple blocks then we keep track of
   // its `col0Id`, mostly for sanity checks.
-  Id currentCol0_ = Id::makeUndefined();
+  Id currentCol0Id_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
 
   ad_utility::TaskQueue<false> blockWriteQueue_{20, 10};
@@ -191,7 +190,8 @@ class CompressedRelationWriter {
 
  public:
   /// Create using a filename, to which the relation data will be written.
-  explicit CompressedRelationWriter(ad_utility::File f, size_t numBytesPerBlock)
+  explicit CompressedRelationWriter(ad_utility::File f,
+                                    ad_utility::MemorySize numBytesPerBlock)
       : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock} {}
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.
@@ -253,7 +253,9 @@ class CompressedRelationWriter {
   // Return the blocksize (in number of triples) of this writer. Note that the
   // actual sizes of blocks will slightly vary due to new relations starting in
   // new blocks etc.
-  size_t blocksize() const { return numBytesPerBlock_ / (2 * sizeof(Id)); }
+  size_t blocksize() const {
+    return numBytesPerBlock_.getBytes() / (2 * sizeof(Id));
+  }
 
  private:
   /// Finish writing all relations which have previously been added, but might
@@ -275,9 +277,9 @@ class CompressedRelationWriter {
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
       std::span<const Id> column);
 
-  // Compress the given `block` and write it to the file. The `firstCol0Id` and
-  // `lastCol0Id` are needed to setup the block's metadata which is appended to
-  // the internal buffer.
+  // Compress the given `block` and write it to the `outfile_`. The
+  // `firstCol0Id` and `lastCol0Id` are needed to set up the block's metadata
+  // which is appended to the internal buffer.
   void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id,
                              std::shared_ptr<IdTable> block);
 
@@ -315,7 +317,7 @@ class CompressedRelationWriter {
   // internals of this class and therefore needs private access.
   friend void testCompressedRelations(const auto& inputs,
                                       std::string testCaseName,
-                                      size_t blocksize);
+                                      ad_utility::MemorySize blocksize);
 };
 
 using namespace std::string_view_literals;
