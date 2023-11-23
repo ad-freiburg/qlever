@@ -59,11 +59,14 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
   if (appendToJsonInFile && std::filesystem::exists(fileName) &&
       !std::filesystem::is_empty(fileName)) {
     /*
-    TODO Is there a cheaper way, than transforming the file to json, combining
-    the old and new content, and writing it to the file?
-    For example: Appending to the end of the file.
+    By parsing the file as json and working with `nlohmann::json`, instead of
+    the json string representation, we first make sure, that the file only
+    contains valid json, and secondly guarantee, that we generate a valid new
+    json.
+    Also not, that this is not a performance critical place, so we don't have to
+    risk errors for a better performance.
     */
-    nlohmann::json fileAsJson(fileToJson(fileName));
+    const nlohmann::json fileAsJson(fileToJson(fileName));
     if (!fileAsJson.is_array()) {
       throw std::runtime_error(
           absl::StrCat("The contents of the file ", fileName,
