@@ -131,12 +131,18 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
   auto webSocketSessionSupplier = [this](net::io_context& ioContext) {
     // This must only be called once
-    AD_CONTRACT_CHECK(!queryHub_);
-    queryHub_ = std::make_unique<ad_utility::websocket::QueryHub>(ioContext);
-    return [this](const http::request<http::string_body>& request,
-                  tcp::socket socket) {
+    AD_CONTRACT_CHECK(queryHub_.expired());
+    auto queryHub =
+        std::make_shared<ad_utility::websocket::QueryHub>(ioContext);
+    // Make sure the `queryHub` does not outlive the ioContext it has a
+    // reference to, by only using a weak ptr here. Note: It must be only
+    // converted back to a shared_ptr inside a task running on the io_context.
+    queryHub_ = queryHub;
+    return [this, queryHub = std::move(queryHub)](
+               const http::request<http::string_body>& request,
+               tcp::socket socket) {
       return ad_utility::websocket::WebSocketSession::handleSession(
-          *queryHub_, queryRegistry_, request, std::move(socket));
+          *queryHub, queryRegistry_, request, std::move(socket));
     };
   };
 
@@ -151,10 +157,6 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
   // Start listening for connections on the server.
   httpServer.run();
-
-  // This will probably never be executed, but to ensure there will never
-  // be any dangling pointers, set it to zero after use.
-  queryHub_ = nullptr;
 }
 
 // _____________________________________________________________________________
@@ -666,9 +668,10 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
-    AD_CORRECTNESS_CHECK(queryHub_ != nullptr);
+    auto queryHub = queryHub_.lock();
+    AD_CORRECTNESS_CHECK(queryHub);
     auto messageSender = co_await ad_utility::websocket::MessageSender::create(
-        getQueryId(request), *queryHub_);
+        getQueryId(request), *queryHub);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query.
     //

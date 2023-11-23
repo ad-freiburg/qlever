@@ -64,10 +64,9 @@ class Server {
 
   bool enablePatternTrick_;
 
-  // Because HttpServer is not a member of this class, we need to assign
-  // this pointer after HttpServer is instanced. It is also set back to
-  // nullptr once the object is destroyed which only happens on shutdown.
-  std::unique_ptr<ad_utility::websocket::QueryHub> queryHub_ = nullptr;
+  /// Non-owning reference to the `QueryHub` instance living inside
+  /// the `WebSocketHandler` created for `HttpServer`.
+  std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
   mutable net::static_thread_pool threadPool_;
 
