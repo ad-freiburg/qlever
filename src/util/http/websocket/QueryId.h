@@ -24,7 +24,9 @@ class QueryId {
     AD_CONTRACT_CHECK(!id_.empty());
   }
 
-  friend void to_json(nlohmann::json&, const QueryId&);
+  friend void to_json(nlohmann::json& json, const QueryId& queryId) {
+    json = queryId.id_;
+  }
 
  public:
   /// Construct this object with the passed string
@@ -43,10 +45,6 @@ class QueryId {
   // Starting with gcc 12 and clang 15 this can be constexpr
   bool operator==(const QueryId&) const noexcept = default;
 };
-
-inline void to_json(nlohmann::json& json, const QueryId& queryId) {
-  json = queryId.id_;
-}
 
 /// This class is similar to QueryId, but it's instances are all unique within
 /// the registry it was created with. (It can not be created without a registry)

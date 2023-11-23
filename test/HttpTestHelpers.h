@@ -39,7 +39,6 @@ class TestHttpServer {
   // Indicator whether the server has been shut down. We need this because
   // `HttpServer::shutDown` must only be called once.
   std::atomic<bool> hasBeenShutDown_ = false;
-  ad_utility::websocket::QueryRegistry registry_;
 
  public:
   // Create server on localhost. Port 0 instructs the operating system to choose
@@ -49,11 +48,13 @@ class TestHttpServer {
     int numServerThreads = 1;
     auto webSocketSessionSupplier = [this](net::io_context& ioContext) {
       ad_utility::websocket::QueryHub queryHub{ioContext};
-      return [this, queryHub = std::move(queryHub)](
+      ad_utility::websocket::QueryRegistry registry;
+      return [this, queryHub = std::move(queryHub),
+              registry = std::move(registry)](
                  const http::request<http::string_body>& request,
                  tcp::socket socket) mutable {
         return ad_utility::websocket::WebSocketSession::handleSession(
-            queryHub, registry_, request, std::move(socket));
+            queryHub, registry, request, std::move(socket));
       };
     };
     server_ = std::make_shared<HttpServer<HttpHandler, WebSocketHandlerType>>(

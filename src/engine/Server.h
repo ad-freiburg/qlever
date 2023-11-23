@@ -143,8 +143,9 @@ class Server {
 
   /// Acquire the cancellation handle based on `queryId`, pass it to the
   /// operation and configure it to get cancelled automatically if a time limit
-  /// is passed by calling `cancelAfterDeadline`. If `timeLimit` is empty,
-  /// return a no-op lambda.
+  /// is passed by calling `cancelAfterDeadline`. In this case the return value
+  /// can be used to cancel the timer. If `timeLimit` is empty, return a
+  /// no-op lambda.
   std::function<void()> setupCancellationHandle(
       const net::any_io_executor& executor,
       const ad_utility::websocket::QueryId& queryId,
