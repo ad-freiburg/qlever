@@ -129,21 +129,35 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
     }
   };
 
+  auto webSocketSessionSupplier = [this](net::io_context& ioContext) {
+    // This must only be called once
+    AD_CONTRACT_CHECK(queryHub_.expired());
+    auto queryHub =
+        std::make_shared<ad_utility::websocket::QueryHub>(ioContext);
+    // Make sure the `queryHub` does not outlive the ioContext it has a
+    // reference to, by only storing a `weak_ptr` in the `queryHub_`. Note: This
+    // `weak_ptr` may only be converted back to a `shared_ptr` inside a task
+    // running on the `io_context`.
+    queryHub_ = queryHub;
+    return [this, queryHub = std::move(queryHub)](
+               const http::request<http::string_body>& request,
+               tcp::socket socket) {
+      return ad_utility::websocket::WebSocketSession::handleSession(
+          *queryHub, queryRegistry_, request, std::move(socket));
+    };
+  };
+
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
   auto httpServer = HttpServer{port_, "0.0.0.0", static_cast<int>(numThreads_),
-                               std::move(httpSessionHandler)};
-  queryHub_ = &httpServer.getQueryHub();
+                               std::move(httpSessionHandler),
+                               std::move(webSocketSessionSupplier)};
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations);
 
   // Start listening for connections on the server.
   httpServer.run();
-
-  // This will probably never be executed, but to ensure there will never
-  // be any dangling pointers, set it to zero after use.
-  queryHub_ = nullptr;
 }
 
 // _____________________________________________________________________________
@@ -292,7 +306,8 @@ Awaitable<void> Server::process(
   std::optional<http::response<http::string_body>> response;
 
   // Execute commands (URL parameter with key "cmd").
-  auto logCommand = [](std::optional<std::string>& cmd, std::string actionMsg) {
+  auto logCommand = [](const std::optional<std::string>& cmd,
+                       std::string_view actionMsg) {
     LOG(INFO) << "Processing command \"" << cmd.value() << "\""
               << ": " << actionMsg << std::endl;
   };
@@ -314,6 +329,10 @@ Awaitable<void> Server::process(
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
     response = createJsonResponse(RuntimeParameters().toMap(), request);
+  } else if (auto cmd =
+                 checkParameter("cmd", "dump-active-queries", accessTokenOk)) {
+    logCommand(cmd, "dump active queries");
+    response = createJsonResponse(queryRegistry_.getActiveQueries(), request);
   }
 
   // Ping with or without messsage.
@@ -532,10 +551,11 @@ auto Server::cancelAfterDeadline(
 // ____________________________________________________________________________
 std::function<void()> Server::setupCancellationHandle(
     const net::any_io_executor& executor,
+    const ad_utility::websocket::QueryId& queryId,
     const std::shared_ptr<Operation>& rootOperation,
-    std::optional<std::chrono::seconds> timeLimit) {
-  // TODO<RobinTF> register cancellation handle to allow manual cancellation
-  auto cancellationHandle = std::make_shared<ad_utility::CancellationHandle>();
+    std::optional<std::chrono::seconds> timeLimit) const {
+  auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
+  AD_CORRECTNESS_CHECK(cancellationHandle);
   rootOperation->recursivelySetCancellationHandle(
       std::move(cancellationHandle));
   if (timeLimit.has_value()) {
@@ -649,9 +669,10 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
-    AD_CORRECTNESS_CHECK(queryHub_ != nullptr);
+    auto queryHub = queryHub_.lock();
+    AD_CORRECTNESS_CHECK(queryHub);
     auto messageSender = co_await ad_utility::websocket::MessageSender::create(
-        getQueryId(request), *queryHub_);
+        getQueryId(request), *queryHub);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query.
     //
@@ -668,7 +689,8 @@ boost::asio::awaitable<void> Server::processQuery(
     auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
     absl::Cleanup cancelCancellationHandle{setupCancellationHandle(
-        co_await net::this_coro::executor, qet.getRootOperation(), timeLimit)};
+        co_await net::this_coro::executor, messageSender.getQueryId(),
+        qet.getRootOperation(), timeLimit)};
     auto timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
         qet.getRootOperation()->getRuntimeInfoWholeQuery();
