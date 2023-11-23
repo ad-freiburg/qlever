@@ -1071,14 +1071,35 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
       "hurt the performance of the index builder",
       &numTriplesPerBatch_, static_cast<size_t>(NUM_TRIPLES_PER_PARTIAL_VOCAB));
 
-  config.addOption("parser-batch-size", "The internal batch size of the turtle parser. Typically there is no need to change this parameter.", &parserBatchSize_,
-                   PARSER_BATCH_SIZE);
+  config.addOption("parser-batch-size",
+                   "The internal batch size of the turtle parser. Typically "
+                   "there is no need to change this parameter.",
+                   &parserBatchSize_, PARSER_BATCH_SIZE);
 
-  // TODO Write a description.
   std::string parserIntegerOverflowBehavior;
-  config.addOption("parser-integer-overflow-behavior", "",
-                   &parserIntegerOverflowBehavior,
-                   "overflowing-integers-throw"s);
+  decltype(auto) overflowOption = config.addOption(
+      "parser-integer-overflow-behavior",
+      "QLever stores all integer values with a fixed number of bits. This "
+      "option configures the behavior when an integer in the turtle input "
+      "cannot be represented by QLever. Note that this doesn't affect the "
+      "behavior of overflows during the query processing",
+      &parserIntegerOverflowBehavior, "overflowing-integers-throw"s);
+
+  using OverflowMap =
+      ad_utility::HashMap<std::string, TurtleParserIntegerOverflowBehavior>;
+  const OverflowMap overflowMap = []() -> OverflowMap {
+    using enum TurtleParserIntegerOverflowBehavior;
+    return {{"overflowing-integers-throw", Error},
+            {"overflowing-integers-become-doubles", OverflowingToDouble},
+            {"all-integers-become-doubles", AllToDouble}};
+  }();
+  config.addValidator(
+      [&overflowMap](std::string_view input) -> bool {
+        return overflowMap.contains(input);
+      },
+      "value must be one of " +
+          ad_utility::lazyStrJoin(std::views::keys(overflowMap), ", "),
+      "dummy description for the overflow behavior validator", overflowOption);
 
   // Set the options.
   if (!settingsFileName_.empty()) {
@@ -1127,41 +1148,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     LOG(INFO) << WARNING_PARALLEL_PARSING << std::endl;
   }
 
-  std::string overflowingIntegersThrow = "overflowing-integers-throw";
-  std::string overflowingIntegersBecomeDoubles =
-      "overflowing-integers-become-doubles";
-  std::string allIntegersBecomeDoubles = "all-integers-become-doubles";
-  std::vector<std::string_view> allModes{overflowingIntegersThrow,
-                                         overflowingIntegersBecomeDoubles,
-                                         allIntegersBecomeDoubles};
-  if (parserIntegerOverflowBehavior == overflowingIntegersThrow) {
-    LOG(INFO) << "Integers that cannot be represented by QLever will throw "
-                 "an exception"
-              << std::endl;
-    turtleParserIntegerOverflowBehavior_ =
-        TurtleParserIntegerOverflowBehavior::Error;
-  } else if (parserIntegerOverflowBehavior ==
-             overflowingIntegersBecomeDoubles) {
-    LOG(INFO) << "Integers that cannot be represented by QLever will be "
-                 "converted to doubles"
-              << std::endl;
-    turtleParserIntegerOverflowBehavior_ =
-        TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
-  } else if (parserIntegerOverflowBehavior == allIntegersBecomeDoubles) {
-    LOG(INFO) << "All integers will be converted to doubles" << std::endl;
-    turtleParserIntegerOverflowBehavior_ =
-        TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
-  } else {
-    // TODO This can maybe be replaced with a validator, if the logging of the
-    // information is not needed.
-    AD_CONTRACT_CHECK(std::find(allModes.begin(), allModes.end(),
-                                parserIntegerOverflowBehavior) ==
-                      allModes.end());
-    LOG(ERROR) << "Invalid value for parser-integer-overflow-behavior"
-               << std::endl;
-    LOG(INFO) << "The currently supported values are "
-              << absl::StrJoin(allModes, ",") << std::endl;
-  }
+  turtleParserIntegerOverflowBehavior_ =
+      overflowMap.at(parserIntegerOverflowBehavior);
 
   // Logging used configuration options.
   LOG(INFO) << config.printConfigurationDoc(true);
