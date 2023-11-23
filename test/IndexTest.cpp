@@ -566,3 +566,10 @@ TEST(IndexTest, getPermutation) {
   EXPECT_EQ(&index.OPS(), &index.getPermutation(OPS));
   EXPECT_EQ(&index.OSP(), &index.getPermutation(OSP));
 }
+
+TEST(IndexTest, trivialGettersAndSetters) {
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.memoryLimitIndexBuilding() = 7_kB;
+  EXPECT_EQ(index.memoryLimitIndexBuilding(), 7_kB);
+  EXPECT_EQ(std::as_const(index).memoryLimitIndexBuilding(), 7_kB);
+}
