@@ -611,7 +611,8 @@ boost::asio::awaitable<void> Server::processQuery(
               << (pinResult ? " [pin result]" : "")
               << (pinSubtrees ? " [pin subresults]" : "") << "\n"
               << query << std::endl;
-    ParsedQuery pq = SparqlParser::parseQuery(query);
+    ParsedQuery pq = co_await computeInNewThread(
+        [&query]() { return SparqlParser::parseQuery(query); });
 
     // The following code block determines the media type to be used for the
     // result. The media type is either determined by the "Accept:" header of
@@ -683,9 +684,12 @@ boost::asio::awaitable<void> Server::processQuery(
     QueryExecutionContext qec(index_, &cache_, allocator_,
                               sortPerformanceEstimator_,
                               std::ref(messageSender), pinSubtrees, pinResult);
-    QueryPlanner qp(&qec);
-    qp.setEnablePatternTrick(enablePatternTrick_);
-    queryExecutionTree = qp.createExecutionTree(pq);
+    queryExecutionTree = co_await computeInNewThread(
+        [&qec, enablePatternTrick = enablePatternTrick_, &pq]() {
+          QueryPlanner qp(&qec);
+          qp.setEnablePatternTrick(enablePatternTrick);
+          return qp.createExecutionTree(pq);
+        });
     auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
     absl::Cleanup cancelCancellationHandle{setupCancellationHandle(
