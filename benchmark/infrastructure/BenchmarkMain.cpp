@@ -7,6 +7,7 @@
 #include <boost/program_options.hpp>
 #include <boost/program_options/value_semantic.hpp>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <ios>
@@ -21,6 +22,7 @@
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
+#include "util/Exception.h"
 #include "util/File.h"
 #include "util/json.h"
 
@@ -28,18 +30,58 @@
 using namespace ad_benchmark;
 
 /*
- * @brief Write the json object to the specified file.
- *
- * @param fileName The name of the file, where the json informationen
- *  should be written in.
- * @param appendToFile Should the json informationen be appended to the end
- *  of the file, or should the previous content be overwritten?
- */
-static void writeJsonToFile(nlohmann::json j, const std::string& fileName,
-                            bool appendToFile = false) {
-  ad_utility::makeOfstream(
-      fileName, appendToFile ? (std::ios::out | std::ios::app) : std::ios::out)
-      << j;
+@brief Transform the given benchmark classes and corresponding results to
+json, and write them to the specified file.
+
+@param benchmarkClassAndResults The benchmark classes togehter with their
+results of running `runAllBenchmarks`.
+@param fileName The name of the file, where the json informationen
+should be written in.
+@param appendToJsonInFile Should the json informationen be appended to the end
+of the json structure in the file, or should the previous content be
+overwritten? Note: If the json structure in the file isn't an array, an error
+will be thrown, except if the file is empty. In that case, `appendToFile` will
+be treated as `false`.
+*/
+static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
+    const std::vector<std::pair<const BenchmarkInterface*, BenchmarkResults>>&
+        benchmarkClassAndResults,
+    const std::string& fileName, bool appendToJsonInFile = false) {
+  // Convert to json.
+  nlohmann::json benchmarkClassAndBenchmarkResultsAsJson(
+      zipBenchmarkClassAndBenchmarkResultsToJson(benchmarkClassAndResults));
+  AD_CORRECTNESS_CHECK(benchmarkClassAndBenchmarkResultsAsJson.is_array());
+
+  /*
+  Add the old json arry entries to the new json array entries, if a non empty
+  file exists. Otherwise, we create/fill the file.
+  */
+  if (appendToJsonInFile && std::filesystem::exists(fileName) &&
+      !std::filesystem::is_empty(fileName)) {
+    /*
+    By parsing the file as json and working with `nlohmann::json`, instead of
+    the json string representation, we first make sure, that the file only
+    contains valid json, and secondly guarantee, that we generate a valid new
+    json.
+    Also not, that this is not a performance critical place, so we don't have to
+    risk errors for a better performance.
+    */
+    const nlohmann::json fileAsJson(fileToJson(fileName));
+    if (!fileAsJson.is_array()) {
+      throw std::runtime_error(
+          absl::StrCat("The contents of the file ", fileName,
+                       " do not describe an array json value. Therefore no "
+                       "values can be appended."));
+    }
+
+    // Add the old entries to the new entries.
+    benchmarkClassAndBenchmarkResultsAsJson.insert(
+        benchmarkClassAndBenchmarkResultsAsJson.begin(), fileAsJson.begin(),
+        fileAsJson.end());
+  }
+
+  ad_utility::makeOfstream(fileName)
+      << benchmarkClassAndBenchmarkResultsAsJson << std::endl;
 }
 
 /*
@@ -66,8 +108,9 @@ int main(int argc, char** argv) {
       "Writes the benchmarks as json to a file, overriding the previous"
       " content of the file.")(
       "append,a",
-      "Causes the json option to append to the end of the"
-      " file, instead of overriding the previous content of the file.")(
+      "Causes the json option to append to the end of the json arry in the "
+      "file, if there is one, instead of overriding the previous content of "
+      "the file.")(
       "configuration-json,j",
       po::value<std::string>(&jsonConfigurationFileName),
       "Set the configuration of benchmarks as described in a json file.")(
@@ -162,8 +205,7 @@ int main(int argc, char** argv) {
   }
 
   if (vm.count("write")) {
-    writeJsonToFile(
-        zipBenchmarkClassAndBenchmarkResultsToJson(benchmarkClassAndResults),
-        writeFileName, vm.count("append"));
+    writeBenchmarkClassAndBenchmarkResultsToJsonFile(
+        benchmarkClassAndResults, writeFileName, vm.count("append"));
   }
 }

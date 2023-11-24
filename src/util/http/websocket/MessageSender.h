@@ -54,6 +54,11 @@ class MessageSender {
 
   /// Broadcast the string to all listeners of this query asynchronously.
   void operator()(std::string) const;
+
+  /// Get read only view of underlying `QueryId`.
+  const QueryId& getQueryId() const noexcept {
+    return distributor_->owningQueryId_.toQueryId();
+  }
 };
 
 }  // namespace ad_utility::websocket

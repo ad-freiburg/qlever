@@ -211,8 +211,8 @@ class Index {
 
   void setKeepTempFiles(bool keepTempFiles);
 
-  ad_utility::MemorySize& stxxlMemory();
-  const ad_utility::MemorySize& stxxlMemory() const;
+  ad_utility::MemorySize& memoryLimitIndexBuilding();
+  const ad_utility::MemorySize& memoryLimitIndexBuilding() const;
 
   uint64_t& blocksizePermutationsInBytes();
 

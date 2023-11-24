@@ -64,10 +64,9 @@ class Server {
 
   bool enablePatternTrick_;
 
-  // Because HttpServer is not a member of this class, we need to assign
-  // this pointer after HttpServer is instanced. It is also set back to
-  // nullptr once the object is destroyed which only happens on shutdown.
-  ad_utility::websocket::QueryHub* queryHub_ = nullptr;
+  /// Non-owning reference to the `QueryHub` instance living inside
+  /// the `WebSocketHandler` created for `HttpServer`.
+  std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
   mutable net::static_thread_pool threadPool_;
 
@@ -141,11 +140,14 @@ class Server {
       std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
       std::chrono::seconds timeLimit);
 
-  /// Create a cancellation handle, pass it to the operation and configure
-  /// it to get cancelled automatically if a time limit is passed by calling
-  /// `cancelAfterDeadline`. If `timeLimit` is empty, return a no-op lambda.
-  static std::function<void()> setupCancellationHandle(
+  /// Acquire the cancellation handle based on `queryId`, pass it to the
+  /// operation and configure it to get cancelled automatically if a time limit
+  /// is passed by calling `cancelAfterDeadline`. In this case the return value
+  /// can be used to cancel the timer. If `timeLimit` is empty, return a
+  /// no-op lambda.
+  std::function<void()> setupCancellationHandle(
       const net::any_io_executor& executor,
+      const ad_utility::websocket::QueryId& queryId,
       const std::shared_ptr<Operation>& rootOperation,
-      std::optional<std::chrono::seconds> timeLimit);
+      std::optional<std::chrono::seconds> timeLimit) const;
 };

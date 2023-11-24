@@ -19,10 +19,6 @@ namespace net = boost::asio;
 /// this coroutine was co_spawned on.
 /// IMPORTANT: If the coroutine is cancelled, no guarantees are given. Make
 /// sure to keep that in mind when handling cancellation errors!
-// TODO<RobinTF, joka921> When using `net::dispatch()` instead of `net::post()`
-// and the `awaitable` itself dispatches to a strand, then this strand is not
-// left in all cases when leaving this function. Further investigate whether we
-// lack understanding here or whether this is a bug in `Boost::ASIO`.
 template <typename T>
 inline net::awaitable<T> resumeOnOriginalExecutor(net::awaitable<T> awaitable) {
   std::exception_ptr exceptionPtr;
