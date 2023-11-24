@@ -40,27 +40,27 @@ TEST(AcceptHeaderParser, singleType) {
 }
 
 TEST(AcceptHeaderParser, multipleTypes) {
-  auto c = parseAcceptHeader("application/json,text/html   ,  text/css");
+  auto c = parseAcceptHeader("application/json,text/plain   ,  text/csv");
   ASSERT_EQ(c.size(), 3u);
-  ASSERT_EQ(c[0], ad_utility::MediaType::json);
-  ASSERT_EQ(c[1], ad_utility::MediaType::html);
-  ASSERT_EQ(c[2], ad_utility::MediaType::css);
+  ASSERT_EQ(c[0], MediaType::json);
+  ASSERT_EQ(c[1], MediaType::textPlain);
+  ASSERT_EQ(c[2], MediaType::csv);
 }
 
 TEST(AcceptHeaderParser, ignoreUnknown) {
   auto c =
-      parseAcceptHeader("application/json,unknown/strangeType   ,  text/css");
+      parseAcceptHeader("application/json,unknown/strangeType   ,  text/csv");
   ASSERT_EQ(c.size(), 2u);
-  ASSERT_EQ(c[0], ad_utility::MediaType::json);
-  ASSERT_EQ(c[1], ad_utility::MediaType::css);
+  ASSERT_EQ(c[0], MediaType::json);
+  ASSERT_EQ(c[1], MediaType::csv);
 }
 
 TEST(AcceptHeaderParser, MultipleTypesCaseInsensitive) {
-  auto c = parseAcceptHeader("appLicaTion/jSOn,teXt/Html   ,  Text/Css");
+  auto c = parseAcceptHeader("appLicaTion/jSOn,teXt/Plain   ,  Text/Csv");
   ASSERT_EQ(c.size(), 3u);
-  ASSERT_EQ(c[0], ad_utility::MediaType::json);
-  ASSERT_EQ(c[1], ad_utility::MediaType::html);
-  ASSERT_EQ(c[2], ad_utility::MediaType::css);
+  ASSERT_EQ(c[0], MediaType::json);
+  ASSERT_EQ(c[1], MediaType::textPlain);
+  ASSERT_EQ(c[2], MediaType::csv);
 }
 
 TEST(AcceptHeaderParser, AllTypesUnknownThrow) {
@@ -69,15 +69,16 @@ TEST(AcceptHeaderParser, AllTypesUnknownThrow) {
 }
 
 TEST(AcceptHeaderParser, QualityValues) {
-  auto p = std::string{"application/json;q=0.35, text/Html, image/png;q=0.123"};
+  auto p = std::string{
+      "application/json;q=0.35, text/Plain, application/octet-stream;q=0.123"};
   auto c = parseAcceptHeader(p);
   ASSERT_EQ(c.size(), 3u);
   ASSERT_FLOAT_EQ(c[0]._qualityValue, 1.0f);
-  ASSERT_EQ(c[0], MediaType::html);
+  ASSERT_EQ(c[0], MediaType::textPlain);
   ASSERT_FLOAT_EQ(c[1]._qualityValue, 0.35f);
   ASSERT_EQ(c[1], MediaType::json);
   ASSERT_FLOAT_EQ(c[2]._qualityValue, 0.123f);
-  ASSERT_EQ(c[2], MediaType::png);
+  ASSERT_EQ(c[2], MediaType::octetStream);
 
   p = "application/json;q=0.3542, text/Html";
   ASSERT_THROW(parseAcceptHeader(p), AcceptHeaderQleverVisitor::ParseException);
@@ -88,11 +89,11 @@ TEST(AcceptHeaderParser, QualityValues) {
 
 TEST(AcceptHeaderParser, CharsetParametersNotSupported) {
   // Currently the `charset=UTF-8` is simply ignored.
-  auto p = std::string{"application/json;charset=UTF-8, text/Html"};
+  auto p = std::string{"application/json;charset=UTF-8, text/Plain"};
   auto c = parseAcceptHeader(p);
   ASSERT_EQ(c.size(), 2u);
   ASSERT_EQ(c[0], MediaType::json);
-  ASSERT_EQ(c[1], MediaType::html);
+  ASSERT_EQ(c[1], MediaType::textPlain);
 }
 
 TEST(AcceptHeaderParser, WildcardSubtype) {

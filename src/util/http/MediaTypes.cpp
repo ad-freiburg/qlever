@@ -34,24 +34,10 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
                               std::move(subtypeString), std::move(v))));
     };
     using enum MediaType;
-    add(html, "text", "html", {".htm", ".html", ".php"});
-    add(css, "text", "css", {".css"});
     add(textPlain, "text", "plain", {".txt"});
-    add(javascript, "application", "javascript", {".js"});
     add(json, "application", "json", {".json"});
-    add(xml, "application", "xml", {".xml"});
-    add(flash, "application", "x-shockwave-flash", {".swf"});
-    add(flv, "video", "x-flv", {".flv"});
-    add(png, "image", "png", {".png"});
-    add(jpeg, "image", "jpeg", {".jpe", ".jpg", ".jpeg"});
-    add(gif, "image", "gif", {".gif"});
-    add(bmp, "image", "bmp", {".bmp"});
-    add(ico, "image", "vnd.microsof.icon", {".ico"});
-    add(tiff, "image", "tiff", {".tiff", ".tif"});
-    add(svg, "image", "svg+xml", {".svgz"});
     add(tsv, "text", "tab-separated-values", {".tsv"});
     add(csv, "text", "csv", {".csv"});
-    add(defaultType, "application", "text", {""});
     add(sparqlJson, "application", "sparql-results+json", {});
     add(sparqlXml, "application", "sparql-results+xml", {});
     add(qleverJson, "application", "qlever-results+json", {});
@@ -60,22 +46,6 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
     return t;
   }();
   return types;
-}
-
-// ________________________________________________________________
-const auto& getSuffixToMediaTypeStringMap() {
-  static const auto map = []() {
-    const auto& types = getAllMediaTypes();
-    ad_utility::HashMap<std::string, std::string> map;
-    for (const auto& [type, impl] : types) {
-      for (const auto& suffix : impl._fileSuffixes) {
-        AD_CONTRACT_CHECK(!map.contains(suffix));
-        map[suffix] = impl._asString;
-      }
-    }
-    return map;
-  }();
-  return map;
 }
 
 // ______________________________________________________________
@@ -91,26 +61,6 @@ const auto& getStringToMediaTypeMap() {
 }
 
 }  // namespace detail
-
-// _______________________________________________________________
-const string& mediaTypeForFilename(std::string_view filename) {
-  const auto ext = [&filename] {
-    const auto pos = filename.rfind('.');
-    if (pos == std::string_view::npos) {
-      return std::string_view{};
-    } else {
-      return filename.substr(pos);
-    }
-  }();
-  auto extLower = ad_utility::utf8ToLower(ext);
-  const auto& map = detail::getSuffixToMediaTypeStringMap();
-  if (map.contains(extLower)) {
-    return map.at(extLower);
-  } else {
-    // the default type is "application/text"
-    return map.at("");
-  }
-}
 
 // _______________________________________________________________________
 const std::string& toString(MediaType t) {

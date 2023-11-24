@@ -315,10 +315,6 @@ enable_testing()
 option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools" OFF)
 add_subdirectory(test)
 
-configure_file(src/web/index.html index.html)
-configure_file(src/web/style.css style.css)
-configure_file(src/web/script.js script.js)
-
 # Add the library with the constants declared in `CompilationInfo.h` and defined
 # in `CompilationInfo.cpp` created by `CompilationInfo.cmake`.
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)

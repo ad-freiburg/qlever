@@ -298,9 +298,9 @@ Awaitable<void> Server::process(
   }
 
   // Process all URL parameters known to QLever. If there is more than one,
-  // QLever processes all of one, but only returns the result from the last one.
-  // In particular, if there is a "query" parameter, it will be processed last
-  // and its result returned.
+  // QLever processes all of them, but only returns the result from the last
+  // one. In particular, if there is a "query" parameter, it will be processed
+  // last and its result returned.
   //
   // Some parameters require that "access-token" is set correctly. If not, that
   // parameter is ignored.
@@ -399,30 +399,8 @@ Awaitable<void> Server::process(
     throw std::runtime_error(
         "Request with URL parameters, but none of them could be processed");
   }
-
-  // At this point, we only have a path and no URL paraeters. We then interpret
-  // the request as a request for a file. However, only files from a very
-  // restricted whitelist (see below) will actually be served.
-  //
-  // NOTE 1: `makeFileServer` returns a function.  The first argument is the
-  // document root, the second one is the whitelist.
-  //
-  // NOTE 2: `co_await makeFileServer(....)(...)` doesn't compile in g++ 11.2.0,
-  // probably because of the following bug:
-  // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98056
-  // TODO<joka921>: Reinstate this one-liner as soon as this bug is fixed.
-  //
-  // TODO: The file server currently does not LOG much. For example, when a file
-  // is not found, a corresponding response is returned to the requestion
-  // client, but the log says nothing about it. The place to change this would
-  // be in `src/util/http/HttpUtils.h`.
-  LOG(INFO) << "Treating request target \"" << request.target() << "\""
-            << " as a request for a file with that name" << std::endl;
-  auto serveFileRequest = makeFileServer(
-      ".",
-      ad_utility::HashSet<std::string>{"index.html", "script.js", "style.css"})(
-      std::move(request), send);
-  co_return co_await std::move(serveFileRequest);
+  co_return co_await send(
+      createNotFoundResponse("Unknown path", std::move(request)));
 }
 
 // _____________________________________________________________________________
