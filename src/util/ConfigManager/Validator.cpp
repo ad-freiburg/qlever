@@ -26,4 +26,9 @@ void ConfigOptionValidatorManager::checkValidator() const {
 std::string_view ConfigOptionValidatorManager::getDescription() const {
   return descriptor_;
 }
+
+// ____________________________________________________________________________
+size_t ConfigOptionValidatorManager::getInitializationId() const {
+  return initializationId_;
+}
 }  // namespace ad_utility

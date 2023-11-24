@@ -149,7 +149,7 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
   if (stxxlMemory.has_value()) {
-    index.stxxlMemory() = stxxlMemory.value();
+    index.memoryLimitIndexBuilding() = stxxlMemory.value();
   }
 
   // If no text index name was specified, take the part of the wordsfile after
