@@ -122,7 +122,7 @@ int main(int argc, char** argv) {
       "Disable the precomputation for `ql:has-predicate`.");
   add("no-compressed-vocabulary,N", po::bool_switch(&noPrefixCompression),
       "Do not apply prefix compression to the vocabulary (default: do apply).");
-  add("only-pos-and-pso-permutations,o", po::bool_switch(&onlyPsoAndPos),
+  add("only-pso-and-pos-permutations,o", po::bool_switch(&onlyPsoAndPos),
       "Only build the PSO and POS permutations. This is faster, but then "
       "queries with predicate variables are not supported");
 
