@@ -1312,6 +1312,9 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("regex(?x, \"ab\")", matchPtr<RegexExpression>());
   expectBuiltInCall("LANG(?x)", matchPtr<LangExpression>());
   expectFails("SHA512(?x)");
+
+  expectBuiltInCall("encode_for_uri(?x)",
+                    matchUnary(&makeEncodeForUriExpression));
 }
 
 TEST(SparqlParser, unaryExpression) {
