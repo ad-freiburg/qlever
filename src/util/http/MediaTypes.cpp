@@ -6,15 +6,20 @@
 
 #include <absl/strings/str_join.h>
 
-#include "../Exception.h"
-#include "../StringUtils.h"
-#include "../TypeTraits.h"
 #include "../antlr/ANTLRErrorHandling.h"
 #include "./HttpParser/AcceptHeaderQleverVisitor.h"
 #include "./HttpParser/generated/AcceptHeaderLexer.h"
 
 using std::string;
 namespace ad_utility {
+
+// The first media type in this list is the default, if no other type is
+// specified in the request. It's "application/sparql-results+json", as
+// required by the SPARQL standard.
+constexpr std::array SUPPORTED_MEDIA_TYPES{
+    MediaType::sparqlJson, MediaType::sparqlXml, MediaType::qleverJson,
+    MediaType::tsv,        MediaType::csv,       MediaType::turtle,
+    MediaType::octetStream};
 
 namespace detail {
 // _____________________________________________________________
@@ -33,7 +38,7 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
     add(css, "text", "css", {".css"});
     add(textPlain, "text", "plain", {".txt"});
     add(javascript, "application", "javascript", {".js"});
-    add(MediaType::json, "application", "json", {".json"});
+    add(json, "application", "json", {".json"});
     add(xml, "application", "xml", {".xml"});
     add(flash, "application", "x-shockwave-flash", {".swf"});
     add(flv, "video", "x-flv", {".flv"});
@@ -144,7 +149,7 @@ class InvalidMediaTypeParseException : public ParseException {
 
 // ___________________________________________________________________________
 std::vector<MediaTypeWithQuality> parseAcceptHeader(
-    std::string_view acceptHeader, std::vector<MediaType> supportedMediaTypes) {
+    std::string_view acceptHeader) {
   struct ParserAndVisitor {
    private:
     string input;
@@ -157,9 +162,7 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
    public:
     AcceptHeaderParser parser{&tokens};
     AcceptHeaderQleverVisitor visitor;
-    explicit ParserAndVisitor(string toParse,
-                              std::vector<MediaType> supportedMediaTypes)
-        : input{std::move(toParse)}, visitor{std::move(supportedMediaTypes)} {
+    explicit ParserAndVisitor(string toParse) : input{std::move(toParse)} {
       parser.removeErrorListeners();
       parser.addErrorListener(&errorListener_);
       lexer.removeErrorListeners();
@@ -167,8 +170,7 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
     }
   };
 
-  auto p = ParserAndVisitor{std::string{acceptHeader},
-                            std::move(supportedMediaTypes)};
+  auto p = ParserAndVisitor{std::string{acceptHeader}};
   try {
     auto context = p.parser.acceptWithEof();
     auto resultAsAny = p.visitor.visitAcceptWithEof(context);
@@ -185,31 +187,30 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
 
 // ___________________________________________________________________________
 std::optional<MediaType> getMediaTypeFromAcceptHeader(
-    std::string_view acceptHeader,
-    const std::vector<MediaType>& supportedMediaTypes) {
-  AD_CONTRACT_CHECK(!supportedMediaTypes.empty());
+    std::string_view acceptHeader) {
+  static_assert(!SUPPORTED_MEDIA_TYPES.empty());
   // empty accept Header means "any type is allowed", so simply choose one.
   if (acceptHeader.empty()) {
-    return *supportedMediaTypes.begin();
+    return SUPPORTED_MEDIA_TYPES.at(0);
   }
 
-  auto orderedMediaTypes = parseAcceptHeader(acceptHeader, supportedMediaTypes);
+  auto orderedMediaTypes = parseAcceptHeader(acceptHeader);
 
-  auto getMediaTypeFromPart = [&supportedMediaTypes]<typename T>(
-                                  const T& part) -> std::optional<MediaType> {
+  auto getMediaTypeFromPart =
+      []<typename T>(const T& part) -> std::optional<MediaType> {
     static constexpr std::optional<MediaType> noValue = std::nullopt;
     if constexpr (ad_utility::isSimilar<T, MediaTypeWithQuality::Wildcard>) {
-      return *supportedMediaTypes.begin();
+      return SUPPORTED_MEDIA_TYPES.at(0);
     } else if constexpr (ad_utility::isSimilar<
                              T, MediaTypeWithQuality::TypeWithWildcard>) {
       auto it = std::find_if(
-          supportedMediaTypes.begin(), supportedMediaTypes.end(),
+          SUPPORTED_MEDIA_TYPES.begin(), SUPPORTED_MEDIA_TYPES.end(),
           [&part](const auto& el) { return getType(el) == part._type; });
-      return it == supportedMediaTypes.end() ? noValue : *it;
+      return it == SUPPORTED_MEDIA_TYPES.end() ? noValue : *it;
     } else if constexpr (ad_utility::isSimilar<T, MediaType>) {
-      auto it = std::find(supportedMediaTypes.begin(),
-                          supportedMediaTypes.end(), part);
-      return it != supportedMediaTypes.end() ? part : noValue;
+      auto it = std::find(SUPPORTED_MEDIA_TYPES.begin(),
+                          SUPPORTED_MEDIA_TYPES.end(), part);
+      return it != SUPPORTED_MEDIA_TYPES.end() ? part : noValue;
     } else {
       static_assert(ad_utility::alwaysFalse<T>);
     }
@@ -227,11 +228,10 @@ std::optional<MediaType> getMediaTypeFromAcceptHeader(
 }
 
 // ______________________________________________________________________
-std::string getErrorMessageForSupportedMediaTypes(
-    const std::vector<MediaType>& supportedMediaTypes) {
+std::string getErrorMessageForSupportedMediaTypes() {
   // TODO<C++23> Refactor this using `join_view` and the formatting of ranges.
   std::vector<std::string> asString;
-  for (const auto& type : supportedMediaTypes) {
+  for (const auto& type : SUPPORTED_MEDIA_TYPES) {
     asString.push_back(toString(type));
   }
   return "Currently the following media types are supported: " +

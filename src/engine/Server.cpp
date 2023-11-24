@@ -621,50 +621,36 @@ boost::asio::awaitable<void> Server::processQuery(
     // for QLever-historical reasons).
     using ad_utility::MediaType;
 
-    // The first media type in this list is the default, if no other type is
-    // specified in the request. It's "application/sparql-results+json", as
-    // required by the SPARQL standard.
-    const auto supportedMediaTypes = []() {
-      static const std::vector<MediaType> mediaTypes{
-          ad_utility::MediaType::sparqlJson, ad_utility::MediaType::sparqlXml,
-          ad_utility::MediaType::qleverJson, ad_utility::MediaType::tsv,
-          ad_utility::MediaType::csv,        ad_utility::MediaType::turtle,
-          ad_utility::MediaType::octetStream};
-      return mediaTypes;
-    };
-
     std::optional<MediaType> mediaType = std::nullopt;
 
     // The explicit `action=..._export` parameter have precedence over the
     // `Accept:...` header field
     if (containsParam("action", "csv_export")) {
-      mediaType = ad_utility::MediaType::csv;
+      mediaType = MediaType::csv;
     } else if (containsParam("action", "tsv_export")) {
-      mediaType = ad_utility::MediaType::tsv;
+      mediaType = MediaType::tsv;
     } else if (containsParam("action", "qlever_json_export")) {
-      mediaType = ad_utility::MediaType::qleverJson;
+      mediaType = MediaType::qleverJson;
     } else if (containsParam("action", "sparql_json_export")) {
-      mediaType = ad_utility::MediaType::sparqlJson;
+      mediaType = MediaType::sparqlJson;
     } else if (containsParam("action", "turtle_export")) {
-      mediaType = ad_utility::MediaType::turtle;
+      mediaType = MediaType::turtle;
     } else if (containsParam("action", "binary_export")) {
-      mediaType = ad_utility::MediaType::octetStream;
+      mediaType = MediaType::octetStream;
     }
 
     std::string_view acceptHeader = request.base()[http::field::accept];
 
     if (!mediaType.has_value()) {
-      mediaType = ad_utility::getMediaTypeFromAcceptHeader(
-          acceptHeader, supportedMediaTypes());
+      mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
     }
 
     if (!mediaType.has_value()) {
       co_return co_await send(createBadRequestResponse(
-          "Did not find any supported media type "
-          "in this \'Accept:\' header field: \"" +
-              std::string{acceptHeader} + "\". " +
-              ad_utility::getErrorMessageForSupportedMediaTypes(
-                  supportedMediaTypes()),
+          absl::StrCat("Did not find any supported media type "
+                       "in this \'Accept:\' header field: \"",
+                       acceptHeader, "\". ",
+                       ad_utility::getErrorMessageForSupportedMediaTypes()),
           request));
     }
     AD_CONTRACT_CHECK(mediaType.has_value());
@@ -706,8 +692,7 @@ boost::asio::awaitable<void> Server::processQuery(
 
     // Common code for sending responses for the streamable media types
     // (tsv, csv, octet-stream, turtle).
-    auto sendStreamableResponse =
-        [&](ad_utility::MediaType mediaType) -> Awaitable<void> {
+    auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
       auto responseGenerator = co_await computeInNewThread([&] {
         return ExportQueryExecutionTrees::computeResultAsStream(pq, qet,
                                                                 mediaType);
@@ -736,15 +721,15 @@ boost::asio::awaitable<void> Server::processQuery(
     // This actually processes the query and sends the result in the requested
     // format.
     switch (mediaType.value()) {
-      case ad_utility::MediaType::csv:
-      case ad_utility::MediaType::tsv:
-      case ad_utility::MediaType::octetStream:
-      case ad_utility::MediaType::sparqlXml:
-      case ad_utility::MediaType::turtle: {
+      case MediaType::csv:
+      case MediaType::tsv:
+      case MediaType::octetStream:
+      case MediaType::sparqlXml:
+      case MediaType::turtle: {
         co_await sendStreamableResponse(mediaType.value());
       } break;
-      case ad_utility::MediaType::qleverJson:
-      case ad_utility::MediaType::sparqlJson: {
+      case MediaType::qleverJson:
+      case MediaType::sparqlJson: {
         // Normal case: JSON response
         auto responseString = co_await computeInNewThread([&, maxSend] {
           return ExportQueryExecutionTrees::computeResultAsJSON(

@@ -128,22 +128,20 @@ const std::string& getType(MediaType t);
 /// already sorted (highest quality first, more specific types first if the
 /// quality is the same). Throws on error.
 std::vector<MediaTypeWithQuality> parseAcceptHeader(
-    std::string_view acceptHeader, std::vector<MediaType> supportedMediaTypes);
+    std::string_view acceptHeader);
 
-/// Parse `acceptHeader`, and determine which of the `supportedMediaTypes`
+/// Parse `acceptHeader`, and determine which of the `SUPPORTED_MEDIA_TYPES`
 /// has the highest priority, and return this type. If several mediaTypes have
 /// the same priority (e.g. because of a wildcard in `acceptHeader`) then
-/// media types that appear earlier in the `supportedMediaTypes`. If none of the
-/// `supportedMediaTypes` is accepted by `acceptHeader`, then `std::nullopt`
-/// is returned.
+/// media types that appear earlier in the `SUPPORTED_MEDIA_TYPES`. If none of
+/// the `SUPPORTED_MEDIA_TYPES` is accepted by `acceptHeader`, then
+/// `std::nullopt` is returned.
 std::optional<MediaType> getMediaTypeFromAcceptHeader(
-    std::string_view acceptHeader,
-    const std::vector<MediaType>& supportedMediaTypes);
+    std::string_view acceptHeader);
 
-/// Return an error message, which reports that only the `supportedMediaTypes`
+/// Return an error message, which reports that only the `SUPPORTED_MEDIA_TYPES`
 /// are supported.
-std::string getErrorMessageForSupportedMediaTypes(
-    const std::vector<MediaType>& supportedMediaTypes);
+std::string getErrorMessageForSupportedMediaTypes();
 }  // namespace ad_utility
 
 #endif  // QLEVER_MEDIATYPES_H
