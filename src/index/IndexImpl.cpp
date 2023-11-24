@@ -985,9 +985,20 @@ void IndexImpl::readConfiguration() {
     target = std::decay_t<decltype(target)>{*it};
   };
 
+  auto loadDataMemberWithDefault = [this](std::string_view key, auto& target,
+                                          auto defaultValue) {
+    auto it = configurationJson_.find(key);
+    if (it == configurationJson_.end()) {
+      target = defaultValue;
+    } else {
+      target = std::decay_t<decltype(target)>{*it};
+    }
+  };
+
   loadRequestedDataMember("num-predicates-normal", numPredicatesNormal_);
-  loadRequestedDataMember("num-subjects-normal", numSubjectsNormal_);
-  loadRequestedDataMember("num-objects-normal", numObjectsNormal_);
+  // These might be missing if there are only two permutations.
+  loadDataMemberWithDefault("num-subjects-normal", numSubjectsNormal_, 0);
+  loadDataMemberWithDefault("num-objects-normal", numObjectsNormal_, 0);
   loadRequestedDataMember("num-triples-normal", numTriplesNormal_);
 }
 

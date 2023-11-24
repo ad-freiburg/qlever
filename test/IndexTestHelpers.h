@@ -97,6 +97,7 @@ inline Index makeTestIndex(
     index.setOnDiskBase(indexBasename);
     index.setUsePatterns(usePatterns);
     index.setPrefixCompression(usePrefixCompression);
+    index.setLoadAllPermutations(loadAllPermutations);
     index.createFromFile(inputFilename);
   }
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
