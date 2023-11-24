@@ -241,7 +241,6 @@ int main(int argc, char** argv) {
     if (!docsfile.empty()) {
       index.buildDocsDB(docsfile);
     }
-    ad_utility::deleteFile(stxxlFileName);
   } catch (std::exception& e) {
     LOG(ERROR) << e.what() << std::endl;
     exit(2);
