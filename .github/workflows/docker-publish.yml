@@ -42,6 +42,15 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          # Docker multiplatform images require an entry in their manifests. If this
+          # entry is missing, then the images for each platform are considered seperate.
+          # If this action runs on a single runner (i.e. the attribute `platforms`
+          # contains a list of all platforms) then the manifest is configured automatically.
+          # If the build and push is split over multiple runners, then the action requires an additional `merge`
+          # job, which merges the images for each platform into a single multiplatform image.
+          # References:
+          # https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
+          # https://www.docker.com/blog/multi-arch-build-and-images-the-simple-way/
           platforms: linux/amd64,linux/arm64
           push: true
           # If this is a push on master, publish with short commit sha
