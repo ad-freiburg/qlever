@@ -736,8 +736,12 @@ TEST(SparqlParser, triplesSameSubjectPath) {
   expectTriples("10.0 <bar> true",
                 {{Literal(10.0), PathIri("<bar>"), Literal(true)}});
   expectTriples(
-      "<foo> <QLever-internal-function/contains-word> \"Berlin Freiburg\"",
-      {{Iri("<foo>"), PathIri("<QLever-internal-function/contains-word>"),
+      "<foo> "
+      "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "
+      "\"Berlin Freiburg\"",
+      {{Iri("<foo>"),
+        PathIri("<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+                "contains-word>"),
         Literal("\"Berlin Freiburg\"")}});
 }
 
