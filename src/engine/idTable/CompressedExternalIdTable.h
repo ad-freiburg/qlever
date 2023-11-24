@@ -575,6 +575,10 @@ class CompressedExternalIdTableSorter
   cppcoro::generator<IdTableStatic<N>> getSortedBlocks(
       std::optional<size_t> blocksize = std::nullopt) {
     mergeIsActive_.store(true);
+    // Explanation for the second argument: One block is buffered by this
+    // generator, one block is buffered inside the `sortedBlocks` generator, so
+    // `numBufferedOutputBlocks_ - 2` blocks may be buffered by the async
+    // stream.
     for (auto& block : ad_utility::streams::runStreamAsync(
              sortedBlocks<N>(blocksize),
              std::max(1, numBufferedOutputBlocks_ - 2))) {

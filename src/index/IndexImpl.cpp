@@ -583,7 +583,7 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   CompressedRelationWriter writer2{ad_utility::File(fileName2, "w"),
                                    blocksizePermutation_};
 
-  // lift a callback that works on single elements to a callback that works on
+  // Lift a callback that works on single elements to a callback that works on
   // blocks.
   auto liftCallback = [](auto callback) {
     return [callback](const auto& block) mutable {
@@ -638,7 +638,8 @@ void IndexImpl::createPermutationPair(auto&& sortedTriples,
   // `getKbName` simple reads one of these names.
   auto writeMetadata = [this](auto& metaData, const auto& permutation) {
     metaData.setName(getKbName());
-    ad_utility::File f(onDiskBase_ + ".index" + permutation.fileSuffix_, "r+");
+    ad_utility::File f(
+        absl::StrCat(onDiskBase_, ".index", permutation.fileSuffix_), "r+");
     metaData.appendToFile(&f);
   };
   LOG(INFO) << "Writing meta data for " << p1.readableName_ << " and "

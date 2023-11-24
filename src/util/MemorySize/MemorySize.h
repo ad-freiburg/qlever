@@ -58,7 +58,7 @@ class MemorySize {
   // Default comparison operator.
   constexpr auto operator<=>(const MemorySize&) const = default;
 
-  // Hashing
+  // Hashing.
   template <typename H>
   friend H AbslHashValue(H h, const MemorySize& mem) {
     return H::combine(std::move(h), mem.memoryInBytes_);

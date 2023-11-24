@@ -57,7 +57,6 @@ void checkThatTablesAreEqual(
 // a unique name for the required temporary files and for the implicit cache
 // of the `CompressedRelationMetaData`. `blocksize` is the size of the blocks
 // in which the permutation will be compressed and stored on disk.
-/*void testCompressedRelations(const std::vector<RelationInput>& inputs, */
 void testCompressedRelations(const auto& inputs, std::string testCaseName,
                              ad_utility::MemorySize blocksize) {
   // First check the invariants of the `inputs`. They must be sorted by the

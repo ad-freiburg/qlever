@@ -94,7 +94,7 @@ inline size_t BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10'000;
 // NOTE: This used to be over 8MB, which is fairly large (we always
 // need to decompress at least one whole block, even when reading only few
 // triples). With 100K, the total space for all the `CompressedBlockMetadata` is
-// still small compared to the rest of the index. However, with 100K, and single
+// still small compared to the rest of the index. However, with 100K, a single
 // block is just 10K compressed, which might result in suboptimal IO-efficiency
 // when reading many blocks. We take 500K as a compromise.
 constexpr ad_utility::MemorySize BLOCKSIZE_COMPRESSED_METADATA = 500_kB;

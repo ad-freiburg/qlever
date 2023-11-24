@@ -45,7 +45,7 @@ TEST(Views, BufferedAsyncView) {
   testWithVector(strings);
 }
 
-TEST(Views, UniqueView) {
+TEST(Views, uniqueView) {
   std::vector<int> ints;
   const uint64_t numInts = 50'000;
   ints.reserve(numInts);
@@ -69,14 +69,14 @@ TEST(Views, UniqueView) {
     result.push_back(element);
   }
   std::sort(ints.begin(), ints.end());
-  // Erase "accidentally" unique duplicates from the random initialization.
+  // Erase "accidental" duplicates from the random initialization.
   auto it = std::unique(ints.begin(), ints.end());
   ints.erase(it, ints.end());
   ASSERT_EQ(ints.size(), result.size());
   ASSERT_EQ(ints, result);
 }
 
-TEST(Views, UniqueBlock) {
+TEST(Views, uniqueBlockView) {
   const uint64_t numInts = 50'000;
   std::vector<int> ints;
 

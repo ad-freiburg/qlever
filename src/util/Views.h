@@ -79,7 +79,7 @@ cppcoro::generator<ValueType> uniqueView(SortedView view) {
             << std::endl;
 }
 
-// Takes a view of blocks and yields the elements of the same view, but removed
+// Takes a view of blocks and yields the elements of the same view, but removes
 // consecutive duplicates inside the blocks and across block boundaries.
 template <typename SortedBlockView,
           typename ValueType = SortedBlockView::value_type::value_type>
@@ -87,28 +87,27 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
     SortedBlockView view) {
   size_t numInputs = 0;
   size_t numUnique = 0;
-  std::optional<ValueType> previousValue = std::nullopt;
+  std::optional<ValueType> lastValueFromPreviousBlock = std::nullopt;
 
   for (auto& block : view) {
     if (block.empty()) {
       continue;
     }
     numInputs += block.size();
-    auto beg = previousValue
+    auto beg = lastValueFromPreviousBlock
                    ? std::ranges::find_if(
-                         block, [&p = previousValue.value()](
+                         block, [&p = lastValueFromPreviousBlock.value()](
                                     const auto& el) { return el != p; })
                    : block.begin();
-    previousValue = *(block.end() - 1);
+    lastValueFromPreviousBlock = *(block.end() - 1);
     auto it = std::unique(beg, block.end());
     block.erase(it, block.end());
     block.erase(block.begin(), beg);
     numUnique += block.size();
     co_yield block;
   }
-  LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
-  LOG(INFO) << "Number of unique outputs of `uniqueView`: " << numUnique
-            << std::endl;
+  LOG(DEBUG) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
+  LOG(INFO) << "Number of unique elements: " << numUnique << std::endl;
 }
 
 // A view that owns its underlying storage. It is a rather simple drop-in
