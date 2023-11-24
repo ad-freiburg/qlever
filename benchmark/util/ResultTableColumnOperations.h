@@ -27,15 +27,11 @@ struct ColumnNumWithType {
   const size_t columnNum_;
 };
 
-template <typename ColumnReturnType, typename... ColumnInputType>
-requires ad_utility::isInstantiation<ColumnReturnType, ColumnNumWithType> &&
-         (ad_utility::isInstantiation<ColumnInputType, ColumnNumWithType> &&
-          ...)
-void generateColumnWithColumnInput(
+template <typename ColumnReturnType, typename... ColumnInputTypes>
+requires(sizeof...(ColumnInputTypes) > 0) void generateColumnWithColumnInput(
     ResultTable* const table,
     ad_utility::InvocableWithSimilarReturnType<
-        typename ColumnReturnType::ColumnType,
-        typename ColumnInputType::ColumnType...> auto&& generator,
-    const ColumnReturnType& columnToPutResultIn,
-    const ColumnInputType&... inputColumns);
+        ColumnReturnType, const ColumnInputTypes&...> auto&& generator,
+    const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn,
+    const ColumnNumWithType<ColumnInputTypes>&... inputColumns);
 }  // namespace ad_benchmark
