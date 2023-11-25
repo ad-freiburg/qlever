@@ -41,7 +41,6 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
     std::string _message;
   };
 
- public:
   // ________________________________________________________________________
   antlrcpp::Any visitAcceptWithEof(
       AcceptHeaderParser::AcceptWithEofContext* ctx) override {
