@@ -52,6 +52,12 @@ class Server {
   Index& index() { return index_; }
   const Index& index() const { return index_; }
 
+  /// Helper struct bundling a parsed query with a query execution tree.
+  struct PlannedQuery {
+    ParsedQuery parsedQuery_;
+    QueryExecutionTree queryExecutionTree_;
+  };
+
  private:
   const size_t numThreads_;
   unsigned short port_;
@@ -150,4 +156,24 @@ class Server {
       const ad_utility::websocket::QueryId& queryId,
       const std::shared_ptr<Operation>& rootOperation,
       std::optional<std::chrono::seconds> timeLimit) const;
+
+  /// Parse the query and plan it on `threadPool_`.
+  net::awaitable<PlannedQuery> parseAndPlan(const std::string& query,
+                                            QueryExecutionContext& qec) const;
+
+  bool checkAccessToken(std::optional<std::string_view> accessToken) const;
+
+  /// Checks if a URL parameter exists in the request and if we are
+  /// allowed to access it. If yes, return the value, otherwise return
+  /// `std::nullopt`.
+  ///
+  /// If `value` is `std::nullopt`, only check if the key exists.  We need this
+  /// because we have parameters like "cmd=stats", where a fixed combination of
+  /// the key and value determines the kind of action, as well as parameters
+  /// like "index-decription=...", where the key determines the kind of action.
+  /// If the key is not found, always return std::nullopt.
+  static std::optional<std::string_view> checkParameter(
+      const ad_utility::HashMap<std::string, std::string>& parameters,
+      std::string_view key, std::optional<std::string_view> value,
+      bool accessAllowed);
 };

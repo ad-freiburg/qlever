@@ -240,62 +240,17 @@ Awaitable<void> Server::process(
   const auto urlPathAndParameters = getUrlPathAndParameters(request);
   const auto& parameters = urlPathAndParameters._parameters;
 
-  // Lambda for checking if a URL parameter exists in the request and if we are
-  // allowed to access it. If yes, return the value, otherwise return
-  // `std::nullopt`.
-  //
-  // If `value` is `std::nullopt`, only check if the key exists.  We need this
-  // because we have parameters like "cmd=stats", where a fixed combination of
-  // the key and value determines the kind of action, as well as parameters
-  // like "index-decription=...", where the key determines the kind of action.
-  auto checkParameter =
-      [&parameters](
-          std::string_view key, std::optional<std::string_view> value,
-          bool accessAllowed = true) -> std::optional<std::string_view> {
-    // If the key is not found, always return std::nullopt.
-    if (!parameters.contains(key)) {
-      return std::nullopt;
-    }
-    // If value is given, but not equal to param value, return std::nullopt. If
-    // no value is given, set it to param value.
-    if (value == std::nullopt) {
-      value = parameters.at(key);
-    } else if (value != parameters.at(key)) {
-      return std::nullopt;
-    }
-    // Now that we have the value, check if there is a problem with the access.
-    // If yes, we abort the query processing at this point.
-    if (!accessAllowed) {
-      throw std::runtime_error(absl::StrCat("Access to \"", key, "=",
-                                            value.value(), "\" denied",
-                                            " (requires a valid access token)",
-                                            ", processing of request aborted"));
-    }
-    return value;
+  auto checkParameter = [&parameters](std::string_view key,
+                                      std::optional<std::string_view> value,
+                                      bool accessAllowed = true) {
+    return Server::checkParameter(parameters, key, value, accessAllowed);
   };
 
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
   // processing had been allowed without access token).
-  auto accessToken = checkParameter("access-token", std::nullopt);
-  bool accessTokenOk = false;
-  if (accessToken) {
-    auto accessTokenProvidedMsg = absl::StrCat(
-        "Access token \"access-token=", accessToken.value(), "\" provided");
-    auto requestIgnoredMsg = ", request is ignored";
-    if (accessToken_.empty()) {
-      throw std::runtime_error(absl::StrCat(
-          accessTokenProvidedMsg,
-          " but server was started without --access-token", requestIgnoredMsg));
-    } else if (!ad_utility::constantTimeEquals(accessToken.value(),
-                                               accessToken_)) {
-      throw std::runtime_error(absl::StrCat(
-          accessTokenProvidedMsg, " but not correct", requestIgnoredMsg));
-    } else {
-      LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
-      accessTokenOk = true;
-    }
-  }
+  bool accessTokenOk =
+      checkAccessToken(checkParameter("access-token", std::nullopt));
 
   // Process all URL parameters known to QLever. If there is more than one,
   // QLever processes all of them, but only returns the result from the last
@@ -590,8 +545,6 @@ boost::asio::awaitable<void> Server::processQuery(
               << (pinResult ? " [pin result]" : "")
               << (pinSubtrees ? " [pin subresults]" : "") << "\n"
               << query << std::endl;
-    ParsedQuery pq = co_await computeInNewThread(
-        [&query]() { return SparqlParser::parseQuery(query); });
 
     // The following code block determines the media type to be used for the
     // result. The media type is either determined by the "Accept:" header of
@@ -649,12 +602,10 @@ boost::asio::awaitable<void> Server::processQuery(
     QueryExecutionContext qec(index_, &cache_, allocator_,
                               sortPerformanceEstimator_,
                               std::ref(messageSender), pinSubtrees, pinResult);
-    queryExecutionTree = co_await computeInNewThread(
-        [&qec, enablePatternTrick = enablePatternTrick_, &pq]() {
-          QueryPlanner qp(&qec);
-          qp.setEnablePatternTrick(enablePatternTrick);
-          return qp.createExecutionTree(pq);
-        });
+
+    auto plannedQuery = co_await parseAndPlan(query, qec);
+    auto pq = std::move(plannedQuery.parsedQuery_);
+    queryExecutionTree = std::move(plannedQuery.queryExecutionTree_);
     auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
     absl::Cleanup cancelCancellationHandle{setupCancellationHandle(
@@ -785,4 +736,67 @@ Awaitable<T> Server::computeInNewThread(Function function) const {
   };
   return ad_utility::resumeOnOriginalExecutor(
       runOnExecutor(threadPool_.get_executor(), std::move(function)));
+}
+
+// _____________________________________________________________________________
+
+net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
+    const std::string& query, QueryExecutionContext& qec) const {
+  return computeInNewThread(
+      [&query, &qec, enablePatternTrick = enablePatternTrick_]() {
+        auto pq = SparqlParser::parseQuery(query);
+        QueryPlanner qp(&qec);
+        qp.setEnablePatternTrick(enablePatternTrick);
+        return PlannedQuery{pq, qp.createExecutionTree(pq)};
+      });
+}
+
+// _____________________________________________________________________________
+
+bool Server::checkAccessToken(
+    std::optional<std::string_view> accessToken) const {
+  if (accessToken) {
+    auto accessTokenProvidedMsg = absl::StrCat(
+        "Access token \"access-token=", accessToken.value(), "\" provided");
+    auto requestIgnoredMsg = ", request is ignored";
+    if (accessToken_.empty()) {
+      throw std::runtime_error(absl::StrCat(
+          accessTokenProvidedMsg,
+          " but server was started without --access-token", requestIgnoredMsg));
+    } else if (!ad_utility::constantTimeEquals(accessToken.value(),
+                                               accessToken_)) {
+      throw std::runtime_error(absl::StrCat(
+          accessTokenProvidedMsg, " but not correct", requestIgnoredMsg));
+    } else {
+      LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
+      return true;
+    }
+  }
+  return false;
+}
+
+// _____________________________________________________________________________
+
+std::optional<std::string_view> Server::checkParameter(
+    const ad_utility::HashMap<std::string, std::string>& parameters,
+    std::string_view key, std::optional<std::string_view> value,
+    bool accessAllowed) {
+  if (!parameters.contains(key)) {
+    return std::nullopt;
+  }
+  // If value is given, but not equal to param value, return std::nullopt. If
+  // no value is given, set it to param value.
+  if (value == std::nullopt) {
+    value = parameters.at(key);
+  } else if (value != parameters.at(key)) {
+    return std::nullopt;
+  }
+  // Now that we have the value, check if there is a problem with the access.
+  // If yes, we abort the query processing at this point.
+  if (!accessAllowed) {
+    throw std::runtime_error(absl::StrCat(
+        "Access to \"", key, "=", value.value(), "\" denied",
+        " (requires a valid access token)", ", processing of request aborted"));
+  }
+  return value;
 }
