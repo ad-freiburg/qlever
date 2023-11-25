@@ -161,6 +161,10 @@ class Server {
   net::awaitable<PlannedQuery> parseAndPlan(const std::string& query,
                                             QueryExecutionContext& qec) const;
 
+  /// Check if the access token is valid. Return true if the access token
+  /// exists and is valid. Return false if there's no access token passed.
+  /// Throw an exception if there is a token passed but it doesn't match,
+  /// or there is no access token set by the server config.
   bool checkAccessToken(std::optional<std::string_view> accessToken) const;
 
   /// Checks if a URL parameter exists in the request and if we are
