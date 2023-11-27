@@ -182,9 +182,10 @@ void IndexImpl::createFromFile(const string& filename) {
       allocator_};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
-  auto uniqueSorter = ad_utility::uniqueView<decltype(psoSorter.sortedView()),
-                                             IdTableStatic<3>::row_type>(
-      psoSorter.sortedView());
+  auto uniqueSorter =
+      ad_utility::uniqueBlockView<decltype(psoSorter.getSortedBlocks<0>()),
+                                  IdTableStatic<0>::row_type>(
+          psoSorter.getSortedBlocks<0>());
 
   size_t numPredicatesNormal = 0;
   createPermutationPair(
@@ -208,15 +209,16 @@ void IndexImpl::createFromFile(const string& filename) {
       auto pushTripleToPatterns = [&patternCreator,
                                    &isInternalId](const auto& triple) {
         if (!std::ranges::any_of(triple, isInternalId)) {
-          patternCreator.processTriple(static_cast<std::array<Id, 3>>(triple));
+          patternCreator.processTriple(
+              std::array<Id, 3>{triple[0], triple[1], triple[2]});
         }
       };
-      createPermutationPair(spoSorter.sortedView(), spo_, sop_,
+      createPermutationPair(spoSorter.getSortedBlocks<0>(), spo_, sop_,
                             ospSorter.makePushCallback(), pushTripleToPatterns,
                             numSubjectCounter);
       patternCreator.finish();
     } else {
-      createPermutationPair(spoSorter.sortedView(), spo_, sop_,
+      createPermutationPair(spoSorter.getSortedBlocks<0>(), spo_, sop_,
                             ospSorter.makePushCallback(), numSubjectCounter);
     }
     spoSorter.clear();
@@ -226,7 +228,7 @@ void IndexImpl::createFromFile(const string& filename) {
     // For the last pair of permutations we don't need a next sorter, so we have
     // no fourth argument.
     size_t numObjectsNormal = 0;
-    createPermutationPair(ospSorter.sortedView(), osp_, ops_,
+    createPermutationPair(ospSorter.getSortedBlocks<0>(), osp_, ops_,
                           makeNumEntitiesCounter(numObjectsNormal, 2));
     configurationJson_["num-objects-normal"] = numObjectsNormal;
     configurationJson_["has-all-permutations"] = true;
@@ -562,124 +564,63 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
 }
 
 // _____________________________________________________________________________
-std::optional<std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
-                        IndexImpl::IndexMetaDataMmapDispatcher::WriteType>>
+std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
+          IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
 IndexImpl::createPermutationPairImpl(const string& fileName1,
                                      const string& fileName2,
-                                     auto&& sortedTriples, size_t c0, size_t c1,
-                                     size_t c2, auto&&... perTripleCallbacks) {
+                                     auto&& sortedTriples,
+                                     std::array<size_t, 3> permutation,
+                                     auto&&... perTripleCallbacks) {
+  LOG(INFO) << "Creating a pair of index permutations ..." << std::endl;
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
-  if constexpr (MetaData::_isMmapBased) {
-    metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
-    metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
-  }
+  static_assert(MetaData::_isMmapBased);
+  metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
+  metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
 
   CompressedRelationWriter writer1{ad_utility::File(fileName1, "w"),
-                                   blocksizePermutationInBytes_};
+                                   blocksizePermutation_};
   CompressedRelationWriter writer2{ad_utility::File(fileName2, "w"),
-                                   blocksizePermutationInBytes_};
+                                   blocksizePermutation_};
 
-  // Iterate over the vector and identify "relation" boundaries, where a
-  // "relation" is the sequence of sortedTriples equal first component. For PSO
-  // and POS, this is a predicate (of which "relation" is a synonym).
-  LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
-  size_t from = 0;
-  std::optional<Id> currentRel;
-  BufferedIdTable buffer{
-      2,
-      std::array{
-          ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                         fileName1 + ".tmp.mmap-buffer-col0"},
-          ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                         fileName1 + ".tmp.mmap-buffer-col1"}}};
-  size_t distinctCol1 = 0;
-  Id lastLhs = ID_NO_VALUE;
-  uint64_t totalNumTriples = 0;
-  auto addCurrentRelation = [&metaData1, &metaData2, &writer1, &writer2,
-                             &currentRel, &buffer, &distinctCol1]() {
-    auto md1 = writer1.addRelation(currentRel.value(), buffer, distinctCol1);
-    auto md2 = writeSwitchedRel(&writer2, currentRel.value(), &buffer);
-    md1.setCol2Multiplicity(md2.getCol1Multiplicity());
-    md2.setCol2Multiplicity(md1.getCol1Multiplicity());
-    metaData1.add(md1);
-    metaData2.add(md2);
+  // Lift a callback that works on single elements to a callback that works on
+  // blocks.
+  auto liftCallback = [](auto callback) {
+    return [callback](const auto& block) mutable {
+      std::ranges::for_each(block, callback);
+    };
   };
-  for (const auto& triple : AD_FWD(sortedTriples)) {
-    if (!currentRel.has_value()) {
-      currentRel = triple[c0];
-    }
-    // Call each of the `perTripleCallbacks` for the current triple
-    (..., perTripleCallbacks(triple));
-    ++totalNumTriples;
-    if (triple[c0] != currentRel) {
-      addCurrentRelation();
-      buffer.clear();
-      distinctCol1 = 1;
-      currentRel = triple[c0];
-    } else {
-      distinctCol1 += triple[c1] != lastLhs;
-    }
-    buffer.push_back(std::array{triple[c1], triple[c2]});
-    lastLhs = triple[c1];
-  }
-  if (from < totalNumTriples) {
-    addCurrentRelation();
-  }
+  auto callback1 =
+      liftCallback([&metaData1](const auto& md) { metaData1.add(md); });
+  auto callback2 =
+      liftCallback([&metaData2](const auto& md) { metaData2.add(md); });
 
-  metaData1.blockData() = std::move(writer1).getFinishedBlocks();
-  metaData2.blockData() = std::move(writer2).getFinishedBlocks();
+  std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
+      liftCallback(perTripleCallbacks)...};
 
-  return std::make_pair(std::move(metaData1), std::move(metaData2));
-}
+  std::tie(metaData1.blockData(), metaData2.blockData()) =
+      CompressedRelationWriter::createPermutationPair(
+          fileName1, {writer1, callback1}, {writer2, callback2},
+          AD_FWD(sortedTriples), permutation, perBlockCallbacks);
 
-// __________________________________________________________________________
-CompressedRelationMetadata IndexImpl::writeSwitchedRel(
-    CompressedRelationWriter* out, Id currentRel, BufferedIdTable* bufPtr) {
-  // Sort according to the "switched" relation.
-  // TODO<joka921> The swapping is rather inefficient, as we have to iterate
-  // over the whole file. Maybe the `CompressedRelationWriter` should take
-  // the switched relations directly.
-  auto& buffer = *bufPtr;
-
-  AD_CONTRACT_CHECK(buffer.numColumns() == 2);
-  for (BufferedIdTable::row_reference row : buffer) {
-    std::swap(row[0], row[1]);
-  }
-  // std::ranges::sort(buffer, [](const auto& a, const auto& b) {
-  std::ranges::sort(buffer.begin(), buffer.end(),
-                    [](const auto& a, const auto& b) {
-                      return std::ranges::lexicographical_compare(a, b);
-                    });
-  Id lastLhs = std::numeric_limits<Id>::max();
-
-  size_t distinctC1 = 0;
-  for (const auto& el : buffer.getColumn(0)) {
-    distinctC1 += el != lastLhs;
-    lastLhs = el;
-  }
-  return out->addRelation(currentRel, buffer, distinctC1);
+  return {std::move(metaData1), std::move(metaData2)};
 }
 
 // ________________________________________________________________________
-std::optional<std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
-                        IndexImpl::IndexMetaDataMmapDispatcher::WriteType>>
+std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
+          IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
 IndexImpl::createPermutations(auto&& sortedTriples, const Permutation& p1,
                               const Permutation& p2,
                               auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl(
       onDiskBase_ + ".index" + p1.fileSuffix_,
       onDiskBase_ + ".index" + p2.fileSuffix_, AD_FWD(sortedTriples),
-      p1.keyOrder_[0], p1.keyOrder_[1], p1.keyOrder_[2],
-      AD_FWD(perTripleCallbacks)...);
+      p1.keyOrder_, AD_FWD(perTripleCallbacks)...);
 
-  if (metaData.has_value()) {
-    auto& mdv = metaData.value();
-    LOG(INFO) << "Statistics for " << p1.readableName_ << ": "
-              << mdv.first.statistics() << std::endl;
-    LOG(INFO) << "Statistics for " << p2.readableName_ << ": "
-              << mdv.second.statistics() << std::endl;
-  }
+  LOG(INFO) << "Statistics for " << p1.readableName_ << ": "
+            << metaData.first.statistics() << std::endl;
+  LOG(INFO) << "Statistics for " << p2.readableName_ << ": "
+            << metaData.second.statistics() << std::endl;
 
   return metaData;
 }
@@ -689,22 +630,22 @@ void IndexImpl::createPermutationPair(auto&& sortedTriples,
                                       const Permutation& p1,
                                       const Permutation& p2,
                                       auto&&... perTripleCallbacks) {
-  auto metaData = createPermutations(AD_FWD(sortedTriples), p1, p2,
-                                     AD_FWD(perTripleCallbacks)...);
+  auto [metaData1, metaData2] = createPermutations(
+      AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
   // NOTE: When `setKbName` was called, it set the name of pso_.meta_,
   // pso_.meta_, ... which however are not used during index building.
   // `getKbName` simple reads one of these names.
-  metaData.value().first.setName(getKbName());
-  metaData.value().second.setName(getKbName());
-  if (metaData) {
-    LOG(INFO) << "Writing meta data for " << p1.readableName_ << " and "
-              << p2.readableName_ << " ..." << std::endl;
-    ad_utility::File f1(onDiskBase_ + ".index" + p1.fileSuffix_, "r+");
-    metaData.value().first.appendToFile(&f1);
-    ad_utility::File f2(onDiskBase_ + ".index" + p2.fileSuffix_, "r+");
-    metaData.value().second.appendToFile(&f2);
-  }
+  auto writeMetadata = [this](auto& metaData, const auto& permutation) {
+    metaData.setName(getKbName());
+    ad_utility::File f(
+        absl::StrCat(onDiskBase_, ".index", permutation.fileSuffix_), "r+");
+    metaData.appendToFile(&f);
+  };
+  LOG(INFO) << "Writing meta data for " << p1.readableName_ << " and "
+            << p2.readableName_ << " ..." << std::endl;
+  writeMetadata(metaData1, p1);
+  writeMetadata(metaData2, p2);
 }
 
 // _____________________________________________________________________________

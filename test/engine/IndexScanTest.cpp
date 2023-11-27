@@ -68,10 +68,10 @@ void testLazyScanForJoinOfTwoScans(
     const std::string& kgTurtle, const SparqlTriple& tripleLeft,
     const SparqlTriple& tripleRight, const std::vector<IndexPair>& leftRows,
     const std::vector<IndexPair>& rightRows,
-    size_t blocksizePermutationsInBytes = 32,
+    ad_utility::MemorySize blocksizePermutations = 32_B,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  auto qec = getQec(kgTurtle, true, true, true, blocksizePermutationsInBytes);
+  auto qec = getQec(kgTurtle, true, true, true, blocksizePermutations);
   IndexScan s1{qec, Permutation::PSO, tripleLeft};
   IndexScan s2{qec, Permutation::PSO, tripleRight};
   auto implForSwitch = [](IndexScan& l, IndexScan& r, const auto& expectedL,
@@ -202,7 +202,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<a> <o> <a1>. <b> <p> <x80>. <b> <p> <x90>. "
         "<x2> <q> <xb>. <x5> <q> <xb2> . <x5> <q> <xb>. "
         "<x9> <q> <xb2> . <x91> <q> <xb>. <x93> <q> <xb2> .";
-    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 48);
+    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 48_B);
   }
   {
     std::string kg =
