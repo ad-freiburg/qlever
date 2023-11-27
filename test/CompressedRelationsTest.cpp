@@ -121,7 +121,6 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
         if (buffer.numRows() > writer.blocksize()) {
           addBlock();
         }
-
       }
       if (numBlocks > 0 || buffer.numRows() > 0.8 * writer.blocksize()) {
         addBlock();
@@ -170,13 +169,14 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
                     m.multiplicityCol1_);
     // Scan for all distinct `col0` and check that we get the expected result.
-    IdTable table = reader.scan(metaData[i], blocks, additionalColumns, cancellationHandle);
+    IdTable table =
+        reader.scan(metaData[i], blocks, additionalColumns, cancellationHandle);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
     table.clear();
-    for (const auto& block :
-         reader.lazyScan(metaData[i], blocks, additionalColumns, cancellationHandle)) {
+    for (const auto& block : reader.lazyScan(
+             metaData[i], blocks, additionalColumns, cancellationHandle)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -189,7 +189,7 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
 
     auto scanAndCheck = [&]() {
       auto size =
-          reader.getResultSizeOfScan(metaData[i], V(lastCol1Id), blocks, file);
+          reader.getResultSizeOfScan(metaData[i], V(lastCol1Id), blocks);
       IdTable tableWidthOne = reader.scan(metaData[i], V(lastCol1Id), blocks,
                                           {}, cancellationHandle);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);

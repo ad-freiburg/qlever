@@ -37,7 +37,7 @@ using BufferedIdTable =
 
 // This type is used to buffer small relations that will be stored in the same
 // block.
-using SmallRelationsBuffer = columnBasedIdTable::IdTable<Id, 0>;
+using SmallRelationsBuffer = IdTable;
 
 // Sometimes we do not read/decompress  all the columns of a block, so we have
 // to use a dynamic `IdTable`.
@@ -179,7 +179,6 @@ class CompressedRelationWriter {
   SmallRelationsBuffer smallRelationsBuffer_{numColumns_, allocator_};
   ad_utility::MemorySize uncompressedBlocksizePerColumn_;
 
-
   // When we store a large relation with multiple blocks then we keep track of
   // its `col0Id`, mostly for sanity checks.
   Id currentCol0Id_ = Id::makeUndefined();
@@ -189,11 +188,15 @@ class CompressedRelationWriter {
 
   // A dummy value for multiplicities that can only later be determined.
   static constexpr float multiplicityDummy = 42.4242f;
+
  public:
   /// Create using a filename, to which the relation data will be written.
-  explicit CompressedRelationWriter(size_t numColumns, ad_utility::File f,
-                                    ad_utility::MemorySize uncompressedBlocksizePerColumn)
-      : outfile_{std::move(f)}, uncompressedBlocksizePerColum,n_{uncompressedBlocksizePerColumn}, numColumns_{numColumns} {}
+  explicit CompressedRelationWriter(
+      size_t numColumns, ad_utility::File f,
+      ad_utility::MemorySize uncompressedBlocksizePerColumn)
+      : outfile_{std::move(f)},
+        numColumns_{numColumns},
+        uncompressedBlocksizePerColumn_{uncompressedBlocksizePerColumn} {}
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.
   using MetadataCallback =
@@ -255,7 +258,7 @@ class CompressedRelationWriter {
   // actual sizes of blocks will slightly vary due to new relations starting in
   // new blocks etc.
   size_t blocksize() const {
-    return numBytesPerBlock_.getBytes() / (2 * sizeof(Id));
+    return uncompressedBlocksizePerColumn_.getBytes() / sizeof(Id);
   }
 
  private:
@@ -277,7 +280,6 @@ class CompressedRelationWriter {
   // size of the compressed column in the `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
       std::span<const Id> column);
-
 
   // Return the number of columns that is stored inside the blocks.
   size_t numColumns() const { return numColumns_; }
@@ -455,7 +457,8 @@ class CompressedRelationReader {
    */
   IdTable scan(
       const CompressedRelationMetadata& metadata, Id col1Id,
-      std::span<const CompressedBlockMetadata> blocks, ColumnIndices additionalColumns,
+      std::span<const CompressedBlockMetadata> blocks,
+      ColumnIndices additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
@@ -464,7 +467,7 @@ class CompressedRelationReader {
   IdTableGenerator lazyScan(
       CompressedRelationMetadata metadata, Id col1Id,
       std::vector<CompressedBlockMetadata> blockMetadata,
-     OwningColumnIndices additionalColumns,
+      OwningColumnIndices additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
@@ -556,8 +559,7 @@ class CompressedRelationReader {
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
   IdTableGenerator asyncParallelBlockGenerator(
-      auto beginBlock, auto endBlock, ad_utility::File& file,
-      OwningColumnIndices columnIndices,
+      auto beginBlock, auto endBlock, OwningColumnIndices columnIndices,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // A helper function to abstract away the timeout check:

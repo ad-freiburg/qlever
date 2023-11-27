@@ -112,8 +112,7 @@ IdTable CompressedRelationReader::scan(
 // ____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
-    auto beginBlock, auto endBlock,
-    OwningColumnIndices columnIndices,
+    auto beginBlock, auto endBlock, OwningColumnIndices columnIndices,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
@@ -176,7 +175,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata,
-    std::vector<CompressedBlockMetadata> blockMetadata,OwningColumnIndices additionalColumns,
+    std::vector<CompressedBlockMetadata> blockMetadata,
+    OwningColumnIndices additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   auto relevantBlocks =
       getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
@@ -198,10 +198,8 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   co_yield firstBlock;
   checkCancellation(cancellationHandle);
 
-  auto blockGenerator = asyncParallelBlockGenerator(beginBlock + 1, endBlock,
-                                                    columnIndices, cancellationHandle);
   auto blockGenerator = asyncParallelBlockGenerator(
-      beginBlock + 1, endBlock, file, std::nullopt, cancellationHandle);
+      beginBlock + 1, endBlock, columnIndices, cancellationHandle);
   blockGenerator.setDetailsPointer(&details);
   for (auto& block : blockGenerator) {
     co_yield block;
@@ -212,7 +210,8 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata, Id col1Id,
-    std::vector<CompressedBlockMetadata> blockMetadata, OwningColumnIndices additionalColumns,
+    std::vector<CompressedBlockMetadata> blockMetadata,
+    OwningColumnIndices additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   AD_CONTRACT_CHECK(cancellationHandle);
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
@@ -237,8 +236,8 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 
   auto columnIndices = prepareColumnIndices({1}, additionalColumns);
 
-  auto getIncompleteBlock = [&, cancellationHandle](auto it) {
-    auto result = readPossiblyIncompleteBlock(metadata, col1Id, file, *it,
+  auto getIncompleteBlock = [&](auto it) {
+    auto result = readPossiblyIncompleteBlock(metadata, col1Id, *it,
                                               std::ref(details), columnIndices);
     result.setColumnSubset(std::array<ColumnIndex, 1>{1});
     checkCancellation(cancellationHandle);
@@ -251,9 +250,9 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   }
 
   if (beginBlock + 1 < endBlock) {
-    auto blockGenerator = asyncParallelBlockGenerator(
-        beginBlock + 1, endBlock - 1,columnIndices,
-        std::move(cancellationHandle));
+    auto blockGenerator =
+        asyncParallelBlockGenerator(beginBlock + 1, endBlock - 1, columnIndices,
+                                    std::move(cancellationHandle));
     blockGenerator.setDetailsPointer(&details);
     for (auto& block : blockGenerator) {
       co_yield block;
@@ -420,7 +419,8 @@ CompressedRelationReader::getBlocksForJoin(
 // _____________________________________________________________________________
 IdTable CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata, Id col1Id,
-    std::span<const CompressedBlockMetadata> blocks, ColumnIndices additionalColumns,
+    std::span<const CompressedBlockMetadata> blocks,
+    ColumnIndices additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   auto columnIndices = prepareColumnIndices({1}, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);

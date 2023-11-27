@@ -1375,14 +1375,16 @@ IdTable IndexImpl::scan(
     size_t numColumns = col1String.has_value() ? 1 : 2;
     return IdTable{numColumns, allocator_};
   }
-  return scan(col0Id.value(), col1Id, permutation, additionalColumns, std::move(cancellationHandle));
+  return scan(col0Id.value(), col1Id, permutation, additionalColumns,
+              std::move(cancellationHandle));
 }
 // _____________________________________________________________________________
-IdTable IndexImpl::scan(Id col0Id, std::optional<Id> col1Id,
-                        Permutation::Enum p,
-                        Permutation::ColumnIndices additionalColumns,
+IdTable IndexImpl::scan(
+    Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+    Permutation::ColumnIndices additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
-  return getPermutation(p).scan(col0Id, col1Id, additionalColumns, std::move(cancellationHandle));
+  return getPermutation(p).scan(col0Id, col1Id, additionalColumns,
+                                std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________

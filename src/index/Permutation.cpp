@@ -39,9 +39,9 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
 }
 
 // _____________________________________________________________________
-IdTable Permutation::scan(Id col0Id, std::optional<Id> col1Id,
-                          ColumnIndices additionalColumns,
-                          std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+IdTable Permutation::scan(
+    Id col0Id, std::optional<Id> col1Id, ColumnIndices additionalColumns,
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
                              readableName_ + ", which was not loaded");
@@ -54,10 +54,11 @@ IdTable Permutation::scan(Id col0Id, std::optional<Id> col1Id,
   const auto& metaData = meta_.getMetaData(col0Id);
 
   if (col1Id.has_value()) {
-    return reader_.scan(metaData, col1Id.value(), meta_.blockData(),
-                        additionalColumns, cancellationHandle);
+    return reader().scan(metaData, col1Id.value(), meta_.blockData(),
+                         additionalColumns, cancellationHandle);
   } else {
-    return reader().scan(metaData, meta_.blockData(), additionalColumns, cancellationHandle);
+    return reader().scan(metaData, meta_.blockData(), additionalColumns,
+                         cancellationHandle);
   }
 }
 

@@ -134,12 +134,6 @@ class MemorySize {
   template <Arithmetic T>
   constexpr MemorySize& operator/=(const T c);
 
-  // Hashing for abseil
-  template <typename H>
-  friend H AbslHashValue(H h, const MemorySize& mem) {
-    return H::combine(std::move(h), mem.memoryInBytes_);
-  }
-
  private:
   // Constructor for the factory functions.
   explicit constexpr MemorySize(size_t amountOfMemoryInBytes)

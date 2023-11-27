@@ -409,8 +409,9 @@ class IndexImpl {
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // _____________________________________________________________________________
-  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-               Permutation::ColumnIndices additionalColumns,
+  IdTable scan(
+      Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+      Permutation::ColumnIndices additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // _____________________________________________________________________________
