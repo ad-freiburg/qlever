@@ -68,7 +68,7 @@ void testLazyScanForJoinOfTwoScans(
     const std::string& kgTurtle, const SparqlTriple& tripleLeft,
     const SparqlTriple& tripleRight, const std::vector<IndexPair>& leftRows,
     const std::vector<IndexPair>& rightRows,
-    ad_utility::MemorySize blocksizePermutationsInBytes = 16_B,
+    ad_utility::MemorySize blocksizePermutations = 16_B,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kgTurtle, true, true, true, blocksizePermutations);
