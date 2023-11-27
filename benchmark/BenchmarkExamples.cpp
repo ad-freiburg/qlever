@@ -64,9 +64,12 @@ class ConfigOptions : public BenchmarkInterface {
     manager.addOption("CoinFlipTry", "The number of succesful coin flips.",
                       &wonOnTryX_, {false, false, false, false, false});
 
-    manager.addOption({"Accounts"s, "Personal"s, "Steve"s},
-                      "Steves saving account balance.",
-                      &balanceOnStevesSavingAccount_, -41.9f);
+    // Sub manager can be used to organize things better. They are basically
+    // just a path prefix for all the options inside it.
+    ad_utility::ConfigManager& subManager{
+        manager.addSubManager({"Accounts"s, "Personal"s})};
+    subManager.addOption("Steve"s, "Steves saving account balance.",
+                         &balanceOnStevesSavingAccount_, -41.9f);
   }
 };
 
