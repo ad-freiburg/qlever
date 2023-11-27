@@ -24,7 +24,7 @@ using Awaitable = Server::Awaitable<T>;
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads,
                ad_utility::MemorySize maxMem, std::string accessToken,
-               bool usePatternTrick)
+               std::chrono::seconds defaultQueryTimeout, bool usePatternTrick)
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
@@ -37,7 +37,8 @@ Server::Server(unsigned short port, size_t numThreads,
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.
-      threadPool_{numThreads} {
+      threadPool_{numThreads},
+      defaultQueryTimeout_{defaultQueryTimeout} {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
   RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
@@ -485,20 +486,17 @@ auto Server::cancelAfterDeadline(
 }
 
 // ____________________________________________________________________________
-std::function<void()> Server::setupCancellationHandle(
+auto Server::setupCancellationHandle(
     const net::any_io_executor& executor,
     const ad_utility::websocket::QueryId& queryId,
     const std::shared_ptr<Operation>& rootOperation,
-    std::optional<std::chrono::seconds> timeLimit) const {
+    std::chrono::seconds timeLimit) const {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
   AD_CORRECTNESS_CHECK(cancellationHandle);
   rootOperation->recursivelySetCancellationHandle(
       std::move(cancellationHandle));
-  if (timeLimit.has_value()) {
-    rootOperation->recursivelySetTimeConstraint(timeLimit.value());
-    return cancelAfterDeadline(executor, cancellationHandle, timeLimit.value());
-  }
-  return []() { /* Do nothing when no timeout is given */ };
+  rootOperation->recursivelySetTimeConstraint(timeLimit);
+  return cancelAfterDeadline(executor, cancellationHandle, timeLimit);
 }
 
 // ____________________________________________________________________________
@@ -530,10 +528,10 @@ boost::asio::awaitable<void> Server::processQuery(
   // access to the runtimeInformation in the case of an error.
   std::optional<PlannedQuery> plannedQuery;
   try {
-    std::optional<std::chrono::seconds> timeLimit =
-        params.contains("timeout") ? std::optional{std::chrono::seconds(
-                                         std::stoi(params.at("timeout")))}
-                                   : std::nullopt;
+    std::chrono::seconds timeLimit =
+        params.contains("timeout")
+            ? std::chrono::seconds(std::stoi(params.at("timeout")))
+            : defaultQueryTimeout_;
 
     auto containsParam = [&params](const std::string& param,
                                    const std::string& expected) {

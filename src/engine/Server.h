@@ -32,6 +32,7 @@ class Server {
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
+                  std::chrono::seconds defaultQueryTimeout,
                   bool usePatternTrick = true);
 
   virtual ~Server() = default;
@@ -75,6 +76,8 @@ class Server {
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
   mutable net::static_thread_pool threadPool_;
+
+  std::chrono::seconds defaultQueryTimeout_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
@@ -147,15 +150,12 @@ class Server {
       std::chrono::seconds timeLimit);
 
   /// Acquire the cancellation handle based on `queryId`, pass it to the
-  /// operation and configure it to get cancelled automatically if a time limit
-  /// is passed by calling `cancelAfterDeadline`. In this case the return value
-  /// can be used to cancel the timer. If `timeLimit` is empty, return a
-  /// no-op lambda.
-  std::function<void()> setupCancellationHandle(
-      const net::any_io_executor& executor,
-      const ad_utility::websocket::QueryId& queryId,
-      const std::shared_ptr<Operation>& rootOperation,
-      std::optional<std::chrono::seconds> timeLimit) const;
+  /// operation and configure it to get cancelled automatically by calling
+  /// `cancelAfterDeadline`. The return value can be used to cancel the timer.
+  auto setupCancellationHandle(const net::any_io_executor& executor,
+                               const ad_utility::websocket::QueryId& queryId,
+                               const std::shared_ptr<Operation>& rootOperation,
+                               std::chrono::seconds timeLimit) const;
 
   /// Run the SPARQL parser and then the query planner on the `query`. All
   /// computation is performed on the `threadPool_`.

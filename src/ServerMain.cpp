@@ -49,6 +49,7 @@ int main(int argc, char** argv) {
   bool onlyPsoAndPosPermutations;
 
   NonNegative memoryMaxSizeGb;
+  std::chrono::seconds defaultQueryTimeout;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &RuntimeParameters()};
@@ -104,6 +105,13 @@ int main(int argc, char** argv) {
       po::bool_switch(&onlyPsoAndPosPermutations),
       "Only load the PSO and POS permutations. This disables queries with "
       "predicate variables.");
+  add("default-query-timeout,s",
+      po::value<NonNegative>()->default_value(10)->notifier(
+          [&defaultQueryTimeout](NonNegative seconds) {
+            defaultQueryTimeout = std::chrono::seconds{seconds};
+          }),
+      "Set the default timeout in seconds after which queries are cancelled"
+      "automatically.");
   po::variables_map optionsMap;
 
   try {
@@ -127,7 +135,7 @@ int main(int argc, char** argv) {
     Server server(
         port, numSimultaneousQueries,
         ad_utility::MemorySize::gigabytes(static_cast<size_t>(memoryMaxSizeGb)),
-        std::move(accessToken), !noPatternTrick);
+        std::move(accessToken), defaultQueryTimeout, !noPatternTrick);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
