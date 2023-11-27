@@ -259,6 +259,17 @@ class ConfigManager {
   static nlohmann::json parseShortHand(const std::string& shortHandString);
 
   /*
+  @brief Generate the json representation the current config manager
+  configuration.
+
+  @param printCurrentConfiguration Iff yes, then if an option wasn't set and has
+  no default value, it's value will be shown as `"value was never initialized"`.
+  Otherwise a dummy value will be used.
+  */
+  nlohmann::ordered_json generateConfigurationDocJson(
+      bool printCurrentConfiguration) const;
+
+  /*
   @brief Returns a string containing a json configuration and the
   string representations of all added configuration options. Followed by a list
   of all the configuration options, that kept their default values.
