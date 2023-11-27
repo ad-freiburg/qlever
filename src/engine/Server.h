@@ -18,7 +18,6 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
-#include "util/Timer.h"
 #include "util/http/HttpServer.h"
 #include "util/http/streamable_body.h"
 #include "util/http/websocket/QueryHub.h"
@@ -65,10 +64,9 @@ class Server {
 
   bool enablePatternTrick_;
 
-  // Because HttpServer is not a member of this class, we need to assign
-  // this pointer after HttpServer is instanced. It is also set back to
-  // nullptr once the object is destroyed which only happens on shutdown.
-  ad_utility::websocket::QueryHub* queryHub_ = nullptr;
+  /// Non-owning reference to the `QueryHub` instance living inside
+  /// the `WebSocketHandler` created for `HttpServer`.
+  std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
   mutable net::static_thread_pool threadPool_;
 
@@ -132,4 +130,24 @@ class Server {
   ///         on destruction.
   ad_utility::websocket::OwningQueryId getQueryId(
       const ad_utility::httpUtils::HttpRequest auto& request);
+
+  /// Schedule a task to trigger the timeout after the `timeLimit`.
+  /// The returned callback can be used to prevent this task from executing
+  /// either because the `cancellationHandle` has been aborted by some other
+  /// means or because the task has been completed successfully.
+  static auto cancelAfterDeadline(
+      const net::any_io_executor& executor,
+      std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
+      std::chrono::seconds timeLimit);
+
+  /// Acquire the cancellation handle based on `queryId`, pass it to the
+  /// operation and configure it to get cancelled automatically if a time limit
+  /// is passed by calling `cancelAfterDeadline`. In this case the return value
+  /// can be used to cancel the timer. If `timeLimit` is empty, return a
+  /// no-op lambda.
+  std::function<void()> setupCancellationHandle(
+      const net::any_io_executor& executor,
+      const ad_utility::websocket::QueryId& queryId,
+      const std::shared_ptr<Operation>& rootOperation,
+      std::optional<std::chrono::seconds> timeLimit) const;
 };

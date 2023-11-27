@@ -71,7 +71,7 @@ void testLazyScanForJoinOfTwoScans(
     ad_utility::MemorySize blocksizePermutationsInBytes = 16_B,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  auto qec = getQec(kgTurtle, true, true, true, blocksizePermutationsInBytes);
+  auto qec = getQec(kgTurtle, true, true, true, blocksizePermutations);
   IndexScan s1{qec, Permutation::PSO, tripleLeft};
   IndexScan s2{qec, Permutation::PSO, tripleRight};
   auto implForSwitch = [](IndexScan& l, IndexScan& r, const auto& expectedL,

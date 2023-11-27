@@ -1,5 +1,4 @@
 // Copyright 2015, University of Freiburg,
-
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
@@ -139,10 +138,10 @@ ResultTable IndexScan::computeResult() {
   const auto permutedTriple = getPermutedTriple();
   if (numVariables_ == 2) {
     idTable = index.scan(*permutedTriple[0], std::nullopt, permutation_,
-                         additionalColumns(), _timeoutTimer);
+                         additionalColumns(), cancellationHandle_);
   } else if (numVariables_ == 1) {
     idTable = index.scan(*permutedTriple[0], *permutedTriple[1], permutation_,
-                         additionalColumns(), _timeoutTimer);
+                         additionalColumns(), cancellationHandle_);
   } else {
     AD_CORRECTNESS_CHECK(numVariables_ == 3);
     computeFullScan(&idTable, permutation_);
@@ -284,8 +283,8 @@ void IndexScan::computeFullScan(IdTable* result,
   size_t i = 0;
   const auto& permutationImpl =
       getExecutionContext()->getIndex().getImpl().getPermutation(permutation);
-  auto triplesView = TriplesView(permutationImpl, ignoredRanges,
-                                 isTripleIgnored, _timeoutTimer);
+  auto triplesView = TriplesView(permutationImpl, cancellationHandle_,
+                                 ignoredRanges, isTripleIgnored);
   for (const auto& triple : triplesView) {
     if (i >= resultSize) {
       break;
@@ -316,7 +315,7 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   }
   return index.getPermutation(s.permutation())
       .lazyScan(col0Id, col1Id, std::move(blocks), s.additionalColumns(),
-                s._timeoutTimer);
+                s.cancellationHandle_);
 };
 
 // ________________________________________________________________

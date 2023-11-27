@@ -9,25 +9,21 @@
 
 #include "util/Timer.h"
 
-using ad_utility::TimeoutTimer;
 using ad_utility::Timer;
 using namespace std::chrono_literals;
 
 // On macOS the timer seems to work, but the `sleep_for` is too imprecise.
 #ifndef __APPLE__
 
-void testTime(Timer::Duration duration, size_t msecs,
+void testTime(Timer::Duration duration, std::chrono::milliseconds msecs,
               std::chrono::milliseconds expected) {
   auto lowerBound = 0.9 * expected;
   auto upperBound = 1.1 * expected + 3ms;
   EXPECT_GE(duration, lowerBound);
   EXPECT_LE(duration, upperBound);
 
-  EXPECT_GE(msecs, lowerBound.count());
-  EXPECT_LE(msecs, upperBound.count());
-
-  EXPECT_GE(Timer::toSeconds(duration), 0.001 * lowerBound.count());
-  EXPECT_LE(Timer::toSeconds(duration), 0.001 * upperBound.count());
+  EXPECT_GE(msecs, lowerBound);
+  EXPECT_LE(msecs, upperBound);
 }
 
 void testTime(const ad_utility::Timer& timer,
@@ -76,7 +72,7 @@ TEST(Timer, BasicWorkflow) {
   t.reset();
   ASSERT_FALSE(t.isRunning());
   ASSERT_EQ(t.value(), Timer::Duration::zero());
-  ASSERT_EQ(t.msecs(), 0u);
+  ASSERT_EQ(t.msecs(), 0ms);
   std::this_thread::sleep_for(5ms);
 
   // Start leads to a running timer.
@@ -89,53 +85,22 @@ TEST(Timer, InitiallyStopped) {
   Timer t{Timer::Stopped};
   ASSERT_FALSE(t.isRunning());
   ASSERT_EQ(t.value(), Timer::Duration::zero());
-  ASSERT_EQ(t.msecs(), 0u);
+  ASSERT_EQ(t.msecs(), 0ms);
   std::this_thread::sleep_for(15ms);
   ASSERT_EQ(t.value(), Timer::Duration::zero());
-  ASSERT_EQ(t.msecs(), 0u);
+  ASSERT_EQ(t.msecs(), 0ms);
 
   t.cont();
   std::this_thread::sleep_for(15ms);
   testTime(t, 15ms);
 }
 
-TEST(TimeoutTimer, Unlimited) {
-  auto timer = TimeoutTimer::unlimited();
-  for (size_t i = 0; i < 10; ++i) {
-    std::this_thread::sleep_for(1ms);
-    ASSERT_FALSE(timer.hasTimedOut());
-    ASSERT_NO_THROW(timer.checkTimeoutAndThrow("error1"));
-    // When no timeout occurs, the lambda is not executed.
-    ASSERT_NO_THROW(
-        timer.checkTimeoutAndThrow([]() -> std::string { throw 42; }));
-  }
-}
-
-TEST(TimeoutTimer, Limited) {
-  auto timer = TimeoutTimer{10ms, Timer::Started};
-  std::this_thread::sleep_for(5ms);
-  ASSERT_FALSE(timer.hasTimedOut());
-  ASSERT_NO_THROW(timer.checkTimeoutAndThrow("error1"));
-  ASSERT_NO_THROW(timer.checkTimeoutAndThrow([]() { return "error2"; }));
-  std::this_thread::sleep_for(7ms);
-
-  ASSERT_TRUE(timer.hasTimedOut());
-  ASSERT_THROW(timer.checkTimeoutAndThrow("hi"), ad_utility::TimeoutException);
-  try {
-    timer.checkTimeoutAndThrow([]() { return "Testing. "; });
-    FAIL() << "Expected a timeout exception, but no exception was thrown";
-  } catch (const ad_utility::TimeoutException& ex) {
-    ASSERT_STREQ(
-        ex.what(),
-        "Testing. A Timeout occured. The time limit was 0.010 seconds");
-  }
-}
-
 TEST(TimeBlockAndLog, TimeBlockAndLog) {
   std::string s;
   {
-    auto callback = [&s](size_t msecs, std::string_view message) {
-      s = absl::StrCat(message, ": ", msecs);
+    auto callback = [&s](std::chrono::milliseconds msecs,
+                         std::string_view message) {
+      s = absl::StrCat(message, ": ", msecs.count());
     };
     ad_utility::TimeBlockAndLog t{"message", callback};
     std::this_thread::sleep_for(25ms);

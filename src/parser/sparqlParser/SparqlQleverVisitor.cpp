@@ -1161,15 +1161,8 @@ PropertyPath Visitor::visit(Parser::PathEltContext* ctx) {
   PropertyPath p = visit(ctx->pathPrimary());
 
   if (ctx->pathMod()) {
-    // TODO move case distinction +/*/? into PropertyPath.
-    if (ctx->pathMod()->getText() == "+") {
-      p = PropertyPath::makeTransitiveMin(p, 1);
-    } else if (ctx->pathMod()->getText() == "?") {
-      p = PropertyPath::makeTransitiveMax(p, 1);
-    } else {
-      AD_CORRECTNESS_CHECK(ctx->pathMod()->getText() == "*");
-      p = PropertyPath::makeTransitive(p);
-    }
+    std::string modifier = ctx->pathMod()->getText();
+    p = PropertyPath::makeModified(p, modifier);
   }
   return p;
 }
@@ -1696,6 +1689,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "coalesce") {
     AD_CORRECTNESS_CHECK(ctx->expressionList());
     return makeCoalesceExpression(visit(ctx->expressionList()));
+  } else if (functionName == "encode_for_uri") {
+    return createUnary(&makeEncodeForUriExpression);
   } else if (functionName == "concat") {
     AD_CORRECTNESS_CHECK(ctx->expressionList());
     return makeConcatExpression(visit(ctx->expressionList()));

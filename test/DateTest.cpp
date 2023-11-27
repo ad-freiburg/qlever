@@ -15,13 +15,13 @@
 
 using ad_utility::source_location;
 
-SlowRandomIntGenerator yearGenerator{-9999, 9999};
-SlowRandomIntGenerator monthGenerator{1, 12};
-SlowRandomIntGenerator dayGenerator{1, 31};
-SlowRandomIntGenerator hourGenerator{0, 23};
-SlowRandomIntGenerator minuteGenerator{0, 59};
-RandomDoubleGenerator secondGenerator{0, 59.9999};
-SlowRandomIntGenerator timeZoneGenerator{-23, 23};
+ad_utility::SlowRandomIntGenerator yearGenerator{-9999, 9999};
+ad_utility::SlowRandomIntGenerator monthGenerator{1, 12};
+ad_utility::SlowRandomIntGenerator dayGenerator{1, 31};
+ad_utility::SlowRandomIntGenerator hourGenerator{0, 23};
+ad_utility::SlowRandomIntGenerator minuteGenerator{0, 59};
+ad_utility::RandomDoubleGenerator secondGenerator{0, 59.9999};
+ad_utility::SlowRandomIntGenerator timeZoneGenerator{-23, 23};
 
 TEST(Date, Size) {
   ASSERT_EQ(sizeof(Date), 8);

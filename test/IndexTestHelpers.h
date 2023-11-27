@@ -24,7 +24,8 @@ inline Index makeIndexWithTestSettings() {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  index.stxxlMemory() = 50_MB;
+  BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10;
+  index.memoryLimitIndexBuilding() = 50_MB;
   return index;
 }
 
@@ -67,7 +68,7 @@ inline Index makeTestIndex(
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,
     bool usePrefixCompression = true,
-    ad_utility::MemorySize blocksizePermutationsInBytes = 16_B) {
+    ad_utility::MemorySize blocksizePermutations = 16_B) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
@@ -154,26 +155,26 @@ inline QueryExecutionContext* getQec(
   static ad_utility::HashMap<Key, Context> contextMap;
 
   auto key = Key{turtleInput, loadAllPermutations, usePatterns,
-                 usePrefixCompression, blocksizePermutationsInBytes};
+                 usePrefixCompression, blocksizePermutations};
 
   if (!contextMap.contains(key)) {
     std::string testIndexBasename =
         "_staticGlobalTestIndex" + std::to_string(contextMap.size());
     contextMap.emplace(
-        key, Context{TypeErasedCleanup{[testIndexBasename]() {
-                       for (const std::string& indexFilename :
-                            getAllIndexFilenames(testIndexBasename)) {
-                         // Don't log when a file can't be deleted,
-                         // because the logging might already be
-                         // destroyed.
-                         ad_utility::deleteFile(indexFilename, false);
-                       }
-                     }},
-                     std::make_unique<Index>(makeTestIndex(
-                         testIndexBasename, turtleInput, loadAllPermutations,
-                         usePatterns, usePrefixCompression,
-                         blocksizePermutationsInBytes)),
-                     std::make_unique<QueryResultCache>()});
+        key,
+        Context{TypeErasedCleanup{[testIndexBasename]() {
+                  for (const std::string& indexFilename :
+                       getAllIndexFilenames(testIndexBasename)) {
+                    // Don't log when a file can't be deleted,
+                    // because the logging might already be
+                    // destroyed.
+                    ad_utility::deleteFile(indexFilename, false);
+                  }
+                }},
+                std::make_unique<Index>(makeTestIndex(
+                    testIndexBasename, turtleInput, loadAllPermutations,
+                    usePatterns, usePrefixCompression, blocksizePermutations)),
+                std::make_unique<QueryResultCache>()});
   }
   return contextMap.at(key).qec_.get();
 }

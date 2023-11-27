@@ -72,13 +72,14 @@ void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
   }
 }
 
+}  // namespace
+
 // Run a set of tests on a permutation that is defined by the `inputs`. The
 // `inputs` must be ordered wrt the `col0_`. `testCaseName` is used to create
 // a unique name for the required temporary files and for the implicit cache
 // of the `CompressedRelationMetaData`. `blocksize` is the size of the blocks
 // in which the permutation will be compressed and stored on disk.
-void testCompressedRelations(const std::vector<RelationInput>& inputs,
-                             std::string testCaseName,
+void testCompressedRelations(const auto& inputs, std::string testCaseName,
                              ad_utility::MemorySize blocksize) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
@@ -103,23 +104,36 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     for (const auto& input : inputs) {
       std::string bufferFilename =
           testCaseName + ".buffers." + std::to_string(i) + ".dat";
-      std::vector<ad_utility::BufferedVector<Id>> buffers;
-      for ([[maybe_unused]] auto colIdx :
-           ad_utility::integerRange(numColumns)) {
-        buffers.emplace_back(THRESHOLD_RELATION_CREATION,
-                             bufferFilename + "." + std::to_string(colIdx));
-      }
-      BufferedIdTable buffer{numColumns, std::move(buffers)};
+      IdTable buffer{numColumns, ad_utility::makeUnlimitedAllocator<Id>()};
+      size_t numBlocks = 0;
+
+      auto addBlock = [&]() {
+        if (buffer.empty()) {
+          return;
+        }
+        writer.addBlockForLargeRelation(
+            V(input.col0_), std::make_shared<IdTable>(std::move(buffer)));
+        buffer.clear();
+        ++numBlocks;
+      };
       for (const auto& arr : input.col1And2_) {
         buffer.push_back(std::views::transform(arr, V));
+        if (buffer.numRows() > writer.blocksize()) {
+          addBlock();
+        }
+
       }
-      // The last argument is the number of distinct elements in `col1`. We
-      // store a dummy value here that we can check later.
-      auto md = writer.addRelation(V(input.col0_), buffer, i + 1);
-      metaData.push_back(md);
+      if (numBlocks > 0 || buffer.numRows() > 0.8 * writer.blocksize()) {
+        addBlock();
+        // The last argument is the number of distinct elements in `col1`. We
+        // store a dummy value here that we can check later.
+        metaData.push_back(writer.finishLargeRelation(i + 1));
+      } else {
+        metaData.push_back(writer.addSmallRelation(V(input.col0_), i + 1,
+                                                   buffer.asStaticView<0>()));
+      }
       buffer.clear();
-      ASSERT_THROW(writer.addRelation(V(input.col0_), buffer, i + 1),
-                   ad_utility::Exception);
+      numBlocks = 0;
       ++i;
     }
   }
@@ -136,8 +150,7 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
 
   ASSERT_EQ(metaData.size(), inputs.size());
 
-  auto timer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-      ad_utility::TimeoutTimer::unlimited());
+  auto cancellationHandle = std::make_shared<ad_utility::CancellationHandle>();
   // Check the contents of the metadata.
 
   auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
@@ -157,13 +170,13 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
                     m.multiplicityCol1_);
     // Scan for all distinct `col0` and check that we get the expected result.
-    IdTable table = reader.scan(metaData[i], blocks, additionalColumns, timer);
+    IdTable table = reader.scan(metaData[i], blocks, additionalColumns, cancellationHandle);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
     table.clear();
     for (const auto& block :
-         reader.lazyScan(metaData[i], blocks, additionalColumns, timer)) {
+         reader.lazyScan(metaData[i], blocks, additionalColumns, cancellationHandle)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -176,15 +189,15 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
 
     auto scanAndCheck = [&]() {
       auto size =
-          reader.getResultSizeOfScan(metaData[i], V(lastCol1Id), blocks);
-      IdTable tableWidthOne =
-          reader.scan(metaData[i], V(lastCol1Id), blocks, {}, timer);
+          reader.getResultSizeOfScan(metaData[i], V(lastCol1Id), blocks, file);
+      IdTable tableWidthOne = reader.scan(metaData[i], V(lastCol1Id), blocks,
+                                          {}, cancellationHandle);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
-      for (const auto& block :
-           reader.lazyScan(metaData[i], V(lastCol1Id), blocks, {}, timer)) {
+      for (const auto& block : reader.lazyScan(
+               metaData[i], V(lastCol1Id), blocks, {}, cancellationHandle)) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
@@ -203,6 +216,8 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     scanAndCheck();
   }
 }
+
+namespace {
 
 // Run `testCompressedRelations` (see above) for the given `inputs` and
 // `testCaseName`, but with a set of different `blocksizes` (small and medium
@@ -478,4 +493,11 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   metadataAndBlocks.col1Id_ = std::nullopt;
   metadataAndBlocksB.col1Id_ = V(7);
   test({std::vector{block4, block5}, std::vector{blockB3}});
+}
+
+TEST(CompressedRelationReader, PermutedTripleToString) {
+  auto tr = CompressedBlockMetadata::PermutedTriple{V(12), V(13), V(27)};
+  std::stringstream str;
+  str << tr;
+  ASSERT_EQ(str.str(), "Triple: VocabIndex:12 VocabIndex:13 VocabIndex:27\n");
 }

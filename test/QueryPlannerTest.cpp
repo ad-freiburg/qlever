@@ -214,9 +214,13 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       ASSERT_EQ(
           "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-          "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
+          "1 {s: ?c, p: "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+          "contains-entity>, o: ?x} : "
           "(0, 2)\n"
-          "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: \"abc\"} "
+          "2 {s: ?c, p: "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word>, "
+          "o: \"abc\"} "
           ": "
           "(1)",
           tg.asString());
@@ -227,14 +231,14 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                    QueryPlanner::TripleGraph::Node(
                        0, Var{"?c"}, {"abc"},
                        {
-                           SparqlTriple(
-                               Var{"?c"},
-                               "<QLever-internal-function/contains-entity>",
-                               Var{"?x"}),
-                           SparqlTriple(
-                               Var{"?c"},
-                               "<QLever-internal-function/contains-word>",
-                               lit("\"abc\"")),
+                           SparqlTriple(Var{"?c"},
+                                        "<http://qlever.cs.uni-freiburg.de/"
+                                        "builtin-functions/contains-entity>",
+                                        Var{"?x"}),
+                           SparqlTriple(Var{"?c"},
+                                        "<http://qlever.cs.uni-freiburg.de/"
+                                        "builtin-functions/contains-word>",
+                                        lit("\"abc\"")),
                        }),
                    {1}),
                std::make_pair<Node, vector<size_t>>(
@@ -246,19 +250,27 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
     {
       ParsedQuery pq = SparqlParser::parseQuery(
           "SELECT ?x WHERE {?x <p> <X>. ?c "
-          "<QLever-internal-function/contains-entity> ?x. ?c "
-          "<QLever-internal-function/contains-word> \"abc\" . ?c "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+          "contains-entity> ?x. ?c "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "
+          "\"abc\" . ?c "
           "ql:contains-entity ?y}");
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       ASSERT_EQ(
           "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-          "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
+          "1 {s: ?c, p: "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+          "contains-entity>, o: ?x} : "
           "(0, 2, 3)\n"
-          "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: \"abc\"} "
+          "2 {s: ?c, p: "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word>, "
+          "o: \"abc\"} "
           ": "
           "(1, 3)\n"
-          "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : "
+          "3 {s: ?c, p: "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+          "contains-entity>, o: ?y} : "
           "(1, 2)",
           tg.asString());
       tg.collapseTextCliques();
@@ -267,17 +279,18 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
               {std::make_pair<Node, vector<size_t>>(
                    QueryPlanner::TripleGraph::Node(
                        0, Var{"?c"}, {"abc"},
-                       {SparqlTriple(
-                            Var{"?c"},
-                            "<QLever-internal-function/contains-entity>",
-                            Var{"?x"}),
+                       {SparqlTriple(Var{"?c"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-entity>",
+                                     Var{"?x"}),
                         SparqlTriple(Var{"?c"},
-                                     "<QLever-internal-function/contains-word>",
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-word>",
                                      lit("\"abc\"")),
-                        SparqlTriple(
-                            Var{"?c"},
-                            "<QLever-internal-function/contains-entity>",
-                            Var{"?y"})}),
+                        SparqlTriple(Var{"?c"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-entity>",
+                                     Var{"?y"})}),
                    {1}),
                std::make_pair<Node, vector<size_t>>(
                    QueryPlanner::TripleGraph::Node(
@@ -294,12 +307,18 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       ASSERT_EQ(
           "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-          "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
+          "1 {s: ?c, p: "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+          "contains-entity>, o: ?x} : "
           "(0, 2, 3)\n"
-          "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: \"abc\"} "
+          "2 {s: ?c, p: "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word>, "
+          "o: \"abc\"} "
           ": "
           "(1, 3)\n"
-          "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : "
+          "3 {s: ?c, p: "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+          "contains-entity>, o: ?y} : "
           "(1, 2, 4)\n"
           "4 {s: ?y, p: <P2>, o: <X2>} : (3)",
           tg.asString());
@@ -309,17 +328,18 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
               {std::make_pair<Node, vector<size_t>>(
                    QueryPlanner::TripleGraph::Node(
                        0, Var{"?c"}, {"abc"},
-                       {SparqlTriple(
-                            Var{"?c"},
-                            "<QLever-internal-function/contains-entity>",
-                            Var{"?x"}),
+                       {SparqlTriple(Var{"?c"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-entity>",
+                                     Var{"?x"}),
                         SparqlTriple(Var{"?c"},
-                                     "<QLever-internal-function/contains-word>",
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-word>",
                                      lit("\"abc\"")),
-                        SparqlTriple(
-                            Var{"?c"},
-                            "<QLever-internal-function/contains-entity>",
-                            Var{"?y"})}),
+                        SparqlTriple(Var{"?c"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-entity>",
+                                     Var{"?y"})}),
                    {1, 2}),
                std::make_pair<Node, vector<size_t>>(
                    QueryPlanner::TripleGraph::Node(
@@ -338,74 +358,84 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
           "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\"}");
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-      TripleGraph expected = TripleGraph(std::vector<
-                                         std::pair<Node, std::vector<size_t>>>(
-          {std::make_pair<Node, vector<size_t>>(
-               QueryPlanner::TripleGraph::Node(
-                   0, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
-               {1}),
-           std::make_pair<Node, vector<size_t>>(
-               QueryPlanner::TripleGraph::Node(
-                   1, SparqlTriple(Var{"?c"},
-                                   "<QLever-internal-function/contains-entity>",
-                                   Var{"?x"})),
-               {0, 2, 3}),
-           std::make_pair<Node, vector<size_t>>(
-               QueryPlanner::TripleGraph::Node(
-                   2, SparqlTriple(Var{"?c"},
-                                   "<QLever-internal-function/contains-word>",
-                                   lit("\"abc\""))),
-               {1, 3}),
-           std::make_pair<Node, vector<size_t>>(
-               QueryPlanner::TripleGraph::Node(
-                   3, SparqlTriple(Var{"?c"},
-                                   "<QLever-internal-function/contains-entity>",
-                                   Var{"?y"})),
-               {1, 2, 4}),
-           std::make_pair<Node, vector<size_t>>(
-               QueryPlanner::TripleGraph::Node(
-                   4, SparqlTriple(Var{"?c2"},
-                                   "<QLever-internal-function/contains-entity>",
-                                   Var{"?y"})),
-               {3, 5}),
-           std::make_pair<Node, vector<size_t>>(
-               QueryPlanner::TripleGraph::Node(
-                   5, SparqlTriple(Var{"?c2"},
-                                   "<QLever-internal-function/contains-word>",
-                                   lit("\"xx\""))),
-               {4})}));
+      TripleGraph expected =
+          TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+              {std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       0, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
+                   {1}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       1, SparqlTriple(Var{"?c"},
+                                       "<http://qlever.cs.uni-freiburg.de/"
+                                       "builtin-functions/contains-entity>",
+                                       Var{"?x"})),
+                   {0, 2, 3}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       2, SparqlTriple(Var{"?c"},
+                                       "<http://qlever.cs.uni-freiburg.de/"
+                                       "builtin-functions/contains-word>",
+                                       lit("\"abc\""))),
+                   {1, 3}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       3, SparqlTriple(Var{"?c"},
+                                       "<http://qlever.cs.uni-freiburg.de/"
+                                       "builtin-functions/contains-entity>",
+                                       Var{"?y"})),
+                   {1, 2, 4}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       4, SparqlTriple(Var{"?c2"},
+                                       "<http://qlever.cs.uni-freiburg.de/"
+                                       "builtin-functions/contains-entity>",
+                                       Var{"?y"})),
+                   {3, 5}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       5, SparqlTriple(Var{"?c2"},
+                                       "<http://qlever.cs.uni-freiburg.de/"
+                                       "builtin-functions/contains-word>",
+                                       lit("\"xx\""))),
+                   {4})}));
 
       ASSERT_TRUE(tg.isSimilar(expected));
       tg.collapseTextCliques();
-      TripleGraph expected2 = TripleGraph(std::vector<
-                                          std::pair<Node, std::vector<size_t>>>(
-          {std::make_pair<Node, vector<size_t>>(
-               QueryPlanner::TripleGraph::Node(
-                   0, Var{"?c"}, {"abc"},
-                   {SparqlTriple(Var{"?c"},
-                                 "<QLever-internal-function/contains-entity>",
-                                 Var{"?x"}),
-                    SparqlTriple(Var{"?c"},
-                                 "<QLever-internal-function/contains-word>",
-                                 lit("\"abc\"")),
-                    SparqlTriple(Var{"?c"},
-                                 "<QLever-internal-function/contains-entity>",
-                                 Var{"?y"})}),
-               {1, 2}),
-           std::make_pair<Node, vector<size_t>>(
-               QueryPlanner::TripleGraph::Node(
-                   1, Var{"?c2"}, {"xx"},
-                   {SparqlTriple(Var{"?c2"},
-                                 "<QLever-internal-function/contains-entity>",
-                                 Var{"?y"}),
-                    SparqlTriple(Var{"?c2"},
-                                 "<QLever-internal-function/contains-word>",
-                                 lit("\"xx\""))}),
-               {0}),
-           std::make_pair<Node, vector<size_t>>(
-               QueryPlanner::TripleGraph::Node(
-                   2, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
-               {0})}));
+      TripleGraph expected2 =
+          TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+              {std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       0, Var{"?c"}, {"abc"},
+                       {SparqlTriple(Var{"?c"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-entity>",
+                                     Var{"?x"}),
+                        SparqlTriple(Var{"?c"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-word>",
+                                     lit("\"abc\"")),
+                        SparqlTriple(Var{"?c"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-entity>",
+                                     Var{"?y"})}),
+                   {1, 2}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       1, Var{"?c2"}, {"xx"},
+                       {SparqlTriple(Var{"?c2"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-entity>",
+                                     Var{"?y"}),
+                        SparqlTriple(Var{"?c2"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-word>",
+                                     lit("\"xx\""))}),
+                   {0}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       2, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
+                   {0})}));
       ASSERT_TRUE(tg.isSimilar(expected2));
     }
     {
@@ -418,54 +448,69 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       ASSERT_EQ(
           "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-          "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
+          "1 {s: ?c, p: "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+          "contains-entity>, o: ?x} : "
           "(0, 2, 3)\n"
-          "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: \"abc\"} "
+          "2 {s: ?c, p: "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word>, "
+          "o: \"abc\"} "
           ": "
           "(1, 3)\n"
-          "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : "
+          "3 {s: ?c, p: "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+          "contains-entity>, o: ?y} : "
           "(1, 2, 4, 6)\n"
-          "4 {s: ?c2, p: <QLever-internal-function/contains-entity>, o: ?y} "
+          "4 {s: ?c2, p: "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+          "contains-entity>, o: ?y} "
           ": (3, 5, 6)\n"
-          "5 {s: ?c2, p: <QLever-internal-function/contains-word>, o: \"xx\"} "
+          "5 {s: ?c2, p: "
+          "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word>, "
+          "o: \"xx\"} "
           ": "
           "(4)\n"
           "6 {s: ?y, p: <P2>, o: <X2>} : (3, 4)",
           tg.asString());
       tg.collapseTextCliques();
-      TripleGraph expected2 = TripleGraph(std::vector<
-                                          std::pair<Node, std::vector<size_t>>>(
-          {std::make_pair<Node, vector<size_t>>(
-               QueryPlanner::TripleGraph::Node(
-                   0, Var{"?c"}, {"abc"},
-                   {SparqlTriple(Var{"?c"},
-                                 "<QLever-internal-function/contains-entity>",
-                                 Var{"?x"}),
-                    SparqlTriple(Var{"?c"},
-                                 "<QLever-internal-function/contains-word>",
-                                 "abc"),
-                    SparqlTriple(Var{"?c"},
-                                 "<QLever-internal-function/contains-entity>",
-                                 Var{"?y"})}),
-               {1, 2, 3}),
-           std::make_pair<Node, vector<size_t>>(
-               QueryPlanner::TripleGraph::Node(
-                   1, Var{"?c2"}, {"xx"},
-                   {SparqlTriple(Var{"?c2"},
-                                 "<QLever-internal-function/contains-entity>",
-                                 Var{"?y"}),
-                    SparqlTriple(Var{"?c2"},
-                                 "<QLever-internal-function/contains-word>",
-                                 lit("\"xx\""))}),
-               {0, 3}),
-           std::make_pair<Node, vector<size_t>>(
-               QueryPlanner::TripleGraph::Node(
-                   2, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
-               {0}),
-           std::make_pair<Node, vector<size_t>>(
-               QueryPlanner::TripleGraph::Node(
-                   3, SparqlTriple(Var{"?y"}, "<P2>", "<X2>")),
-               {0, 1})}));
+      TripleGraph expected2 =
+          TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+              {std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       0, Var{"?c"}, {"abc"},
+                       {SparqlTriple(Var{"?c"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-entity>",
+                                     Var{"?x"}),
+                        SparqlTriple(Var{"?c"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-word>",
+                                     "abc"),
+                        SparqlTriple(Var{"?c"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-entity>",
+                                     Var{"?y"})}),
+                   {1, 2, 3}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       1, Var{"?c2"}, {"xx"},
+                       {SparqlTriple(Var{"?c2"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-entity>",
+                                     Var{"?y"}),
+                        SparqlTriple(Var{"?c2"},
+                                     "<http://qlever.cs.uni-freiburg.de/"
+                                     "builtin-functions/contains-word>",
+                                     lit("\"xx\""))}),
+                   {0, 3}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       2, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
+                   {0}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       3, SparqlTriple(Var{"?y"}, "<P2>", "<X2>")),
+                   {0, 1})}));
       ASSERT_TRUE(tg.isSimilar(expected2));
     }
   }
@@ -681,17 +726,20 @@ TEST(QueryPlannerTest, threeVarTriples) {
 }
 
 TEST(QueryPlannerTest, threeVarTriplesTCJ) {
+  auto qec = ad_utility::testing::getQec("<s> <p> <x>");
   h::expect(
       "SELECT ?x ?p ?o WHERE {"
       "<s> ?p ?x . ?x ?p ?o }",
       h::MultiColumnJoin(h::IndexScan("<s>", Var{"?p"}, Var{"?x"}),
-                         h::IndexScan(Var{"?x"}, Var{"?p"}, Var{"?o"})));
+                         h::IndexScan(Var{"?x"}, Var{"?p"}, Var{"?o"})),
+      qec);
 
   h::expect(
       "SELECT ?s ?p ?o WHERE {"
       "?s ?p ?o . ?s ?p <x> }",
       h::MultiColumnJoin(h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}),
-                         h::IndexScan(Var{"?s"}, Var{"?p"}, "<x>")));
+                         h::IndexScan(Var{"?s"}, Var{"?p"}, "<x>")),
+      qec);
 }
 
 TEST(QueryPlannerTest, threeVarXthreeVarException) {
@@ -1025,32 +1073,40 @@ TEST(QueryPlannerTest, SimpleTripleOneVariable) {
 TEST(QueryPlannerTest, SimpleTripleTwoVariables) {
   using enum Permutation::Enum;
 
+  // In the following tests we need the query planner to be aware that the index
+  // contains the entities `<s> <p> <o>` that are used below, otherwise it will
+  // estimate that and Index scan has the same cost as an Index scan followed by
+  // a sort (because both plans have a cost of zero if the index scan is known
+  // to be empty).
+
+  auto qec = ad_utility::testing::getQec("<s> <p> <o>");
+
   // Fixed predicate.
 
   // Without `Order By`, two orderings are possible, both are fine.
   h::expect("SELECT * WHERE { ?s <p> ?o }",
-            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {POS, PSO}));
+            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {POS, PSO}), qec);
   // Must always be a single index scan, never index scan + sorting.
   h::expect("SELECT * WHERE { ?s <p> ?o } INTERNAL SORT BY ?o",
-            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {POS}));
+            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {POS}), qec);
   h::expect("SELECT * WHERE { ?s <p> ?o } INTERNAL SORT BY ?s",
-            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {PSO}));
+            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {PSO}), qec);
 
   // Fixed subject.
   h::expect("SELECT * WHERE { <s> ?p ?o }",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP, SPO}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP, SPO}), qec);
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP}), qec);
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SPO}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SPO}), qec);
 
   // Fixed object.
   h::expect("SELECT * WHERE { <s> ?p ?o }",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP, SPO}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP, SPO}), qec);
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP}), qec);
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SPO}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SPO}), qec);
 }
 
 TEST(QueryPlannerTest, SimpleTripleThreeVariables) {
@@ -1103,6 +1159,85 @@ TEST(QueryPlannerTest, CartesianProductJoin) {
       h::CartesianProductJoin(
           h::Join(scan("?s", "<p>", "<o>"), scan("?s", "<p2>", "?o2")),
           scan("?x", "<b>", "?c")));
+}
+
+TEST(QueryPlannerTest, TransitivePathUnbound) {
+  auto scan = h::IndexScanFromStrings;
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p>+ ?y }",
+      h::TransitivePath(
+          left, right, 1, std::numeric_limits<size_t>::max(),
+          scan("?_qlever_internal_variable_query_planner_0", "<p>",
+               "?_qlever_internal_variable_query_planner_1")));
+}
+
+TEST(QueryPlannerTest, TransitivePathLeftId) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<s> <p> <o>");
+
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  TransitivePathSide left{std::nullopt, 0, getId("<s>"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
+  h::expect(
+      "SELECT ?y WHERE {"
+      "<s> <p>+ ?y }",
+      h::TransitivePath(
+          left, right, 1, std::numeric_limits<size_t>::max(),
+          scan("?_qlever_internal_variable_query_planner_0", "<p>",
+               "?_qlever_internal_variable_query_planner_1")),
+      qec);
+}
+
+TEST(QueryPlannerTest, TransitivePathRightId) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<s> <p> <o>");
+
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, getId("<o>"), 1};
+  h::expect(
+      "SELECT ?y WHERE {"
+      "?x <p>+ <o> }",
+      h::TransitivePath(
+          left, right, 1, std::numeric_limits<size_t>::max(),
+          scan("?_qlever_internal_variable_query_planner_0", "<p>",
+               "?_qlever_internal_variable_query_planner_1")),
+      qec);
+}
+
+TEST(QueryPlannerTest, TransitivePathBindLeft) {
+  auto scan = h::IndexScanFromStrings;
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "<s> <p> ?x."
+      "?x <p>* ?y }",
+      h::TransitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          scan("<s>", "<p>", "?x"),
+          scan("?_qlever_internal_variable_query_planner_0", "<p>",
+               "?_qlever_internal_variable_query_planner_1")));
+}
+
+TEST(QueryPlannerTest, TransitivePathBindRight) {
+  auto scan = h::IndexScanFromStrings;
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p>* ?y."
+      "?y <p> <o> }",
+      h::TransitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          scan("?y", "<p>", "<o>"),
+          scan("?_qlever_internal_variable_query_planner_0", "<p>",
+               "?_qlever_internal_variable_query_planner_1")));
 }
 
 // __________________________________________________________________________

@@ -28,12 +28,12 @@ static const size_t PARSER_BATCH_SIZE = 1'000'000;
 // That many triples does the turtle parser have to buffer before the call to
 // getline returns (unless our input reaches EOF). This makes parsing from
 // streams faster.
-static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 100'000;
+static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 10'000;
 
 // When reading from a file, Chunks of this size will
-// be fed to the parser at once (100 MiB)
+// be fed to the parser at once (10 MiB)
 inline std::atomic<size_t>& FILE_BUFFER_SIZE() {
-  static std::atomic<size_t> fileBufferSize = 100 * (1ul << 20);
+  static std::atomic<size_t> fileBufferSize = 10 * (1ul << 20);
   return fileBufferSize;
 }
 
@@ -63,11 +63,11 @@ static const std::string TMP_BASENAME_COMPRESSION =
 // unique elements of the vocabulary are identified via hash maps. Typically, 6
 // is a good value. On systems with very few CPUs, a lower value might be
 // beneficial.
-constexpr size_t NUM_PARALLEL_ITEM_MAPS = 6;
+constexpr size_t NUM_PARALLEL_ITEM_MAPS = 10;
 
 // The number of threads that are parsing in parallel, when the parallel Turtle
 // parser is used.
-constexpr size_t NUM_PARALLEL_PARSER_THREADS = 5;
+constexpr size_t NUM_PARALLEL_PARSER_THREADS = 8;
 
 // Increasing the following two constants increases the RAM usage without much
 // benefit to the performance.
@@ -78,6 +78,16 @@ constexpr size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
 // The number of parsed blocks of triples, that may wait for parsing at the same
 // time
 constexpr size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
+
+// The blocksize parameter of the parallel vocabulary merging. Higher values
+// mean higher memory consumption, wherease a too low value will impact the
+// performance negatively.
+static constexpr size_t BLOCKSIZE_VOCABULARY_MERGING = 100;
+
+// A buffer size used during the second pass of the Index build.
+// It is not const, so we can set it to a much lower value for unit tests to
+// increase the test coverage.
+inline size_t BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10'000;
 
 // The uncompressed size in bytes of a block of a single column of the
 // permutations. If chosen too large, then we lose performance for very small

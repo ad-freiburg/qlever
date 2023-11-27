@@ -6,22 +6,31 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <concepts>
 #include <cstddef>
 #include <functional>
 #include <tuple>
 #include <type_traits>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include "./util/ConfigOptionHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/ValidatorHelpers.h"
 #include "gtest/gtest.h"
+#include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
+#include "util/ConfigManager/Validator.h"
+#include "util/ConstexprUtils.h"
 #include "util/CtreHelpers.h"
+#include "util/Forward.h"
+#include "util/TupleForEach.h"
 #include "util/json.h"
 
 using namespace std::string_literals;
@@ -995,9 +1004,9 @@ TEST(ConfigManagerTest, HumanReadableAddValidator) {
   decltype(auto) numberInRangeOption =
       m.addOption("numberInRange", "", &someInt);
   m.addValidator([](const int& num) { return num <= 100; },
-                 "'numberInRange' must be <=100.", numberInRangeOption);
+                 "'numberInRange' must be <=100.", "", numberInRangeOption);
   m.addValidator([](const int& num) { return num > 49; },
-                 "'numberInRange' must be >=50.", numberInRangeOption);
+                 "'numberInRange' must be >=50.", "", numberInRangeOption);
   checkValidator(m, nlohmann::json::parse(R"--({"numberInRange" : 60})--"),
                  nlohmann::json::parse(R"--({"numberInRange" : 101})--"),
                  "'numberInRange' must be <=100.");
@@ -1018,7 +1027,7 @@ TEST(ConfigManagerTest, HumanReadableAddValidator) {
         return (one && !two && !three) || (!one && two && !three) ||
                (!one && !two && three);
       },
-      "Exactly one bool must be choosen.", boolOneOption, boolTwoOption,
+      "Exactly one bool must be choosen.", "", boolOneOption, boolTwoOption,
       boolThreeOption);
   checkValidator(
       m,
@@ -1038,7 +1047,7 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
       mAllWithDefault.addOption("firstOption", "", &firstInt, 10);
   mAllWithDefault.addOptionValidator(
       [](const ConfigOption& opt) { return opt.hasDefaultValue(); },
-      "Every option must have a default value.", firstOption);
+      "Every option must have a default value.", "", firstOption);
   ASSERT_NO_THROW(mAllWithDefault.parseConfig(
       nlohmann::json::parse(R"--({"firstOption": 4})--")));
   int secondInt;
@@ -1048,7 +1057,7 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
       [](const ConfigOption& opt1, const ConfigOption& opt2) {
         return opt1.hasDefaultValue() && opt2.hasDefaultValue();
       },
-      "Every option must have a default value.", firstOption, secondOption);
+      "Every option must have a default value.", "", firstOption, secondOption);
   ASSERT_ANY_THROW(mAllWithDefault.parseConfig(
       nlohmann::json::parse(R"--({"firstOption": 4, "secondOption" : 7})--")));
 
@@ -1060,7 +1069,7 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
       [](const ConfigOption& opt) {
         return opt.getIdentifier().starts_with('d');
       },
-      "Every option name must start with the letter d.", correctLetter);
+      "Every option name must start with the letter d.", "", correctLetter);
   ASSERT_NO_THROW(
       mFirstLetter.parseConfig(nlohmann::json::parse(R"--({"dValue": 4})--")));
   decltype(auto) wrongLetter = mFirstLetter.addOption("value", "", &secondInt);
@@ -1069,87 +1078,11 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
         return opt1.getIdentifier().starts_with('d') &&
                opt2.getIdentifier().starts_with('d');
       },
-      "Every option name must start with the letter d.", correctLetter,
+      "Every option name must start with the letter d.", "", correctLetter,
       wrongLetter);
   ASSERT_ANY_THROW(mFirstLetter.parseConfig(
       nlohmann::json::parse(R"--({"dValue": 4, "Value" : 7})--")));
 }
-
-/*
-@brief Generate a value of the given type. Used for generating test values in
-cooperation with `generateSingleParameterValidatorFunction`, while keeping the
-invariant of `generateValidatorFunction` true.
-`variant` slightly changes the returned value.
-*/
-template <typename Type>
-Type createDummyValueForValidator(size_t variant) {
-  if constexpr (std::is_same_v<Type, bool>) {
-    return variant % 2;
-  } else if constexpr (std::is_same_v<Type, std::string>) {
-    // Create a string counting up to `variant`.
-    std::ostringstream stream;
-    for (size_t i = 0; i <= variant; i++) {
-      stream << i;
-    }
-    return stream.str();
-  } else if constexpr (std::is_same_v<Type, int> ||
-                       std::is_same_v<Type, size_t>) {
-    // Return uneven numbers.
-    return static_cast<Type>(variant) * 2 + 1;
-  } else if constexpr (std::is_same_v<Type, float>) {
-    return 43.70137416518735163649172636491957f * static_cast<Type>(variant);
-  } else {
-    // Must be a vector and we can go recursive.
-    AD_CORRECTNESS_CHECK(ad_utility::isVector<Type>);
-    Type vec;
-    vec.reserve(variant + 1);
-    for (size_t i = 0; i <= variant; i++) {
-      vec.push_back(createDummyValueForValidator<typename Type::value_type>(i));
-    }
-    return vec;
-  }
-};
-
-/*
-@brief For easily creating `Validator` functions, that compare given values to
-values created using the `createDummyValueForValidator` function.
-
-The following invariant should always be true, except for when `bool` is one of
-the types in `ParameterTypes`: A validator function, that was generated with
-`variant` number $x$, returns false, when given
-`createDummyValueForValidator<ParameterTypes>(x)...`. Otherwise, it always
-returns true.
-
-Special behavior for `bool` types: Because we only have 2 values for `bool`, I
-decided, that the comparison for any `bool` argument `b` is always `b == false`.
-In other words, when only looking at the `bool` arguments given to the generated
-validator, than the given arguments are valid, as long as they are all `false`.
-
-@tparam ParameterType The parameter type for the parameter of the
-function.
-
-@param variant Changes the generated function slightly. Allows the easier
-creation of multiple different validator functions. For more information,
-what the exact difference is, see the code in `createDummyValueForValidator`.
-*/
-template <typename... ParameterTypes>
-auto generateDummyNonExceptionValidatorFunction(size_t variant) {
-  return [... dummyValuesToCompareTo =
-              createDummyValueForValidator<ParameterTypes>(variant)](
-             const ParameterTypes&... args) {
-    // Special handeling for `args` of type bool is needed. For the reasoning:
-    // See the doc string.
-    auto compare = []<typename T>(const T& arg,
-                                  const T& dummyValueToCompareTo) {
-      if constexpr (std::is_same_v<T, bool>) {
-        return arg == false;
-      } else {
-        return arg != dummyValueToCompareTo;
-      }
-    };
-    return (compare(args, dummyValuesToCompareTo) || ...);
-  };
-};
 
 /*
 @brief Generate an informative validator name in the form of `Config manager
@@ -1158,40 +1091,24 @@ unqiue number id.
 
 @tparam Ts The types of the function arguments of the validator function.
 
-@param id An identification number for identifying specific validator
+@param id An optional identification number for identifying specific validator
 functions.
 */
 template <typename... Ts>
-std::string generateValidatorName(size_t id) {
-  return absl::StrCat(
+std::string generateValidatorName(std::optional<size_t> id) {
+  static const std::string prefix = absl::StrCat(
       "Config manager validator<",
       lazyStrJoin(std::array{ConfigOption::availableTypesToString<Ts>()...},
                   ", "),
-      "> ", id);
+      ">");
+
+  if (id.has_value()) {
+    return absl::StrCat(prefix, " ", id.value());
+  } else {
+    return prefix;
+  }
 };
 
-/*
-@brief Transform a validator function into an exception validator function.
-That is, instead of returning `bool`, it now returns
-`std::optional<ErrorMessage>`.
-
-@param errorMessage Content for `ErrorMessage`.
-*/
-template <typename... ValidatorParameterTypes>
-auto transformNonExceptionValidatorIntoExceptionValidator(
-    Validator<ValidatorParameterTypes...> auto validatorFunction,
-    std::string errorMessage) {
-  // The whole 'transformation' is simply a wrapper.
-  return [validatorFunction, errorMessage = std::move(errorMessage)](
-             const ValidatorParameterTypes&... args)
-             -> std::optional<ErrorMessage> {
-    if (std::invoke(validatorFunction, args...)) {
-      return std::nullopt;
-    } else {
-      return std::make_optional<ErrorMessage>(errorMessage);
-    }
-  };
-}
 /*
 @brief The test for adding a validator to a config manager.
 
@@ -1334,12 +1251,14 @@ void doValidatorTest(
       If we have only bools, than we can't use the invariant of the
       generated validators to go 'through' the added validators via invalid
       values.
-      Instead, we can only ever fail the first added validator, because they
-      are all identical.
+      Because there is no strict evaluation order for validators, it is also
+      impossible to say, which of the bool only validators will throw the
+      exception, so we can't check for a specific validator either. Instead, we
+      only check, if it was bool validator.
       */
       if constexpr ((std::is_same_v<bool, Ts> && ...)) {
         checkValidator(m, validJson, invalidJson,
-                       generateValidatorName<Ts...>(0));
+                       generateValidatorName<Ts...>(std::nullopt));
       } else {
         checkValidator(m, validJson, invalidJson,
                        generateValidatorName<Ts...>(validatorNumber));
@@ -1697,7 +1616,7 @@ void doValidatorTest(
 
   // Default values.
   const std::string defaultValue = "This is the default value.";
-  const std::string defaultExceptionMessage = "Default exception message";
+  const std::string defaultExceptionMessage = "Default exception message.";
 
   // Add the validator and check, if the configuration option with it's current
   // value is in the exception message for failing the validator.
@@ -1767,6 +1686,19 @@ void doValidatorTest(
       4, mValidatorSubValidator, mValidatorSubValidator,
       mValidatorSubValidatorOption1,
       nlohmann::json::json_pointer("/some/manager/someValue1"));
+
+  /*
+  Reseting `mValidatorSubValidatorOption1`, so that the validator, that was
+  added via `doExceptionMessageTest`, not longer fails.
+
+  We can not use an r-value nlohmann json object for this, because there is no
+  fitting constructor.
+  */
+  nlohmann::json jsonForReset(nlohmann::json::value_t::object);
+  jsonForReset[nlohmann::json::json_pointer("/some/manager/someValue1")] =
+      defaultValue;
+  mValidatorSubValidator.parseConfig(jsonForReset);
+
   doExceptionMessageTest(
       5, mValidatorSubValidator, mValidatorSubValidatorSub,
       mValidatorSubValidatorOption2,
@@ -1779,7 +1711,7 @@ TEST(ConfigManagerTest, AddNonExceptionValidator) {
                                      ConfigManager& m,
                                      ConstConfigOptionProxy<Ts>... optProxy) {
     m.addValidator(generateDummyNonExceptionValidatorFunction<Ts...>(variant),
-                   std::string(validatorExceptionMessage), optProxy...);
+                   std::string(validatorExceptionMessage), "", optProxy...);
   });
 }
 
@@ -1789,10 +1721,10 @@ TEST(ConfigManagerTest, AddExceptionValidator) {
                                      ConfigManager& m,
                                      ConstConfigOptionProxy<Ts>... optProxy) {
     m.addValidator(
-        transformNonExceptionValidatorIntoExceptionValidator<Ts...>(
+        transformValidatorIntoExceptionValidator<Ts...>(
             generateDummyNonExceptionValidatorFunction<Ts...>(variant),
             std::move(validatorExceptionMessage)),
-        optProxy...);
+        "", optProxy...);
   });
 }
 
@@ -1899,7 +1831,7 @@ TEST(ConfigManagerTest, AddNonExceptionValidatorException) {
   doValidatorExceptionTest(
       []<typename... Ts>(ConfigManager& m,
                          ConstConfigOptionProxy<Ts>... validatorArguments) {
-        m.addValidator([](const Ts&...) { return true; }, "",
+        m.addValidator([](const Ts&...) { return true; }, "", "",
                        validatorArguments...);
       });
 }
@@ -1912,7 +1844,7 @@ TEST(ConfigManagerTest, AddExceptionValidatorException) {
             [](const Ts&...) -> std::optional<ErrorMessage> {
               return {std::nullopt};
             },
-            validatorArguments...);
+            "", validatorArguments...);
       });
 }
 
@@ -2054,7 +1986,7 @@ TEST(ConfigManagerTest, AddOptionNoExceptionValidator) {
       []<typename... Ts>(auto validatorFunction,
                          std::string validatorExceptionMessage,
                          ConfigManager& m, ConstConfigOptionProxy<Ts>... args) {
-        m.addOptionValidator(validatorFunction, validatorExceptionMessage,
+        m.addOptionValidator(validatorFunction, validatorExceptionMessage, "",
                              args...);
       });
 }
@@ -2065,10 +1997,10 @@ TEST(ConfigManagerTest, AddOptionExceptionValidator) {
                          std::string validatorExceptionMessage,
                          ConfigManager& m, ConstConfigOptionProxy<Ts>... args) {
         m.addOptionValidator(
-            transformNonExceptionValidatorIntoExceptionValidator<
+            transformValidatorIntoExceptionValidator<
                 decltype(args.getConfigOption())...>(
                 validatorFunction, std::move(validatorExceptionMessage)),
-            args...);
+            "", args...);
       });
 }
 
@@ -2164,7 +2096,7 @@ TEST(ConfigManagerTest, AddOptionNoExceptionValidatorException) {
       []<typename... Ts>(ConfigManager& m, ConstConfigOptionProxy<Ts>... args) {
         m.addOptionValidator(
             [](const decltype(args.getConfigOption())&...) { return true; }, "",
-            args...);
+            "", args...);
       });
 }
 
@@ -2174,7 +2106,7 @@ TEST(ConfigManagerTest, AddOptionExceptionValidatorException) {
         m.addOptionValidator(
             [](const decltype(args.getConfigOption())&...)
                 -> std::optional<ErrorMessage> { return {std::nullopt}; },
-            args...);
+            "", args...);
       });
 }
 
@@ -2295,244 +2227,135 @@ TEST(ConfigManagerTest, ContainsOption) {
                          subManagerDepth2ContainmentStatusVector);
 }
 
+// Describes the order of configuration options and validators inside a
+// configuration manager.
+struct ConfigOptionsAndValidatorsOrder {
+  // The order of the configuration options. Options can be identified via their
+  // memory address.
+  std::vector<const ConfigOption*> configOptions_;
+
+  // The order the validators. unfortunately, there is no way, to perfectly
+  // identify an instance, but the description can be used, as long as all the
+  // added validators have unique descriptions.
+  std::vector<std::string> validators_;
+
+  // Appends the content of an different `ConfigOptionsAndValidatorsOrder`.
+  template <typename T>
+  requires isSimilar<T, ConfigOptionsAndValidatorsOrder>
+  void append(T&& order) {
+    appendVector(configOptions_, AD_FWD(order).configOptions_);
+    appendVector(validators_, AD_FWD(order).validators_);
+  }
+};
+
 /*
-@brief Call the given template function with the cartesian product of the
-parameter type list with itself, as template parameters. For example: If given
-`<int, const int>`, then the function will be called as `Func<int, int>`,
-`Func<int, const int>`, `Func<const int, int>` and `Func<const int, const int>`.
+This is for testing, if the internal helper functions
+`ConfigManager::validators` and `ConfigManager::configurationOptions` sort their
+return values correctly.
 */
-template <typename Func, typename... Parameter>
-constexpr void passCartesianPorductToLambda(Func func) {
-  (
-      [&func]<typename T>() {
-        (func.template operator()<T, Parameter>(), ...);
-      }.template operator()<Parameter>(),
-      ...);
-}
+TEST(ConfigManagerTest, CollectionFunctionsSorting) {
+  /*
+  Add dummy configuration option for all supported types and dummy validators
+  for them to the given `configManager`.
 
-TEST(ConfigManagerTest, ValidatorConcept) {
-  // Lambda function types for easier test creation.
-  using SingleIntValidatorFunction = decltype([](const int&) { return true; });
-  using DoubleIntValidatorFunction =
-      decltype([](const int&, const int&) { return true; });
+  @returns The order of all added configuration options and validators.
+  */
+  auto addConfigOptionsAndValidators = [callNum =
+                                            0](ConfigManager* manager) mutable {
+    ConfigOptionsAndValidatorsOrder order{};
 
-  // Valid function.
-  static_assert(ad_utility::Validator<SingleIntValidatorFunction, int>);
-  static_assert(ad_utility::Validator<DoubleIntValidatorFunction, int, int>);
+    // We know, how many instances we will add.
+    order.configOptions_.reserve(
+        std::variant_size_v<ConfigOption::AvailableTypes>);
+    order.validators_.reserve(
+        std::variant_size_v<ConfigOption::AvailableTypes> * 2);
 
-  // The number of parameter types is wrong.
-  static_assert(!ad_utility::Validator<SingleIntValidatorFunction>);
-  static_assert(!ad_utility::Validator<SingleIntValidatorFunction, int, int>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction>);
-  static_assert(
-      !ad_utility::Validator<DoubleIntValidatorFunction, int, int, int, int>);
+    // Fill the list.
+    forEachTypeInTemplateType<ConfigOption::AvailableTypes>(
+        [&order, &manager, &callNum]<typename T>() {
+          // This variable will never be used, so this SHOULD be okay.
+          T var;
 
-  // Function is valid, but the parameter types are of the wrong object type.
-  static_assert(
-      !ad_utility::Validator<SingleIntValidatorFunction, std::vector<bool>>);
-  static_assert(
-      !ad_utility::Validator<SingleIntValidatorFunction, std::string>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction,
-                                       std::vector<bool>, int>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, int,
-                                       std::vector<bool>>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction,
-                                       std::vector<bool>, std::vector<bool>>);
-  static_assert(
-      !ad_utility::Validator<DoubleIntValidatorFunction, std::string, int>);
-  static_assert(
-      !ad_utility::Validator<DoubleIntValidatorFunction, int, std::string>);
-  static_assert(!ad_utility::Validator<DoubleIntValidatorFunction, std::string,
-                                       std::string>);
+          // Create the options and validators.
+          decltype(auto) opt =
+              manager->addOption({absl::StrCat("Option", callNum++)}, "", &var);
+          order.configOptions_.push_back(&opt.getConfigOption());
+          manager->addValidator([](const T&) { return true; }, "",
+                                absl::StrCat("Normal validator ", callNum),
+                                opt);
+          order.validators_.push_back(
+              absl::StrCat("Normal validator ", callNum++));
+          manager->addOptionValidator(
+              [](const ConfigOption&) { return true; }, "",
+              absl::StrCat("Option validator ", callNum), opt);
+          order.validators_.push_back(
+              absl::StrCat("Option validator ", callNum++));
+        });
 
-  // The given function is not valid.
+    return order;
+  };
 
-  // The parameter types of the function are wrong, but the return type is
-  // correct.
-  static_assert(
-      !ad_utility::Validator<decltype([](int&) { return true; }), int>);
-  static_assert(
-      !ad_utility::Validator<decltype([](int&&) { return true; }), int>);
-  static_assert(
-      !ad_utility::Validator<decltype([](const int&&) { return true; }), int>);
+  // Check the order of the configuration options and validators inside the
+  // configuration manager.
+  auto checkOrder = [](const ConfigManager& manager,
+                       const ConfigOptionsAndValidatorsOrder& order,
+                       ad_utility::source_location l =
+                           ad_utility::source_location::current()) {
+    // For generating better messages, when failing a test.
+    auto trace{generateLocationTrace(l, "checkOrder")};
 
-  auto validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper =
-      []<typename FirstParameter, typename SecondParameter>() {
-        static_assert(
-            !ad_utility::Validator<
-                decltype([](FirstParameter, SecondParameter) { return true; }),
-                int, int>);
-      };
-  passCartesianPorductToLambda<
-      decltype(validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper),
-      int&, int&&, const int&&>(
-      validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper);
+    ASSERT_TRUE(std::ranges::equal(
+        manager.configurationOptions(true), order.configOptions_, {},
+        [](const std::pair<std::string, const ConfigOption&>& pair) {
+          return &pair.second;
+        }));
+    ASSERT_TRUE(std::ranges::equal(
+        manager.validators(true), order.validators_, {},
+        [](const ConfigOptionValidatorManager& validatorManager) {
+          return validatorManager.getDescription();
+        }));
+  };
 
-  // Parameter types are correct, but return type is wrong.
-  static_assert(!ad_utility::Validator<decltype([](int n) { return n; }), int>);
-  static_assert(
-      !ad_utility::Validator<decltype([](const int n) { return n; }), int>);
-  static_assert(
-      !ad_utility::Validator<decltype([](const int& n) { return n; }), int>);
+  // First add the options, then the sub manager and then more options to the
+  // top manager again.
+  ConfigManager mOptionFirst;
+  auto mOptionFirstOrderOfAll{addConfigOptionsAndValidators(&mOptionFirst)};
+  checkOrder(mOptionFirst, mOptionFirstOrderOfAll);
 
-  auto validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper =
-      []<typename FirstParameter, typename SecondParameter>() {
-        static_assert(
-            !ad_utility::Validator<decltype([](FirstParameter n,
-                                               SecondParameter) { return n; }),
-                                   int, int>);
-      };
-  passCartesianPorductToLambda<
-      decltype(validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper),
-      int, const int, const int&>(
-      validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper);
+  // Add the sub manager, together with its config options.
+  ConfigManager& mOptionFirstSub{mOptionFirst.addSubManager({"s"})};
+  auto mOptionFirstSubOrder{addConfigOptionsAndValidators(&mOptionFirstSub)};
+  checkOrder(mOptionFirstSub, mOptionFirstSubOrder);
+  mOptionFirstOrderOfAll.append(mOptionFirstSubOrder);
+  checkOrder(mOptionFirst, mOptionFirstOrderOfAll);
 
-  // Both the parameter types and the return type is wrong.
-  static_assert(
-      !ad_utility::Validator<decltype([](int& n) { return n; }), int>);
-  static_assert(
-      !ad_utility::Validator<decltype([](int&& n) { return n; }), int>);
-  static_assert(
-      !ad_utility::Validator<decltype([](const int&& n) { return n; }), int>);
+  // Add config options to the top manager.
+  mOptionFirstOrderOfAll.append(addConfigOptionsAndValidators(&mOptionFirst));
+  checkOrder(mOptionFirstSub, mOptionFirstSubOrder);
+  checkOrder(mOptionFirst, mOptionFirstOrderOfAll);
 
-  auto validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper =
-      []<typename FirstParameter, typename SecondParameter>() {
-        static_assert(
-            !ad_utility::Validator<decltype([](FirstParameter n,
-                                               SecondParameter) { return n; }),
-                                   int, int>);
-      };
-  passCartesianPorductToLambda<
-      decltype(validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper),
-      int&, int&&, const int&&>(
-      validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper);
-}
+  // First add the sub manager with config options, then options to the top
+  // manager and then options to the sub manager again.
+  ConfigManager mSubManagerFirst;
+  ConfigManager& mSubManagerFirstSub{mSubManagerFirst.addSubManager({"s"})};
+  auto mSubManagerFirstSubOrder{
+      addConfigOptionsAndValidators(&mSubManagerFirstSub)};
+  auto mSubManagerFirstOrderOfAll{mSubManagerFirstSubOrder};
+  checkOrder(mSubManagerFirst, mSubManagerFirstOrderOfAll);
+  checkOrder(mSubManagerFirstSub, mSubManagerFirstSubOrder);
 
-TEST(ConfigManagerTest, ExceptionValidatorConcept) {
-  // Lambda function types for easier test creation.
-  using SingleIntExceptionValidatorFunction =
-      decltype([](const int&) { return std::optional<ErrorMessage>{}; });
-  using DoubleIntExceptionValidatorFunction =
-      decltype([](const int&, const int&) {
-        return std::optional<ErrorMessage>{};
-      });
+  // Add config options to the top manager.
+  mSubManagerFirstOrderOfAll.append(
+      addConfigOptionsAndValidators(&mSubManagerFirst));
+  checkOrder(mSubManagerFirst, mSubManagerFirstOrderOfAll);
+  checkOrder(mSubManagerFirstSub, mSubManagerFirstSubOrder);
 
-  // Valid function.
-  static_assert(
-      ad_utility::ExceptionValidator<SingleIntExceptionValidatorFunction, int>);
-  static_assert(
-      ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction, int,
-                                     int>);
-
-  // The number of parameter types is wrong.
-  static_assert(
-      !ad_utility::ExceptionValidator<SingleIntExceptionValidatorFunction>);
-  static_assert(
-      !ad_utility::ExceptionValidator<SingleIntExceptionValidatorFunction, int,
-                                      int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction, int,
-                                      int, int, int>);
-
-  // Function is valid, but the parameter types are of the wrong object type.
-  static_assert(
-      !ad_utility::ExceptionValidator<SingleIntExceptionValidatorFunction,
-                                      std::vector<bool>>);
-  static_assert(
-      !ad_utility::ExceptionValidator<SingleIntExceptionValidatorFunction,
-                                      std::string>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction,
-                                      std::vector<bool>, int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction, int,
-                                      std::vector<bool>>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction,
-                                      std::vector<bool>, std::vector<bool>>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction,
-                                      std::string, int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction, int,
-                                      std::string>);
-  static_assert(
-      !ad_utility::ExceptionValidator<DoubleIntExceptionValidatorFunction,
-                                      std::string, std::string>);
-
-  // The given function is not valid.
-
-  // The parameter types of the function are wrong, but the return type is
-  // correct.
-  static_assert(
-      !ad_utility::ExceptionValidator<
-          decltype([](int&) { return std::optional<ErrorMessage>{}; }), int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<
-          decltype([](int&&) { return std::optional<ErrorMessage>{}; }), int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<decltype([](const int&&) {
-                                        return std::optional<ErrorMessage>{};
-                                      }),
-                                      int>);
-
-  auto validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper =
-      []<typename FirstParameter, typename SecondParameter>() {
-        static_assert(!ad_utility::ExceptionValidator<
-                      decltype([](FirstParameter, SecondParameter) {
-                        return std::optional<ErrorMessage>{};
-                      }),
-                      int, int>);
-      };
-  passCartesianPorductToLambda<
-      decltype(validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper),
-      int&, int&&, const int&&>(
-      validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper);
-
-  // Parameter types are correct, but return type is wrong.
-  static_assert(
-      !ad_utility::ExceptionValidator<decltype([](int n) { return n; }), int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<decltype([](const int n) { return n; }),
-                                      int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<decltype([](const int& n) { return n; }),
-                                      int>);
-
-  auto validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper =
-      []<typename FirstParameter, typename SecondParameter>() {
-        static_assert(
-            !ad_utility::ExceptionValidator<
-                decltype([](FirstParameter n, SecondParameter) { return n; }),
-                int, int>);
-      };
-  passCartesianPorductToLambda<
-      decltype(validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper),
-      int, const int, const int&>(
-      validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper);
-
-  // Both the parameter types and the return type is wrong.
-  static_assert(
-      !ad_utility::ExceptionValidator<decltype([](int& n) { return n; }), int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<decltype([](int&& n) { return n; }),
-                                      int>);
-  static_assert(
-      !ad_utility::ExceptionValidator<decltype([](const int&& n) { return n; }),
-                                      int>);
-
-  auto validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper =
-      []<typename FirstParameter, typename SecondParameter>() {
-        static_assert(
-            !ad_utility::Validator<decltype([](FirstParameter n,
-                                               SecondParameter) { return n; }),
-                                   int, int>);
-      };
-  passCartesianPorductToLambda<
-      decltype(validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper),
-      int&, int&&, const int&&>(
-      validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper);
+  // Add config options to the sub manager.
+  auto mSubManagerFirstSubOrder2{
+      addConfigOptionsAndValidators(&mSubManagerFirstSub)};
+  mSubManagerFirstOrderOfAll.append(mSubManagerFirstSubOrder2);
+  mSubManagerFirstSubOrder.append(std::move(mSubManagerFirstSubOrder2));
+  checkOrder(mSubManagerFirst, mSubManagerFirstOrderOfAll);
+  checkOrder(mSubManagerFirstSub, mSubManagerFirstSubOrder);
 }
 }  // namespace ad_utility

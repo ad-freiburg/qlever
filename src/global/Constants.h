@@ -17,7 +17,7 @@
 // For access to `memorySize` literals.
 using namespace ad_utility::memory_literals;
 
-static const ad_utility::MemorySize DEFAULT_STXXL_MEMORY = 5_GB;
+static const ad_utility::MemorySize DEFAULT_MEMORY_LIMIT_INDEX_BUILDING = 5_GB;
 static const ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
 
 static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 4;
@@ -39,17 +39,27 @@ static const size_t TEXT_LIMIT_DEFAULT = std::numeric_limits<size_t>::max();
 static const size_t GALLOP_THRESHOLD = 1000;
 
 static const char INTERNAL_PREDICATE_PREFIX_NAME[] = "ql";
-static const char INTERNAL_PREDICATE_PREFIX_IRI[] =
-    "<QLever-internal-function/>";
-static const char CONTAINS_ENTITY_PREDICATE[] =
-    "<QLever-internal-function/contains-entity>";
-static const char CONTAINS_WORD_PREDICATE[] =
-    "<QLever-internal-function/contains-word>";
-static const char CONTAINS_WORD_PREDICATE_NS[] = "ql:contains-word";
-static const char INTERNAL_TEXT_MATCH_PREDICATE[] =
-    "<QLever-internal-function/text>";
-static const char HAS_PREDICATE_PREDICATE[] =
-    "<QLever-internal-function/has-predicate>";
+
+static const std::string INTERNAL_PREDICATE_PREFIX =
+    "http://qlever.cs.uni-freiburg.de/builtin-functions/";
+
+// Return a IRI of the form
+// `<http://qlever.cs.uni-freiburg.de/builtin-functions/concatenationOfSuffixes>`
+constexpr auto makeInternalIri = [](auto&&... suffixes) {
+  return absl::StrCat("<", INTERNAL_PREDICATE_PREFIX, suffixes..., ">");
+};
+static const std::string INTERNAL_ENTITIES_URI_PREFIX =
+    absl::StrCat("<", INTERNAL_PREDICATE_PREFIX);
+static const std::string INTERNAL_PREDICATE_PREFIX_IRI = makeInternalIri("");
+static const std::string CONTAINS_ENTITY_PREDICATE =
+    makeInternalIri("contains-entity");
+static const std::string CONTAINS_WORD_PREDICATE =
+    makeInternalIri("contains-word");
+
+static const std::string INTERNAL_TEXT_MATCH_PREDICATE =
+    makeInternalIri("text");
+static const std::string HAS_PREDICATE_PREDICATE =
+    makeInternalIri("has-predicate");
 static constexpr std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "<http://www.opengis.net/def/function/geosparql/"};
 static constexpr std::pair<std::string_view, std::string_view> MATH_PREFIX = {
@@ -65,11 +75,7 @@ static constexpr std::string_view MATCHINGWORD_VARIABLE_PREFIX =
 // For anonymous nodes in Turtle.
 static const std::string ANON_NODE_PREFIX = "QLever-Anon-Node";
 
-static const std::string INTERNAL_ENTITIES_URI_PREFIX =
-    "<QLever-internal-function/";
-
-static const std::string LANGUAGE_PREDICATE =
-    INTERNAL_ENTITIES_URI_PREFIX + "langtag>";
+static const std::string LANGUAGE_PREDICATE = makeInternalIri("langtag");
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
@@ -157,12 +163,6 @@ static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 126;
 // compression has been applied to  a word
 static const uint8_t NO_PREFIX_CHAR =
     MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
-
-// After performing this many "basic operations", we check for timeouts
-static constexpr size_t NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS = 32000;
-// How many "basic operations" (see above) do we assume for a hashset or hashmap
-// operation
-static constexpr size_t NUM_OPERATIONS_HASHSET_LOOKUP = 32;
 
 // When initializing a sort performance estimator, at most this percentage of
 // the number of triples in the index is being sorted at once.
