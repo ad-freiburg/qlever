@@ -103,25 +103,25 @@ void ConfigManager::verifyHashMapEntry(std::string_view jsonPathToEntry,
 // ____________________________________________________________________________
 template <typename Visitor>
 requires ad_utility::InvocableWithExactReturnType<
-             Visitor, void, std::pair<std::string_view, ConfigManager&>&&> &&
+             Visitor, void, std::string_view, ConfigManager&> &&
          ad_utility::InvocableWithExactReturnType<
-             Visitor, void, std::pair<std::string_view, ConfigOption&>&&>
+             Visitor, void, std::string_view, ConfigOption&>
 void ConfigManager::visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
                                         std::string_view pathPrefix) const {
   // `std::reference_wrapper` works with `std::ranges::sort`. `const
   // HashMapEntry&` does not.
+  auto transformedHashMap =
+      std::views::transform(configurationOptions_, [&pathPrefix](auto& pair) {
+        const auto& [jsonPath, hashMapEntry] = pair;
+        // Check the hash map entry, before doing anything.
+        verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath), hashMapEntry);
+        return std::pair<std::string_view,
+                         std::reference_wrapper<const HashMapEntry>>(
+            jsonPath, hashMapEntry);
+      });
   std::vector<
       std::pair<std::string_view, std::reference_wrapper<const HashMapEntry>>>
-      hashMapEntries(std::views::transform(
-          configurationOptions_, [&pathPrefix](auto& pair) {
-            const auto& [jsonPath, hashMapEntry] = pair;
-            // Check the hash map entry, before doing anything.
-            verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath),
-                               hashMapEntry);
-            return std::pair<std::string_view,
-                             std::reference_wrapper<const HashMapEntry>>(
-                jsonPath, hashMapEntry);
-          }));
+      hashMapEntries(transformedHashMap.begin(), transformedHashMap.end());
 
   // Sort the collected `HashMapEntry`s, if wanted.
   if (sortByCreationOrder) {
@@ -134,9 +134,8 @@ void ConfigManager::visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
   // Call a wrapper for `vis` with the `HashMapEntry::visit` of every entry.
   std::ranges::for_each(hashMapEntries, [&vis](auto& pair) {
     auto& [jsonPath, hashMapEntry] = pair;
-    hashMapEntry.get().visit([&jsonPath, &vis](auto&& data) {
-      std::invoke(vis, std::make_pair(jsonPath, AD_FWD(data)));
-    });
+    hashMapEntry.get().visit(
+        [&jsonPath, &vis](auto& data) { std::invoke(vis, jsonPath, data); });
   });
 }
 
@@ -331,7 +330,7 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
               absl::StrCat("Key error: There is already a configuration "
                            "option, or sub manager, with the path '",
                            vectorOfKeysForJsonToString(path), "'\n",
-                           printConfigurationDoc(true), "\n"));
+                           printConfigurationDoc(), "\n"));
         }
 
         /*
@@ -377,7 +376,7 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
           throw std::runtime_error(absl::StrCat(
               "Key error: The given path '", vectorOfKeysForJsonToString(path),
               "' is a prefix of a path, '", alreadyAddedPath,
-              "', that is already in use.", "'\n", printConfigurationDoc(true),
+              "', that is already in use.", "'\n", printConfigurationDoc(),
               "\n"));
         }
 
@@ -387,7 +386,7 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
           throw std::runtime_error(absl::StrCat(
               "Key error: The given path '", vectorOfKeysForJsonToString(path),
               "' has an already in use path '", alreadyAddedPath,
-              "' as an prefix.", "'\n", printConfigurationDoc(true), "\n"));
+              "' as an prefix.", "'\n", printConfigurationDoc(), "\n"));
         }
       });
 }
@@ -517,9 +516,9 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
         throw j.at(currentPtr.parent_pointer()).is_array()
             ? NoConfigOptionFoundException(
                   currentPtr.parent_pointer().to_string(),
-                  printConfigurationDoc(false))
+                  printConfigurationDoc())
             : NoConfigOptionFoundException(currentPtr.to_string(),
-                                           printConfigurationDoc(false));
+                                           printConfigurationDoc());
       }
     }
   }
@@ -554,8 +553,49 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
 }
 
 // ____________________________________________________________________________
-std::string ConfigManager::printConfigurationDoc(
-    bool printCurrentJsonConfiguration) const {
+nlohmann::ordered_json ConfigManager::generateConfigurationDocJson(
+    std::string_view pathPrefix) const {
+  nlohmann::ordered_json configurationDocJson;
+
+  visitHashMapEntries(
+      [&configurationDocJson, &pathPrefix]<typename T>(std::string_view path,
+                                                       T& optionOrSubManager) {
+        /*
+        Pointer to the position of this option, or sub manager, in
+        `configurationDocJson`.
+        */
+        const nlohmann::ordered_json::json_pointer jsonPointer{
+            std::string{path}};
+
+        // Either add the option, or recursively add the sub manager.
+        if constexpr (isSimilar<T, ConfigOption>) {
+          /*
+          Add the paths of `configOptions_` and have them point to either:
+          - The current value of the configuration option. Which is the default
+          value, if the option was never set and has a default value.
+          - A "[must be specified]", if we are not sure, the current
+          value of the configuration option was initialized.
+          */
+          configurationDocJson[jsonPointer] =
+              optionOrSubManager.wasSet() ? optionOrSubManager.getValueAsJson()
+                                          : "\"[must be specified]\"";
+        } else if constexpr (isSimilar<T, ConfigManager>) {
+          // `visitHashMapEntries` already checks, that sub manager aren't
+          // empty.
+          configurationDocJson[jsonPointer] =
+              optionOrSubManager.generateConfigurationDocJson(
+                  absl::StrCat(pathPrefix, path));
+        } else {
+          AD_FAIL();
+        }
+      },
+      true, pathPrefix);
+
+  return configurationDocJson;
+}
+
+// ____________________________________________________________________________
+std::string ConfigManager::printConfigurationDoc() const {
   // All the configuration options together with their paths.
   const std::vector<std::pair<std::string, const ConfigOption&>>
       allConfigOptions = configurationOptions(true);
@@ -565,43 +605,8 @@ std::string ConfigManager::printConfigurationDoc(
     return "No configuration options were defined.";
   }
 
-  /*
-  Setup for printing the locations of the option in json format, so that
-  people can easier understand, where everything is.
-  Note: This json remembers the insertion order.
-  */
-  nlohmann::ordered_json configuratioOptionsVisualization;
-
-  /*
-  Add the paths of `configOptions_` and have them point to either:
-  - The current value of the configuration option.
-  - A "value was never initialized", if we are not sure, the current value of
-    the configuration option was initialized.
-  - The default value of the configuration option.
-  - An example value, of the correct type.
-  */
-  for (const auto& [path, option] : allConfigOptions) {
-    /*
-    Pointer to the position of this option in
-    `configuratioOptionsVisualization`.
-    */
-    const nlohmann::ordered_json::json_pointer jsonOptionPointer{path};
-
-    if (printCurrentJsonConfiguration) {
-      // We can only use the value, if we are sure, that the value was
-      // initialized.
-      configuratioOptionsVisualization[jsonOptionPointer] =
-          option.wasSet() ? option.getValueAsJson()
-                          : "value was never initialized";
-    } else {
-      configuratioOptionsVisualization[jsonOptionPointer] =
-          option.hasDefaultValue() ? option.getDefaultValueAsJson()
-                                   : option.getDummyValueAsJson();
-    }
-  }
-
   const std::string& configuratioOptionsVisualizationAsString =
-      configuratioOptionsVisualization.dump(2);
+      generateConfigurationDocJson("").dump(2);
 
   // List the configuration options themselves.
   const std::string& listOfConfigurationOptions = ad_utility::lazyStrJoin(
@@ -625,10 +630,7 @@ std::string ConfigManager::printConfigurationDoc(
       "\n\n");
 
   return absl::StrCat(
-      "Locations of available configuration options with",
-      (printCurrentJsonConfiguration ? " their current values"
-                                     : " example values"),
-      ":\n",
+      "Locations of available configuration options:", ":\n",
       ad_utility::addIndentation(configuratioOptionsVisualizationAsString,
                                  "    "),
       "\n\n", listOfConfigurationOptions,

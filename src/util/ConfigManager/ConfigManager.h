@@ -262,25 +262,20 @@ class ConfigManager {
   @brief Generate the json representation the current config manager
   configuration.
 
-  @param printCurrentConfiguration Iff yes, then if an option wasn't set and has
-  no default value, it's value will be shown as `"value was never initialized"`.
-  Otherwise a dummy value will be used.
+  @param pathPrefix Only used for improved error messages. For example: You have
+  a sub manager with the path `subManagers/sub1` and call `visitHashMapEntries`
+  with it. The sub manager doesn't know its own path, so that information will
+  only be included in generated error messages, if you pass it along.
   */
   nlohmann::ordered_json generateConfigurationDocJson(
-      bool printCurrentConfiguration) const;
+      std::string_view pathPrefix) const;
 
   /*
   @brief Returns a string containing a json configuration and the
   string representations of all added configuration options. Followed by a list
   of all the configuration options, that kept their default values.
-
-  @param printCurrentJsonConfiguration If true, the current values of the
-  configuration options will be used for printing the json configuration. If
-  false, an example json configuration will be printed, that uses the default
-  values of the configuration options, and, if an option doesn't have a default
-  value, a dummy value.
   */
-  std::string printConfigurationDoc(bool printCurrentJsonConfiguration) const;
+  std::string printConfigurationDoc() const;
 
   /*
   @brief Add a function to the configuration manager for verifying, that the
@@ -433,8 +428,8 @@ class ConfigManager {
   passing them to `vis`.
 
   @param vis The visitor function. Will either be called with
-  `std::pair<std::string_view, ConfigManager&>&&`, or
-  `std::pair<std::string_view, ConfigOption&>&&`. Both represent the content of
+  `std::string_view, ConfigManager&`, or
+  `std::string_view, ConfigOption&`. Both represent the content of
   a `HashMapEntry`.
   @param sortByCreationOrder Should `vis` get the entries of
   `configurationOptions_` ordered by their creation order, when set to true, or
@@ -447,9 +442,9 @@ class ConfigManager {
   */
   template <typename Visitor>
   requires ad_utility::InvocableWithExactReturnType<
-               Visitor, void, std::pair<std::string_view, ConfigManager&>&&> &&
+               Visitor, void, std::string_view, ConfigManager&> &&
            ad_utility::InvocableWithExactReturnType<
-               Visitor, void, std::pair<std::string_view, ConfigOption&>&&>
+               Visitor, void, std::string_view, ConfigOption&>
   void visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
                            std::string_view pathPrefix) const;
 
