@@ -205,9 +205,9 @@ class Index {
 
   void setTextName(const std::string& name);
 
-  void setUsePatterns(bool usePatterns);
+  bool& usePatterns();
 
-  void setLoadAllPermutations(bool loadAllPermutations);
+  bool& loadAllPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);
 

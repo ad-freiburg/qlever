@@ -180,12 +180,12 @@ int main(int argc, char** argv) {
 
     index.setKbName(kbIndexName);
     index.setTextName(textIndexName);
-    index.setUsePatterns(!noPatterns);
+    index.usePatterns() = !noPatterns;
     index.setOnDiskBase(baseName);
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.setPrefixCompression(!noPrefixCompression);
-    index.setLoadAllPermutations(!onlyPsoAndPos);
+    index.loadAllPermutations() = !onlyPsoAndPos;
     // NOTE: If `onlyAddTextIndex` is true, we do not want to construct an
     // index, but we assume that it already exists. In particular, we then need
     // the vocabulary from the KB index for building the text index.

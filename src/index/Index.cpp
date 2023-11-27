@@ -207,14 +207,10 @@ void Index::setTextName(const std::string& name) {
 }
 
 // ____________________________________________________________________________
-void Index::setUsePatterns(bool usePatterns) {
-  return pimpl_->setUsePatterns(usePatterns);
-}
+bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 
 // ____________________________________________________________________________
-void Index::setLoadAllPermutations(bool loadAllPermutations) {
-  return pimpl_->setLoadAllPermutations(loadAllPermutations);
-}
+bool& Index::loadAllPermutations() { return pimpl_->loadAllPermutations(); }
 
 // ____________________________________________________________________________
 void Index::setKeepTempFiles(bool keepTempFiles) {

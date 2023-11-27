@@ -751,10 +751,19 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   }
 
   if (usePatterns_) {
-    PatternCreator::readPatternsFromFile(
-        onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
-        avgNumDistinctPredicatesPerSubject_, numDistinctSubjectPredicatePairs_,
-        patterns_, hasPattern_);
+    try {
+      PatternCreator::readPatternsFromFile(
+          onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
+          avgNumDistinctPredicatesPerSubject_,
+          numDistinctSubjectPredicatePairs_, patterns_, hasPattern_);
+    } catch (const std::exception& e) {
+      LOG(WARN) << "Could not load the patterns. Likely this index was built "
+                   "without patterns, the pattern trick will therefore not be "
+                   "available. To suppress this warning, start the server with "
+                   "the `--no-patterns` option. The error message was "
+                << e.what() << std::endl;
+      usePatterns_ = false;
+    }
   }
 }
 
@@ -846,12 +855,10 @@ void IndexImpl::setKeepTempFiles(bool keepTempFiles) {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::setUsePatterns(bool usePatterns) { usePatterns_ = usePatterns; }
+bool& IndexImpl::usePatterns() { return usePatterns_; }
 
 // _____________________________________________________________________________
-void IndexImpl::setLoadAllPermutations(bool loadAllPermutations) {
-  loadAllPermutations_ = loadAllPermutations;
-}
+bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
 
 // ____________________________________________________________________________
 void IndexImpl::setSettingsFile(const std::string& filename) {

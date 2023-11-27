@@ -58,8 +58,8 @@ void Server::initialize(const string& indexBaseName, bool useText,
                         bool usePatterns, bool loadAllPermutations) {
   LOG(INFO) << "Initializing server ..." << std::endl;
 
-  index_.setUsePatterns(usePatterns);
-  index_.setLoadAllPermutations(loadAllPermutations);
+  index_.usePatterns() = usePatterns;
+  index_.loadAllPermutations() = loadAllPermutations;
 
   // Init the index.
   index_.createFromOnDiskIndex(indexBaseName);
