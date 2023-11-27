@@ -24,7 +24,7 @@ using Awaitable = Server::Awaitable<T>;
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads,
                ad_utility::MemorySize maxMem, std::string accessToken,
-               std::chrono::seconds defaultQueryTimeout, bool usePatternTrick)
+               bool usePatternTrick)
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
@@ -37,8 +37,7 @@ Server::Server(unsigned short port, size_t numThreads,
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.
-      threadPool_{numThreads},
-      defaultQueryTimeout_{defaultQueryTimeout} {
+      threadPool_{numThreads} {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
   RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
@@ -464,7 +463,8 @@ ad_utility::websocket::OwningQueryId Server::getQueryId(
 auto Server::cancelAfterDeadline(
     const net::any_io_executor& executor,
     std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
-    std::chrono::seconds timeLimit) {
+    std::chrono::seconds timeLimit)
+    -> ad_utility::InvocableWithExactReturnType<void> auto {
   auto strand = net::make_strand(executor);
   auto timer = std::make_shared<net::steady_timer>(strand, timeLimit);
 
@@ -490,7 +490,8 @@ auto Server::setupCancellationHandle(
     const net::any_io_executor& executor,
     const ad_utility::websocket::QueryId& queryId,
     const std::shared_ptr<Operation>& rootOperation,
-    std::chrono::seconds timeLimit) const {
+    std::chrono::seconds timeLimit) const
+    -> ad_utility::InvocableWithExactReturnType<void> auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
   AD_CORRECTNESS_CHECK(cancellationHandle);
   rootOperation->recursivelySetCancellationHandle(
@@ -528,10 +529,10 @@ boost::asio::awaitable<void> Server::processQuery(
   // access to the runtimeInformation in the case of an error.
   std::optional<PlannedQuery> plannedQuery;
   try {
-    std::chrono::seconds timeLimit =
+    std::chrono::seconds timeLimit{
         params.contains("timeout")
-            ? std::chrono::seconds(std::stoi(params.at("timeout")))
-            : defaultQueryTimeout_;
+            ? std::stoi(params.at("timeout"))
+            : RuntimeParameters().get<"default-query-timeout">()};
 
     auto containsParam = [&params](const std::string& param,
                                    const std::string& expected) {

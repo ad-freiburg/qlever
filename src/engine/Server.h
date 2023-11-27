@@ -32,7 +32,6 @@ class Server {
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
-                  std::chrono::seconds defaultQueryTimeout,
                   bool usePatternTrick = true);
 
   virtual ~Server() = default;
@@ -76,8 +75,6 @@ class Server {
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
   mutable net::static_thread_pool threadPool_;
-
-  std::chrono::seconds defaultQueryTimeout_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
@@ -147,7 +144,8 @@ class Server {
   static auto cancelAfterDeadline(
       const net::any_io_executor& executor,
       std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
-      std::chrono::seconds timeLimit);
+      std::chrono::seconds timeLimit)
+      -> ad_utility::InvocableWithExactReturnType<void> auto;
 
   /// Acquire the cancellation handle based on `queryId`, pass it to the
   /// operation and configure it to get cancelled automatically by calling
@@ -155,7 +153,8 @@ class Server {
   auto setupCancellationHandle(const net::any_io_executor& executor,
                                const ad_utility::websocket::QueryId& queryId,
                                const std::shared_ptr<Operation>& rootOperation,
-                               std::chrono::seconds timeLimit) const;
+                               std::chrono::seconds timeLimit) const
+      -> ad_utility::InvocableWithExactReturnType<void> auto;
 
   /// Run the SPARQL parser and then the query planner on the `query`. All
   /// computation is performed on the `threadPool_`.
