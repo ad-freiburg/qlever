@@ -627,8 +627,7 @@ std::string ConfigManager::printConfigurationDoc(
       ":\n",
       ad_utility::addIndentation(configuratioOptionsVisualizationAsString,
                                  "    "),
-      "\n\nAvailable configuration options:\n",
-      ad_utility::addIndentation(listOfConfigurationOptions, "    "),
+      "\n\n", listOfConfigurationOptions,
       "\n\nRequired invariants of the configuration options:",
       listOfAllValidators.empty()
           ? " None."
