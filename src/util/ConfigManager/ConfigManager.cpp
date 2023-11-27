@@ -106,17 +106,21 @@ requires ad_utility::InvocableWithExactReturnType<
              Visitor, void, std::pair<std::string_view, ConfigManager&>&&> &&
          ad_utility::InvocableWithExactReturnType<
              Visitor, void, std::pair<std::string_view, ConfigOption&>&&>
-void ConfigManager::visitHashMapEntries(Visitor&& vis,
-                                        bool sortByCreationOrder) const {
+void ConfigManager::visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
+                                        std::string_view pathPrefix) const {
   // `std::reference_wrapper` works with `std::ranges::sort`. `const
   // HashMapEntry&` does not.
-  std::vector<std::pair<std::string_view,
-                        const std::reference_wrapper<const HashMapEntry>>>
-      hashMapEntries(
-          std::views::transform(configurationOptions_, [](const auto& pair) {
+  std::vector<
+      std::pair<std::string_view, std::reference_wrapper<const HashMapEntry>>>
+      hashMapEntries(std::views::transform(
+          configurationOptions_, [&pathPrefix](auto& pair) {
+            const auto& [jsonPath, hashMapEntry] = pair;
+            // Check the hash map entry, before doing anything.
+            verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath),
+                               hashMapEntry);
             return std::pair<std::string_view,
                              std::reference_wrapper<const HashMapEntry>>(
-                pair.first, pair.second);
+                jsonPath, hashMapEntry);
           }));
 
   // Sort the collected `HashMapEntry`s, if wanted.
@@ -128,8 +132,8 @@ void ConfigManager::visitHashMapEntries(Visitor&& vis,
   }
 
   // Call a wrapper for `vis` with the `HashMapEntry::visit` of every entry.
-  std::ranges::for_each(hashMapEntries, [&vis](const auto& pair) {
-    const auto& [jsonPath, hashMapEntry] = pair;
+  std::ranges::for_each(hashMapEntries, [&vis](auto& pair) {
+    auto& [jsonPath, hashMapEntry] = pair;
     hashMapEntry.get().visit([&jsonPath, &vis](auto&& data) {
       std::invoke(vis, std::make_pair(jsonPath, AD_FWD(data)));
     });

@@ -429,6 +429,8 @@ class ConfigManager {
   @brief Visit the entries of `configurationOptions_` by visiting the content of
   the `HashMapEntry`s, see `std::visit`, paired with the key for the
   `HashMapEntry`.
+  Note: Also checks integrity of all entries via `verifyHashMapEntry` before
+  passing them to `vis`.
 
   @param vis The visitor function. Will either be called with
   `std::pair<std::string_view, ConfigManager&>&&`, or
@@ -437,13 +439,19 @@ class ConfigManager {
   @param sortByCreationOrder Should `vis` get the entries of
   `configurationOptions_` ordered by their creation order, when set to true, or
   should the order be random?
+  @param pathPrefix Only used for improved error messages and not passed to
+  `vis`. For example: You have a sub manager with the path `subManagers/sub1`
+  and call `visitHashMapEntries` with it. The sub manager doesn't know its own
+  path, so that information will only be included in generated error messages,
+  if you pass it along.
   */
   template <typename Visitor>
   requires ad_utility::InvocableWithExactReturnType<
                Visitor, void, std::pair<std::string_view, ConfigManager&>&&> &&
            ad_utility::InvocableWithExactReturnType<
                Visitor, void, std::pair<std::string_view, ConfigOption&>&&>
-  void visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder) const;
+  void visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
+                           std::string_view pathPrefix) const;
 
   /*
   @brief Collect all `HashMapEntry` contained in the given
