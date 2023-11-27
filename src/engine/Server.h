@@ -157,25 +157,28 @@ class Server {
       const std::shared_ptr<Operation>& rootOperation,
       std::optional<std::chrono::seconds> timeLimit) const;
 
-  /// Parse the query and plan it on `threadPool_`.
+  /// Run the SPARQL parser and then the query planner on the `query`. All
+  /// computation is performed on the `threadPool_`.
   net::awaitable<PlannedQuery> parseAndPlan(const std::string& query,
                                             QueryExecutionContext& qec) const;
 
   /// Check if the access token is valid. Return true if the access token
   /// exists and is valid. Return false if there's no access token passed.
   /// Throw an exception if there is a token passed but it doesn't match,
-  /// or there is no access token set by the server config.
+  /// or there is no access token set by the server config. The error message is
+  /// formulated towards end users, it can be sent directly as the text of an
+  /// HTTP error response.
   bool checkAccessToken(std::optional<std::string_view> accessToken) const;
 
-  /// Checks if a URL parameter exists in the request and if we are
-  /// allowed to access it. If yes, return the value, otherwise return
-  /// `std::nullopt`.
-  ///
-  /// If `value` is `std::nullopt`, only check if the key exists.  We need this
-  /// because we have parameters like "cmd=stats", where a fixed combination of
-  /// the key and value determines the kind of action, as well as parameters
-  /// like "index-decription=...", where the key determines the kind of action.
-  /// If the key is not found, always return std::nullopt.
+  /// Checks if a URL parameter exists in the request, if we are allowed to
+  /// access it and it matches the expected `value`. If yes, return the value,
+  /// otherwise return `std::nullopt`. If `value` is `std::nullopt`, only check
+  /// if the key exists. We need this because we have parameters like
+  /// "cmd=stats", where a fixed combination of the key and value determines the
+  /// kind of action, as well as parameters like "index-decription=...", where
+  /// the key determines the kind of action. If the key is not found, always
+  /// return `std::nullopt`. If `accessAllowed` is false and a value is present,
+  /// throw an exception.
   static std::optional<std::string_view> checkParameter(
       const ad_utility::HashMap<std::string, std::string>& parameters,
       std::string_view key, std::optional<std::string_view> value,

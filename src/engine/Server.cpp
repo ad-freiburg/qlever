@@ -354,6 +354,8 @@ Awaitable<void> Server::process(
     throw std::runtime_error(
         "Request with URL parameters, but none of them could be processed");
   }
+  // No path matched up until this point, so return 404 to indicate the client
+  // made an error and the server will not serve anything else.
   co_return co_await send(
       createNotFoundResponse("Unknown path", std::move(request)));
 }
@@ -526,7 +528,7 @@ boost::asio::awaitable<void> Server::processQuery(
   std::optional<ExceptionMetadata> metadata;
   // Also store the QueryExecutionTree outside the try-catch block to gain
   // access to the runtimeInformation in the case of an error.
-  std::optional<QueryExecutionTree> queryExecutionTree;
+  std::optional<PlannedQuery> plannedQuery;
   try {
     std::optional<std::chrono::seconds> timeLimit =
         params.contains("timeout") ? std::optional{std::chrono::seconds(
@@ -603,10 +605,8 @@ boost::asio::awaitable<void> Server::processQuery(
                               sortPerformanceEstimator_,
                               std::ref(messageSender), pinSubtrees, pinResult);
 
-    auto plannedQuery = co_await parseAndPlan(query, qec);
-    auto pq = std::move(plannedQuery.parsedQuery_);
-    queryExecutionTree = std::move(plannedQuery.queryExecutionTree_);
-    auto& qet = queryExecutionTree.value();
+    plannedQuery = co_await parseAndPlan(query, qec);
+    auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
     absl::Cleanup cancelCancellationHandle{setupCancellationHandle(
         co_await net::this_coro::executor, messageSender.getQueryId(),
@@ -623,8 +623,8 @@ boost::asio::awaitable<void> Server::processQuery(
     // (tsv, csv, octet-stream, turtle).
     auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
       auto responseGenerator = co_await computeInNewThread([&] {
-        return ExportQueryExecutionTrees::computeResultAsStream(pq, qet,
-                                                                mediaType);
+        return ExportQueryExecutionTrees::computeResultAsStream(
+            plannedQuery.value().parsedQuery_, qet, mediaType);
       });
 
       // The `streamable_body` that is used internally turns all exceptions that
@@ -650,19 +650,21 @@ boost::asio::awaitable<void> Server::processQuery(
     // This actually processes the query and sends the result in the requested
     // format.
     switch (mediaType.value()) {
-      case MediaType::csv:
-      case MediaType::tsv:
-      case MediaType::octetStream:
-      case MediaType::sparqlXml:
-      case MediaType::turtle: {
+      using enum MediaType;
+      case csv:
+      case tsv:
+      case octetStream:
+      case sparqlXml:
+      case turtle: {
         co_await sendStreamableResponse(mediaType.value());
       } break;
-      case MediaType::qleverJson:
-      case MediaType::sparqlJson: {
+      case qleverJson:
+      case sparqlJson: {
         // Normal case: JSON response
         auto responseString = co_await computeInNewThread([&, maxSend] {
           return ExportQueryExecutionTrees::computeResultAsJSON(
-              pq, qet, requestTimer, maxSend, mediaType.value());
+              plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
+              mediaType.value());
         });
         co_await sendJson(std::move(responseString), responseStatus);
       } break;
@@ -719,9 +721,11 @@ boost::asio::awaitable<void> Server::processQuery(
     }
     auto errorResponseJson = composeErrorResponseJson(
         query, exceptionErrorMsg.value(), requestTimer, metadata);
-    if (queryExecutionTree) {
-      errorResponseJson["runtimeInformation"] = nlohmann::ordered_json(
-          queryExecutionTree->getRootOperation()->runtimeInfo());
+    if (plannedQuery.has_value()) {
+      errorResponseJson["runtimeInformation"] =
+          nlohmann::ordered_json(plannedQuery.value()
+                                     .queryExecutionTree_.getRootOperation()
+                                     ->runtimeInfo());
     }
     co_return co_await sendJson(errorResponseJson, responseStatus);
   }
@@ -739,7 +743,6 @@ Awaitable<T> Server::computeInNewThread(Function function) const {
 }
 
 // _____________________________________________________________________________
-
 net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
     const std::string& query, QueryExecutionContext& qec) const {
   return computeInNewThread(
@@ -747,32 +750,32 @@ net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
         auto pq = SparqlParser::parseQuery(query);
         QueryPlanner qp(&qec);
         qp.setEnablePatternTrick(enablePatternTrick);
-        return PlannedQuery{pq, qp.createExecutionTree(pq)};
+        auto qet = qp.createExecutionTree(pq);
+        return PlannedQuery{std::move(pq), std::move(qet)};
       });
 }
 
 // _____________________________________________________________________________
-
 bool Server::checkAccessToken(
     std::optional<std::string_view> accessToken) const {
-  if (accessToken) {
-    auto accessTokenProvidedMsg = absl::StrCat(
-        "Access token \"access-token=", accessToken.value(), "\" provided");
-    auto requestIgnoredMsg = ", request is ignored";
-    if (accessToken_.empty()) {
-      throw std::runtime_error(absl::StrCat(
-          accessTokenProvidedMsg,
-          " but server was started without --access-token", requestIgnoredMsg));
-    } else if (!ad_utility::constantTimeEquals(accessToken.value(),
-                                               accessToken_)) {
-      throw std::runtime_error(absl::StrCat(
-          accessTokenProvidedMsg, " but not correct", requestIgnoredMsg));
-    } else {
-      LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
-      return true;
-    }
+  if (!accessToken) {
+    return false;
   }
-  return false;
+  auto accessTokenProvidedMsg = absl::StrCat(
+      "Access token \"access-token=", accessToken.value(), "\" provided");
+  auto requestIgnoredMsg = ", request is ignored";
+  if (accessToken_.empty()) {
+    throw std::runtime_error(absl::StrCat(
+        accessTokenProvidedMsg,
+        " but server was started without --access-token", requestIgnoredMsg));
+  } else if (!ad_utility::constantTimeEquals(accessToken.value(),
+                                             accessToken_)) {
+    throw std::runtime_error(absl::StrCat(
+        accessTokenProvidedMsg, " but not correct", requestIgnoredMsg));
+  } else {
+    LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
+    return true;
+  }
 }
 
 // _____________________________________________________________________________

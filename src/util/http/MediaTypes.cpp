@@ -4,24 +4,21 @@
 
 #include "MediaTypes.h"
 
-#include <absl/strings/str_join.h>
-
-#include "../antlr/ANTLRErrorHandling.h"
-#include "./HttpParser/AcceptHeaderQleverVisitor.h"
-#include "./HttpParser/generated/AcceptHeaderLexer.h"
+#include "util/antlr/ANTLRErrorHandling.h"
+#include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
+#include "util/http/HttpParser/generated/AcceptHeaderLexer.h"
 
 using std::string;
 namespace ad_utility {
 
+namespace detail {
+using enum MediaType;
 // The first media type in this list is the default, if no other type is
 // specified in the request. It's "application/sparql-results+json", as
 // required by the SPARQL standard.
 constexpr std::array SUPPORTED_MEDIA_TYPES{
-    MediaType::sparqlJson, MediaType::sparqlXml, MediaType::qleverJson,
-    MediaType::tsv,        MediaType::csv,       MediaType::turtle,
-    MediaType::octetStream};
+    sparqlJson, sparqlXml, qleverJson, tsv, csv, turtle, octetStream};
 
-namespace detail {
 // _____________________________________________________________
 const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
   static const ad_utility::HashMap<MediaType, MediaTypeImpl> types = [] {
@@ -138,10 +135,10 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
 // ___________________________________________________________________________
 std::optional<MediaType> getMediaTypeFromAcceptHeader(
     std::string_view acceptHeader) {
-  static_assert(!SUPPORTED_MEDIA_TYPES.empty());
+  static_assert(!detail::SUPPORTED_MEDIA_TYPES.empty());
   // empty accept Header means "any type is allowed", so simply choose one.
   if (acceptHeader.empty()) {
-    return SUPPORTED_MEDIA_TYPES.at(0);
+    return detail::SUPPORTED_MEDIA_TYPES.at(0);
   }
 
   auto orderedMediaTypes = parseAcceptHeader(acceptHeader);
@@ -150,17 +147,16 @@ std::optional<MediaType> getMediaTypeFromAcceptHeader(
       []<typename T>(const T& part) -> std::optional<MediaType> {
     static constexpr std::optional<MediaType> noValue = std::nullopt;
     if constexpr (ad_utility::isSimilar<T, MediaTypeWithQuality::Wildcard>) {
-      return SUPPORTED_MEDIA_TYPES.at(0);
+      return detail::SUPPORTED_MEDIA_TYPES.at(0);
     } else if constexpr (ad_utility::isSimilar<
                              T, MediaTypeWithQuality::TypeWithWildcard>) {
-      auto it = std::find_if(
-          SUPPORTED_MEDIA_TYPES.begin(), SUPPORTED_MEDIA_TYPES.end(),
+      auto it = std::ranges::find_if(
+          detail::SUPPORTED_MEDIA_TYPES,
           [&part](const auto& el) { return getType(el) == part._type; });
-      return it == SUPPORTED_MEDIA_TYPES.end() ? noValue : *it;
+      return it == detail::SUPPORTED_MEDIA_TYPES.end() ? noValue : *it;
     } else if constexpr (ad_utility::isSimilar<T, MediaType>) {
-      auto it = std::find(SUPPORTED_MEDIA_TYPES.begin(),
-                          SUPPORTED_MEDIA_TYPES.end(), part);
-      return it != SUPPORTED_MEDIA_TYPES.end() ? part : noValue;
+      auto it = std::ranges::find(detail::SUPPORTED_MEDIA_TYPES, part);
+      return it != detail::SUPPORTED_MEDIA_TYPES.end() ? part : noValue;
     } else {
       static_assert(ad_utility::alwaysFalse<T>);
     }
@@ -179,13 +175,10 @@ std::optional<MediaType> getMediaTypeFromAcceptHeader(
 
 // ______________________________________________________________________
 std::string getErrorMessageForSupportedMediaTypes() {
-  // TODO<C++23> Refactor this using `join_view` and the formatting of ranges.
-  std::vector<std::string> asString;
-  for (const auto& type : SUPPORTED_MEDIA_TYPES) {
-    asString.push_back(toString(type));
-  }
   return "Currently the following media types are supported: " +
-         absl::StrJoin(asString, ", ");
+         lazyStrJoin(
+             detail::SUPPORTED_MEDIA_TYPES | std::views::transform(toString),
+             ", ");
 }
 
 }  // namespace ad_utility
