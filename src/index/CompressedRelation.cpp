@@ -239,7 +239,6 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   auto getIncompleteBlock = [&](auto it) {
     auto result = readPossiblyIncompleteBlock(metadata, col1Id, *it,
                                               std::ref(details), columnIndices);
-    result.setColumnSubset(std::array<ColumnIndex, 1>{1});
     checkCancellation(cancellationHandle);
     return result;
   };
@@ -250,9 +249,10 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   }
 
   if (beginBlock + 1 < endBlock) {
-    auto blockGenerator =
-        asyncParallelBlockGenerator(beginBlock + 1, endBlock - 1, columnIndices,
-                                    std::move(cancellationHandle));
+    // We copy the cancellationHandle because it is still captured by reference
+    // inside the `getIncompleteBlock` lambda.
+    auto blockGenerator = asyncParallelBlockGenerator(
+        beginBlock + 1, endBlock - 1, columnIndices, cancellationHandle);
     blockGenerator.setDetailsPointer(&details);
     for (auto& block : blockGenerator) {
       co_yield block;
