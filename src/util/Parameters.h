@@ -146,8 +146,7 @@ struct bl {
     if (s == "true") return true;
     if (s == "false") return false;
     AD_THROW(
-        "The string value for bool parameter must be "
-        "either \"true\" or \"false\".");
+        R"(The string value for bool parameter must be either "true" or "false".)");
   }
 };
 

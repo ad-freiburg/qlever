@@ -333,7 +333,7 @@ ResultTable GroupBy::computeResult() {
 
   std::shared_ptr<const ResultTable> subresult;
   if (hashMapOptimizationParams.has_value()) {
-    auto* child = _subtree->getRootOperation()->getChildren().at(0);
+    const auto* child = _subtree->getRootOperation()->getChildren().at(0);
     // Skip sorting
     subresult = child->getResult();
     // Update runtime information
@@ -707,7 +707,8 @@ bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
 
 // _____________________________________________________________________________
 std::optional<GroupBy::HashMapOptimizationData>
-GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate> aggregates) {
+GroupBy::checkIfHashMapOptimizationPossible(
+    const std::vector<Aggregate>& aggregates) {
   if (!RuntimeParameters().get<"use-group-by-hash-map-optimization">()) {
     return std::nullopt;
   }
@@ -722,6 +723,8 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate> aggregates) {
     return std::nullopt;
   }
 
+  // TODO<kcaliban> remove this as soon as we have a better implementation
+  //                for multiple aggregates
   // Only allow up to 5 aggregates for now (because of CallFixedSize)
   if (aggregates.size() > 5) {
     return std::nullopt;
@@ -731,7 +734,7 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate> aggregates) {
     auto expr = aggregate._expression.getPimpl();
 
     // Only allow AVG for now
-    if (dynamic_cast<sparqlExpression::AvgExpression*>(expr) == nullptr)
+    if (dynamic_cast<const sparqlExpression::AvgExpression*>(expr) == nullptr)
       return std::nullopt;
 
     // Check that there are no nested aggregates
@@ -747,14 +750,16 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate> aggregates) {
 
 // _____________________________________________________________________________
 template <size_t OUT_WIDTH, size_t numAggregates>
-bool GroupBy::createResultFromHashMap(IdTable* result,
-                                      const HashMapType<numAggregates>& map) {
+void GroupBy::createResultFromHashMap(
+    IdTable* result,
+    const ad_utility::HashMapWithMemoryLimit<KeyType, ValueType<numAggregates>>&
+        map) {
   // Sort by groupBy column
   std::vector<ValueId> sortedKeys;
   for (const auto& val : map) {
     sortedKeys.push_back(val.first);
   }
-  std::ranges::sort(sortedKeys.begin(), sortedKeys.end());
+  std::ranges::sort(sortedKeys);
 
   // Create result table
   IdTableStatic<OUT_WIDTH> idTable = std::move(*result).toStatic<OUT_WIDTH>();
@@ -770,15 +775,16 @@ bool GroupBy::createResultFromHashMap(IdTable* result,
   }
 
   *result = std::move(idTable).toDynamic();
-  return true;
 }
 
 // _____________________________________________________________________________
 template <size_t OUT_WIDTH, size_t numAggregates>
-bool GroupBy::computeGroupByForHashMapOptimization(
-    IdTable* result, std::vector<Aggregate> aggregates,
-    const IdTable& subresult, size_t columnIndex, LocalVocab* localVocab) {
-  HashMapType<numAggregates> map(getExecutionContext()->getAllocator());
+void GroupBy::computeGroupByForHashMapOptimization(
+    IdTable* result, const std::vector<Aggregate>& aggregates,
+    const IdTable& subresult, size_t columnIndex,
+    const LocalVocab* localVocab) {
+  ad_utility::HashMapWithMemoryLimit<KeyType, ValueType<numAggregates>> map(
+      getExecutionContext()->getAllocator());
 
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext(
@@ -812,7 +818,7 @@ bool GroupBy::computeGroupByForHashMapOptimization(
     // Create elements in map
     for (size_t j = 0; j < currentBlockSize; ++j) {
       auto id = getId(j);
-      (void)map[id];
+      map.try_emplace(id);
     }
 
     // Get pointers to values
@@ -841,15 +847,14 @@ bool GroupBy::computeGroupByForHashMapOptimization(
 
             using NVG = sparqlExpression::detail::NumericValueGetter;
 
-            auto rowIndex = i;
+            auto hashEntryIndex = 0;
             for (const auto& val : generator) {
               sparqlExpression::detail::NumericValue numVal =
                   NVG()(val, &evaluationContext);
 
-              auto hashEntryIndex = rowIndex - evaluationContext._beginIndex;
               hashEntries[hashEntryIndex]->at(aggregateIndex).increment(numVal);
 
-              ++rowIndex;
+              ++hashEntryIndex;
             }
           };
 
@@ -858,7 +863,7 @@ bool GroupBy::computeGroupByForHashMapOptimization(
     }
   }
 
-  return createResultFromHashMap<OUT_WIDTH, numAggregates>(result, map);
+  createResultFromHashMap<OUT_WIDTH, numAggregates>(result, map);
 }
 
 // _____________________________________________________________________________

@@ -2,12 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
+#include <gmock/gmock.h>
+
 #include <cstdio>
 
 #include "./IndexTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -454,9 +455,9 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
 
   std::vector<Variable> variablesXAndY{varX, varY};
 
-  std::vector<ColumnIndex> sortedColumnsVector = {0};
-  Tree validJoinWhenGroupingByXPlusSort = makeExecutionTree<Sort>(
-      qec, validJoinWhenGroupingByX, sortedColumnsVector);
+  std::vector<ColumnIndex> sortedColumns = {0};
+  Tree sutreeWithSort =
+      makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
 
   SparqlExpressionPimpl avgXPimpl = makeAvgPimpl(varX);
   SparqlExpressionPimpl avgCountXPimpl = makeAvgCountPimpl(varX);
@@ -469,29 +470,27 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   std::vector<GroupBy::Aggregate> avgAggregate = {{avgXPimpl, 1}};
   std::vector<GroupBy::Aggregate> avgCountAggregate = {{avgCountXPimpl, 1}};
 
+  // Enable optimization
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+
   // Must have exactly one variable to group by.
-  testFailure(emptyVariables, aliasesAvgX, validJoinWhenGroupingByXPlusSort,
-              avgAggregate);
-  testFailure(variablesXAndY, aliasesAvgX, validJoinWhenGroupingByXPlusSort,
-              avgAggregate);
+  testFailure(emptyVariables, aliasesAvgX, sutreeWithSort, avgAggregate);
+  testFailure(variablesXAndY, aliasesAvgX, sutreeWithSort, avgAggregate);
   // Must be AVG aggregate (for now)
-  testFailure(variablesOnlyX, aliasesCountX, validJoinWhenGroupingByXPlusSort,
-              countAggregate);
+  testFailure(variablesOnlyX, aliasesCountX, sutreeWithSort, countAggregate);
   // Top operation must be SORT
   testFailure(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX,
               avgAggregate);
   // Can not be a nested aggregate
-  testFailure(variablesOnlyX, aliasesAvgCountX,
-              validJoinWhenGroupingByXPlusSort, avgCountAggregate);
+  testFailure(variablesOnlyX, aliasesAvgCountX, sutreeWithSort,
+              avgCountAggregate);
   // Optimization has to be enabled
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
-  testFailure(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByXPlusSort,
-              avgAggregate);
+  testFailure(variablesOnlyX, aliasesAvgX, sutreeWithSort, avgAggregate);
 
   // Everything is valid for the following example.
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
-  GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX,
-                  validJoinWhenGroupingByXPlusSort};
+  GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX, sutreeWithSort};
   auto optimizedAggregateData =
       groupBy.checkIfHashMapOptimizationPossible(avgAggregate);
   ASSERT_TRUE(optimizedAggregateData.has_value());
@@ -499,6 +498,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
 }
 
 // _____________________________________________________________________________
+
 TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
   /* Setup query:
   SELECT ?x (AVG(?y) as ?avg) WHERE {
@@ -513,8 +513,8 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
       qec, Permutation::Enum::PSO,
       SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
-  std::vector<ColumnIndex> sortedColumnsVector = {1};  // is ?x in column 1?
-  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumnsVector);
+  std::vector<ColumnIndex> sortedColumns = {1};
+  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
 
   SparqlExpressionPimpl avgYPimpl = makeAvgPimpl(varY);
   std::vector<Alias> aliasesAvgY{Alias{avgYPimpl, Variable{"?avg"}}};
@@ -756,18 +756,6 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
     } else {
       ASSERT_TRUE(groupBy.computeOptimizedGroupByIfPossible(&result));
     }
-    Id idOfX;
-    Id idOfY;
-    Id idOfZ;
-    Id idOfA;
-    Id idOfB;
-    Id idOfC;
-    qec->getIndex().getId("<x>", &idOfX);
-    qec->getIndex().getId("<y>", &idOfY);
-    qec->getIndex().getId("<z>", &idOfZ);
-    qec->getIndex().getId("<a>", &idOfA);
-    qec->getIndex().getId("<b>", &idOfB);
-    qec->getIndex().getId("<c>", &idOfC);
 
     // Six distinct subjects.
     ASSERT_EQ(result.size(), 6);
@@ -776,24 +764,20 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
     } else {
       ASSERT_EQ(result.numColumns(), 1);
     }
-    // The test index currently consists of 6 triples.
-    EXPECT_EQ(result(0, 0), idOfA);
-    EXPECT_EQ(result(1, 0), idOfB);
-    EXPECT_EQ(result(2, 0), idOfC);
-    EXPECT_EQ(result(3, 0), idOfX);
-    EXPECT_EQ(result(4, 0), idOfY);
-    EXPECT_EQ(result(5, 0), idOfZ);
 
+    auto getId = makeGetId(qec->getIndex());
+    EXPECT_THAT(
+        result.getColumn(0),
+        ::testing::ElementsAre(getId("<a>"), getId("<b>"), getId("<c>"),
+                               getId("<x>"), getId("<y>"), getId("<z>")));
     if (includeCount) {
-      EXPECT_EQ(result(0, 1), Id::makeFromInt(2));
-      EXPECT_EQ(result(1, 1), Id::makeFromInt(2));
-      EXPECT_EQ(result(2, 1), Id::makeFromInt(2));
-      EXPECT_EQ(result(3, 1), Id::makeFromInt(7));
-      EXPECT_EQ(result(4, 1), Id::makeFromInt(1));
-      // TODO<joka921> This should be 1.
-      // There is one triple added <z> @en@<label> "zz"@en which is
-      // currently not filtered out.
-      EXPECT_EQ(result(5, 1), Id::makeFromInt(2));
+      EXPECT_THAT(result.getColumn(1),
+                  ::testing::ElementsAre(
+                      IntId(2), IntId(2), IntId(2), IntId(7), IntId(1),
+                      // TODO<joka921> This should be 1.
+                      // There is one triple added <z> @en@<label> "zz"@en which
+                      // is currently not filtered out.
+                      IntId(2)));
     }
   };
   testWithBothInterfaces(true, true);

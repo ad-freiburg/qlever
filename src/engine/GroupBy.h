@@ -8,7 +8,6 @@
 
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -157,13 +156,13 @@ class GroupBy : public Operation {
   // `?z`.
   bool computeGroupByForJoinWithFullScan(IdTable* result);
 
-  // Create a HashMap containing the results of each aggregation for each group.
+  // Create result IdTable by using a HashMap mapping groups to aggregation data
+  // and subsequently calling `createResultFromHashMap`.
   template <size_t OUT_WIDTH, size_t numAggregates>
-  bool computeGroupByForHashMapOptimization(IdTable* result,
-                                            std::vector<Aggregate> aggregates,
-                                            const IdTable& subresult,
-                                            size_t columnIndex,
-                                            LocalVocab* localVocab);
+  void computeGroupByForHashMapOptimization(
+      IdTable* result, const std::vector<Aggregate>& aggregates,
+      const IdTable& subresult, size_t columnIndex,
+      const LocalVocab* localVocab);
 
   // Required data to perform HashMap optimization.
   struct HashMapOptimizationData {
@@ -188,27 +187,19 @@ class GroupBy : public Operation {
       if (error_)
         return ValueId::makeUndefined();
       else
-        return ValueId::makeFromDouble(sum_ / (double)count_);
+        return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
     }
   };
 
   using KeyType = ValueId;
   template <size_t numAggregates>
   using ValueType = std::array<AverageAggregationData, numAggregates>;
-  using HashType = absl::container_internal::hash_default_hash<KeyType>;
-  using EqType = absl::container_internal::hash_default_eq<KeyType>;
-  template <size_t numAggregates>
-  using AllocType = ad_utility::AllocatorWithLimit<
-      std::pair<const KeyType, ValueType<numAggregates>>>;
-  template <size_t numAggregates>
-  using HashMapType =
-      ad_utility::HashMap<KeyType, ValueType<numAggregates>, HashType, EqType,
-                          AllocType<numAggregates>>;
 
   // Sort the HashMap by key and create result table.
   template <size_t OUT_WIDTH, size_t numAggregates>
-  bool createResultFromHashMap(IdTable* result,
-                               const HashMapType<numAggregates>& map);
+  void createResultFromHashMap(IdTable* result,
+                               const ad_utility::HashMapWithMemoryLimit<
+                                   KeyType, ValueType<numAggregates>>& map);
 
   // Check if hash map optimization is applicable. This is the case when
   // the following conditions hold true:
@@ -219,7 +210,7 @@ class GroupBy : public Operation {
   // - Maximum 5 aggregates
   // - Only one grouped variable
   std::optional<HashMapOptimizationData> checkIfHashMapOptimizationPossible(
-      std::vector<Aggregate> aggregates);
+      const std::vector<Aggregate>& aggregates);
 
   // The check whether the optimization just described can be applied and its
   // actual computation are split up in two functions. This struct contains
