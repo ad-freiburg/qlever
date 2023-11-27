@@ -240,73 +240,29 @@ Awaitable<void> Server::process(
   const auto urlPathAndParameters = getUrlPathAndParameters(request);
   const auto& parameters = urlPathAndParameters._parameters;
 
-  // Lambda for checking if a URL parameter exists in the request and if we are
-  // allowed to access it. If yes, return the value, otherwise return
-  // `std::nullopt`.
-  //
-  // If `value` is `std::nullopt`, only check if the key exists.  We need this
-  // because we have parameters like "cmd=stats", where a fixed combination of
-  // the key and value determines the kind of action, as well as parameters
-  // like "index-decription=...", where the key determines the kind of action.
-  auto checkParameter =
-      [&parameters](const std::string key, std::optional<std::string> value,
-                    bool accessAllowed = true) -> std::optional<std::string> {
-    // If the key is not found, always return std::nullopt.
-    if (!parameters.contains(key)) {
-      return std::nullopt;
-    }
-    // If value is given, but not equal to param value, return std::nullopt. If
-    // no value is given, set it to param value.
-    if (value == std::nullopt) {
-      value = parameters.at(key);
-    } else if (value != parameters.at(key)) {
-      return std::nullopt;
-    }
-    // Now that we have the value, check if there is a problem with the access.
-    // If yes, we abort the query processing at this point.
-    if (accessAllowed == false) {
-      throw std::runtime_error(absl::StrCat("Access to \"", key, "=",
-                                            value.value(), "\" denied",
-                                            " (requires a valid access token)",
-                                            ", processing of request aborted"));
-    }
-    return value;
+  auto checkParameter = [&parameters](std::string_view key,
+                                      std::optional<std::string_view> value,
+                                      bool accessAllowed = true) {
+    return Server::checkParameter(parameters, key, value, accessAllowed);
   };
 
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
   // processing had been allowed without access token).
-  auto accessToken = checkParameter("access-token", std::nullopt);
-  bool accessTokenOk = false;
-  if (accessToken) {
-    auto accessTokenProvidedMsg = absl::StrCat(
-        "Access token \"access-token=", accessToken.value(), "\" provided");
-    auto requestIgnoredMsg = ", request is ignored";
-    if (accessToken_.empty()) {
-      throw std::runtime_error(absl::StrCat(
-          accessTokenProvidedMsg,
-          " but server was started without --access-token", requestIgnoredMsg));
-    } else if (!ad_utility::constantTimeEquals(accessToken.value(),
-                                               accessToken_)) {
-      throw std::runtime_error(absl::StrCat(
-          accessTokenProvidedMsg, " but not correct", requestIgnoredMsg));
-    } else {
-      LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
-      accessTokenOk = true;
-    }
-  }
+  bool accessTokenOk =
+      checkAccessToken(checkParameter("access-token", std::nullopt));
 
   // Process all URL parameters known to QLever. If there is more than one,
-  // QLever processes all of one, but only returns the result from the last one.
-  // In particular, if there is a "query" parameter, it will be processed last
-  // and its result returned.
+  // QLever processes all of them, but only returns the result from the last
+  // one. In particular, if there is a "query" parameter, it will be processed
+  // last and its result returned.
   //
   // Some parameters require that "access-token" is set correctly. If not, that
   // parameter is ignored.
   std::optional<http::response<http::string_body>> response;
 
   // Execute commands (URL parameter with key "cmd").
-  auto logCommand = [](const std::optional<std::string>& cmd,
+  auto logCommand = [](const std::optional<std::string_view>& cmd,
                        std::string_view actionMsg) {
     LOG(INFO) << "Processing command \"" << cmd.value() << "\""
               << ": " << actionMsg << std::endl;
@@ -352,7 +308,7 @@ Awaitable<void> Server::process(
           checkParameter("index-description", std::nullopt, accessTokenOk)) {
     LOG(INFO) << "Setting index description to: \"" << description.value()
               << "\"" << std::endl;
-    index_.setKbName(description.value());
+    index_.setKbName(std::string{description.value()});
     response = createJsonResponse(composeStatsJson(), request);
   }
 
@@ -361,7 +317,7 @@ Awaitable<void> Server::process(
           checkParameter("text-description", std::nullopt, accessTokenOk)) {
     LOG(INFO) << "Setting text description to: \"" << description.value()
               << "\"" << std::endl;
-    index_.setTextName(description.value());
+    index_.setTextName(std::string{description.value()});
     response = createJsonResponse(composeStatsJson(), request);
   }
 
@@ -370,7 +326,7 @@ Awaitable<void> Server::process(
     if (auto value = checkParameter(key, std::nullopt, accessTokenOk)) {
       LOG(INFO) << "Setting runtime parameter \"" << key << "\""
                 << " to value \"" << value.value() << "\"" << std::endl;
-      RuntimeParameters().set(key, value.value());
+      RuntimeParameters().set(key, std::string{value.value()});
       response = createJsonResponse(RuntimeParameters().toMap(), request);
     }
   }
@@ -398,30 +354,10 @@ Awaitable<void> Server::process(
     throw std::runtime_error(
         "Request with URL parameters, but none of them could be processed");
   }
-
-  // At this point, we only have a path and no URL paraeters. We then interpret
-  // the request as a request for a file. However, only files from a very
-  // restricted whitelist (see below) will actually be served.
-  //
-  // NOTE 1: `makeFileServer` returns a function.  The first argument is the
-  // document root, the second one is the whitelist.
-  //
-  // NOTE 2: `co_await makeFileServer(....)(...)` doesn't compile in g++ 11.2.0,
-  // probably because of the following bug:
-  // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98056
-  // TODO<joka921>: Reinstate this one-liner as soon as this bug is fixed.
-  //
-  // TODO: The file server currently does not LOG much. For example, when a file
-  // is not found, a corresponding response is returned to the requestion
-  // client, but the log says nothing about it. The place to change this would
-  // be in `src/util/http/HttpUtils.h`.
-  LOG(INFO) << "Treating request target \"" << request.target() << "\""
-            << " as a request for a file with that name" << std::endl;
-  auto serveFileRequest = makeFileServer(
-      ".",
-      ad_utility::HashSet<std::string>{"index.html", "script.js", "style.css"})(
-      std::move(request), send);
-  co_return co_await std::move(serveFileRequest);
+  // No path matched up until this point, so return 404 to indicate the client
+  // made an error and the server will not serve anything else.
+  co_return co_await send(
+      createNotFoundResponse("Unknown path", std::move(request)));
 }
 
 // _____________________________________________________________________________
@@ -592,7 +528,7 @@ boost::asio::awaitable<void> Server::processQuery(
   std::optional<ExceptionMetadata> metadata;
   // Also store the QueryExecutionTree outside the try-catch block to gain
   // access to the runtimeInformation in the case of an error.
-  std::optional<QueryExecutionTree> queryExecutionTree;
+  std::optional<PlannedQuery> plannedQuery;
   try {
     std::optional<std::chrono::seconds> timeLimit =
         params.contains("timeout") ? std::optional{std::chrono::seconds(
@@ -611,7 +547,6 @@ boost::asio::awaitable<void> Server::processQuery(
               << (pinResult ? " [pin result]" : "")
               << (pinSubtrees ? " [pin subresults]" : "") << "\n"
               << query << std::endl;
-    ParsedQuery pq = SparqlParser::parseQuery(query);
 
     // The following code block determines the media type to be used for the
     // result. The media type is either determined by the "Accept:" header of
@@ -619,50 +554,36 @@ boost::asio::awaitable<void> Server::processQuery(
     // for QLever-historical reasons).
     using ad_utility::MediaType;
 
-    // The first media type in this list is the default, if no other type is
-    // specified in the request. It's "application/sparql-results+json", as
-    // required by the SPARQL standard.
-    const auto supportedMediaTypes = []() {
-      static const std::vector<MediaType> mediaTypes{
-          ad_utility::MediaType::sparqlJson, ad_utility::MediaType::sparqlXml,
-          ad_utility::MediaType::qleverJson, ad_utility::MediaType::tsv,
-          ad_utility::MediaType::csv,        ad_utility::MediaType::turtle,
-          ad_utility::MediaType::octetStream};
-      return mediaTypes;
-    };
-
     std::optional<MediaType> mediaType = std::nullopt;
 
     // The explicit `action=..._export` parameter have precedence over the
     // `Accept:...` header field
     if (containsParam("action", "csv_export")) {
-      mediaType = ad_utility::MediaType::csv;
+      mediaType = MediaType::csv;
     } else if (containsParam("action", "tsv_export")) {
-      mediaType = ad_utility::MediaType::tsv;
+      mediaType = MediaType::tsv;
     } else if (containsParam("action", "qlever_json_export")) {
-      mediaType = ad_utility::MediaType::qleverJson;
+      mediaType = MediaType::qleverJson;
     } else if (containsParam("action", "sparql_json_export")) {
-      mediaType = ad_utility::MediaType::sparqlJson;
+      mediaType = MediaType::sparqlJson;
     } else if (containsParam("action", "turtle_export")) {
-      mediaType = ad_utility::MediaType::turtle;
+      mediaType = MediaType::turtle;
     } else if (containsParam("action", "binary_export")) {
-      mediaType = ad_utility::MediaType::octetStream;
+      mediaType = MediaType::octetStream;
     }
 
     std::string_view acceptHeader = request.base()[http::field::accept];
 
     if (!mediaType.has_value()) {
-      mediaType = ad_utility::getMediaTypeFromAcceptHeader(
-          acceptHeader, supportedMediaTypes());
+      mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
     }
 
     if (!mediaType.has_value()) {
       co_return co_await send(createBadRequestResponse(
-          "Did not find any supported media type "
-          "in this \'Accept:\' header field: \"" +
-              std::string{acceptHeader} + "\". " +
-              ad_utility::getErrorMessageForSupportedMediaTypes(
-                  supportedMediaTypes()),
+          absl::StrCat("Did not find any supported media type "
+                       "in this \'Accept:\' header field: \"",
+                       acceptHeader, "\". ",
+                       ad_utility::getErrorMessageForSupportedMediaTypes()),
           request));
     }
     AD_CONTRACT_CHECK(mediaType.has_value());
@@ -683,10 +604,9 @@ boost::asio::awaitable<void> Server::processQuery(
     QueryExecutionContext qec(index_, &cache_, allocator_,
                               sortPerformanceEstimator_,
                               std::ref(messageSender), pinSubtrees, pinResult);
-    QueryPlanner qp(&qec);
-    qp.setEnablePatternTrick(enablePatternTrick_);
-    queryExecutionTree = qp.createExecutionTree(pq);
-    auto& qet = queryExecutionTree.value();
+
+    plannedQuery = co_await parseAndPlan(query, qec);
+    auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
     absl::Cleanup cancelCancellationHandle{setupCancellationHandle(
         co_await net::this_coro::executor, messageSender.getQueryId(),
@@ -701,11 +621,10 @@ boost::asio::awaitable<void> Server::processQuery(
 
     // Common code for sending responses for the streamable media types
     // (tsv, csv, octet-stream, turtle).
-    auto sendStreamableResponse =
-        [&](ad_utility::MediaType mediaType) -> Awaitable<void> {
+    auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
       auto responseGenerator = co_await computeInNewThread([&] {
-        return ExportQueryExecutionTrees::computeResultAsStream(pq, qet,
-                                                                mediaType);
+        return ExportQueryExecutionTrees::computeResultAsStream(
+            plannedQuery.value().parsedQuery_, qet, mediaType);
       });
 
       // The `streamable_body` that is used internally turns all exceptions that
@@ -731,19 +650,21 @@ boost::asio::awaitable<void> Server::processQuery(
     // This actually processes the query and sends the result in the requested
     // format.
     switch (mediaType.value()) {
-      case ad_utility::MediaType::csv:
-      case ad_utility::MediaType::tsv:
-      case ad_utility::MediaType::octetStream:
-      case ad_utility::MediaType::sparqlXml:
-      case ad_utility::MediaType::turtle: {
+      using enum MediaType;
+      case csv:
+      case tsv:
+      case octetStream:
+      case sparqlXml:
+      case turtle: {
         co_await sendStreamableResponse(mediaType.value());
       } break;
-      case ad_utility::MediaType::qleverJson:
-      case ad_utility::MediaType::sparqlJson: {
+      case qleverJson:
+      case sparqlJson: {
         // Normal case: JSON response
         auto responseString = co_await computeInNewThread([&, maxSend] {
           return ExportQueryExecutionTrees::computeResultAsJSON(
-              pq, qet, requestTimer, maxSend, mediaType.value());
+              plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
+              mediaType.value());
         });
         co_await sendJson(std::move(responseString), responseStatus);
       } break;
@@ -800,9 +721,11 @@ boost::asio::awaitable<void> Server::processQuery(
     }
     auto errorResponseJson = composeErrorResponseJson(
         query, exceptionErrorMsg.value(), requestTimer, metadata);
-    if (queryExecutionTree) {
-      errorResponseJson["runtimeInformation"] = nlohmann::ordered_json(
-          queryExecutionTree->getRootOperation()->runtimeInfo());
+    if (plannedQuery.has_value()) {
+      errorResponseJson["runtimeInformation"] =
+          nlohmann::ordered_json(plannedQuery.value()
+                                     .queryExecutionTree_.getRootOperation()
+                                     ->runtimeInfo());
     }
     co_return co_await sendJson(errorResponseJson, responseStatus);
   }
@@ -817,4 +740,66 @@ Awaitable<T> Server::computeInNewThread(Function function) const {
   };
   return ad_utility::resumeOnOriginalExecutor(
       runOnExecutor(threadPool_.get_executor(), std::move(function)));
+}
+
+// _____________________________________________________________________________
+net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
+    const std::string& query, QueryExecutionContext& qec) const {
+  return computeInNewThread(
+      [&query, &qec, enablePatternTrick = enablePatternTrick_]() {
+        auto pq = SparqlParser::parseQuery(query);
+        QueryPlanner qp(&qec);
+        qp.setEnablePatternTrick(enablePatternTrick);
+        auto qet = qp.createExecutionTree(pq);
+        return PlannedQuery{std::move(pq), std::move(qet)};
+      });
+}
+
+// _____________________________________________________________________________
+bool Server::checkAccessToken(
+    std::optional<std::string_view> accessToken) const {
+  if (!accessToken) {
+    return false;
+  }
+  auto accessTokenProvidedMsg = absl::StrCat(
+      "Access token \"access-token=", accessToken.value(), "\" provided");
+  auto requestIgnoredMsg = ", request is ignored";
+  if (accessToken_.empty()) {
+    throw std::runtime_error(absl::StrCat(
+        accessTokenProvidedMsg,
+        " but server was started without --access-token", requestIgnoredMsg));
+  } else if (!ad_utility::constantTimeEquals(accessToken.value(),
+                                             accessToken_)) {
+    throw std::runtime_error(absl::StrCat(
+        accessTokenProvidedMsg, " but not correct", requestIgnoredMsg));
+  } else {
+    LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
+    return true;
+  }
+}
+
+// _____________________________________________________________________________
+
+std::optional<std::string_view> Server::checkParameter(
+    const ad_utility::HashMap<std::string, std::string>& parameters,
+    std::string_view key, std::optional<std::string_view> value,
+    bool accessAllowed) {
+  if (!parameters.contains(key)) {
+    return std::nullopt;
+  }
+  // If value is given, but not equal to param value, return std::nullopt. If
+  // no value is given, set it to param value.
+  if (value == std::nullopt) {
+    value = parameters.at(key);
+  } else if (value != parameters.at(key)) {
+    return std::nullopt;
+  }
+  // Now that we have the value, check if there is a problem with the access.
+  // If yes, we abort the query processing at this point.
+  if (!accessAllowed) {
+    throw std::runtime_error(absl::StrCat(
+        "Access to \"", key, "=", value.value(), "\" denied",
+        " (requires a valid access token)", ", processing of request aborted"));
+  }
+  return value;
 }

@@ -71,9 +71,9 @@ jobs:
       - name: Build
           # Build your program with the given configuration
         # Sourcing the conanrun.sh even for building is required to make gtest_discover_tests pass reliably.
-      run: >
-        source ${{github.workspace}}/build/conanrun.sh;
-        cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j 1 
+        run: >
+          source ${{github.workspace}}/build/conanrun.sh;
+          cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j 1; 
 
       - name: Test
         working-directory: ${{github.workspace}}/build/test

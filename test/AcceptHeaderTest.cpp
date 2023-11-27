@@ -8,26 +8,10 @@
 
 #include "util/ParseException.h"
 #include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
-#include "util/http/HttpParser/generated/AcceptHeaderLexer.h"
 
 using namespace antlr4;
 using std::string;
 using namespace ad_utility;
-
-const std::vector<MediaType>& supportedMediaTypes() {
-  static auto vector = [] {
-    std::vector<MediaType> result;
-    for (const auto& [mediaType, impl] : detail::getAllMediaTypes()) {
-      result.push_back(mediaType);
-    }
-    return result;
-  }();
-  return vector;
-}
-
-auto parse = [](std::string_view input) {
-  return parseAcceptHeader(input, supportedMediaTypes());
-};
 
 namespace ad_utility {
 // Comparison operator to make the tests more readable.
@@ -50,70 +34,71 @@ bool isTotalWildcard(const MediaTypeWithQuality& a) {
 }  // namespace ad_utility
 
 TEST(AcceptHeaderParser, singleType) {
-  auto c = parse("application/json");
+  auto c = parseAcceptHeader("application/json");
   ASSERT_EQ(c.size(), 1u);
   ASSERT_EQ(c[0], MediaType::json);
 }
 
 TEST(AcceptHeaderParser, multipleTypes) {
-  auto c = parse("application/json,text/html   ,  text/css");
+  auto c = parseAcceptHeader("application/json,text/plain   ,  text/csv");
   ASSERT_EQ(c.size(), 3u);
-  ASSERT_EQ(c[0], ad_utility::MediaType::json);
-  ASSERT_EQ(c[1], ad_utility::MediaType::html);
-  ASSERT_EQ(c[2], ad_utility::MediaType::css);
+  ASSERT_EQ(c[0], MediaType::json);
+  ASSERT_EQ(c[1], MediaType::textPlain);
+  ASSERT_EQ(c[2], MediaType::csv);
 }
 
 TEST(AcceptHeaderParser, ignoreUnknown) {
-  auto c = parse("application/json,unknown/strangeType   ,  text/css");
+  auto c =
+      parseAcceptHeader("application/json,unknown/strangeType   ,  text/csv");
   ASSERT_EQ(c.size(), 2u);
-  ASSERT_EQ(c[0], ad_utility::MediaType::json);
-  ASSERT_EQ(c[1], ad_utility::MediaType::css);
+  ASSERT_EQ(c[0], MediaType::json);
+  ASSERT_EQ(c[1], MediaType::csv);
 }
 
 TEST(AcceptHeaderParser, MultipleTypesCaseInsensitive) {
-  auto c = parse("appLicaTion/jSOn,teXt/Html   ,  Text/Css");
+  auto c = parseAcceptHeader("appLicaTion/jSOn,teXt/Plain   ,  Text/Csv");
   ASSERT_EQ(c.size(), 3u);
-  ASSERT_EQ(c[0], ad_utility::MediaType::json);
-  ASSERT_EQ(c[1], ad_utility::MediaType::html);
-  ASSERT_EQ(c[2], ad_utility::MediaType::css);
+  ASSERT_EQ(c[0], MediaType::json);
+  ASSERT_EQ(c[1], MediaType::textPlain);
+  ASSERT_EQ(c[2], MediaType::csv);
 }
 
 TEST(AcceptHeaderParser, AllTypesUnknownThrow) {
   auto p = std::string{"appLicaTion/unknown, unknown/Html   ,  strange/Css"};
-  ASSERT_THROW(parse(p), AcceptHeaderQleverVisitor::Exception);
+  ASSERT_THROW(parseAcceptHeader(p), AcceptHeaderQleverVisitor::Exception);
 }
 
 TEST(AcceptHeaderParser, QualityValues) {
-  auto p = std::string{"application/json;q=0.35, text/Html, image/png;q=0.123"};
-  auto c = parse(p);
+  auto p = std::string{
+      "application/json;q=0.35, text/Plain, application/octet-stream;q=0.123"};
+  auto c = parseAcceptHeader(p);
   ASSERT_EQ(c.size(), 3u);
   ASSERT_FLOAT_EQ(c[0]._qualityValue, 1.0f);
-  ASSERT_EQ(c[0], MediaType::html);
+  ASSERT_EQ(c[0], MediaType::textPlain);
   ASSERT_FLOAT_EQ(c[1]._qualityValue, 0.35f);
   ASSERT_EQ(c[1], MediaType::json);
   ASSERT_FLOAT_EQ(c[2]._qualityValue, 0.123f);
-  ASSERT_EQ(c[2], MediaType::png);
+  ASSERT_EQ(c[2], MediaType::octetStream);
 
   p = "application/json;q=0.3542, text/Html";
-  ASSERT_THROW(parse(p), AcceptHeaderQleverVisitor::ParseException);
+  ASSERT_THROW(parseAcceptHeader(p), AcceptHeaderQleverVisitor::ParseException);
 
   p = "application/json;q=1.3, text/Html";
-  ASSERT_THROW(parse(p), AcceptHeaderQleverVisitor::ParseException);
+  ASSERT_THROW(parseAcceptHeader(p), AcceptHeaderQleverVisitor::ParseException);
 }
 
 TEST(AcceptHeaderParser, CharsetParametersNotSupported) {
   // Currently the `charset=UTF-8` is simply ignored.
-  auto p = std::string{"application/json;charset=UTF-8, text/Html"};
-  // auto p = std::string{"application/json, text/Html"};
-  auto c = parse(p);
+  auto p = std::string{"application/json;charset=UTF-8, text/Plain"};
+  auto c = parseAcceptHeader(p);
   ASSERT_EQ(c.size(), 2u);
   ASSERT_EQ(c[0], MediaType::json);
-  ASSERT_EQ(c[1], MediaType::html);
+  ASSERT_EQ(c[1], MediaType::textPlain);
 }
 
 TEST(AcceptHeaderParser, WildcardSubtype) {
   auto p = std::string{"text/*, application/json"};
-  auto c = parse(p);
+  auto c = parseAcceptHeader(p);
   ASSERT_EQ(c.size(), 2u);
   ASSERT_FLOAT_EQ(c[0]._qualityValue, 1.0f);
   ASSERT_EQ(c[0], MediaType::json);
@@ -121,7 +106,7 @@ TEST(AcceptHeaderParser, WildcardSubtype) {
   ASSERT_EQ(c[1], "text");
 
   p = std::string{"text/*, application/json;q=0.9"};
-  c = parse(p);
+  c = parseAcceptHeader(p);
   ASSERT_EQ(c.size(), 2u);
   ASSERT_FLOAT_EQ(c[0]._qualityValue, 1.0f);
   ASSERT_EQ(c[0], "text");
@@ -131,7 +116,7 @@ TEST(AcceptHeaderParser, WildcardSubtype) {
 
 TEST(AcceptHeaderParser, TotalWildCard) {
   auto p = std::string{"text/*, */*, application/json"};
-  auto c = parse(p);
+  auto c = parseAcceptHeader(p);
   ASSERT_EQ(c.size(), 3u);
   ASSERT_FLOAT_EQ(c[0]._qualityValue, 1.0f);
   ASSERT_EQ(c[0], MediaType::json);
@@ -142,47 +127,46 @@ TEST(AcceptHeaderParser, TotalWildCard) {
 }
 
 TEST(AcceptHeaderParser, IllegalInput) {
-  ASSERT_THROW(parse("application/json text/html"), ParseException);
-  ASSERT_THROW(parse("application/json; text/html"), ParseException);
-  ASSERT_THROW(parse("application/json,q=1.0, text/html"), ParseException);
-  ASSERT_THROW(parse("application"), ParseException);
-  ASSERT_THROW(parse("application/"), ParseException);
+  ASSERT_THROW(parseAcceptHeader("application/json text/html"), ParseException);
+  ASSERT_THROW(parseAcceptHeader("application/json; text/html"),
+               ParseException);
+  ASSERT_THROW(parseAcceptHeader("application/json,q=1.0, text/html"),
+               ParseException);
+  ASSERT_THROW(parseAcceptHeader("application"), ParseException);
+  ASSERT_THROW(parseAcceptHeader("application/"), ParseException);
 }
 
 TEST(AcceptHeaderParser, FindMediaTypeFromAcceptHeader) {
-  std::vector<MediaType> supportedTypes;
-  supportedTypes.push_back(MediaType::json);
-  supportedTypes.push_back(MediaType::png);
-
-  std::string p = "text/html,application/json";
-  auto result = getMediaTypeFromAcceptHeader(p, supportedTypes);
+  std::string p = "text/html,application/sparql-results+json";
+  auto result = getMediaTypeFromAcceptHeader(p);
   ASSERT_TRUE(result.has_value());
-  ASSERT_EQ(result.value(), MediaType::json);
+  ASSERT_EQ(result.value(), MediaType::sparqlJson);
 
-  p = "text/html, image/jpeg";
-  ASSERT_FALSE(getMediaTypeFromAcceptHeader(p, supportedTypes).has_value());
+  p = "application/json, image/jpeg";
+  ASSERT_FALSE(getMediaTypeFromAcceptHeader(p).has_value());
 
-  // The wildcard matches json or png, json has higher priority;
+  // The wildcard matches all the supported media types, sparql-json has
+  // higher priority;
   p = "*/*, text/html";
-  result = getMediaTypeFromAcceptHeader(p, supportedTypes);
+  result = getMediaTypeFromAcceptHeader(p);
   ASSERT_TRUE(result.has_value());
-  ASSERT_EQ(result.value(), MediaType::json);
+  ASSERT_EQ(result.value(), MediaType::sparqlJson);
 
-  // The wildcard matches png, but not json;
-  p = "image/*, text/html";
-  result = getMediaTypeFromAcceptHeader(p, supportedTypes);
+  // The wildcard matches csv and tsv, but not the json variants
+  p = "text/*, text/html";
+  result = getMediaTypeFromAcceptHeader(p);
   ASSERT_TRUE(result.has_value());
-  ASSERT_EQ(result.value(), MediaType::png);
+  ASSERT_EQ(result.value(), MediaType::tsv);
 
-  // The wildcard matches png, json has higher precedence;
-  p = "image/*, application/json";
-  result = getMediaTypeFromAcceptHeader(p, supportedTypes);
+  // The wildcard matches csv/tsv, qlever-json has higher precedence;
+  p = "text/*, application/qlever-results+json";
+  result = getMediaTypeFromAcceptHeader(p);
   ASSERT_TRUE(result.has_value());
-  ASSERT_EQ(result.value(), MediaType::json);
+  ASSERT_EQ(result.value(), MediaType::qleverJson);
 
-  // The wildcard matches png, which has the higher quality value;
-  p = "image/*, application/json; q=0.3";
-  result = getMediaTypeFromAcceptHeader(p, supportedTypes);
+  // The wildcard matches tsv/csv, which has the higher quality value;
+  p = "text/*, application/json; q=0.3";
+  result = getMediaTypeFromAcceptHeader(p);
   ASSERT_TRUE(result.has_value());
-  ASSERT_EQ(result.value(), MediaType::png);
+  ASSERT_EQ(result.value(), MediaType::tsv);
 }
