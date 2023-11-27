@@ -488,13 +488,6 @@ class ConfigManager {
       const std::vector<std::string>& keys);
 
   /*
-  @brief Return a string, containing a list of all entries from
-  `getListOfNotChangedConfigOptionsWithDefaultValues`, in the form of
-  "Configuration option 'x' was not set at runtime, using default value 'y'.".
-  */
-  std::string getListOfNotChangedConfigOptionsWithDefaultValuesAsString() const;
-
-  /*
   @brief Creates and adds a new configuration option.
 
   @tparam OptionType The type of value, the configuration option can hold.

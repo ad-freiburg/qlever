@@ -633,10 +633,7 @@ std::string ConfigManager::printConfigurationDoc(
       listOfAllValidators.empty()
           ? " None."
           : absl::StrCat(
-                "\n", ad_utility::addIndentation(listOfAllValidators, "    ")),
-      "\n\nConfiguration options, that kept their default values:\n",
-      ad_utility::addIndentation(
-          getListOfNotChangedConfigOptionsWithDefaultValuesAsString(), "    "));
+                "\n", ad_utility::addIndentation(listOfAllValidators, "    ")));
 }
 
 // ____________________________________________________________________________
@@ -647,41 +644,6 @@ std::string ConfigManager::vectorOfKeysForJsonToString(
     keysToString << "[" << key << "]";
   });
   return std::move(keysToString).str();
-}
-
-// ____________________________________________________________________________
-std::string
-ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
-    const {
-  // All the configuration options together with their paths.
-  const std::vector<std::pair<std::string, const ConfigOption&>>
-      allConfigOptions = configurationOptions(true);
-
-  // For only looking at the configuration options in our map.
-  auto onlyConfigurationOptionsView = std::views::values(allConfigOptions);
-
-  // Returns true, if the `ConfigOption` has a default value and wasn't set at
-  // runtime.
-  auto valueIsUnchangedFromDefault = [](const ConfigOption& option) {
-    return option.hasDefaultValue() && !option.wasSetAtRuntime();
-  };
-
-  // Prints the default value of a configuration option and the accompanying
-  // text.
-  auto defaultConfigurationOptionToString = [](const ConfigOption& option) {
-    return absl::StrCat("Configuration option '", option.getIdentifier(),
-                        "' was not set at runtime, using default value '",
-                        option.getDefaultValueAsString(), "'.");
-  };
-
-  // A string vector view of all our unchanged configuration options in the
-  // string form from `defaultConfigurationOptionToString`.
-  auto unchangedFromDefaultConfigOptions =
-      onlyConfigurationOptionsView |
-      std::views::filter(valueIsUnchangedFromDefault) |
-      std::views::transform(defaultConfigurationOptionToString);
-
-  return ad_utility::lazyStrJoin(unchangedFromDefaultConfigOptions, "\n");
 }
 
 // ____________________________________________________________________________
