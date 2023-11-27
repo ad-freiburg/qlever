@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -26,6 +24,7 @@
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -99,6 +98,42 @@ void ConfigManager::verifyHashMapEntry(std::string_view jsonPathToEntry,
         absl::StrCat("The sub manager at '", jsonPathToEntry,
                      "' is empty. Either fill it, or delete it."));
   }
+}
+
+// ____________________________________________________________________________
+template <typename Visitor>
+requires ad_utility::InvocableWithExactReturnType<
+             Visitor, void, std::pair<std::string_view, ConfigManager&>&&> &&
+         ad_utility::InvocableWithExactReturnType<
+             Visitor, void, std::pair<std::string_view, ConfigOption&>&&>
+void ConfigManager::visitHashMapEntries(Visitor&& vis,
+                                        bool sortByCreationOrder) const {
+  // `std::reference_wrapper` works with `std::ranges::sort`. `const
+  // HashMapEntry&` does not.
+  std::vector<std::pair<std::string_view,
+                        const std::reference_wrapper<const HashMapEntry>>>
+      hashMapEntries(
+          std::views::transform(configurationOptions_, [](const auto& pair) {
+            return std::pair<std::string_view,
+                             std::reference_wrapper<const HashMapEntry>>(
+                pair.first, pair.second);
+          }));
+
+  // Sort the collected `HashMapEntry`s, if wanted.
+  if (sortByCreationOrder) {
+    std::ranges::sort(hashMapEntries, {}, [](const auto& pair) {
+      const HashMapEntry& hashMapEntry = pair.second;
+      return hashMapEntry.getInitializationId();
+    });
+  }
+
+  // Call a wrapper for `vis` with the `HashMapEntry::visit` of every entry.
+  std::ranges::for_each(hashMapEntries, [&vis](const auto& pair) {
+    const auto& [jsonPath, hashMapEntry] = pair;
+    hashMapEntry.get().visit([&jsonPath, &vis](auto&& data) {
+      std::invoke(vis, std::make_pair(jsonPath, AD_FWD(data)));
+    });
+  });
 }
 
 // ____________________________________________________________________________

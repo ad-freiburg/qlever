@@ -415,6 +415,26 @@ class ConfigManager {
   FRIEND_TEST(ConfigManagerTest, CollectionFunctionsSorting);
 
   /*
+  @brief Visit the entries of `configurationOptions_` by visiting the content of
+  the `HashMapEntry`s, see `std::visit`, paired with the key for the
+  `HashMapEntry`.
+
+  @param vis The visitor function. Will either be called with
+  `std::pair<std::string_view, ConfigManager&>&&`, or
+  `std::pair<std::string_view, ConfigOption&>&&`. Both represent the content of
+  a `HashMapEntry`.
+  @param sortByCreationOrder Should `vis` get the entries of
+  `configurationOptions_` ordered by their creation order, when set to true, or
+  should the order be random?
+  */
+  template <typename Visitor>
+  requires ad_utility::InvocableWithExactReturnType<
+               Visitor, void, std::pair<std::string_view, ConfigManager&>&&> &&
+           ad_utility::InvocableWithExactReturnType<
+               Visitor, void, std::pair<std::string_view, ConfigOption&>&&>
+  void visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder) const;
+
+  /*
   @brief Collect all `HashMapEntry` contained in the given
   `configurationOptions`, including the ones in sub managern and return them
   together with their json paths.
