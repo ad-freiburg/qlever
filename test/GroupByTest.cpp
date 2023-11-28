@@ -456,7 +456,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   std::vector<Variable> variablesXAndY{varX, varY};
 
   std::vector<ColumnIndex> sortedColumns = {0};
-  Tree sutreeWithSort =
+  Tree subtreeWithSort =
       makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
 
   SparqlExpressionPimpl avgXPimpl = makeAvgPimpl(varX);
@@ -474,23 +474,23 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
 
   // Must have exactly one variable to group by.
-  testFailure(emptyVariables, aliasesAvgX, sutreeWithSort, avgAggregate);
-  testFailure(variablesXAndY, aliasesAvgX, sutreeWithSort, avgAggregate);
+  testFailure(emptyVariables, aliasesAvgX, subtreeWithSort, avgAggregate);
+  testFailure(variablesXAndY, aliasesAvgX, subtreeWithSort, avgAggregate);
   // Must be AVG aggregate (for now)
-  testFailure(variablesOnlyX, aliasesCountX, sutreeWithSort, countAggregate);
+  testFailure(variablesOnlyX, aliasesCountX, subtreeWithSort, countAggregate);
   // Top operation must be SORT
   testFailure(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX,
               avgAggregate);
   // Can not be a nested aggregate
-  testFailure(variablesOnlyX, aliasesAvgCountX, sutreeWithSort,
+  testFailure(variablesOnlyX, aliasesAvgCountX, subtreeWithSort,
               avgCountAggregate);
   // Optimization has to be enabled
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
-  testFailure(variablesOnlyX, aliasesAvgX, sutreeWithSort, avgAggregate);
+  testFailure(variablesOnlyX, aliasesAvgX, subtreeWithSort, avgAggregate);
 
   // Everything is valid for the following example.
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
-  GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX, sutreeWithSort};
+  GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX, subtreeWithSort};
   auto optimizedAggregateData =
       groupBy.checkIfHashMapOptimizationPossible(avgAggregate);
   ASSERT_TRUE(optimizedAggregateData.has_value());
@@ -771,13 +771,13 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
         ::testing::ElementsAre(getId("<a>"), getId("<b>"), getId("<c>"),
                                getId("<x>"), getId("<y>"), getId("<z>")));
     if (includeCount) {
-      EXPECT_THAT(result.getColumn(1),
-                  ::testing::ElementsAre(
-                      IntId(2), IntId(2), IntId(2), IntId(7), IntId(1),
-                      // TODO<joka921> This should be 1.
-                      // There is one triple added <z> @en@<label> "zz"@en which
-                      // is currently not filtered out.
-                      IntId(2)));
+      EXPECT_THAT(
+          result.getColumn(1),
+          ::testing::ElementsAre(I(2), I(2), I(2), I(7), I(1),
+                                 // TODO<joka921> This should be 1.
+                                 // There is one triple added <z> @en@<label>
+                                 // "zz"@en which is currently not filtered out.
+                                 I(2)));
     }
   };
   testWithBothInterfaces(true, true);

@@ -838,7 +838,7 @@ void GroupBy::computeGroupByForHashMapOptimization(
           exprChildren[0]->evaluate(&evaluationContext);
 
       auto visitor =
-          [&currentBlockSize, &evaluationContext, &i, &hashEntries,
+          [&currentBlockSize, &evaluationContext, &hashEntries,
            &aggregateIndex]<sparqlExpression::SingleExpressionResult T>(
               T&& singleResult) mutable {
             auto generator = sparqlExpression::detail::makeGenerator(
