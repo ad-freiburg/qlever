@@ -8,7 +8,7 @@
 #include <iostream>
 
 #include "util/Concepts.h"
-#include "util/StreamUtils.h"
+#include "util/ParseableDuration.h"
 
 using ad_utility::ParseableDuration;
 using namespace std::chrono_literals;

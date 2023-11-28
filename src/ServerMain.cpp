@@ -14,9 +14,9 @@
 #include "global/Constants.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/MemorySize/MemorySizeParser.h"
+#include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFact.h"
-#include "util/StreamUtils.h"
 
 using std::size_t;
 using std::string;

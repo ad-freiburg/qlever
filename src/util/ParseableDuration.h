@@ -2,8 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef QLEVER_STREAMUTILS_H
-#define QLEVER_STREAMUTILS_H
+#ifndef QLEVER_PARSEABLEDURATION_H
+#define QLEVER_PARSEABLEDURATION_H
 
 #include <ctre/ctre.h>
 
@@ -107,4 +107,4 @@ static_assert(
     std::is_copy_assignable_v<ParseableDuration<std::chrono::seconds>>);
 }  // namespace ad_utility
 
-#endif  // QLEVER_STREAMUTILS_H
+#endif  // QLEVER_PARSEABLEDURATION_H

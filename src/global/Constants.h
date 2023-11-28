@@ -13,7 +13,7 @@
 
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
-#include "util/StreamUtils.h"
+#include "util/ParseableDuration.h"
 
 // For access to `memorySize` literals.
 using namespace ad_utility::memory_literals;
