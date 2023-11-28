@@ -50,27 +50,6 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
     additionalPermutation_->loadFromDisk(onDiskBase + ADDITIONAL_TRIPLES_SUFFIX,
                                          false);
   }
-void Permutation::loadFromDisk(const std::string& onDiskBase) {
-  if constexpr (MetaData::_isMmapBased) {
-    meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
-                ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-  }
-  auto filename = string(onDiskBase + ".index" + fileSuffix_);
-  ad_utility::File file;
-  try {
-    file.open(filename, "r");
-  } catch (const std::runtime_error& e) {
-    AD_THROW("Could not open the index file " + filename +
-             " for reading. Please check that you have read access to "
-             "this file. If it does not exist, your index is broken. The error "
-             "message was: " +
-             e.what());
-  }
-  meta_.readFromFile(&file);
-  reader_.emplace(allocator_, std::move(file));
-  LOG(INFO) << "Registered " << readableName_
-            << " permutation: " << meta_.statistics() << std::endl;
-  isLoaded_ = true;
 }
 
 // _____________________________________________________________________
@@ -84,7 +63,7 @@ IdTable Permutation::scan(
 
   if (!meta_.col0IdExists(col0Id)) {
     if (additionalPermutation_) {
-      return additionalPermutation_->scan(col0Id, col1Id, additionalColumns);
+      return additionalPermutation_->scan(col0Id, col1Id, additionalColumns, std::move(cancellationHandle));
     }
     size_t numColumns = col1Id.has_value() ? 1 : 2;
     return IdTable{numColumns, reader().allocator()};
@@ -185,7 +164,7 @@ Permutation::IdTableGenerator Permutation::lazyScan(
   if (!meta_.col0IdExists(col0Id)) {
     if (additionalPermutation_) {
       return additionalPermutation_->lazyScan(col0Id, col1Id, std::move(blocks),
-                                              additionalColumns, timer);
+                                              additionalColumns, std::move(cancellationHandle));
     }
     return {};
   }
