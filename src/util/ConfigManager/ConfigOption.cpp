@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigOption.h"
-
 #include <absl/strings/str_cat.h>
 
 #include <array>
@@ -18,6 +16,7 @@
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -293,15 +292,20 @@ std::string ConfigOption::getDummyValueAsString() const {
 
 // ____________________________________________________________________________
 ConfigOption::operator std::string() const {
+  /*
+  In short:
+  - The value will always be given, even if it was never set.
+  - The default value will only be shown, if it exists and is different from the
+  current value.
+  - The description will only be shown, if it exists.
+  */
   return absl::StrCat(
-      "Configuration option '", identifier_, "'\n",
-      ad_utility::addIndentation(
-          absl::StrCat(
-              "Value type: ", getActualValueTypeAsString(), "\nDefault value: ",
-              getDefaultValueAsString(), "\nCurrently held value: ",
-              wasSet() ? getValueAsString() : "value was never initialized",
-              "\nDescription: ", description_),
-          "    "));
+      "Value: ", wasSet() ? getValueAsString() : "[must be specified]",
+      wasSetAtRuntime() && getDefaultValueAsString() != getValueAsString()
+          ? absl::StrCat("\nDefault: ", getDefaultValueAsString())
+          : "",
+      !description_.empty() ? absl::StrCat("\nDescription: ", description_)
+                            : "");
 }
 
 // ____________________________________________________________________________

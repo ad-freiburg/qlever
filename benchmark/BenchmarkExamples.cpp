@@ -54,7 +54,7 @@ class ConfigOptions : public BenchmarkInterface {
     manager.addOption("date", "The current date.", &dateString_, "22.3.2023"s);
 
     auto numSigns = manager.addOption("numSigns", "The number of street signs.",
-                                      &numberOfStreetSigns_, 10);
+                                      &numberOfStreetSigns_, 10000);
     manager.addValidator([](const int& num) { return num >= 0; },
                          "The number of street signs must be at least 0!",
                          "Negative numbers, or floating point numbers, are not "

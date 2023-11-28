@@ -561,15 +561,19 @@ std::string ConfigManager::generateConfigurationDocDetailedList(
   visitHashMapEntries(
       [&pathPrefix, &stringRepresentations]<typename T>(std::string_view path,
                                                         T& optionOrSubManager) {
+        // Getting rid of the first `/` for printing, based on user feedback.
+        std::string_view adjustedPath = path.substr(1, path.length());
+
         // Either add the string representation of the option, or recursively
         // add the sub manager.
         if constexpr (isSimilar<T, ConfigOption>) {
-          stringRepresentations.emplace_back(
-              absl::StrCat("Location : ", path, "\n",
-                           static_cast<std::string>(optionOrSubManager)));
+          stringRepresentations.emplace_back(absl::StrCat(
+              "Option '", adjustedPath, "' [",
+              optionOrSubManager.getActualValueTypeAsString(), "]\n",
+              static_cast<std::string>(optionOrSubManager)));
         } else if constexpr (isSimilar<T, ConfigManager>) {
           stringRepresentations.emplace_back(absl::StrCat(
-              "Sub manager : ", path, "\n",
+              "Sub manager '", adjustedPath, "'\n",
               ad_utility::addIndentation(
                   optionOrSubManager.generateConfigurationDocDetailedList(
                       absl::StrCat(pathPrefix, path)),
