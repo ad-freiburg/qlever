@@ -595,6 +595,60 @@ nlohmann::ordered_json ConfigManager::generateConfigurationDocJson(
 }
 
 // ____________________________________________________________________________
+std::string ConfigManager::generateDetailedConfigurationDoc(
+    std::string_view pathPrefix) const {
+  // For collecting the string representations of the hash map entries.
+  std::vector<std::string> stringRepresentations;
+  stringRepresentations.reserve(configurationOptions_.size());
+
+  visitHashMapEntries(
+      [&pathPrefix, &stringRepresentations]<typename T>(std::string_view path,
+                                                        T& optionOrSubManager) {
+        // Either add the string representation of the option, or recursively
+        // add the sub manager.
+        if constexpr (isSimilar<T, ConfigOption>) {
+          stringRepresentations.emplace_back(
+              absl::StrCat("Location : ", path, "\n",
+                           static_cast<std::string>(optionOrSubManager)));
+        } else if constexpr (isSimilar<T, ConfigManager>) {
+          stringRepresentations.emplace_back(absl::StrCat(
+              "Sub manager : ", path, "\n",
+              ad_utility::addIndentation(
+                  optionOrSubManager.generateDetailedConfigurationDoc(
+                      absl::StrCat(pathPrefix, path)),
+                  "    ")));
+        } else {
+          AD_FAIL();
+        }
+      },
+      true, pathPrefix);
+
+  /*
+  List of local validators. Validators inside sub managers can be found
+  there in the string representation.
+  Also note, that `validators_` is always sorted by their creation order.
+  */
+  AD_CORRECTNESS_CHECK(std::ranges::is_sorted(
+      validators_, {}, [](const ConfigOptionValidatorManager& validator) {
+        return validator.getInitializationId();
+      }));
+  const std::string& listValidators = ad_utility::lazyStrJoin(
+      ad_utility::transform(validators_,
+                            [](const ConfigOptionValidatorManager& validator) {
+                              return absl::StrCat("- ",
+                                                  validator.getDescription());
+                            }),
+      "\n\n");
+
+  return absl::StrCat(ad_utility::lazyStrJoin(stringRepresentations, "\n\n"),
+                      "\n\nRequired invariants:",
+                      listValidators.empty()
+                          ? " None."
+                          : absl::StrCat("\n", ad_utility::addIndentation(
+                                                   listValidators, "    ")));
+}
+
+// ____________________________________________________________________________
 std::string ConfigManager::printConfigurationDoc() const {
   // All the configuration options together with their paths.
   const std::vector<std::pair<std::string, const ConfigOption&>>
@@ -608,35 +662,9 @@ std::string ConfigManager::printConfigurationDoc() const {
   const std::string& configuratioOptionsVisualizationAsString =
       generateConfigurationDocJson("").dump(2);
 
-  // List the configuration options themselves.
-  const std::string& listOfConfigurationOptions = ad_utility::lazyStrJoin(
-      std::views::transform(allConfigOptions,
-                            [](const auto& pair) {
-                              // Add the location of the option and the option
-                              // itself.
-                              return absl::StrCat(
-                                  "Location : ", pair.first, "\n",
-                                  static_cast<std::string>(pair.second));
-                            }),
-      "\n\n");
-
-  // List of the validators.
-  const std::string& listOfAllValidators = ad_utility::lazyStrJoin(
-      ad_utility::transform(validators(true),
-                            [](const ConfigOptionValidatorManager& validator) {
-                              return absl::StrCat("- ",
-                                                  validator.getDescription());
-                            }),
-      "\n\n");
-
-  return absl::StrCat(
-      "Configuration:\n", configuratioOptionsVisualizationAsString, "\n\n",
-      listOfConfigurationOptions,
-      "\n\nRequired invariants of the configuration options:",
-      listOfAllValidators.empty()
-          ? " None."
-          : absl::StrCat(
-                "\n", ad_utility::addIndentation(listOfAllValidators, "    ")));
+  return absl::StrCat("Configuration:\n",
+                      configuratioOptionsVisualizationAsString, "\n\n",
+                      generateDetailedConfigurationDoc(""));
 }
 
 // ____________________________________________________________________________
