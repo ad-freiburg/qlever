@@ -673,7 +673,9 @@ class IdTable {
 
  private:
   // Get direct access to the underlying data() as a reference.
-  Data& data() requires(!isView) { return data_; }
+  // TODO<joka921> for `views` the data should be const, but the colums
+  // permutable, check if this is indeed the case for the type of `data_`.
+  Data& data() { return data_; }
   const Data& data() const { return data_; }
 
   // Common implementation for const and mutable overloads of `getColumns`

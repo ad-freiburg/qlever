@@ -175,22 +175,22 @@ void IndexImpl::createFromFile(const string& filename) {
 
   auto& spoSorterWithDuplicates = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
-  auto uniqueSorter =
-      ad_utility::uniqueView<decltype(spoSorterWithDuplicates.sortedView()),
-                             IdTableStatic<3>::row_type>(
-          spoSorterWithDuplicates.sortedView());
+  auto uniqueSorter = ad_utility::uniqueBlockView<
+      decltype(spoSorterWithDuplicates.getSortedBlocks<0>()),
+      IdTableStatic<0>::row_type>(spoSorterWithDuplicates.getSortedBlocks<0>());
 
   PatternCreator patternCreator{onDiskBase_ + ".index.patterns",
-                                stxxlMemory() / 5};
+                                memoryLimitIndexBuilding() / 5};
   auto pushTripleToPatterns = [&patternCreator,
                                &isInternalId](const auto& triple) {
-    patternCreator.processTriple(static_cast<std::array<Id, 3>>(triple),
-                                 std::ranges::any_of(triple, isInternalId));
+    patternCreator.processTriple(
+        std::array<Id, 3>{triple[0], triple[1], triple[2]},
+        std::ranges::any_of(triple, isInternalId));
   };
   size_t numSubjectsNormal = 0;
   auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
   // TODO<joka921> The pattern creator currently ignores the internal triples.
-  createPermutationPair(std::move(uniqueSorter), spo_, sop_,
+  createPermutationPair(2, std::move(uniqueSorter), spo_, sop_,
                         pushTripleToPatterns, numSubjectCounter);
   patternCreator.finish();
   configurationJson_["num-subjects-normal"] = numSubjectsNormal;
@@ -206,9 +206,11 @@ void IndexImpl::createFromFile(const string& filename) {
                                  ad_utility::makeUnlimitedAllocator<Id>(),
                                  Permutation::HasAdditionalTriples::True};
   tempPSOForPatterns.loadFromDisk(onDiskBase_, true);
-  auto lazyPatternScan =
-      tempPSOForPatterns.lazyScan(qlever::specialIds.at(HAS_PATTERN_PREDICATE),
-                                  std::nullopt, std::nullopt, {});
+  auto dummyCancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle>();
+  auto lazyPatternScan = tempPSOForPatterns.lazyScan(
+      qlever::specialIds.at(HAS_PATTERN_PREDICATE), std::nullopt, std::nullopt,
+      {}, dummyCancellationHandle);
 
   auto makePtrAndBool = [](auto range)
       -> cppcoro::generator<
@@ -277,25 +279,29 @@ void IndexImpl::createFromFile(const string& filename) {
     queue.finish();
   }};
 
-  auto blockGenerator = [](auto& queue) -> cppcoro::generator<IdTable> {
+  auto blockGenerator =
+      [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
     while (auto block = queue.pop()) {
       block.value().setColumnSubset(std::array<ColumnIndex, 5>{2, 1, 0, 3, 4});
       std::ranges::for_each(block.value().getColumn(4), [](Id& id) {
         id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id;
       });
-      co_yield block.value();
+      IdTableStatic<0> staticBlock =
+          std::move(block.value()).template toStatic<0>();
+      co_yield staticBlock;
     }
   }(queue);
 
-  auto opsViewWithBothPatternColumns = std::views::join(blockGenerator);
+  // auto opsViewWithBothPatternColumns = std::views::join(blockGenerator);
 
   // For the last pair of permutations we don't need a next sorter, so we have
   // no fourth argument.
   ExternalSorter5<SortByPSO> psoSorter{
       onDiskBase_ + ".lastPermutation-sorter.dat",
-      stxxlMemory() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME, allocator_};
+      memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
+      allocator_};
   size_t numObjectsNormal = 0;
-  createPermutationPair(opsViewWithBothPatternColumns, osp_, ops_,
+  createPermutationPair(4, std::move(blockGenerator), osp_, ops_,
                         makeNumEntitiesCounter(numObjectsNormal, 2),
                         psoSorter.makePushCallback());
   configurationJson_["num-objects-normal"] = numObjectsNormal;
@@ -308,7 +314,7 @@ void IndexImpl::createFromFile(const string& filename) {
     numTriplesNormal += !std::ranges::any_of(triple, isInternalId);
   };
 
-  createPermutationPair(psoSorter.sortedView(), pso_, pos_,
+  createPermutationPair(4, psoSorter.getSortedBlocks<0>(), pso_, pos_,
                         makeNumEntitiesCounter(numPredicatesNormal, 1),
                         countActualTriples);
   configurationJson_["num-predicates-normal"] = numPredicatesNormal;
@@ -643,7 +649,7 @@ std::unique_ptr<ExternalSorter<SortBySPO>> IndexImpl::convertPartialToGlobalIds(
 // _____________________________________________________________________________
 std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
           IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutationPairImpl(const string& fileName1,
+IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
                                      const string& fileName2,
                                      auto&& sortedTriples,
                                      std::array<size_t, 3> permutation,
@@ -655,11 +661,9 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
 
-  // TODO<joka921> has to be set to the correct number of columns...
-  static constexpr size_t NumColumns = 2;
-  CompressedRelationWriter writer1{NumColumns, ad_utility::File(fileName1, "w"),
+  CompressedRelationWriter writer1{numColumns, ad_utility::File(fileName1, "w"),
                                    blocksizePermutationPerColumn_};
-  CompressedRelationWriter writer2{NumColumns, ad_utility::File(fileName2, "w"),
+  CompressedRelationWriter writer2{numColumns, ad_utility::File(fileName2, "w"),
                                    blocksizePermutationPerColumn_};
 
   // Lift a callback that works on single elements to a callback that works on
@@ -688,11 +692,11 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
 // ________________________________________________________________________
 std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
           IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutations(auto&& sortedTriples, const Permutation& p1,
-                              const Permutation& p2,
+IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
+                              const Permutation& p1, const Permutation& p2,
                               auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl(
-      onDiskBase_ + ".index" + p1.fileSuffix_,
+      numColumns, onDiskBase_ + ".index" + p1.fileSuffix_,
       onDiskBase_ + ".index" + p2.fileSuffix_, AD_FWD(sortedTriples),
       p1.keyOrder_, AD_FWD(perTripleCallbacks)...);
 
@@ -705,12 +709,12 @@ IndexImpl::createPermutations(auto&& sortedTriples, const Permutation& p1,
 }
 
 // ________________________________________________________________________
-void IndexImpl::createPermutationPair(auto&& sortedTriples,
+void IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
                                       const Permutation& p1,
                                       const Permutation& p2,
                                       auto&&... perTripleCallbacks) {
   auto [metaData1, metaData2] = createPermutations(
-      AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
+      numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
   // NOTE: When `setKbName` was called, it set the name of pso_.meta_,
   // pso_.meta_, ... which however are not used during index building.
@@ -1474,6 +1478,7 @@ void IndexImpl::makeIndexFromAdditionalTriples(
     ExternalSorter<SortByPSO>&& additionalTriples) {
   auto onDiskBaseCpy = onDiskBase_;
   onDiskBase_ += ADDITIONAL_TRIPLES_SUFFIX;
-  createPermutationPair(std::move(additionalTriples).sortedView(), pso_, pos_);
+  createPermutationPair(2, std::move(additionalTriples).getSortedBlocks<0>(),
+                        pso_, pos_);
   onDiskBase_ = onDiskBaseCpy;
 }

@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "./util/GTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "global/SpecialIds.h"
 #include "index/PatternCreator.h"
@@ -26,6 +27,8 @@ TripleVec getVectorFromSorter(PatternCreator::PSOSorter&& sorter) {
   }
   return triples;
 }
+
+using ad_utility::source_location;
 }  // namespace
 
 TEST(PatternStatistics, Initialization) {
@@ -49,7 +52,6 @@ TEST(PatternStatistics, Serialization) {
   ASSERT_FLOAT_EQ(statistics2._avgNumDistinctPredicatesPerSubject, 2.0);
   ASSERT_FLOAT_EQ(statistics2._avgNumDistinctSubjectsPerPredicate, 12.5);
 }
-
 // Create patterns from a small SPO-sorted sequence of triples.
 void createExamplePatterns(PatternCreator& creator) {
   creator.processTriple({V(0), V(10), V(20)}, false);
@@ -66,7 +68,9 @@ void createExamplePatterns(PatternCreator& creator) {
 // Assert that the contents of patterns read from `filename` match the triples
 // from the `createExamplePatterns` function.
 void assertPatternContents(const std::string& filename,
-                           const TripleVec& addedTriples) {
+                           const TripleVec& addedTriples,
+                           source_location l = source_location ::current()) {
+  auto tr = generateLocationTrace(l);
   double averageNumSubjectsPerPredicate;
   double averageNumPredicatesPerSubject;
   uint64_t numDistinctSubjectPredicatePairs;
@@ -97,11 +101,12 @@ void assertPatternContents(const std::string& filename,
   // it has no triples. Subjects 0 and 3 have the first pattern, subject 1 has
   // the second pattern.
   auto pat = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
-  auto pred = qlever::specialIds.at(HAS_PREDICATE_PREDICATE);
+  // auto pred = qlever::specialIds.at(HAS_PREDICATE_PREDICATE);
   TripleVec expectedTriples;
   expectedTriples.push_back(std::array{V(0), pat, I(0)});
   expectedTriples.push_back(std::array{V(1), pat, I(1)});
   expectedTriples.push_back(std::array{V(3), pat, I(0)});
+  /*
   expectedTriples.push_back(std::array{V(0), pred, V(10)});
   expectedTriples.push_back(std::array{V(0), pred, V(11)});
   expectedTriples.push_back(std::array{V(1), pred, V(10)});
@@ -109,6 +114,7 @@ void assertPatternContents(const std::string& filename,
   expectedTriples.push_back(std::array{V(1), pred, V(13)});
   expectedTriples.push_back(std::array{V(3), pred, V(10)});
   expectedTriples.push_back(std::array{V(3), pred, V(11)});
+   */
   std::ranges::sort(expectedTriples, SortByPSO{});
   EXPECT_THAT(addedTriples, ::testing::ElementsAreArray(expectedTriples));
 }

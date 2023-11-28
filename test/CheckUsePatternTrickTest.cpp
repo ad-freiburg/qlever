@@ -269,7 +269,8 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
   ASSERT_EQ(triples.size(), 1u);
   const auto& tr = triples[0];
   EXPECT_EQ(tr._s.getVariable().name(), "?x");
-  EXPECT_EQ(tr._p.asString(), "<QLever-internal-function/has-pattern>");
+  EXPECT_EQ(tr._p.asString(),
+            "<http://qlever.cs.uni-freiburg.de/builtin-functions/has-pattern>");
   EXPECT_EQ(tr._o.getVariable().name(), "?p");
 
   pq = SparqlParser::parseQuery(

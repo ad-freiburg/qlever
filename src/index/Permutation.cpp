@@ -63,7 +63,8 @@ IdTable Permutation::scan(
 
   if (!meta_.col0IdExists(col0Id)) {
     if (additionalPermutation_) {
-      return additionalPermutation_->scan(col0Id, col1Id, additionalColumns, std::move(cancellationHandle));
+      return additionalPermutation_->scan(col0Id, col1Id, additionalColumns,
+                                          std::move(cancellationHandle));
     }
     size_t numColumns = col1Id.has_value() ? 1 : 2;
     return IdTable{numColumns, reader().allocator()};
@@ -91,7 +92,7 @@ size_t Permutation::getResultSizeOfScan(Id col0Id,
   }
 
   return reader().getResultSizeOfScan(metaData, col1Id.value(),
-                                     meta_.blockData());
+                                      meta_.blockData());
 }
 
 // _____________________________________________________________________
@@ -164,7 +165,8 @@ Permutation::IdTableGenerator Permutation::lazyScan(
   if (!meta_.col0IdExists(col0Id)) {
     if (additionalPermutation_) {
       return additionalPermutation_->lazyScan(col0Id, col1Id, std::move(blocks),
-                                              additionalColumns, std::move(cancellationHandle));
+                                              additionalColumns,
+                                              std::move(cancellationHandle));
     }
     return {};
   }

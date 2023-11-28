@@ -478,8 +478,8 @@ class IndexImpl {
 
   std::pair<IndexMetaDataMmapDispatcher::WriteType,
             IndexMetaDataMmapDispatcher::WriteType>
-  createPermutationPairImpl(const string& fileName1, const string& fileName2,
-                            auto&& sortedTriples,
+  createPermutationPairImpl(size_t numColumns, const string& fileName1,
+                            const string& fileName2, auto&& sortedTriples,
                             std::array<size_t, 3> permutation,
                             auto&&... perTripleCallbacks);
 
@@ -494,8 +494,8 @@ class IndexImpl {
   // the SPO permutation is also needed for patterns (see usage in
   // IndexImpl::createFromFile function)
 
-  void createPermutationPair(auto&& sortedTriples, const Permutation& p1,
-                             const Permutation& p2,
+  void createPermutationPair(size_t numColumns, auto&& sortedTriples,
+                             const Permutation& p1, const Permutation& p2,
                              auto&&... perTripleCallbacks);
 
   // wrapper for createPermutation that saves a lot of code duplications
@@ -509,8 +509,9 @@ class IndexImpl {
   // the optional is std::nullopt if vec and thus the index is empty
   std::pair<IndexMetaDataMmapDispatcher::WriteType,
             IndexMetaDataMmapDispatcher::WriteType>
-  createPermutations(auto&& sortedTriples, const Permutation& p1,
-                     const Permutation& p2, auto&&... perTripleCallbacks);
+  createPermutations(size_t numColumns, auto&& sortedTriples,
+                     const Permutation& p1, const Permutation& p2,
+                     auto&&... perTripleCallbacks);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 
