@@ -3,20 +3,20 @@
 //   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <CompilationInfo.h>
-#include <engine/Server.h>
-#include <global/Constants.h>
-#include <util/ProgramOptionsHelpers.h>
-#include <util/ReadableNumberFact.h>
-
 #include <boost/program_options.hpp>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
 
+#include "CompilationInfo.h"
+#include "engine/Server.h"
+#include "global/Constants.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/MemorySize/MemorySizeParser.h"
+#include "util/ProgramOptionsHelpers.h"
+#include "util/ReadableNumberFact.h"
+#include "util/StreamUtils.h"
 
 using std::size_t;
 using std::string;

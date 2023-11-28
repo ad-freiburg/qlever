@@ -11,8 +11,9 @@
 #include <stdexcept>
 #include <string>
 
-#include "../util/Parameters.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Parameters.h"
+#include "util/StreamUtils.h"
 
 // For access to `memorySize` literals.
 using namespace ad_utility::memory_literals;
@@ -189,12 +190,24 @@ static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Double;
   using ad_utility::detail::parameterShortNames::SizeT;
+  using ad_utility::detail::parameterShortNames::StreamableParameter;
   // NOTE: It is important that the value of the static variable is created by
   // an immediately invoked lambda, otherwise we get really strange segfaults on
   // Clang 16 and 17.
   // TODO<joka921> Figure out whether this is a bug in Clang or whether we
   // clearly misunderstand something about static initialization.
   static ad_utility::Parameters params = []() {
+    auto ensureStrictPositivity = [](auto&& parameter) {
+      parameter.setParameterConstraint(
+          [](std::chrono::seconds value, std::string_view parameterName) {
+            if (value <= std::chrono::seconds{0}) {
+              throw std::runtime_error{absl::StrCat(
+                  "Parameter ", parameterName,
+                  " must be strictly positive, was ", value.count())};
+            }
+          });
+      return parameter;
+    };
     return ad_utility::Parameters{
         // If the time estimate for a sort operation is larger by more than this
         // factor than the remaining time, then the sort is canceled with a
@@ -205,7 +218,10 @@ inline auto& RuntimeParameters() {
         SizeT<"cache-max-size-gb-single-entry">{5},
         SizeT<"lazy-index-scan-queue-size">{20},
         SizeT<"lazy-index-scan-num-threads">{10},
-        SizeT<"default-query-timeout">{30},
+        ensureStrictPositivity(
+            StreamableParameter<
+                ad_utility::ParseableDuration<std::chrono::seconds>,
+                "default-query-timeout">{30}),
         SizeT<"lazy-index-scan-max-size-materialization">{1'000'000}};
   }();
   return params;

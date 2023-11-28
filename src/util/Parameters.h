@@ -59,16 +59,18 @@ struct Parameter : public ParameterBase {
   constexpr static ParameterName name = Name;
 
  private:
-  Type _value{};
+  Type value_{};
 
   // This function is called each time the value is changed.
   using OnUpdateAction = std::function<void(Type)>;
-  std::optional<OnUpdateAction> _onUpdateAction = std::nullopt;
+  std::optional<OnUpdateAction> onUpdateAction_ = std::nullopt;
+  using ParameterConstraint = std::function<void(Type, std::string_view)>;
+  std::optional<ParameterConstraint> parameterConstraint_ = std::nullopt;
 
  public:
   /// Construction is only allowed using an initial parameter value
   Parameter() = delete;
-  explicit Parameter(Type initialValue) : _value{std::move(initialValue)} {};
+  explicit Parameter(Type initialValue) : value_{std::move(initialValue)} {};
 
   /// Copying is disabled, but moving is ok
   Parameter(const Parameter& rhs) = delete;
@@ -84,30 +86,44 @@ struct Parameter : public ParameterBase {
 
   /// Set the value.
   void set(Type newValue) {
-    _value = std::move(newValue);
+    triggerParameterConstraint(newValue);
+    value_ = std::move(newValue);
     triggerOnUpdateAction();
   }
 
-  const Type& get() const { return _value; }
+  const Type& get() const { return value_; }
 
   /// Specify the onUpdateAction and directly trigger it.
   /// Note that this useful when the initial value of the parameter
   /// is known before the `onUpdateAction`.
   void setOnUpdateAction(OnUpdateAction onUpdateAction) {
-    _onUpdateAction = std::move(onUpdateAction);
+    onUpdateAction_ = std::move(onUpdateAction);
     triggerOnUpdateAction();
+  }
+
+  /// Set an constraint that will be executed every time the value changes
+  /// and once initially when setting it.
+  void setParameterConstraint(ParameterConstraint parameterConstraint) {
+    parameterConstraint_ = std::move(parameterConstraint);
+    triggerParameterConstraint(value_);
   }
 
   // ___________________________________________________________________
   [[nodiscard]] std::string toString() const override {
-    return ToString{}(_value);
+    return ToString{}(value_);
   }
 
  private:
   // Manually trigger the `_onUpdateAction` if it exists
   void triggerOnUpdateAction() {
-    if (_onUpdateAction.has_value()) {
-      _onUpdateAction.value()(_value);
+    if (onUpdateAction_.has_value()) {
+      onUpdateAction_.value()(value_);
+    }
+  }
+  // Manually trigger the `_onUpdateAction` if it exists
+  void triggerParameterConstraint(const Type& value) {
+    if (parameterConstraint_.has_value()) {
+      std::invoke(parameterConstraint_.value(), value, name);
     }
   }
 };
@@ -156,6 +172,24 @@ struct MemorySizeFromString {
   }
 };
 
+template <typename T>
+struct StreamableConverter {
+  static_assert(!ad_utility::isSimilar<T, std::string>);
+
+  T operator()(const std::string& str) const {
+    std::istringstream is{str};
+    T result;
+    is >> result;
+    return result;
+  }
+
+  std::string operator()(const T& value) const {
+    std::ostringstream os;
+    os << value;
+    return std::move(os).str();
+  }
+};
+
 /// Partial template specialization for Parameters with common types (numeric
 /// types and strings)
 template <ParameterName Name>
@@ -173,6 +207,10 @@ using String = Parameter<std::string, std::identity, std::identity, Name>;
 template <ParameterName Name>
 using MemorySizeParameter =
     Parameter<MemorySize, MemorySizeFromString, MemorySizeToString, Name>;
+
+template <typename T, ParameterName Name>
+using StreamableParameter =
+    Parameter<T, StreamableConverter<T>, StreamableConverter<T>, Name>;
 }  // namespace detail::parameterShortNames
 
 /// A container class that stores several `Parameters`. The reading (via
