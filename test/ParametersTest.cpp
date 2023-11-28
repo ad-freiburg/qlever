@@ -93,7 +93,9 @@ TEST(StreamableConverter, verifyConversionWorks) {
 
 // _____________________________________________________________________________
 TEST(Parameter, verifyParameterConstraint) {
-  Parameter<size_t, szt, toString, "test"> parameter{1337};
+  Parameter<size_t, szt, toString, "test"> parameter{42};
+
+  EXPECT_NO_THROW(parameter.set(1337));
 
   // Check constraint is tested for existing value
   EXPECT_THROW(parameter.setParameterConstraint(
