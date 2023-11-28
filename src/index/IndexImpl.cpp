@@ -223,7 +223,7 @@ void IndexImpl::createFromFile(const string& filename) {
   ad_utility::data_structures::ThreadSafeQueue<IdTable> queue{4};
   ad_utility::JThread joinWithPatternThread{[&] {
     auto ospAsblocks =
-        makePtrAndBool(ospSorterWithPatterns.sortedViewAsBlocks());
+        makePtrAndBool(ospSorterWithPatterns.getSortedBlocks());
 
     auto ospAsBlocksTransformed =
         ospAsblocks |

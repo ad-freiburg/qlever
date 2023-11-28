@@ -913,6 +913,7 @@ CompressedRelationWriter::createPermutationPair(
 
   ad_utility::Timer inputWaitTimer{ad_utility::Timer::Stopped};
   ad_utility::Timer largeTwinRelationTimer{ad_utility::Timer::Stopped};
+  ad_utility::Timer blockCallbackTimer{ad_utility::Timer::Stopped};
 
   // Iterate over the vector and identify relation boundaries, where a
   // relation is the sequence of sortedTriples with equal first component. For
@@ -923,7 +924,9 @@ CompressedRelationWriter::createPermutationPair(
   IdTableStatic<0> relation{numColumns, alloc};
   size_t numBlocksCurrentRel = 0;
   auto compare = [](const auto& a, const auto& b) {
-    return std::ranges::lexicographical_compare(a, b);
+    // TODO<joka921> can we use some `std::tie/lexicographical compare` trick here?
+    return a[0] != b[0] ? a[0] < b[0] : a[1] < b[1];
+    //return std::ranges::lexicographical_compare(a, b);
   };
   // TODO<joka921> Use `CALL_FIXED_SIZE`.
   ad_utility::CompressedExternalIdTableSorter<decltype(compare), 0>
@@ -985,11 +988,11 @@ CompressedRelationWriter::createPermutationPair(
     numBlocksCurrentRel = 0;
   };
   size_t i = 0;
-  inputWaitTimer.cont();
   std::vector<ColumnIndex> relationCols{c1, c2};
   for (size_t colIdx = 2; colIdx < numColumns; ++colIdx) {
     relationCols.push_back(colIdx + 1);
   }
+  inputWaitTimer.cont();
   for (auto& block : AD_FWD(sortedTriples)) {
     // TODO<joka921> Also add such checks into the other functions inside the
     // writers.
@@ -1021,10 +1024,9 @@ CompressedRelationWriter::createPermutationPair(
       if (i % 100'000'000 == 0) {
         LOG(INFO) << "Triples processed: " << i << std::endl;
       }
-      inputWaitTimer.cont();
     }
-    inputWaitTimer.stop();
     // Call each of the `perBlockCallbacks` for the current block.
+    blockCallbackTimer.cont();
     blockCallbackQueue.push(
         [block =
              std::make_shared<std::decay_t<decltype(block)>>(std::move(block)),
@@ -1033,20 +1035,28 @@ CompressedRelationWriter::createPermutationPair(
             callback(*block);
           }
         });
+    blockCallbackTimer.stop();
+    inputWaitTimer.cont();
   }
+  inputWaitTimer.stop();
   if (!relation.empty() || numBlocksCurrentRel > 0) {
     finishRelation();
   }
 
   writer1.finish();
   writer2.finish();
+  blockCallbackTimer.cont();
   blockCallbackQueue.finish();
-  LOG(TIMING) << "Time spent waiting for the input "
+  blockCallbackTimer.stop();
+  LOG(INFO) << "Time spent waiting for the input "
               << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
               << std::endl;
-  LOG(TIMING) << "Time spent waiting for large twin relations "
+  LOG(INFO) << "Time spent waiting for large twin relations "
               << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
               << "s" << std::endl;
+  LOG(INFO) << "Time spent waiting for triple callbacks (e.g. the next sorter) "
+            << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs())
+            << "s" << std::endl;
   return std::pair{std::move(writer1).getFinishedBlocks(),
                    std::move(writer2).getFinishedBlocks()};
 }

@@ -587,19 +587,8 @@ class CompressedExternalIdTableSorter
     mergeIsActive_.store(false);
   }
 
-  cppcoro::generator<IdTableStatic<NumStaticCols>> sortedViewAsBlocks() {
-    size_t numYielded = 0;
-    mergeIsActive_.store(true);
-    for (auto& block : ad_utility::streams::runStreamAsync(
-             sortedBlocks(), std::max(1, numBufferedOutputBlocks_ - 2))) {
-      numYielded += block.numRows();
-      co_yield block;
-    }
-    AD_CORRECTNESS_CHECK(numYielded == this->numElementsPushed_);
-    mergeIsActive_.store(false);
-  }
-
  private:
+  // TODO<joka921> Implement `CallFixedSize` optimization also for the merging.
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return a generator that yields the sorted elements. This
   // function may be called exactly once.
@@ -607,6 +596,19 @@ class CompressedExternalIdTableSorter
   requires(N == NumStaticCols || N == 0)
   cppcoro::generator<IdTableStatic<N>> sortedBlocks(
       std::optional<size_t> blocksize = std::nullopt) {
+
+    auto impl = [blocksize, this]<size_t I>() {
+      if constexpr (NumStaticCols == 0 || NumStaticCols == I) {
+        return sortedBlocksImpl<I>(blocksize);
+      } else {
+        AD_FAIL();
+        return sortedBlocksImpl<0>(blocksize);
+      }
+    };
+    auto generator = ad_utility::callFixedSize(this->writer_.numColumns(), impl);
+    for (auto& block: generator) {
+    co_yield std::move(block).template toStatic<N>();}
+    /*
     if (!this->transformAndPushLastBlock()) {
       // There was only one block, return it.
       co_yield std::move(this->currentBlock_).template toStatic<N>();
@@ -660,15 +662,83 @@ class CompressedExternalIdTableSorter
     numPopped += result.numRows();
     co_yield std::move(result).template toStatic<N>();
     AD_CORRECTNESS_CHECK(numPopped == this->numElementsPushed_);
+     */
+  }
+
+  // TODO<joka921> Implement `CallFixedSize` optimization also for the merging.
+  // Transition from the input phase, where `push()` may be called, to the
+  // output phase and return a generator that yields the sorted elements. This
+  // function may be called exactly once.
+  template <size_t N>
+  cppcoro::generator<IdTableStatic<NumStaticCols>> sortedBlocksImpl(
+      std::optional<size_t> blocksize = std::nullopt) {
+    if (!this->transformAndPushLastBlock()) {
+      // There was only one block, return it.
+      co_yield std::move(this->currentBlock_).template toStatic<NumStaticCols>();
+      co_return;
+    }
+    auto rowGenerators =
+        this->writer_.template getAllRowGenerators<N>();
+
+    const size_t blockSizeOutput =
+        blocksize.value_or(computeBlockSizeForMergePhase(rowGenerators.size()));
+
+    using P = std::pair<decltype(rowGenerators[0].begin()),
+        decltype(rowGenerators[0].end())>;
+    auto projection = [](const auto& el) -> decltype(auto) {
+      return *el.first;
+    };
+    // NOTE: We have to switch the arguments, because the heap operations by
+    // default order descending...
+    auto comp = [&, this](const auto& a, const auto& b) {
+      return comparator_(projection(b), projection(a));
+    };
+    std::vector<P> pq;
+
+    for (auto& gen : rowGenerators) {
+      pq.emplace_back(gen.begin(), gen.end());
+    }
+    std::ranges::make_heap(pq, comp);
+    IdTableStatic<N> result(this->writer_.numColumns(),
+                                        this->writer_.allocator());
+    result.reserve(blockSizeOutput);
+    size_t numPopped = 0;
+    while (!pq.empty()) {
+      std::ranges::pop_heap(pq, comp);
+      auto& min = pq.back();
+      result.push_back(*min.first);
+      ++(min.first);
+      if (min.first == min.second) {
+        pq.pop_back();
+      } else {
+        std::ranges::push_heap(pq, comp);
+      }
+      if (result.size() >= blockSizeOutput) {
+        numPopped += result.numRows();
+        co_yield std::move(result).template toStatic<NumStaticCols>();
+        // The `result` will be moved away, so we have to reset it again.
+        result = IdTableStatic<N>(this->writer_.numColumns(),
+                                              this->writer_.allocator());
+        result.reserve(blockSizeOutput);
+      }
+    }
+    numPopped += result.numRows();
+    co_yield std::move(result).template toStatic<NumStaticCols>();
+    AD_CORRECTNESS_CHECK(numPopped == this->numElementsPushed_);
   }
 
   // _____________________________________________________________
   void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
+    auto doSort = [&]<size_t I>() {
+      auto staticBlock = std::move(block).template toStatic<I>();
 #ifdef _PARALLEL_SORT
-    ad_utility::parallel_sort(block.begin(), block.end(), comparator_);
+      ad_utility::parallel_sort(staticBlock.begin(), staticBlock.end(), comparator_);
 #else
-    std::ranges::sort(block, comparator_);
+      std::ranges::sort(staticBlock, comparator_);
 #endif
+      block = std::move(staticBlock).template toStatic<NumStaticCols>();
+    };
+    ad_utility::callFixedSize(block.numColumns(), doSort);
   }
 
   // A function with this name is needed by the mixin base class.
