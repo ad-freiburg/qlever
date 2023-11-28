@@ -86,7 +86,9 @@ struct Parameter : public ParameterBase {
 
   /// Set the value.
   void set(Type newValue) {
-    triggerParameterConstraint(newValue);
+    if (parameterConstraint_.has_value()) {
+      std::invoke(parameterConstraint_.value(), newValue, name);
+    }
     value_ = std::move(newValue);
     triggerOnUpdateAction();
   }
@@ -103,9 +105,9 @@ struct Parameter : public ParameterBase {
 
   /// Set an constraint that will be executed every time the value changes
   /// and once initially when setting it.
-  void setParameterConstraint(ParameterConstraint parameterConstraint) {
+  void setParameterConstraint(ParameterConstraint&& parameterConstraint) {
+    std::invoke(parameterConstraint, value_, name);
     parameterConstraint_ = std::move(parameterConstraint);
-    triggerParameterConstraint(value_);
   }
 
   // ___________________________________________________________________
@@ -118,12 +120,6 @@ struct Parameter : public ParameterBase {
   void triggerOnUpdateAction() {
     if (onUpdateAction_.has_value()) {
       onUpdateAction_.value()(value_);
-    }
-  }
-  // Manually trigger the `_onUpdateAction` if it exists
-  void triggerParameterConstraint(const Type& value) {
-    if (parameterConstraint_.has_value()) {
-      std::invoke(parameterConstraint_.value(), value, name);
     }
   }
 };

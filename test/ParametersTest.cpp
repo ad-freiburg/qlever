@@ -82,3 +82,38 @@ TEST(Parameters, ParameterConcept) {
   static_assert(!IsParameter<std::string>);
   static_assert(!IsParameter<ParameterName>);
 }
+
+// _____________________________________________________________________________
+TEST(StreamableConverter, verifyConversionWorks) {
+  StreamableConverter<int> converter;
+
+  EXPECT_EQ(converter(1), "1");
+  EXPECT_EQ(converter("1"), 1);
+}
+
+// _____________________________________________________________________________
+TEST(Parameter, verifyParameterConstraint) {
+  Parameter<size_t, szt, toString, "test"> parameter{1337};
+
+  // Check constraint is tested for existing value
+  EXPECT_THROW(parameter.setParameterConstraint(
+                   [](const auto& value, std::string_view name) {
+                     EXPECT_EQ(value, 1337);
+                     EXPECT_EQ(name, "test");
+                     throw std::runtime_error{"Test"};
+                   }),
+               std::runtime_error);
+
+  // Assert constraint was not set
+  EXPECT_NO_THROW(parameter.set(0));
+  EXPECT_EQ(parameter.get(), 0);
+
+  parameter.setParameterConstraint([](const auto& value, std::string_view) {
+    if (value != 0) {
+      throw std::runtime_error{"Test"};
+    }
+  });
+
+  EXPECT_THROW(parameter.set(1), std::runtime_error);
+  EXPECT_EQ(parameter.get(), 0);
+}
