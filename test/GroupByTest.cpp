@@ -2,16 +2,18 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
+#include <gmock/gmock.h>
+
 #include <cstdio>
 
 #include "./IndexTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryPlanner.h"
+#include "engine/Sort.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -322,13 +324,22 @@ std::shared_ptr<QueryExecutionTree> makeExecutionTree(
 }
 
 using namespace sparqlExpression;
-struct GroupBySpecialCount : ::testing::Test {
+struct GroupByOptimizations : ::testing::Test {
   using Tree = std::shared_ptr<QueryExecutionTree>;
   Variable varX{"?x"};
   Variable varY{"?y"};
   Variable varZ{"?z"};
   Variable varA{"?a"};
-  QueryExecutionContext* qec = getQec();
+
+  std::string turtleInput =
+      "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
+      "<a> <is-a> <f> . <a> <is> 20 . <b> <is-a> <f> . <b> <is> 40.0 . <c> "
+      "<is-a> <g> . <c> <is> 100 . <x> <is-a> <f> . <x> <is> \"A\" . "
+      "<x> "
+      "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
+      "\"zz\"@en";
+
+  QueryExecutionContext* qec = getQec(turtleInput);
   SparqlTriple xyzTriple{Variable{"?x"}, "?y", Variable{"?z"}};
   Tree xyzScanSortedByX =
       makeExecutionTree<IndexScan>(qec, Permutation::Enum::SOP, xyzTriple);
@@ -365,7 +376,21 @@ struct GroupBySpecialCount : ::testing::Test {
                                               bool distinct = false) {
     return SparqlExpressionPimpl{std::make_unique<CountExpression>(
                                      distinct, makeVariableExpression(var)),
-                                 "COUNT(?someVariable}"};
+                                 "COUNT(?someVariable)"};
+  }
+
+  static SparqlExpressionPimpl makeAvgPimpl(const Variable& var) {
+    return SparqlExpressionPimpl{
+        std::make_unique<AvgExpression>(false, makeVariableExpression(var)),
+        "AVG(?someVariable)"};
+  }
+
+  static SparqlExpressionPimpl makeAvgCountPimpl(const Variable& var) {
+    auto countExpression =
+        std::make_unique<CountExpression>(false, makeVariableExpression(var));
+    return SparqlExpressionPimpl{
+        std::make_unique<AvgExpression>(false, std::move(countExpression)),
+        "AVG(COUNT(?someVariable))"};
   }
 
   SparqlExpressionPimpl varxExpressionPimpl = makeVariablePimpl(varX);
@@ -395,7 +420,7 @@ struct GroupBySpecialCount : ::testing::Test {
 };
 
 // _____________________________________________________________________________
-TEST_F(GroupBySpecialCount, getPermutationForThreeVariableTriple) {
+TEST_F(GroupByOptimizations, getPermutationForThreeVariableTriple) {
   using enum Permutation::Enum;
   const QueryExecutionTree& xyzScan = *xyzScanSortedByX;
 
@@ -421,7 +446,99 @@ TEST_F(GroupBySpecialCount, getPermutationForThreeVariableTriple) {
 }
 
 // _____________________________________________________________________________
-TEST_F(GroupBySpecialCount, checkIfJoinWithFullScan) {
+TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
+  auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
+                            const auto& join, const auto& aggregates) {
+    auto groupBy = GroupBy{qec, groupByVariables, aliases, join};
+    ASSERT_FALSE(groupBy.checkIfHashMapOptimizationPossible(aggregates));
+  };
+
+  std::vector<Variable> variablesXAndY{varX, varY};
+
+  std::vector<ColumnIndex> sortedColumns = {0};
+  Tree subtreeWithSort =
+      makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
+
+  SparqlExpressionPimpl avgXPimpl = makeAvgPimpl(varX);
+  SparqlExpressionPimpl avgCountXPimpl = makeAvgCountPimpl(varX);
+
+  std::vector<Alias> aliasesAvgX{Alias{avgXPimpl, Variable{"?avg"}}};
+  std::vector<Alias> aliasesAvgCountX{
+      Alias{avgCountXPimpl, Variable("?avgcount")}};
+
+  std::vector<GroupBy::Aggregate> countAggregate = {{countXPimpl, 1}};
+  std::vector<GroupBy::Aggregate> avgAggregate = {{avgXPimpl, 1}};
+  std::vector<GroupBy::Aggregate> avgCountAggregate = {{avgCountXPimpl, 1}};
+
+  // Enable optimization
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+
+  // Must have exactly one variable to group by.
+  testFailure(emptyVariables, aliasesAvgX, subtreeWithSort, avgAggregate);
+  testFailure(variablesXAndY, aliasesAvgX, subtreeWithSort, avgAggregate);
+  // Must be AVG aggregate (for now)
+  testFailure(variablesOnlyX, aliasesCountX, subtreeWithSort, countAggregate);
+  // Top operation must be SORT
+  testFailure(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX,
+              avgAggregate);
+  // Can not be a nested aggregate
+  testFailure(variablesOnlyX, aliasesAvgCountX, subtreeWithSort,
+              avgCountAggregate);
+  // Optimization has to be enabled
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  testFailure(variablesOnlyX, aliasesAvgX, subtreeWithSort, avgAggregate);
+
+  // Everything is valid for the following example.
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX, subtreeWithSort};
+  auto optimizedAggregateData =
+      groupBy.checkIfHashMapOptimizationPossible(avgAggregate);
+  ASSERT_TRUE(optimizedAggregateData.has_value());
+  ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
+}
+
+// _____________________________________________________________________________
+
+TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
+  /* Setup query:
+  SELECT ?x (AVG(?y) as ?avg) WHERE {
+    ?z <is-a> ?x .
+    ?z <is> ?y
+  } GROUP BY ?x
+ */
+  Tree zxScan = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{Variable{"?z"}, {"<is-a>"}, Variable{"?x"}});
+  Tree zyScan = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
+  Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
+  std::vector<ColumnIndex> sortedColumns = {1};
+  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
+
+  SparqlExpressionPimpl avgYPimpl = makeAvgPimpl(varY);
+  std::vector<Alias> aliasesAvgY{Alias{avgYPimpl, Variable{"?avg"}}};
+  std::vector<GroupBy::Aggregate> avgAggregate = {{avgYPimpl, 1}};
+
+  // Calculate result with optimization
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, sortedJoin};
+  auto resultWithOptimization = groupByWithOptimization.getResult();
+
+  // Clear cache, calculate result without optimization
+  qec->clearCacheUnpinnedOnly();
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY,
+                                     sortedJoin};
+  auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
+
+  // Compare results, using debugString as the result only contains 2 rows
+  ASSERT_EQ(resultWithOptimization->asDebugString(),
+            resultWithoutOptimization->asDebugString());
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations, checkIfJoinWithFullScan) {
   // Assert that a Group by, that is constructed from the given arguments,
   // can not perform the `OptimizedAggregateOnJoinChild` optimization.
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
@@ -455,7 +572,7 @@ TEST_F(GroupBySpecialCount, checkIfJoinWithFullScan) {
   ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
 }
 
-TEST_F(GroupBySpecialCount, computeGroupByForJoinWithFullScan) {
+TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
   {
     // One of the invalid cases from the previous test.
     GroupBy invalidForOptimization{qec, emptyVariables, aliasesCountX,
@@ -504,7 +621,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForJoinWithFullScan) {
           validForOptimization.computeOptimizedGroupByIfPossible(&result));
     }
 
-    // There are 5 triples with `<x>` as a subject, 0 triples with `<xa>` as a
+    // There are 7 triples with `<x>` as a subject, 0 triples with `<xa>` as a
     // subject, and 1 triple with `y` as a subject.
     ASSERT_EQ(result.numColumns(), 2u);
     ASSERT_EQ(result.size(), 2u);
@@ -514,7 +631,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForJoinWithFullScan) {
     qec->getIndex().getId("<y>", &idOfY);
 
     ASSERT_EQ(result(0, 0), idOfX);
-    ASSERT_EQ(result(0, 1), Id::makeFromInt(5));
+    ASSERT_EQ(result(0, 1), Id::makeFromInt(7));
     ASSERT_EQ(result(1, 0), idOfY);
     ASSERT_EQ(result(1, 1), Id::makeFromInt(1));
   };
@@ -533,7 +650,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForJoinWithFullScan) {
   }
 }
 
-TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan) {
+TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
   // Assert that a GROUP BY, that is constructed from the given arguments,
   // can not perform the `OptimizedAggregateOnIndexScanChild` optimization.
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
@@ -570,8 +687,8 @@ TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan) {
 
     ASSERT_EQ(result.size(), 1);
     ASSERT_EQ(result.numColumns(), 1);
-    // The test index currently consists of 7 triples.
-    ASSERT_EQ(result(0, 0), Id::makeFromInt(7));
+    // The test index currently consists of 15 triples.
+    ASSERT_EQ(result(0, 0), Id::makeFromInt(15));
   };
   testWithBothInterfaces(true);
   testWithBothInterfaces(false);
@@ -593,13 +710,13 @@ TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan) {
     ASSERT_TRUE(groupBy.computeGroupByForSingleIndexScan(&result));
     ASSERT_EQ(result.size(), 1);
     ASSERT_EQ(result.numColumns(), 1);
-    // The test index currently consists of three distinct subjects:
-    // <x>, <y>, and <z>.
-    ASSERT_EQ(result(0, 0), Id::makeFromInt(3));
+    // The test index currently consists of six distinct subjects:
+    // <x>, <y>, <z>, <a>, <b> and <c>.
+    ASSERT_EQ(result(0, 0), Id::makeFromInt(6));
   }
 }
 
-TEST_F(GroupBySpecialCount, computeGroupByForFullIndexScan) {
+TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
   // Assert that a GROUP BY which is constructed from the given arguments
   // can not perform the `GroupByForSingleIndexScan2` optimization.
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
@@ -639,32 +756,28 @@ TEST_F(GroupBySpecialCount, computeGroupByForFullIndexScan) {
     } else {
       ASSERT_TRUE(groupBy.computeOptimizedGroupByIfPossible(&result));
     }
-    Id idOfX;
-    Id idOfY;
-    Id idOfZ;
-    qec->getIndex().getId("<x>", &idOfX);
-    qec->getIndex().getId("<y>", &idOfY);
-    qec->getIndex().getId("<z>", &idOfZ);
 
-    // Three distinct subjects.
-    ASSERT_EQ(result.size(), 3);
+    // Six distinct subjects.
+    ASSERT_EQ(result.size(), 6);
     if (includeCount) {
       ASSERT_EQ(result.numColumns(), 2);
     } else {
       ASSERT_EQ(result.numColumns(), 1);
     }
-    // The test index currently consists of 6 triples.
-    EXPECT_EQ(result(0, 0), idOfX);
-    EXPECT_EQ(result(1, 0), idOfY);
-    EXPECT_EQ(result(2, 0), idOfZ);
 
+    auto getId = makeGetId(qec->getIndex());
+    EXPECT_THAT(
+        result.getColumn(0),
+        ::testing::ElementsAre(getId("<a>"), getId("<b>"), getId("<c>"),
+                               getId("<x>"), getId("<y>"), getId("<z>")));
     if (includeCount) {
-      EXPECT_EQ(result(0, 1), Id::makeFromInt(5));
-      EXPECT_EQ(result(1, 1), Id::makeFromInt(1));
-      // TODO<joka921> This should be 1.
-      // There is one triple added <z> @en@<label> "zz"@en which is
-      // currently not filtered out.
-      EXPECT_EQ(result(2, 1), Id::makeFromInt(2));
+      EXPECT_THAT(
+          result.getColumn(1),
+          ::testing::ElementsAre(I(2), I(2), I(2), I(7), I(1),
+                                 // TODO<joka921> This should be 1.
+                                 // There is one triple added <z> @en@<label>
+                                 // "zz"@en which is currently not filtered out.
+                                 I(2)));
     }
   };
   testWithBothInterfaces(true, true);
