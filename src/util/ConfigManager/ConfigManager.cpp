@@ -630,10 +630,8 @@ std::string ConfigManager::printConfigurationDoc() const {
       "\n\n");
 
   return absl::StrCat(
-      "Locations of available configuration options:", ":\n",
-      ad_utility::addIndentation(configuratioOptionsVisualizationAsString,
-                                 "    "),
-      "\n\n", listOfConfigurationOptions,
+      "Configuration:\n", configuratioOptionsVisualizationAsString, "\n\n",
+      listOfConfigurationOptions,
       "\n\nRequired invariants of the configuration options:",
       listOfAllValidators.empty()
           ? " None."
