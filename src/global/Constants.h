@@ -188,6 +188,7 @@ static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
 static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
 inline auto& RuntimeParameters() {
+  using ad_utility::detail::parameterShortNames::Bool;
   using ad_utility::detail::parameterShortNames::Double;
   using ad_utility::detail::parameterShortNames::SizeT;
   using ad_utility::detail::parameterShortNames::StreamableParameter;
@@ -222,7 +223,8 @@ inline auto& RuntimeParameters() {
             StreamableParameter<
                 ad_utility::ParseableDuration<std::chrono::seconds>,
                 "default-query-timeout">{30}),
-        SizeT<"lazy-index-scan-max-size-materialization">{1'000'000}};
+        SizeT<"lazy-index-scan-max-size-materialization">{1'000'000},
+        Bool<"use-group-by-hash-map-optimization">{true}};
   }();
   return params;
 }
