@@ -21,6 +21,13 @@ template <typename DurationType>
 class ParseableDuration {
   DurationType duration_{};
 
+ public:
+  // Implicit conversion is on purpose!
+  ParseableDuration() = default;
+  ParseableDuration(DurationType duration) : duration_{duration} {}
+  operator DurationType() const { return duration_; }
+  auto operator<=>(const ParseableDuration&) const noexcept = default;
+
   template <typename CharT>
   friend inline std::basic_istream<CharT>& operator>>(
       std::basic_istream<CharT>& is, ParseableDuration<DurationType>& result) {
@@ -29,6 +36,18 @@ class ParseableDuration {
 
     is >> arg;
 
+    try {
+      result = ParseableDuration<DurationType>::fromString(arg);
+    } catch (const std::runtime_error&) {
+      // >> operator does not throw, it sets the error state
+      is.setstate(is.rdstate() | std::ios_base::failbit);
+    }
+
+    return is;
+  }
+
+  static ParseableDuration<DurationType> fromString(std::string_view arg) {
+    using namespace std::chrono;
     if (auto matcher = ctre::match<"(-?\\d+)(ns|us|ms|s|min|h)">(arg)) {
       auto amount = matcher.template get<1>().to_view();
       auto unit = matcher.template get<2>().to_view();
@@ -39,26 +58,24 @@ class ParseableDuration {
       };
 
       if (unit == "ns") {
-        result = toDuration.template operator()<nanoseconds>(amount);
+        return toDuration.template operator()<nanoseconds>(amount);
       } else if (unit == "us") {
-        result = toDuration.template operator()<microseconds>(amount);
+        return toDuration.template operator()<microseconds>(amount);
       } else if (unit == "ms") {
-        result = toDuration.template operator()<milliseconds>(amount);
+        return toDuration.template operator()<milliseconds>(amount);
       } else if (unit == "s") {
-        result = toDuration.template operator()<seconds>(amount);
+        return toDuration.template operator()<seconds>(amount);
       } else if (unit == "min") {
-        result = toDuration.template operator()<minutes>(amount);
+        return toDuration.template operator()<minutes>(amount);
       } else if (unit == "h") {
-        result = toDuration.template operator()<hours>(amount);
+        return toDuration.template operator()<hours>(amount);
       } else {
         // Unsupported suffix
         AD_FAIL();
       }
-    } else {
-      is.setstate(is.rdstate() | std::ios_base::failbit);
     }
-
-    return is;
+    throw std::runtime_error{
+        absl::StrCat("Failed to convert string '", arg, "' to duration type.")};
   }
 
   template <typename CharT>
@@ -88,25 +105,6 @@ class ParseableDuration {
     }
 
     return os;
-  }
-
- public:
-  // Implicit conversion is on purpose!
-  ParseableDuration() = default;
-  ParseableDuration(DurationType duration) : duration_{duration} {}
-  ParseableDuration(DurationType::rep rep) : duration_{rep} {}
-  operator DurationType() const { return duration_; }
-  auto operator<=>(const ParseableDuration&) const noexcept = default;
-
-  static ParseableDuration<DurationType> fromString(std::string_view str) {
-    std::istringstream is{std::string{str}};
-    ParseableDuration<DurationType> result;
-    is >> result;
-    if (is.rdstate() & std::ios_base::failbit) {
-      throw std::runtime_error{absl::StrCat("Failed to convert string '", str,
-                                            "' to duration type.")};
-    }
-    return result;
   }
 
   std::string toString() const {

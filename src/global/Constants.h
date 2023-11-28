@@ -208,7 +208,7 @@ inline auto& RuntimeParameters() {
                   " must be strictly positive, was ", value.count(), "s")};
             }
           });
-      return parameter;
+      return AD_FWD(parameter);
     };
     return ad_utility::Parameters{
         // If the time estimate for a sort operation is larger by more than this
@@ -222,7 +222,7 @@ inline auto& RuntimeParameters() {
         SizeT<"lazy-index-scan-num-threads">{10},
         ensureStrictPositivity(
             DurationParameter<std::chrono::seconds, "default-query-timeout">{
-                30}),
+                30s}),
         SizeT<"lazy-index-scan-max-size-materialization">{1'000'000},
         Bool<"use-group-by-hash-map-optimization">{true}};
   }();

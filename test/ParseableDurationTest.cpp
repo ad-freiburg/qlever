@@ -52,6 +52,13 @@ TEST(ParseableDuration, testFailBit) {
     is >> duration;
     EXPECT_EQ(is.rdstate() & std::ios_base::failbit, std::ios_base::failbit);
   }
+  // Valid case should not set fail bit
+  {
+    std::istringstream is{"1ms"};
+    ParseableDuration<seconds> duration;
+    is >> duration;
+    EXPECT_EQ(is.rdstate() & std::ios_base::failbit, 0);
+  }
 }
 
 // _____________________________________________________________________________
@@ -94,11 +101,4 @@ TEST(ParseableDuration, testParsingConversion) {
   EXPECT_EQ(1000ms, fromString<milliseconds>("1s"));
   EXPECT_EQ(60s, fromString<seconds>("1min"));
   EXPECT_EQ(60min, fromString<minutes>("1h"));
-}
-
-// _____________________________________________________________________________
-TEST(ParseableDuration, testForwardingConstructor) {
-  ParseableDuration<seconds> duration{1};
-
-  EXPECT_EQ(duration.toString(), "1s");
 }

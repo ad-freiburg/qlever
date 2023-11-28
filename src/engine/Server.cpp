@@ -376,6 +376,8 @@ Awaitable<void> Server::process(
                                       timeLimit.value());
 
     } else {
+      // If the optional is empty, this indicates an error response has been
+      // sent to the client already. We can stop here.
       co_return;
     }
   }
