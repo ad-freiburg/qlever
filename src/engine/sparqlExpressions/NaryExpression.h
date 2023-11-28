@@ -48,6 +48,9 @@ SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
 
+SparqlExpression::Ptr makeSecondsExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeMinutesExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeHoursExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
@@ -78,6 +81,8 @@ SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child2,
                                        SparqlExpression::Ptr child3);
+
+SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
 
 // For a `function` that takes `std::vector<SparqlExpression::Ptr>` (size only
 // known at runtime), create a lambda that takes the `Ptr`s directly as a
@@ -110,4 +115,5 @@ SparqlExpression::Ptr makeConcatExpression(
     std::vector<SparqlExpression::Ptr> children);
 inline auto makeConcatExpressionVariadic =
     variadicExpressionFactory(&makeConcatExpression);
+
 }  // namespace sparqlExpression

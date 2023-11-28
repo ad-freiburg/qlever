@@ -37,16 +37,12 @@ struct ParameterBase {
 template <typename FunctionType, typename ToType>
 concept ParameterFromStringType =
     std::default_initializable<FunctionType> &&
-    std::invocable<FunctionType, const std::string&> &&
-    ad_utility::isSimilar<
-        ToType, std::invoke_result_t<FunctionType, const std::string&>>;
+    InvocableWithSimilarReturnType<FunctionType, ToType, const std::string&>;
 
 template <typename FunctionType, typename FromType>
 concept ParameterToStringType =
     std::default_initializable<FunctionType> &&
-    std::invocable<FunctionType, FromType> &&
-    ad_utility::isSimilar<std::string,
-                          std::invoke_result_t<FunctionType, FromType>>;
+    InvocableWithSimilarReturnType<FunctionType, std::string, FromType>;
 
 /// Abstraction for a parameter that connects a (compile time) `Name` to a
 /// runtime value.
@@ -145,9 +141,20 @@ struct dbl {
 struct szt {
   size_t operator()(const auto& s) const { return std::stoull(s); }
 };
+struct bl {
+  bool operator()(const auto& s) const {
+    if (s == "true") return true;
+    if (s == "false") return false;
+    AD_THROW(
+        R"(The string value for bool parameter must be either "true" or "false".)");
+  }
+};
 
 struct toString {
   std::string operator()(const auto& s) const { return std::to_string(s); }
+};
+struct boolToString {
+  std::string operator()(const bool& v) const { return v ? "true" : "false"; }
 };
 
 // To/from string for `MemorySize`.
@@ -173,6 +180,9 @@ using SizeT = Parameter<size_t, szt, toString, Name>;
 
 template <ParameterName Name>
 using String = Parameter<std::string, std::identity, std::identity, Name>;
+
+template <ParameterName Name>
+using Bool = Parameter<bool, bl, boolToString, Name>;
 
 template <ParameterName Name>
 using MemorySizeParameter =

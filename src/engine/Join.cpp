@@ -291,13 +291,18 @@ Join::ScanMethodType Join::getScanMethod(
   // this works because the join operations execution Context never changes
   // during its lifetime
   const auto& idx = _executionContext->getIndex();
-  // TODO<joka921> Make sure that we never have additional columns with a full
-  // scan, else this immediately breaks.
-  const auto scanLambda = [&idx](const Permutation::Enum perm) {
-    return [&idx, perm](Id id) { return idx.scan(id, std::nullopt, perm, {}); };
-  };
+  const auto scanLambda =
+      [&idx, &scan](
+          const Permutation::Enum perm,
+          std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) {
+        return [&idx, perm, &scan,
+                cancellationHandle = std::move(cancellationHandle)](Id id) {
+          return idx.scan(id, std::nullopt, perm, scan.additionalColumns(),
+                          cancellationHandle);
+        };
+      };
   AD_CORRECTNESS_CHECK(scan.getResultWidth() == 3);
-  return scanLambda(scan.permutation());
+  return scanLambda(scan.permutation(), cancellationHandle_);
 }
 
 // _____________________________________________________________________________
@@ -322,7 +327,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       // The scan is a relatively expensive disk operation, so we can afford to
       // check for timeouts before each call.
-      checkTimeout();
+      checkCancellation();
       IdTable jr = scan(currentJoinId);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
@@ -453,8 +458,7 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
   if (a.empty() || b.empty()) {
     return;
   }
-  [[maybe_unused]] auto checkTimeoutAfterNCalls =
-      checkTimeoutAfterNCallsFactory();
+  checkCancellation();
   ad_utility::JoinColumnMapping joinColumnData{
       {{jc1, jc2}}, a.numColumns(), b.numColumns()};
   auto joinColumnL = a.getColumn(jc1);
@@ -691,9 +695,9 @@ void updateRuntimeInfoForLazyScan(
     const CompressedRelationReader::LazyScanMetadata& metadata) {
   scanTree.updateRuntimeInformationWhenOptimizedOut(
       RuntimeInformation::Status::lazilyMaterialized);
-  auto& rti = scanTree.getRuntimeInfo();
+  auto& rti = scanTree.runtimeInfo();
   rti.numRows_ = metadata.numElementsRead_;
-  rti.totalTime_ = static_cast<double>(metadata.blockingTimeMs_);
+  rti.totalTime_ = metadata.blockingTime_;
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
   rti.addDetail("num-blocks-all", metadata.numBlocksAll_);
 }
@@ -716,7 +720,7 @@ IdTable Join::computeResultForTwoIndexScans() {
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
   auto [leftBlocksInternal, rightBlocksInternal] =
       IndexScan::lazyScanForJoinOfTwoScans(leftScan, rightScan);
-  getRuntimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
+  runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
   auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
   auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
@@ -766,7 +770,7 @@ IdTable Join::computeResultForIndexScanAndIdTable(const IdTable& idTable,
       permutationIdTable.col(), scan);
   auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
 
-  getRuntimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
+  runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
   auto doJoin = [&rowAdder](auto& left, auto& right) mutable {
     ad_utility::zipperJoinForBlocksWithoutUndef(left, right, std::less{},

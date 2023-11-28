@@ -29,7 +29,6 @@
 #include <util/Forward.h>
 #include <util/HashMap.h>
 #include <util/MmapVector.h>
-#include <util/Timer.h>
 #include <util/json.h>
 
 #include <array>
@@ -43,6 +42,7 @@
 #include <vector>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "util/CancellationHandle.h"
 #include "util/MemorySize/MemorySize.h"
 
 using ad_utility::BufferedVector;
@@ -124,8 +124,10 @@ class IndexImpl {
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
   bool keepTempFiles_ = false;
-  ad_utility::MemorySize stxxlMemory_ = DEFAULT_STXXL_MEMORY;
-  uint64_t blocksizePermutationInBytes_ = BLOCKSIZE_COMPRESSED_METADATA;
+  ad_utility::MemorySize memoryLimitIndexBuilding_ =
+      DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
+  ad_utility::MemorySize blocksizePermutationPerColumn_ =
+      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   json configurationJson_;
   Index::Vocab vocab_;
   size_t totalVocabularySize_ = 0;
@@ -362,11 +364,15 @@ class IndexImpl {
 
   void setKeepTempFiles(bool keepTempFiles);
 
-  ad_utility::MemorySize& stxxlMemory() { return stxxlMemory_; }
-  const ad_utility::MemorySize& stxxlMemory() const { return stxxlMemory_; }
+  ad_utility::MemorySize& memoryLimitIndexBuilding() {
+    return memoryLimitIndexBuilding_;
+  }
+  const ad_utility::MemorySize& memoryLimitIndexBuilding() const {
+    return memoryLimitIndexBuilding_;
+  }
 
-  uint64_t& blocksizePermutationInBytes() {
-    return blocksizePermutationInBytes_;
+  ad_utility::MemorySize& blocksizePermutationPerColumn() {
+    return blocksizePermutationPerColumn_;
   }
 
   void setOnDiskBase(const std::string& onDiskBase);
@@ -404,13 +410,13 @@ class IndexImpl {
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       const Permutation::Enum& permutation,
       Permutation::ColumnIndices additionalColumns,
-      const ad_utility::SharedConcurrentTimeoutTimer& timer = nullptr) const;
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // _____________________________________________________________________________
   IdTable scan(
       Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
       Permutation::ColumnIndices additionalColumns,
-      const ad_utility::SharedConcurrentTimeoutTimer& timer = nullptr) const;
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(const TripleComponent& col0,
@@ -470,14 +476,12 @@ class IndexImpl {
   void processWordsForInvertedLists(const string& contextFile,
                                     bool addWordsFromLiterals, TextVec& vec);
 
-  std::optional<std::pair<IndexMetaDataMmapDispatcher::WriteType,
-                          IndexMetaDataMmapDispatcher::WriteType>>
+  std::pair<IndexMetaDataMmapDispatcher::WriteType,
+            IndexMetaDataMmapDispatcher::WriteType>
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
-                            auto&& sortedTriples, size_t c0, size_t c1,
-                            size_t c2, auto&&... perTripleCallbacks);
-
-  static CompressedRelationMetadata writeSwitchedRel(
-      CompressedRelationWriter* out, Id currentRel, BufferedIdTable* bufPtr);
+                            auto&& sortedTriples,
+                            std::array<size_t, 3> permutation,
+                            auto&&... perTripleCallbacks);
 
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
@@ -503,8 +507,8 @@ class IndexImpl {
   // Careful: only multiplicities for first column is valid after call, need to
   // call exchangeMultiplicities as done by createPermutationPair
   // the optional is std::nullopt if vec and thus the index is empty
-  std::optional<std::pair<IndexMetaDataMmapDispatcher::WriteType,
-                          IndexMetaDataMmapDispatcher::WriteType>>
+  std::pair<IndexMetaDataMmapDispatcher::WriteType,
+            IndexMetaDataMmapDispatcher::WriteType>
   createPermutations(auto&& sortedTriples, const Permutation& p1,
                      const Permutation& p2, auto&&... perTripleCallbacks);
 

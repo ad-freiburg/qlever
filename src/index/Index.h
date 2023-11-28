@@ -16,6 +16,7 @@
 #include "index/StringSortComparator.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
+#include "util/CancellationHandle.h"
 
 // Forward declarations.
 class IdTable;
@@ -208,10 +209,10 @@ class Index {
 
   void setKeepTempFiles(bool keepTempFiles);
 
-  ad_utility::MemorySize& stxxlMemory();
-  const ad_utility::MemorySize& stxxlMemory() const;
+  ad_utility::MemorySize& memoryLimitIndexBuilding();
+  const ad_utility::MemorySize& memoryLimitIndexBuilding() const;
 
-  uint64_t& blocksizePermutationsInBytes();
+  ad_utility::MemorySize& blocksizePermutationsPerColumn();
 
   void setOnDiskBase(const std::string& onDiskBase);
 
@@ -263,12 +264,13 @@ class Index {
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       Permutation::Enum p, Permutation::ColumnIndices additionalColumns,
-      ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Similar to the overload of `scan` above, but the keys are specified as IDs.
-  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-               Permutation::ColumnIndices additionalColumns,
-               ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+  IdTable scan(
+      Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+      Permutation::ColumnIndices additionalColumns,
+      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of
   // the scan result.

@@ -457,7 +457,8 @@ class IdTable {
   //       generic code that is templated on the number of columns easier to
   //       write.
   template <int NewNumColumns>
-  requires(isDynamic && !isView)
+  requires((isDynamic || NewNumColumns == NumColumns || NewNumColumns == 0) &&
+           !isView)
   IdTable<T, NewNumColumns, ColumnStorage> toStatic() && {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     auto result = IdTable<T, NewNumColumns, ColumnStorage>{
@@ -540,6 +541,12 @@ class IdTable {
     });
     data() = std::move(newData);
     numColumns_ = subset.size();
+  }
+
+  // Swap the two columns at index `c1` and `c2`
+  void swapColumns(ColumnIndex c1, ColumnIndex c2) {
+    AD_EXPENSIVE_CHECK(c1 < numColumns() && c2 < numColumns());
+    std::swap(data()[c1], data()[c2]);
   }
 
   // Helper `struct` that stores a pointer to this table and has an `operator()`

@@ -131,7 +131,13 @@ TEST(Serializer, Serializability) {
 
   // See the definitions above as for why or why not these are serializable.
   static_assert(isReadSerializable<B>);
+  // C is not read serializable on clang 17, probably because of a bug in
+  // relation with templated friend functions which are defined outside the
+  // class. This bug has been reported at
+  // https://github.com/llvm/llvm-project/issues/71595
+#if !(defined(__clang__) && (__clang_major__ == 17))
   static_assert(isReadSerializable<C>);
+#endif
   static_assert(!isReadSerializable<D>);
   static_assert(!isReadSerializable<F>);
   static_assert(isReadSerializable<G>);
@@ -364,6 +370,25 @@ TEST(Serializer, Vector) {
 
   testWithAllSerializers(testTriviallyCopyableDatatype);
   testWithAllSerializers(testNonTriviallyCopyableDatatype);
+}
+
+// Test that we can succesfully write `string_view`s to a serializer and
+// correctly read them as `string`s.
+TEST(Serializer, StringViewToString) {
+  auto testString = [](auto&& writer, auto makeReaderFromWriter) {
+    std::vector<std::string_view> v = {"bim", "bam",
+                                       "veryLongStringLongerThanShortString"};
+    std::vector<std::string> vAsString = {
+        "bim", "bam", "veryLongStringLongerThanShortString"};
+    writer | v;
+
+    auto reader = makeReaderFromWriter();
+    std::vector<std::string> w;
+    reader | w;
+    ASSERT_EQ(vAsString, w);
+  };
+
+  testWithAllSerializers(testString);
 }
 
 TEST(Serializer, CopyAndMove) {

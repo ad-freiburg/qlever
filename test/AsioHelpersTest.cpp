@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/deadline_timer.hpp>
 #include <boost/asio/detached.hpp>
@@ -16,31 +17,35 @@
 
 namespace net = boost::asio;
 
-using ad_utility::sameExecutor;
+using ad_utility::resumeOnOriginalExecutor;
 using namespace boost::asio::experimental::awaitable_operators;
 
-TEST(AsioHelpers, sameExecutor) {
+TEST(AsioHelpers, resumeOnOriginalExecutor) {
   net::io_context ioContext{};
   auto strand1 = net::make_strand(ioContext);
   auto strand2 = net::make_strand(ioContext);
 
   uint32_t sanityCounter = 0;
 
-  auto innerAwaitable = [&sanityCounter, strand2]() -> net::awaitable<int> {
-    co_await net::post(strand2, net::use_awaitable);
+  auto innerAwaitable = [&sanityCounter, strand1,
+                         strand2]() -> net::awaitable<int> {
+    co_await net::post(net::bind_executor(strand2, net::use_awaitable));
     // sanity check
+    EXPECT_FALSE(strand1.running_in_this_thread());
     EXPECT_TRUE(strand2.running_in_this_thread());
     sanityCounter++;
     co_return 1337;
   };
 
-  auto outerAwaitable = [&sanityCounter, &innerAwaitable,
-                         strand1]() -> net::awaitable<void> {
+  auto outerAwaitable = [&sanityCounter, &innerAwaitable, strand1,
+                         strand2]() -> net::awaitable<void> {
     // Sanity check
     EXPECT_TRUE(strand1.running_in_this_thread());
-    auto value = co_await sameExecutor(innerAwaitable());
+    EXPECT_FALSE(strand2.running_in_this_thread());
+    auto value = co_await resumeOnOriginalExecutor(innerAwaitable());
     // Verify we're back on the same strand
     EXPECT_TRUE(strand1.running_in_this_thread());
+    EXPECT_FALSE(strand2.running_in_this_thread());
     EXPECT_EQ(value, 1337);
     sanityCounter++;
   };
@@ -54,7 +59,7 @@ TEST(AsioHelpers, sameExecutor) {
 
 // _____________________________________________________________________________
 
-TEST(AsioHelpers, sameExecutorVoidOverload) {
+TEST(AsioHelpers, resumeOnOriginalExecutorVoidOverload) {
   net::io_context ioContext{};
   auto strand1 = net::make_strand(ioContext);
   auto strand2 = net::make_strand(ioContext);
@@ -65,9 +70,12 @@ TEST(AsioHelpers, sameExecutorVoidOverload) {
                          strand2]() -> net::awaitable<void> {
     // Sanity check
     EXPECT_TRUE(strand1.running_in_this_thread());
-    co_await sameExecutor(net::post(strand2, net::use_awaitable));
+    EXPECT_FALSE(strand2.running_in_this_thread());
+    co_await resumeOnOriginalExecutor(
+        net::post(net::bind_executor(strand2, net::use_awaitable)));
     // Verify we're back on the same strand
     EXPECT_TRUE(strand1.running_in_this_thread());
+    EXPECT_FALSE(strand2.running_in_this_thread());
     sanityFlag = true;
   };
 
@@ -80,28 +88,33 @@ TEST(AsioHelpers, sameExecutorVoidOverload) {
 
 // _____________________________________________________________________________
 
-TEST(AsioHelpers, sameExecutorWhenException) {
+TEST(AsioHelpers, resumeOnOriginalExecutorWhenException) {
   net::io_context ioContext{};
   auto strand1 = net::make_strand(ioContext);
   auto strand2 = net::make_strand(ioContext);
 
   uint32_t sanityCounter = 0;
 
-  auto innerAwaitable = [&sanityCounter, strand2]() -> net::awaitable<int> {
-    co_await net::post(strand2, net::use_awaitable);
+  auto innerAwaitable = [&sanityCounter, strand1,
+                         strand2]() -> net::awaitable<int> {
+    co_await net::post(net::bind_executor(strand2, net::use_awaitable));
     // sanity check
+    EXPECT_FALSE(strand1.running_in_this_thread());
     EXPECT_TRUE(strand2.running_in_this_thread());
     sanityCounter++;
     throw std::runtime_error{"Expected"};
   };
 
-  auto outerAwaitable = [&sanityCounter, &innerAwaitable,
-                         strand1]() -> net::awaitable<void> {
+  auto outerAwaitable = [&sanityCounter, &innerAwaitable, strand1,
+                         strand2]() -> net::awaitable<void> {
     // Sanity check
     EXPECT_TRUE(strand1.running_in_this_thread());
-    EXPECT_THROW(co_await sameExecutor(innerAwaitable()), std::runtime_error);
+    EXPECT_FALSE(strand2.running_in_this_thread());
+    EXPECT_THROW(co_await resumeOnOriginalExecutor(innerAwaitable()),
+                 std::runtime_error);
     // Verify we're back on the same strand
     EXPECT_TRUE(strand1.running_in_this_thread());
+    EXPECT_FALSE(strand2.running_in_this_thread());
     sanityCounter++;
   };
 
@@ -114,28 +127,33 @@ TEST(AsioHelpers, sameExecutorWhenException) {
 
 // _____________________________________________________________________________
 
-TEST(AsioHelpers, sameExecutorVoidOverloadWhenException) {
+TEST(AsioHelpers, resumeOnOriginalExecutorVoidOverloadWhenException) {
   net::io_context ioContext{};
   auto strand1 = net::make_strand(ioContext);
   auto strand2 = net::make_strand(ioContext);
 
   uint32_t sanityCounter = 0;
 
-  auto innerAwaitable = [&sanityCounter, strand2]() -> net::awaitable<void> {
-    co_await net::post(strand2, net::use_awaitable);
+  auto innerAwaitable = [&sanityCounter, strand1,
+                         strand2]() -> net::awaitable<void> {
+    co_await net::post(net::bind_executor(strand2, net::use_awaitable));
     // sanity check
+    EXPECT_FALSE(strand1.running_in_this_thread());
     EXPECT_TRUE(strand2.running_in_this_thread());
     sanityCounter++;
     throw std::runtime_error{"Expected"};
   };
 
-  auto outerAwaitable = [&sanityCounter, &innerAwaitable,
-                         strand1]() -> net::awaitable<void> {
+  auto outerAwaitable = [&sanityCounter, &innerAwaitable, strand1,
+                         strand2]() -> net::awaitable<void> {
     // Sanity check
     EXPECT_TRUE(strand1.running_in_this_thread());
-    EXPECT_THROW(co_await sameExecutor(innerAwaitable()), std::runtime_error);
+    EXPECT_FALSE(strand2.running_in_this_thread());
+    EXPECT_THROW(co_await resumeOnOriginalExecutor(innerAwaitable()),
+                 std::runtime_error);
     // Verify we're back on the same strand
     EXPECT_TRUE(strand1.running_in_this_thread());
+    EXPECT_FALSE(strand2.running_in_this_thread());
     sanityCounter++;
   };
 
@@ -157,7 +175,7 @@ net::awaitable<T> cancelAfter(net::awaitable<T> coroutine,
 // _____________________________________________________________________________
 
 // Checks that behavior is consistent for cancellation case
-TEST(AsioHelpers, sameExecutorWhenCancelled) {
+TEST(AsioHelpers, resumeOnOriginalExecutorWhenCancelled) {
   net::io_context ioContext{};
   auto strand1 = net::make_strand(ioContext);
   auto strand2 = net::make_strand(ioContext);
@@ -168,10 +186,11 @@ TEST(AsioHelpers, sameExecutorWhenCancelled) {
 
   uint32_t sanityCounter = 0;
 
-  auto innerAwaitable = [&sanityCounter, strand2,
+  auto innerAwaitable = [&sanityCounter, strand1, strand2,
                          &infiniteTimer]() -> net::awaitable<void> {
-    co_await net::post(strand2, net::use_awaitable);
+    co_await net::post(net::bind_executor(strand2, net::use_awaitable));
     // sanity check
+    EXPECT_FALSE(strand1.running_in_this_thread());
     EXPECT_TRUE(strand2.running_in_this_thread());
     sanityCounter++;
     co_await infiniteTimer.async_wait(net::use_awaitable);
@@ -179,12 +198,16 @@ TEST(AsioHelpers, sameExecutorWhenCancelled) {
 
   auto outerAwaitable = [&sanityCounter, &innerAwaitable, strand1, strand2,
                          strand3]() -> net::awaitable<void> {
-    co_await net::post(strand1, net::use_awaitable);
+    co_await net::post(net::bind_executor(strand1, net::use_awaitable));
     // Sanity check
     EXPECT_TRUE(strand1.running_in_this_thread());
-    EXPECT_THROW(co_await sameExecutor(innerAwaitable()),
+    EXPECT_FALSE(strand2.running_in_this_thread());
+    EXPECT_FALSE(strand3.running_in_this_thread());
+    EXPECT_THROW(co_await resumeOnOriginalExecutor(innerAwaitable()),
                  boost::system::system_error);
     // Verify we're on the strand the cancellation happened
+    EXPECT_FALSE(strand1.running_in_this_thread());
+    EXPECT_FALSE(strand2.running_in_this_thread());
     EXPECT_TRUE(strand3.running_in_this_thread());
     sanityCounter++;
   };
@@ -201,7 +224,7 @@ TEST(AsioHelpers, sameExecutorWhenCancelled) {
 // _____________________________________________________________________________
 
 // Checks that behavior is consistent for cancellation case
-TEST(AsioHelpers, sameExecutorVoidOverloadWhenCancelled) {
+TEST(AsioHelpers, resumeOnOriginalExecutorVoidOverloadWhenCancelled) {
   net::io_context ioContext{};
   auto strand1 = net::make_strand(ioContext);
   auto strand2 = net::make_strand(ioContext);
@@ -212,23 +235,29 @@ TEST(AsioHelpers, sameExecutorVoidOverloadWhenCancelled) {
 
   uint32_t sanityCounter = 0;
 
-  auto innerAwaitable = [&sanityCounter, strand2,
+  auto innerAwaitable = [&sanityCounter, strand1, strand2, strand3,
                          &infiniteTimer]() -> net::awaitable<void> {
-    co_await net::post(strand2, net::use_awaitable);
+    co_await net::post(net::bind_executor(strand2, net::use_awaitable));
     // sanity check
+    EXPECT_FALSE(strand1.running_in_this_thread());
     EXPECT_TRUE(strand2.running_in_this_thread());
+    EXPECT_FALSE(strand3.running_in_this_thread());
     sanityCounter++;
     co_await infiniteTimer.async_wait(net::use_awaitable);
   };
 
   auto outerAwaitable = [&sanityCounter, &innerAwaitable, strand1, strand2,
                          strand3]() -> net::awaitable<void> {
-    co_await net::post(strand1, net::use_awaitable);
+    co_await net::post(net::bind_executor(strand1, net::use_awaitable));
     // Sanity check
     EXPECT_TRUE(strand1.running_in_this_thread());
-    EXPECT_THROW(co_await sameExecutor(innerAwaitable()),
+    EXPECT_FALSE(strand2.running_in_this_thread());
+    EXPECT_FALSE(strand3.running_in_this_thread());
+    EXPECT_THROW(co_await resumeOnOriginalExecutor(innerAwaitable()),
                  boost::system::system_error);
     // Verify we're on the strand the cancellation happened
+    EXPECT_FALSE(strand1.running_in_this_thread());
+    EXPECT_FALSE(strand2.running_in_this_thread());
     EXPECT_TRUE(strand3.running_in_this_thread());
     sanityCounter++;
   };

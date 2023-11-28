@@ -97,6 +97,7 @@ bool TurtleParser<T>::triples() {
     }
   } else {
     if (blankNodePropertyList()) {
+      activeSubject_ = lastParseResult_.getString();
       predicateObjectList();
       return true;
     } else {
@@ -208,8 +209,6 @@ bool TurtleParser<T>::blankNodePropertyList() {
   string savedPredicate = activePredicate_;
   // new triple with blank node as object
   string blank = createAnonNode();
-  lastParseResult_ = blank;
-  emitTriple();
   // the following triples have the blank node as subject
   activeSubject_ = blank;
   check(predicateObjectList());
@@ -217,6 +216,8 @@ bool TurtleParser<T>::blankNodePropertyList() {
   // restore subject and predicate
   activeSubject_ = savedSubject;
   activePredicate_ = savedPredicate;
+  // The parse result is the current
+  lastParseResult_ = blank;
   return true;
 }
 

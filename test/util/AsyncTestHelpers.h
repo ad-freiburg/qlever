@@ -43,6 +43,9 @@ void runCoroutine(Func innerRun, size_t numThreads) {
   AD_CORRECTNESS_CHECK(status != std::future_status::deferred);
   if (status == std::future_status::timeout) {
     FAIL() << "Timeout for awaitable reached!";
+  } else {
+    // Propagate exceptions
+    future.get();
   }
 }
 

@@ -9,9 +9,9 @@
 
 #include <regex>
 
-#include "../util/Exception.h"
-#include "../util/Log.h"
-#include "./TurtleTokenId.h"
+#include "parser/TurtleTokenId.h"
+#include "util/Exception.h"
+#include "util/Log.h"
 
 using re2::RE2;
 using namespace std::string_literals;
@@ -199,6 +199,57 @@ struct TurtleToken {
   static string cls(const string& s) { return '[' + s + ']'; }
 };
 
+// A CRTP-style Mixin that factors out the common implementation of
+// `skipWhitespaceAndComments` of the `Tokenizer` and `TokenizerCtre` classes.
+template <typename Self>
+struct SkipWhitespaceAndCommentsMixin {
+ private:
+  Self& self() { return static_cast<Self&>(*this); }
+
+ public:
+  /// Skip any whitespace or comments at the beginning of the held characters
+  void skipWhitespaceAndComments() {
+    // Call `skipWhitespace` and `skipComments` in a loop until no more input
+    // was consumed. This is necessary because we might have multiple lines of
+    // comments that are spearated by whitespace.
+    while (true) {
+      bool a = skipWhitespace();
+      bool b = skipComments();
+      if (!(a || b)) {
+        return;
+      }
+    }
+  }
+
+ private:
+  // _________________________________________________________________________
+  bool skipWhitespace() {
+    auto v = self().view();
+    auto numLeadingWhitespace = v.find_first_not_of("\x20\x09\x0D\x0A");
+    numLeadingWhitespace = std::min(numLeadingWhitespace, v.size());
+    self()._data.remove_prefix(numLeadingWhitespace);
+    return numLeadingWhitespace > 0;
+  }
+
+  // _________________________________________________________________________
+  bool skipComments() {
+    auto v = self().view();
+    if (v.starts_with('#')) {
+      auto pos = v.find('\n');
+      if (pos == string::npos) {
+        // TODO<joka921>: This should rather yield an error.
+        LOG(INFO) << "Warning, unfinished comment found while parsing"
+                  << std::endl;
+      } else {
+        self()._data.remove_prefix(pos + 1);
+      }
+      return true;
+    }
+    return false;
+  }
+  FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
+};
+
 /**
  * @brief Tokenizer that uses the Ctre library
  *
@@ -209,7 +260,8 @@ struct TurtleToken {
 
 // The currently used hand-written tokenizer
 // for this for correctness and efficiency
-class Tokenizer {
+class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
+  friend struct SkipWhitespaceAndCommentsMixin<Tokenizer>;
   FRIEND_TEST(TokenizerTest, Compilation);
 
  public:
@@ -271,9 +323,6 @@ class Tokenizer {
                       curBetter ? res : content);
   }
 
-  // _______________________________________________________________________________
-  void skipWhitespaceAndComments();
-
   // If there is a prefix match with the argument, move forward the input stream
   // and return true. Can be used if we are not interested in the actual value
   // of the match
@@ -305,31 +354,6 @@ class Tokenizer {
   // convert the (external) TurtleTokenId to the internally used google-regex
   const RE2& idToRegex(const TurtleTokenId reg);
 
-  // ________________________________________________________________
-  void skipWhitespace() {
-    auto v = view();
-    auto pos = v.find_first_not_of("\x20\x09\x0D\x0A");
-    pos = std::min(pos, v.size());
-    _data.remove_prefix(pos);
-    return;
-  }
-
-  // ___________________________________________________________________________________
-  void skipComments() {
-    // if not successful, then there was no comment, but this does not matter to
-    // us
-    auto v = view();
-    if (v.starts_with('#')) {
-      auto pos = v.find('\n');
-      if (pos == string::npos) {
-        // TODO: this actually should yield a n error
-        LOG(INFO) << "Warning, unfinished comment found while parsing"
-                  << std::endl;
-      } else {
-        _data.remove_prefix(pos + 1);
-      }
-    }
-  }
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
   re2::StringPiece _data;
 };

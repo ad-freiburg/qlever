@@ -487,7 +487,7 @@ builtInCall	  :  	  aggregate
 | strReplaceExpression
 | UCASE '(' expression ')'
 | LCASE '(' expression ')'
-| ENCODE '_' FOR '_' URI '(' expression ')'
+| ENCODE_FOR_URI '(' expression ')'
 | CONTAINS '(' expression ',' expression ')'
 | STRSTARTS '(' expression ',' expression ')'
 | STRENDS '(' expression ',' expression ')'
@@ -672,7 +672,7 @@ CONCAT : C O N C A T;
 STRLEN : S T R L E N;
 UCASE : U C A S E;
 LCASE : L C A S E;
-ENCODE : E N C O D E;
+ENCODE_FOR_URI : E N C O D E '_' F O R '_' U R I;
 FOR : F O R;
 CONTAINS : C O N T A I N S;
 STRSTARTS : S T R S T A R T S;

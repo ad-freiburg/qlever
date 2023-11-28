@@ -212,16 +212,18 @@ void Index::setKeepTempFiles(bool keepTempFiles) {
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize& Index::stxxlMemory() { return pimpl_->stxxlMemory(); }
-
-// ____________________________________________________________________________
-uint64_t& Index::blocksizePermutationsInBytes() {
-  return pimpl_->blocksizePermutationInBytes();
+ad_utility::MemorySize& Index::memoryLimitIndexBuilding() {
+  return pimpl_->memoryLimitIndexBuilding();
 }
 
 // ____________________________________________________________________________
-const ad_utility::MemorySize& Index::stxxlMemory() const {
-  return pimpl_->stxxlMemory();
+ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
+  return pimpl_->blocksizePermutationPerColumn();
+}
+
+// ____________________________________________________________________________
+const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
+  return std::as_const(*pimpl_).memoryLimitIndexBuilding();
 }
 
 // ____________________________________________________________________________
@@ -302,16 +304,18 @@ IdTable Index::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
     Permutation::Enum p, Permutation::ColumnIndices additionalColumns,
-    ad_utility::SharedConcurrentTimeoutTimer timer) const {
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   return pimpl_->scan(col0String, col1String, p, additionalColumns,
-                      std::move(timer));
+                      std::move(cancellationHandle));
 }
 
 // ____________________________________________________________________________
-IdTable Index::scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-                    Permutation::ColumnIndices additionalColumns,
-                    ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return pimpl_->scan(col0Id, col1Id, p, additionalColumns, std::move(timer));
+IdTable Index::scan(
+    Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+    Permutation::ColumnIndices additionalColumns,
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+  return pimpl_->scan(col0Id, col1Id, p, additionalColumns,
+                      std::move(cancellationHandle));
 }
 
 // ____________________________________________________________________________

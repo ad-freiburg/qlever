@@ -11,6 +11,8 @@
 
 #include <any>
 #include <concepts>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -24,6 +26,7 @@
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConfigManager/ConfigUtil.h"
+#include "util/ConfigManager/Validator.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -35,48 +38,68 @@
 namespace ad_utility {
 
 /*
-A validator function is any invocable object, who takes the given parameter
-types, in the same order and transformed to `const type&`, and returns a
-bool.
-
-This concept is used for `ConfigManager::addValidator`.
-*/
-template <typename Func, typename... ParameterTypes>
-concept Validator =
-    std::regular_invocable<Func, const ParameterTypes&...> &&
-    std::same_as<std::invoke_result_t<Func, const ParameterTypes&...>, bool>;
-
-// Simple struct, that holds an error message. For use as the return type of
-// invocable object, that fullfill `ExceptionValidator`.
-struct ErrorMessage {
- private:
-  std::string message_;
-
- public:
-  // Constructor.
-  explicit ErrorMessage(std::string message) : message_{std::move(message)} {}
-
-  // Getter for the message.
-  const std::string& getMessage() const;
-};
-
-/*
-An exception validator function is any invocable object, who takes the given
-parameter types, in the same order and transformed to `const type&`, and returns
-an instance of `std::optional<ErrorMessage>`.
-
-This concept is used for `ConfigManager::addValidator`.
-*/
-template <typename Func, typename... ParameterTypes>
-concept ExceptionValidator =
-    std::regular_invocable<Func, const ParameterTypes&...> &&
-    std::same_as<std::invoke_result_t<Func, const ParameterTypes&...>,
-                 std::optional<ErrorMessage>>;
-
-/*
 Manages a bunch of `ConfigOption`s.
 */
 class ConfigManager {
+  /*
+  Our hash map always saves either a configuration option, or a sub manager
+  (another `ConfigManager`).
+
+  This class makes the handeling more explicit and allows for more information
+  to be saved alongside the configuration options and sub managers.
+  For example: The order, in which they were created.
+  */
+  class HashMapEntry {
+   public:
+    using Data = std::variant<ConfigOption, ConfigManager>;
+
+   private:
+    std::unique_ptr<Data> data_;
+
+    // Describes the order of initialization.
+    static inline std::atomic_size_t numberOfInstances_{0};
+    size_t initializationId_{numberOfInstances_++};
+
+   public:
+    // Construct an instance of this class managing `data`.
+    explicit HashMapEntry(Data&& data);
+
+    // Does this instance hold a configuration option?
+    bool holdsConfigOption() const;
+
+    // Does this instance hold a sub manager?
+    bool holdsSubManager() const;
+
+    /*
+    Currently held configuration option, if there is one. Note: If there is a
+    pointer, it's never a `nullptr`.
+    */
+    std::optional<ConfigOption*> getConfigOption() const;
+
+    /*
+    Currently held sub manager, if there is one. Note: If there is a
+    pointer, it's never a `nullptr`.
+    */
+    std::optional<ConfigManager*> getSubManager() const;
+
+    // Return, how many instances of this class were initialized before this
+    // instance.
+    size_t getInitializationId() const;
+
+    // Wrapper for calling `std::visit` on the saved `Data`.
+    decltype(auto) visit(auto&& vis) const {
+      // Make sure, that it is not a null pointer.
+      AD_CORRECTNESS_CHECK(data_);
+
+      return std::visit(AD_FWD(vis), *data_);
+    }
+
+   private:
+    // Implementation for `holdsConfigOption` and `holdsSubManager`.
+    template <typename T>
+    requires isTypeContainedIn<T, Data> bool implHolds() const;
+  };
+
   /*
   The added configuration options. Configuration managers are used by the user
   to describe a json object literal more explicitly.
@@ -88,8 +111,6 @@ class ConfigManager {
   The string key describes their location in the json object literal, by
   representing a json pointer in string form.
   */
-  using HashMapEntry =
-      std::unique_ptr<std::variant<ConfigOption, ConfigManager>>;
   ad_utility::HashMap<std::string, HashMapEntry> configurationOptions_;
 
   /*
@@ -98,7 +119,7 @@ class ConfigManager {
   the new values are valid.
   If the new value isn't valid, it throws an exception.
   */
-  std::vector<std::function<void(void)>> validators_;
+  std::vector<ConfigOptionValidatorManager> validators_;
 
  public:
   /*
@@ -262,14 +283,16 @@ class ConfigManager {
   options are valid. Should return true, if they are valid.
   @param errorMessage A `std::runtime_error` with this as an error message will
   get thrown, if the `validatorFunction` returns false.
+  @param validatorDescriptor A description of the invariant, that
+  `validatorFunction` imposes.
   @param configOptionsToBeChecked Proxies for the configuration options, whos
   values will be passed to the validator function as function arguments. Will
   keep the same order.
   */
   template <typename... ValidatorParameterTypes>
   void addValidator(
-      Validator<ValidatorParameterTypes...> auto validatorFunction,
-      std::string errorMessage,
+      ValidatorFunction<ValidatorParameterTypes...> auto validatorFunction,
+      std::string errorMessage, std::string validatorDescriptor,
       ConstConfigOptionProxy<
           ValidatorParameterTypes>... configOptionsToBeChecked)
       requires(sizeof...(configOptionsToBeChecked) > 0) {
@@ -280,7 +303,7 @@ class ConfigManager {
         },
         transformValidatorIntoExceptionValidator<ValidatorParameterTypes...>(
             validatorFunction, std::move(errorMessage)),
-        configOptionsToBeChecked...);
+        std::move(validatorDescriptor), configOptionsToBeChecked...);
   }
 
   /*
@@ -295,14 +318,17 @@ class ConfigManager {
   configuration options are valid. Return an empty instance of
   `std::optional<ErrorMessage>` if valid. Otherwise, the `ErrorMessage` should
   contain the reason, why the values are none valid.
+  @param exceptionValidatorDescriptor A description of the invariant, that
+  `exceptionValidatorFunction` imposes.
   @param configOptionsToBeChecked Proxies for the configuration options, the
   values of which will be passed to the exception validator function as function
   arguments. Will keep the same order.
   */
   template <typename... ExceptionValidatorParameterTypes>
   void addValidator(
-      ExceptionValidator<ExceptionValidatorParameterTypes...> auto
+      ExceptionValidatorFunction<ExceptionValidatorParameterTypes...> auto
           exceptionValidatorFunction,
+      std::string exceptionValidatorDescriptor,
       ConstConfigOptionProxy<
           ExceptionValidatorParameterTypes>... configOptionsToBeChecked)
       requires(sizeof...(configOptionsToBeChecked) > 0) {
@@ -311,7 +337,8 @@ class ConfigManager {
         []<typename T>(ConstConfigOptionProxy<T> opt) {
           return opt.getConfigOption().template getValue<std::decay_t<T>>();
         },
-        exceptionValidatorFunction, configOptionsToBeChecked...);
+        exceptionValidatorFunction, std::move(exceptionValidatorDescriptor),
+        configOptionsToBeChecked...);
   }
 
   /*
@@ -322,6 +349,8 @@ class ConfigManager {
   Should return true, if they are valid.
   @param errorMessage A `std::runtime_error` with this as an error message will
   get thrown, if the `validatorFunction` returns false.
+  @param validatorDescriptor A description of the invariant, that
+  `validatorFunction` imposes.
   @param configOptionsToBeChecked Proxies for the configuration options, who
   will be passed to the validator function as function arguments. Will keep the
   same order.
@@ -329,11 +358,12 @@ class ConfigManager {
   template <typename ValidatorT>
   void addOptionValidator(
       ValidatorT validatorFunction, std::string errorMessage,
+      std::string validatorDescriptor,
       isInstantiation<ConstConfigOptionProxy> auto... configOptionsToBeChecked)
       requires(
           sizeof...(configOptionsToBeChecked) > 0 &&
-          Validator<ValidatorT,
-                    decltype(configOptionsToBeChecked.getConfigOption())...>) {
+          ValidatorFunction<ValidatorT, decltype(configOptionsToBeChecked
+                                                     .getConfigOption())...>) {
     addValidatorImpl(
         "addOptionValidator",
         []<typename T>(ConstConfigOptionProxy<T> opt) {
@@ -342,7 +372,7 @@ class ConfigManager {
         transformValidatorIntoExceptionValidator<
             decltype(configOptionsToBeChecked.getConfigOption())...>(
             validatorFunction, std::move(errorMessage)),
-        configOptionsToBeChecked...);
+        std::move(validatorDescriptor), configOptionsToBeChecked...);
   }
 
   /*
@@ -353,6 +383,8 @@ class ConfigManager {
   are valid. Return an empty instance of `std::optional<ErrorMessage>` if valid.
   Otherwise, the `ErrorMessage` should contain the reason, why the options are
   none valid.
+  @param exceptionValidatorDescriptor A description of the invariant, that
+  `exceptionValidatorFunction` imposes.
   @param configOptionsToBeChecked Proxies for the configuration options, who
   will be passed to the validator function as function arguments. Will keep the
   same order.
@@ -360,9 +392,10 @@ class ConfigManager {
   template <typename ExceptionValidatorT>
   void addOptionValidator(
       ExceptionValidatorT exceptionValidatorFunction,
+      std::string exceptionValidatorDescriptor,
       isInstantiation<ConstConfigOptionProxy> auto... configOptionsToBeChecked)
       requires(sizeof...(configOptionsToBeChecked) > 0 &&
-               ExceptionValidator<
+               ExceptionValidatorFunction<
                    ExceptionValidatorT,
                    decltype(configOptionsToBeChecked.getConfigOption())...>) {
     addValidatorImpl(
@@ -370,7 +403,8 @@ class ConfigManager {
         []<typename T>(ConstConfigOptionProxy<T> opt) {
           return opt.getConfigOption();
         },
-        exceptionValidatorFunction, configOptionsToBeChecked...);
+        exceptionValidatorFunction, std::move(exceptionValidatorDescriptor),
+        configOptionsToBeChecked...);
   }
 
  private:
@@ -378,7 +412,28 @@ class ConfigManager {
   FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
   FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
   FRIEND_TEST(ConfigManagerTest, ContainsOption);
-  FRIEND_TEST(ConfigManagerTest, CheckForBrokenPaths);
+  FRIEND_TEST(ConfigManagerTest, CollectionFunctionsSorting);
+
+  /*
+  @brief Collect all `HashMapEntry` contained in the given
+  `configurationOptions`, including the ones in sub managern and return them
+  together with their json paths.
+  Note: Also checks integrity of all entries via `verifyHashMapEntry`.
+
+  @param sortByInitialization If true, the order of the returned `HashMapEntry`
+  is by initialization order. If false, the order is random.
+  @param pathPrefix This prefix will be added to all json paths, that will be
+  returned.
+  @param predicate Only the `HashMapEntry` for which a true is returned, will be
+  given back.
+  */
+  template <ad_utility::InvocableWithExactReturnType<bool, const HashMapEntry&>
+                Predicate>
+  static std::vector<std::pair<std::string, const HashMapEntry&>>
+  allHashMapEntries(
+      const ad_utility::HashMap<std::string, HashMapEntry>& entries,
+      const bool sortByInitialization, std::string_view pathPrefix,
+      const Predicate& predicate);
 
   /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
@@ -450,9 +505,12 @@ class ConfigManager {
     verifyPath(pathToOption);
 
     /*
-    The `unqiue_ptr` was created, by creating a new `ConfigOption` via it's
-    move constructor. Which is why, we can't just return the `ConfigOption`
-    we created here.
+    We can't just create a `ConfigOption` variable, pass it and return it,
+    because the hash map has ownership of the newly added `ConfigOption`.
+    Which was transfered via creating a new internal `ConfigOption` with move
+    constructors.
+    Which would mean, that our local `ConfigOption` isn't the `ConfigOption` we
+    want to return a reference to.
     */
     return ConstConfigOptionProxy<OptionType>(addConfigOption(
         pathToOption,
@@ -464,10 +522,25 @@ class ConfigManager {
   @brief A vector to all the configuratio options, held by this manager,
   represented with their json paths and reference to them. Options held by a sub
   manager, are also included with the path to the sub manager as prefix.
+
+  @param sortByInitialization If true, the order of the returned `ConfigOption`
+  is by initialization order. If false, the order is random.
   */
-  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions();
-  std::vector<std::pair<std::string, const ConfigOption&>>
-  configurationOptions() const;
+  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions(
+      const bool sortByInitialization);
+  std::vector<std::pair<std::string, const ConfigOption&>> configurationOptions(
+      const bool sortByInitialization) const;
+
+  /*
+  @brief Return all `ConfigOptionValidatorManager` held by this manager and its
+  sub managers.
+
+  @param sortByInitialization If true, the order of the returned
+  `ConfigOptionValidatorManager` is by initialization order. If false, the order
+  is random.
+  */
+  std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
+  validators(const bool sortByInitialization) const;
 
   /*
   @brief The implementation for `configurationOptions`.
@@ -475,15 +548,16 @@ class ConfigManager {
   @tparam ReturnReference Should be either `ConfigOption&`, or `const
   ConfigOption&`.
 
-  @param pathPrefix This prefix will be added to all configuration option json
-  paths, that will be returned.
+  @param sortByInitialization If true, the order of the returned `ConfigOption`
+  is by initialization order. If false, the order is random.
   */
   template <typename ReturnReference>
   requires std::same_as<ReturnReference, ConfigOption&> ||
            std::same_as<ReturnReference, const ConfigOption&>
   static std::vector<std::pair<std::string, ReturnReference>>
-  configurationOptionsImpl(auto& configurationOptions,
-                           std::string_view pathPrefix = "");
+  configurationOptionsImpl(const ad_utility::HashMap<std::string, HashMapEntry>&
+                               configurationOptions,
+                           const bool sortByInitialization);
 
   /*
   @brief Call all the validators to check, if the current value is valid.
@@ -497,30 +571,6 @@ class ConfigManager {
   bool containsOption(const ConfigOption& opt) const;
 
   /*
-  @brief Transform a validator function into an exception validator function.
-  That is, instead of returning `bool`, it now returns
-  `std::optional<ErrorMessage>`.
-
-  @param errorMessage Content for `ErrorMessage`.
-  */
-  template <typename... ValidatorParameterTypes>
-  auto transformValidatorIntoExceptionValidator(
-      Validator<ValidatorParameterTypes...> auto validatorFunction,
-      std::string errorMessage) {
-    // The whole 'transformation' is simply a wrapper.
-    return [validatorFunction,
-            errorMessage = ErrorMessage{std::move(errorMessage)}](
-               const ValidatorParameterTypes&... args)
-               -> std::optional<ErrorMessage> {
-      if (std::invoke(validatorFunction, args...)) {
-        return std::nullopt;
-      } else {
-        return errorMessage;
-      }
-    };
-  }
-
-  /*
   @brief The implementation of `addValidator` and `addOptionValidator`. Note:
   Normal validator functions must first be transformed in to an exception
   validator function via `transformValidatorIntoExceptionValidator`.
@@ -529,30 +579,26 @@ class ConfigManager {
   implementation. So that people can easier identify them.
   @param translationFunction Transforms the given `ConstConfigOptionProxy` in
   the value form for the exception validator function.
-  @param exceptionValidatorFunction Should return an empty
+  @param exceptionValidatorFunc Should return an empty
   `std::optional<ErrorMessage>`, if the transformed `ConstConfigOptionProxy`
   represent valid values. Otherwise, it should return an error message.
   For example: There configuration options were all set at run time, or contain
   numbers bigger than 10.
+  @param exceptionValidatorDescriptor A description of the invariant, that
+  `exceptionValidatorFunc` imposes.
   @param configOptionsToBeChecked Proxies for the configuration options, who
   will be passed to the exception validator function as function arguments,
   after being transformed. Will keep the same order.
   */
   template <
-      typename TranslationFunction, typename ExceptionValidatorFunction,
+      typename TranslationFunction, typename ExceptionValidatorFunc,
       isInstantiation<ConstConfigOptionProxy>... ExceptionValidatorParameter>
-  requires(std::invocable<TranslationFunction,
-                          const ExceptionValidatorParameter> &&
-           ...) &&
-          ExceptionValidator<
-              ExceptionValidatorFunction,
-              std::invoke_result_t<TranslationFunction,
-                                   ExceptionValidatorParameter>...> &&
-          (sizeof...(ExceptionValidatorParameter) > 0) void addValidatorImpl(
+  void addValidatorImpl(
       std::string_view addValidatorFunctionName,
       TranslationFunction translationFunction,
-      ExceptionValidatorFunction exceptionValidatorFunction,
-      const ExceptionValidatorParameter... configOptionsToBeChecked) {
+      ExceptionValidatorFunc exceptionValidatorFunction,
+      std::string exceptionValidatorDescriptor,
+      ExceptionValidatorParameter... configOptionsToBeChecked) {
     // Check, if we contain all the configuration options, that were given us.
     auto checkIfContainOption = [this, &addValidatorFunctionName]<typename T>(
                                     ConstConfigOptionProxy<T> opt) {
@@ -567,39 +613,20 @@ class ConfigManager {
     };
     (checkIfContainOption(configOptionsToBeChecked), ...);
 
-    /*
-    Add a function wrapper to our list of validators, that calls the
-    `exceptionValidatorFunction` with the config options and throws an
-    exception, if the `exceptionValidatorFunction` returns a `ErrorMessage`.
-    */
-    validators_.emplace_back([translationFunction, exceptionValidatorFunction,
-                              configOptionsToBeChecked...]() {
-      if (const auto errorMessage = std::invoke(
-              exceptionValidatorFunction,
-              std::invoke(translationFunction, configOptionsToBeChecked)...);
-          errorMessage.has_value()) {
-        // Create the error message prefix.
-        auto generateConfigOptionIdentifierWithValueString =
-            [](const ConfigOption& c) {
-              // Is there a value, we can show together with the identifier?
-              const bool wasSet = c.wasSet();
-              return absl::StrCat(
-                  "'", c.getIdentifier(), "' (With ",
-                  wasSet ? absl::StrCat("value '", c.getValueAsString(), "'")
-                         : "no value",
-                  ".)");
-            };
-        const std::array optionNamesWithValues{
-            generateConfigOptionIdentifierWithValueString(
-                configOptionsToBeChecked.getConfigOption())...};
-        std::string errorMessagePrefix =
-            absl::StrCat("Validity check of configuration options ",
-                         lazyStrJoin(optionNamesWithValues, ", "), " failed: ");
-
-        throw std::runtime_error(absl::StrCat(
-            errorMessagePrefix, errorMessage.value().getMessage()));
-      }
-    });
+    validators_.emplace_back(std::move(exceptionValidatorFunction),
+                             std::move(exceptionValidatorDescriptor),
+                             std::move(translationFunction),
+                             std::move(configOptionsToBeChecked)...);
   }
+
+  /*
+  @brief Throw an exception, if the given entry of `configurationOptions_`
+  contains an empty sub manager, which would point to a logic error.
+
+  @param jsonPathToEntry For a better exception message.
+  @param entry The object managed by the hash map.
+  */
+  static void verifyHashMapEntry(std::string_view jsonPathToEntry,
+                                 const HashMapEntry& entry);
 };
 }  // namespace ad_utility

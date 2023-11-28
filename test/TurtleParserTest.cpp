@@ -66,7 +66,7 @@ auto checkParseResult =
 
 // Formatted output of TurtleTriples in case of test failures.
 std::ostream& operator<<(std::ostream& os, const TurtleTriple& tr) {
-  os << "( " << tr.subject_ << " " << tr.object_ << " " << tr.predicate_ << ")";
+  os << "( " << tr.subject_ << " " << tr.predicate_ << " " << tr.object_ << ")";
   return os;
 }
 TEST(TurtleParserTest, prefixedName) {
@@ -246,17 +246,17 @@ TEST(TurtleParserTest, blankNode) {
 }
 
 TEST(TurtleParserTest, blankNodePropertyList) {
-  auto runCommonTests = [](auto p) {
+  auto testPropertyListAsObject = [](auto p) {
     p.activeSubject_ = "<s>";
     p.activePredicate_ = "<p1>";
 
     string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
-    std::vector<TurtleTriple> exp = {{"<s>", "<p1>", "_:g_5_0"},
-                                     {"_:g_5_0", "<p2>", "<ob2>"},
-                                     {"_:g_5_0", "<p3>", "<ob3>"}};
+    std::vector<TurtleTriple> exp = {{"_:g_5_0", "<p2>", "<ob2>"},
+                                     {"_:g_5_0", "<p3>", "<ob3>"},
+                                     {"<s>", "<p1>", "_:g_5_0"}};
     p.setInputStream(blankNodeL);
     p.setBlankNodePrefixOnlyForTesting(5);
-    ASSERT_TRUE(p.blankNodePropertyList());
+    ASSERT_TRUE(p.object());
     ASSERT_EQ(p.triples_, exp);
     ASSERT_EQ(p.getPosition(), blankNodeL.size());
 
@@ -265,8 +265,27 @@ TEST(TurtleParserTest, blankNodePropertyList) {
     ASSERT_THROW(p.blankNodePropertyList(),
                  TurtleParser<Tokenizer>::ParseException);
   };
-  runCommonTests(Re2Parser{});
-  runCommonTests(CtreParser{});
+  testPropertyListAsObject(Re2Parser{});
+  testPropertyListAsObject(CtreParser{});
+
+  auto testPropertyListAsSubject = [](auto p) {
+    string blankNodeL = "[<p2> <ob2>; <p3> <ob3>] <p1> <ob1>";
+    std::vector<TurtleTriple> exp = {{"_:g_5_0", "<p2>", "<ob2>"},
+                                     {"_:g_5_0", "<p3>", "<ob3>"},
+                                     {"_:g_5_0", "<p1>", "<ob1>"}};
+    p.setInputStream(blankNodeL);
+    p.setBlankNodePrefixOnlyForTesting(5);
+    ASSERT_TRUE(p.triples());
+    ASSERT_EQ(p.triples_, exp);
+    ASSERT_EQ(p.getPosition(), blankNodeL.size());
+
+    blankNodeL = "[<2> <ob2>; \"invalidPred\" <ob3>]";
+    p.setInputStream(blankNodeL);
+    ASSERT_THROW(p.blankNodePropertyList(),
+                 TurtleParser<Tokenizer>::ParseException);
+  };
+  testPropertyListAsSubject(Re2Parser{});
+  testPropertyListAsSubject(CtreParser{});
 }
 
 TEST(TurtleParserTest, object) {
@@ -590,6 +609,60 @@ TEST(TurtleParserTest, collection) {
   runCommonTests(checkParseResult<CtreParser, &CtreParser::collection, 22>);
 }
 
+// Sort a vector of triples to get a deterministic order for comparison.
+void sortTriples(std::vector<TurtleTriple>& triples) {
+  auto toRef = [](const TurtleTriple& t) {
+    return std::tie(t.subject_, t.predicate_, t.object_.getString());
+  };
+  std::ranges::sort(triples, std::less{}, toRef);
+}
+
+// Parse the file at `filename` using a parser of type `Parser` and return the
+// sorted result. Iff `useBatchInterface` then the `getBatch()` function is used
+// for parsing, else `getLine()` is used.
+template <typename Parser>
+std::vector<TurtleTriple> parseFromFile(const std::string& filename,
+                                        bool useBatchInterface) {
+  Parser parserChild{filename};
+  TurtleParserBase& parser = parserChild;
+
+  std::vector<TurtleTriple> result;
+  if (useBatchInterface) {
+    while (auto batch = parser.getBatch()) {
+      result.insert(result.end(), batch.value().begin(), batch.value().end());
+      parser.printAndResetQueueStatistics();
+    }
+  } else {
+    TurtleTriple next;
+    while (parser.getLine(next)) {
+      result.push_back(next);
+    }
+  }
+  // The order of triples in not necessarily the same, so we sort them.
+  sortTriples(result);
+  return result;
+}
+
+// Run a function that takes a bool as the first argument (typically the
+// `useBatchInterface` argument) and possible additional args, and run this
+// function for all the different parsers that can read from a file (stream and
+// parallel parser, with all the combinations of the different tokenizers).
+auto forAllParsers(const auto& function, const auto&... args) {
+  function.template operator()<TurtleStreamParser<Tokenizer>>(true, args...);
+  function.template operator()<TurtleStreamParser<Tokenizer>>(false, args...);
+  function.template operator()<TurtleParallelParser<Tokenizer>>(true, args...);
+  function.template operator()<TurtleParallelParser<Tokenizer>>(false, args...);
+
+  function.template operator()<TurtleStreamParser<TokenizerCtre>>(true,
+                                                                  args...);
+  function.template operator()<TurtleStreamParser<TokenizerCtre>>(false,
+                                                                  args...);
+  function.template operator()<TurtleParallelParser<TokenizerCtre>>(true,
+                                                                    args...);
+  function.template operator()<TurtleParallelParser<TokenizerCtre>>(false,
+                                                                    args...);
+}
+
 TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
   std::string filename{"turtleStreamAndParallelParserTest.dat"};
   std::vector<TurtleTriple> expectedTriples;
@@ -604,36 +677,15 @@ TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
     }
   }
   // The order of triples in not necessarily the same, so we sort them.
-  auto toRef = [](const TurtleTriple& t) {
-    return std::tie(t.subject_, t.predicate_, t.object_.getString());
-  };
-  std::ranges::sort(expectedTriples, std::less{}, toRef);
+  sortTriples(expectedTriples);
 
   FILE_BUFFER_SIZE() = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface) {
-    Parser parserChild{filename};
-    TurtleParserBase& parser = parserChild;
-
-    std::vector<TurtleTriple> result;
-    if (useBatchInterface) {
-      while (auto batch = parser.getBatch()) {
-        result.insert(result.end(), batch.value().begin(), batch.value().end());
-        parser.printAndResetQueueStatistics();
-      }
-    } else {
-      TurtleTriple next;
-      while (parser.getLine(next)) {
-        result.push_back(next);
-      }
-    }
-    std::ranges::sort(result, std::less{}, toRef);
+    auto result = parseFromFile<Parser>(filename, useBatchInterface);
     EXPECT_THAT(result, ::testing::ElementsAreArray(expectedTriples));
   };
 
-  testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(true);
-  testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(false);
-  testWithParser.template operator()<TurtleParallelParser<Tokenizer>>(true);
-  testWithParser.template operator()<TurtleParallelParser<Tokenizer>>(false);
+  forAllParsers(testWithParser);
   ad_utility::deleteFile(filename);
 }
 
@@ -647,32 +699,64 @@ TEST(TurtleParserTest, emptyInput) {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
     }
-    Parser parserChild{filename};
-    TurtleParserBase& parser = parserChild;
-
-    std::vector<TurtleTriple> result;
-    if (useBatchInterface) {
-      while (auto batch = parser.getBatch()) {
-        result.insert(result.end(), batch.value().begin(), batch.value().end());
-        parser.printAndResetQueueStatistics();
-      }
-    } else {
-      TurtleTriple next;
-      while (parser.getLine(next)) {
-        result.push_back(next);
-      }
-    }
+    auto result = parseFromFile<Parser>(filename, useBatchInterface);
     EXPECT_THAT(result, ::testing::ElementsAre());
     ad_utility::deleteFile(filename);
   };
 
-  testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(true);
-  testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(false);
-  testWithParser.template operator()<TurtleParallelParser<Tokenizer>>(true);
-  testWithParser.template operator()<TurtleParallelParser<Tokenizer>>(false);
+  forAllParsers(testWithParser, "");
   std::string onlyPrefixes = "PREFIX bim: <http://www.bimm.bam.de/blubb/>";
-  testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(
-      true, onlyPrefixes);
-  testWithParser.template operator()<TurtleStreamParser<Tokenizer>>(
-      false, onlyPrefixes);
+  forAllParsers(testWithParser, onlyPrefixes);
+}
+
+// ________________________________________________________________________
+TEST(TurtleParserTest, multilineComments) {
+  std::string filename{"turtleParserMultilineComments.dat"};
+  FILE_BUFFER_SIZE() = 1000;
+  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
+                                             std::string_view input,
+                                             const auto& expectedTriples) {
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    auto result = parseFromFile<Parser>(filename, useBatchInterface);
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expectedTriples));
+    ad_utility::deleteFile(filename);
+  };
+
+  // Test an input with many lines that only comments and whitespace. There
+  // was a bug for this case in a previous version of the parser.
+  std::string input = R"(#Comments
+  #at
+##the beginning
+##the beginning
+##the beginning
+##the beginning
+##the beginning
+##the beginning
+##the beginning
+##the beginning
+##the beginning
+##the beginning
+##the beginning
+##the beginning
+##the beginning
+##the beginning
+##the beginning
+##the beginning
+
+#and so on
+<s> <p> <o> .
+#comment
+
+#comment
+#commentnext
+<s> <p> <o2> .
+
+)";
+  std::vector<TurtleTriple> expected{{"<s>", "<p>", "<o>"},
+                                     {"<s>", "<p>", "<o2>"}};
+  sortTriples(expected);
+  forAllParsers(testWithParser, input, expected);
 }

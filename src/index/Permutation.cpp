@@ -13,7 +13,7 @@ Permutation::Permutation(Enum permutation, Allocator allocator,
     : readableName_(toString(permutation)),
       fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
       keyOrder_(toKeyOrder(permutation)),
-      reader_{allocator} {
+      allocator_{std::move(allocator)} {
   if (hasAdditionalTriples == HasAdditionalTriples::True) {
     additionalPermutation_ = std::make_unique<Permutation>(
         permutation, std::move(allocator), HasAdditionalTriples::False);
@@ -29,8 +29,9 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
                   ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
     }
     auto filename = string(onDiskBase + ".index" + fileSuffix_);
+    ad_utility::File file;
     try {
-      file_.open(filename, "r");
+      file.open(filename, "r");
     } catch (const std::runtime_error& e) {
       AD_THROW(
           "Could not open the index file " + filename +
@@ -39,7 +40,8 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
           "message was: " +
           e.what());
     }
-    meta_.readFromFile(&file_);
+    meta_.readFromFile(&file);
+    reader_.emplace(allocator_, std::move(file));
     LOG(INFO) << "Registered " << readableName_
               << " permutation: " << meta_.statistics() << std::endl;
     isLoaded_ = true;
@@ -48,12 +50,33 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
     additionalPermutation_->loadFromDisk(onDiskBase + ADDITIONAL_TRIPLES_SUFFIX,
                                          false);
   }
+void Permutation::loadFromDisk(const std::string& onDiskBase) {
+  if constexpr (MetaData::_isMmapBased) {
+    meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
+                ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
+  }
+  auto filename = string(onDiskBase + ".index" + fileSuffix_);
+  ad_utility::File file;
+  try {
+    file.open(filename, "r");
+  } catch (const std::runtime_error& e) {
+    AD_THROW("Could not open the index file " + filename +
+             " for reading. Please check that you have read access to "
+             "this file. If it does not exist, your index is broken. The error "
+             "message was: " +
+             e.what());
+  }
+  meta_.readFromFile(&file);
+  reader_.emplace(allocator_, std::move(file));
+  LOG(INFO) << "Registered " << readableName_
+            << " permutation: " << meta_.statistics() << std::endl;
+  isLoaded_ = true;
 }
 
 // _____________________________________________________________________
-IdTable Permutation::scan(Id col0Id, std::optional<Id> col1Id,
-                          ColumnIndices additionalColumns,
-                          const TimeoutTimer& timer) const {
+IdTable Permutation::scan(
+    Id col0Id, std::optional<Id> col1Id, ColumnIndices additionalColumns,
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
                              readableName_ + ", which was not loaded");
@@ -64,17 +87,12 @@ IdTable Permutation::scan(Id col0Id, std::optional<Id> col1Id,
       return additionalPermutation_->scan(col0Id, col1Id, additionalColumns);
     }
     size_t numColumns = col1Id.has_value() ? 1 : 2;
-    return IdTable{numColumns, reader_.allocator()};
+    return IdTable{numColumns, reader().allocator()};
   }
   const auto& metaData = meta_.getMetaData(col0Id);
 
-  if (col1Id.has_value()) {
-    return reader_.scan(metaData, col1Id.value(), meta_.blockData(), file_,
-                        additionalColumns, timer);
-  } else {
-    return reader_.scan(metaData, meta_.blockData(), file_, additionalColumns,
-                        timer);
-  }
+  return reader().scan(metaData, col1Id, meta_.blockData(), additionalColumns,
+                       cancellationHandle);
 }
 
 // _____________________________________________________________________
@@ -88,12 +106,13 @@ size_t Permutation::getResultSizeOfScan(Id col0Id,
   }
   const auto& metaData = meta_.getMetaData(col0Id);
 
+  // TODO<joka921> should be handled inside the CompressedRelationReader.
   if (!col1Id.has_value()) {
     return metaData.getNofElements();
   }
 
-  return reader_.getResultSizeOfScan(metaData, col1Id.value(),
-                                     meta_.blockData(), file_);
+  return reader().getResultSizeOfScan(metaData, col1Id.value(),
+                                     meta_.blockData());
 }
 
 // _____________________________________________________________________
@@ -153,7 +172,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
                                metadata, col1Id, meta_.blockData()),
                            col1Id, std::nullopt};
 
-  result.firstAndLastTriple_ = reader_.getFirstAndLastTriple(result, file_);
+  result.firstAndLastTriple_ = reader().getFirstAndLastTriple(result);
   return result;
 }
 
@@ -161,7 +180,8 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
 Permutation::IdTableGenerator Permutation::lazyScan(
     Id col0Id, std::optional<Id> col1Id,
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
-    ColumnIndices additionalColumns, const TimeoutTimer& timer) const {
+    ColumnIndices additionalColumns,
+    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   if (!meta_.col0IdExists(col0Id)) {
     if (additionalPermutation_) {
       return additionalPermutation_->lazyScan(col0Id, col1Id, std::move(blocks),
@@ -175,13 +195,9 @@ Permutation::IdTableGenerator Permutation::lazyScan(
         relationMetadata, col1Id, meta_.blockData());
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   }
-  if (col1Id.has_value()) {
-    return reader_.lazyScan(meta_.getMetaData(col0Id), col1Id.value(),
-                            std::move(blocks.value()), file_, additionalColumns,
-                            timer);
-  } else {
-    return reader_.lazyScan(meta_.getMetaData(col0Id),
-                            std::move(blocks.value()), file_, additionalColumns,
-                            timer);
-  }
+  OwningColumnIndices owningColumns{additionalColumns.begin(),
+                                    additionalColumns.end()};
+  return reader().lazyScan(meta_.getMetaData(col0Id), col1Id,
+                           std::move(blocks.value()), std::move(owningColumns),
+                           cancellationHandle);
 }

@@ -11,8 +11,7 @@ namespace ad_utility::websocket {
 template <bool isSender>
 net::awaitable<std::shared_ptr<
     QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
-QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
-  co_await net::dispatch(net::bind_executor(globalStrand_, net::use_awaitable));
+QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
   while (socketDistributors_.contains(queryId)) {
     auto& reference = socketDistributors_.at(queryId);
     if (auto ptr = reference.pointer_.lock()) {
@@ -38,8 +37,10 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
               bool wasErased = socketDistributors_.erase(queryId);
               AD_CORRECTNESS_CHECK(wasErased);
             })));
-        // Make sure we never block, just run some tasks on the `ioContext_`
-        // until the task is executed
+        // As long as the destructor would have to block anyway, perform work
+        // on the `ioContext_`. This avoids blocking in case the destructor
+        // already runs inside the `ioContext_`.
+        // Note: When called on a strand this may block the current strand.
         while (future.wait_for(std::chrono::seconds(0)) !=
                std::future_status::ready) {
           ioContext_.poll_one();
@@ -52,9 +53,20 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
 
 // _____________________________________________________________________________
 
+template <bool isSender>
+net::awaitable<std::shared_ptr<
+    QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
+QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
+  co_await net::post(net::bind_executor(globalStrand_, net::use_awaitable));
+  co_return co_await createOrAcquireDistributorInternalUnsafe<isSender>(
+      std::move(queryId));
+}
+
+// _____________________________________________________________________________
+
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForSending(QueryId queryId) {
-  return sameExecutor(
+  return resumeOnOriginalExecutor(
       createOrAcquireDistributorInternal<true>(std::move(queryId)));
 }
 
@@ -62,7 +74,16 @@ QueryHub::createOrAcquireDistributorForSending(QueryId queryId) {
 
 net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForReceiving(QueryId queryId) {
-  return sameExecutor(
+  return resumeOnOriginalExecutor(
       createOrAcquireDistributorInternal<false>(std::move(queryId)));
 }
+
+// _____________________________________________________________________________
+
+// Clang does not seem to keep this instantiation around when called directly,
+// so we need to explicitly instantiate it here for the
+// QueryHub_testCorrectReschedulingForEmptyPointerOnDestruct test to compile
+// properly
+template net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
+    QueryHub::createOrAcquireDistributorInternalUnsafe<false>(QueryId);
 }  // namespace ad_utility::websocket

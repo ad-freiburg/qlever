@@ -75,19 +75,6 @@ class Url {
   }
 };
 
-/// Concatenate base and path. Path must start with a '/', base may end with a
-/// slash. For example, path_cat("base", "/file.txt"), path_cat("base/" ,
-/// "/file.txt") both lead to "base/file.txt". Taken from the beast examples.
-inline std::string path_cat(beast::string_view base, beast::string_view path) {
-  if (base.empty()) return std::string(path);
-  std::string result(base);
-  AD_CONTRACT_CHECK(path.starts_with('/'));
-  char constexpr path_separator = '/';
-  if (result.back() == path_separator) result.resize(result.size() - 1);
-  result.append(path.data(), path.size());
-  return result;
-}
-
 // A concept for http::request
 template <typename T>
 static constexpr bool isHttpRequest = false;
@@ -108,7 +95,7 @@ concept HttpRequest = isHttpRequest<T>;
  */
 auto createHttpResponseFromString(std::string body, http::status status,
                                   const HttpRequest auto& request,
-                                  MediaType mediaType = MediaType::html) {
+                                  MediaType mediaType) {
   http::response<http::string_body> response{status, request.version()};
   response.set(http::field::content_type, toString(mediaType));
   response.keep_alive(request.keep_alive());
@@ -186,166 +173,16 @@ static auto createJsonResponse(const nlohmann::json& j, const auto& request,
 static auto createNotFoundResponse(const std::string& errorMsg,
                                    const HttpRequest auto& request) {
   return createHttpResponseFromString(errorMsg, http::status::not_found,
-                                      request);
+                                      request, MediaType::textPlain);
 }
 
 /// Create a HttpResponse with status 400 Bad Request.
 static auto createBadRequestResponse(std::string body,
                                      const HttpRequest auto& request) {
   return createHttpResponseFromString(std::move(body),
-                                      http::status::bad_request, request);
+                                      http::status::bad_request, request,
+                                      MediaType::textPlain);
 }
-
-/// Create a HttpResponse with status 500 Bad Request.
-static auto createServerErrorResponse(std::string message,
-                                      const HttpRequest auto& request) {
-  return createHttpResponseFromString(
-      std::move(message), http::status::internal_server_error, request);
-}
-
-/// Create a HttpResponse for a HTTP HEAD request for a file from the
-/// size of the file and the path to the file.
-static auto createHeadResponse(size_t sizeOfFile, const string& path,
-                               const HttpRequest auto& request) {
-  http::response<http::empty_body> response{http::status::ok,
-                                            request.version()};
-  response.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-  response.set(http::field::content_type, mediaTypeForFilename(path));
-  response.content_length(sizeOfFile);
-  response.keep_alive(request.keep_alive());
-  return response;
-}
-
-/// Create a HttpResponse for a HTTP GET request for a file.
-static auto createGetResponseForFile(http::file_body::value_type&& body,
-                                     const string& path,
-                                     const HttpRequest auto& request) {
-  auto sizeOfFile = body.size();
-  // Respond to GET request
-  http::response<http::file_body> response{
-      std::piecewise_construct, std::make_tuple(std::move(body)),
-      std::make_tuple(http::status::ok, request.version())};
-  response.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-  response.set(http::field::content_type, mediaTypeForFilename(path));
-  response.content_length(sizeOfFile);
-  response.keep_alive(request.keep_alive());
-  return response;
-}
-
-/// Log a beast::error_code together with an additional message.
-inline void logBeastError(beast::error_code ec, char const* what) {
-  LOG(ERROR) << what << ": " << ec.message() << "\n";
-}
-
-namespace detail {
-
-// This coroutine is  part of the implementation of `makeFileServer` (see
-// below). It is the actual coroutine that performs the serving of a file.
-// Note: Because of the coroutine lifetime rules, the coroutine has to get the
-// `documentRoot`,`whitelist`, `request` by value. According to the signature,
-// the `send` action might be dangling, but when using this coroutine inside
-// the `HttpServer` class template, it never is. The parameters `documentRoot`
-// and `whitelist` are currently copied for every http request, if this
-// becomes a performance problem, they might also become `shared_ptr`s.
-boost::asio::awaitable<void> makeFileServerImpl(
-    std::string documentRoot,
-    std::optional<ad_utility::HashSet<std::string>> whitelist,
-    HttpRequest auto request, auto&& send) {
-  // Make sure we can handle the method
-  if (request.method() != http::verb::get &&
-      request.method() != http::verb::head) {
-    throw std::runtime_error(
-        "When serving files, only GET and HEAD requests are supported");
-  }
-
-  // Decode the path and check that it is absolute and contains no "..".
-  auto urlPath =
-      ad_utility::UrlParser::getDecodedPathAndCheck(request.target());
-  if (!urlPath.has_value()) {
-    throw std::runtime_error(
-        absl::StrCat("Invalid URL path \"", toStd(request.target()), "\""));
-  }
-
-  // Check if the target is in the whitelist. The `target()` starts with a
-  // slash, entries in the whitelist don't.
-  auto urlPathWithFirstCharRemoved = urlPath.value().substr(1);
-  if (whitelist.has_value() &&
-      !whitelist.value().contains(urlPathWithFirstCharRemoved)) {
-    throw std::runtime_error(absl::StrCat(
-        "Resource \"", urlPathWithFirstCharRemoved, "\" not in whitelist"));
-  }
-
-  // Build the path to the requested file on the file system.
-  std::string filesystemPath = path_cat(documentRoot, request.target());
-  if (request.target().back() == '/') filesystemPath.append("index.html");
-
-  // Attempt to open the file.
-  beast::error_code errorCode;
-  http::file_body::value_type body;
-  body.open(filesystemPath.c_str(), beast::file_mode::scan, errorCode);
-
-  // Handle the case where the file doesn't exist.
-  if (errorCode == beast::errc::no_such_file_or_directory) {
-    std::string errorMsg =
-        absl::StrCat("Resource \"", toStd(request.target()), "\" not found");
-    LOG(ERROR) << errorMsg << std::endl;
-    co_return co_await send(createNotFoundResponse(errorMsg, request));
-  }
-
-  // Handle an unknown error.
-  if (errorCode) {
-    LOG(ERROR) << errorCode.message() << std::endl;
-    co_return co_await send(
-        createServerErrorResponse(errorCode.message(), request));
-  }
-
-  // Respond to HEAD request.
-  if (request.method() == http::verb::head) {
-    co_return co_await send(
-        createHeadResponse(body.size(), filesystemPath, request));
-  }
-  // Respond to GET request.
-  co_return co_await send(
-      createGetResponseForFile(std::move(body), filesystemPath, request));
-}
-}  // namespace detail
-
-/**
- * @brief Return a lambda which satisfies the constraints of the `HttpHandler`
- * argument in the `HttpServer` class and serves files from a specified
- * documentRoot. A typical use is `HttpServer
- * httpServer{httpUtils::makeFileServer("path_to_some_directory")};`
- * @param documentRoot The path from which files are served. May be absolute
- * or relative.
- * @param whitelist Specify a whitelist of allowed filenames (e.g.
- * `{"index.html", "style.css"}`). The default value std::nullopt means, that
- *         all files from the documentRoot may be served.
- */
-inline auto makeFileServer(
-    std::string documentRoot,
-    std::optional<ad_utility::HashSet<std::string>> whitelist = std::nullopt) {
-  // The empty path means "index.html", add this information to the whitelist.
-  if (whitelist.has_value() && whitelist.value().contains("index.html")) {
-    whitelist.value().insert("");
-  }
-
-  // Return a lambda that takes a HttpRequest and a Send function (see the
-  // HttpServer class for details).
-  // TODO<joka921> make the SendAction a concept.
-  return [documentRoot = std::move(documentRoot),
-          whitelist = std::move(whitelist)](
-             HttpRequest auto request,
-             auto&& send) -> boost::asio::awaitable<void> {
-    // We need this extra indirection because the coroutine that is returned
-    // might live longer than the lambda closure object which stores the
-    // captures `documentRoot` and `whitelist`. For details see
-    // https://devblogs.microsoft.com/oldnewthing/20211103-00/?p=105870 and
-    // https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#Rcoro-capture
-    return detail::makeFileServerImpl(documentRoot, whitelist,
-                                      std::move(request), AD_FWD(send));
-  };
-}
-
 }  // namespace ad_utility::httpUtils
 
 #endif  // QLEVER_HTTPUTILS_H

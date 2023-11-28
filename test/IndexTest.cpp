@@ -32,7 +32,9 @@ auto makeTestScanWidthOne = [](const IndexImpl& index) {
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
     TripleComponent c1Tc{c1};
-    IdTable result = index.scan(c0, std::cref(c1Tc), permutation, {});
+    IdTable result =
+        index.scan(c0, std::cref(c1Tc), permutation, {},
+                   std::make_shared<ad_utility::CancellationHandle>());
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
 };
@@ -47,7 +49,9 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index) {
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
-    IdTable wol = index.scan(c0, std::nullopt, permutation, {});
+    IdTable wol =
+        index.scan(c0, std::nullopt, permutation, {},
+                   std::make_shared<ad_utility::CancellationHandle>());
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
@@ -352,7 +356,7 @@ MATCHER_P2(IsPossiblyExternalString, content, isExternal, "") {
     return false;
   }
   const auto& el = std::get<PossiblyExternalizedIriOrLiteral>(arg);
-  return (el._iriOrLiteral == content) && (isExternal == el._isExternal);
+  return (el.iriOrLiteral_ == content) && (isExternal == el.isExternal_);
 }
 
 TEST(IndexTest, TripleToInternalRepresentation) {
@@ -361,10 +365,10 @@ TEST(IndexTest, TripleToInternalRepresentation) {
     TurtleTriple turtleTriple{"<subject>", "<predicate>", lit("\"literal\"")};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
-    ASSERT_TRUE(res._langtag.empty());
-    EXPECT_THAT(res._triple[0], IsPossiblyExternalString("<subject>", false));
-    EXPECT_THAT(res._triple[1], IsPossiblyExternalString("<predicate>", false));
-    EXPECT_THAT(res._triple[2], IsPossiblyExternalString("\"literal\"", false));
+    ASSERT_TRUE(res.langtag_.empty());
+    EXPECT_THAT(res.triple_[0], IsPossiblyExternalString("<subject>", false));
+    EXPECT_THAT(res.triple_[1], IsPossiblyExternalString("<predicate>", false));
+    EXPECT_THAT(res.triple_[2], IsPossiblyExternalString("\"literal\"", false));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
@@ -374,11 +378,11 @@ TEST(IndexTest, TripleToInternalRepresentation) {
                               lit("\"literal\"", "@fr")};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
-    ASSERT_EQ(res._langtag, "fr");
-    EXPECT_THAT(res._triple[0], IsPossiblyExternalString("<subject>", true));
-    EXPECT_THAT(res._triple[1], IsPossiblyExternalString("<predicate>", false));
+    ASSERT_EQ(res.langtag_, "fr");
+    EXPECT_THAT(res.triple_[0], IsPossiblyExternalString("<subject>", true));
+    EXPECT_THAT(res.triple_[1], IsPossiblyExternalString("<predicate>", false));
     // By default all languages other than English are externalized.
-    EXPECT_THAT(res._triple[2],
+    EXPECT_THAT(res.triple_[2],
                 IsPossiblyExternalString("\"literal\"@fr", true));
   }
   {
@@ -386,7 +390,7 @@ TEST(IndexTest, TripleToInternalRepresentation) {
     TurtleTriple turtleTriple{"<subject>", "<predicate>", 42.0};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
-    ASSERT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res._triple[2]));
+    ASSERT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res.triple_[2]));
   }
 }
 
@@ -402,8 +406,9 @@ TEST(IndexTest, getIgnoredIdRanges) {
     return id;
   };
 
-  Id qlLangtag = getId("<QLever-internal-function/langtag>");
-  Id en = getId("<QLever-internal-function/@en>");
+  Id qlLangtag =
+      getId("<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>");
+  Id en = getId("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>");
   Id enLabel = getId("@en@<label>");
   Id label = getId("<label>");
   Id firstLiteral = getId("\"A\"");
@@ -414,7 +419,8 @@ TEST(IndexTest, getIgnoredIdRanges) {
     return Id::makeFromVocabIndex(id.getVocabIndex().incremented());
   };
 
-  // The range of all entities that start with "<QLever-internal-function/"
+  // The range of all entities that start with
+  // "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
   auto internalEntities = std::pair{en, increment(qlLangtag)};
   // The range of all entities that start with @ (like `@en@<label>`)
   auto predicatesWithLangtag = std::pair{enLabel, increment(enLabel)};
@@ -565,4 +571,11 @@ TEST(IndexTest, getPermutation) {
   EXPECT_EQ(&index.SPO(), &index.getPermutation(SPO));
   EXPECT_EQ(&index.OPS(), &index.getPermutation(OPS));
   EXPECT_EQ(&index.OSP(), &index.getPermutation(OSP));
+}
+
+TEST(IndexTest, trivialGettersAndSetters) {
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.memoryLimitIndexBuilding() = 7_kB;
+  EXPECT_EQ(index.memoryLimitIndexBuilding(), 7_kB);
+  EXPECT_EQ(std::as_const(index).memoryLimitIndexBuilding(), 7_kB);
 }

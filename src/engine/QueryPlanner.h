@@ -54,9 +54,7 @@ class QueryPlanner {
             // TODO<joka921> What is this triple used for? If it is just a
             // dummy, then we can replace it by a `variant<Triple,
             // TextNodeData>`.
-            _triple(cvar,
-                    PropertyPath(PropertyPath::Operation::IRI, 0,
-                                 INTERNAL_TEXT_MATCH_PREDICATE, {}),
+            _triple(cvar, PropertyPath::fromIri(INTERNAL_TEXT_MATCH_PREDICATE),
                     TripleComponent::UNDEF{}),
             _cvar(cvar),
             _wordPart(std::move(words)) {
@@ -275,13 +273,7 @@ class QueryPlanner {
       const TripleComponent& right);
   [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitive(
       const TripleComponent& left, const PropertyPath& path,
-      const TripleComponent& right);
-  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern>
-  seedFromTransitiveMin(const TripleComponent& left, const PropertyPath& path,
-                        const TripleComponent& right);
-  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern>
-  seedFromTransitiveMax(const TripleComponent& left, const PropertyPath& path,
-                        const TripleComponent& right);
+      const TripleComponent& right, size_t min, size_t max);
   [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromInverse(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);

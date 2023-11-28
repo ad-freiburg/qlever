@@ -40,10 +40,36 @@ inline auto extractDay = [](std::optional<DateOrLargeYear> d) {
   return Id::makeFromInt(optionalDay.value());
 };
 
+template <auto dateMember, auto makeId>
+inline auto extractTimeComponentImpl = [](std::optional<DateOrLargeYear> d) {
+  if (!d.has_value() || !d->isDate()) {
+    return Id::makeUndefined();
+  }
+  Date date = d.value().getDate();
+  if (!date.hasTime()) {
+    return Id::makeUndefined();
+  }
+  return std::invoke(makeId, std::invoke(dateMember, date));
+};
+
+constexpr auto extractHours =
+    extractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>;
+constexpr auto extractMinutes =
+    extractTimeComponentImpl<&Date::getMinute, &Id::makeFromInt>;
+constexpr auto extractSeconds =
+    extractTimeComponentImpl<&Date::getSecond, &Id::makeFromDouble>;
+
 NARY_EXPRESSION(YearExpression, 1, FV<decltype(extractYear), DateValueGetter>);
 NARY_EXPRESSION(MonthExpression, 1,
                 FV<decltype(extractMonth), DateValueGetter>);
 NARY_EXPRESSION(DayExpression, 1, FV<decltype(extractDay), DateValueGetter>);
+NARY_EXPRESSION(HoursExpression, 1,
+                FV<decltype(extractHours), DateValueGetter>);
+NARY_EXPRESSION(MinutesExpression, 1,
+                FV<decltype(extractMinutes), DateValueGetter>);
+NARY_EXPRESSION(SecondsExpression, 1,
+                FV<decltype(extractSeconds), DateValueGetter>);
+
 }  // namespace detail
 using namespace detail;
 SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child) {
@@ -56,5 +82,17 @@ SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child) {
 
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child) {
   return std::make_unique<MonthExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeHoursExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<HoursExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeMinutesExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<MinutesExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeSecondsExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<SecondsExpression>(std::move(child));
 }
 }  // namespace sparqlExpression

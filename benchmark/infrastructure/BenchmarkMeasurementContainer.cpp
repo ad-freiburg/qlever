@@ -13,8 +13,10 @@
 #include <memory>
 #include <ranges>
 #include <sstream>
+#include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "../benchmark/infrastructure/BenchmarkToString.h"
@@ -24,6 +26,8 @@
 #include "util/Forward.h"
 #include "util/Iterators.h"
 #include "util/StringUtils.h"
+
+using namespace std::string_literals;
 
 namespace ad_benchmark {
 
@@ -151,12 +155,15 @@ ResultTable::ResultTable(const std::string& descriptor,
 // ____________________________________________________________________________
 void ResultTable::setEntry(const size_t& row, const size_t& column,
                            const EntryType& newEntryContent) {
+  // 'Deleting' an entry doesn't make much sense.
+  AD_CONTRACT_CHECK(!std::holds_alternative<std::monostate>(newEntryContent));
+
   entries_.at(row).at(column) = newEntryContent;
 }
 
 // ____________________________________________________________________________
 ResultTable::operator std::string() const {
-  // Used for the formating of numbers in the table. They will always be
+  // Used for the formating of floats in the table. They will always be
   // formated as having 4 values after the decimal point.
   static constexpr absl::string_view floatFormatSpecifier = "%.4f";
 
@@ -166,19 +173,28 @@ ResultTable::operator std::string() const {
   // Convert an `EntryType` of `ResultTable` to a screen friendly
   // format.
   auto entryToStringVisitor = []<typename T>(const T& entry) {
-    // We have 3 possible types, because `EntryType` has three distinct possible
-    // types, that all need different handeling.
-    // Fortunaly, we can decide the handeling at compile time and throw the
-    // others away, using `if constexpr(std::is_same<...,...>::value)`.
+    /*
+    `EntryType` has multiple distinct possible types, that all need different
+    handeling. Fortunaly, we can decide the handeling at compile time and
+    throw the others away, using `if constexpr(std::is_same<...,...>::value)`.
+    */
     if constexpr (std::is_same_v<T, std::monostate>) {
       // No value, print it as NA.
-      return (std::string) "NA";
+      return "NA"s;
     } else if constexpr (std::is_same_v<T, float>) {
       // There is a value, format it as specified.
       return absl::StrFormat(floatFormatSpecifier, entry);
-    } else {
-      // Only other possible type is a string, which needs no formating.
+    } else if constexpr (std::is_same_v<T, size_t> || std::is_same_v<T, int>) {
+      // There is already a `std` function for this.
+      return std::to_string(entry);
+    } else if constexpr (std::is_same_v<T, std::string>) {
       return entry;
+    } else if constexpr (std::is_same_v<T, bool>) {
+      // Simple conversion.
+      return entry ? "true"s : "false"s;
+    } else {
+      // Unsupported type.
+      AD_FAIL();
     }
   };
   auto entryToString = [&entryToStringVisitor](const EntryType& entry) {

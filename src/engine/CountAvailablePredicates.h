@@ -104,7 +104,7 @@ class CountAvailablePredicates : public Operation {
                                   const CompactVectorOfStrings<Id>& patterns,
                                   size_t subjectColumnIdx,
                                   size_t patternColumnIdx,
-                                  RuntimeInformation* runtimeInfo);
+                                  RuntimeInformation& runtimeInfo);
 
   void computePatternTrickAllEntities(
       IdTable* result, const CompactVectorOfStrings<Id>& patterns) const;

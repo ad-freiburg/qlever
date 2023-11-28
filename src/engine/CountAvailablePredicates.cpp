@@ -117,8 +117,6 @@ ResultTable CountAvailablePredicates::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(2);
 
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-
   const CompactVectorOfStrings<Id>& patterns =
       _executionContext->getIndex().getPatterns();
 
@@ -135,7 +133,7 @@ ResultTable CountAvailablePredicates::computeResult() {
     size_t width = subresult->idTable().numColumns();
     size_t patternColumn = _subtree->getVariableColumn(_predicateVariable);
     CALL_FIXED_SIZE(width, &computePatternTrick, subresult->idTable(), &idTable,
-                    patterns, _subjectColumnIndex, patternColumn, &runtimeInfo);
+                    patterns, _subjectColumnIndex, patternColumn, runtimeInfo());
     return {std::move(idTable), resultSortedOn(),
             subresult->getSharedLocalVocab()};
   }
@@ -198,7 +196,7 @@ template <size_t WIDTH>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
     const CompactVectorOfStrings<Id>& patterns, const size_t subjectColumnIdx,
-    const size_t patternColumnIdx, RuntimeInformation* runtimeInfo) {
+    const size_t patternColumnIdx, RuntimeInformation& runtimeInfo) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   LOG(DEBUG) << "For " << input.size() << " entities in column "
@@ -330,14 +328,14 @@ void CountAvailablePredicates::computePatternTrick(
              << std::endl;
 
   // Add these values to the runtime info
-  runtimeInfo->addDetail("numEntities", input.size());
-  runtimeInfo->addDetail("numPredicatesWithRepetitions",
-                         numPredicatesWithRepetitions);
-  runtimeInfo->addDetail("percentEntitesWithPatterns", ratioHasPatterns * 100);
-  runtimeInfo->addDetail("percentPredicatesFromPatterns",
-                         ratioCountedWithPatterns * 100);
-  runtimeInfo->addDetail("costWithoutPatterns", costWithoutPatterns);
-  runtimeInfo->addDetail("costWithPatterns", costWithPatterns);
-  runtimeInfo->addDetail("costRatio", costRatio * 100);
+  runtimeInfo.addDetail("numEntities", input.size());
+  runtimeInfo.addDetail("numPredicatesWithRepetitions",
+                        numPredicatesWithRepetitions);
+  runtimeInfo.addDetail("percentEntitesWithPatterns", ratioHasPatterns * 100);
+  runtimeInfo.addDetail("percentPredicatesFromPatterns",
+                        ratioCountedWithPatterns * 100);
+  runtimeInfo.addDetail("costWithoutPatterns", costWithoutPatterns);
+  runtimeInfo.addDetail("costWithPatterns", costWithPatterns);
+  runtimeInfo.addDetail("costRatio", costRatio * 100);
   *dynResult = std::move(result).toDynamic();
 }

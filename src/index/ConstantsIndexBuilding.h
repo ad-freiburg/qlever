@@ -28,12 +28,12 @@ static const size_t PARSER_BATCH_SIZE = 1'000'000;
 // That many triples does the turtle parser have to buffer before the call to
 // getline returns (unless our input reaches EOF). This makes parsing from
 // streams faster.
-static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 100'000;
+static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 10'000;
 
 // When reading from a file, Chunks of this size will
-// be fed to the parser at once (100 MiB)
+// be fed to the parser at once (10 MiB)
 inline std::atomic<size_t>& FILE_BUFFER_SIZE() {
-  static std::atomic<size_t> fileBufferSize = 100 * (1ul << 20);
+  static std::atomic<size_t> fileBufferSize = 10 * (1ul << 20);
   return fileBufferSize;
 }
 
@@ -63,11 +63,11 @@ static const std::string TMP_BASENAME_COMPRESSION =
 // unique elements of the vocabulary are identified via hash maps. Typically, 6
 // is a good value. On systems with very few CPUs, a lower value might be
 // beneficial.
-constexpr size_t NUM_PARALLEL_ITEM_MAPS = 6;
+constexpr size_t NUM_PARALLEL_ITEM_MAPS = 10;
 
 // The number of threads that are parsing in parallel, when the parallel Turtle
 // parser is used.
-constexpr size_t NUM_PARALLEL_PARSER_THREADS = 5;
+constexpr size_t NUM_PARALLEL_PARSER_THREADS = 8;
 
 // Increasing the following two constants increases the RAM usage without much
 // benefit to the performance.
@@ -79,12 +79,20 @@ constexpr size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
 // time
 constexpr size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
 
-// The uncompressed size in bytes of a block of the permutations.
-//
-// NOTE: This used to be `1 << 23` (over 8M), which is fairly large (we always
-// need to decompress at least one whole block, even when reading only few
-// triples). With 100K, the total space for all the `CompressedBlockMetadata` is
-// still small compared to the rest of the index. However, with 100K, and single
-// block is just 10K compresse, which might result in sub-optimal IO-efficiency
-// when reading many blocks. We take 500K as a compromise.
-constexpr size_t BLOCKSIZE_COMPRESSED_METADATA = 500'000;
+// The blocksize parameter of the parallel vocabulary merging. Higher values
+// mean higher memory consumption, wherease a too low value will impact the
+// performance negatively.
+static constexpr size_t BLOCKSIZE_VOCABULARY_MERGING = 100;
+
+// A buffer size used during the second pass of the Index build.
+// It is not const, so we can set it to a much lower value for unit tests to
+// increase the test coverage.
+inline size_t BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10'000;
+
+// The uncompressed size in bytes of a block of a single column of the
+// permutations. If chosen too large, then we lose performance for very small
+// index scans which always have to read a complete block. If chosen too small,
+// the overhead of the metadata that has to be stored per block becomes
+// infeasible. 250K seems to be a reasonable tradeoff here.
+constexpr ad_utility::MemorySize
+    UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN = 250_kB;
