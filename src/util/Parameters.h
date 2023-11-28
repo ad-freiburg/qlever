@@ -15,6 +15,7 @@
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/ParseableDuration.h"
 #include "util/TupleForEach.h"
 #include "util/TypeTraits.h"
 
@@ -170,6 +171,22 @@ struct boolToString {
   std::string operator()(const bool& v) const { return v ? "true" : "false"; }
 };
 
+template <typename DurationType>
+struct durationToString {
+  std::string operator()(
+      const ad_utility::ParseableDuration<DurationType>& duration) const {
+    return duration.toString();
+  }
+};
+
+template <typename DurationType>
+struct durationFromString {
+  ad_utility::ParseableDuration<DurationType> operator()(
+      const std::string& duration) const {
+    return ad_utility::ParseableDuration<DurationType>::fromString(duration);
+  }
+};
+
 // To/from string for `MemorySize`.
 struct MemorySizeToString {
   std::string operator()(const MemorySize& m) const { return m.asString(); }
@@ -177,24 +194,6 @@ struct MemorySizeToString {
 struct MemorySizeFromString {
   MemorySize operator()(const std::string& str) const {
     return MemorySize::parse(str);
-  }
-};
-
-template <typename T>
-struct StreamableConverter {
-  static_assert(!ad_utility::isSimilar<T, std::string>);
-
-  T operator()(const std::string& str) const {
-    std::istringstream is{str};
-    T result;
-    is >> result;
-    return result;
-  }
-
-  std::string operator()(const T& value) const {
-    std::ostringstream os;
-    os << value;
-    return std::move(os).str();
   }
 };
 
@@ -219,9 +218,10 @@ template <ParameterName Name>
 using MemorySizeParameter =
     Parameter<MemorySize, MemorySizeFromString, MemorySizeToString, Name>;
 
-template <typename T, ParameterName Name>
-using StreamableParameter =
-    Parameter<T, StreamableConverter<T>, StreamableConverter<T>, Name>;
+template <typename DurationType, ParameterName Name>
+using DurationParameter = Parameter<ad_utility::ParseableDuration<DurationType>,
+                                    durationFromString<DurationType>,
+                                    durationToString<DurationType>, Name>;
 }  // namespace detail::parameterShortNames
 
 /// A container class that stores several `Parameters`. The reading (via

@@ -5,9 +5,11 @@
 #ifndef QLEVER_PARSEABLEDURATION_H
 #define QLEVER_PARSEABLEDURATION_H
 
+#include <absl/strings/str_cat.h>
 #include <ctre/ctre.h>
 
 #include <boost/lexical_cast.hpp>
+#include <iostream>
 
 #include "util/Exception.h"
 
@@ -95,6 +97,23 @@ class ParseableDuration {
   ParseableDuration(DurationType::rep rep) : duration_{rep} {}
   operator DurationType() const { return duration_; }
   auto operator<=>(const ParseableDuration&) const noexcept = default;
+
+  static ParseableDuration<DurationType> fromString(const std::string& str) {
+    std::istringstream is{str};
+    ParseableDuration<DurationType> result;
+    is >> result;
+    if (is.rdstate() & std::ios_base::failbit) {
+      throw std::runtime_error{absl::StrCat("Failed to convert string '", str,
+                                            "' to duration type.")};
+    }
+    return result;
+  }
+
+  std::string toString() const {
+    std::ostringstream os;
+    os << *this;
+    return std::move(os).str();
+  }
 };
 
 static_assert(

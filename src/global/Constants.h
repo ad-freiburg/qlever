@@ -190,8 +190,8 @@ static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Bool;
   using ad_utility::detail::parameterShortNames::Double;
+  using ad_utility::detail::parameterShortNames::DurationParameter;
   using ad_utility::detail::parameterShortNames::SizeT;
-  using ad_utility::detail::parameterShortNames::StreamableParameter;
   // NOTE: It is important that the value of the static variable is created by
   // an immediately invoked lambda, otherwise we get really strange segfaults on
   // Clang 16 and 17.
@@ -221,9 +221,8 @@ inline auto& RuntimeParameters() {
         SizeT<"lazy-index-scan-queue-size">{20},
         SizeT<"lazy-index-scan-num-threads">{10},
         ensureStrictPositivity(
-            StreamableParameter<
-                ad_utility::ParseableDuration<std::chrono::seconds>,
-                "default-query-timeout">{30}),
+            DurationParameter<std::chrono::seconds, "default-query-timeout">{
+                30}),
         SizeT<"lazy-index-scan-max-size-materialization">{1'000'000},
         Bool<"use-group-by-hash-map-optimization">{true}};
   }();

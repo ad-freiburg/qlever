@@ -94,14 +94,6 @@ TEST(Parameters, ParameterConcept) {
 }
 
 // _____________________________________________________________________________
-TEST(StreamableConverter, verifyConversionWorks) {
-  StreamableConverter<int> converter;
-
-  EXPECT_EQ(converter(1), "1");
-  EXPECT_EQ(converter("1"), 1);
-}
-
-// _____________________________________________________________________________
 TEST(Parameter, verifyParameterConstraint) {
   Parameter<size_t, szt, toString, "test"> parameter{42};
 

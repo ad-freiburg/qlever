@@ -378,6 +378,6 @@ addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
 addLinkAndDiscoverTest(ParallelMultiwayMergeTest)
 
-addLinkAndDiscoverTest(StreamUtilsTest)
+addLinkAndDiscoverTest(ParseableDurationTest)
 
 addLinkAndDiscoverTest(ConstantsTest)

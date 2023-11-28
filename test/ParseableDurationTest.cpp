@@ -2,32 +2,23 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <chrono>
 #include <iostream>
 
 #include "util/Concepts.h"
+#include "util/GTestHelpers.h"
 #include "util/ParseableDuration.h"
 
 using ad_utility::ParseableDuration;
 using namespace std::chrono_literals;
 using namespace std::chrono;
+using ::testing::HasSubstr;
 
-// _____________________________________________________________________________
-std::string toString(ad_utility::Streamable auto streamable) {
-  std::ostringstream os;
-  os << streamable;
-  return std::move(os).str();
-}
-
-// _____________________________________________________________________________
 template <typename DurationType>
-ParseableDuration<DurationType> fromString(const std::string& str) {
-  std::istringstream is{str};
-  ParseableDuration<DurationType> duration;
-  is >> duration;
-  return duration;
+auto fromString(const std::string& str) {
+  return ParseableDuration<DurationType>::fromString(str);
 }
 
 // _____________________________________________________________________________
@@ -39,12 +30,12 @@ TEST(ParseableDuration, testBasicSerialization) {
   ParseableDuration duration5{1min};
   ParseableDuration duration6{1h};
 
-  EXPECT_EQ(toString(duration1), "1ns");
-  EXPECT_EQ(toString(duration2), "1us");
-  EXPECT_EQ(toString(duration3), "1ms");
-  EXPECT_EQ(toString(duration4), "1s");
-  EXPECT_EQ(toString(duration5), "1min");
-  EXPECT_EQ(toString(duration6), "1h");
+  EXPECT_EQ(duration1.toString(), "1ns");
+  EXPECT_EQ(duration2.toString(), "1us");
+  EXPECT_EQ(duration3.toString(), "1ms");
+  EXPECT_EQ(duration4.toString(), "1s");
+  EXPECT_EQ(duration5.toString(), "1min");
+  EXPECT_EQ(duration6.toString(), "1h");
 }
 
 // _____________________________________________________________________________
@@ -78,6 +69,16 @@ TEST(ParseableDuration, testBasicParsing) {
   EXPECT_EQ(-1s, fromString<seconds>("-1s"));
   EXPECT_EQ(-1min, fromString<minutes>("-1min"));
   EXPECT_EQ(-1h, fromString<hours>("-1h"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(fromString<seconds>("1234"),
+                                        HasSubstr("1234"), std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(fromString<seconds>("s"),
+                                        HasSubstr("s"), std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(fromString<seconds>("    "),
+                                        HasSubstr("    "), std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(fromString<seconds>("onesecond"),
+                                        HasSubstr("onesecond"),
+                                        std::runtime_error);
 }
 
 // _____________________________________________________________________________
@@ -99,5 +100,5 @@ TEST(ParseableDuration, testParsingConversion) {
 TEST(ParseableDuration, testForwardingConstructor) {
   ParseableDuration<seconds> duration{1};
 
-  EXPECT_EQ(toString(duration), "1s");
+  EXPECT_EQ(duration.toString(), "1s");
 }
