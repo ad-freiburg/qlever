@@ -187,6 +187,7 @@ static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
 static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
 inline auto& RuntimeParameters() {
+  using ad_utility::detail::parameterShortNames::Bool;
   using ad_utility::detail::parameterShortNames::Double;
   using ad_utility::detail::parameterShortNames::SizeT;
   // NOTE: It is important that the value of the static variable is created by
@@ -205,7 +206,8 @@ inline auto& RuntimeParameters() {
         SizeT<"cache-max-size-gb-single-entry">{5},
         SizeT<"lazy-index-scan-queue-size">{20},
         SizeT<"lazy-index-scan-num-threads">{10},
-        SizeT<"lazy-index-scan-max-size-materialization">{1'000'000}};
+        SizeT<"lazy-index-scan-max-size-materialization">{1'000'000},
+        Bool<"use-group-by-hash-map-optimization">{true}};
   }();
   return params;
 }
