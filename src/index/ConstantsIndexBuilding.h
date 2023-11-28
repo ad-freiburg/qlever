@@ -91,10 +91,10 @@ inline size_t BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10'000;
 
 // The uncompressed size in bytes of a block of the permutations.
 //
-// NOTE: This used to be `1 << 23` (over 8M), which is fairly large (we always
+// NOTE: This used to be over 8MB, which is fairly large (we always
 // need to decompress at least one whole block, even when reading only few
 // triples). With 100K, the total space for all the `CompressedBlockMetadata` is
-// still small compared to the rest of the index. However, with 100K, and single
-// block is just 10K compresse, which might result in sub-optimal IO-efficiency
+// still small compared to the rest of the index. However, with 100K, a single
+// block is just 10K compressed, which might result in suboptimal IO-efficiency
 // when reading many blocks. We take 500K as a compromise.
-constexpr size_t BLOCKSIZE_COMPRESSED_METADATA = 500'000;
+constexpr ad_utility::MemorySize BLOCKSIZE_COMPRESSED_METADATA = 500_kB;

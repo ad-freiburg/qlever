@@ -18,30 +18,15 @@
 
 namespace ad_utility {
 
-/// A (far from complete) enum for different mime types.
+/// A minimal enum for different mime types.
 enum class MediaType {
-  defaultType,
-  html,
-  css,
   textPlain,
-  javascript,
   json,
   sparqlJson,
-  qleverJson,
   sparqlXml,
-  xml,
-  flash,
-  flv,
-  png,
-  jpeg,
-  gif,
-  bmp,
-  ico,
-  tiff,
-  svg,
+  qleverJson,
   tsv,
   csv,
-  textApplication,
   turtle,
   octetStream
 };
@@ -95,19 +80,10 @@ struct MediaTypeImpl {
 // media types.
 const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes();
 
-// Return a static map from file suffixes (e.g. ".json") to media types
-// (`MediaType::json`).
-const auto& getSuffixToMediaTypeStringMap();
-
 // Return a map from strings like "application/json" to MediaTypes.
 const auto& getStringToMediaTypeMap();
 
 }  // namespace detail
-
-// For a given filename (e.g. "index.html") compute the corresponding media type
-// ("text/html"). Unknown file suffixes will result in the media type
-// "application/text".
-const std::string& mediaTypeForFilename(std::string_view filename);
 
 /// Convert a `MediaType` to the corresponding media type string.
 const std::string& toString(MediaType t);
@@ -128,22 +104,20 @@ const std::string& getType(MediaType t);
 /// already sorted (highest quality first, more specific types first if the
 /// quality is the same). Throws on error.
 std::vector<MediaTypeWithQuality> parseAcceptHeader(
-    std::string_view acceptHeader, std::vector<MediaType> supportedMediaTypes);
+    std::string_view acceptHeader);
 
-/// Parse `acceptHeader`, and determine which of the `supportedMediaTypes`
+/// Parse `acceptHeader`, and determine which of the `SUPPORTED_MEDIA_TYPES`
 /// has the highest priority, and return this type. If several mediaTypes have
 /// the same priority (e.g. because of a wildcard in `acceptHeader`) then
-/// media types that appear earlier in the `supportedMediaTypes`. If none of the
-/// `supportedMediaTypes` is accepted by `acceptHeader`, then `std::nullopt`
-/// is returned.
+/// media types that appear earlier in the `SUPPORTED_MEDIA_TYPES`. If none of
+/// the `SUPPORTED_MEDIA_TYPES` is accepted by `acceptHeader`, then
+/// `std::nullopt` is returned.
 std::optional<MediaType> getMediaTypeFromAcceptHeader(
-    std::string_view acceptHeader,
-    const std::vector<MediaType>& supportedMediaTypes);
+    std::string_view acceptHeader);
 
-/// Return an error message, which reports that only the `supportedMediaTypes`
+/// Return an error message, which reports that only the `SUPPORTED_MEDIA_TYPES`
 /// are supported.
-std::string getErrorMessageForSupportedMediaTypes(
-    const std::vector<MediaType>& supportedMediaTypes);
+std::string getErrorMessageForSupportedMediaTypes();
 }  // namespace ad_utility
 
 #endif  // QLEVER_MEDIATYPES_H

@@ -227,8 +227,8 @@ ad_utility::MemorySize& Index::memoryLimitIndexBuilding() {
 }
 
 // ____________________________________________________________________________
-uint64_t& Index::blocksizePermutationsInBytes() {
-  return pimpl_->blocksizePermutationInBytes();
+ad_utility::MemorySize& Index::blocksizePermutations() {
+  return pimpl_->blocksizePermutation();
 }
 
 // ____________________________________________________________________________

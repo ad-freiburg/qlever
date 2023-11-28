@@ -240,7 +240,7 @@ addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
 
-addLinkAndDiscoverTest(TriplesViewTest util)
+addLinkAndDiscoverTest(TriplesViewTest util OpenSSL::SSL OpenSSL::Crypto)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 

@@ -50,13 +50,15 @@ void checkThatTablesAreEqual(
   }
 }
 
+}  // namespace
+
 // Run a set of tests on a permutation that is defined by the `inputs`. The
 // `inputs` must be ordered wrt the `col0_`. `testCaseName` is used to create
 // a unique name for the required temporary files and for the implicit cache
 // of the `CompressedRelationMetaData`. `blocksize` is the size of the blocks
 // in which the permutation will be compressed and stored on disk.
-void testCompressedRelations(const std::vector<RelationInput>& inputs,
-                             std::string testCaseName, size_t blocksize) {
+void testCompressedRelations(const auto& inputs, std::string testCaseName,
+                             ad_utility::MemorySize blocksize) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
   AD_CONTRACT_CHECK(std::ranges::is_sorted(
@@ -78,22 +80,35 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     for (const auto& input : inputs) {
       std::string bufferFilename =
           testCaseName + ".buffers." + std::to_string(i) + ".dat";
-      BufferedIdTable buffer{
-          2,
-          std::array{ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                                    bufferFilename + ".0"},
-                     ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                                    bufferFilename + ".1"}}};
+      IdTable buffer{2, ad_utility::makeUnlimitedAllocator<Id>()};
+      size_t numBlocks = 0;
+
+      auto addBlock = [&]() {
+        if (buffer.empty()) {
+          return;
+        }
+        writer.addBlockForLargeRelation(
+            V(input.col0_), std::make_shared<IdTable>(std::move(buffer)));
+        buffer.clear();
+        ++numBlocks;
+      };
       for (const auto& arr : input.col1And2_) {
         buffer.push_back({V(arr[0]), V(arr[1])});
+        if (buffer.numRows() > writer.blocksize()) {
+          addBlock();
+        }
       }
-      // The last argument is the number of distinct elements in `col1`. We
-      // store a dummy value here that we can check later.
-      auto md = writer.addRelation(V(input.col0_), buffer, i + 1);
-      metaData.push_back(md);
+      if (numBlocks > 0 || buffer.numRows() > 0.8 * writer.blocksize()) {
+        addBlock();
+        // The last argument is the number of distinct elements in `col1`. We
+        // store a dummy value here that we can check later.
+        metaData.push_back(writer.finishLargeRelation(i + 1));
+      } else {
+        metaData.push_back(writer.addSmallRelation(V(input.col0_), i + 1,
+                                                   buffer.asStaticView<0>()));
+      }
       buffer.clear();
-      ASSERT_THROW(writer.addRelation(V(input.col0_), buffer, i + 1),
-                   ad_utility::Exception);
+      numBlocks = 0;
       ++i;
     }
   }
@@ -173,15 +188,17 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
   ad_utility::deleteFile(filename);
 }
 
+namespace {
+
 // Run `testCompressedRelations` (see above) for the given `inputs` and
 // `testCaseName`, but with a set of different `blocksizes` (small and medium
 // size, powers of two and odd), to find subtle rounding bugs when creating the
 // blocks.
 void testWithDifferentBlockSizes(const std::vector<RelationInput>& inputs,
                                  std::string testCaseName) {
-  testCompressedRelations(inputs, testCaseName, 37);
-  testCompressedRelations(inputs, testCaseName, 237);
-  testCompressedRelations(inputs, testCaseName, 4096);
+  testCompressedRelations(inputs, testCaseName, 37_B);
+  testCompressedRelations(inputs, testCaseName, 237_B);
+  testCompressedRelations(inputs, testCaseName, 4096_B);
 }
 }  // namespace
 
@@ -409,4 +426,11 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   metadataAndBlocks.col1Id_ = std::nullopt;
   metadataAndBlocksB.col1Id_ = V(7);
   test({std::vector{block4, block5}, std::vector{blockB3}});
+}
+
+TEST(CompressedRelationReader, PermutedTripleToString) {
+  auto tr = CompressedBlockMetadata::PermutedTriple{V(12), V(13), V(27)};
+  std::stringstream str;
+  str << tr;
+  ASSERT_EQ(str.str(), "Triple: VocabIndex:12 VocabIndex:13 VocabIndex:27\n");
 }

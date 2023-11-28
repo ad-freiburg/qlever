@@ -16,12 +16,16 @@ TEST(Parameters, First) {
   using FloatParameter = Float<"Float">;
   using IntParameter = SizeT<"SizeT">;
   using DoubleParameter = Double<"Double">;
+  using BoolParameter = Bool<"Bool">;
+  using BoolParameter2 = Bool<"Bool2">;  // to test both results of toString
 
   Parameters pack2(FloatParameter{2.0f}, IntParameter{3ull},
-                   DoubleParameter{42.1});
+                   DoubleParameter{42.1}, BoolParameter{true},
+                   BoolParameter2{true});
   ASSERT_EQ(3ul, pack2.get<"SizeT">());
   ASSERT_FLOAT_EQ(2.0, pack2.get<"Float">());
   ASSERT_DOUBLE_EQ(42.1, pack2.get<"Double">());
+  ASSERT_TRUE(pack2.get<"Bool">());
 
   pack2.set("Float", "42.0");
   ASSERT_EQ(3ul, pack2.get<"SizeT">());
@@ -33,15 +37,20 @@ TEST(Parameters, First) {
   pack2.set("SizeT", "134");
   ASSERT_EQ(pack2.get<"SizeT">(), 134);
 
+  pack2.set("Bool", "false");
+  ASSERT_FALSE(pack2.get<"Bool">());
+
   ASSERT_THROW(pack2.set("NoKey", "24.1"), std::runtime_error);
   // TODO<joka921>: Make this unit test work.
   // ASSERT_THROW(pack2.set("Float", "24.nofloat1"), std::runtime_error);
 
   auto map = pack2.toMap();
-  ASSERT_EQ(3ul, map.size());
+  ASSERT_EQ(5ul, map.size());
   ASSERT_EQ("134", map.at("SizeT"));
   ASSERT_EQ("42.000000", map.at("Float"));
   ASSERT_EQ("16.200000", map.at("Double"));
+  ASSERT_EQ("false", map.at("Bool"));
+  ASSERT_EQ("true", map.at("Bool2"));
 }
 
 // Basic test, if the parameter for `MemorySize` works.
@@ -77,6 +86,7 @@ TEST(Parameters, ParameterConcept) {
   static_assert(IsParameter<SizeT<"SizeT">>);
   static_assert(IsParameter<String<"String">>);
   static_assert(IsParameter<MemorySizeParameter<"MemorySizeParameter">>);
+  static_assert(IsParameter<Bool<"Bool">>);
 
   // Test some other random types.
   static_assert(!IsParameter<std::string>);

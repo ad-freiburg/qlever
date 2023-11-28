@@ -135,7 +135,7 @@ find_package(OpenSSL REQUIRED)
 function (qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::flat_hash_map
         absl::flat_hash_set absl::strings absl::str_format ICU::uc
-        ICU::i18n)
+        ICU::i18n OpenSSL::SSL OpenSSL::Crypto)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -314,10 +314,6 @@ add_subdirectory(benchmark)
 enable_testing()
 option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools" OFF)
 add_subdirectory(test)
-
-configure_file(src/web/index.html index.html)
-configure_file(src/web/style.css style.css)
-configure_file(src/web/script.js script.js)
 
 # Add the library with the constants declared in `CompilationInfo.h` and defined
 # in `CompilationInfo.cpp` created by `CompilationInfo.cmake`.

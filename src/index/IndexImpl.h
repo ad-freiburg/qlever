@@ -119,7 +119,7 @@ class IndexImpl {
   bool keepTempFiles_ = false;
   ad_utility::MemorySize memoryLimitIndexBuilding_ =
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
-  uint64_t blocksizePermutationInBytes_ = BLOCKSIZE_COMPRESSED_METADATA;
+  ad_utility::MemorySize blocksizePermutation_ = BLOCKSIZE_COMPRESSED_METADATA;
   json configurationJson_;
   Index::Vocab vocab_;
   size_t totalVocabularySize_ = 0;
@@ -366,8 +366,8 @@ class IndexImpl {
     return memoryLimitIndexBuilding_;
   }
 
-  uint64_t& blocksizePermutationInBytes() {
-    return blocksizePermutationInBytes_;
+  ad_utility::MemorySize& blocksizePermutation() {
+    return blocksizePermutation_;
   }
 
   void setOnDiskBase(const std::string& onDiskBase);
@@ -469,14 +469,12 @@ class IndexImpl {
   void processWordsForInvertedLists(const string& contextFile,
                                     bool addWordsFromLiterals, TextVec& vec);
 
-  std::optional<std::pair<IndexMetaDataMmapDispatcher::WriteType,
-                          IndexMetaDataMmapDispatcher::WriteType>>
+  std::pair<IndexMetaDataMmapDispatcher::WriteType,
+            IndexMetaDataMmapDispatcher::WriteType>
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
-                            auto&& sortedTriples, size_t c0, size_t c1,
-                            size_t c2, auto&&... perTripleCallbacks);
-
-  static CompressedRelationMetadata writeSwitchedRel(
-      CompressedRelationWriter* out, Id currentRel, BufferedIdTable* bufPtr);
+                            auto&& sortedTriples,
+                            std::array<size_t, 3> permutation,
+                            auto&&... perTripleCallbacks);
 
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
@@ -502,8 +500,8 @@ class IndexImpl {
   // Careful: only multiplicities for first column is valid after call, need to
   // call exchangeMultiplicities as done by createPermutationPair
   // the optional is std::nullopt if vec and thus the index is empty
-  std::optional<std::pair<IndexMetaDataMmapDispatcher::WriteType,
-                          IndexMetaDataMmapDispatcher::WriteType>>
+  std::pair<IndexMetaDataMmapDispatcher::WriteType,
+            IndexMetaDataMmapDispatcher::WriteType>
   createPermutations(auto&& sortedTriples, const Permutation& p1,
                      const Permutation& p2, auto&&... perTripleCallbacks);
 
