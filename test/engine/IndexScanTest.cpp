@@ -338,6 +338,9 @@ TEST(IndexScan, additionalColumn) {
               ::testing::ContainsRegex("Additional Columns: 1 0"));
   // Executing such a query that has the same column multiple times is currently
   // not supported and fails with an exception inside the `IdTable.h` module
+  // TODO<joka921> Add proper tests as soon as we can properly add additional
+  // columns. Maybe we cann add additional columns generically during the index
+  // build by adding a generic transformation function etc.
   AD_EXPECT_THROW_WITH_MESSAGE(scan.computeResultOnlyForTesting(),
                                ::testing::ContainsRegex("IdTable.h"));
 }

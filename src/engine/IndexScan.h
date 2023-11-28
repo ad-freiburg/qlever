@@ -21,15 +21,13 @@ class IndexScan : public Operation {
   size_t sizeEstimate_;
   vector<float> multiplicity_;
 
+  // Additional columns (e.g. patterns) that are being retrieved in addition to
+  // the "ordinary" subjects, predicates, or objects, as well as the variables
+  // that they are bound to.
   std::vector<ColumnIndex> additionalColumns_;
   std::vector<Variable> additionalVariables_;
 
  public:
-  const std::vector<ColumnIndex>& additionalColumns() const {
-    return additionalColumns_;
-  }
-  string getDescriptor() const override;
-
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTriple& triple);
 
@@ -38,6 +36,11 @@ class IndexScan : public Operation {
   const TripleComponent& getPredicate() const { return predicate_; }
   const TripleComponent& getSubject() const { return subject_; }
   const TripleComponent& getObject() const { return object_; }
+
+  const std::vector<ColumnIndex>& additionalColumns() const {
+    return additionalColumns_;
+  }
+  string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 

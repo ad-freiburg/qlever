@@ -59,25 +59,21 @@ string IndexScan::asStringImpl(size_t indent) const {
     os << "SCAN FOR FULL INDEX " << permutationString << " (DUMMY OPERATION)";
 
   } else {
-    auto firstKeyString = permutationString.at(0);
-    auto permutedTriple = getPermutedTriple();
-    const auto& firstKey = permutedTriple.at(0)->toRdfLiteral();
+    os << "SCAN " << permutationString << " with ";
+    auto addKey = [&os, &permutationString, this](size_t idx) {
+      auto keyString = permutationString.at(idx);
+      const auto& key = getPermutedTriple().at(idx)->toRdfLiteral();
+      os << keyString << " = \"" << key << "\"";
+    };
+    addKey(0);
     if (numVariables_ == 1) {
-      auto secondKeyString = permutationString.at(1);
-      const auto& secondKey = permutedTriple.at(1)->toRdfLiteral();
-      os << "SCAN " << permutationString << " with " << firstKeyString
-         << " = \"" << firstKey << "\", " << secondKeyString << " = \""
-         << secondKey << "\"";
-    } else if (numVariables_ == 2) {
-      os << "SCAN " << permutationString << " with " << firstKeyString
-         << " = \"" << firstKey << "\"";
+      os << ", ";
+      addKey(1);
     }
   }
   if (!additionalColumns_.empty()) {
-    os << " Additional Columns:";
-    for (auto col : additionalColumns_) {
-      os << " " << col;
-    }
+    os << " Additional Columns: ";
+    ad_utility::lazyStrJoin(&os, additionalColumns(), " ");
   }
   return std::move(os).str();
 }
@@ -110,21 +106,19 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
 // _____________________________________________________________________________
 VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   VariableToColumnMap variableToColumnMap;
-  // All the columns of an index scan only contain defined values.
-  auto makeCol = makeAlwaysDefinedColumn;
-  auto nextColIdx = ColumnIndex{0};
+  auto addCol = [&variableToColumnMap,
+                 nextColIdx = ColumnIndex{0}](const Variable& var) mutable {
+    // All the columns of an index scan only contain defined values.
+    variableToColumnMap[var] = makeAlwaysDefinedColumn(nextColIdx);
+    ++nextColIdx;
+  };
 
   for (const TripleComponent* const ptr : getPermutedTriple()) {
     if (ptr->isVariable()) {
-      variableToColumnMap[ptr->getVariable()] = makeCol(nextColIdx);
-      ++nextColIdx;
+      addCol(ptr->getVariable());
     }
   }
-
-  for (const auto& var : additionalVariables_) {
-    variableToColumnMap[var] = makeCol(nextColIdx);
-    ++nextColIdx;
-  }
+  std::ranges::for_each(additionalVariables_, addCol);
   return variableToColumnMap;
 }
 // _____________________________________________________________________________
@@ -170,10 +164,10 @@ size_t IndexScan::computeSizeEstimate() {
         // This call explicitly has to read two blocks of triples from memory to
         // obtain an exact size estimate.
         return getIndex().getResultSizeOfScan(
-            *getPermutedTriple()[0], *getPermutedTriple()[1], permutation_);
+            *getPermutedTriple()[0], *getPermutedTriple().at(1), permutation_);
       }
     } else if (numVariables_ == 2) {
-      const TripleComponent& firstKey = *getPermutedTriple()[0];
+      const TripleComponent& firstKey = *getPermutedTriple().at(0);
       return getIndex().getCardinality(firstKey, permutation_);
     } else {
       // The triple consists of three variables.
@@ -188,14 +182,10 @@ size_t IndexScan::computeSizeEstimate() {
   } else {
     // Only for test cases. The handling of the objects is to make the
     // strange query planner tests pass.
-    // TODO<joka921> Code duplication.
-    std::string objectStr =
-        object_.isString() ? object_.getString() : object_.toString();
-    std::string subjectStr =
-        subject_.isString() ? subject_.getString() : subject_.toString();
-    std::string predStr =
-        predicate_.isString() ? predicate_.getString() : predicate_.toString();
-    return 1000 + subjectStr.size() + predStr.size() + objectStr.size();
+    auto strLen = [](const auto& el) {
+      return (el.isString() ? el.getString() : el.toString()).size();
+    };
+    return 1000 + strLen(subject_) + strLen(object_) + strLen(predicate_);
   }
 }
 
@@ -254,7 +244,6 @@ void IndexScan::determineMultiplicities() {
     multiplicity_.emplace_back(1);
   }
   AD_CONTRACT_CHECK(multiplicity_.size() == getResultWidth());
-  // assert(multiplicity_.size() >= 1 || multiplicity_.size() <= 3);
 }
 
 // ________________________________________________________________________

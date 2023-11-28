@@ -12,7 +12,6 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "util/BufferedVector.h"
 #include "util/Cache.h"
 #include "util/CancellationHandle.h"
 #include "util/ConcurrentCache.h"
@@ -28,12 +27,6 @@
 
 // Forward declaration of the `IdTable` class.
 class IdTable;
-
-// A buffer for all columns except for the first one (which will be dealt with
-// separately). This is the format in which the raw data for a single relation
-// is passed around during the index building.
-using BufferedIdTable =
-    columnBasedIdTable::IdTable<Id, 0, ad_utility::BufferedVector<Id>>;
 
 // This type is used to buffer small relations that will be stored in the same
 // block.
@@ -585,10 +578,6 @@ class CompressedRelationReader {
  * and the number of columns etc. to make the permutation class a thinner
  * wrapper.
  * 2. Then add assertions that we only get valid column indices specified.
- * 3. Store meta information about the additional columns AND THEIR SEMANTICS
- * somewhere (preferably in the CompressedRelationReader or the permutation
- * class.
- * 4. Also add a typedef in this .h file for `std::span<const ColumnIndex>`.
  */
 
 #endif  // QLEVER_COMPRESSEDRELATION_H

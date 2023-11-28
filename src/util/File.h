@@ -118,12 +118,6 @@ class File {
 
   // read from current file pointer position
   // returns the number of bytes read
-  size_t readFromBeginning(void* targetBuffer, size_t nofBytesToRead) const {
-    return read(targetBuffer, nofBytesToRead, (off_t)0);
-  }
-
-  // read from current file pointer position
-  // returns the number of bytes read
   size_t read(void* targetBuffer, size_t nofBytesToRead) {
     assert(_file);
     return fread(targetBuffer, (size_t)1, nofBytesToRead, _file);

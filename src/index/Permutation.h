@@ -107,6 +107,8 @@ class Permutation {
   const MetaData& metaData() const { return meta_; }
   MetaData meta_;
 
+  // This member is `optional` because we initialize it in a deferred way in the
+  // `loadFromDisk` method.
   std::optional<CompressedRelationReader> reader_;
   Allocator allocator_;
 

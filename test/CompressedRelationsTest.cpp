@@ -156,9 +156,9 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
       [&filename] { ad_utility::deleteFile(filename); });
   CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
                                   ad_utility::File{filename, "r"}};
+  // TODO<C++23> `std::ranges::to<vector>`.
   std::vector<ColumnIndex> additionalColumns;
-  auto numCols = inputs.empty() ? 2 : inputs.at(0).col1And2_.at(0).size();
-  std::ranges::copy(std::views::iota(2ul, numCols),
+  std::ranges::copy(std::views::iota(2ul, getNumColumns(inputs)),
                     std::back_inserter(additionalColumns));
   for (size_t i = 0; i < metaData.size(); ++i) {
     const auto& m = metaData[i];
