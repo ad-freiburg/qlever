@@ -405,13 +405,13 @@ class IndexImpl {
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       const Permutation::Enum& permutation,
-      Permutation::ColumnIndices additionalColumns,
+      Permutation::ColumnIndicesRef additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // _____________________________________________________________________________
   IdTable scan(
       Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-      Permutation::ColumnIndices additionalColumns,
+      Permutation::ColumnIndicesRef additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // _____________________________________________________________________________

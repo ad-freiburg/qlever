@@ -327,8 +327,8 @@ using namespace std::string_view_literals;
 class CompressedRelationReader {
  public:
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
-  using ColumnIndices = std::span<const ColumnIndex>;
-  using OwningColumnIndices = std::vector<ColumnIndex>;
+  using ColumnIndicesRef = std::span<const ColumnIndex>;
+  using ColumnIndices = std::vector<ColumnIndex>;
 
   // The metadata of a single relation together with a subset of its
   // blocks and possibly a `col1Id` for additional filtering. This is used as
@@ -424,7 +424,7 @@ class CompressedRelationReader {
   IdTable scan(
       const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
       std::span<const CompressedBlockMetadata> blocks,
-      ColumnIndices additionalColumns,
+      ColumnIndicesRef additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
@@ -433,7 +433,7 @@ class CompressedRelationReader {
   IdTableGenerator lazyScan(
       CompressedRelationMetadata metadata, std::optional<Id> col1Id,
       std::vector<CompressedBlockMetadata> blockMetadata,
-      OwningColumnIndices additionalColumns,
+      ColumnIndices additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
@@ -474,7 +474,7 @@ class CompressedRelationReader {
   // Only the columns specified by `columnIndices` are read.
   CompressedBlock readCompressedBlockFromFile(
       const CompressedBlockMetadata& blockMetaData,
-      ColumnIndices columnIndices) const;
+      ColumnIndicesRef columnIndices) const;
 
   // Decompress the `compressedBlock`. The number of rows that the block will
   // have after decompression must be passed in via the `numRowsToRead`
@@ -504,7 +504,7 @@ class CompressedRelationReader {
   // are returned.
   DecompressedBlock readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData,
-      ColumnIndices columnIndices) const;
+      ColumnIndicesRef columnIndices) const;
 
   // Read the block that is identified by the `blockMetadata` from the `file`,
   // decompress and return it. Before returning, delete all rows where the col0
@@ -517,15 +517,15 @@ class CompressedRelationReader {
       const CompressedRelationMetadata& relationMetadata,
       std::optional<Id> col1Id, const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
-      ColumnIndices columnIndices) const;
+      ColumnIndicesRef columnIndices) const;
 
   // Yield all the blocks in the range `[beginBlock, endBlock)`. If the
-  // `columnIndices` are set, that only the specified columns from the blocks
-  // are yielded, else the complete blocks are yielded. The blocks are yielded
+  // `columnIndices` are set, only the specified columns from the blocks
+  // are yielded, else all columns are yielded. The blocks are yielded
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
   IdTableGenerator asyncParallelBlockGenerator(
-      auto beginBlock, auto endBlock, OwningColumnIndices columnIndices,
+      auto beginBlock, auto endBlock, ColumnIndices columnIndices,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // A helper function to abstract away the timeout check:
@@ -539,16 +539,17 @@ class CompressedRelationReader {
   }
 
   // Return a vector that consists of the concatenation of `baseColumns` and
-  // `additionalColumnsAndVariables`
+  // `additionalColumns`
   static std::vector<ColumnIndex> prepareColumnIndices(
       std::initializer_list<ColumnIndex> baseColumns,
-      ColumnIndices additionalColumns);
+      ColumnIndicesRef additionalColumns);
+
   // If `col1Id` is specified, `return {1, additionalColumns...}`, else return
   // `{0, 1, additionalColumns}`.
   // These are exactly the columns that are returned by a scan depending on
   // whether the `col1Id` is specified or not.
   static std::vector<ColumnIndex> prepareColumnIndices(
-      const std::optional<Id>& col1Id, ColumnIndices additionalColumns);
+      const std::optional<Id>& col1Id, ColumnIndicesRef additionalColumns);
 };
 
 // TODO<joka921>

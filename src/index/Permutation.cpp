@@ -40,7 +40,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
 
 // _____________________________________________________________________
 IdTable Permutation::scan(
-    Id col0Id, std::optional<Id> col1Id, ColumnIndices additionalColumns,
+    Id col0Id, std::optional<Id> col1Id, ColumnIndicesRef additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
@@ -129,7 +129,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
 Permutation::IdTableGenerator Permutation::lazyScan(
     Id col0Id, std::optional<Id> col1Id,
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
-    ColumnIndices additionalColumns,
+    ColumnIndicesRef additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   if (!meta_.col0IdExists(col0Id)) {
     return {};
@@ -140,9 +140,8 @@ Permutation::IdTableGenerator Permutation::lazyScan(
         relationMetadata, col1Id, meta_.blockData());
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   }
-  OwningColumnIndices owningColumns{additionalColumns.begin(),
-                                    additionalColumns.end()};
+  ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
   return reader().lazyScan(meta_.getMetaData(col0Id), col1Id,
-                           std::move(blocks.value()), std::move(owningColumns),
+                           std::move(blocks.value()), std::move(columns),
                            cancellationHandle);
 }

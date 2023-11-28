@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 
+#include "absl/strings/str_join.h"
 #include "index/IndexImpl.h"
 #include "index/TriplesView.h"
 #include "parser/ParsedQuery.h"
@@ -73,7 +74,7 @@ string IndexScan::asStringImpl(size_t indent) const {
   }
   if (!additionalColumns_.empty()) {
     os << " Additional Columns: ";
-    ad_utility::lazyStrJoin(&os, additionalColumns(), " ");
+    os << absl::StrJoin(additionalColumns(), " ");
   }
   return std::move(os).str();
 }
@@ -222,6 +223,7 @@ void IndexScan::determineMultiplicities() {
   if (_executionContext) {
     const auto& idx = getIndex();
     if (numVariables_ == 1) {
+      // There are no duplicate triples in RDF and two elements are fixed.
       multiplicity_.emplace_back(1);
     } else if (numVariables_ == 2) {
       const auto permutedTriple = getPermutedTriple();
@@ -231,6 +233,7 @@ void IndexScan::determineMultiplicities() {
       multiplicity_ = idx.getMultiplicities(permutation_);
     }
   } else {
+    // This branch is only used in certain unit tests.
     multiplicity_.emplace_back(1);
     if (numVariables_ == 2) {
       multiplicity_.emplace_back(1);

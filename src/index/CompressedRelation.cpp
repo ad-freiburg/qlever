@@ -26,7 +26,7 @@ static auto getBeginAndEnd(auto& range) {
 // ____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
-    auto beginBlock, auto endBlock, OwningColumnIndices columnIndices,
+    auto beginBlock, auto endBlock, ColumnIndices columnIndices,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
@@ -90,7 +90,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata, std::optional<Id> col1Id,
     std::vector<CompressedBlockMetadata> blockMetadata,
-    OwningColumnIndices additionalColumns,
+    ColumnIndices additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   AD_CONTRACT_CHECK(cancellationHandle);
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
@@ -289,7 +289,7 @@ CompressedRelationReader::getBlocksForJoin(
 IdTable CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
     std::span<const CompressedBlockMetadata> blocks,
-    ColumnIndices additionalColumns,
+    ColumnIndicesRef additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   auto columnIndices = prepareColumnIndices(col1Id, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
@@ -336,8 +336,8 @@ IdTable CompressedRelationReader::scan(
   result.resize(totalResultSize);
 
   size_t rowIndexOfNextBlockStart = 0;
-  // Lambda that adds a possibly incomplete block (the first or last block) at
-  // the current position.
+  // Lambda that appends a possibly incomplete block (the first or last block)
+  // to the `result`.
   auto addIncompleteBlockIfExists =
       [&rowIndexOfNextBlockStart, &result](
           const std::optional<DecompressedBlock>& incompleteBlock) mutable {
@@ -404,7 +404,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     const CompressedRelationMetadata& relationMetadata,
     std::optional<Id> col1Id, const CompressedBlockMetadata& blockMetadata,
     std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
-    ColumnIndices columnIndices) const {
+    ColumnIndicesRef columnIndices) const {
   std::vector<ColumnIndex> allColumns;
   std::ranges::copy(
       ad_utility::integerRange(blockMetadata.offsetsAndCompressedSize_.size()),
@@ -526,7 +526,7 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
 // _____________________________________________________________________________
 CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
     const CompressedBlockMetadata& blockMetaData,
-    ColumnIndices columnIndices) const {
+    ColumnIndicesRef columnIndices) const {
   CompressedBlock compressedBuffer;
   compressedBuffer.resize(columnIndices.size());
   // TODO<C++23> Use `std::views::zip`
@@ -581,7 +581,7 @@ void CompressedRelationReader::decompressColumn(
 // _____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::readAndDecompressBlock(
     const CompressedBlockMetadata& blockMetaData,
-    ColumnIndices columnIndices) const {
+    ColumnIndicesRef columnIndices) const {
   CompressedBlock compressedColumns =
       readCompressedBlockFromFile(blockMetaData, columnIndices);
   const auto numRowsToRead = blockMetaData.numRows_;
@@ -715,7 +715,7 @@ auto CompressedRelationReader::getFirstAndLastTriple(
 // ____________________________________________________________________________
 std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
     std::initializer_list<ColumnIndex> baseColumns,
-    ColumnIndices additionalColumns) {
+    ColumnIndicesRef additionalColumns) {
   std::vector<ColumnIndex> result;
   result.reserve(baseColumns.size() + additionalColumns.size());
   std::ranges::copy(baseColumns, std::back_inserter(result));
@@ -725,7 +725,7 @@ std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
 
 // ____________________________________________________________________________
 std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
-    const std::optional<Id>& col1Id, ColumnIndices additionalColumns) {
+    const std::optional<Id>& col1Id, ColumnIndicesRef additionalColumns) {
   if (col1Id.has_value()) {
     return prepareColumnIndices({1}, additionalColumns);
   } else {
