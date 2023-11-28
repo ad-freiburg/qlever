@@ -147,6 +147,20 @@ int main(int argc, char** argv) {
     printUsageAndExit();
   }
 
+  // Print all the available configuration options, if wanted.
+  if (vm.count("configuration-options")) {
+    std::ranges::for_each(
+        BenchmarkRegister::getAllRegisteredBenchmarks(),
+        [](const BenchmarkInterface* bench) {
+          std::cerr << createCategoryTitle(absl::StrCat("Benchmark class '",
+                                                        bench->name(), "'"))
+                    << "\n"
+                    << bench->getConfigManager().printConfigurationDoc()
+                    << "\n\n";
+        });
+    exit(0);
+  }
+
   /*
   Set all the configuration options.
   Because the `configManager` also checks, if mandatory options were set, when
@@ -163,20 +177,6 @@ int main(int argc, char** argv) {
   }
 
   BenchmarkRegister::parseConfigWithAllRegisteredBenchmarks(jsonConfig);
-
-  // Print all the available configuration options, if wanted.
-  if (vm.count("configuration-options")) {
-    std::ranges::for_each(
-        BenchmarkRegister::getAllRegisteredBenchmarks(),
-        [](const BenchmarkInterface* bench) {
-          std::cerr << createCategoryTitle(absl::StrCat("Benchmark class '",
-                                                        bench->name(), "'"))
-                    << "\n"
-                    << bench->getConfigManager().printConfigurationDoc()
-                    << "\n\n";
-        });
-    exit(0);
-  }
 
   // Measuring the time for all registered benchmarks.
   // For measuring and saving the times.
