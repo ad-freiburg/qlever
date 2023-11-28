@@ -599,7 +599,7 @@ std::string ConfigManager::generateConfigurationDocDetailedList(
                               return absl::StrCat("- ",
                                                   validator.getDescription());
                             }),
-      "\n\n");
+      "\n");
 
   return absl::StrCat(ad_utility::lazyStrJoin(stringRepresentations, "\n\n"),
                       "\n\nRequired invariants:",
