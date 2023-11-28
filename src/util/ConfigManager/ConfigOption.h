@@ -183,18 +183,6 @@ class ConfigOption {
   */
   nlohmann::json getValueAsJson() const;
 
-  /*
-  @brief Return json representation of a dummy value, that is of the same type,
-  as the type, this configuration option was set to.
-  */
-  nlohmann::json getDummyValueAsJson() const;
-
-  /*
-  @brief Return string representation of a dummy value, that is of the same
-  type, as the type, this configuration option was set to.
-  */
-  std::string getDummyValueAsString() const;
-
   // For printing.
   explicit operator std::string() const;
 

@@ -236,60 +236,6 @@ nlohmann::json ConfigOption::getDefaultValueAsJson() const {
       data_);
 }
 
-// The dummy values.
-template <typename DummyType>
-static std::decay_t<DummyType> getDummyValue() {
-  if constexpr (std::is_same_v<std::decay_t<DummyType>, bool>) {
-    return false;
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, std::string>) {
-    return "Example string";
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, int>) {
-    return -42;
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, size_t>) {
-    return 42uL;
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, float>) {
-    return 4.2f;
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>,
-                                      std::vector<bool>>) {
-    return std::vector{true, false};
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>,
-                                      std::vector<std::string>>) {
-    return std::vector<std::string>{"Example", "string", "list"};
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>,
-                                      std::vector<int>>) {
-    return std::vector{40, -41, 42};
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>,
-                                      std::vector<size_t>>) {
-    return std::vector{40uL, 41uL, 42uL};
-  } else {
-    // Must be a vector of floats.
-    static_assert(std::is_same_v<std::decay_t<DummyType>, std::vector<float>>);
-    return {40.0f, 41.1f, 42.2f};
-  }
-}
-
-// ____________________________________________________________________________
-nlohmann::json ConfigOption::getDummyValueAsJson() const {
-  return std::visit(
-      []<typename T>(const Data<T>&) {
-        return nlohmann::json(getDummyValue<T>());
-      },
-      data_);
-}
-
-// ____________________________________________________________________________
-std::string ConfigOption::getDummyValueAsString() const {
-  return std::visit(
-      /*
-      We could directly return a string, but by converting a value, we don't
-      have to keep an eye on how the class represents it's values as strings.
-      */
-      []<typename T>(const Data<T>&) {
-        return contentOfAvailableTypesToString(getDummyValue<T>());
-      },
-      data_);
-}
-
 // ____________________________________________________________________________
 ConfigOption::operator std::string() const {
   /*
