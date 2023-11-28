@@ -203,7 +203,7 @@ inline auto& RuntimeParameters() {
             if (value <= std::chrono::seconds{0}) {
               throw std::runtime_error{absl::StrCat(
                   "Parameter ", parameterName,
-                  " must be strictly positive, was ", value.count())};
+                  " must be strictly positive, was ", value.count(), "s")};
             }
           });
       return parameter;

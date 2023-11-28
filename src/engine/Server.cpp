@@ -337,8 +337,20 @@ Awaitable<void> Server::process(
       throw std::runtime_error(
           "Parameter \"query\" must not have an empty value");
     }
+    std::chrono::seconds timeLimit =
+        RuntimeParameters().get<"default-query-timeout">();
+    if (auto timeoutParam = checkParameter("timeout", std::nullopt)) {
+      std::string userTimeoutString{timeoutParam.value()};
+      // std::stoi does not support std::string_view
+      std::chrono::seconds userTimeout{std::stoi(userTimeoutString)};
+      if (userTimeout > timeLimit) {
+        // Throw exception if token is invalid
+        checkParameter("timeout", std::nullopt, accessTokenOk);
+      }
+      timeLimit = userTimeout;
+    }
     co_return co_await processQuery(parameters, requestTimer,
-                                    std::move(request), send);
+                                    std::move(request), send, timeLimit);
   }
 
   // If there was no "query", but any of the URL parameters processed before
@@ -503,7 +515,8 @@ auto Server::setupCancellationHandle(
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+    std::chrono::seconds timeLimit) {
   using namespace ad_utility::httpUtils;
   AD_CONTRACT_CHECK(params.contains("query"));
   const auto& query = params.at("query");
@@ -529,11 +542,6 @@ boost::asio::awaitable<void> Server::processQuery(
   // access to the runtimeInformation in the case of an error.
   std::optional<PlannedQuery> plannedQuery;
   try {
-    std::chrono::seconds timeLimit{
-        params.contains("timeout")
-            ? std::stoi(params.at("timeout"))
-            : RuntimeParameters().get<"default-query-timeout">()};
-
     auto containsParam = [&params](const std::string& param,
                                    const std::string& expected) {
       return params.contains(param) && params.at(param) == expected;

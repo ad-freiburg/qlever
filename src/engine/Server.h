@@ -102,9 +102,12 @@ class Server {
   /// \param request The HTTP request.
   /// \param send The action that sends a http:response (see the
   ///             `HttpServer.h` for documentation).
+  /// \param timeLimit Duration in seconds after which the query will be
+  ///                  cancelled.
   Awaitable<void> processQuery(
       const ParamValueMap& params, ad_utility::Timer& requestTimer,
-      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+      std::chrono::seconds timeLimit);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
