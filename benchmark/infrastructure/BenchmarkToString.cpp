@@ -76,7 +76,8 @@ std::string benchmarkResultsToString(
 
   // Visualize the configuration options of this class.
   visualization << "\n\n"
-                << benchmarkClass->getConfigManager().printConfigurationDoc();
+                << benchmarkClass->getConfigManager().printConfigurationDoc(
+                       true);
 
   /*
   @brief Adds a category to the string steam, if it is not empty. Mainly

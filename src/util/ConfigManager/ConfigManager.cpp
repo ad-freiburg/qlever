@@ -330,7 +330,7 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
               absl::StrCat("Key error: There is already a configuration "
                            "option, or sub manager, with the path '",
                            vectorOfKeysForJsonToString(path), "'\n",
-                           printConfigurationDoc(), "\n"));
+                           printConfigurationDoc(true), "\n"));
         }
 
         /*
@@ -376,7 +376,7 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
           throw std::runtime_error(absl::StrCat(
               "Key error: The given path '", vectorOfKeysForJsonToString(path),
               "' is a prefix of a path, '", alreadyAddedPath,
-              "', that is already in use.", "'\n", printConfigurationDoc(),
+              "', that is already in use.", "'\n", printConfigurationDoc(true),
               "\n"));
         }
 
@@ -386,7 +386,7 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
           throw std::runtime_error(absl::StrCat(
               "Key error: The given path '", vectorOfKeysForJsonToString(path),
               "' has an already in use path '", alreadyAddedPath,
-              "' as an prefix.", "'\n", printConfigurationDoc(), "\n"));
+              "' as an prefix.", "'\n", printConfigurationDoc(true), "\n"));
         }
       });
 }
@@ -516,9 +516,9 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
         throw j.at(currentPtr.parent_pointer()).is_array()
             ? NoConfigOptionFoundException(
                   currentPtr.parent_pointer().to_string(),
-                  printConfigurationDoc())
+                  printConfigurationDoc(false))
             : NoConfigOptionFoundException(currentPtr.to_string(),
-                                           printConfigurationDoc());
+                                           printConfigurationDoc(false));
       }
     }
   }
@@ -595,7 +595,7 @@ nlohmann::ordered_json ConfigManager::generateConfigurationDocJson(
 }
 
 // ____________________________________________________________________________
-std::string ConfigManager::generateDetailedConfigurationDoc(
+std::string ConfigManager::generateConfigurationDocDetailedList(
     std::string_view pathPrefix) const {
   // For collecting the string representations of the hash map entries.
   std::vector<std::string> stringRepresentations;
@@ -614,7 +614,7 @@ std::string ConfigManager::generateDetailedConfigurationDoc(
           stringRepresentations.emplace_back(absl::StrCat(
               "Sub manager : ", path, "\n",
               ad_utility::addIndentation(
-                  optionOrSubManager.generateDetailedConfigurationDoc(
+                  optionOrSubManager.generateConfigurationDocDetailedList(
                       absl::StrCat(pathPrefix, path)),
                   "    ")));
         } else {
@@ -649,22 +649,21 @@ std::string ConfigManager::generateDetailedConfigurationDoc(
 }
 
 // ____________________________________________________________________________
-std::string ConfigManager::printConfigurationDoc() const {
-  // All the configuration options together with their paths.
-  const std::vector<std::pair<std::string, const ConfigOption&>>
-      allConfigOptions = configurationOptions(true);
-
-  // Handeling, for when there are no configuration options.
-  if (allConfigOptions.empty()) {
+std::string ConfigManager::printConfigurationDoc(bool detailed) const {
+  /*
+  This works, because sub managers are not allowed to be empty. (This invariant
+  is checked by the helper function for walking over the hash map entries, that
+  is used by the `generateConfigurationDoc...` helper functions.)
+  So, the only way for a valid lack of configuration options to be true, is on
+  the top level. A.k.a. the object, on which `printConfigurationDoc` was called.
+  */
+  if (configurationOptions_.empty()) {
     return "No configuration options were defined.";
   }
-
-  const std::string& configuratioOptionsVisualizationAsString =
-      generateConfigurationDocJson("").dump(2);
-
-  return absl::StrCat("Configuration:\n",
-                      configuratioOptionsVisualizationAsString, "\n\n",
-                      generateDetailedConfigurationDoc(""));
+  return absl::StrCat(
+      "Configuration:\n", generateConfigurationDocJson("").dump(2),
+      detailed ? absl::StrCat("\n\n", generateConfigurationDocDetailedList(""))
+               : "");
 }
 
 // ____________________________________________________________________________

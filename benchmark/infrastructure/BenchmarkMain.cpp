@@ -155,7 +155,7 @@ int main(int argc, char** argv) {
           std::cerr << createCategoryTitle(absl::StrCat("Benchmark class '",
                                                         bench->name(), "'"))
                     << "\n"
-                    << bench->getConfigManager().printConfigurationDoc()
+                    << bench->getConfigManager().printConfigurationDoc(true)
                     << "\n\n";
         });
     exit(0);

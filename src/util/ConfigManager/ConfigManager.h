@@ -259,36 +259,16 @@ class ConfigManager {
   static nlohmann::json parseShortHand(const std::string& shortHandString);
 
   /*
-  @brief Generate the json representation the current config manager
-  configuration.
+  @brief Returns a string containing a json configuration and, optionally, the
+  string representations of all added configuration options, togehter with the
+  validator invariants.
 
-  @param pathPrefix Only used for improved error messages. For example: You have
-  a sub manager with the path `subManagers/sub1` and call `visitHashMapEntries`
-  with it. The sub manager doesn't know its own path, so that information will
-  only be included in generated error messages, if you pass it along.
+  @param detailed Iff false, only print the json configuration. Otherwise, print
+  the json configuration, followed by the string representations of all added
+  configuration options, which contain more detailed information about the
+  configuration options, togehter with the validator invariants
   */
-  nlohmann::ordered_json generateConfigurationDocJson(
-      std::string_view pathPrefix) const;
-
-  /*
-  @brief Create a detailed list about the configuration options, with their
-  types, values, default values,  etc. shown, followed by a list of the
-  validator invariants and organized by the sub managers, that hold them.
-
-  @param pathPrefix Only used for improved error messages. For example: You have
-  a sub manager with the path `subManagers/sub1` and call `visitHashMapEntries`
-  with it. The sub manager doesn't know its own path, so that information will
-  only be included in generated error messages, if you pass it along.
-  */
-  std::string generateDetailedConfigurationDoc(
-      std::string_view pathPrefix) const;
-
-  /*
-  @brief Returns a string containing a json configuration and the
-  string representations of all added configuration options. Followed by a list
-  of all the configuration options, that kept their default values.
-  */
-  std::string printConfigurationDoc() const;
+  std::string printConfigurationDoc(bool detailed) const;
 
   /*
   @brief Add a function to the configuration manager for verifying, that the
@@ -668,5 +648,30 @@ class ConfigManager {
   */
   static void verifyHashMapEntry(std::string_view jsonPathToEntry,
                                  const HashMapEntry& entry);
+
+  /*
+  @brief Generate the json representation the current config manager
+  configuration.
+
+  @param pathPrefix Only used for improved error messages. For example: You have
+  a sub manager with the path `subManagers/sub1` and call `visitHashMapEntries`
+  with it. The sub manager doesn't know its own path, so that information will
+  only be included in generated error messages, if you pass it along.
+  */
+  nlohmann::ordered_json generateConfigurationDocJson(
+      std::string_view pathPrefix) const;
+
+  /*
+  @brief Create a detailed list about the configuration options, with their
+  types, values, default values,  etc. shown, followed by a list of the
+  validator invariants and organized by the sub managers, that hold them.
+
+  @param pathPrefix Only used for improved error messages. For example: You have
+  a sub manager with the path `subManagers/sub1` and call `visitHashMapEntries`
+  with it. The sub manager doesn't know its own path, so that information will
+  only be included in generated error messages, if you pass it along.
+  */
+  std::string generateConfigurationDocDetailedList(
+      std::string_view pathPrefix) const;
 };
 }  // namespace ad_utility
