@@ -156,19 +156,6 @@ class GroupBy : public Operation {
   // `?z`.
   bool computeGroupByForJoinWithFullScan(IdTable* result);
 
-  // Create result IdTable by using a HashMap mapping groups to aggregation data
-  // and subsequently calling `createResultFromHashMap`.
-  template <size_t OUT_WIDTH, size_t numAggregates>
-  void computeGroupByForHashMapOptimization(
-      IdTable* result, const std::vector<Aggregate>& aggregates,
-      const IdTable& subresult, size_t columnIndex,
-      const LocalVocab* localVocab);
-
-  // Required data to perform HashMap optimization.
-  struct HashMapOptimizationData {
-    size_t subtreeColumnIndex_;
-  };
-
   // Data to perform the AVG aggregation using the HashMap optimization.
   struct AverageAggregationData {
     bool error_ = false;
@@ -195,11 +182,33 @@ class GroupBy : public Operation {
   template <size_t numAggregates>
   using ValueType = std::array<AverageAggregationData, numAggregates>;
 
+  struct HashMapAggregateInformation {
+    sparqlExpression::SparqlExpression* expr_ = nullptr;
+    sparqlExpression::SparqlExpression* parent_ = nullptr;
+    std::optional<size_t> nThChild = std::nullopt;
+  };
+
+  // Required data to perform HashMap optimization.
+  struct HashMapOptimizationData {
+    size_t subtreeColumnIndex_;
+    std::vector<HashMapAggregateInformation> aggregateInfo_;
+  };
+
+  // Create result IdTable by using a HashMap mapping groups to aggregation data
+  // and subsequently calling `createResultFromHashMap`.
+  template <size_t OUT_WIDTH, size_t numAggregates>
+  void computeGroupByForHashMapOptimization(
+      IdTable* result, std::vector<Aggregate>& aggregates,
+      std::vector<HashMapAggregateInformation>& aggregateInfo,
+      const IdTable& subresult, size_t columnIndex, LocalVocab* localVocab);
+
   // Sort the HashMap by key and create result table.
   template <size_t OUT_WIDTH, size_t numAggregates>
   void createResultFromHashMap(IdTable* result,
-                               const ad_utility::HashMapWithMemoryLimit<
-                                   KeyType, ValueType<numAggregates>>& map);
+                               const ad_utility::HashMapWithMemoryLimit<KeyType,
+                                               ValueType<numAggregates>>& map,
+      std::vector<HashMapAggregateInformation>& aggregateInfo,
+      LocalVocab* localVocab);
 
   // Check if hash map optimization is applicable. This is the case when
   // the following conditions hold true:
@@ -210,7 +219,10 @@ class GroupBy : public Operation {
   // - Maximum 5 aggregates
   // - Only one grouped variable
   std::optional<HashMapOptimizationData> checkIfHashMapOptimizationPossible(
-      const std::vector<Aggregate>& aggregates);
+      std::vector<Aggregate>& aggregates);
+
+  HashMapAggregateInformation findAggregate(
+      sparqlExpression::SparqlExpression* expr);
 
   // The check whether the optimization just described can be applied and its
   // actual computation are split up in two functions. This struct contains

@@ -83,6 +83,15 @@ class SparqlExpression {
     });
   }
 
+  // Replace child at index childIndex with newExpression
+  // TODO: Check for memory leaks etc.
+  //       Should be fine, since old expression goes out of scope and hence
+  //       destructor should be called
+  virtual void replaceChild(size_t childIndex,
+                            std::unique_ptr<SparqlExpression> newExpression) {
+    children()[childIndex].swap(newExpression);
+  }
+
   /// Get a unique identifier for this expression, used as cache key.
   virtual string getCacheKey(const VariableToColumnMap& varColMap) const = 0;
 
