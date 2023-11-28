@@ -104,7 +104,8 @@ struct Parameter : public ParameterBase {
   }
 
   /// Set an constraint that will be executed every time the value changes
-  /// and once initially when setting it.
+  /// and once initially when setting it. It is intended to throw an exception
+  /// if the value is invalid.
   void setParameterConstraint(ParameterConstraint&& parameterConstraint) {
     std::invoke(parameterConstraint, value_, name);
     parameterConstraint_ = std::move(parameterConstraint);

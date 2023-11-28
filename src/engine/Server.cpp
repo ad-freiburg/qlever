@@ -16,6 +16,7 @@
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/http/HttpUtils.h"
 #include "util/http/websocket/MessageSender.h"
 
 template <typename T>
@@ -216,6 +217,35 @@ ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
 };
 
 // _____________________________________________________________________________
+
+net::awaitable<std::optional<Server::TimeLimit>>
+Server::verifyUserSubmittedQueryTimeout(
+    std::optional<std::string_view> userTimeout, bool accessTokenOk,
+    const ad_utility::httpUtils::HttpRequest auto& request, auto& send) const {
+  TimeLimit timeLimit = RuntimeParameters().get<"default-query-timeout">();
+  // TODO<GCC12> Use the monadic operations for std::optional
+  if (userTimeout.has_value()) {
+    std::string userTimeoutString{userTimeout.value()};
+    // std::stoi does not support std::string_view
+    // TODO parse with same mechanism as RuntimeParameters
+    TimeLimit timeoutCandidate{std::stoi(userTimeoutString)};
+    if (timeoutCandidate > timeLimit && !accessTokenOk) {
+      co_await send(ad_utility::httpUtils::createForbiddenResponse(
+          absl::StrCat("User submitted timeout was higher than what is "
+                       "currently allowed by "
+                       "this instance (",
+                       timeLimit.count(),
+                       "s). Please use a valid-access token to override this "
+                       "server configuration."),
+          request));
+      co_return std::nullopt;
+    }
+    co_return timeoutCandidate;
+  }
+  co_return timeLimit;
+}
+
+// _____________________________________________________________________________
 Awaitable<void> Server::process(
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
   using namespace ad_utility::httpUtils;
@@ -337,20 +367,17 @@ Awaitable<void> Server::process(
       throw std::runtime_error(
           "Parameter \"query\" must not have an empty value");
     }
-    std::chrono::seconds timeLimit =
-        RuntimeParameters().get<"default-query-timeout">();
-    if (auto timeoutParam = checkParameter("timeout", std::nullopt)) {
-      std::string userTimeoutString{timeoutParam.value()};
-      // std::stoi does not support std::string_view
-      std::chrono::seconds userTimeout{std::stoi(userTimeoutString)};
-      if (userTimeout > timeLimit) {
-        // Throw exception if token is invalid
-        checkParameter("timeout", std::nullopt, accessTokenOk);
-      }
-      timeLimit = userTimeout;
+
+    if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
+            checkParameter("timeout", std::nullopt), accessTokenOk, request,
+            send)) {
+      co_return co_await processQuery(parameters, requestTimer,
+                                      std::move(request), send,
+                                      timeLimit.value());
+
+    } else {
+      co_return;
     }
-    co_return co_await processQuery(parameters, requestTimer,
-                                    std::move(request), send, timeLimit);
   }
 
   // If there was no "query", but any of the URL parameters processed before
@@ -475,7 +502,7 @@ ad_utility::websocket::OwningQueryId Server::getQueryId(
 auto Server::cancelAfterDeadline(
     const net::any_io_executor& executor,
     std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
-    std::chrono::seconds timeLimit)
+    TimeLimit timeLimit)
     -> ad_utility::InvocableWithExactReturnType<void> auto {
   auto strand = net::make_strand(executor);
   auto timer = std::make_shared<net::steady_timer>(strand, timeLimit);
@@ -501,8 +528,7 @@ auto Server::cancelAfterDeadline(
 auto Server::setupCancellationHandle(
     const net::any_io_executor& executor,
     const ad_utility::websocket::QueryId& queryId,
-    const std::shared_ptr<Operation>& rootOperation,
-    std::chrono::seconds timeLimit) const
+    const std::shared_ptr<Operation>& rootOperation, TimeLimit timeLimit) const
     -> ad_utility::InvocableWithExactReturnType<void> auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
   AD_CORRECTNESS_CHECK(cancellationHandle);
@@ -516,7 +542,7 @@ auto Server::setupCancellationHandle(
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-    std::chrono::seconds timeLimit) {
+    TimeLimit timeLimit) {
   using namespace ad_utility::httpUtils;
   AD_CONTRACT_CHECK(params.contains("query"));
   const auto& query = params.at("query");

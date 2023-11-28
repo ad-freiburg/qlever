@@ -79,6 +79,8 @@ class Server {
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
 
+  using TimeLimit = std::chrono::seconds;
+
   /// Parse the path and URL parameters from the given request. Supports both
   /// GET and POST request according to the SPARQL 1.1 standard.
   ad_utility::UrlParser::UrlPathAndParameters getUrlPathAndParameters(
@@ -107,7 +109,7 @@ class Server {
   Awaitable<void> processQuery(
       const ParamValueMap& params, ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-      std::chrono::seconds timeLimit);
+      TimeLimit timeLimit);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
@@ -147,7 +149,7 @@ class Server {
   static auto cancelAfterDeadline(
       const net::any_io_executor& executor,
       std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
-      std::chrono::seconds timeLimit)
+      TimeLimit timeLimit)
       -> ad_utility::InvocableWithExactReturnType<void> auto;
 
   /// Acquire the cancellation handle based on `queryId`, pass it to the
@@ -156,7 +158,7 @@ class Server {
   auto setupCancellationHandle(const net::any_io_executor& executor,
                                const ad_utility::websocket::QueryId& queryId,
                                const std::shared_ptr<Operation>& rootOperation,
-                               std::chrono::seconds timeLimit) const
+                               TimeLimit timeLimit) const
       -> ad_utility::InvocableWithExactReturnType<void> auto;
 
   /// Run the SPARQL parser and then the query planner on the `query`. All
@@ -185,4 +187,13 @@ class Server {
       const ad_utility::HashMap<std::string, std::string>& parameters,
       std::string_view key, std::optional<std::string_view> value,
       bool accessAllowed);
+
+  /// Check if user-provided timeout is authorized with a valid access-token or
+  /// lower than the server default. Return an empty optional and send a 403
+  /// Forbidden HTTP response if the change is not allowed. Return the new
+  /// timeout otherwise.
+  net::awaitable<std::optional<Server::TimeLimit>>
+  verifyUserSubmittedQueryTimeout(
+      std::optional<std::string_view> userTimeout, bool accessTokenOk,
+      const ad_utility::httpUtils::HttpRequest auto& request, auto& send) const;
 };

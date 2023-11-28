@@ -198,10 +198,11 @@ inline auto& RuntimeParameters() {
   // TODO<joka921> Figure out whether this is a bug in Clang or whether we
   // clearly misunderstand something about static initialization.
   static ad_utility::Parameters params = []() {
+    using namespace std::chrono_literals;
     auto ensureStrictPositivity = [](auto&& parameter) {
       parameter.setParameterConstraint(
           [](std::chrono::seconds value, std::string_view parameterName) {
-            if (value <= std::chrono::seconds{0}) {
+            if (value <= 0s) {
               throw std::runtime_error{absl::StrCat(
                   "Parameter ", parameterName,
                   " must be strictly positive, was ", value.count(), "s")};

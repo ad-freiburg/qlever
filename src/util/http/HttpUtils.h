@@ -167,12 +167,17 @@ static auto createJsonResponse(const nlohmann::json& j, const auto& request,
   return createJsonResponse(j.dump(4), request, status);
 }
 
-/// Create a HttpResponse with status 404 Not Found. The string body will be a
-/// default message including the name of the file that was not found, which
-/// can be read from the request directly.
+/// Create a HttpResponse with status 404 Not Found.
 static auto createNotFoundResponse(const std::string& errorMsg,
                                    const HttpRequest auto& request) {
   return createHttpResponseFromString(errorMsg, http::status::not_found,
+                                      request, MediaType::textPlain);
+}
+
+/// Create a HttpResponse with status 403 Forbidden.
+static auto createForbiddenResponse(const std::string& errorMsg,
+                                    const HttpRequest auto& request) {
+  return createHttpResponseFromString(errorMsg, http::status::forbidden,
                                       request, MediaType::textPlain);
 }
 
