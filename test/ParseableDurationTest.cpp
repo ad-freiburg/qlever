@@ -102,3 +102,12 @@ TEST(ParseableDuration, testParsingConversion) {
   EXPECT_EQ(60s, fromString<seconds>("1min"));
   EXPECT_EQ(60min, fromString<minutes>("1h"));
 }
+
+// _____________________________________________________________________________
+TEST(ParseableDuration, testComparisonOperators) {
+  EXPECT_EQ(ParseableDuration{1ms}, ParseableDuration{1ms});
+  EXPECT_LT(ParseableDuration{0ms}, ParseableDuration{1ms});
+  EXPECT_GT(ParseableDuration{1ms}, ParseableDuration{0ms});
+  EXPECT_GE(ParseableDuration{0ms}, ParseableDuration{0ms});
+  EXPECT_LE(ParseableDuration{0ms}, ParseableDuration{0ms});
+}

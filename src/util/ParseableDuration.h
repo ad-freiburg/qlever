@@ -26,7 +26,14 @@ class ParseableDuration {
   ParseableDuration() = default;
   ParseableDuration(DurationType duration) : duration_{duration} {}
   operator DurationType() const { return duration_; }
-  auto operator<=>(const ParseableDuration&) const noexcept = default;
+
+  // TODO default this implementation (and remove explicit equality) once libc++
+  // supports it.
+  auto operator<=>(const ParseableDuration& other) const noexcept {
+    return duration_.count() <=> other.duration_.count();
+  }
+
+  bool operator==(const ParseableDuration&) const noexcept = default;
 
   template <typename CharT>
   friend inline std::basic_istream<CharT>& operator>>(
