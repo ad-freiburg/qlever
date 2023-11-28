@@ -380,35 +380,6 @@ class CompressedRelationReader {
  public:
   explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
       : allocator_{std::move(allocator)}, file_{std::move(file)} {}
-  /**
-   * @brief For a permutation XYZ, retrieve all YZ for a given X.
-   *
-   * @param metadata The metadata of the given X.
-   * @param blockMetadata The metadata of the on-disk blocks for the given
-   * permutation.
-   * @param file The file in which the permutation is stored.
-   * @param additionalColumns specify the additional payload columns that will
-   * be returned by the scan.
-   * @param cancellationHandle An `CancellationException` will be thrown if the
-   * cancellationHandle runs out during the execution of this function.
-   *
-   * The arguments `metadata`, `blocks`, and `file` must all be obtained from
-   * The same `CompressedRelationWriter` (see below).
-   */
-  IdTable scan(
-      const CompressedRelationMetadata& metadata,
-      std::span<const CompressedBlockMetadata> blockMetadata,
-      ColumnIndices additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
-
-  // Similar to `scan` (directly above), but the result of the scan is lazily
-  // computed and returned as a generator of the single blocks that are scanned.
-  // The blocks are guaranteed to be in order.
-  IdTableGenerator lazyScan(
-      CompressedRelationMetadata metadata,
-      std::vector<CompressedBlockMetadata> blockMetadata,
-      OwningColumnIndices additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Get the blocks (an ordered subset of the blocks that are passed in via the
   // `metadataAndBlocks`) where the `col1Id` can theoretically match one of the
@@ -433,10 +404,12 @@ class CompressedRelationReader {
       const MetadataAndBlocks& metadataAndBlocks2);
 
   /**
-   * @brief For a permutation XYZ, retrieve all Z for given X and Y.
+   * @brief For a permutation XYZ, retrieve all Z for given X and Y (if `col1Id`
+   * is set) or all YZ for a given X (if `col1Id` is `std::nullopt`.
    *
    * @param metadata The metadata of the given X.
-   * @param col1Id The ID for Y.
+   * @param col1Id The ID for Y. If `std::nullopt`, then the Y will be also
+   * returned as a column.
    * @param blocks The metadata of the on-disk blocks for the given
    * permutation.
    * @param file The file in which the permutation is stored.
@@ -449,7 +422,7 @@ class CompressedRelationReader {
    * The same `CompressedRelationWriter` (see below).
    */
   IdTable scan(
-      const CompressedRelationMetadata& metadata, Id col1Id,
+      const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
       std::span<const CompressedBlockMetadata> blocks,
       ColumnIndices additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
@@ -458,7 +431,7 @@ class CompressedRelationReader {
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
   IdTableGenerator lazyScan(
-      CompressedRelationMetadata metadata, Id col1Id,
+      CompressedRelationMetadata metadata, std::optional<Id> col1Id,
       std::vector<CompressedBlockMetadata> blockMetadata,
       OwningColumnIndices additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
@@ -570,6 +543,12 @@ class CompressedRelationReader {
   static std::vector<ColumnIndex> prepareColumnIndices(
       std::initializer_list<ColumnIndex> baseColumns,
       ColumnIndices additionalColumns);
+  // If `col1Id` is specified, `return {1, additionalColumns...}`, else return
+  // `{0, 1, additionalColumns}`.
+  // These are exactly the columns that are returned by a scan depending on
+  // whether the `col1Id` is specified or not.
+  static std::vector<ColumnIndex> prepareColumnIndices(
+      const std::optional<Id>& col1Id, ColumnIndices additionalColumns);
 };
 
 // TODO<joka921>

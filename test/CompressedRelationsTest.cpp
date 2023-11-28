@@ -169,14 +169,15 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
                     m.multiplicityCol1_);
     // Scan for all distinct `col0` and check that we get the expected result.
-    IdTable table =
-        reader.scan(metaData[i], blocks, additionalColumns, cancellationHandle);
+    IdTable table = reader.scan(metaData[i], std::nullopt, blocks,
+                                additionalColumns, cancellationHandle);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
     table.clear();
-    for (const auto& block : reader.lazyScan(
-             metaData[i], blocks, additionalColumns, cancellationHandle)) {
+    for (const auto& block :
+         reader.lazyScan(metaData[i], std::nullopt, blocks, additionalColumns,
+                         cancellationHandle)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);

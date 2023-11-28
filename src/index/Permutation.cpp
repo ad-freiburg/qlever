@@ -53,13 +53,8 @@ IdTable Permutation::scan(
   }
   const auto& metaData = meta_.getMetaData(col0Id);
 
-  if (col1Id.has_value()) {
-    return reader().scan(metaData, col1Id.value(), meta_.blockData(),
-                         additionalColumns, cancellationHandle);
-  } else {
-    return reader().scan(metaData, meta_.blockData(), additionalColumns,
-                         cancellationHandle);
-  }
+  return reader().scan(metaData, col1Id, meta_.blockData(), additionalColumns,
+                       cancellationHandle);
 }
 
 // _____________________________________________________________________
@@ -147,13 +142,7 @@ Permutation::IdTableGenerator Permutation::lazyScan(
   }
   OwningColumnIndices owningColumns{additionalColumns.begin(),
                                     additionalColumns.end()};
-  if (col1Id.has_value()) {
-    return reader().lazyScan(meta_.getMetaData(col0Id), col1Id.value(),
-                             std::move(blocks.value()),
-                             std::move(owningColumns), cancellationHandle);
-  } else {
-    return reader().lazyScan(meta_.getMetaData(col0Id),
-                             std::move(blocks.value()),
-                             std::move(owningColumns), cancellationHandle);
-  }
+  return reader().lazyScan(meta_.getMetaData(col0Id), col1Id,
+                           std::move(blocks.value()), std::move(owningColumns),
+                           cancellationHandle);
 }

@@ -9,7 +9,6 @@
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/ConcurrentCache.h"
 #include "util/Generator.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/OverloadCallOperator.h"
 #include "util/ThreadSafeQueue.h"
@@ -19,94 +18,9 @@
 
 using namespace std::chrono_literals;
 
-// ____________________________________________________________________________
-IdTable CompressedRelationReader::scan(
-    const CompressedRelationMetadata& metadata,
-    std::span<const CompressedBlockMetadata> blockMetadata,
-    ColumnIndices additionalColumns,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
-  // We always return the first two columns (the `col1` and `col2` of the
-  // permutation), additional payload columns have to be specified manually.
-  auto columnIndices = prepareColumnIndices({0, 1}, additionalColumns);
-  IdTable result(columnIndices.size(), allocator_);
-
-  auto relevantBlocks =
-      getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
-  auto beginBlock = relevantBlocks.begin();
-  auto endBlock = relevantBlocks.end();
-  // The total size of the result is now known.
-  result.resize(metadata.getNofElements());
-
-  // The position in the result to which the next block is being
-  // decompressed.
-  size_t rowIndexOfNextBlock = 0;
-
-  // The number of rows for which we still have space
-  // in the result (only needed for checking of invariants).
-  size_t spaceLeft = result.size();
-
-  // We have at most one block that is incomplete and thus requires trimming.
-  // Set up a lambda, that reads this block and decompresses it to
-  // the result.
-  auto readIncompleteBlock = [&](const auto& block) mutable {
-    auto trimmedBlock = readPossiblyIncompleteBlock(
-        metadata, std::nullopt, block, std::nullopt, columnIndices);
-    for (size_t i = 0; i < trimmedBlock.numColumns(); ++i) {
-      const auto& inputCol = trimmedBlock.getColumn(i);
-      auto resultColumn = result.getColumn(i);
-      AD_CORRECTNESS_CHECK(inputCol.size() <= resultColumn.size());
-      std::ranges::copy(inputCol, resultColumn.begin());
-    }
-    rowIndexOfNextBlock += trimmedBlock.size();
-    spaceLeft -= trimmedBlock.size();
-  };
-
-  // Read the first block (it might be incomplete).
-  readIncompleteBlock(*beginBlock);
-  ++beginBlock;
-  checkCancellation(cancellationHandle);
-
-  // Read all the other (complete!) blocks in parallel
-  if (beginBlock < endBlock) {
-#pragma omp parallel
-#pragma omp single
-    {
-      for (; beginBlock < endBlock; ++beginBlock) {
-        const auto& block = *beginBlock;
-        // Read a block from disk (serially).
-
-        CompressedBlock compressedBuffer =
-            readCompressedBlockFromFile(block, columnIndices);
-
-        // This lambda decompresses the block that was just read to the
-        // correct position in the result.
-        auto decompressLambda = [&result, rowIndexOfNextBlock, &block,
-                                 compressedBuffer =
-                                     std::move(compressedBuffer)]() {
-          ad_utility::TimeBlockAndLog tbl{"Decompressing a block"};
-
-          decompressBlockToExistingIdTable(compressedBuffer, block.numRows_,
-                                           result, rowIndexOfNextBlock);
-        };
-
-        // The `decompressLambda` can now run in parallel
-#pragma omp task
-        {
-          if (!cancellationHandle->isCancelled()) {
-            decompressLambda();
-          }
-        }
-
-        // this is again serial code, set up the correct pointers
-        // for the next block;
-        spaceLeft -= block.numRows_;
-        rowIndexOfNextBlock += block.numRows_;
-      }
-      AD_CORRECTNESS_CHECK(spaceLeft == 0);
-    }  // End of omp parallel region, all the decompression was handled now.
-  }
-  checkCancellation(cancellationHandle);
-  return result;
+// A small helper function to obtain the begin and end iterator of a range
+static auto getBeginAndEnd(auto& range) {
+  return std::pair{range.begin(), range.end()};
 }
 
 // ____________________________________________________________________________
@@ -174,49 +88,13 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
-    CompressedRelationMetadata metadata,
-    std::vector<CompressedBlockMetadata> blockMetadata,
-    OwningColumnIndices additionalColumns,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
-  auto relevantBlocks =
-      getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
-  const auto beginBlock = relevantBlocks.begin();
-  const auto endBlock = relevantBlocks.end();
-
-  LazyScanMetadata& details = co_await cppcoro::getDetails;
-  size_t numBlocksTotal = endBlock - beginBlock;
-
-  if (beginBlock == endBlock) {
-    co_return;
-  }
-
-  auto columnIndices = prepareColumnIndices({0, 1}, additionalColumns);
-
-  // Read the first block, it might be incomplete
-  auto firstBlock = readPossiblyIncompleteBlock(
-      metadata, std::nullopt, *beginBlock, std::ref(details), columnIndices);
-  co_yield firstBlock;
-  checkCancellation(cancellationHandle);
-
-  auto blockGenerator = asyncParallelBlockGenerator(
-      beginBlock + 1, endBlock, columnIndices, cancellationHandle);
-  blockGenerator.setDetailsPointer(&details);
-  for (auto& block : blockGenerator) {
-    co_yield block;
-  }
-  AD_CORRECTNESS_CHECK(numBlocksTotal == details.numBlocksRead_);
-}
-
-// _____________________________________________________________________________
-CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
-    CompressedRelationMetadata metadata, Id col1Id,
+    CompressedRelationMetadata metadata, std::optional<Id> col1Id,
     std::vector<CompressedBlockMetadata> blockMetadata,
     OwningColumnIndices additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   AD_CONTRACT_CHECK(cancellationHandle);
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
-  auto beginBlock = relevantBlocks.begin();
-  auto endBlock = relevantBlocks.end();
+  auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
 
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   size_t numBlocksTotal = endBlock - beginBlock;
@@ -225,16 +103,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     co_return;
   }
 
-  // Invariant: The col0Id is completely stored in a single block, or it is
-  // contained in multiple blocks that only contain this col0Id,
-  bool col0IdHasExclusiveBlocks =
-      metadata.offsetInBlock_ == std::numeric_limits<uint64_t>::max();
-  if (!col0IdHasExclusiveBlocks) {
-    // This might also be zero if no block was found at all.
-    AD_CORRECTNESS_CHECK(endBlock - beginBlock <= 1);
-  }
-
-  auto columnIndices = prepareColumnIndices({1}, additionalColumns);
+  auto columnIndices = prepareColumnIndices(col1Id, additionalColumns);
 
   auto getIncompleteBlock = [&](auto it) {
     auto result = readPossiblyIncompleteBlock(metadata, col1Id, *it,
@@ -418,11 +287,11 @@ CompressedRelationReader::getBlocksForJoin(
 
 // _____________________________________________________________________________
 IdTable CompressedRelationReader::scan(
-    const CompressedRelationMetadata& metadata, Id col1Id,
+    const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
     std::span<const CompressedBlockMetadata> blocks,
     ColumnIndices additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
-  auto columnIndices = prepareColumnIndices({1}, additionalColumns);
+  auto columnIndices = prepareColumnIndices(col1Id, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
 
   // Get all the blocks  that possibly might contain our pair of col0Id and
@@ -430,15 +299,6 @@ IdTable CompressedRelationReader::scan(
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blocks);
   auto beginBlock = relevantBlocks.begin();
   auto endBlock = relevantBlocks.end();
-
-  // Invariant: The col0Id is completely stored in a single block, or it is
-  // contained in multiple blocks that only contain this col0Id,
-  bool col0IdHasExclusiveBlocks =
-      metadata.offsetInBlock_ == std::numeric_limits<uint64_t>::max();
-  if (!col0IdHasExclusiveBlocks) {
-    // This might also be zero if no block was found at all.
-    AD_CORRECTNESS_CHECK(endBlock - beginBlock <= 1);
-  }
 
   // The first and the last block might be incomplete (that is, only
   // a part of these blocks is actually part of the result,
@@ -600,8 +460,7 @@ size_t CompressedRelationReader::getResultSizeOfScan(
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blocks);
-  auto beginBlock = relevantBlocks.begin();
-  auto endBlock = relevantBlocks.end();
+  auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
   std::array<ColumnIndex, 1> columnIndices{0u};
 
   // The first and the last block might be incomplete (that is, only
@@ -862,6 +721,16 @@ std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
   std::ranges::copy(baseColumns, std::back_inserter(result));
   std::ranges::copy(additionalColumns, std::back_inserter(result));
   return result;
+}
+
+// ____________________________________________________________________________
+std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
+    const std::optional<Id>& col1Id, ColumnIndices additionalColumns) {
+  if (col1Id.has_value()) {
+    return prepareColumnIndices({1}, additionalColumns);
+  } else {
+    return prepareColumnIndices({0, 1}, additionalColumns);
+  }
 }
 
 // _____________________________________________________________________________
