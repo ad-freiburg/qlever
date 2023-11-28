@@ -757,9 +757,10 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
           avgNumDistinctPredicatesPerSubject_,
           numDistinctSubjectPredicatePairs_, patterns_, hasPattern_);
     } catch (const std::exception& e) {
-      LOG(WARN) << "Could not load the patterns. Likely this index was built "
-                   "without patterns, the pattern trick will therefore not be "
-                   "available. To suppress this warning, start the server with "
+      LOG(WARN) << "Could not load the patterns. The internal predicate "
+                   "`ql:has-predicate` is therefore not available (and certain "
+                   "queries that benefit from that predicate will be slower)."
+                   "To suppress this warning, start the server with "
                    "the `--no-patterns` option. The error message was "
                 << e.what() << std::endl;
       usePatterns_ = false;
@@ -974,39 +975,32 @@ void IndexImpl::readConfiguration() {
         configurationJson_["languages-internal"]);
   }
 
-  if (configurationJson_.find("has-all-permutations") !=
-          configurationJson_.end() &&
-      configurationJson_["has-all-permutations"] == false) {
-    // If the permutations simply don't exist, then we can never load them.
-    loadAllPermutations_ = false;
-  }
-
-  auto loadRequestedDataMember = [this](std::string_view key, auto& target) {
+  auto loadDataMember = [this]<typename Target>(
+                            std::string_view key, Target& target,
+                            std::optional<std::type_identity_t<Target>>
+                                defaultValue = std::nullopt) {
     auto it = configurationJson_.find(key);
     if (it == configurationJson_.end()) {
-      throw std::runtime_error{absl::StrCat(
-          "The required key \"", key,
-          "\" was not found in the `meta-data.json`. Most likely this index "
-          "was built with an older version of QLever and should be rebuilt")};
-    }
-    target = std::decay_t<decltype(target)>{*it};
-  };
-
-  auto loadDataMemberWithDefault = [this](std::string_view key, auto& target,
-                                          auto defaultValue) {
-    auto it = configurationJson_.find(key);
-    if (it == configurationJson_.end()) {
-      target = defaultValue;
+      if (defaultValue.has_value()) {
+        target = std::move(defaultValue.value());
+      } else {
+        throw std::runtime_error{absl::StrCat(
+            "The required key \"", key,
+            "\" was not found in the `meta-data.json`. Most likely this index "
+            "was built with an older version of QLever and should be rebuilt")};
+      }
     } else {
-      target = std::decay_t<decltype(target)>{*it};
+      target = Target{*it};
     }
   };
 
-  loadRequestedDataMember("num-predicates-normal", numPredicatesNormal_);
+  loadDataMember("has-all-permutations", loadAllPermutations_, true);
+
+  loadDataMember("num-predicates-normal", numPredicatesNormal_);
   // These might be missing if there are only two permutations.
-  loadDataMemberWithDefault("num-subjects-normal", numSubjectsNormal_, 0);
-  loadDataMemberWithDefault("num-objects-normal", numObjectsNormal_, 0);
-  loadRequestedDataMember("num-triples-normal", numTriplesNormal_);
+  loadDataMember("num-subjects-normal", numSubjectsNormal_, 0);
+  loadDataMember("num-objects-normal", numObjectsNormal_, 0);
+  loadDataMember("num-triples-normal", numTriplesNormal_);
 }
 
 // ___________________________________________________________________________
