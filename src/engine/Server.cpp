@@ -16,6 +16,7 @@
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/ParseableDuration.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/websocket/MessageSender.h"
 
@@ -225,10 +226,9 @@ Server::verifyUserSubmittedQueryTimeout(
   TimeLimit timeLimit = RuntimeParameters().get<"default-query-timeout">();
   // TODO<GCC12> Use the monadic operations for std::optional
   if (userTimeout.has_value()) {
-    std::string userTimeoutString{userTimeout.value()};
-    // std::stoi does not support std::string_view
-    // TODO parse with same mechanism as RuntimeParameters
-    TimeLimit timeoutCandidate{std::stoi(userTimeoutString)};
+    auto timeoutCandidate =
+        ad_utility::ParseableDuration<TimeLimit>::fromString(
+            userTimeout.value());
     if (timeoutCandidate > timeLimit && !accessTokenOk) {
       co_await send(ad_utility::httpUtils::createForbiddenResponse(
           absl::StrCat("User submitted timeout was higher than what is "

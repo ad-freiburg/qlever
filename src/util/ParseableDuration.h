@@ -98,8 +98,8 @@ class ParseableDuration {
   operator DurationType() const { return duration_; }
   auto operator<=>(const ParseableDuration&) const noexcept = default;
 
-  static ParseableDuration<DurationType> fromString(const std::string& str) {
-    std::istringstream is{str};
+  static ParseableDuration<DurationType> fromString(std::string_view str) {
+    std::istringstream is{std::string{str}};
     ParseableDuration<DurationType> result;
     is >> result;
     if (is.rdstate() & std::ios_base::failbit) {
