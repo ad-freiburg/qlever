@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigOption.h"
-
 #include <absl/strings/str_cat.h>
 
 #include <array>
@@ -18,6 +16,7 @@
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -174,7 +173,7 @@ std::string ConfigOption::contentOfAvailableTypesToString(
       using VectorEntryType = T::value_type;
 
       std::ostringstream stream;
-      stream << "{";
+      stream << "[";
       ad_utility::lazyStrJoin(
           &stream,
           std::views::transform(
@@ -183,7 +182,7 @@ std::string ConfigOption::contentOfAvailableTypesToString(
                 return variantSubTypeToString(entry, variantSubTypeToString);
               }),
           ", ");
-      stream << "}";
+      stream << "]";
       return stream.str();
     }
   };
