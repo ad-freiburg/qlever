@@ -9,6 +9,8 @@
 
 #include <boost/lexical_cast.hpp>
 
+#include "util/Exception.h"
+
 namespace ad_utility {
 
 // Wrapper type for std::chrono::duration<> to avoid having to declare
@@ -51,7 +53,7 @@ class ParseableDuration {
         AD_FAIL();
       }
     } else {
-      is.setstate(std::ios_base::failbit);
+      is.setstate(is.rdstate() | std::ios_base::failbit);
     }
 
     return is;
@@ -72,11 +74,11 @@ class ParseableDuration {
       os << "us";
     } else if constexpr (std::is_same_v<period, std::milli>) {
       os << "ms";
-    } else if constexpr (std::is_same_v<period, std::ratio<1>>) {
+    } else if constexpr (std::is_same_v<period, seconds::period>) {
       os << "s";
-    } else if constexpr (std::is_same_v<period, std::ratio<60>>) {
+    } else if constexpr (std::is_same_v<period, minutes::period>) {
       os << "min";
-    } else if constexpr (std::is_same_v<period, std::ratio<3600>>) {
+    } else if constexpr (std::is_same_v<period, hours::period>) {
       os << "h";
     } else {
       static_assert(ad_utility::alwaysFalse<period>,
@@ -90,11 +92,19 @@ class ParseableDuration {
   // Implicit conversion is on purpose!
   ParseableDuration() = default;
   ParseableDuration(DurationType duration) : duration_{duration} {}
-  template <typename... Args>
-  ParseableDuration(Args&&... args) : duration_{AD_FWD(args)...} {}
+  ParseableDuration(DurationType::rep rep) : duration_{rep} {}
   operator DurationType() const { return duration_; }
   auto operator<=>(const ParseableDuration&) const noexcept = default;
 };
+
+static_assert(
+    std::is_move_constructible_v<ParseableDuration<std::chrono::seconds>>);
+static_assert(
+    std::is_move_assignable_v<ParseableDuration<std::chrono::seconds>>);
+static_assert(
+    std::is_copy_constructible_v<ParseableDuration<std::chrono::seconds>>);
+static_assert(
+    std::is_copy_assignable_v<ParseableDuration<std::chrono::seconds>>);
 }  // namespace ad_utility
 
 #endif  // QLEVER_STREAMUTILS_H
