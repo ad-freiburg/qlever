@@ -578,7 +578,7 @@ nlohmann::ordered_json ConfigManager::generateConfigurationDocJson(
           */
           configurationDocJson[jsonPointer] =
               optionOrSubManager.wasSet() ? optionOrSubManager.getValueAsJson()
-                                          : "\"[must be specified]\"";
+                                          : "[must be specified]";
         } else if constexpr (isSimilar<T, ConfigManager>) {
           // `visitHashMapEntries` already checks, that sub manager aren't
           // empty.
