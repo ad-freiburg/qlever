@@ -411,7 +411,6 @@ class ConfigManager {
   FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
   FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
   FRIEND_TEST(ConfigManagerTest, ContainsOption);
-  FRIEND_TEST(ConfigManagerTest, CollectionFunctionsSorting);
 
   /*
   @brief Visit the entries of `configurationOptions_` by visiting the content of
@@ -442,13 +441,11 @@ class ConfigManager {
                            std::string_view pathPrefix) const;
 
   /*
-  @brief Collect all `HashMapEntry` contained in the given
-  `configurationOptions`, including the ones in sub managern and return them
-  together with their json paths.
+  @brief Collect all `HashMapEntry` contained in the `configurationOptions_`,
+  including the ones in sub managern and return them together with their json
+  paths in a random order.
   Note: Also checks integrity of all entries via `verifyHashMapEntry`.
 
-  @param sortByInitialization If true, the order of the returned `HashMapEntry`
-  is by initialization order. If false, the order is random.
   @param pathPrefix This prefix will be added to all json paths, that will be
   returned.
   @param predicate Only the `HashMapEntry` for which a true is returned, will be
@@ -456,11 +453,8 @@ class ConfigManager {
   */
   template <ad_utility::InvocableWithExactReturnType<bool, const HashMapEntry&>
                 Predicate>
-  static std::vector<std::pair<std::string, const HashMapEntry&>>
-  allHashMapEntries(
-      const ad_utility::HashMap<std::string, HashMapEntry>& entries,
-      const bool sortByInitialization, std::string_view pathPrefix,
-      const Predicate& predicate);
+  std::vector<std::pair<std::string, const HashMapEntry&>> allHashMapEntries(
+      std::string_view pathPrefix, const Predicate& predicate) const;
 
   /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
@@ -539,45 +533,20 @@ class ConfigManager {
   }
 
   /*
-  @brief A vector to all the configuratio options, held by this manager,
-  represented with their json paths and reference to them. Options held by a sub
-  manager, are also included with the path to the sub manager as prefix.
-
-  @param sortByInitialization If true, the order of the returned `ConfigOption`
-  is by initialization order. If false, the order is random.
+  @brief A vector to all the configuratio options, held by this manager and in a
+  random order, represented with their json paths and reference to them. Options
+  held by a sub manager, are also included with the path to the sub manager as
+  prefix.
   */
-  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions(
-      const bool sortByInitialization);
-  std::vector<std::pair<std::string, const ConfigOption&>> configurationOptions(
-      const bool sortByInitialization) const;
+  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions()
+      const;
 
   /*
   @brief Return all `ConfigOptionValidatorManager` held by this manager and its
-  sub managers.
-
-  @param sortByInitialization If true, the order of the returned
-  `ConfigOptionValidatorManager` is by initialization order. If false, the order
-  is random.
+  sub managers, in a random order.
   */
   std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
-  validators(const bool sortByInitialization) const;
-
-  /*
-  @brief The implementation for `configurationOptions`.
-
-  @tparam ReturnReference Should be either `ConfigOption&`, or `const
-  ConfigOption&`.
-
-  @param sortByInitialization If true, the order of the returned `ConfigOption`
-  is by initialization order. If false, the order is random.
-  */
-  template <typename ReturnReference>
-  requires std::same_as<ReturnReference, ConfigOption&> ||
-           std::same_as<ReturnReference, const ConfigOption&>
-  static std::vector<std::pair<std::string, ReturnReference>>
-  configurationOptionsImpl(const ad_utility::HashMap<std::string, HashMapEntry>&
-                               configurationOptions,
-                           const bool sortByInitialization);
+  validators() const;
 
   /*
   @brief Call all the validators to check, if the current value is valid.

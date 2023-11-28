@@ -144,14 +144,9 @@ template <ad_utility::InvocableWithExactReturnType<
     bool, const ConfigManager::HashMapEntry&>
               Predicate>
 std::vector<std::pair<std::string, const ConfigManager::HashMapEntry&>>
-ConfigManager::allHashMapEntries(
-    const ad_utility::HashMap<std::string, HashMapEntry>& entries,
-    const bool sortByInitialization, std::string_view pathPrefix,
-    const Predicate& predicate) {
-  // `std::reference_wrapper` works with `std::ranges::sort`. `const
-  // HashMapEntry&` does not.
-  std::vector<
-      std::pair<std::string, std::reference_wrapper<const HashMapEntry>>>
+ConfigManager::allHashMapEntries(std::string_view pathPrefix,
+                                 const Predicate& predicate) const {
+  std::vector<std::pair<std::string, const ConfigManager::HashMapEntry&>>
       allHashMapEntry;
 
   /*
@@ -187,72 +182,34 @@ ConfigManager::allHashMapEntries(
 
     // Recursively add, if we have a sub manager.
     if (hashMapEntry.holdsSubManager()) {
-      /*
-      Move the recursive results.
-      Note: There is no use in calling with `sortByInitialization` set to true.
-      If there was a config option 'optionA' created, after creating this sub
-      manager and before adding configuration options to this sub manager, then
-      the configuration options of the sub manager would be added to
-      `allHashMapEntries` before 'optionA'.
-      Which is no the creation order.
-      */
-      auto recursiveResults = allHashMapEntries(
-          hashMapEntry.getSubManager().value()->configurationOptions_, false,
-          pathToCurrentEntry, predicate);
+      // Move the recursive results.
+      auto recursiveResults =
+          hashMapEntry.getSubManager().value()->allHashMapEntries(
+              pathToCurrentEntry, predicate);
       allHashMapEntry.reserve(recursiveResults.size());
-      std::ranges::move(recursiveResults, std::back_inserter(allHashMapEntry));
+      std::ranges::move(std::move(recursiveResults),
+                        std::back_inserter(allHashMapEntry));
     }
   };
 
   // Collect all the entries in the given `entries`.
-  std::ranges::for_each(entries, addHashMapEntryToCollectedOptions,
-                        verifyEntry);
+  std::ranges::for_each(configurationOptions_,
+                        addHashMapEntryToCollectedOptions, verifyEntry);
 
-  // Sort the collected `HashMapEntry`s, if wanted.
-  if (sortByInitialization) {
-    std::ranges::sort(allHashMapEntry, {}, [](const auto& pair) {
-      const auto& [jsonPath, hashMapEntry] = pair;
-      return hashMapEntry.get().getInitializationId();
-    });
-  }
-
-  return ad_utility::transform(std::move(allHashMapEntry), [](auto&& pair) {
-    return std::pair<std::string, const ConfigManager::HashMapEntry&>(
-        AD_FWD(pair).first, pair.second.get());
-  });
-}
-
-// ____________________________________________________________________________
-template <typename ReturnReference>
-requires std::same_as<ReturnReference, ConfigOption&> ||
-         std::same_as<ReturnReference, const ConfigOption&>
-std::vector<std::pair<std::string, ReturnReference>>
-ConfigManager::configurationOptionsImpl(
-    const ad_utility::HashMap<std::string, HashMapEntry>& configurationOptions,
-    const bool sortByInitialization) {
-  return ad_utility::transform(
-      allHashMapEntries(
-          configurationOptions, sortByInitialization, "",
-          [](const HashMapEntry& entry) { return entry.holdsConfigOption(); }),
-      [](auto&& pair) {
-        return std::pair<std::string, ReturnReference>(
-            AD_FWD(pair).first, *pair.second.getConfigOption().value());
-      });
-  ;
+  return allHashMapEntry;
 }
 
 // ____________________________________________________________________________
 std::vector<std::pair<std::string, ConfigOption&>>
-ConfigManager::configurationOptions(const bool sortByInitialization) {
-  return configurationOptionsImpl<ConfigOption&>(configurationOptions_,
-                                                 sortByInitialization);
-}
-
-// ____________________________________________________________________________
-std::vector<std::pair<std::string, const ConfigOption&>>
-ConfigManager::configurationOptions(const bool sortByInitialization) const {
-  return configurationOptionsImpl<const ConfigOption&>(configurationOptions_,
-                                                       sortByInitialization);
+ConfigManager::configurationOptions() const {
+  return ad_utility::transform(
+      allHashMapEntries(
+          "",
+          [](const HashMapEntry& entry) { return entry.holdsConfigOption(); }),
+      [](auto&& pair) {
+        return std::pair<std::string, ConfigOption&>(
+            AD_FWD(pair).first, *pair.second.getConfigOption().value());
+      });
 }
 
 // ____________________________________________________________________________
@@ -469,7 +426,7 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   // All the configuration options together with their paths.
   const auto allConfigOptions{[this]() {
     std::vector<std::pair<std::string, ConfigOption&>> allConfigOption =
-        configurationOptions(false);
+        configurationOptions();
 
     // `absl::flat_hash_map` doesn't allow the values to be l-value references,
     // but `std::unordered_map` does.
@@ -678,7 +635,7 @@ std::string ConfigManager::vectorOfKeysForJsonToString(
 
 // ____________________________________________________________________________
 std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
-ConfigManager::validators(const bool sortByInitialization) const {
+ConfigManager::validators() const {
   // For the collected validators. Initialized with the validators inside this
   // manager.
   std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
@@ -687,37 +644,28 @@ ConfigManager::validators(const bool sortByInitialization) const {
 
   // Collect the validators from the sub managers.
   std::vector<std::pair<std::string, const ConfigManager::HashMapEntry&>>
-      allSubManager{allHashMapEntries(
-          configurationOptions_, false, "",
-          [](const HashMapEntry& entry) { return entry.holdsSubManager(); })};
+      allSubManager{allHashMapEntries("", [](const HashMapEntry& entry) {
+        return entry.holdsSubManager();
+      })};
   std::ranges::for_each(
       std::views::values(allSubManager),
       [&allValidators](const ConfigManager::HashMapEntry& entry) {
         appendVector(allValidators,
-                     entry.getSubManager().value()->validators(false));
+                     entry.getSubManager().value()->validators());
       });
-
-  // Sort the validators, if wanted.
-  if (sortByInitialization) {
-    std::ranges::sort(allValidators, {},
-                      [](const ConfigOptionValidatorManager& validator) {
-                        return validator.getInitializationId();
-                      });
-  }
 
   return allValidators;
 }
 
 // ____________________________________________________________________________
 void ConfigManager::verifyWithValidators() const {
-  std::ranges::for_each(validators(false), [](auto& validator) {
-    validator.get().checkValidator();
-  });
+  std::ranges::for_each(
+      validators(), [](auto& validator) { validator.get().checkValidator(); });
 };
 
 // ____________________________________________________________________________
 bool ConfigManager::containsOption(const ConfigOption& opt) const {
-  const auto allOptions = configurationOptions(false);
+  const auto allOptions = configurationOptions();
   return ad_utility::contains(
       std::views::values(allOptions) |
           std::views::transform(
