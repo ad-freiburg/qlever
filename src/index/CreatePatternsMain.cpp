@@ -117,7 +117,7 @@ int main(int argc, char** argv) {
 
   try {
     Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-    index.setUsePatterns(false);
+    index.usePatterns() = false;
     index.createFromOnDiskIndex(baseName);
     index.addPatternsToExistingIndex();
   } catch (const std::exception& e) {
