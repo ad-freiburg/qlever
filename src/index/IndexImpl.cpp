@@ -412,7 +412,10 @@ std::unique_ptr<FirstPermutationSorter> IndexImpl::convertPartialToGlobalIds(
     return [&result, &i, triples = std::move(triples)]() {
       for (const auto& triple : triples) {
         // update the Element
-        result.push(triple);
+        //result.push(triple);
+        // TODO<joka921> Throw out again.
+        // add some dummy payload.
+        result.push(std::array{triple[0], triple[1], triple[2], Id::makeUndefined(), Id::makeFromInt(243)});
         ++i;
         if (i % 100'000'000 == 0) {
           LOG(INFO) << "Triples converted: " << i << std::endl;

@@ -58,7 +58,7 @@ using json = nlohmann::json;
 
 template <typename Comparator>
 using ExternalSorter =
-    ad_utility::CompressedExternalIdTableSorter<Comparator, 3>;
+    ad_utility::CompressedExternalIdTableSorter<Comparator, 5>;
 
 using FirstPermutation = SortByPSO;
 using FirstPermutationSorter = ExternalSorter<FirstPermutation>;
