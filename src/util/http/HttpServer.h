@@ -144,6 +144,7 @@ class HttpServer {
 
     // Wait until the posted task has successfully executed
     future.wait();
+    ioContext_.stop();
   }
 
  private:
