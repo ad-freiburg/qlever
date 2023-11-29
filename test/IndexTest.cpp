@@ -65,8 +65,20 @@ TEST(IndexTest, createFromTurtleTest) {
           "<a>  <b>  <c2> .\n"
           "<a>  <b2> <c> .\n"
           "<a2> <b2> <c2> .";
-      const IndexImpl& index =
-          getQec(kb, loadAllPermutations, loadPatterns)->getIndex().getImpl();
+
+      auto getIndex = [&]() -> decltype(auto) {
+        [[maybe_unused]] decltype(auto) ref =
+            getQec(kb, loadAllPermutations, loadPatterns)->getIndex().getImpl();
+        return ref;
+      };
+      if (!loadAllPermutations && loadPatterns) {
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            getIndex(),
+            ::testing::HasSubstr(
+                "patterns can only be built when all 6 permutations"));
+        return;
+      }
+      const IndexImpl& index = getIndex();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id a = getId("<a>");
@@ -546,7 +558,7 @@ TEST(IndexTest, NumDistinctEntities) {
 }
 
 TEST(IndexTest, NumDistinctEntitiesCornerCases) {
-  const IndexImpl& index = getQec("", false)->getIndex().getImpl();
+  const IndexImpl& index = getQec("", false, false)->getIndex().getImpl();
   AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctSubjects(),
                                ::testing::ContainsRegex("if all 6"));
   AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctObjects(),
