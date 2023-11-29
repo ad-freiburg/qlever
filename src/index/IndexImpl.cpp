@@ -510,7 +510,8 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
 
-  static constexpr size_t NumColumns = 2;
+  // TODO<joka921> dynamically infer this.
+  static constexpr size_t NumColumns = 4;
   CompressedRelationWriter writer1{NumColumns, ad_utility::File(fileName1, "w"),
                                    blocksizePermutationPerColumn_};
   CompressedRelationWriter writer2{NumColumns, ad_utility::File(fileName2, "w"),
