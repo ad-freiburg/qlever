@@ -596,7 +596,9 @@ class CompressedExternalIdTableSorter
   cppcoro::generator<IdTableStatic<N>> sortedBlocks(
       std::optional<size_t> blocksize = std::nullopt) {
     if (!this->transformAndPushLastBlock()) {
-      // There was only one block, return it.
+      // There was only one block, return it. If a blocksize was explicitly
+      // requested for the output, and the single block is larger than this
+      // blocksize, we manually have to split it into chunks.
       auto& block = this->currentBlock_;
       const auto blocksizeOutput = blocksize.value_or(block.numRows());
       if (block.numRows() <= blocksizeOutput) {
