@@ -3,10 +3,9 @@
 // Author: Andre Schlegel (September of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/Validator.h"
-
 #include <functional>
 
+#include "util/ConfigManager/Validator.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
@@ -30,5 +29,11 @@ std::string_view ConfigOptionValidatorManager::getDescription() const {
 // ____________________________________________________________________________
 size_t ConfigOptionValidatorManager::getInitializationId() const {
   return initializationId_;
+}
+
+// ____________________________________________________________________________
+const std::unordered_set<const ConfigOption*>&
+ConfigOptionValidatorManager::configOptionToBeChecked() const {
+  return configOptionsToBeChecked_;
 }
 }  // namespace ad_utility
