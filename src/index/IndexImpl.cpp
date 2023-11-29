@@ -153,20 +153,21 @@ void IndexImpl::createFromFile(const string& filename) {
   auto& firstSorter = *indexBuilderData.sorter_;
   // For the first permutation, perform a unique.
   auto uniqueSorter =
-      ad_utility::uniqueBlockView<decltype(firstSorter.getSortedBlocks<0>()),
+      ad_utility::uniqueBlockView<decltype(firstSorter.getSortedOutput()),
                                   IdTableStatic<0>::row_type>(
-          firstSorter.getSortedBlocks<0>());
+          firstSorter.getSortedOutput());
 
-  createFirstPermutationPair(isInternalId, std::move(uniqueSorter),
-                             secondSorter);
+  createFirstPermutationPair(NumColumnsIndexBuilding, isInternalId,
+                             std::move(uniqueSorter), secondSorter);
   configurationJson_["has-all-permutations"] = false;
   if (loadAllPermutations_) {
     // After the SPO permutation, create patterns if so desired.
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
-    createSecondPermutationPair(isInternalId, secondSorter.getSortedBlocks<0>(),
-                                thirdSorter);
+    createSecondPermutationPair(NumColumnsIndexBuilding, isInternalId,
+                                secondSorter.getSortedBlocks<0>(), thirdSorter);
     secondSorter.clear();
-    createThirdPermutationPair(isInternalId, thirdSorter.getSortedBlocks<0>());
+    createThirdPermutationPair(NumColumnsIndexBuilding, isInternalId,
+                               thirdSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   }
   LOG(DEBUG) << "Finished writing permutations" << std::endl;
@@ -363,7 +364,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<FirstPermutationSorter> IndexImpl::convertPartialToGlobalIds(
+std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>
+IndexImpl::convertPartialToGlobalIds(
     TripleVec& data, const vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial) {
   LOG(INFO) << "Converting triples from local IDs to global IDs ..."
@@ -372,16 +374,27 @@ std::unique_ptr<FirstPermutationSorter> IndexImpl::convertPartialToGlobalIds(
              << std::endl;
 
   // Iterate over all partial vocabularies.
-  auto resultPtr = std::make_unique<FirstPermutationSorter>(
-      onDiskBase_ + ".pso-sorter.dat",
-      memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
-      allocator_);
+  auto resultPtr =
+      [&]() -> std::unique_ptr<
+                ad_utility::CompressedExternalIdTableSorterTypeErased> {
+    if (loadAllPermutations()) {
+      return std::make_unique<FirstPermutationSorter>(
+          onDiskBase_ + ".first-sorter.dat",
+          memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
+          allocator_);
+    } else {
+      return std::make_unique<ExternalSorter<SortByPSO>>(
+          onDiskBase_ + ".first-sorter.dat",
+          memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
+          allocator_);
+    }
+  }();
   auto& result = *resultPtr;
   size_t i = 0;
   auto triplesGenerator = data.getRows();
   auto it = triplesGenerator.begin();
-  using Triple = typename TripleVec::value_type;
-  using Buffer = std::vector<Triple>;
+  // using Buffer = std::vector<Triple>;
+  using Buffer = IdTableStatic<3>;
   using Map = ad_utility::HashMap<Id, Id>;
 
   ad_utility::TaskQueue<true> lookupQueue(30, 10,
@@ -392,7 +405,7 @@ std::unique_ptr<FirstPermutationSorter> IndexImpl::convertPartialToGlobalIds(
   ad_utility::TaskQueue<true> writeQueue(30, 1, "Writing global Ids to file");
 
   // For all triple elements find their mapping from partial to global ids.
-  auto transformTriple = [](Triple& curTriple, auto& idMap) {
+  auto transformTriple = [](auto&& curTriple, auto& idMap) {
     for (auto& id : curTriple) {
       // TODO<joka92> Since the mapping only maps `VocabIndex->VocabIndex`,
       // probably the mapping should also be defined as `HashMap<VocabIndex,
@@ -409,18 +422,15 @@ std::unique_ptr<FirstPermutationSorter> IndexImpl::convertPartialToGlobalIds(
   // Return a lambda that pushes all the triples to the sorter. Must only be
   // called single-threaded.
   auto getWriteTask = [&result, &i](Buffer triples) {
-    return [&result, &i, triples = std::move(triples)]() {
-      for (const auto& triple : triples) {
-        // update the Element
-        //result.push(triple);
-        // TODO<joka921> Throw out again.
-        // add some dummy payload.
-        result.push(std::array{triple[0], triple[1], triple[2], Id::makeUndefined(), Id::makeFromInt(243)});
-        ++i;
-        if (i % 100'000'000 == 0) {
-          LOG(INFO) << "Triples converted: " << i << std::endl;
-        }
+    return [&result, &i,
+            triples = std::make_shared<IdTableStatic<0>>(
+                std::move(triples).toDynamic())] {
+      result.pushBlock(*triples);
+      size_t newI = i + triples->size();
+      if ((newI / 100'000'000) > (i / 100'000'000)) {
+        LOG(INFO) << "Triples converted: " << i << std::endl;
       }
+      i = newI;
     };
   };
 
@@ -429,13 +439,15 @@ std::unique_ptr<FirstPermutationSorter> IndexImpl::convertPartialToGlobalIds(
   // multiple batches need access to the same map.
   auto getLookupTask = [&writeQueue, &transformTriple, &getWriteTask](
                            Buffer triples, std::shared_ptr<Map> idMap) {
-    return [&writeQueue, triples = std::move(triples), idMap = std::move(idMap),
-            &getWriteTask, &transformTriple]() mutable {
-      for (auto& triple : triples) {
-        transformTriple(triple, *idMap);
-      }
-      writeQueue.push(getWriteTask(std::move(triples)));
-    };
+    return
+        [&writeQueue, triples = std::make_shared<Buffer>(std::move(triples)),
+         idMap = std::move(idMap), &getWriteTask, &transformTriple]() mutable {
+          using Ref = typename std::decay_t<decltype(*triples)>::row_reference;
+          for (Ref triple : *triples) {
+            transformTriple(triple, *idMap);
+          }
+          writeQueue.push(getWriteTask(std::move(*triples)));
+        };
   };
 
   std::atomic<size_t> nextPartialVocabulary = 0;
@@ -467,7 +479,7 @@ std::unique_ptr<FirstPermutationSorter> IndexImpl::convertPartialToGlobalIds(
     auto idMap = std::make_shared<Map>(std::move(mapping));
 
     const size_t bufferSize = BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS;
-    std::vector<Triple> buffer;
+    Buffer buffer{ad_utility::makeUnlimitedAllocator<Id>()};
     buffer.reserve(bufferSize);
     auto pushBatch = [&buffer, &idMap, &lookupQueue, &getLookupTask,
                       bufferSize]() {
@@ -498,7 +510,7 @@ std::unique_ptr<FirstPermutationSorter> IndexImpl::convertPartialToGlobalIds(
 // _____________________________________________________________________________
 std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
           IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutationPairImpl(const string& fileName1,
+IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
                                      const string& fileName2,
                                      auto&& sortedTriples,
                                      std::array<size_t, 3> permutation,
@@ -510,11 +522,11 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
 
-  // TODO<joka921> dynamically infer this.
-  static constexpr size_t NumColumns = 4;
-  CompressedRelationWriter writer1{NumColumns, ad_utility::File(fileName1, "w"),
+  CompressedRelationWriter writer1{numColumns - 1,
+                                   ad_utility::File(fileName1, "w"),
                                    blocksizePermutationPerColumn_};
-  CompressedRelationWriter writer2{NumColumns, ad_utility::File(fileName2, "w"),
+  CompressedRelationWriter writer2{numColumns - 1,
+                                   ad_utility::File(fileName2, "w"),
                                    blocksizePermutationPerColumn_};
 
   // Lift a callback that works on single elements to a callback that works on
@@ -543,11 +555,11 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
 // ________________________________________________________________________
 std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
           IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutations(auto&& sortedTriples, const Permutation& p1,
-                              const Permutation& p2,
+IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
+                              const Permutation& p1, const Permutation& p2,
                               auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl(
-      onDiskBase_ + ".index" + p1.fileSuffix_,
+      numColumns, onDiskBase_ + ".index" + p1.fileSuffix_,
       onDiskBase_ + ".index" + p2.fileSuffix_, AD_FWD(sortedTriples),
       p1.keyOrder_, AD_FWD(perTripleCallbacks)...);
 
@@ -560,12 +572,12 @@ IndexImpl::createPermutations(auto&& sortedTriples, const Permutation& p1,
 }
 
 // ________________________________________________________________________
-void IndexImpl::createPermutationPair(auto&& sortedTriples,
+void IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
                                       const Permutation& p1,
                                       const Permutation& p2,
                                       auto&&... perTripleCallbacks) {
   auto [metaData1, metaData2] = createPermutations(
-      AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
+      numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
   // NOTE: When `setKbName` was called, it set the name of pso_.meta_,
   // pso_.meta_, ... which however are not used during index building.
@@ -1375,7 +1387,8 @@ auto makeNumEntitiesCounter = [](size_t& numEntities, size_t idx,
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createPSOAndPOS(auto& isInternalId, BlocksOfTriples sortedInput,
+void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
+                                BlocksOfTriples sortedInput,
                                 NextSorter&&... nextSorter)
 
 {
@@ -1386,7 +1399,8 @@ void IndexImpl::createPSOAndPOS(auto& isInternalId, BlocksOfTriples sortedInput,
   };
   size_t numPredicatesNormal = 0;
   createPermutationPair(
-      AD_FWD(sortedInput), pso_, pos_, nextSorter.makePushCallback()...,
+      numColumns, AD_FWD(sortedInput), pso_, pos_,
+      nextSorter.makePushCallback()...,
       makeNumEntitiesCounter(numPredicatesNormal, 1, isInternalId),
       countActualTriples);
   configurationJson_["num-predicates-normal"] = numPredicatesNormal;
@@ -1397,7 +1411,8 @@ void IndexImpl::createPSOAndPOS(auto& isInternalId, BlocksOfTriples sortedInput,
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createSPOAndSOP(auto& isInternalId, BlocksOfTriples sortedInput,
+void IndexImpl::createSPOAndSOP(size_t numColumns, auto& isInternalId,
+                                BlocksOfTriples sortedInput,
                                 NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
   auto numSubjectCounter =
@@ -1411,12 +1426,12 @@ void IndexImpl::createSPOAndSOP(auto& isInternalId, BlocksOfTriples sortedInput,
             std::array<Id, 3>{triple[0], triple[1], triple[2]});
       }
     };
-    createPermutationPair(AD_FWD(sortedInput), spo_, sop_,
+    createPermutationPair(numColumns, AD_FWD(sortedInput), spo_, sop_,
                           nextSorter.makePushCallback()...,
                           pushTripleToPatterns, numSubjectCounter);
     patternCreator.finish();
   } else {
-    createPermutationPair(AD_FWD(sortedInput), spo_, sop_,
+    createPermutationPair(numColumns, AD_FWD(sortedInput), spo_, sop_,
                           nextSorter.makePushCallback()..., numSubjectCounter);
   }
   configurationJson_["num-subjects-normal"] = numSubjectsNormal;
@@ -1426,13 +1441,15 @@ void IndexImpl::createSPOAndSOP(auto& isInternalId, BlocksOfTriples sortedInput,
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createOSPAndOPS(auto& isInternalId, BlocksOfTriples sortedInput,
+void IndexImpl::createOSPAndOPS(size_t numColumns, auto& isInternalId,
+                                BlocksOfTriples sortedInput,
                                 NextSorter&&... nextSorter) {
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjectsNormal = 0;
   createPermutationPair(
-      AD_FWD(sortedInput), osp_, ops_, nextSorter.makePushCallback()...,
+      numColumns, AD_FWD(sortedInput), osp_, ops_,
+      nextSorter.makePushCallback()...,
       makeNumEntitiesCounter(numObjectsNormal, 2, isInternalId));
   configurationJson_["num-objects-normal"] = numObjectsNormal;
   configurationJson_["has-all-permutations"] = true;

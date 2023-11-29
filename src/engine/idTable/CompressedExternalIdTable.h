@@ -498,6 +498,14 @@ class CompressedExternalIdTable
 inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 
+class CompressedExternalIdTableSorterTypeErased {
+ public:
+  virtual void pushBlock(const IdTableStatic<0>& block) = 0;
+  virtual cppcoro::generator<IdTableStatic<0>> getSortedOutput(
+      std::optional<size_t> blocksize = std::nullopt) = 0;
+  virtual ~CompressedExternalIdTableSorterTypeErased() = default;
+};
+
 // The implementation of sorting a single block
 template <typename Comparator>
 struct BlockSorter {
@@ -519,7 +527,8 @@ BlockSorter(Comparator) -> BlockSorter<Comparator>;
 template <typename Comparator, size_t NumStaticCols>
 class CompressedExternalIdTableSorter
     : public CompressedExternalIdTableBase<NumStaticCols,
-                                           BlockSorter<Comparator>> {
+                                           BlockSorter<Comparator>>,
+      public CompressedExternalIdTableSorterTypeErased {
  private:
   using Base =
       CompressedExternalIdTableBase<NumStaticCols, BlockSorter<Comparator>>;
@@ -585,6 +594,16 @@ class CompressedExternalIdTableSorter
       co_yield block;
     }
     mergeIsActive_.store(false);
+  }
+
+  void pushBlock(const IdTableStatic<0>& block) override {
+    for (const auto& row : block) {
+      this->push(row);
+    }
+  }
+  virtual cppcoro::generator<IdTableStatic<0>> getSortedOutput(
+      std::optional<size_t> blocksize) override {
+    return getSortedBlocks<0>(blocksize);
   }
 
  private:

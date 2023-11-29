@@ -924,9 +924,10 @@ CompressedRelationWriter::createPermutationPair(
   IdTableStatic<0> relation{numColumns, alloc};
   size_t numBlocksCurrentRel = 0;
   auto compare = [](const auto& a, const auto& b) {
-    // TODO<joka921> can we use some `std::tie/lexicographical compare` trick here?
+    // TODO<joka921> can we use some `std::tie/lexicographical compare` trick
+    // here?
     return a[0] != b[0] ? a[0] < b[0] : a[1] < b[1];
-    //return std::ranges::lexicographical_compare(a, b);
+    // return std::ranges::lexicographical_compare(a, b);
   };
   // TODO<joka921> Use `CALL_FIXED_SIZE`.
   ad_utility::CompressedExternalIdTableSorter<decltype(compare), 0>
@@ -1055,8 +1056,8 @@ CompressedRelationWriter::createPermutationPair(
             << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
             << "s" << std::endl;
   LOG(INFO) << "Time spent waiting for triple callbacks (e.g. the next sorter) "
-            << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs())
-            << "s" << std::endl;
+            << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs()) << "s"
+            << std::endl;
   return std::pair{std::move(writer1).getFinishedBlocks(),
                    std::move(writer2).getFinishedBlocks()};
 }
