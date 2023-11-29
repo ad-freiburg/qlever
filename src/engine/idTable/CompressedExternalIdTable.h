@@ -535,7 +535,7 @@ class CompressedExternalIdTableSorter
 
  public:
   // Constructor.
-  explicit CompressedExternalIdTableSorter(
+  CompressedExternalIdTableSorter(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
@@ -550,7 +550,7 @@ class CompressedExternalIdTableSorter
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
-  explicit CompressedExternalIdTableSorter(
+  CompressedExternalIdTableSorter(
       std::string filename, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,

@@ -694,4 +694,19 @@ class IndexImpl {
 
     return std::pair{std::move(ignoredRanges), std::move(isTripleIgnored)};
   }
+
+  // Functions only required for index building.
+  template <typename... NextSorter> requires(sizeof...(NextSorter) <= 1)
+  void createSPOAndSOP(auto& isInternalId,
+                                  auto&& spoSorter, NextSorter&&... nextSorter);
+  template <typename... NextSorter> requires(sizeof...(NextSorter) <= 1)
+  void createOSPAndOPS ( auto isInternalId,
+                                    auto&& ospSorter, NextSorter&&... nextSorter);
+  template <typename... NextSorter> requires(sizeof...(NextSorter) <= 1)
+  void createPSOAndPOS(auto& isInternalId, auto&& psoSorter, NextSorter&&... nextSorter);
+
+  // TODO<joka921> The Comparator and permutationName could be also inferred from the permutation.
+  template<typename Comparator>
+  ExternalSorter<Comparator> makeSorter(std::string_view permutationName);
+
 };
