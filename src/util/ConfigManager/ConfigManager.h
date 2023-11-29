@@ -411,6 +411,7 @@ class ConfigManager {
   FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
   FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
   FRIEND_TEST(ConfigManagerTest, ContainsOption);
+  FRIEND_TEST(ConfigManagerTest, ValidatorsSorting);
 
   /*
   @brief Visit the entries of `configurationOptions_` by visiting the content of
@@ -543,10 +544,14 @@ class ConfigManager {
 
   /*
   @brief Return all `ConfigOptionValidatorManager` held by this manager and its
-  sub managers, in a random order.
+  sub managers.
+
+  @param sortByInitialization If true, the order of the returned
+  `ConfigOptionValidatorManager` is by initialization order. If false, the order
+  is random.
   */
   std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
-  validators() const;
+  validators(const bool sortByInitialization) const;
 
   /*
   @brief Call all the validators to check, if the current value is valid.

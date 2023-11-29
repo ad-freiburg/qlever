@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -26,6 +24,7 @@
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -640,7 +639,7 @@ std::string ConfigManager::vectorOfKeysForJsonToString(
 
 // ____________________________________________________________________________
 std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
-ConfigManager::validators() const {
+ConfigManager::validators(const bool sortByInitialization) const {
   // For the collected validators. Initialized with the validators inside this
   // manager.
   std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
@@ -656,16 +655,24 @@ ConfigManager::validators() const {
       std::views::values(allSubManager),
       [&allValidators](const ConfigManager::HashMapEntry& entry) {
         appendVector(allValidators,
-                     entry.getSubManager().value()->validators());
+                     entry.getSubManager().value()->validators(false));
       });
 
+  // Sort the validators, if wanted.
+  if (sortByInitialization) {
+    std::ranges::sort(allValidators, {},
+                      [](const ConfigOptionValidatorManager& validator) {
+                        return validator.getInitializationId();
+                      });
+  }
   return allValidators;
 }
 
 // ____________________________________________________________________________
 void ConfigManager::verifyWithValidators() const {
-  std::ranges::for_each(
-      validators(), [](auto& validator) { validator.get().checkValidator(); });
+  std::ranges::for_each(validators(false), [](auto& validator) {
+    validator.get().checkValidator();
+  });
 };
 
 // ____________________________________________________________________________
