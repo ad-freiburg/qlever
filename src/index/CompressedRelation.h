@@ -28,19 +28,9 @@
 // Forward declaration of the `IdTable` class.
 class IdTable;
 
-// Currently our indexes have two columns (the first column of a triple
-// is stored in the respective metadata). This might change in the future when
-// we add a column for patterns or functional relations like rdf:type.
-static constexpr int NumColumns = 2;
-// Two columns of IDs that are buffered in a file if they become too large.
-// This is the format in which the raw two-column data for a single relation is
-// passed around during the index building.
-using BufferedIdTable =
-    columnBasedIdTable::IdTable<Id, NumColumns, ad_utility::BufferedVector<Id>>;
-
 // This type is used to buffer small relations that will be stored in the same
 // block.
-using SmallRelationsBuffer = IdTableStatic<NumColumns>;
+using SmallRelationsBuffer = IdTable;
 
 // Sometimes we do not read/decompress  all the columns of a block, so we have
 // to use a dynamic `IdTable`.
@@ -174,8 +164,9 @@ class CompressedRelationWriter {
 
   ad_utility::AllocatorWithLimit<Id> allocator_ =
       ad_utility::makeUnlimitedAllocator<Id>();
+  size_t numColumns_;
   // A buffer for small relations that will be stored in the same block.
-  SmallRelationsBuffer smallRelationsBuffer_{allocator_};
+  SmallRelationsBuffer smallRelationsBuffer_{numColumns_, allocator_};
   ad_utility::MemorySize numBytesPerBlock_;
 
   // When we store a large relation with multiple blocks then we keep track of
@@ -190,9 +181,9 @@ class CompressedRelationWriter {
 
  public:
   /// Create using a filename, to which the relation data will be written.
-  explicit CompressedRelationWriter(ad_utility::File f,
+  explicit CompressedRelationWriter(size_t numColumns, ad_utility::File f,
                                     ad_utility::MemorySize numBytesPerBlock)
-      : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock} {}
+      : outfile_{std::move(f)},numColumns_{numColumns}, numBytesPerBlock_{numBytesPerBlock} {}
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.
   using MetadataCallback =
