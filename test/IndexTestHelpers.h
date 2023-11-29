@@ -95,13 +95,25 @@ inline Index makeTestIndex(
     // adapted.
     index.blocksizePermutations() = blocksizePermutations;
     index.setOnDiskBase(indexBasename);
-    index.setUsePatterns(usePatterns);
+    index.usePatterns() = usePatterns;
     index.setPrefixCompression(usePrefixCompression);
+    index.loadAllPermutations() = loadAllPermutations;
     index.createFromFile(inputFilename);
   }
+  if (!usePatterns || !loadAllPermutations) {
+    // If we have no patterns, or only two permutations, then check the graceful
+    // fallback even if the options were not explicitly specified during the
+    // loading of the server.
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.usePatterns() = true;
+    index.loadAllPermutations() = true;
+    EXPECT_NO_THROW(index.createFromOnDiskIndex(indexBasename));
+    EXPECT_EQ(index.loadAllPermutations(), loadAllPermutations);
+    EXPECT_EQ(index.usePatterns(), usePatterns);
+  }
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-  index.setUsePatterns(usePatterns);
-  index.setLoadAllPermutations(loadAllPermutations);
+  index.usePatterns() = usePatterns;
+  index.loadAllPermutations() = loadAllPermutations;
   index.createFromOnDiskIndex(indexBasename);
   ad_utility::setGlobalLoggingStream(&std::cout);
   return index;
