@@ -60,7 +60,12 @@ template <typename Comparator>
 using ExternalSorter =
     ad_utility::CompressedExternalIdTableSorter<Comparator, 3>;
 
-using FirstPermutationSorter = ExternalSorter<SortByPSO>;
+using FirstPermutation = SortBySPO;
+using FirstPermutationSorter = ExternalSorter<FirstPermutation>;
+using SecondPermutation = SortByOSP;
+using ThirdPermutation = SortByPSO;
+
+
 
 // Several data that are passed along between different phases of the
 // index builder.
@@ -450,7 +455,7 @@ class IndexImpl {
       std::unique_ptr<ItemMapArray> items, auto localIds,
       ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
 
-  std::unique_ptr<ExternalSorter<SortByPSO>> convertPartialToGlobalIds(
+  std::unique_ptr<FirstPermutationSorter> convertPartialToGlobalIds(
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial);
 
@@ -709,4 +714,16 @@ class IndexImpl {
   template<typename Comparator>
   ExternalSorter<Comparator> makeSorter(std::string_view permutationName);
 
+  void firstPermutation(auto&&... args) {
+    static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
+    return createSPOAndSOP(AD_FWD(args)...);
+  }
+  void secondPermutation(auto&&... args) {
+    static_assert(std::is_same_v<SecondPermutation, SortByOSP> );
+    return createOSPAndOPS(AD_FWD(args)...);
+  }
+  void thirdPermutation(auto&&... args) {
+    static_assert(std::is_same_v<ThirdPermutation, SortByPSO> );
+    return createPSOAndPOS(AD_FWD(args)...);
+  }
 };

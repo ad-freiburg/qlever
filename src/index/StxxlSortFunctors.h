@@ -33,11 +33,11 @@ struct SortTriple {
 };
 
 using SortByPSO = SortTriple<1, 0, 2>;
-using SortByPOS = SortTriple<1, 2, 0>;
+//using SortByPOS = SortTriple<1, 2, 0>;
 using SortBySPO = SortTriple<0, 1, 2>;
-using SortBySOP = SortTriple<0, 2, 1>;
+//using SortBySOP = SortTriple<0, 2, 1>;
 using SortByOSP = SortTriple<2, 0, 1>;
-using SortByOPS = SortTriple<2, 1, 0>;
+//using SortByOPS = SortTriple<2, 1, 0>;
 
 // TODO<joka921> Which of those are actually "IDs" and which are something else?
 struct SortText {

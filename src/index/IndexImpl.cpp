@@ -61,11 +61,11 @@ IndexBuilderDataAsPsoSorter IndexImpl::createIdTriplesAndVocab(
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
   vocab_.clear();
-  auto psoSorter = convertPartialToGlobalIds(
+  auto firstSorter = convertPartialToGlobalIds(
       *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
       NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
-  return {indexBuilderData, std::move(psoSorter)};
+  return {indexBuilderData, std::move(firstSorter)};
 }
 
 // Compute patterns and write them to `filename`. Triples where the predicate is
@@ -159,30 +159,33 @@ void IndexImpl::createFromFile(const string& filename) {
 
   using std::type_identity;
 
-  auto spoSorter = makeSorter<SortBySPO>("spo");
-  auto& psoSorter = *indexBuilderData.psoSorter;
+  auto secondSorter = makeSorter<SecondPermutation>("second");
+  auto& firstSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
   auto uniqueSorter =
-      ad_utility::uniqueBlockView<decltype(psoSorter.getSortedBlocks<0>()),
+      ad_utility::uniqueBlockView<decltype(firstSorter.getSortedBlocks<0>()),
                                   IdTableStatic<0>::row_type>(
-          psoSorter.getSortedBlocks<0>());
+          firstSorter.getSortedBlocks<0>());
 
 
-  createPSOAndPOS(isInternalId, std::move(uniqueSorter), spoSorter);
-  if (loadAllPermutations_) {
+  firstPermutation(isInternalId, std::move(uniqueSorter), secondSorter);
+  //if (loadAllPermutations_) {
     // After the SPO permutation, create patterns if so desired.
-    auto ospSorter = makeSorter<SortByOSP>("osp");
-    createSPOAndSOP(isInternalId, spoSorter.getSortedBlocks<0>(), ospSorter);
-    spoSorter.clear();
-    createOSPAndOPS(isInternalId, ospSorter.getSortedBlocks<0>());
+    auto thirdSorter = makeSorter<ThirdPermutation>("third");
+    secondPermutation(isInternalId, secondSorter.getSortedBlocks<0>(),
+                    thirdSorter);
+    secondSorter.clear();
+    thirdPermutation(isInternalId, thirdSorter.getSortedBlocks<0>());
+    /*
   } else {
     if (usePatterns_) {
-      createPatternsFromSpoTriplesView(spoSorter.sortedView(),
+      createPatternsFromSpoTriplesView(secondSorter.sortedView(),
                                        onDiskBase_ + ".index.patterns",
                                        isInternalId);
     }
     configurationJson_["has-all-permutations"] = false;
   }
+     */
   LOG(DEBUG) << "Finished writing permutations" << std::endl;
 
   // Dump the configuration again in case the permutations have added some

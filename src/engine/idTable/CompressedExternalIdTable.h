@@ -597,7 +597,19 @@ class CompressedExternalIdTableSorter
       std::optional<size_t> blocksize = std::nullopt) {
     if (!this->transformAndPushLastBlock()) {
       // There was only one block, return it.
-      co_yield std::move(this->currentBlock_).template toStatic<N>();
+      auto& block = this->currentBlock_;
+      const auto blocksizeOutput = blocksize.value_or(block.numRows());
+      if (block.numRows() <= blocksizeOutput) {
+        co_yield std::move(this->currentBlock_).template toStatic<N>();
+      } else {
+        for (size_t i = 0; i < block.numRows(); i += blocksizeOutput) {
+          size_t upper = std::min(i + blocksizeOutput, block.numRows());
+          auto curBlock = IdTableStatic<NumStaticCols>(this->numColumns_, this->writer_.allocator());
+          curBlock.reserve(upper - i);
+          curBlock.insertAtEnd(block.begin() + i, block.begin() + upper);
+          co_yield std::move(curBlock).template toStatic<N>();
+        }
+      }
       co_return;
     }
     auto rowGenerators =
