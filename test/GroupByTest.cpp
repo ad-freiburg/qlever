@@ -135,7 +135,7 @@ TEST_F(GroupByTest, doGroupBy) {
   /*
   std::vector<size_t> groupByCols = {0};
   std::string delim1(", ");
-  std::vector<GroupBy::Aggregate> aggregates = {
+  std::vector<GroupBy::AggregateAlias> aggregates = {
       // type                                in out userdata
       {ParsedQuery::AggregateType::COUNT, 1, 1, nullptr},
 
@@ -466,9 +466,10 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   std::vector<Alias> aliasesAvgCountX{
       Alias{avgCountXPimpl, Variable("?avgcount")}};
 
-  std::vector<GroupBy::Aggregate> countAggregate = {{countXPimpl, 1}};
-  std::vector<GroupBy::Aggregate> avgAggregate = {{avgXPimpl, 1}};
-  std::vector<GroupBy::Aggregate> avgCountAggregate = {{avgCountXPimpl, 1}};
+  std::vector<GroupBy::AggregateAlias> countAggregate = {{countXPimpl, 1}};
+  std::vector<GroupBy::AggregateAlias> avgAggregate = {{avgXPimpl, 1}};
+  std::vector<GroupBy::AggregateAlias> avgCountAggregate = {
+      {avgCountXPimpl, 1}};
 
   // Enable optimization
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
@@ -518,7 +519,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
 
   SparqlExpressionPimpl avgYPimpl = makeAvgPimpl(varY);
   std::vector<Alias> aliasesAvgY{Alias{avgYPimpl, Variable{"?avg"}}};
-  std::vector<GroupBy::Aggregate> avgAggregate = {{avgYPimpl, 1}};
+  std::vector<GroupBy::AggregateAlias> avgAggregate = {{avgYPimpl, 1}};
 
   // Calculate result with optimization
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
