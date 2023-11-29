@@ -4,13 +4,13 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/Parameters.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Parameters.h"
+
 using namespace ad_utility;
 using namespace memory_literals;
-
 using namespace detail::parameterShortNames;
-using namespace memory_literals;
+using namespace std::chrono_literals;
 
 TEST(Parameters, First) {
   using FloatParameter = Float<"Float">;
@@ -87,8 +87,48 @@ TEST(Parameters, ParameterConcept) {
   static_assert(IsParameter<String<"String">>);
   static_assert(IsParameter<MemorySizeParameter<"MemorySizeParameter">>);
   static_assert(IsParameter<Bool<"Bool">>);
+  static_assert(
+      IsParameter<DurationParameter<std::chrono::seconds, "Seconds">>);
 
   // Test some other random types.
   static_assert(!IsParameter<std::string>);
   static_assert(!IsParameter<ParameterName>);
+}
+
+// _____________________________________________________________________________
+TEST(Parameter, verifyParameterConstraint) {
+  Parameter<size_t, szt, toString, "test"> parameter{42};
+
+  EXPECT_NO_THROW(parameter.set(1337));
+
+  // Check constraint is tested for existing value
+  EXPECT_THROW(parameter.setParameterConstraint(
+                   [](const auto& value, std::string_view name) {
+                     EXPECT_EQ(value, 1337);
+                     EXPECT_EQ(name, "test");
+                     throw std::runtime_error{"Test"};
+                   }),
+               std::runtime_error);
+
+  // Assert constraint was not set
+  EXPECT_NO_THROW(parameter.set(0));
+  EXPECT_EQ(parameter.get(), 0);
+
+  parameter.setParameterConstraint([](const auto& value, std::string_view) {
+    if (value != 0) {
+      throw std::runtime_error{"Test"};
+    }
+  });
+
+  EXPECT_THROW(parameter.set(1), std::runtime_error);
+  EXPECT_EQ(parameter.get(), 0);
+}
+
+// _____________________________________________________________________________
+TEST(Parameter, verifyDurationParameterSerializationWorks) {
+  DurationParameter<std::chrono::seconds, "Seconds"> durationParameter{0s};
+  EXPECT_EQ(durationParameter.toString(), "0s");
+
+  durationParameter.setFromString("10s");
+  EXPECT_EQ(durationParameter.get(), 10s);
 }

@@ -15,6 +15,7 @@
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/ParseableDuration.h"
 #include "util/TupleForEach.h"
 #include "util/TypeTraits.h"
 
@@ -59,16 +60,18 @@ struct Parameter : public ParameterBase {
   constexpr static ParameterName name = Name;
 
  private:
-  Type _value{};
+  Type value_{};
 
   // This function is called each time the value is changed.
   using OnUpdateAction = std::function<void(Type)>;
-  std::optional<OnUpdateAction> _onUpdateAction = std::nullopt;
+  std::optional<OnUpdateAction> onUpdateAction_ = std::nullopt;
+  using ParameterConstraint = std::function<void(Type, std::string_view)>;
+  std::optional<ParameterConstraint> parameterConstraint_ = std::nullopt;
 
  public:
   /// Construction is only allowed using an initial parameter value
   Parameter() = delete;
-  explicit Parameter(Type initialValue) : _value{std::move(initialValue)} {};
+  explicit Parameter(Type initialValue) : value_{std::move(initialValue)} {};
 
   /// Copying is disabled, but moving is ok
   Parameter(const Parameter& rhs) = delete;
@@ -84,30 +87,41 @@ struct Parameter : public ParameterBase {
 
   /// Set the value.
   void set(Type newValue) {
-    _value = std::move(newValue);
+    if (parameterConstraint_.has_value()) {
+      std::invoke(parameterConstraint_.value(), newValue, name);
+    }
+    value_ = std::move(newValue);
     triggerOnUpdateAction();
   }
 
-  const Type& get() const { return _value; }
+  const Type& get() const { return value_; }
 
   /// Specify the onUpdateAction and directly trigger it.
   /// Note that this useful when the initial value of the parameter
   /// is known before the `onUpdateAction`.
   void setOnUpdateAction(OnUpdateAction onUpdateAction) {
-    _onUpdateAction = std::move(onUpdateAction);
+    onUpdateAction_ = std::move(onUpdateAction);
     triggerOnUpdateAction();
+  }
+
+  /// Set an constraint that will be executed every time the value changes
+  /// and once initially when setting it. It is intended to throw an exception
+  /// if the value is invalid.
+  void setParameterConstraint(ParameterConstraint&& parameterConstraint) {
+    std::invoke(parameterConstraint, value_, name);
+    parameterConstraint_ = std::move(parameterConstraint);
   }
 
   // ___________________________________________________________________
   [[nodiscard]] std::string toString() const override {
-    return ToString{}(_value);
+    return ToString{}(value_);
   }
 
  private:
   // Manually trigger the `_onUpdateAction` if it exists
   void triggerOnUpdateAction() {
-    if (_onUpdateAction.has_value()) {
-      _onUpdateAction.value()(_value);
+    if (onUpdateAction_.has_value()) {
+      onUpdateAction_.value()(value_);
     }
   }
 };
@@ -157,6 +171,22 @@ struct boolToString {
   std::string operator()(const bool& v) const { return v ? "true" : "false"; }
 };
 
+template <typename DurationType>
+struct durationToString {
+  std::string operator()(
+      const ad_utility::ParseableDuration<DurationType>& duration) const {
+    return duration.toString();
+  }
+};
+
+template <typename DurationType>
+struct durationFromString {
+  ad_utility::ParseableDuration<DurationType> operator()(
+      const std::string& duration) const {
+    return ad_utility::ParseableDuration<DurationType>::fromString(duration);
+  }
+};
+
 // To/from string for `MemorySize`.
 struct MemorySizeToString {
   std::string operator()(const MemorySize& m) const { return m.asString(); }
@@ -187,6 +217,11 @@ using Bool = Parameter<bool, bl, boolToString, Name>;
 template <ParameterName Name>
 using MemorySizeParameter =
     Parameter<MemorySize, MemorySizeFromString, MemorySizeToString, Name>;
+
+template <typename DurationType, ParameterName Name>
+using DurationParameter = Parameter<ad_utility::ParseableDuration<DurationType>,
+                                    durationFromString<DurationType>,
+                                    durationToString<DurationType>, Name>;
 }  // namespace detail::parameterShortNames
 
 /// A container class that stores several `Parameters`. The reading (via
