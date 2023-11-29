@@ -4,6 +4,8 @@
 
 #include "CompressedRelation.h"
 
+#include <ranges>
+
 #include "engine/idTable/IdTable.h"
 #include "util/Cache.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
@@ -20,7 +22,7 @@ using namespace std::chrono_literals;
 
 // A small helper function to obtain the begin and end iterator of a range
 static auto getBeginAndEnd(auto& range) {
-  return std::pair{std::begin(range), std::end(range)};
+  return std::pair{std::ranges::begin(range), std::ranges::end(range)};
 }
 
 // ____________________________________________________________________________
