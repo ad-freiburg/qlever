@@ -26,6 +26,7 @@
 #include "util/HashMap.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/TupleHelpers.h"
+#include "util/TypeTraits.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
@@ -152,16 +153,17 @@ void IndexImpl::createFromFile(const string& filename) {
   auto secondSorter = makeSorter<SecondPermutation>("second");
   auto& firstSorter = *indexBuilderData.sorter_;
   // For the first permutation, perform a unique.
-  auto uniqueSorter =
+  // TODO<joka921> Make the interface nicer, s.t. the first argument does not
+  // have to be specified.
+  auto firstSorterWithUnique =
       ad_utility::uniqueBlockView<decltype(firstSorter.getSortedBlocks<0>()),
                                   IdTableStatic<0>::row_type>(
           firstSorter.getSortedBlocks<0>());
 
-  createFirstPermutationPair(isInternalId, std::move(uniqueSorter),
+  createFirstPermutationPair(isInternalId, std::move(firstSorterWithUnique),
                              secondSorter);
   configurationJson_["has-all-permutations"] = false;
   if (loadAllPermutations_) {
-    // After the SPO permutation, create patterns if so desired.
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
     createSecondPermutationPair(isInternalId, secondSorter.getSortedBlocks<0>(),
                                 thirdSorter);
@@ -1349,38 +1351,42 @@ namespace {
 // Return a lambda that is called repeatedly with triples that are sorted by the
 // `idx`-th column and counts the number of distinct entities that occur in a
 // triple where none of the elements fulfills the `isInternalId` predicate.
-auto makeNumEntitiesCounter = [](size_t& numEntities, size_t idx,
-                                 auto isInternalId) {
-  // TODO<joka921> Make the `index` a template parameter.
-  return [lastEntity = std::optional<Id>{}, &numEntities,
-          isInternalId = std::move(isInternalId),
-          idx](const auto& triple) mutable {
-    const auto& id = triple[idx];
-    if (id != lastEntity && !std::ranges::any_of(triple, isInternalId)) {
-      numEntities++;
-      lastEntity = id;
-    }
-  };
-};
+// This is used to cound the number of distinct subjects, objects, and
+// predicates during the index building.
+template <size_t idx>
+auto makeNumDistinctIdsCounter =
+    [](size_t& numDistinctIds,
+       ad_utility::InvocableWithExactReturnType<bool, Id> auto isInternalId) {
+      return
+          [lastId = std::optional<Id>{}, &numDistinctIds,
+           isInternalId = std::move(isInternalId)](const auto& triple) mutable {
+            const auto& id = triple[idx];
+            if (id != lastId && !std::ranges::any_of(triple, isInternalId)) {
+              numDistinctIds++;
+              lastId = id;
+            }
+          };
+    };
 }  // namespace
 
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createPSOAndPOS(auto& isInternalId, BlocksOfTriples sortedInput,
+void IndexImpl::createPSOAndPOS(auto& isInternalId,
+                                BlocksOfTriples sortedTriples,
                                 NextSorter&&... nextSorter)
 
 {
   size_t numTriplesNormal = 0;
-  auto countActualTriples = [&numTriplesNormal,
+  auto countTriplesNormal = [&numTriplesNormal,
                              &isInternalId](const auto& triple) mutable {
-    numTriplesNormal += !std::ranges::any_of(triple, isInternalId);
+    numTriplesNormal += std::ranges::none_of(triple, isInternalId);
   };
   size_t numPredicatesNormal = 0;
   createPermutationPair(
-      AD_FWD(sortedInput), pso_, pos_, nextSorter.makePushCallback()...,
-      makeNumEntitiesCounter(numPredicatesNormal, 1, isInternalId),
-      countActualTriples);
+      AD_FWD(sortedTriples), pso_, pos_, nextSorter.makePushCallback()...,
+      makeNumDistinctIdsCounter<1>(numPredicatesNormal, isInternalId),
+      countTriplesNormal);
   configurationJson_["num-predicates-normal"] = numPredicatesNormal;
   configurationJson_["num-triples-normal"] = numTriplesNormal;
   writeConfiguration();
@@ -1389,26 +1395,27 @@ void IndexImpl::createPSOAndPOS(auto& isInternalId, BlocksOfTriples sortedInput,
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createSPOAndSOP(auto& isInternalId, BlocksOfTriples sortedInput,
+void IndexImpl::createSPOAndSOP(auto& isInternalId,
+                                BlocksOfTriples sortedTriples,
                                 NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
   auto numSubjectCounter =
-      makeNumEntitiesCounter(numSubjectsNormal, 0, isInternalId);
+      makeNumDistinctIdsCounter<0>(numSubjectsNormal, isInternalId);
   if (usePatterns_) {
     PatternCreator patternCreator{onDiskBase_ + ".index.patterns"};
     auto pushTripleToPatterns = [&patternCreator,
                                  &isInternalId](const auto& triple) {
       if (!std::ranges::any_of(triple, isInternalId)) {
         patternCreator.processTriple(
-            std::array<Id, 3>{triple[0], triple[1], triple[2]});
+            std::array{triple[0], triple[1], triple[2]});
       }
     };
-    createPermutationPair(AD_FWD(sortedInput), spo_, sop_,
+    createPermutationPair(AD_FWD(sortedTriples), spo_, sop_,
                           nextSorter.makePushCallback()...,
                           pushTripleToPatterns, numSubjectCounter);
     patternCreator.finish();
   } else {
-    createPermutationPair(AD_FWD(sortedInput), spo_, sop_,
+    createPermutationPair(AD_FWD(sortedTriples), spo_, sop_,
                           nextSorter.makePushCallback()..., numSubjectCounter);
   }
   configurationJson_["num-subjects-normal"] = numSubjectsNormal;
@@ -1418,16 +1425,18 @@ void IndexImpl::createSPOAndSOP(auto& isInternalId, BlocksOfTriples sortedInput,
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createOSPAndOPS(auto& isInternalId, BlocksOfTriples sortedInput,
+void IndexImpl::createOSPAndOPS(auto& isInternalId,
+                                BlocksOfTriples sortedTriples,
                                 NextSorter&&... nextSorter) {
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjectsNormal = 0;
   createPermutationPair(
-      AD_FWD(sortedInput), osp_, ops_, nextSorter.makePushCallback()...,
-      makeNumEntitiesCounter(numObjectsNormal, 2, isInternalId));
+      AD_FWD(sortedTriples), osp_, ops_, nextSorter.makePushCallback()...,
+      makeNumDistinctIdsCounter<2>(numObjectsNormal, isInternalId));
   configurationJson_["num-objects-normal"] = numObjectsNormal;
   configurationJson_["has-all-permutations"] = true;
+  writeConfiguration();
 };
 
 // _____________________________________________________________________________

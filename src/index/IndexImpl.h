@@ -60,6 +60,7 @@ template <typename Comparator>
 using ExternalSorter =
     ad_utility::CompressedExternalIdTableSorter<Comparator, 3>;
 
+// The Order in which the permutations are created during the index building.
 using FirstPermutation = SortByPSO;
 using FirstPermutationSorter = ExternalSorter<FirstPermutation>;
 using SecondPermutation = SortBySPO;
@@ -85,7 +86,7 @@ struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
 };
 
 // All the data from IndexBuilderDataBase and a ExternalSorter that stores all
-// ID triples sorted by the PSO permutation.
+// ID triples sorted by the first permutation.
 struct IndexBuilderDataAsFirstPermutationSorter : IndexBuilderDataBase {
   using SorterPtr = std::unique_ptr<FirstPermutationSorter>;
   SorterPtr sorter_;
@@ -454,8 +455,7 @@ class IndexImpl {
       ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
 
   //  Apply the prefix compression to the internal vocabulary. Is called by
-  //  `createFromFile` after the vocabularies
-  // have been created and merged.
+  //  `createFromFile` after the vocabularies have been created and merged.
   void compressInternalVocabularyIfSpecified(
       const std::vector<std::string>& prefixes);
 
@@ -704,31 +704,30 @@ class IndexImpl {
     return std::pair{std::move(ignoredRanges), std::move(isTripleIgnored)};
   }
   using BlocksOfTriples = cppcoro::generator<IdTableStatic<0>>;
+
   // Functions to create the pairs of permutations during the index build. Each
   // of them takes the following arguments:
   // * `isInternalId` a callable that takes an `Id` and returns true iff the
-  // corresponding IRI was internally added by
-  //    QLever and not part of the knowledge graph.
+  //    corresponding IRI was internally added by QLever and not part of the
+  //    knowledge graph.
   // * `sortedInput`  The input, must be sorted by the first permutation in the
-  // function name. Unfortunately we currently
-  //                   have no way of statically determining the correct
-  //                   sorting.
+  //    function name.
   // * `nextSorter` A callback that is invoked for each row in each of the
-  // blocks in the input. Typically used to set up
-  //                the sorting for the subsequent pair of permutations.
+  //    blocks in the input. Typically used to set up the sorting for the
+  //    subsequent pair of permutations.
 
   // Create the SPO and SOP permutations. Also count the number of distinct
   // actual (not internal) subjects in the input and write it to the metadata.
   // Also builds the patterns if specified.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createSPOAndSOP(auto& isInternalId, BlocksOfTriples sortedInput,
+  void createSPOAndSOP(auto& isInternalId, BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createOSPAndOPS(auto& isInternalId, BlocksOfTriples sortedInput,
+  void createOSPAndOPS(auto& isInternalId, BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally count the number of
@@ -736,7 +735,7 @@ class IndexImpl {
   // metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createPSOAndPOS(auto& isInternalId, BlocksOfTriples sortedInput,
+  void createPSOAndPOS(auto& isInternalId, BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
