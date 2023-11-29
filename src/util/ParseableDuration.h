@@ -58,9 +58,9 @@ class ParseableDuration {
   // ___________________________________________________________________________
   static ParseableDuration<DurationType> fromString(std::string_view arg) {
     using namespace std::chrono;
-    if (auto matcher = ctre::match<"(-?\\d+)(ns|us|ms|s|min|h)">(arg)) {
-      auto amount = matcher.template get<1>().to_view();
-      auto unit = matcher.template get<2>().to_view();
+    if (auto m = ctre::match<R"(\s*(-?\d+)\s*(ns|us|ms|s|min|h)\s*)">(arg)) {
+      auto amount = m.template get<1>().to_view();
+      auto unit = m.template get<2>().to_view();
 
       auto toDuration = []<typename OriginalDuration>(std::string_view amount) {
         return duration_cast<DurationType>(OriginalDuration{

@@ -89,6 +89,22 @@ TEST(ParseableDuration, testBasicParsing) {
 }
 
 // _____________________________________________________________________________
+TEST(ParseableDuration, testParsingWithWhitespace) {
+  EXPECT_EQ(1ns, fromString<nanoseconds>(" 1 ns "));
+  EXPECT_EQ(1us, fromString<microseconds>("  1  us  "));
+  EXPECT_EQ(1ms, fromString<milliseconds>("1    ms"));
+  EXPECT_EQ(1s, fromString<seconds>("1s    "));
+  EXPECT_EQ(1min, fromString<minutes>(" 1min   "));
+  EXPECT_EQ(1h, fromString<hours>(" \r\n\t\v1h        "));
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(fromString<seconds>("1 n s"),
+                                        HasSubstr("1 n s"), std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(fromString<seconds>(" 1 m i n "),
+                                        HasSubstr(" 1 m i n "),
+                                        std::runtime_error);
+}
+
+// _____________________________________________________________________________
 TEST(ParseableDuration, testParsingConversion) {
   EXPECT_EQ(0us, fromString<microseconds>("1ns"));
   EXPECT_EQ(0ms, fromString<milliseconds>("1us"));

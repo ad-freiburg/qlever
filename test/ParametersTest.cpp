@@ -4,13 +4,13 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/Parameters.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Parameters.h"
+
 using namespace ad_utility;
 using namespace memory_literals;
-
 using namespace detail::parameterShortNames;
-using namespace memory_literals;
+using namespace std::chrono_literals;
 
 TEST(Parameters, First) {
   using FloatParameter = Float<"Float">;
@@ -87,6 +87,8 @@ TEST(Parameters, ParameterConcept) {
   static_assert(IsParameter<String<"String">>);
   static_assert(IsParameter<MemorySizeParameter<"MemorySizeParameter">>);
   static_assert(IsParameter<Bool<"Bool">>);
+  static_assert(
+      IsParameter<DurationParameter<std::chrono::seconds, "Seconds">>);
 
   // Test some other random types.
   static_assert(!IsParameter<std::string>);
@@ -120,4 +122,13 @@ TEST(Parameter, verifyParameterConstraint) {
 
   EXPECT_THROW(parameter.set(1), std::runtime_error);
   EXPECT_EQ(parameter.get(), 0);
+}
+
+// _____________________________________________________________________________
+TEST(Parameter, verifyDurationParameterSerializationWorks) {
+  DurationParameter<std::chrono::seconds, "Seconds"> durationParameter{0s};
+  EXPECT_EQ(durationParameter.toString(), "0s");
+
+  durationParameter.setFromString("10s");
+  EXPECT_EQ(durationParameter.get(), 10s);
 }
