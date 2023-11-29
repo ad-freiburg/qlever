@@ -89,12 +89,10 @@ static constexpr size_t BLOCKSIZE_VOCABULARY_MERGING = 100;
 // increase the test coverage.
 inline size_t BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10'000;
 
-// The uncompressed size in bytes of a block of the permutations.
-//
-// NOTE: This used to be over 8MB, which is fairly large (we always
-// need to decompress at least one whole block, even when reading only few
-// triples). With 100K, the total space for all the `CompressedBlockMetadata` is
-// still small compared to the rest of the index. However, with 100K, a single
-// block is just 10K compressed, which might result in suboptimal IO-efficiency
-// when reading many blocks. We take 500K as a compromise.
-constexpr ad_utility::MemorySize BLOCKSIZE_COMPRESSED_METADATA = 500_kB;
+// The uncompressed size in bytes of a block of a single column of the
+// permutations. If chosen too large, then we lose performance for very small
+// index scans which always have to read a complete block. If chosen too small,
+// the overhead of the metadata that has to be stored per block becomes
+// infeasible. 250K seems to be a reasonable tradeoff here.
+constexpr ad_utility::MemorySize
+    UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN = 250_kB;
