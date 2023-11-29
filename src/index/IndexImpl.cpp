@@ -377,7 +377,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
+std::unique_ptr<FirstPermutationSorter> IndexImpl::convertPartialToGlobalIds(
     TripleVec& data, const vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial) {
   LOG(INFO) << "Converting triples from local IDs to global IDs ..."
@@ -386,7 +386,7 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
              << std::endl;
 
   // Iterate over all partial vocabularies.
-  auto resultPtr = std::make_unique<PsoSorter>(
+  auto resultPtr = std::make_unique<FirstPermutationSorter>(
       onDiskBase_ + ".pso-sorter.dat",
       memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
       allocator_);

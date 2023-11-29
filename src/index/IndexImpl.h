@@ -60,7 +60,7 @@ template <typename Comparator>
 using ExternalSorter =
     ad_utility::CompressedExternalIdTableSorter<Comparator, 3>;
 
-using PsoSorter = ExternalSorter<SortByPSO>;
+using FirstPermutationSorter = ExternalSorter<SortByPSO>;
 
 // Several data that are passed along between different phases of the
 // index builder.
@@ -84,7 +84,7 @@ struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
 // All the data from IndexBuilderDataBase and a ExternalSorter that stores all
 // ID triples sorted by the PSO permutation.
 struct IndexBuilderDataAsPsoSorter : IndexBuilderDataBase {
-  using SorterPtr = std::unique_ptr<ExternalSorter<SortByPSO>>;
+  using SorterPtr = std::unique_ptr<FirstPermutationSorter>;
   SorterPtr psoSorter;
   IndexBuilderDataAsPsoSorter(const IndexBuilderDataBase& base,
                               SorterPtr sorter)
