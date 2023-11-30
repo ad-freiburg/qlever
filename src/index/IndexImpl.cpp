@@ -103,18 +103,8 @@ void IndexImpl::compressInternalVocabularyIfSpecified(
   }
 }
 
-// _____________________________________________________________________________
-void IndexImpl::createFromFile(const string& filename) {
-  if (!loadAllPermutations_ && usePatterns_) {
-    throw std::runtime_error{
-        "The patterns can only be built when all 6 permutations are created"};
-  }
-  LOG(INFO) << "Processing input triples from " << filename << " ..."
-            << std::endl;
-  string indexFilename = onDiskBase_ + ".index";
-
-  readIndexBuilderSettingsFromFile();
-
+std::unique_ptr<TurtleParserBase> IndexImpl::makeTurtleParser(
+    const std::string& filename) {
   auto setTokenizer = [this,
                        &filename]<template <typename> typename ParserTemplate>()
       -> std::unique_ptr<TurtleParserBase> {
@@ -125,16 +115,25 @@ void IndexImpl::createFromFile(const string& filename) {
     }
   };
 
-  std::unique_ptr<TurtleParserBase> parser = [&setTokenizer, this]() {
-    if (useParallelParser_) {
-      return setTokenizer.template operator()<TurtleParallelParser>();
-    } else {
-      return setTokenizer.template operator()<TurtleStreamParser>();
-    }
-  }();
+  if (useParallelParser_) {
+    return setTokenizer.template operator()<TurtleParallelParser>();
+  } else {
+    return setTokenizer.template operator()<TurtleStreamParser>();
+  }
+}
+// _____________________________________________________________________________
+void IndexImpl::createFromFile(const string& filename) {
+  if (!loadAllPermutations_ && usePatterns_) {
+    throw std::runtime_error{
+        "The patterns can only be built when all 6 permutations are created"};
+  }
+  LOG(INFO) << "Processing input triples from " << filename << " ..."
+            << std::endl;
+
+  readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(std::move(parser));
+      createIdTriplesAndVocab(makeTurtleParser(filename));
 
   compressInternalVocabularyIfSpecified(indexBuilderData.prefixes_);
 
@@ -143,22 +142,15 @@ void IndexImpl::createFromFile(const string& filename) {
   writeConfiguration();
 
   auto isInternalId = [&](const auto& id) {
-    const auto& v = indexBuilderData.vocabularyMetaData_;
-    auto isInRange = [&](const auto& range) {
-      return range.begin() <= id && id < range.end();
-    };
-    return isInRange(v.internalEntities_) || isInRange(v.langTaggedPredicates_);
+    return indexBuilderData.vocabularyMetaData_.isInternalId(id);
   };
 
   auto secondSorter = makeSorter<SecondPermutation>("second");
   auto& firstSorter = *indexBuilderData.sorter_;
+
   // For the first permutation, perform a unique.
-  // TODO<joka921> Make the interface nicer, s.t. the first argument does not
-  // have to be specified.
   auto firstSorterWithUnique =
-      ad_utility::uniqueBlockView<decltype(firstSorter.getSortedBlocks<0>()),
-                                  IdTableStatic<0>::row_type>(
-          firstSorter.getSortedBlocks<0>());
+      ad_utility::uniqueBlockView(firstSorter.getSortedBlocks<0>());
 
   createFirstPermutationPair(isInternalId, std::move(firstSorterWithUnique),
                              secondSorter);
@@ -171,7 +163,6 @@ void IndexImpl::createFromFile(const string& filename) {
     createThirdPermutationPair(isInternalId, thirdSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   }
-  LOG(DEBUG) << "Finished writing permutations" << std::endl;
 
   // Dump the configuration again in case the permutations have added some
   // information.
@@ -533,6 +524,12 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
       CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
           AD_FWD(sortedTriples), permutation, perBlockCallbacks);
+
+  // There previously was a bug in the CompressedIdTableSorter that lead to
+  // semantically correct blocks, but with too large block sizes for the twin
+  // relation. This assertion would have caught this bug.
+  AD_CORRECTNESS_CHECK(metaData1.blockData().size() ==
+                       metaData2.blockData().size());
 
   return {std::move(metaData1), std::move(metaData2)};
 }

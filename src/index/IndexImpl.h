@@ -459,6 +459,13 @@ class IndexImpl {
   void compressInternalVocabularyIfSpecified(
       const std::vector<std::string>& prefixes);
 
+  // Return a turtle parser that parser the `filename`. The parser will be
+  // configured to either parser in parallel or not, and to either use the
+  // CTRE-based relaxed parser or not, depending on the settings of the
+  // corresponding member variables.
+  std::unique_ptr<TurtleParserBase> makeTurtleParser(
+      const std::string& filename);
+
   std::unique_ptr<FirstPermutationSorter> convertPartialToGlobalIds(
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial);
