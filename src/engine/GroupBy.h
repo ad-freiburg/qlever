@@ -191,20 +191,14 @@ class GroupBy : public Operation {
     }
   };
 
-  using AggregateData = std::variant<std::monostate, AverageAggregationData,
-                                     CountAggregationData>;
-
-  enum class AggregateType { Average, Count };
-
   using KeyType = ValueId;
   template <size_t numAggregates>
-  using ValueType = std::array<AggregateData, numAggregates>;
+  using ValueType = std::array<AverageAggregationData, numAggregates>;
 
   struct HashMapAggregateInformation {
     sparqlExpression::SparqlExpression* expr_ = nullptr;
     sparqlExpression::SparqlExpression* parent_ = nullptr;
     std::optional<size_t> nThChild_ = std::nullopt;
-    AggregateType type_;
     size_t hashMapIndex_ = 0;
   };
 

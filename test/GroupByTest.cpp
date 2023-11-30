@@ -619,7 +619,8 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationNonTrivial) {
                                      sortedJoin};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
 
-  // Calculate result with optimization, after since optimization changes tree
+  // Calculate result with optimization, after calculating it without,
+  // since optimization changes tree
   qec->clearCacheUnpinnedOnly();
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
   GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, sortedJoin};

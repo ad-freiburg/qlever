@@ -207,7 +207,7 @@ inline auto& RuntimeParameters() {
         SizeT<"lazy-index-scan-queue-size">{20},
         SizeT<"lazy-index-scan-num-threads">{10},
         SizeT<"lazy-index-scan-max-size-materialization">{1'000'000},
-        Bool<"use-group-by-hash-map-optimization">{true}};
+        Bool<"use-group-by-hash-map-optimization">{false}};
   }();
   return params;
 }

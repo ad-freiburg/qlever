@@ -777,12 +777,7 @@ bool GroupBy::findAggregateMultiple(
     sparqlExpression::SparqlExpression* expr, std::optional<size_t> index,
     std::vector<GroupBy::HashMapAggregateInformation>& info) {
   if (dynamic_cast<sparqlExpression::AvgExpression*>(expr) != nullptr) {
-    info.push_back({expr, parent, index, AggregateType::Average});
-    return true;
-  }
-
-  if (dynamic_cast<sparqlExpression::CountExpression*>(expr) != nullptr) {
-    info.push_back({expr, parent, index, AggregateType::Count});
+    info.push_back({expr, parent, index});
     return true;
   }
 
@@ -790,6 +785,7 @@ bool GroupBy::findAggregateMultiple(
   if (dynamic_cast<sparqlExpression::SumExpression*>(expr) != nullptr ||
       dynamic_cast<sparqlExpression::MinExpression*>(expr) != nullptr ||
       dynamic_cast<sparqlExpression::MaxExpression*>(expr) != nullptr ||
+      dynamic_cast<sparqlExpression::CountExpression*>(expr) != nullptr ||
       dynamic_cast<sparqlExpression::GroupConcatExpression*>(expr) != nullptr) {
     return false;
   }
@@ -862,13 +858,7 @@ void GroupBy::createResultFromHashMap(
       for (auto& aggregate : info) {
         auto& aggregateData = map.at(val).at(aggregate.hashMapIndex_);
 
-        if (const AverageAggregationData* avgPtr =
-                std::get_if<AverageAggregationData>(&aggregateData)) {
-          aggregateResult = avgPtr->calculateResult();
-        } else if (const CountAggregationData* cntPtr =
-                       std::get_if<CountAggregationData>(&aggregateData)) {
-          aggregateResult = cntPtr->calculateResult();
-        }
+        aggregateResult = aggregateData.calculateResult();
 
         // If this aggregate is a child, substitute result
         if (aggregate.nThChild_.has_value()) {
@@ -947,7 +937,7 @@ void GroupBy::computeGroupByForHashMapOptimization(
         evaluationContext._endIndex - evaluationContext._beginIndex;
 
     // Perform HashMap lookup for all groups in current block
-    std::vector<std::array<AggregateData, numAggregates>*> hashEntries;
+    std::vector<std::array<AverageAggregationData, numAggregates>*> hashEntries;
 
     auto getId = [&subresult, &evaluationContext, &columnIndex](size_t j) {
       return subresult(evaluationContext._beginIndex + j, columnIndex);
@@ -991,24 +981,7 @@ void GroupBy::computeGroupByForHashMapOptimization(
             auto& aggregateData =
                 hashEntries[hashEntryIndex]->at(aggregate.hashMapIndex_);
 
-            // Initialize the correct variant if this is the first time
-            // we see this group
-            if (std::monostate* monostatePtr =
-                    std::get_if<std::monostate>(&aggregateData)) {
-              if (aggregate.type_ == AggregateType::Average) {
-                aggregateData = AverageAggregationData{};
-              } else if (aggregate.type_ == AggregateType::Count) {
-                aggregateData = CountAggregationData{};
-              }
-            }
-
-            if (AverageAggregationData* avgPtr =
-                    std::get_if<AverageAggregationData>(&aggregateData)) {
-              avgPtr->increment(numVal);
-            } else if (CountAggregationData* cntPtr =
-                           std::get_if<CountAggregationData>(&aggregateData)) {
-              cntPtr->increment();
-            }
+            aggregateData.increment(numVal);
 
             ++hashEntryIndex;
           }

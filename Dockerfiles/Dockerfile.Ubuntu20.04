@@ -11,7 +11,7 @@ RUN add-apt-repository -y ppa:ubuntu-toolchain-r/test
 RUN apt-get update
 
 FROM base as builder
-RUN apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git gcc-11 g++-11 libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.81-dev
+RUN apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git gcc-11 g++-11 libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.81-dev libboost-url1.81-dev
 
 COPY . /app/
 
