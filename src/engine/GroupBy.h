@@ -204,7 +204,7 @@ class GroupBy : public Operation {
     sparqlExpression::SparqlExpression* expr_ = nullptr;
     sparqlExpression::SparqlExpression* parent_ = nullptr;
     std::optional<size_t> nThChild_ = std::nullopt;
-    AggregateType type;
+    AggregateType type_;
     size_t hashMapIndex_ = 0;
   };
 
@@ -249,8 +249,9 @@ class GroupBy : public Operation {
       std::vector<Aggregate>& aggregates);
 
   // Find all aggregates of expression `expr`, collecting this information in
-  // the vector `info`
-  void findAggregateMultiple(sparqlExpression::SparqlExpression* parent,
+  // the vector `info`. Returns `false` in case an unsupported aggregate is
+  // found.
+  bool findAggregateMultiple(sparqlExpression::SparqlExpression* parent,
                              sparqlExpression::SparqlExpression* expr,
                              std::optional<size_t> index,
                              std::vector<HashMapAggregateInformation>& info);

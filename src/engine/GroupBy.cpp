@@ -13,6 +13,7 @@
 #include "engine/Sort.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -738,7 +739,9 @@ GroupBy::checkIfHashMapOptimizationPossible(
   for (auto& aggregateAlias : aggregates) {
     std::vector<HashMapAggregateInformation> aliasAggregateInfo;
     auto expr = aggregateAlias._expression.getPimpl();
-    findAggregateMultiple(nullptr, expr, std::nullopt, aliasAggregateInfo);
+
+    if (!findAggregateMultiple(nullptr, expr, std::nullopt, aliasAggregateInfo))
+      return std::nullopt;
 
     for (auto& aliasAggregate : aliasAggregateInfo) {
       aliasAggregate.hashMapIndex_ = numAggregates++;
@@ -769,18 +772,26 @@ GroupBy::checkIfHashMapOptimizationPossible(
 }
 
 // _____________________________________________________________________________
-void GroupBy::findAggregateMultiple(
+bool GroupBy::findAggregateMultiple(
     sparqlExpression::SparqlExpression* parent,
     sparqlExpression::SparqlExpression* expr, std::optional<size_t> index,
     std::vector<GroupBy::HashMapAggregateInformation>& info) {
   if (dynamic_cast<sparqlExpression::AvgExpression*>(expr) != nullptr) {
     info.push_back({expr, parent, index, AggregateType::Average});
-    return;
+    return true;
   }
 
   if (dynamic_cast<sparqlExpression::CountExpression*>(expr) != nullptr) {
     info.push_back({expr, parent, index, AggregateType::Count});
-    return;
+    return true;
+  }
+
+  // Unsupported aggregates
+  if (dynamic_cast<sparqlExpression::SumExpression*>(expr) != nullptr ||
+      dynamic_cast<sparqlExpression::MinExpression*>(expr) != nullptr ||
+      dynamic_cast<sparqlExpression::MaxExpression*>(expr) != nullptr ||
+      dynamic_cast<sparqlExpression::GroupConcatExpression*>(expr) != nullptr) {
+    return false;
   }
 
   auto children = expr->children();
@@ -788,8 +799,7 @@ void GroupBy::findAggregateMultiple(
   // TODO<C++23> use views::enumerate
   size_t childIndex = 0;
   for (const auto& child : children) {
-    findAggregateMultiple(expr, child.get(), childIndex, info);
-    childIndex++;
+    return findAggregateMultiple(expr, child.get(), childIndex++, info);
   }
 }
 
@@ -979,9 +989,9 @@ void GroupBy::computeGroupByForHashMapOptimization(
             // we see this group
             if (std::monostate* monostatePtr =
                     std::get_if<std::monostate>(&aggregateData)) {
-              if (aggregate.type == AggregateType::Average) {
+              if (aggregate.type_ == AggregateType::Average) {
                 aggregateData = AverageAggregationData{};
-              } else if (aggregate.type == AggregateType::Count) {
+              } else if (aggregate.type_ == AggregateType::Count) {
                 aggregateData = CountAggregationData{};
               }
             }

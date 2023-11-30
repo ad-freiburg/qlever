@@ -393,14 +393,11 @@ struct GroupByOptimizations : ::testing::Test {
         "AVG(?someVariable)"};
   }
 
-  /*
-  static SparqlExpressionPimpl makeAvgPimpl(SparqlExpression* expr) {
-    std::unique_ptr<SparqlExpression> uniqPtr(expr);
+  static SparqlExpressionPimpl makeMinPimpl(const Variable& var) {
     return SparqlExpressionPimpl{
-        std::make_unique<AvgExpression>(false, std::move(uniqPtr)),
-            "AVG(expr)"};
+        std::make_unique<MinExpression>(false, makeVariableExpression(var)),
+        "MIN(?someVariable)"};
   }
- */
 
   static SparqlExpressionPimpl makeAvgCountPimpl(const Variable& var) {
     auto countExpression =
@@ -481,14 +478,17 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
 
   SparqlExpressionPimpl avgXPimpl = makeAvgPimpl(varX);
   SparqlExpressionPimpl avgCountXPimpl = makeAvgCountPimpl(varX);
+  SparqlExpressionPimpl minXPimpl = makeMinPimpl(varX);
 
   std::vector<Alias> aliasesAvgX{Alias{avgXPimpl, Variable{"?avg"}}};
   std::vector<Alias> aliasesAvgCountX{
       Alias{avgCountXPimpl, Variable("?avgcount")}};
+  std::vector<Alias> aliasesMinX{Alias{minXPimpl, Variable{"?minX"}}};
 
   std::vector<GroupBy::Aggregate> countAggregate = {{countXPimpl, 1}};
   std::vector<GroupBy::Aggregate> avgAggregate = {{avgXPimpl, 1}};
   std::vector<GroupBy::Aggregate> avgCountAggregate = {{avgCountXPimpl, 1}};
+  std::vector<GroupBy::Aggregate> minAggregate = {{minXPimpl, 1}};
 
   // Enable optimization
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
@@ -496,6 +496,8 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   // Must have exactly one variable to group by.
   testFailure(emptyVariables, aliasesAvgX, subtreeWithSort, avgAggregate);
   testFailure(variablesXAndY, aliasesAvgX, subtreeWithSort, avgAggregate);
+  // No support for min at the moment
+  testFailure(variablesOnlyX, aliasesMinX, subtreeWithSort, minAggregate);
   // Top operation must be SORT
   testFailure(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX,
               avgAggregate);
