@@ -177,7 +177,7 @@ size_t GroupBy::getCostEstimate() {
 
 template <size_t OUT_WIDTH>
 void GroupBy::processGroup(
-    const GroupBy::AggregateAlias& aggregate,
+    const GroupBy::Aggregate& aggregate,
     sparqlExpression::EvaluationContext& evaluationContext, size_t blockStart,
     size_t blockEnd, IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
     size_t resultColumn, LocalVocab* localVocab) const {
@@ -232,7 +232,7 @@ void GroupBy::processGroup(
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
 void GroupBy::doGroupBy(const IdTable& dynInput,
                         const vector<size_t>& groupByCols,
-                        const vector<GroupBy::AggregateAlias>& aggregates,
+                        const vector<GroupBy::Aggregate>& aggregates,
                         IdTable* dynResult, const IdTable* inTable,
                         LocalVocab* outLocalVocab) const {
   LOG(DEBUG) << "Group by input size " << dynInput.size() << std::endl;
@@ -248,8 +248,8 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 
   // In a GROUP BY evaluation, the expressions need to know which variables are
   // grouped, and to which columns the results of the aliases are written. The
-  // latter information is needed if the expression of an reuses the result
-  // variable from a previous alias as an input.
+  // latter information is needed if the expression of an alias reuses the
+  // result variable from a previous alias as an input.
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};
   evaluationContext._variableToColumnMapPreviousResults =
@@ -265,7 +265,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     for (size_t i = 0; i < groupByCols.size(); ++i) {
       result(rowIdx, i) = input(blockStart, groupByCols[i]);
     }
-    for (const GroupBy::AggregateAlias& a : aggregates) {
+    for (const GroupBy::Aggregate& a : aggregates) {
       processGroup<OUT_WIDTH>(a, evaluationContext, blockStart, blockEnd,
                               &result, rowIdx, a._outCol, outLocalVocab);
     }
@@ -318,7 +318,7 @@ ResultTable GroupBy::computeResult() {
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   }
 
-  std::vector<AggregateAlias> aggregates;
+  std::vector<Aggregate> aggregates;
   aggregates.reserve(_aliases.size() + _groupByVariables.size());
 
   // parse the aggregate aliases
@@ -387,9 +387,8 @@ ResultTable GroupBy::computeResult() {
         (std::array{outWidth, aggregates.size(),
                     hashMapOptimizationParams->numAggregates_}),
         &GroupBy::computeGroupByForHashMapOptimization, this, &idTable,
-        aggregates, hashMapOptimizationParams->aggregateInfo_,
-        subresult->idTable(), hashMapOptimizationParams->subtreeColumnIndex_,
-        &localVocab);
+        hashMapOptimizationParams->aggregateAliases_, subresult->idTable(),
+        hashMapOptimizationParams->subtreeColumnIndex_, &localVocab);
 
     return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
   }
@@ -711,7 +710,7 @@ bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
 // _____________________________________________________________________________
 std::optional<GroupBy::HashMapOptimizationData>
 GroupBy::checkIfHashMapOptimizationPossible(
-    std::vector<AggregateAlias>& aggregates) {
+    std::vector<Aggregate>& aggregates) {
   if (!RuntimeParameters().get<"use-group-by-hash-map-optimization">()) {
     return std::nullopt;
   }
@@ -735,31 +734,38 @@ GroupBy::checkIfHashMapOptimizationPossible(
 
   // Get pointers to all aggregate expressions and their parents
   size_t numAggregates = 0;
-  std::vector<std::vector<HashMapAggregateInformation>> aggregateInfo;
+  std::vector<HashMapAliasInformation> aliasAggregates;
   for (auto& aggregateAlias : aggregates) {
     std::vector<HashMapAggregateInformation> aliasAggregateInfo;
     auto expr = aggregateAlias._expression.getPimpl();
-
     findAggregateMultiple(nullptr, expr, std::nullopt, aliasAggregateInfo);
-    aggregateInfo.push_back(aliasAggregateInfo);
-    numAggregates += aliasAggregateInfo.size();
+
+    for (auto& aliasAggregate : aliasAggregateInfo) {
+      aliasAggregate.hashMapIndex_ = numAggregates++;
+    }
+
+    aliasAggregates.push_back({aggregateAlias._expression,
+                               aggregateAlias._outCol, aliasAggregateInfo});
   }
 
   // Make sure that there are no nested aggregates
-  for (auto& info : aggregateInfo) {
-    for (auto& aggregate : info) {
-      auto aggregateExpression = aggregate.expr_;
+  for (auto& aliasAggregate : aliasAggregates) {
+    for (auto& info : aliasAggregate.aggregateInfo_) {
+      auto aggregateExpression = info.expr_;
 
       if (aggregateExpression->children().front()->containsAggregate())
         return std::nullopt;
     }
   }
 
+  // Make sure there are aggregates
+  if (numAggregates == 0) return std::nullopt;
+
   const Variable& groupByVariable = _groupByVariables.front();
   auto child = _subtree->getRootOperation()->getChildren().at(0);
   auto columnIndex = child->getVariableColumn(groupByVariable);
 
-  return HashMapOptimizationData{columnIndex, aggregateInfo, numAggregates};
+  return HashMapOptimizationData{columnIndex, aliasAggregates, numAggregates};
 }
 
 // _____________________________________________________________________________
@@ -768,7 +774,12 @@ void GroupBy::findAggregateMultiple(
     sparqlExpression::SparqlExpression* expr, std::optional<size_t> index,
     std::vector<GroupBy::HashMapAggregateInformation>& info) {
   if (dynamic_cast<sparqlExpression::AvgExpression*>(expr) != nullptr) {
-    info.push_back({expr, parent, index});
+    info.push_back({expr, parent, index, AggregateType::Average});
+    return;
+  }
+
+  if (dynamic_cast<sparqlExpression::CountExpression*>(expr) != nullptr) {
+    info.push_back({expr, parent, index, AggregateType::Count});
     return;
   }
 
@@ -783,43 +794,12 @@ void GroupBy::findAggregateMultiple(
 }
 
 // _____________________________________________________________________________
-GroupBy::HashMapAggregateInformation GroupBy::findAggregate(
-    sparqlExpression::SparqlExpression* expr) {
-  if (!expr->containsAggregate()) return {nullptr, nullptr, std::nullopt};
-
-  if (dynamic_cast<sparqlExpression::AvgExpression*>(expr) != nullptr)
-    return {expr, nullptr, std::nullopt};
-
-  auto children = expr->children();
-  if (children.empty()) return {nullptr, nullptr, std::nullopt};
-
-  // TODO<C++23> use views::enumerate
-  size_t childIndex = 0;
-  for (const auto& child : children) {
-    auto result = findAggregate(child.get());
-
-    // Aggregate is descendant
-    if (result.expr_ != nullptr) {
-      // Aggregate is direct descendant
-      if (result.parent_ == nullptr) return {result.expr_, expr, childIndex};
-      // Aggregate is indirect descendant
-      return result;
-    }
-
-    childIndex++;
-  }
-
-  return {nullptr, nullptr, std::nullopt};
-}
-
-// _____________________________________________________________________________
 template <size_t OUT_WIDTH, size_t numAliases, size_t numAggregates>
 void GroupBy::createResultFromHashMap(
     IdTable* result,
     const ad_utility::HashMapWithMemoryLimit<KeyType, ValueType<numAggregates>>&
         map,
-    std::vector<AggregateAlias>& aggregateAliases,
-    std::vector<std::vector<HashMapAggregateInformation>>& aggregateInfo,
+    std::vector<HashMapAliasInformation>& aggregateAliases,
     LocalVocab* localVocab) {
   // Sort by groupBy column
   std::vector<ValueId> sortedKeys;
@@ -851,26 +831,35 @@ void GroupBy::createResultFromHashMap(
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
   evaluationContext._isPartOfGroupBy = true;
 
-  for (size_t i = 0; i < numAliases; ++i) {
-    auto& info = aggregateInfo[i];
-    // TODO<C++23> use views::enumerate
-    rowIndex = 0;
-    for (const auto& val : sortedKeys) {
-      evaluationContext._beginIndex = rowIndex;
-      evaluationContext._endIndex = rowIndex + 1;
+  // TODO<C++23> use views::enumerate
+  rowIndex = 0;
+  for (const auto& val : sortedKeys) {
+    // Handle by group, as we might need to use results of previous
+    // aliases
+    evaluationContext._beginIndex = rowIndex;
+    evaluationContext._endIndex = rowIndex + 1;
 
+    for (auto& alias : aggregateAliases) {
+      auto& info = alias.aggregateInfo_;
       auto topLevelAggregate = false;
       ValueId aggregateResult;
-      // Substitute results of aggregates
       for (auto& aggregate : info) {
-        aggregateResult = map.at(val).at(i).calculateResult();
+        auto& aggregateData = map.at(val).at(aggregate.hashMapIndex_);
+
+        if (const AverageAggregationData* avgPtr =
+                std::get_if<AverageAggregationData>(&aggregateData)) {
+          aggregateResult = avgPtr->calculateResult();
+        } else if (const CountAggregationData* cntPtr =
+                       std::get_if<CountAggregationData>(&aggregateData)) {
+          aggregateResult = cntPtr->calculateResult();
+        }
 
         // If this aggregate is a child, substitute result
-        if (aggregate.nThChild.has_value()) {
+        if (aggregate.nThChild_.has_value()) {
           // Calculate result of aggregate
           std::unique_ptr<sparqlExpression::SparqlExpression> newExpression =
               std::make_unique<sparqlExpression::IdExpression>(aggregateResult);
-          aggregate.parent_->replaceChild(aggregate.nThChild.value(),
+          aggregate.parent_->replaceChild(aggregate.nThChild_.value(),
                                           std::move(newExpression));
         } else {
           topLevelAggregate = true;
@@ -880,38 +869,42 @@ void GroupBy::createResultFromHashMap(
       if (!topLevelAggregate) {
         // Evaluate top-level alias expression
         sparqlExpression::ExpressionResult expressionResult =
-            aggregateAliases[i]._expression.getPimpl()->evaluate(
-                &evaluationContext);
-        // Extract value
-        auto visitor =
-            [&evaluationContext, &result, &rowIndex, &i,
-             &localVocab]<sparqlExpression::SingleExpressionResult T>(
-                T&& singleResult) mutable {
-              auto generator = sparqlExpression::detail::makeGenerator(
-                  std::forward<T>(singleResult), 1, &evaluationContext);
+            alias.expr_.getPimpl()->evaluate(&evaluationContext);
 
-              for (sparqlExpression::IdOrString val : generator) {
-                (*result)(rowIndex, i + 1) =
-                    sparqlExpression::detail::constantExpressionResultToId(
-                        std::move(val), *localVocab);
-              }
-            };
+        // Extract value
+        auto visitor = [&evaluationContext, &result, &rowIndex, &localVocab,
+                        &alias]<sparqlExpression::SingleExpressionResult T>(
+                           T&& singleResult) mutable {
+          auto generator = sparqlExpression::detail::makeGenerator(
+              std::forward<T>(singleResult), 1, &evaluationContext);
+
+          for (sparqlExpression::IdOrString val : generator) {
+            evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
+                sparqlExpression::copyExpressionResultIfNotVector(val);
+
+            (*result)(rowIndex, alias.outCol_) =
+                sparqlExpression::detail::constantExpressionResultToId(
+                    std::move(val), *localVocab);
+          }
+        };
 
         std::visit(visitor, std::move(expressionResult));
       } else {
-        (*result)(rowIndex, i + 1) = aggregateResult;
-      }
+        // Aggregate sits at top-level
+        (*result)(rowIndex, alias.outCol_) = aggregateResult;
 
-      ++rowIndex;
+        evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
+            aggregateResult;
+      }
     }
+    ++rowIndex;
   }
 }
 
 // _____________________________________________________________________________
 template <size_t OUT_WIDTH, size_t numAliases, size_t numAggregates>
 void GroupBy::computeGroupByForHashMapOptimization(
-    IdTable* result, std::vector<AggregateAlias>& aggregateAliases,
-    std::vector<std::vector<HashMapAggregateInformation>>& aggregateInfo,
+    IdTable* result, std::vector<HashMapAliasInformation>& aggregateAliases,
     const IdTable& subresult, size_t columnIndex, LocalVocab* localVocab) {
   ad_utility::HashMapWithMemoryLimit<KeyType, ValueType<numAggregates>> map(
       getExecutionContext()->getAllocator());
@@ -923,7 +916,6 @@ void GroupBy::computeGroupByForHashMapOptimization(
 
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};
-  // TODO: Save previous results (?)
   evaluationContext._variableToColumnMapPreviousResults =
       getInternallyVisibleVariableColumns();
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
@@ -939,7 +931,7 @@ void GroupBy::computeGroupByForHashMapOptimization(
         evaluationContext._endIndex - evaluationContext._beginIndex;
 
     // Perform HashMap lookup for all groups in current block
-    std::vector<std::array<AverageAggregationData, numAggregates>*> hashEntries;
+    std::vector<std::array<AggregateData, numAggregates>*> hashEntries;
 
     auto getId = [&subresult, &evaluationContext, &columnIndex](size_t j) {
       return subresult(evaluationContext._beginIndex + j, columnIndex);
@@ -959,45 +951,60 @@ void GroupBy::computeGroupByForHashMapOptimization(
     }
 
     // TODO<C++23> use views::enumerate
-    size_t aggregateIndex = 0;
-    for (auto& aggregateAlias : aggregateInfo) {
-      for (auto& aggregate : aggregateAlias) {
+    for (auto& aggregateAlias : aggregateAliases) {
+      for (auto& aggregate : aggregateAlias.aggregateInfo_) {
         // Evaluate child expression on block
         auto exprChildren = aggregate.expr_->children();
         sparqlExpression::ExpressionResult expressionResult =
             exprChildren[0]->evaluate(&evaluationContext);
 
-        auto visitor =
-            [&currentBlockSize, &evaluationContext, &hashEntries,
-             &aggregateIndex]<sparqlExpression::SingleExpressionResult T>(
-                T&& singleResult) mutable {
-              auto generator = sparqlExpression::detail::makeGenerator(
-                  std::forward<T>(singleResult), currentBlockSize,
-                  &evaluationContext);
+        auto visitor = [&currentBlockSize, &evaluationContext, &hashEntries,
+                        &aggregate]<sparqlExpression::SingleExpressionResult T>(
+                           T&& singleResult) mutable {
+          auto generator = sparqlExpression::detail::makeGenerator(
+              std::forward<T>(singleResult), currentBlockSize,
+              &evaluationContext);
 
-              using NVG = sparqlExpression::detail::NumericValueGetter;
+          using NVG = sparqlExpression::detail::NumericValueGetter;
 
-              auto hashEntryIndex = 0;
-              for (const auto& val : generator) {
-                sparqlExpression::detail::NumericValue numVal =
-                    NVG()(val, &evaluationContext);
+          auto hashEntryIndex = 0;
+          for (const auto& val : generator) {
+            sparqlExpression::detail::NumericValue numVal =
+                NVG()(val, &evaluationContext);
 
-                hashEntries[hashEntryIndex]
-                    ->at(aggregateIndex)
-                    .increment(numVal);
+            auto& aggregateData =
+                hashEntries[hashEntryIndex]->at(aggregate.hashMapIndex_);
 
-                ++hashEntryIndex;
+            // Initialize the correct variant if this is the first time
+            // we see this group
+            if (std::monostate* monostatePtr =
+                    std::get_if<std::monostate>(&aggregateData)) {
+              if (aggregate.type == AggregateType::Average) {
+                aggregateData = AverageAggregationData{};
+              } else if (aggregate.type == AggregateType::Count) {
+                aggregateData = CountAggregationData{};
               }
-            };
+            }
+
+            if (AverageAggregationData* avgPtr =
+                    std::get_if<AverageAggregationData>(&aggregateData)) {
+              avgPtr->increment(numVal);
+            } else if (CountAggregationData* cntPtr =
+                           std::get_if<CountAggregationData>(&aggregateData)) {
+              cntPtr->increment();
+            }
+
+            ++hashEntryIndex;
+          }
+        };
 
         std::visit(visitor, std::move(expressionResult));
-        ++aggregateIndex;
       }
     }
   }
 
   createResultFromHashMap<OUT_WIDTH, numAliases, numAggregates>(
-      result, map, aggregateAliases, aggregateInfo, localVocab);
+      result, map, aggregateAliases, localVocab);
 }
 
 // _____________________________________________________________________________

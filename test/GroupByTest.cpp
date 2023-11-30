@@ -135,7 +135,7 @@ TEST_F(GroupByTest, doGroupBy) {
   /*
   std::vector<size_t> groupByCols = {0};
   std::string delim1(", ");
-  std::vector<GroupBy::AggregateAlias> aggregates = {
+  std::vector<GroupBy::Aggregate> aggregates = {
       // type                                in out userdata
       {ParsedQuery::AggregateType::COUNT, 1, 1, nullptr},
 
@@ -365,6 +365,14 @@ struct GroupByOptimizations : ::testing::Test {
 
   std::vector<Alias> emptyAliases{};
 
+  static SparqlExpression::Ptr makeLiteralDoubleExpr(double constant) {
+    return std::make_unique<IdExpression>(DoubleId(constant));
+  }
+
+  static SparqlExpressionPimpl makeLiteralDoublePimpl(double constant) {
+    return SparqlExpressionPimpl{makeLiteralDoubleExpr(constant), "constant"};
+  }
+
   static SparqlExpression::Ptr makeVariableExpression(const Variable& var) {
     return std::make_unique<VariableExpression>(var);
   }
@@ -384,6 +392,15 @@ struct GroupByOptimizations : ::testing::Test {
         std::make_unique<AvgExpression>(false, makeVariableExpression(var)),
         "AVG(?someVariable)"};
   }
+
+  /*
+  static SparqlExpressionPimpl makeAvgPimpl(SparqlExpression* expr) {
+    std::unique_ptr<SparqlExpression> uniqPtr(expr);
+    return SparqlExpressionPimpl{
+        std::make_unique<AvgExpression>(false, std::move(uniqPtr)),
+            "AVG(expr)"};
+  }
+ */
 
   static SparqlExpressionPimpl makeAvgCountPimpl(const Variable& var) {
     auto countExpression =
@@ -446,9 +463,12 @@ TEST_F(GroupByOptimizations, getPermutationForThreeVariableTriple) {
 }
 
 // _____________________________________________________________________________
+// TEST_F(GroupByOptimizations, findAggregateMultiple) {}
+
+// _____________________________________________________________________________
 TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
-                            const auto& join, const auto& aggregates) {
+                            const auto& join, auto& aggregates) {
     auto groupBy = GroupBy{qec, groupByVariables, aliases, join};
     ASSERT_FALSE(groupBy.checkIfHashMapOptimizationPossible(aggregates));
   };
@@ -466,10 +486,9 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   std::vector<Alias> aliasesAvgCountX{
       Alias{avgCountXPimpl, Variable("?avgcount")}};
 
-  std::vector<GroupBy::AggregateAlias> countAggregate = {{countXPimpl, 1}};
-  std::vector<GroupBy::AggregateAlias> avgAggregate = {{avgXPimpl, 1}};
-  std::vector<GroupBy::AggregateAlias> avgCountAggregate = {
-      {avgCountXPimpl, 1}};
+  std::vector<GroupBy::Aggregate> countAggregate = {{countXPimpl, 1}};
+  std::vector<GroupBy::Aggregate> avgAggregate = {{avgXPimpl, 1}};
+  std::vector<GroupBy::Aggregate> avgCountAggregate = {{avgCountXPimpl, 1}};
 
   // Enable optimization
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
@@ -477,8 +496,6 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   // Must have exactly one variable to group by.
   testFailure(emptyVariables, aliasesAvgX, subtreeWithSort, avgAggregate);
   testFailure(variablesXAndY, aliasesAvgX, subtreeWithSort, avgAggregate);
-  // Must be AVG aggregate (for now)
-  testFailure(variablesOnlyX, aliasesCountX, subtreeWithSort, countAggregate);
   // Top operation must be SORT
   testFailure(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX,
               avgAggregate);
@@ -496,10 +513,19 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
       groupBy.checkIfHashMapOptimizationPossible(avgAggregate);
   ASSERT_TRUE(optimizedAggregateData.has_value());
   ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
+  ASSERT_EQ(optimizedAggregateData->numAggregates_, 1);
+  // Check aggregate alias is correct
+  auto aggregateAlias = optimizedAggregateData->aggregateAliases_[0];
+  ASSERT_EQ(aggregateAlias.expr_.getPimpl(), avgXPimpl.getPimpl());
+  // Check aggregate info is correct
+  auto aggregateInfo = aggregateAlias.aggregateInfo_[0];
+  ASSERT_EQ(aggregateInfo.hashMapIndex_, 0);
+  ASSERT_EQ(aggregateInfo.parent_, nullptr);  // has no parent
+  ASSERT_EQ(aggregateInfo.expr_, avgXPimpl.getPimpl());
+  ASSERT_EQ(aggregateInfo.nThChild_, std::nullopt);
 }
 
 // _____________________________________________________________________________
-
 TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
   /* Setup query:
   SELECT ?x (AVG(?y) as ?avg) WHERE {
@@ -519,7 +545,6 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
 
   SparqlExpressionPimpl avgYPimpl = makeAvgPimpl(varY);
   std::vector<Alias> aliasesAvgY{Alias{avgYPimpl, Variable{"?avg"}}};
-  std::vector<GroupBy::AggregateAlias> avgAggregate = {{avgYPimpl, 1}};
 
   // Calculate result with optimization
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
@@ -532,6 +557,71 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
   GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY,
                                      sortedJoin};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
+
+  // Compare results, using debugString as the result only contains 2 rows
+  ASSERT_EQ(resultWithOptimization->asDebugString(),
+            resultWithoutOptimization->asDebugString());
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationNonTrivial) {
+  /* Setup query:
+  SELECT ?x (AVG(?y) as ?avg)
+            (AVG(?y) + ((2 * AVG(?y)) * AVG(4 * ?y)) as ?complexAvg)
+            (2 as ?const) WHERE {
+    ?z <is-a> ?x .
+    ?z <is> ?y
+  } GROUP BY ?x
+  */
+
+  Tree zxScan = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{Variable{"?z"}, {"<is-a>"}, Variable{"?x"}});
+  Tree zyScan = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
+  Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
+  std::vector<ColumnIndex> sortedColumns = {1};
+  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
+
+  SparqlExpressionPimpl avgYPimpl = makeAvgPimpl(varY);
+
+  auto fourTimesYExpr = makeMultiplyExpression(makeLiteralDoubleExpr(4.0),
+                                               makeVariableExpression(varY));
+  auto avgFourTimesYExpr =
+      std::make_unique<AvgExpression>(false, std::move(fourTimesYExpr));
+  auto avgYExpr =
+      std::make_unique<AvgExpression>(false, makeVariableExpression(varY));
+  auto avgYExpr2 =
+      std::make_unique<AvgExpression>(false, makeVariableExpression(varY));
+  auto twoTimesAvgYExpr =
+      makeMultiplyExpression(makeLiteralDoubleExpr(2.0), std::move(avgYExpr));
+  auto twoTimesAvgY_times_avgFourTimesYExpr = makeMultiplyExpression(
+      std::move(twoTimesAvgYExpr), std::move(avgFourTimesYExpr));
+  auto avgY_plus_twoTimesAvgY_times_avgFourTimesYExpr = makeAddExpression(
+      std::move(avgYExpr2), std::move(twoTimesAvgY_times_avgFourTimesYExpr));
+  SparqlExpressionPimpl avgY_plus_twoTimesAvgY_times_avgFourTimesYPimpl(
+      std::move(avgY_plus_twoTimesAvgY_times_avgFourTimesYExpr),
+      "(AVG(?y) + ((2 * AVG(?y)) * AVG(4 * ?y)) as ?complexAvg)");
+  SparqlExpressionPimpl constantFive = makeLiteralDoublePimpl(5.0);
+
+  std::vector<Alias> aliasesAvgY{
+      Alias{avgYPimpl, Variable{"?avg"}},
+      Alias{avgY_plus_twoTimesAvgY_times_avgFourTimesYPimpl,
+            Variable{"?complexAvg"}},
+      Alias{constantFive, Variable{"?const"}}};
+
+  // Clear cache, calculate result without optimization
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY,
+                                     sortedJoin};
+  auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
+
+  // Calculate result with optimization, after since optimization changes tree
+  qec->clearCacheUnpinnedOnly();
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, sortedJoin};
+  auto resultWithOptimization = groupByWithOptimization.getResult();
 
   // Compare results, using debugString as the result only contains 2 rows
   ASSERT_EQ(resultWithOptimization->asDebugString(),
@@ -801,8 +891,8 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   // Test the following SPARQL query:
   //
   // SELECT (AVG(?a + ?b) as ?x) (?a + COUNT(?b) AS ?y) WHERE {
-  //   VALUES (?x ?y) { (1.0 3.0) (1.0 7.0) (5.0 4.0)}
-  // } GROUP BY ?x
+  //   VALUES (?a ?b) { (1.0 3.0) (1.0 7.0) (5.0 4.0)}
+  // } GROUP BY ?a
   //
   // Note: The values are chosen such that the results are all integers.
   // Otherwise we would get into trouble with floating point comparisons. A
