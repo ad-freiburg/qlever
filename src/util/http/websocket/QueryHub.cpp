@@ -31,6 +31,9 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
   }
 
   auto distributor = std::make_shared<QueryToSocketDistributor>(
+      // We pass a copy of the `shared_pointer socketDistributors_` here,
+      // because in unit tests the callback might be invoked after this
+      // `QueryHub` was destroyed.
       ioContext_, [&ioContext = ioContext_, globalStrand = globalStrand_,
                    socketDistributors = socketDistributors_, queryId]() {
         auto future = net::dispatch(net::bind_executor(
