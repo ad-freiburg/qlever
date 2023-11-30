@@ -145,22 +145,41 @@ void IndexImpl::createFromFile(const string& filename) {
     return indexBuilderData.vocabularyMetaData_.isInternalId(id);
   };
 
-  auto secondSorter = makeSorter<SecondPermutation>("second");
+  // auto secondSorter = makeSorter<SecondPermutation>("second");
   auto& firstSorter = *indexBuilderData.sorter_;
 
   // For the first permutation, perform a unique.
   auto firstSorterWithUnique =
       ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
 
-  createFirstPermutationPair(NumColumnsIndexBuilding, isInternalId, std::move(firstSorterWithUnique),
-                             secondSorter);
-  configurationJson_["has-all-permutations"] = false;
-  if (loadAllPermutations_) {
+  if (!loadAllPermutations_) {
+    auto secondSorter =
+        createFirstPermutationPair(NumColumnsIndexBuilding, isInternalId,
+                                   std::move(firstSorterWithUnique));
+    configurationJson_["has-all-permutations"] = false;
+  } else if (loadAllPermutations_ && !usePatterns_) {
+    auto secondSorter = makeSorter<SecondPermutation>("second");
+    createFirstPermutationPair(NumColumnsIndexBuilding, isInternalId,
+                               std::move(firstSorterWithUnique), secondSorter);
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
     createSecondPermutationPair(NumColumnsIndexBuilding, isInternalId,
                                 secondSorter.getSortedBlocks<0>(), thirdSorter);
     secondSorter.clear();
     createThirdPermutationPair(NumColumnsIndexBuilding, isInternalId,
+                               thirdSorter.getSortedBlocks<0>());
+    configurationJson_["has-all-permutations"] = true;
+
+  } else if (loadAllPermutations_) {
+    auto secondSorter =
+        createFirstPermutationPair(NumColumnsIndexBuilding, isInternalId,
+                                   std::move(firstSorterWithUnique));
+    auto thirdSorter =
+        makeSorter<ThirdPermutation, NumColumnsIndexBuilding + 1>("third");
+    createSecondPermutationPair(NumColumnsIndexBuilding + 1, isInternalId,
+                                secondSorter.value()->getSortedBlocks<0>(),
+                                thirdSorter);
+    secondSorter.value()->clear();
+    createThirdPermutationPair(NumColumnsIndexBuilding + 1, isInternalId,
                                thirdSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   }
@@ -1381,8 +1400,9 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
     numTriplesNormal += std::ranges::none_of(triple, isInternalId);
   };
   size_t numPredicatesNormal = 0;
-  createPermutationPair(numColumns,
-      AD_FWD(sortedTriples), pso_, pos_, nextSorter.makePushCallback()...,
+  createPermutationPair(
+      numColumns, AD_FWD(sortedTriples), pso_, pos_,
+      nextSorter.makePushCallback()...,
       makeNumDistinctIdsCounter<1>(numPredicatesNormal, isInternalId),
       countTriplesNormal);
   configurationJson_["num-predicates-normal"] = numPredicatesNormal;
@@ -1393,31 +1413,40 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createSPOAndSOP(size_t numColumns, auto& isInternalId,
-                                BlocksOfTriples sortedTriples,
-                                NextSorter&&... nextSorter) {
+std::optional<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>>
+IndexImpl::createSPOAndSOP(size_t numColumns, auto& isInternalId,
+                           BlocksOfTriples sortedTriples,
+                           NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
   auto numSubjectCounter =
       makeNumDistinctIdsCounter<0>(numSubjectsNormal, isInternalId);
   if (usePatterns_) {
-    PatternCreator patternCreator{onDiskBase_ + ".index.patterns"};
-    auto pushTripleToPatterns = [&patternCreator,
+    // TODO<joka921> magic constant.
+    PatternCreatorNew patternCreator{onDiskBase_ + ".index.patterns.new", 4_GB};
+    PatternCreator patternCreatorOld{onDiskBase_ + ".index.patterns"};
+    auto pushTripleToPatterns = [&patternCreator, &patternCreatorOld,
                                  &isInternalId](const auto& triple) {
-      if (!std::ranges::any_of(triple, isInternalId)) {
-        patternCreator.processTriple(
-            std::array{triple[0], triple[1], triple[2]});
+      bool ignoreForPatterns = std::ranges::any_of(triple, isInternalId);
+      auto tripleArr = std::array{triple[0], triple[1], triple[2]};
+      patternCreator.processTriple(tripleArr, ignoreForPatterns);
+      if (!ignoreForPatterns) {
+        patternCreatorOld.processTriple(tripleArr);
       }
     };
     createPermutationPair(numColumns, AD_FWD(sortedTriples), spo_, sop_,
                           nextSorter.makePushCallback()...,
                           pushTripleToPatterns, numSubjectCounter);
     patternCreator.finish();
+    configurationJson_["num-subjects-normal"] = numSubjectsNormal;
+    writeConfiguration();
+    return std::move(patternCreator).getAllTriplesWithPatternSortedByOSP();
   } else {
     createPermutationPair(numColumns, AD_FWD(sortedTriples), spo_, sop_,
                           nextSorter.makePushCallback()..., numSubjectCounter);
+    configurationJson_["num-subjects-normal"] = numSubjectsNormal;
+    writeConfiguration();
+    return std::nullopt;
   }
-  configurationJson_["num-subjects-normal"] = numSubjectsNormal;
-  writeConfiguration();
 };
 
 // _____________________________________________________________________________
@@ -1429,8 +1458,9 @@ void IndexImpl::createOSPAndOPS(size_t numColumns, auto& isInternalId,
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjectsNormal = 0;
-  createPermutationPair(numColumns,
-      AD_FWD(sortedTriples), osp_, ops_, nextSorter.makePushCallback()...,
+  createPermutationPair(
+      numColumns, AD_FWD(sortedTriples), osp_, ops_,
+      nextSorter.makePushCallback()...,
       makeNumDistinctIdsCounter<2>(numObjectsNormal, isInternalId));
   configurationJson_["num-objects-normal"] = numObjectsNormal;
   configurationJson_["has-all-permutations"] = true;
@@ -1438,8 +1468,8 @@ void IndexImpl::createOSPAndOPS(size_t numColumns, auto& isInternalId,
 };
 
 // _____________________________________________________________________________
-template <typename Comparator>
-ExternalSorter<Comparator> IndexImpl::makeSorter(
+template <typename Comparator, size_t I>
+ExternalSorter<Comparator, I> IndexImpl::makeSorter(
     std::string_view permutationName) const {
   return {absl::StrCat(onDiskBase_, ".", permutationName, "-sorter.dat"),
           memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,

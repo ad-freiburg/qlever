@@ -10,9 +10,11 @@
 #ifndef QLEVER_PATTERNCREATOR_H
 #define QLEVER_PATTERNCREATOR_H
 
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/Pattern.h"
+#include "index/StxxlSortFunctors.h"
 #include "util/ExceptionHandling.h"
 #include "util/MmapVector.h"
 #include "util/Serializer/SerializeVector.h"
@@ -62,6 +64,122 @@ struct PatternStatistics {
 /// be constructed, followed by one call to `processTriple` for each SPO triple.
 /// The final writing to disk can be done explicitly by the `finish()` function,
 /// but is also performed implicitly by the destructor.
+/// The mapping from subjects to pattern indices (has-pattern) and the full
+/// mapping from subjects to predicates (has-predicate) is not written to disk,
+/// but stored in a STXXL sorter which then has to be used to build an index for
+/// these predicates.
+class PatternCreatorNew {
+ public:
+  using PSOSorter = ad_utility::CompressedExternalIdTableSorter<SortByPSO, 3>;
+  using OSPSorter4Cols =
+      ad_utility::CompressedExternalIdTableSorter<SortByOSP, 4>;
+
+ private:
+  // The file to which the patterns will be written.
+  std::string _filename;
+
+  // Store the Id of a pattern, and the number of distinct subjects it occurs
+  // with.
+  struct PatternIdAndCount {
+    PatternID _patternId = 0;
+    uint64_t _count = 0;
+  };
+  using PatternToIdAndCount = ad_utility::HashMap<Pattern, PatternIdAndCount>;
+  PatternToIdAndCount _patternToIdAndCount;
+
+  // Between the calls to `processTriple` we have to remember the current
+  // subject (the subject of the last triple for which `processTriple` was
+  // called).
+  std::optional<VocabIndex> _currentSubjectIndex;
+  // The pattern of `_currentSubjectIndex`. This might still be incomplete,
+  // because more triples with the same subject might be pushed.
+  Pattern _currentPattern;
+
+  ad_utility::serialization::FileWriteSerializer _patternSerializer;
+
+  // Store the additional triples that are created by the pattern mechanism for
+  // the `has-pattern` and `has-predicate` predicates.
+  // TODO<joka921> Use something buffered for this.
+  std::vector<std::pair<std::array<Id, 3>, bool>> _tripleBuffer;
+  PSOSorter _additionalTriplesPsoSorter;
+  std::unique_ptr<OSPSorter4Cols> _fullPsoSorter;
+
+  // The predicates which have already occured in one of the patterns. Needed to
+  // count the number of distinct predicates.
+  ad_utility::HashSet<Pattern::value_type> _distinctPredicates;
+
+  // The number of distinct subjects and distinct subject-predicate pairs.
+  uint64_t _numDistinctSubjects = 0;
+  uint64_t _numDistinctSubjectPredicatePairs = 0;
+
+  // True if `finish()` was already called.
+  bool _isFinished = false;
+
+ public:
+  /// The patterns will be written to `filename` as well as to other filenames
+  /// which have `filename` as a prefix.
+  explicit PatternCreatorNew(const string& filename,
+                             ad_utility::MemorySize memoryForStxxl)
+      : _filename{filename},
+        _patternSerializer{{filename}},
+        _additionalTriplesPsoSorter{filename + "additionalTriples.pso.dat",
+                                    memoryForStxxl / 2,
+                                    ad_utility::makeUnlimitedAllocator<Id>()},
+        _fullPsoSorter{std::make_unique<OSPSorter4Cols>(
+            filename + "withPatterns.pso.dat", memoryForStxxl / 2,
+            ad_utility::makeUnlimitedAllocator<Id>())} {
+    LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
+  }
+
+  /// This function has to be called for all the triples in the SPO permutation
+  /// \param triple Must be >= all previously pushed triples wrt the SPO
+  /// permutation.
+  void processTriple(std::array<Id, 3> triple, bool ignoreForPatterns);
+
+  /// Write the patterns to disk after all triples have been pushed. Calls to
+  /// `processTriple` after calling `finish` lead to undefined behavior. Note
+  /// that the constructor also calls `finish` to give the `PatternCreatorNew`
+  /// proper RAII semantics.
+  void finish();
+
+  /// Destructor implicitly calls `finish`
+  ~PatternCreatorNew() {
+    ad_utility::terminateIfThrows([this]() { finish(); },
+                                  "Finishing the underlying file of a "
+                                  "`PatternCreatorNew` during destruction.");
+  }
+
+  /// Read the patterns from `filename`. The patterns must have been written to
+  /// this file using a `PatternCreatorNew`. The patterns and all their
+  /// statistics will be written to the various arguments.
+  /// TODO<joka921> The storage of the pattern will change soon, so we have
+  /// chosen an interface here that requires as little change as possible in the
+  /// `Index` class.
+  static void readPatternsFromFile(const std::string& filename,
+                                   double& avgNumSubjectsPerPredicate,
+                                   double& avgNumPredicatesPerSubject,
+                                   uint64_t& numDistinctSubjectPredicatePairs,
+                                   CompactVectorOfStrings<Id>& patterns);
+
+  // Move the sorted `has-pattern` and `has-predicate` triples out.
+  PSOSorter&& getHasPatternSortedByPSO() && {
+    finish();
+    return std::move(_additionalTriplesPsoSorter);
+  }
+  std::unique_ptr<OSPSorter4Cols> getAllTriplesWithPatternSortedByOSP() && {
+    finish();
+    return std::move(_fullPsoSorter);
+  }
+
+ private:
+  void finishSubject(VocabIndex subjectIndex, const Pattern& pattern);
+
+  void printStatistics(PatternStatistics patternStatistics) const;
+
+  auto& fullPsoSorter() { return *_fullPsoSorter; }
+};
+
+// The old version of the pattern creator.
 class PatternCreator {
  private:
   // The file to which the patterns will be written.

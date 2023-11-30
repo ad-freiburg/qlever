@@ -57,10 +57,9 @@ using std::vector;
 using json = nlohmann::json;
 
 static constexpr size_t NumColumnsIndexBuilding = 3;
-template <typename Comparator>
+template <typename Comparator, size_t I = NumColumnsIndexBuilding>
 using ExternalSorter =
-    ad_utility::CompressedExternalIdTableSorter<Comparator,
-                                                NumColumnsIndexBuilding>;
+    ad_utility::CompressedExternalIdTableSorter<Comparator, I>;
 
 // The Order in which the permutations are created during the index building.
 using FirstPermutation = SortBySPO;
@@ -734,14 +733,16 @@ class IndexImpl {
   // Also builds the patterns if specified.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createSPOAndSOP(size_t numColumns, auto& isInternalId,
-                       BlocksOfTriples sortedTriples, NextSorter&&... nextSorter);
+  std::optional<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>>
+  createSPOAndSOP(size_t numColumns, auto& isInternalId,
+                  BlocksOfTriples sortedTriples, NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   void createOSPAndOPS(size_t numColumns, auto& isInternalId,
-                       BlocksOfTriples sortedTriples, NextSorter&&... nextSorter);
+                       BlocksOfTriples sortedTriples,
+                       NextSorter&&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally count the number of
   // distinct predicates and the number of actual triples and write them to the
@@ -749,24 +750,28 @@ class IndexImpl {
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   void createPSOAndPOS(size_t numColumns, auto& isInternalId,
-                       BlocksOfTriples sortedTriples, NextSorter&&... nextSorter);
+                       BlocksOfTriples sortedTriples,
+                       NextSorter&&... nextSorter);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
   // The `permutationName` is used to determine the filename and must be unique
   // for each call during one index build.
-  template <typename Comparator>
-  ExternalSorter<Comparator> makeSorter(std::string_view permutationName) const;
+  template <typename Comparator, size_t N = NumColumnsIndexBuilding>
+  ExternalSorter<Comparator, N> makeSorter(
+      std::string_view permutationName) const;
 
   // Aliases for the three functions above that should be consistently used.
   // They assert that the order of the permutations as communicated by the
   // function names are consistent with the aliases for the sorters, i.e. that
   // `createFirstPermutationPair` corresponds to the `FirstPermutation`.
-  void createFirstPermutationPair(auto&&... args) {
+  std::optional<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>>
+  createFirstPermutationPair(auto&&... args) {
     static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
     if (loadAllPermutations()) {
       return createSPOAndSOP(AD_FWD(args)...);
     } else {
-      return createPSOAndPOS(AD_FWD(args)...);
+      createPSOAndPOS(AD_FWD(args)...);
+      return std::nullopt;
     }
   }
 
