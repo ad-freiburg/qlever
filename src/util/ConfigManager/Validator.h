@@ -133,8 +133,9 @@ class ConfigOptionValidatorManager {
            ...) &&
               ExceptionValidatorFunction<
                   ExceptionValidatorFunc,
-                  std::invoke_result_t<TranslationFunction,
-                                       ExceptionValidatorParameterTypes>...> &&
+                  std::invoke_result_t<
+                      TranslationFunction,
+                      const ExceptionValidatorParameterTypes>...> &&
               (sizeof...(ExceptionValidatorParameterTypes) > 0)
   ConfigOptionValidatorManager(
       ExceptionValidatorFunc exceptionValidatorFunction, std::string descriptor,
@@ -195,16 +196,17 @@ class ConfigOptionValidatorManager {
             isInstantiation<ConstConfigOptionProxy>... ValidatorParameterTypes>
   requires(std::invocable<TranslationFunction, const ValidatorParameterTypes> &&
            ...) &&
-          ValidatorFunction<ValidatorFunc,
-                            std::invoke_result_t<TranslationFunction,
-                                                 ValidatorParameterTypes>...> &&
+          ValidatorFunction<
+              ValidatorFunc,
+              std::invoke_result_t<TranslationFunction,
+                                   const ValidatorParameterTypes>...> &&
           (sizeof...(ValidatorParameterTypes) > 0) ConfigOptionValidatorManager(
       ValidatorFunc validatorFunction, std::string errorMessage,
       std::string descriptor, TranslationFunction translationFunction,
       const ValidatorParameterTypes... configOptionsToBeChecked)
       : ConfigOptionValidatorManager(
             transformValidatorIntoExceptionValidator<std::invoke_result_t<
-                TranslationFunction, ValidatorParameterTypes>...>(
+                TranslationFunction, const ValidatorParameterTypes>...>(
                 std::move(validatorFunction), std::move(errorMessage)),
             std::move(descriptor), std::move(translationFunction),
             configOptionsToBeChecked...) {}

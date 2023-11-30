@@ -19,6 +19,7 @@
 #include <string_view>
 #include <type_traits>
 #include <typeinfo>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -412,6 +413,7 @@ class ConfigManager {
   FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
   FRIEND_TEST(ConfigManagerTest, ContainsOption);
   FRIEND_TEST(ConfigManagerTest, ValidatorsSorting);
+  FRIEND_TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment);
 
   /*
   @brief Visit the entries of `configurationOptions_` by visiting the content of
@@ -636,16 +638,95 @@ class ConfigManager {
       std::string_view pathPrefix) const;
 
   /*
+  When printing the configuration documentation, the assignment of `Validators`
+  isn't 100% clear.
+  Should they be printed as part of a sub manager? As part of every
+  `ConfigOption`, they check? Or a split up between sub managers and
+  `ConfigOption`?
+  This class is for clearing up those assignments, by assigning
+  `ConfigOptionValidatorManager` to `ConfigOption` and `ConfigManager`.
+  Note:
+  - Those assignments will be done using memory addresses and pointers. No
+  objects will be copied.
+  - Keys and values are identified via identity/memory address.
+  - The insertion order under a key will be preserved. For example: If you add
+  validator `a` and `b` under `ConfigOption C`, then when retrieving the entries
+  for `C` they will have the order `a`, followed by `b`.
+  */
+  class ConfigurationDocValidatorAssignment {
+    /*
+    Hash maps of the memory address.
+    */
+    template <typename PointerObject>
+    using MemoryAdressHashMap =
+        ad_utility::HashMap<const std::decay_t<PointerObject>*,
+                            std::vector<const ConfigOptionValidatorManager*>>;
+    MemoryAdressHashMap<ConfigOption> configOption_;
+    MemoryAdressHashMap<ConfigManager> configManager_;
+
+    // For fast lookup, if an `ConfigOptionValidatorManager` was ever assigned
+    // to anything.
+    std::unordered_set<const ConfigOptionValidatorManager*> validatorSet_;
+
+   public:
+    /*
+    @brief Add a validator to the list of validators, that are assigned to a
+    `ConfigOption`/`ConfigManager`.
+    */
+    template <typename T>
+    requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
+    void addEntryUnderKey(const T& key,
+                          const ConfigOptionValidatorManager& manager);
+
+    /*
+    @brief Retrieve the list of validators, that are assigned to a
+    `ConfigOption`/`ConfigManager`.
+
+    @returns If there is no entry for `Key`, return an empty `std::vector`.
+    */
+    template <typename T>
+    requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
+    std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
+    getEntriesUnderKey(const T& key) const;
+
+    // Was the given `ConfigOptionValidatorManager` ever assigned to anything?
+    bool containsValue(const ConfigOptionValidatorManager& manager) const;
+
+   private:
+    // Return either `configOption_` or `configManager_`, based on type.
+    template <typename T>
+    requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
+    constexpr const MemoryAdressHashMap<T>& getHashMapBasedOnType() const {
+      if constexpr (std::same_as<T, ConfigOption>) {
+        return configOption_;
+      } else if constexpr (std::same_as<T, ConfigManager>) {
+        return configManager_;
+      }
+    }
+    template <typename T>
+    requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
+    constexpr MemoryAdressHashMap<T>& getHashMapBasedOnType() {
+      if constexpr (std::same_as<T, ConfigOption>) {
+        return configOption_;
+      } else if constexpr (std::same_as<T, ConfigManager>) {
+        return configManager_;
+      }
+    }
+  };
+
+  /*
   @brief Create a detailed list about the configuration options, with their
   types, values, default values,  etc. shown, followed by a list of the
   validator invariants and organized by the sub managers, that hold them.
 
-  @param pathPrefix Only used for improved error messages. For example: You have
-  a sub manager with the path `subManagers/sub1` and call `visitHashMapEntries`
-  with it. The sub manager doesn't know its own path, so that information will
-  only be included in generated error messages, if you pass it along.
+  @param pathPrefix Only used for improved error messages. For example: You
+  have a sub manager with the path `subManagers/sub1` and call
+  `visitHashMapEntries` with it. The sub manager doesn't know its own path, so
+  that information will only be included in generated error messages, if you
+  pass it along.
   */
   std::string generateConfigurationDocDetailedList(
       std::string_view pathPrefix) const;
 };
+
 }  // namespace ad_utility

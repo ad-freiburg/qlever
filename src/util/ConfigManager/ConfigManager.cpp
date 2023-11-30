@@ -685,4 +685,63 @@ bool ConfigManager::containsOption(const ConfigOption& opt) const {
       &opt);
 }
 
+// ____________________________________________________________________________
+template <typename T>
+requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
+void ConfigManager::ConfigurationDocValidatorAssignment::addEntryUnderKey(
+    const T& key, const ConfigOptionValidatorManager& manager) {
+  // The concerned hash map.
+  MemoryAdressHashMap<T>& hashMap{getHashMapBasedOnType<T>()};
+
+  // If we already have a vector, append. Else, create.
+  if (auto mapIterator = hashMap.find(&key); mapIterator != hashMap.end()) {
+    (*mapIterator).second.push_back(&manager);
+  } else {
+    hashMap.emplace(&key, std::vector{&manager});
+  }
+  validatorSet_.emplace(&manager);
+}
+// Explicit instantiation for `ConfigOption` and `ConfigManager`.
+template void ConfigManager::ConfigurationDocValidatorAssignment::
+    addEntryUnderKey<ConfigOption>(const ConfigOption&,
+                                   const ConfigOptionValidatorManager&);
+template void ConfigManager::ConfigurationDocValidatorAssignment::
+    addEntryUnderKey<ConfigManager>(const ConfigManager&,
+                                    const ConfigOptionValidatorManager&);
+
+// ____________________________________________________________________________
+template <typename T>
+requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
+std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
+ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
+    const T& key) const {
+  // The concerned hash map.
+  const MemoryAdressHashMap<T>& hashMap{getHashMapBasedOnType<T>()};
+
+  // Get the vector from the hash map and convert it, if there is one.
+  if (auto mapIterator = hashMap.find(&key); mapIterator != hashMap.end()) {
+    return transform(
+        (*mapIterator).second,
+        [](const auto* pointer)
+            -> std::reference_wrapper<const ConfigOptionValidatorManager> {
+          return *pointer;
+        });
+  } else {
+    return {};
+  }
+}
+// Explicit instantiation for `ConfigOption` and `ConfigManager`.
+template std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
+ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
+    const ConfigOption&) const;
+template std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
+ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
+    const ConfigManager&) const;
+
+// ____________________________________________________________________________
+bool ConfigManager::ConfigurationDocValidatorAssignment::containsValue(
+    const ConfigOptionValidatorManager& manager) const {
+  return validatorSet_.contains(&manager);
+}
+
 }  // namespace ad_utility
