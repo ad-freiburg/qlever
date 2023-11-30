@@ -218,8 +218,6 @@ class IndexImpl {
   // by createFromOnDiskIndex after this call.
   void createFromFile(const string& filename);
 
-  void addPatternsToExistingIndex();
-
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
   void createFromOnDiskIndex(const string& onDiskBase);

@@ -25,11 +25,6 @@ void Index::createFromFile(const std::string& filename) {
 }
 
 // ____________________________________________________________________________
-void Index::addPatternsToExistingIndex() {
-  pimpl_->addPatternsToExistingIndex();
-}
-
-// ____________________________________________________________________________
 void Index::createFromOnDiskIndex(const std::string& onDiskBase) {
   pimpl_->createFromOnDiskIndex(onDiskBase);
 }

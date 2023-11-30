@@ -75,8 +75,6 @@ class Index {
   // setup by `createFromOnDiskIndex` after this call.
   void createFromFile(const std::string& filename);
 
-  void addPatternsToExistingIndex();
-
   // Create an index object from an on-disk index that has previously been
   // constructed using the `createFromFile` method which is typically called via
   // `IndexBuilderMain`. Read necessary metadata into memory and open file

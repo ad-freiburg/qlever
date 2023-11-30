@@ -595,25 +595,6 @@ void IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::addPatternsToExistingIndex() {
-  // auto [langPredLowerBound, langPredUpperBound] = vocab_.prefix_range("@");
-  //  We only iterate over the SPO permutation which typically only has few
-  //  triples per subject, so it should be safe to not apply a memory limit
-  //  here.
-  AD_FAIL();
-  /*
-  ad_utility::AllocatorWithLimit<Id> allocator{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<uint64_t>::max())};
-  auto iterator = TriplesView(spo_, allocator);
-  createPatternsFromSpoTriplesView(iterator, onDiskBase_ + ".index.patterns",
-                                   Id::makeFromVocabIndex(langPredLowerBound),
-                                   Id::makeFromVocabIndex(langPredUpperBound));
-                                   */
-  // TODO<joka921> Remove the AD_FAIL() again.
-}
-
-// _____________________________________________________________________________
 void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
