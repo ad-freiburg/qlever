@@ -68,7 +68,7 @@ void testLazyScanForJoinOfTwoScans(
     const std::string& kgTurtle, const SparqlTriple& tripleLeft,
     const SparqlTriple& tripleRight, const std::vector<IndexPair>& leftRows,
     const std::vector<IndexPair>& rightRows,
-    ad_utility::MemorySize blocksizePermutations = 32_B,
+    ad_utility::MemorySize blocksizePermutations = 16_B,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kgTurtle, true, true, true, blocksizePermutations);
@@ -192,7 +192,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
     testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{1, 5}}, {{0, 4}});
   }
   {
-    // In this example we use 3 triples per block (48 bytes) and the `<p>`
+    // In this example we use 3 triples per block (24 bytes) and the `<p>`
     // permutation is standing in a single block together with the previous
     // `<o>` relation. The lazy scans are however still aware that the relevant
     // part of the block (`<b> <p> ?x`) only  goes from `<x80>` through `<x90>`,
@@ -202,7 +202,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<a> <o> <a1>. <b> <p> <x80>. <b> <p> <x90>. "
         "<x2> <q> <xb>. <x5> <q> <xb2> . <x5> <q> <xb>. "
         "<x9> <q> <xb2> . <x91> <q> <xb>. <x93> <q> <xb2> .";
-    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 48_B);
+    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 24_B);
   }
   {
     std::string kg =
@@ -317,4 +317,30 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanCornerCases) {
     SparqlTriple xpy{Tc{Var{"?x"}}, "<p>", Tc{Var{"?y"}}};
     testLazyScanWithColumnThrows(kg, xpy, unsortedColumn);
   }
+}
+
+TEST(IndexScan, additionalColumn) {
+  auto qec = getQec("<x> <y> <z>.");
+  using V = Variable;
+  SparqlTriple triple{V{"?x"}, "<y>", V{"?z"}};
+  triple._additionalScanColumns.emplace_back(1, V{"?blib"});
+  triple._additionalScanColumns.emplace_back(0, V{"?blub"});
+  auto scan = IndexScan{qec, Permutation::PSO, triple};
+  ASSERT_EQ(scan.getResultWidth(), 4);
+  auto col = makeAlwaysDefinedColumn;
+  VariableToColumnMap expected = {{V{"?x"}, col(0)},
+                                  {V{"?z"}, col(1)},
+                                  {V("?blib"), col(2)},
+                                  {V("?blub"), col(3)}};
+  ASSERT_THAT(scan.getExternallyVisibleVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expected));
+  ASSERT_THAT(scan.asString(),
+              ::testing::ContainsRegex("Additional Columns: 1 0"));
+  // Executing such a query that has the same column multiple times is currently
+  // not supported and fails with an exception inside the `IdTable.h` module
+  // TODO<joka921> Add proper tests as soon as we can properly add additional
+  // columns. Maybe we cann add additional columns generically during the index
+  // build by adding a generic transformation function etc.
+  AD_EXPECT_THROW_WITH_MESSAGE(scan.computeResultOnlyForTesting(),
+                               ::testing::ContainsRegex("IdTable.h"));
 }

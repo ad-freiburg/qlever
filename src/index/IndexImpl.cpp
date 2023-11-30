@@ -578,10 +578,11 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
 
-  CompressedRelationWriter writer1{ad_utility::File(fileName1, "w"),
-                                   blocksizePermutation_};
-  CompressedRelationWriter writer2{ad_utility::File(fileName2, "w"),
-                                   blocksizePermutation_};
+  static constexpr size_t NumColumns = 2;
+  CompressedRelationWriter writer1{NumColumns, ad_utility::File(fileName1, "w"),
+                                   blocksizePermutationPerColumn_};
+  CompressedRelationWriter writer2{NumColumns, ad_utility::File(fileName2, "w"),
+                                   blocksizePermutationPerColumn_};
 
   // Lift a callback that works on single elements to a callback that works on
   // blocks.
@@ -1376,6 +1377,7 @@ IdTable IndexImpl::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
     const Permutation::Enum& permutation,
+    Permutation::ColumnIndicesRef additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
   std::optional<Id> col1Id =
@@ -1385,14 +1387,16 @@ IdTable IndexImpl::scan(
     size_t numColumns = col1String.has_value() ? 1 : 2;
     return IdTable{numColumns, allocator_};
   }
-  return scan(col0Id.value(), col1Id, permutation,
+  return scan(col0Id.value(), col1Id, permutation, additionalColumns,
               std::move(cancellationHandle));
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+    Permutation::ColumnIndicesRef additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
-  return getPermutation(p).scan(col0Id, col1Id, std::move(cancellationHandle));
+  return getPermutation(p).scan(col0Id, col1Id, additionalColumns,
+                                std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________

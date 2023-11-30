@@ -119,7 +119,8 @@ class IndexImpl {
   bool keepTempFiles_ = false;
   ad_utility::MemorySize memoryLimitIndexBuilding_ =
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
-  ad_utility::MemorySize blocksizePermutation_ = BLOCKSIZE_COMPRESSED_METADATA;
+  ad_utility::MemorySize blocksizePermutationPerColumn_ =
+      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   json configurationJson_;
   Index::Vocab vocab_;
   size_t totalVocabularySize_ = 0;
@@ -366,8 +367,8 @@ class IndexImpl {
     return memoryLimitIndexBuilding_;
   }
 
-  ad_utility::MemorySize& blocksizePermutation() {
-    return blocksizePermutation_;
+  ad_utility::MemorySize& blocksizePermutationPerColumn() {
+    return blocksizePermutationPerColumn_;
   }
 
   void setOnDiskBase(const std::string& onDiskBase);
@@ -404,11 +405,13 @@ class IndexImpl {
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       const Permutation::Enum& permutation,
+      Permutation::ColumnIndicesRef additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // _____________________________________________________________________________
   IdTable scan(
       Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+      Permutation::ColumnIndicesRef additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // _____________________________________________________________________________

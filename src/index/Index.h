@@ -214,7 +214,7 @@ class Index {
   ad_utility::MemorySize& memoryLimitIndexBuilding();
   const ad_utility::MemorySize& memoryLimitIndexBuilding() const;
 
-  ad_utility::MemorySize& blocksizePermutations();
+  ad_utility::MemorySize& blocksizePermutationsPerColumn();
 
   void setOnDiskBase(const std::string& onDiskBase);
 
@@ -265,12 +265,13 @@ class Index {
   IdTable scan(
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
-      Permutation::Enum p,
+      Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Similar to the overload of `scan` above, but the keys are specified as IDs.
   IdTable scan(
       Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+      Permutation::ColumnIndicesRef additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of
