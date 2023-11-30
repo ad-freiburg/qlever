@@ -62,6 +62,7 @@ using ExternalSorter =
     ad_utility::CompressedExternalIdTableSorter<Comparator,
                                                 NumColumnsIndexBuilding>;
 
+// The Order in which the permutations are created during the index building.
 using FirstPermutation = SortBySPO;
 using FirstPermutationSorter = ExternalSorter<FirstPermutation>;
 using SecondPermutation = SortByOSP;
@@ -87,7 +88,7 @@ struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
 };
 
 // All the data from IndexBuilderDataBase and a ExternalSorter that stores all
-// ID triples sorted by the PSO permutation.
+// ID triples sorted by the first permutation.
 struct IndexBuilderDataAsFirstPermutationSorter : IndexBuilderDataBase {
   using SorterPtr =
       std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>;
@@ -458,10 +459,16 @@ class IndexImpl {
       ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
 
   //  Apply the prefix compression to the internal vocabulary. Is called by
-  //  `createFromFile` after the vocabularies
-  // have been created and merged.
+  //  `createFromFile` after the vocabularies have been created and merged.
   void compressInternalVocabularyIfSpecified(
       const std::vector<std::string>& prefixes);
+
+  // Return a turtle parser that parser the `filename`. The parser will be
+  // configured to either parser in parallel or not, and to either use the
+  // CTRE-based relaxed parser or not, depending on the settings of the
+  // corresponding member variables.
+  std::unique_ptr<TurtleParserBase> makeTurtleParser(
+      const std::string& filename);
 
   std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>
   convertPartialToGlobalIds(TripleVec& data,
@@ -710,18 +717,17 @@ class IndexImpl {
     return std::pair{std::move(ignoredRanges), std::move(isTripleIgnored)};
   }
   using BlocksOfTriples = cppcoro::generator<IdTableStatic<0>>;
+
   // Functions to create the pairs of permutations during the index build. Each
   // of them takes the following arguments:
   // * `isInternalId` a callable that takes an `Id` and returns true iff the
-  // corresponding IRI was internally added by
-  //    QLever and not part of the knowledge graph.
+  //    corresponding IRI was internally added by QLever and not part of the
+  //    knowledge graph.
   // * `sortedInput`  The input, must be sorted by the first permutation in the
-  // function name. Unfortunately we currently
-  //                   have no way of statically determining the correct
-  //                   sorting.
+  //    function name.
   // * `nextSorter` A callback that is invoked for each row in each of the
-  // blocks in the input. Typically used to set up
-  //                the sorting for the subsequent pair of permutations.
+  //    blocks in the input. Typically used to set up the sorting for the
+  //    subsequent pair of permutations.
 
   // Create the SPO and SOP permutations. Also count the number of distinct
   // actual (not internal) subjects in the input and write it to the metadata.
@@ -729,13 +735,13 @@ class IndexImpl {
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   void createSPOAndSOP(size_t numColumns, auto& isInternalId,
-                       BlocksOfTriples sortedInput, NextSorter&&... nextSorter);
+                       BlocksOfTriples sortedTriples, NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   void createOSPAndOPS(size_t numColumns, auto& isInternalId,
-                       BlocksOfTriples sortedInput, NextSorter&&... nextSorter);
+                       BlocksOfTriples sortedTriples, NextSorter&&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally count the number of
   // distinct predicates and the number of actual triples and write them to the
@@ -743,7 +749,7 @@ class IndexImpl {
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   void createPSOAndPOS(size_t numColumns, auto& isInternalId,
-                       BlocksOfTriples sortedInput, NextSorter&&... nextSorter);
+                       BlocksOfTriples sortedTriples, NextSorter&&... nextSorter);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
   // The `permutationName` is used to determine the filename and must be unique
