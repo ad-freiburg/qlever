@@ -876,3 +876,12 @@ TEST(SparqlExpression, encodeForUri) {
                     IdOrStrings{"L%22os%20%22Angeles"});
   checkEncodeForUri(IdOrStrings{U}, IdOrStrings{U});
 }
+
+TEST(SparqlExpression, replaceChildThrowsIfOutOfRange) {
+  sparqlExpression::IdExpression expr(ValueId::makeFromInt(42));
+  std::unique_ptr<SparqlExpression> exprToSubstitute =
+      std::make_unique<IdExpression>(ValueId::makeFromInt(42));
+
+  ASSERT_THROW(expr.replaceChild(1, std::move(exprToSubstitute)),
+               ad_utility::Exception);
+}
