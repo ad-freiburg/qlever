@@ -11,6 +11,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Exception.h"
+#include "util/TransparentFunctors.h"
 
 namespace ad_utility {
 // This class handles the efficient writing of the results of a JOIN operation
@@ -19,6 +20,7 @@ namespace ad_utility {
 // store the indices of the matching rows. When a certain buffer size
 // (configurable, default value 100'000) is reached, the results are actually
 // written to the table.
+template <std::invocable<IdTable&> BlockwiseCallback = ad_utility::Noop>
 class AddCombinedRowToIdTable {
   std::vector<size_t> numUndefinedPerColumn_;
   size_t numJoinColumns_;
@@ -57,30 +59,40 @@ class AddCombinedRowToIdTable {
   // materialized and written to the result in one go.
   size_t bufferSize_ = 100'000;
 
+  // TODO<joka921> Comment
+  BlockwiseCallback blockwiseCallback_{};
+
  public:
   // Construct from the number of join columns, the two inputs, and the output.
   // The `bufferSize` can be configured for testing.
   explicit AddCombinedRowToIdTable(size_t numJoinColumns, IdTableView<0> input1,
                                    IdTableView<0> input2, IdTable output,
-                                   size_t bufferSize = 100'000)
+                                   size_t bufferSize = 100'000,
+                                   BlockwiseCallback blockwiseCallback = {})
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
         inputs_{std::array{std::move(input1), std::move(input2)}},
         resultTable_{std::move(output)},
-        bufferSize_{bufferSize} {
+        bufferSize_{bufferSize},
+        blockwiseCallback_{std::move(blockwiseCallback)} {
     checkNumColumns();
+    indexBuffer_.reserve(bufferSize);
   }
   // Similar to the previous constructor, but the inputs are not given.
   // This means that the inputs have to be set to an explicit
   // call to `setInput` before adding rows. This is used for the lazy join
   // operations (see Join.cpp) where the input changes over time.
   explicit AddCombinedRowToIdTable(size_t numJoinColumns, IdTable output,
-                                   size_t bufferSize = 100'000)
+                                   size_t bufferSize = 100'000,
+                                   BlockwiseCallback blockwiseCallback = {})
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
         inputs_{std::nullopt},
         resultTable_{std::move(output)},
-        bufferSize_{bufferSize} {}
+        bufferSize_{bufferSize},
+        blockwiseCallback_{std::move(blockwiseCallback)} {
+    indexBuffer_.reserve(bufferSize);
+  }
 
   // Return the number of UNDEF values per column.
   const std::vector<size_t>& numUndefinedPerColumn() {
@@ -120,6 +132,26 @@ class AddCombinedRowToIdTable {
     }
     inputs_ = std::array{toView(inputLeft), toView(inputRight)};
     checkNumColumns();
+  }
+
+  void setLeftInput(const auto& inputLeft) {
+    auto toView = []<typename T>(const T& table) {
+      if constexpr (requires { table.template asStaticView<0>(); }) {
+        return table.template asStaticView<0>();
+      } else {
+        return table;
+      }
+    };
+    if (nextIndex_ != 0) {
+      AD_CORRECTNESS_CHECK(inputs_.has_value());
+      flush();
+    }
+    // TODO<joka921> This is rather unsafe, we should think of something better.
+    inputs_ = std::array{
+        toView(inputLeft),
+        IdTableView<0>{resultTable_.numColumns() -
+                           toView(inputLeft).numColumns() + numJoinColumns_,
+                       ad_utility::makeUnlimitedAllocator<Id>()}};
   }
 
   // The next free row in the output will be created from
@@ -258,19 +290,20 @@ class AddCombinedRowToIdTable {
 
     // Then the remaining columns from the first input.
     for (size_t col = numJoinColumns_; col < inputLeft().numColumns(); ++col) {
-      writeNonJoinColumn.operator()<true>(col, nextResultColIdx);
+      writeNonJoinColumn.template operator()<true>(col, nextResultColIdx);
       ++nextResultColIdx;
     }
 
     // Then the remaining columns from the second input.
     for (size_t col = numJoinColumns_; col < inputRight().numColumns(); col++) {
-      writeNonJoinColumn.operator()<false>(col, nextResultColIdx);
+      writeNonJoinColumn.template operator()<false>(col, nextResultColIdx);
       ++nextResultColIdx;
     }
 
     indexBuffer_.clear();
     optionalIndexBuffer_.clear();
     nextIndex_ = 0;
+    std::invoke(blockwiseCallback_, result);
   }
   const IdTableView<0>& inputLeft() const { return inputs_.value()[0]; }
 
