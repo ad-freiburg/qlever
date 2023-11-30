@@ -796,11 +796,17 @@ bool GroupBy::findAggregateMultiple(
 
   auto children = expr->children();
 
+  std::vector<bool> childrenContainUnsupportedAggregate;
   // TODO<C++23> use views::enumerate
   size_t childIndex = 0;
   for (const auto& child : children) {
-    return findAggregateMultiple(expr, child.get(), childIndex++, info);
+    childrenContainUnsupportedAggregate.push_back(
+        findAggregateMultiple(expr, child.get(), childIndex++, info));
   }
+
+  return std::all_of(childrenContainUnsupportedAggregate.begin(),
+                     childrenContainUnsupportedAggregate.end(),
+                     [](const bool v) { return v; });
 }
 
 // _____________________________________________________________________________
