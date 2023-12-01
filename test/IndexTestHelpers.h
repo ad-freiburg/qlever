@@ -65,11 +65,61 @@ inline std::vector<std::string> getAllIndexFilenames(
 // "älpha", "A", "Beta"`. These vocabulary entries are expected by the tests
 // for the subclasses of `SparqlExpression`.
 // The concrete triple contents are currently used in `GroupByTest.cpp`.
-Index makeTestIndex(const std::string& indexBasename,
-                    std::optional<std::string> turtleInput = std::nullopt,
-                    bool loadAllPermutations = true, bool usePatterns = true,
-                    bool usePrefixCompression = true,
-                    ad_utility::MemorySize blocksizePermutations = 16_B);
+inline Index makeTestIndex(
+    const std::string& indexBasename,
+    std::optional<std::string> turtleInput = std::nullopt,
+    bool loadAllPermutations = true, bool usePatterns = true,
+    bool usePrefixCompression = true,
+    ad_utility::MemorySize blocksizePermutations = 16_B) {
+  // Ignore the (irrelevant) log output of the index building and loading during
+  // these tests.
+  static std::ostringstream ignoreLogStream;
+  ad_utility::setGlobalLoggingStream(&ignoreLogStream);
+  std::string inputFilename = indexBasename + ".ttl";
+  if (!turtleInput.has_value()) {
+    turtleInput =
+        "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
+        "<x> "
+        "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
+        "\"zz\"@en";
+  }
+
+  FILE_BUFFER_SIZE() = 1000;
+  std::fstream f(inputFilename, std::ios_base::out);
+  f << turtleInput.value();
+  f.close();
+  {
+    Index index = makeIndexWithTestSettings();
+    // This is enough for 2 triples per block. This is deliberately chosen as a
+    // small value, s.t. the tiny knowledge graphs from unit tests also contain
+    // multiple blocks. Should this value or the semantics of it (how many
+    // triples it may store) ever change, then some unit tests might have to be
+    // adapted.
+    index.blocksizePermutationsPerColumn() = blocksizePermutations;
+    index.setOnDiskBase(indexBasename);
+    index.usePatterns() = usePatterns;
+    index.setPrefixCompression(usePrefixCompression);
+    index.loadAllPermutations() = loadAllPermutations;
+    index.createFromFile(inputFilename);
+  }
+  if (!usePatterns || !loadAllPermutations) {
+    // If we have no patterns, or only two permutations, then check the graceful
+    // fallback even if the options were not explicitly specified during the
+    // loading of the server.
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.usePatterns() = true;
+    index.loadAllPermutations() = true;
+    EXPECT_NO_THROW(index.createFromOnDiskIndex(indexBasename));
+    EXPECT_EQ(index.loadAllPermutations(), loadAllPermutations);
+    EXPECT_EQ(index.usePatterns(), usePatterns);
+  }
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.usePatterns() = usePatterns;
+  index.loadAllPermutations() = loadAllPermutations;
+  index.createFromOnDiskIndex(indexBasename);
+  ad_utility::setGlobalLoggingStream(&std::cout);
+  return index;
+}
 
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its

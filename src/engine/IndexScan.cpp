@@ -148,7 +148,7 @@ ResultTable IndexScan::computeResult() {
 }
 
 // _____________________________________________________________________________
-size_t IndexScan::computeSizeEstimate() {
+size_t IndexScan::computeSizeEstimate() const {
   if (_executionContext) {
     // Should always be in this branch. Else is only for test cases.
 
