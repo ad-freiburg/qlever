@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <gtest/gtest.h>
+
 #include "./util/AllocatorTestHelpers.h"
 #include "absl/cleanup/cleanup.h"
 #include "engine/QueryExecutionContext.h"
@@ -24,7 +26,8 @@ inline Index makeIndexWithTestSettings() {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  index.stxxlMemory() = 50_MB;
+  BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10;
+  index.memoryLimitIndexBuilding() = 50_MB;
   return index;
 }
 
@@ -66,7 +69,8 @@ inline Index makeTestIndex(
     const std::string& indexBasename,
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,
-    bool usePrefixCompression = true, size_t blocksizePermutationsInBytes = 32,
+    bool usePrefixCompression = true,
+    ad_utility::MemorySize blocksizePermutations = 16_B,
     bool createTextIndex = false) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
@@ -92,18 +96,30 @@ inline Index makeTestIndex(
     // multiple blocks. Should this value or the semantics of it (how many
     // triples it may store) ever change, then some unit tests might have to be
     // adapted.
-    index.blocksizePermutationsInBytes() = blocksizePermutationsInBytes;
+    index.blocksizePermutationsPerColumn() = blocksizePermutations;
     index.setOnDiskBase(indexBasename);
-    index.setUsePatterns(usePatterns);
+    index.usePatterns() = usePatterns;
     index.setPrefixCompression(usePrefixCompression);
+    index.loadAllPermutations() = loadAllPermutations;
     index.createFromFile(inputFilename);
     if (createTextIndex) {
       index.addTextFromContextFile("", true);
     }
   }
+  if (!usePatterns || !loadAllPermutations) {
+    // If we have no patterns, or only two permutations, then check the graceful
+    // fallback even if the options were not explicitly specified during the
+    // loading of the server.
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.usePatterns() = true;
+    index.loadAllPermutations() = true;
+    EXPECT_NO_THROW(index.createFromOnDiskIndex(indexBasename));
+    EXPECT_EQ(index.loadAllPermutations(), loadAllPermutations);
+    EXPECT_EQ(index.usePatterns(), usePatterns);
+  }
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-  index.setUsePatterns(usePatterns);
-  index.setLoadAllPermutations(loadAllPermutations);
+  index.usePatterns() = usePatterns;
+  index.loadAllPermutations() = loadAllPermutations;
   index.createFromOnDiskIndex(indexBasename);
   if (createTextIndex) {
     index.addTextFromOnDiskIndex();
@@ -119,7 +135,8 @@ inline Index makeTestIndex(
 inline QueryExecutionContext* getQec(
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,
-    bool usePrefixCompression = true, size_t blocksizePermutationsInBytes = 32,
+    bool usePrefixCompression = true,
+    ad_utility::MemorySize blocksizePermutations = 16_B,
     bool createTextIndex = false) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
@@ -155,11 +172,12 @@ inline QueryExecutionContext* getQec(
             *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{});
   };
 
-  using Key = std::tuple<std::optional<string>, bool, bool, bool, size_t>;
+  using Key = std::tuple<std::optional<string>, bool, bool, bool,
+                         ad_utility::MemorySize>;
   static ad_utility::HashMap<Key, Context> contextMap;
 
   auto key = Key{turtleInput, loadAllPermutations, usePatterns,
-                 usePrefixCompression, blocksizePermutationsInBytes};
+                 usePrefixCompression, blocksizePermutations};
 
   if (!contextMap.contains(key)) {
     std::string testIndexBasename =
@@ -177,7 +195,7 @@ inline QueryExecutionContext* getQec(
                      std::make_unique<Index>(makeTestIndex(
                          testIndexBasename, turtleInput, loadAllPermutations,
                          usePatterns, usePrefixCompression,
-                         blocksizePermutationsInBytes, createTextIndex)),
+                         blocksizePermutations, createTextIndex)),
                      std::make_unique<QueryResultCache>()});
   }
   return contextMap.at(key).qec_.get();

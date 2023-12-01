@@ -220,14 +220,10 @@ void Index::setTextName(const std::string& name) {
 }
 
 // ____________________________________________________________________________
-void Index::setUsePatterns(bool usePatterns) {
-  return pimpl_->setUsePatterns(usePatterns);
-}
+bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 
 // ____________________________________________________________________________
-void Index::setLoadAllPermutations(bool loadAllPermutations) {
-  return pimpl_->setLoadAllPermutations(loadAllPermutations);
-}
+bool& Index::loadAllPermutations() { return pimpl_->loadAllPermutations(); }
 
 // ____________________________________________________________________________
 void Index::setKeepTempFiles(bool keepTempFiles) {
@@ -235,16 +231,18 @@ void Index::setKeepTempFiles(bool keepTempFiles) {
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize& Index::stxxlMemory() { return pimpl_->stxxlMemory(); }
-
-// ____________________________________________________________________________
-uint64_t& Index::blocksizePermutationsInBytes() {
-  return pimpl_->blocksizePermutationInBytes();
+ad_utility::MemorySize& Index::memoryLimitIndexBuilding() {
+  return pimpl_->memoryLimitIndexBuilding();
 }
 
 // ____________________________________________________________________________
-const ad_utility::MemorySize& Index::stxxlMemory() const {
-  return pimpl_->stxxlMemory();
+ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
+  return pimpl_->blocksizePermutationPerColumn();
+}
+
+// ____________________________________________________________________________
+const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
+  return std::as_const(*pimpl_).memoryLimitIndexBuilding();
 }
 
 // ____________________________________________________________________________
@@ -324,16 +322,19 @@ vector<float> Index::getMultiplicities(const TripleComponent& key,
 IdTable Index::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
-    Permutation::Enum p,
+    Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
-  return pimpl_->scan(col0String, col1String, p, std::move(cancellationHandle));
+  return pimpl_->scan(col0String, col1String, p, additionalColumns,
+                      std::move(cancellationHandle));
 }
 
 // ____________________________________________________________________________
 IdTable Index::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+    Permutation::ColumnIndicesRef additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
-  return pimpl_->scan(col0Id, col1Id, p, std::move(cancellationHandle));
+  return pimpl_->scan(col0Id, col1Id, p, additionalColumns,
+                      std::move(cancellationHandle));
 }
 
 // ____________________________________________________________________________

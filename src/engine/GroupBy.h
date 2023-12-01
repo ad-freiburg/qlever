@@ -8,13 +8,13 @@
 
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "gtest/gtest.h"
 #include "parser/Alias.h"
 #include "parser/ParsedQuery.h"
@@ -155,6 +155,62 @@ class GroupBy : public Operation {
   // triple, and that the COUNT may be by any of the variables `?x`, `?y`, or
   // `?z`.
   bool computeGroupByForJoinWithFullScan(IdTable* result);
+
+  // Create result IdTable by using a HashMap mapping groups to aggregation data
+  // and subsequently calling `createResultFromHashMap`.
+  template <size_t OUT_WIDTH, size_t numAggregates>
+  void computeGroupByForHashMapOptimization(
+      IdTable* result, const std::vector<Aggregate>& aggregates,
+      const IdTable& subresult, size_t columnIndex,
+      const LocalVocab* localVocab);
+
+  // Required data to perform HashMap optimization.
+  struct HashMapOptimizationData {
+    size_t subtreeColumnIndex_;
+  };
+
+  // Data to perform the AVG aggregation using the HashMap optimization.
+  struct AverageAggregationData {
+    bool error_ = false;
+    double sum_ = 0;
+    int64_t count_ = 0;
+    void increment(sparqlExpression::detail::NumericValue intermediate) {
+      if (const int64_t* intval = std::get_if<int64_t>(&intermediate))
+        sum_ += (double)*intval;
+      else if (const double* dval = std::get_if<double>(&intermediate))
+        sum_ += *dval;
+      else
+        error_ = true;
+      count_++;
+    };
+    [[nodiscard]] ValueId calculateResult() const {
+      if (error_)
+        return ValueId::makeUndefined();
+      else
+        return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
+    }
+  };
+
+  using KeyType = ValueId;
+  template <size_t numAggregates>
+  using ValueType = std::array<AverageAggregationData, numAggregates>;
+
+  // Sort the HashMap by key and create result table.
+  template <size_t OUT_WIDTH, size_t numAggregates>
+  void createResultFromHashMap(IdTable* result,
+                               const ad_utility::HashMapWithMemoryLimit<
+                                   KeyType, ValueType<numAggregates>>& map);
+
+  // Check if hash map optimization is applicable. This is the case when
+  // the following conditions hold true:
+  // - Runtime parameter is set
+  // - Child operation is SORT
+  // - Only top-level aggregations
+  // - All aggregates are AVG
+  // - Maximum 5 aggregates
+  // - Only one grouped variable
+  std::optional<HashMapOptimizationData> checkIfHashMapOptimizationPossible(
+      const std::vector<Aggregate>& aggregates);
 
   // The check whether the optimization just described can be applied and its
   // actual computation are split up in two functions. This struct contains

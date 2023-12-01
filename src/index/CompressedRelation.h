@@ -8,37 +8,29 @@
 #include <algorithm>
 #include <vector>
 
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "util/BufferedVector.h"
 #include "util/Cache.h"
 #include "util/CancellationHandle.h"
 #include "util/ConcurrentCache.h"
 #include "util/File.h"
 #include "util/Generator.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeArray.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
+#include "util/TaskQueue.h"
 #include "util/TypeTraits.h"
 
 // Forward declaration of the `IdTable` class.
 class IdTable;
 
-// Currently our indexes have two columns (the first column of a triple
-// is stored in the respective metadata). This might change in the future when
-// we add a column for patterns or functional relations like rdf:type.
-static constexpr int NumColumns = 2;
-// Two columns of IDs that are buffered in a file if they become too large.
-// This is the format in which the raw two-column data for a single relation is
-// passed around during the index building.
-using BufferedIdTable =
-    columnBasedIdTable::IdTable<Id, NumColumns, ad_utility::BufferedVector<Id>>;
-
 // This type is used to buffer small relations that will be stored in the same
 // block.
-using SmallRelationsBuffer = columnBasedIdTable::IdTable<Id, NumColumns>;
+using SmallRelationsBuffer = IdTable;
 
 // Sometimes we do not read/decompress  all the columns of a block, so we have
 // to use a dynamic `IdTable`.
@@ -88,6 +80,14 @@ struct CompressedBlockMetadata {
     Id col1Id_;
     Id col2Id_;
     bool operator==(const PermutedTriple&) const = default;
+
+    // Formatted output for debugging.
+    friend std::ostream& operator<<(std::ostream& str,
+                                    const PermutedTriple& trip) {
+      str << "Triple: " << trip.col0Id_ << ' ' << trip.col1Id_ << ' '
+          << trip.col2Id_ << std::endl;
+      return str;
+    }
 
     friend std::true_type allowTrivialSerialization(PermutedTriple, auto);
   };
@@ -155,43 +155,87 @@ AD_SERIALIZE_FUNCTION(CompressedRelationMetadata) {
 /// build.
 class CompressedRelationWriter {
  private:
-  ad_utility::File outfile_;
-  std::vector<CompressedBlockMetadata> blockBuffer_;
-  CompressedBlockMetadata currentBlockData_;
-  SmallRelationsBuffer buffer_;
-  size_t numBytesPerBlock_;
+  ad_utility::Synchronized<ad_utility::File> outfile_;
+  ad_utility::Synchronized<std::vector<CompressedBlockMetadata>> blockBuffer_;
+  // If multiple small relations are stored in the same block, keep track of the
+  // first and last `col0Id`.
+  Id currentBlockFirstCol0_ = Id::makeUndefined();
+  Id currentBlockLastCol0_ = Id::makeUndefined();
+
+  // The actual number of columns that is stored by this writer. Is 2 if there
+  // are no additional special payloads.
+  size_t numColumns_;
+
+  ad_utility::AllocatorWithLimit<Id> allocator_ =
+      ad_utility::makeUnlimitedAllocator<Id>();
+  // A buffer for small relations that will be stored in the same block.
+  SmallRelationsBuffer smallRelationsBuffer_{numColumns_, allocator_};
+  ad_utility::MemorySize uncompressedBlocksizePerColumn_;
+
+  // When we store a large relation with multiple blocks then we keep track of
+  // its `col0Id`, mostly for sanity checks.
+  Id currentCol0Id_ = Id::makeUndefined();
+  size_t currentRelationPreviousSize_ = 0;
+
+  ad_utility::TaskQueue<false> blockWriteQueue_{20, 10};
+
+  // A dummy value for multiplicities that can only later be determined.
+  static constexpr float multiplicityDummy = 42.4242f;
 
  public:
   /// Create using a filename, to which the relation data will be written.
-  explicit CompressedRelationWriter(ad_utility::File f, size_t numBytesPerBlock)
-      : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock} {}
+  explicit CompressedRelationWriter(
+      size_t numColumns, ad_utility::File f,
+      ad_utility::MemorySize uncompressedBlocksizePerColumn)
+      : outfile_{std::move(f)},
+        numColumns_{numColumns},
+        uncompressedBlocksizePerColumn_{uncompressedBlocksizePerColumn} {}
+  // Two helper types used to make the interface of the function
+  // `createPermutationPair` below safer and more explicit.
+  using MetadataCallback =
+      std::function<void(std::span<const CompressedRelationMetadata>)>;
+
+  struct WriterAndCallback {
+    CompressedRelationWriter& writer_;
+    MetadataCallback callback_;
+  };
 
   /**
-   * Add a complete (single) relation.
-   *
-   * \param col0Id The ID of the relation, that is, the value of X for a
-   * permutation XYZ.
-   *
-   * \param col1And2Ids The sorted data of the relation, that is, the sequence
-   * of all pairs of Y and Z for the given X.
-   *
-   * \param numDistinctCol1 The number of distinct values for X (from which we
-   * can also calculate the average multiplicity and whether the relation is
-   * functional, so we don't need to store that
-   * explicitly).
-   *
-   * \return The Metadata of the relation that was added.
+   * @brief Write two permutations that only differ by the order of the col1 and
+   * col2 (e.g. POS and PSO).
+   * @param basename filename/path that will be used as a prefix for names of
+   * temporary files.
+   * @param writerAndCallback1 A writer for the first permutation together with
+   * a callback that is called for each of the created metadata.
+   * @param writerAndCallback2  The same as `writerAndCallback1`, but for the
+   * other permutation.
+   * @param sortedTriples The inputs as blocks of triples (plus possibly
+   * additional columns). The first three columns must be sorted according to
+   * the `permutation` (which corresponds to the `writerAndCallback1`.
+   * @param permutation The permutation to be build (as a permutation of the
+   * array `[0, 1, 2]`). The `sortedTriples` must be sorted by this permutation.
    */
-  CompressedRelationMetadata addRelation(Id col0Id,
-                                         const BufferedIdTable& col1And2Ids,
-                                         size_t numDistinctCol1);
+  static std::pair<std::vector<CompressedBlockMetadata>,
+                   std::vector<CompressedBlockMetadata>>
+  createPermutationPair(
+      const std::string& basename, WriterAndCallback writerAndCallback1,
+      WriterAndCallback writerAndCallback2,
+      cppcoro::generator<IdTableStatic<0>> sortedTriples,
+      std::array<size_t, 3> permutation,
+      const std::vector<std::function<void(const IdTableStatic<0>&)>>&
+          perBlockCallbacks);
 
   /// Get all the CompressedBlockMetaData that were created by the calls to
   /// addRelation. This also closes the writer. The typical workflow is:
   /// add all relations and then call this method.
-  auto getFinishedBlocks() && {
+  std::vector<CompressedBlockMetadata> getFinishedBlocks() && {
     finish();
-    return std::move(blockBuffer_);
+    auto blocks = std::move(*(blockBuffer_.wlock()));
+    std::ranges::sort(blocks, {}, [](const CompressedBlockMetadata& bl) {
+      return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
+                      bl.firstTriple_.col2Id_);
+    });
+    return blocks;
   }
 
   // Compute the multiplicity of given the number of elements and the number of
@@ -203,28 +247,77 @@ class CompressedRelationWriter {
   static float computeMultiplicity(size_t numElements,
                                    size_t numDistinctElements);
 
+  // Return the blocksize (in number of triples) of this writer. Note that the
+  // actual sizes of blocks will slightly vary due to new relations starting in
+  // new blocks etc.
+  size_t blocksize() const {
+    return uncompressedBlocksizePerColumn_.getBytes() / sizeof(Id);
+  }
+
  private:
   /// Finish writing all relations which have previously been added, but might
   /// still be in some internal buffer.
   void finish() {
+    AD_CORRECTNESS_CHECK(currentRelationPreviousSize_ == 0);
     writeBufferedRelationsToSingleBlock();
-    outfile_.close();
+    blockWriteQueue_.finish();
+    outfile_.wlock()->close();
   }
 
-  // Compress the contents of `buffer_` into a single block and write it to
-  // outfile_. Update `currentBlockData_` with the meta data of the written
-  // block. Then clear `buffer_`.
+  // Compress the contents of `smallRelationsBuffer_` into a single
+  // block and write it to outfile_. Update `currentBlockData_` with the meta
+  // data of the written block. Then clear `smallRelationsBuffer_`.
   void writeBufferedRelationsToSingleBlock();
-
-  // Compress the relation from `data` into one or more blocks, depending on
-  // its size. Write the blocks to `outfile_` and append all the created
-  // block metadata to `blockBuffer_`.
-  void writeRelationToExclusiveBlocks(Id col0Id, const BufferedIdTable& data);
 
   // Compress the `column` and write it to the `outfile_`. Return the offset and
   // size of the compressed column in the `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
       std::span<const Id> column);
+
+  // Return the number of columns that is stored inside the blocks.
+  size_t numColumns() const { return numColumns_; }
+
+  // Compress the given `block` and write it to the `outfile_`. The
+  // `firstCol0Id` and `lastCol0Id` are needed to set up the block's metadata
+  // which is appended to the internal buffer.
+  void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id,
+                             std::shared_ptr<IdTable> block);
+
+  // Add a small relation that will be stored in a single block, possibly
+  // together with other small relations.
+  CompressedRelationMetadata addSmallRelation(Id col0Id, size_t numDistinctC1,
+                                              IdTableView<0> relation);
+
+  // Add a new block for a large relation that is to be stored in multiple
+  // blocks. This function may only be called if one of the following holds:
+  // * This is the first call to `addBlockForLargeRelation` or
+  // `addSmallRelation`.
+  // * The previously called function was `addSmallRelation` or
+  // `finishLargeRelation`.
+  // * The previously called function was `addBlockForLargeRelation` with the
+  // same `col0Id`.
+  void addBlockForLargeRelation(Id col0Id, std::shared_ptr<IdTable> relation);
+
+  // This function must be called after all blocks of a large relation have been
+  // added via `addBlockForLargeRelation` before any other function may be
+  // called. In particular, it has to be called after the last block of the last
+  // relation was added (in case this relation is large). Otherwise, an
+  // assertion inside the `finish()` function (which is also called by the
+  // destructor) will fail.
+  CompressedRelationMetadata finishLargeRelation(size_t numDistinctC1);
+
+  // Add a complete large relation by calling `addBlockForLargeRelation` for
+  // each block in the `sortedBlocks` and then calling `finishLargeRelation`.
+  // The number of distinct col1 entries will be computed from the blocks
+  // directly.
+  CompressedRelationMetadata addCompleteLargeRelation(Id col0Id,
+                                                      auto&& sortedBlocks);
+
+  // This is the function in `CompressedRelationsTest.cpp` that tests the
+  // internals of this class and therefore needs private access.
+  friend void testCompressedRelations(const auto& inputs,
+                                      std::string testCaseName,
+                                      ad_utility::MemorySize blocksize);
 };
 
 using namespace std::string_view_literals;
@@ -234,6 +327,8 @@ using namespace std::string_view_literals;
 class CompressedRelationReader {
  public:
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
+  using ColumnIndicesRef = std::span<const ColumnIndex>;
+  using ColumnIndices = std::vector<ColumnIndex>;
 
   // The metadata of a single relation together with a subset of its
   // blocks and possibly a `col1Id` for additional filtering. This is used as
@@ -279,36 +374,12 @@ class CompressedRelationReader {
   // The allocator used to allocate intermediate buffers.
   mutable Allocator allocator_;
 
- public:
-  explicit CompressedRelationReader(Allocator allocator)
-      : allocator_{std::move(allocator)} {}
-  /**
-   * @brief For a permutation XYZ, retrieve all YZ for a given X.
-   *
-   * @param metadata The metadata of the given X.
-   * @param blockMetadata The metadata of the on-disk blocks for the given
-   * permutation.
-   * @param file The file in which the permutation is stored.
-   * @param cancellationHandle An `CancellationException` will be thrown if the
-   * cancellationHandle runs out during the execution of this function.
-   *
-   * The arguments `metadata`, `blocks`, and `file` must all be obtained from
-   * The same `CompressedRelationWriter` (see below).
-   */
-  IdTable scan(
-      const CompressedRelationMetadata& metadata,
-      std::span<const CompressedBlockMetadata> blockMetadata,
-      ad_utility::File& file,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+  // The file that stores the actual permutations.
+  ad_utility::File file_;
 
-  // Similar to `scan` (directly above), but the result of the scan is lazily
-  // computed and returned as a generator of the single blocks that are scanned.
-  // The blocks are guaranteed to be in order.
-  IdTableGenerator lazyScan(
-      CompressedRelationMetadata metadata,
-      std::vector<CompressedBlockMetadata> blockMetadata,
-      ad_utility::File& file,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+ public:
+  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
+      : allocator_{std::move(allocator)}, file_{std::move(file)} {}
 
   // Get the blocks (an ordered subset of the blocks that are passed in via the
   // `metadataAndBlocks`) where the `col1Id` can theoretically match one of the
@@ -333,10 +404,12 @@ class CompressedRelationReader {
       const MetadataAndBlocks& metadataAndBlocks2);
 
   /**
-   * @brief For a permutation XYZ, retrieve all Z for given X and Y.
+   * @brief For a permutation XYZ, retrieve all Z for given X and Y (if `col1Id`
+   * is set) or all YZ for a given X (if `col1Id` is `std::nullopt`.
    *
    * @param metadata The metadata of the given X.
-   * @param col1Id The ID for Y.
+   * @param col1Id The ID for Y. If `std::nullopt`, then the Y will be also
+   * returned as a column.
    * @param blocks The metadata of the on-disk blocks for the given
    * permutation.
    * @param file The file in which the permutation is stored.
@@ -349,17 +422,18 @@ class CompressedRelationReader {
    * The same `CompressedRelationWriter` (see below).
    */
   IdTable scan(
-      const CompressedRelationMetadata& metadata, Id col1Id,
-      std::span<const CompressedBlockMetadata> blocks, ad_utility::File& file,
+      const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
+      std::span<const CompressedBlockMetadata> blocks,
+      ColumnIndicesRef additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
   IdTableGenerator lazyScan(
-      CompressedRelationMetadata metadata, Id col1Id,
+      CompressedRelationMetadata metadata, std::optional<Id> col1Id,
       std::vector<CompressedBlockMetadata> blockMetadata,
-      ad_utility::File& file,
+      ColumnIndices additionalColumns,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
@@ -367,10 +441,9 @@ class CompressedRelationReader {
   // of this function where only the X is given is not needed, as the size of
   // these scans can be retrieved from the `CompressedRelationMetadata`
   // directly.
-  size_t getResultSizeOfScan(const CompressedRelationMetadata& metaData,
-                             Id col1Id,
-                             const vector<CompressedBlockMetadata>& blocks,
-                             ad_utility::File& file) const;
+  size_t getResultSizeOfScan(
+      const CompressedRelationMetadata& metaData, Id col1Id,
+      const vector<CompressedBlockMetadata>& blocks) const;
 
   // Get the contiguous subrange of the given `blockMetadata` for the blocks
   // that contain the triples that have the relationId/col0Id that was specified
@@ -391,18 +464,17 @@ class CompressedRelationReader {
   // index scans between joining them to get better estimates for the begginning
   // and end of incomplete blocks.
   MetadataAndBlocks::FirstAndLastTriple getFirstAndLastTriple(
-      const MetadataAndBlocks& metadataAndBlocks, ad_utility::File& file) const;
+      const MetadataAndBlocks& metadataAndBlocks) const;
 
   // Get access to the underlying allocator
   const Allocator& allocator() const { return allocator_; }
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
-  // If `columnIndices` is `nullopt`, then all columns of the block are read,
-  // else only the specified columns are read.
-  static CompressedBlock readCompressedBlockFromFile(
-      const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
-      std::optional<std::vector<size_t>> columnIndices);
+  // Only the columns specified by `columnIndices` are read.
+  CompressedBlock readCompressedBlockFromFile(
+      const CompressedBlockMetadata& blockMetaData,
+      ColumnIndicesRef columnIndices) const;
 
   // Decompress the `compressedBlock`. The number of rows that the block will
   // have after decompression must be passed in via the `numRowsToRead`
@@ -428,34 +500,32 @@ class CompressedRelationReader {
                                size_t numRowsToRead, Iterator iterator);
 
   // Read the block that is identified by the `blockMetaData` from the `file`,
-  // decompress and return it.
-  // If `columnIndices` is `nullopt`, then all columns of the block are read,
-  // else only the specified columns are read.
+  // decompress and return it. Only the columns specified by the `columnIndices`
+  // are returned.
   DecompressedBlock readAndDecompressBlock(
-      const CompressedBlockMetadata& blockMetadata, ad_utility::File& file,
-      std::optional<std::vector<size_t>> columnIndices) const;
+      const CompressedBlockMetadata& blockMetaData,
+      ColumnIndicesRef columnIndices) const;
 
   // Read the block that is identified by the `blockMetadata` from the `file`,
   // decompress and return it. Before returning, delete all rows where the col0
   // ID / relation ID does not correspond with the `relationMetadata`, or where
   // the `col1Id` doesn't match. For this to work, the block has to be one of
   // the blocks that actually store triples from the given `relationMetadata`'s
-  // relation, else the behavior is undefined.
+  // relation, else the behavior is undefined. Only return the columns specified
+  // by the `columnIndices`.
   DecompressedBlock readPossiblyIncompleteBlock(
       const CompressedRelationMetadata& relationMetadata,
-      std::optional<Id> col1Id, ad_utility::File& file,
-      const CompressedBlockMetadata& blockMetadata,
-      std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata)
-      const;
+      std::optional<Id> col1Id, const CompressedBlockMetadata& blockMetadata,
+      std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
+      ColumnIndicesRef columnIndices) const;
 
   // Yield all the blocks in the range `[beginBlock, endBlock)`. If the
-  // `columnIndices` are set, that only the specified columns from the blocks
-  // are yielded, else the complete blocks are yielded. The blocks are yielded
+  // `columnIndices` are set, only the specified columns from the blocks
+  // are yielded, else all columns are yielded. The blocks are yielded
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
   IdTableGenerator asyncParallelBlockGenerator(
-      auto beginBlock, auto endBlock, ad_utility::File& file,
-      std::optional<std::vector<size_t>> columnIndices,
+      auto beginBlock, auto endBlock, ColumnIndices columnIndices,
       std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
 
   // A helper function to abstract away the timeout check:
@@ -467,6 +537,27 @@ class CompressedRelationReader {
     AD_EXPENSIVE_CHECK(cancellationHandle);
     cancellationHandle->throwIfCancelled("IndexScan"sv);
   }
+
+  // Return a vector that consists of the concatenation of `baseColumns` and
+  // `additionalColumns`
+  static std::vector<ColumnIndex> prepareColumnIndices(
+      std::initializer_list<ColumnIndex> baseColumns,
+      ColumnIndicesRef additionalColumns);
+
+  // If `col1Id` is specified, `return {1, additionalColumns...}`, else return
+  // `{0, 1, additionalColumns}`.
+  // These are exactly the columns that are returned by a scan depending on
+  // whether the `col1Id` is specified or not.
+  static std::vector<ColumnIndex> prepareColumnIndices(
+      const std::optional<Id>& col1Id, ColumnIndicesRef additionalColumns);
 };
+
+// TODO<joka921>
+/*
+ * 1. Also let the compressedRelationReader know about the contained block data
+ * and the number of columns etc. to make the permutation class a thinner
+ * wrapper.
+ * 2. Then add assertions that we only get valid column indices specified.
+ */
 
 #endif  // QLEVER_COMPRESSEDRELATION_H

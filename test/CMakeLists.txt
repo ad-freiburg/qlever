@@ -240,7 +240,7 @@ addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
 
-addLinkAndDiscoverTest(TriplesViewTest util)
+addLinkAndDiscoverTest(TriplesViewTest util OpenSSL::SSL OpenSSL::Crypto)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 
@@ -332,7 +332,7 @@ addLinkAndDiscoverTest(ConfigOptionProxyTest configManager)
 
 addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
-addLinkAndDiscoverTest(RandomTest)
+addLinkAndDiscoverTest(RandomTest testUtil)
 
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 
@@ -377,3 +377,7 @@ addLinkAndDiscoverTest(CancellationHandleTest util)
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
 addLinkAndDiscoverTest(ParallelMultiwayMergeTest)
+
+addLinkAndDiscoverTest(ParseableDurationTest)
+
+addLinkAndDiscoverTest(ConstantsTest)

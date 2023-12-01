@@ -82,6 +82,8 @@ SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child2,
                                        SparqlExpression::Ptr child3);
 
+SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
+
 // For a `function` that takes `std::vector<SparqlExpression::Ptr>` (size only
 // known at runtime), create a lambda that takes the `Ptr`s directly as a
 // variable number of arguments (as a variadic template, number of arguments
@@ -113,4 +115,5 @@ SparqlExpression::Ptr makeConcatExpression(
     std::vector<SparqlExpression::Ptr> children);
 inline auto makeConcatExpressionVariadic =
     variadicExpressionFactory(&makeConcatExpression);
+
 }  // namespace sparqlExpression

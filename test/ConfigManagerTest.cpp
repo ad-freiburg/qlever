@@ -6,24 +6,31 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <concepts>
 #include <cstddef>
 #include <functional>
 #include <tuple>
 #include <type_traits>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include "./util/ConfigOptionHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/ValidatorHelpers.h"
 #include "gtest/gtest.h"
+#include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/Validator.h"
+#include "util/ConstexprUtils.h"
 #include "util/CtreHelpers.h"
+#include "util/Forward.h"
+#include "util/TupleForEach.h"
 #include "util/json.h"
 
 using namespace std::string_literals;
@@ -2218,5 +2225,137 @@ TEST(ConfigManagerTest, ContainsOption) {
                          subManagerDepth1Num2ContainmentStatusVector);
   checkContainmentStatus(subManagerDepth2,
                          subManagerDepth2ContainmentStatusVector);
+}
+
+// Describes the order of configuration options and validators inside a
+// configuration manager.
+struct ConfigOptionsAndValidatorsOrder {
+  // The order of the configuration options. Options can be identified via their
+  // memory address.
+  std::vector<const ConfigOption*> configOptions_;
+
+  // The order the validators. unfortunately, there is no way, to perfectly
+  // identify an instance, but the description can be used, as long as all the
+  // added validators have unique descriptions.
+  std::vector<std::string> validators_;
+
+  // Appends the content of an different `ConfigOptionsAndValidatorsOrder`.
+  template <typename T>
+  requires isSimilar<T, ConfigOptionsAndValidatorsOrder>
+  void append(T&& order) {
+    appendVector(configOptions_, AD_FWD(order).configOptions_);
+    appendVector(validators_, AD_FWD(order).validators_);
+  }
+};
+
+/*
+This is for testing, if the internal helper functions
+`ConfigManager::validators` and `ConfigManager::configurationOptions` sort their
+return values correctly.
+*/
+TEST(ConfigManagerTest, CollectionFunctionsSorting) {
+  /*
+  Add dummy configuration option for all supported types and dummy validators
+  for them to the given `configManager`.
+
+  @returns The order of all added configuration options and validators.
+  */
+  auto addConfigOptionsAndValidators = [callNum =
+                                            0](ConfigManager* manager) mutable {
+    ConfigOptionsAndValidatorsOrder order{};
+
+    // We know, how many instances we will add.
+    order.configOptions_.reserve(
+        std::variant_size_v<ConfigOption::AvailableTypes>);
+    order.validators_.reserve(
+        std::variant_size_v<ConfigOption::AvailableTypes> * 2);
+
+    // Fill the list.
+    forEachTypeInTemplateType<ConfigOption::AvailableTypes>(
+        [&order, &manager, &callNum]<typename T>() {
+          // This variable will never be used, so this SHOULD be okay.
+          T var;
+
+          // Create the options and validators.
+          decltype(auto) opt =
+              manager->addOption({absl::StrCat("Option", callNum++)}, "", &var);
+          order.configOptions_.push_back(&opt.getConfigOption());
+          manager->addValidator([](const T&) { return true; }, "",
+                                absl::StrCat("Normal validator ", callNum),
+                                opt);
+          order.validators_.push_back(
+              absl::StrCat("Normal validator ", callNum++));
+          manager->addOptionValidator(
+              [](const ConfigOption&) { return true; }, "",
+              absl::StrCat("Option validator ", callNum), opt);
+          order.validators_.push_back(
+              absl::StrCat("Option validator ", callNum++));
+        });
+
+    return order;
+  };
+
+  // Check the order of the configuration options and validators inside the
+  // configuration manager.
+  auto checkOrder = [](const ConfigManager& manager,
+                       const ConfigOptionsAndValidatorsOrder& order,
+                       ad_utility::source_location l =
+                           ad_utility::source_location::current()) {
+    // For generating better messages, when failing a test.
+    auto trace{generateLocationTrace(l, "checkOrder")};
+
+    ASSERT_TRUE(std::ranges::equal(
+        manager.configurationOptions(true), order.configOptions_, {},
+        [](const std::pair<std::string, const ConfigOption&>& pair) {
+          return &pair.second;
+        }));
+    ASSERT_TRUE(std::ranges::equal(
+        manager.validators(true), order.validators_, {},
+        [](const ConfigOptionValidatorManager& validatorManager) {
+          return validatorManager.getDescription();
+        }));
+  };
+
+  // First add the options, then the sub manager and then more options to the
+  // top manager again.
+  ConfigManager mOptionFirst;
+  auto mOptionFirstOrderOfAll{addConfigOptionsAndValidators(&mOptionFirst)};
+  checkOrder(mOptionFirst, mOptionFirstOrderOfAll);
+
+  // Add the sub manager, together with its config options.
+  ConfigManager& mOptionFirstSub{mOptionFirst.addSubManager({"s"})};
+  auto mOptionFirstSubOrder{addConfigOptionsAndValidators(&mOptionFirstSub)};
+  checkOrder(mOptionFirstSub, mOptionFirstSubOrder);
+  mOptionFirstOrderOfAll.append(mOptionFirstSubOrder);
+  checkOrder(mOptionFirst, mOptionFirstOrderOfAll);
+
+  // Add config options to the top manager.
+  mOptionFirstOrderOfAll.append(addConfigOptionsAndValidators(&mOptionFirst));
+  checkOrder(mOptionFirstSub, mOptionFirstSubOrder);
+  checkOrder(mOptionFirst, mOptionFirstOrderOfAll);
+
+  // First add the sub manager with config options, then options to the top
+  // manager and then options to the sub manager again.
+  ConfigManager mSubManagerFirst;
+  ConfigManager& mSubManagerFirstSub{mSubManagerFirst.addSubManager({"s"})};
+  auto mSubManagerFirstSubOrder{
+      addConfigOptionsAndValidators(&mSubManagerFirstSub)};
+  auto mSubManagerFirstOrderOfAll{mSubManagerFirstSubOrder};
+  checkOrder(mSubManagerFirst, mSubManagerFirstOrderOfAll);
+  checkOrder(mSubManagerFirstSub, mSubManagerFirstSubOrder);
+
+  // Add config options to the top manager.
+  mSubManagerFirstOrderOfAll.append(
+      addConfigOptionsAndValidators(&mSubManagerFirst));
+  checkOrder(mSubManagerFirst, mSubManagerFirstOrderOfAll);
+  checkOrder(mSubManagerFirstSub, mSubManagerFirstSubOrder);
+
+  // Add config options to the sub manager.
+  auto mSubManagerFirstSubOrder2{
+      addConfigOptionsAndValidators(&mSubManagerFirstSub)};
+  mSubManagerFirstOrderOfAll.append(mSubManagerFirstSubOrder2);
+  mSubManagerFirstSubOrder.append(std::move(mSubManagerFirstSubOrder2));
+  checkOrder(mSubManagerFirst, mSubManagerFirstOrderOfAll);
+  checkOrder(mSubManagerFirstSub, mSubManagerFirstSubOrder);
 }
 }  // namespace ad_utility
