@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "util/ConfigManager/ConfigOption.h"
+
 #include <absl/strings/str_cat.h>
 
 #include <array>
@@ -16,7 +18,6 @@
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
-#include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
