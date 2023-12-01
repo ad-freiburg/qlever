@@ -22,9 +22,6 @@ using namespace std::chrono_literals;
 
 // A small helper function to obtain the begin and end iterator of a range
 static auto getBeginAndEnd(auto& range) {
-  return std::pair{range.begin(), range.end()};
-// A small helper function to obtain the begin and end iterator of a range
-static auto getBeginAndEnd(auto& range) {
   return std::pair{std::ranges::begin(range), std::ranges::end(range)};
 }
 

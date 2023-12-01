@@ -101,7 +101,7 @@ class PatternCreatorNew {
   // the `has-pattern` and `has-predicate` predicates.
   // TODO<joka921> Use something buffered for this.
   std::vector<std::pair<std::array<Id, 3>, bool>> _tripleBuffer;
-  PSOSorter _additionalTriplesPsoSorter;
+  std::unique_ptr<PSOSorter> _additionalTriplesPsoSorter;
   std::unique_ptr<OSPSorter4Cols> _fullPsoSorter;
 
   // The predicates which have already occured in one of the patterns. Needed to
@@ -122,9 +122,9 @@ class PatternCreatorNew {
                              ad_utility::MemorySize memoryForStxxl)
       : _filename{filename},
         _patternSerializer{{filename}},
-        _additionalTriplesPsoSorter{filename + "additionalTriples.pso.dat",
-                                    memoryForStxxl / 2,
-                                    ad_utility::makeUnlimitedAllocator<Id>()},
+        _additionalTriplesPsoSorter{std::make_unique<PSOSorter>(
+            filename + "additionalTriples.pso.dat", memoryForStxxl / 2,
+            ad_utility::makeUnlimitedAllocator<Id>())},
         _fullPsoSorter{std::make_unique<OSPSorter4Cols>(
             filename + "withPatterns.pso.dat", memoryForStxxl / 2,
             ad_utility::makeUnlimitedAllocator<Id>())} {
@@ -162,7 +162,7 @@ class PatternCreatorNew {
                                    CompactVectorOfStrings<Id>& patterns);
 
   // Move the sorted `has-pattern` and `has-predicate` triples out.
-  PSOSorter&& getHasPatternSortedByPSO() && {
+  std::unique_ptr<PSOSorter> getHasPatternSortedByPSO() && {
     finish();
     return std::move(_additionalTriplesPsoSorter);
   }

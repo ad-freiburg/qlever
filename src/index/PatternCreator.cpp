@@ -66,7 +66,7 @@ void PatternCreatorNew::finishSubject(VocabIndex subjectIndex,
     it->second._count++;
   }
 
-  _additionalTriplesPsoSorter.push(
+  _additionalTriplesPsoSorter->push(
       std::array{Id::makeFromVocabIndex(subjectIndex), hasPatternId,
                  Id::makeFromInt(patternId)});
   std::ranges::for_each(_tripleBuffer, [this, patternId](const auto& t) {

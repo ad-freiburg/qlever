@@ -660,13 +660,11 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   // Type aliases for a single block from the left/right input
   using LeftBlock =
       typename std::ranges::range_value_t<std::decay_t<LeftBlocks>>;
-  using RightBlock = typename std::decay_t<RightBlocks>::value_type;
+  using RightBlock = std::ranges::range_value_t<std::decay_t<RightBlocks>>;
 
   // Type aliases for a single element from a block from the left/right input.
-  using LeftEl =
-      typename std::iterator_traits<typename LeftBlock::iterator>::value_type;
-  using RightEl =
-      typename std::iterator_traits<typename RightBlock::iterator>::value_type;
+  using LeftEl = std::ranges::range_value_t<LeftBlock>;
+  using RightEl = std::ranges::range_value_t<RightBlock>;
 
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
@@ -767,7 +765,7 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
       // so we suppress the warning about `lessThan` being unused.
       (void)lessThan;
       while (targetBuffer.empty() && it != end) {
-        auto& el = *it;
+        auto&& el = *it;
         if (!el.empty()) {
           AD_CORRECTNESS_CHECK(std::ranges::is_sorted(el, lessThan));
           targetBuffer.emplace_back(std::move(el));
