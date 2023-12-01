@@ -68,13 +68,16 @@ void PatternCreatorNew::finishSubject(VocabIndex subjectIndex,
                                      hasPatternId, Id::makeFromInt(patternId)};
   _additionalTriplesPsoSorter.push(additionalTriple);
   auto curSubject = Id::makeFromVocabIndex(_currentSubjectIndex.value());
-  std::ranges::for_each(
-      _tripleBuffer, [this, patternId, &curSubject](const auto& t) {
-        const auto& [s, p, o] = t.first;
-        auto fullTriple = std::array{
-            s, p, o, Id::makeFromInt(curSubject != s ? NO_PATTERN : patternId)};
-        fullPsoSorter().push(fullTriple);
-      });
+  std::ranges::for_each(_tripleBuffer, [this, patternId,
+                                        &curSubject](const auto& t) {
+    const auto& [s, p, o] = t.triple_;
+    // It might happen that the `_tripleBuffer` contains different subjects
+    // which are purely internal and therefore have no pattern.
+    auto actualPatternId =
+        Id::makeFromInt(curSubject != s ? NO_PATTERN : patternId);
+    AD_CORRECTNESS_CHECK(curSubject == s || t.isInternal_);
+    ospSorterTriplesWithPattern().push(std::array{s, p, o, actualPatternId});
+  });
   _tripleBuffer.clear();
 }
 
@@ -98,13 +101,11 @@ void PatternCreatorNew::finish() {
 
   // Store the actual patterns ordered by their pattern ID. They are currently
   // stored in a hash map, so we first have to sort them.
-  std::vector<std::pair<Pattern, PatternIdAndCount>> orderedPatterns;
-  orderedPatterns.insert(orderedPatterns.end(), _patternToIdAndCount.begin(),
-                         _patternToIdAndCount.end());
-  std::sort(orderedPatterns.begin(), orderedPatterns.end(),
-            [](const auto& a, const auto& b) {
-              return a.second._patternId < b.second._patternId;
-            });
+  // TODO<C++23> Use `ranges::to<vector>`.
+  std::vector<std::pair<Pattern, PatternIdAndCount>> orderedPatterns{
+      _patternToIdAndCount.begin(), _patternToIdAndCount.end()};
+  std::ranges::sort(orderedPatterns, std::less<>{},
+                    [](const auto& a) { return a.second._patternId; });
   CompactVectorOfStrings<Pattern::value_type>::Writer patternWriter{
       std::move(_patternSerializer).file()};
   for (const auto& p : orderedPatterns) {

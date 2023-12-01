@@ -78,7 +78,7 @@ class PatternCreatorNew {
   // The file to which the patterns will be written.
   std::string _filename;
 
-  // Store the Id of a pattern, and the number of distinct subjects it occurs
+  // Store the ID of a pattern, and the number of distinct subjects it occurs
   // with.
   struct PatternIdAndCount {
     PatternID _patternId = 0;
@@ -100,9 +100,13 @@ class PatternCreatorNew {
   // Store the additional triples that are created by the pattern mechanism for
   // the `has-pattern` and `has-predicate` predicates.
   // TODO<joka921> Use something buffered for this.
-  std::vector<std::pair<std::array<Id, 3>, bool>> _tripleBuffer;
+  struct TripleAndIsInternal {
+    std::array<Id, 3> triple_;
+    bool isInternal_;
+  };
+  std::vector<TripleAndIsInternal> _tripleBuffer;
   PSOSorter _additionalTriplesPsoSorter;
-  std::unique_ptr<OSPSorter4Cols> _fullPsoSorter;
+  std::unique_ptr<OSPSorter4Cols> _ospSorterTriplesWithPattern;
 
   // The predicates which have already occured in one of the patterns. Needed to
   // count the number of distinct predicates.
@@ -116,45 +120,42 @@ class PatternCreatorNew {
   bool _isFinished = false;
 
  public:
-  /// The patterns will be written to `filename` as well as to other filenames
-  /// which have `filename` as a prefix.
-  explicit PatternCreatorNew(const string& filename,
-                             ad_utility::MemorySize memoryForStxxl)
-      : _filename{filename},
-        _patternSerializer{{filename}},
-        _additionalTriplesPsoSorter{filename + "additionalTriples.pso.dat",
-                                    memoryForStxxl / 2,
+  // The patterns will be written to files starting with `basename`.
+  explicit PatternCreatorNew(const string& basename,
+                             ad_utility::MemorySize memoryLimit)
+      : _filename{basename},
+        _patternSerializer{{basename}},
+        _additionalTriplesPsoSorter{basename + ".additionalTriples.pso.dat",
+                                    memoryLimit / 2,
                                     ad_utility::makeUnlimitedAllocator<Id>()},
-        _fullPsoSorter{std::make_unique<OSPSorter4Cols>(
-            filename + "withPatterns.pso.dat", memoryForStxxl / 2,
+        _ospSorterTriplesWithPattern{std::make_unique<OSPSorter4Cols>(
+            basename + ".withPatterns.pso.dat", memoryLimit / 2,
             ad_utility::makeUnlimitedAllocator<Id>())} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 
-  /// This function has to be called for all the triples in the SPO permutation
-  /// \param triple Must be >= all previously pushed triples wrt the SPO
-  /// permutation.
+  // This function has to be called for all the triples in the SPO permutation
+  // The `triple` must be >= all previously pushed triples wrt the SPO
+  // permutation.
   void processTriple(std::array<Id, 3> triple, bool ignoreForPatterns);
 
-  /// Write the patterns to disk after all triples have been pushed. Calls to
-  /// `processTriple` after calling `finish` lead to undefined behavior. Note
-  /// that the constructor also calls `finish` to give the `PatternCreatorNew`
-  /// proper RAII semantics.
+  // Write the patterns to disk after all triples have been pushed. Calls to
+  // `processTriple` after calling `finish` lead to undefined behavior. Note
+  // that the destructor also calls `finish` to give the `PatternCreatorNew`
+  // proper RAII semantics.
   void finish();
 
-  /// Destructor implicitly calls `finish`
+  // Destructor implicitly calls `finish`.
   ~PatternCreatorNew() {
     ad_utility::terminateIfThrows([this]() { finish(); },
                                   "Finishing the underlying file of a "
                                   "`PatternCreatorNew` during destruction.");
   }
 
-  /// Read the patterns from `filename`. The patterns must have been written to
-  /// this file using a `PatternCreatorNew`. The patterns and all their
-  /// statistics will be written to the various arguments.
-  /// TODO<joka921> The storage of the pattern will change soon, so we have
-  /// chosen an interface here that requires as little change as possible in the
-  /// `Index` class.
+  // Read the patterns from the files with the given `basename`. The patterns
+  // must have been written to files with this `basename` using
+  // `PatternCreatorNew`. The patterns and all their statistics will be written
+  // to the various arguments.
   static void readPatternsFromFile(const std::string& filename,
                                    double& avgNumSubjectsPerPredicate,
                                    double& avgNumPredicatesPerSubject,
@@ -168,7 +169,7 @@ class PatternCreatorNew {
   }
   std::unique_ptr<OSPSorter4Cols> getAllTriplesWithPatternSortedByOSP() && {
     finish();
-    return std::move(_fullPsoSorter);
+    return std::move(_ospSorterTriplesWithPattern);
   }
 
  private:
@@ -176,7 +177,7 @@ class PatternCreatorNew {
 
   void printStatistics(PatternStatistics patternStatistics) const;
 
-  auto& fullPsoSorter() { return *_fullPsoSorter; }
+  auto& ospSorterTriplesWithPattern() { return *_ospSorterTriplesWithPattern; }
 };
 
 // The old version of the pattern creator.
@@ -223,37 +224,37 @@ class PatternCreator {
   bool _isFinished = false;
 
  public:
-  /// The patterns will be written to `filename` as well as to other filenames
-  /// which have `filename` as a prefix.
+  // The patterns will be written to `filename` as well as to other filenames
+  // which have `filename` as a prefix.
   explicit PatternCreator(const string& filename)
       : _filename{filename}, _subjectToPatternSerializer{{filename}} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 
-  /// This function has to be called for all the triples in the SPO permutation
-  /// \param triple Must be >= all previously pushed triples wrt the SPO
-  /// permutation.
+  // This function has to be called for all the triples in the SPO permutation
+  // \param triple Must be >= all previously pushed triples wrt the SPO
+  // permutation.
   void processTriple(std::array<Id, 3> triple);
 
-  /// Write the patterns to disk after all triples have been pushed. Calls to
-  /// `processTriple` after calling `finish` lead to undefined behavior. Note
-  /// that the constructor also calls `finish` to give the `PatternCreator`
-  /// proper RAII semantics.
+  // Write the patterns to disk after all triples have been pushed. Calls to
+  // `processTriple` after calling `finish` lead to undefined behavior. Note
+  // that the constructor also calls `finish` to give the `PatternCreator`
+  // proper RAII semantics.
   void finish();
 
-  /// Destructor implicitly calls `finish`
+  // Destructor implicitly calls `finish`
   ~PatternCreator() {
     ad_utility::terminateIfThrows([this]() { finish(); },
                                   "Finishing the underlying file of a "
                                   "`PatternCreator` during destruction.");
   }
 
-  /// Read the patterns from `filename`. The patterns must have been written to
-  /// this file using a `PatternCreator`. The patterns and all their statistics
-  /// will be written to the various arguments.
-  /// TODO<joka921> The storage of the pattern will change soon, so we have
-  /// chosen an interface here that requires as little change as possible in the
-  /// `Index` class.
+  // Read the patterns from `filename`. The patterns must have been written to
+  // this file using a `PatternCreator`. The patterns and all their statistics
+  // will be written to the various arguments.
+  // TODO<joka921> The storage of the pattern will change soon, so we have
+  // chosen an interface here that requires as little change as possible in the
+  // `Index` class.
   static void readPatternsFromFile(const std::string& filename,
                                    double& avgNumSubjectsPerPredicate,
                                    double& avgNumPredicatesPerSubject,
