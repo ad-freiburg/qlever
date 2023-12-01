@@ -310,17 +310,16 @@ IdTable Index::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
     Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-    std::shared_ptr<ad_utility::CancellationHandle<>> cancellationHandle)
-    const {
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
   return pimpl_->scan(col0String, col1String, p, additionalColumns,
                       std::move(cancellationHandle));
 }
 
 // ____________________________________________________________________________
-IdTable Index::scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-                    Permutation::ColumnIndicesRef additionalColumns,
-                    std::shared_ptr<ad_utility::CancellationHandle<>>
-                        cancellationHandle) const {
+IdTable Index::scan(
+    Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+    Permutation::ColumnIndicesRef additionalColumns,
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
   return pimpl_->scan(col0Id, col1Id, p, additionalColumns,
                       std::move(cancellationHandle));
 }

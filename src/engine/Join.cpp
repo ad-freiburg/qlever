@@ -291,16 +291,15 @@ Join::ScanMethodType Join::getScanMethod(
   // this works because the join operations execution Context never changes
   // during its lifetime
   const auto& idx = _executionContext->getIndex();
-  const auto scanLambda = [&idx, &scan](
-                              const Permutation::Enum perm,
-                              std::shared_ptr<ad_utility::CancellationHandle<>>
-                                  cancellationHandle) {
-    return [&idx, perm, &scan,
-            cancellationHandle = std::move(cancellationHandle)](Id id) {
-      return idx.scan(id, std::nullopt, perm, scan.additionalColumns(),
-                      cancellationHandle);
-    };
-  };
+  const auto scanLambda =
+      [&idx, &scan](const Permutation::Enum perm,
+                    ad_utility::SharedCancellationHandle cancellationHandle) {
+        return [&idx, perm, &scan,
+                cancellationHandle = std::move(cancellationHandle)](Id id) {
+          return idx.scan(id, std::nullopt, perm, scan.additionalColumns(),
+                          cancellationHandle);
+        };
+      };
   AD_CORRECTNESS_CHECK(scan.getResultWidth() == 3);
   return scanLambda(scan.permutation(), cancellationHandle_);
 }

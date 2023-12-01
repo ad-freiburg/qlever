@@ -156,6 +156,8 @@ class CancellationHandle {
 
   ~CancellationHandle();
 };
+
+using SharedCancellationHandle = std::shared_ptr<CancellationHandle<>>;
 }  // namespace ad_utility
 
 #endif  // QLEVER_CANCELLATIONHANDLE_H
