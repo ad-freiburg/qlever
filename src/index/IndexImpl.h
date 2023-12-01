@@ -459,8 +459,8 @@ class IndexImpl {
   void compressInternalVocabularyIfSpecified(
       const std::vector<std::string>& prefixes);
 
-  // Return a turtle parser that parser the `filename`. The parser will be
-  // configured to either parser in parallel or not, and to either use the
+  // Return a Turtle parser that parses the given file. The parser will be
+  // configured to either parse in parallel or not, and to either use the
   // CTRE-based relaxed parser or not, depending on the settings of the
   // corresponding member variables.
   std::unique_ptr<TurtleParserBase> makeTurtleParser(
@@ -714,7 +714,8 @@ class IndexImpl {
 
   // Functions to create the pairs of permutations during the index build. Each
   // of them takes the following arguments:
-  // * `isInternalId` a callable that takes an `Id` and returns true iff the
+  // * `isQleverInternalId` a callable that takes an `Id` and returns true iff
+  // the
   //    corresponding IRI was internally added by QLever and not part of the
   //    knowledge graph.
   // * `sortedInput`  The input, must be sorted by the first permutation in the

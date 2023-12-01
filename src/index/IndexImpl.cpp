@@ -141,8 +141,8 @@ void IndexImpl::createFromFile(const string& filename) {
   // case any of the permutations fail.
   writeConfiguration();
 
-  auto isInternalId = [&](const auto& id) {
-    return indexBuilderData.vocabularyMetaData_.isInternalId(id);
+  auto isQleverInternalId = [&](const auto& id) {
+    return indexBuilderData.vocabularyMetaData_.isQleverInternalId(id);
   };
 
   auto secondSorter = makeSorter<SecondPermutation>("second");
@@ -152,15 +152,16 @@ void IndexImpl::createFromFile(const string& filename) {
   auto firstSorterWithUnique =
       ad_utility::uniqueBlockView(firstSorter.getSortedBlocks<0>());
 
-  createFirstPermutationPair(isInternalId, std::move(firstSorterWithUnique),
-                             secondSorter);
+  createFirstPermutationPair(isQleverInternalId,
+                             std::move(firstSorterWithUnique), secondSorter);
   configurationJson_["has-all-permutations"] = false;
   if (loadAllPermutations_) {
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
-    createSecondPermutationPair(isInternalId, secondSorter.getSortedBlocks<0>(),
-                                thirdSorter);
+    createSecondPermutationPair(isQleverInternalId,
+                                secondSorter.getSortedBlocks<0>(), thirdSorter);
     secondSorter.clear();
-    createThirdPermutationPair(isInternalId, thirdSorter.getSortedBlocks<0>());
+    createThirdPermutationPair(isQleverInternalId,
+                               thirdSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   }
 
@@ -1347,22 +1348,23 @@ namespace {
 
 // Return a lambda that is called repeatedly with triples that are sorted by the
 // `idx`-th column and counts the number of distinct entities that occur in a
-// triple where none of the elements fulfills the `isInternalId` predicate.
-// This is used to cound the number of distinct subjects, objects, and
-// predicates during the index building.
+// triple where none of the elements fulfills the `isQleverInternalId`
+// predicate. This is used to cound the number of distinct subjects, objects,
+// and predicates during the index building.
 template <size_t idx>
 auto makeNumDistinctIdsCounter =
     [](size_t& numDistinctIds,
-       ad_utility::InvocableWithExactReturnType<bool, Id> auto isInternalId) {
-      return
-          [lastId = std::optional<Id>{}, &numDistinctIds,
-           isInternalId = std::move(isInternalId)](const auto& triple) mutable {
-            const auto& id = triple[idx];
-            if (id != lastId && !std::ranges::any_of(triple, isInternalId)) {
-              numDistinctIds++;
-              lastId = id;
-            }
-          };
+       ad_utility::InvocableWithExactReturnType<bool, Id> auto
+           isQleverInternalId) {
+      return [lastId = std::optional<Id>{}, &numDistinctIds,
+              isInternalId =
+                  std::move(isQleverInternalId)](const auto& triple) mutable {
+        const auto& id = triple[idx];
+        if (id != lastId && !std::ranges::any_of(triple, isInternalId)) {
+          numDistinctIds++;
+          lastId = id;
+        }
+      };
     };
 }  // namespace
 
