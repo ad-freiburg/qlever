@@ -12,11 +12,41 @@
 
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
+#include "util/Log.h"
+#include "util/ParseableDuration.h"
 #include "util/TypeTraits.h"
+#include "util/jthread.h"
 
 namespace ad_utility {
 /// Enum to represent possible states of cancellation
-enum class CancellationState { NOT_CANCELLED, MANUAL, TIMEOUT };
+enum class CancellationState {
+  NOT_CANCELLED,
+  WAITING_FOR_CHECK,
+  CHECK_WINDOW_MISSED,
+  MANUAL,
+  TIMEOUT
+};
+
+namespace detail {
+
+constexpr std::chrono::milliseconds DESIRED_CHECK_INTERVAL{50};
+
+AD_ALWAYS_INLINE constexpr bool isCancelled(
+    CancellationState cancellationState) {
+  using enum CancellationState;
+  static_assert(NOT_CANCELLED <= CHECK_WINDOW_MISSED);
+  static_assert(WAITING_FOR_CHECK <= CHECK_WINDOW_MISSED);
+  static_assert(MANUAL > CHECK_WINDOW_MISSED);
+  static_assert(TIMEOUT > CHECK_WINDOW_MISSED);
+  return cancellationState > CHECK_WINDOW_MISSED;
+}
+
+struct Empty {
+  // Ignore potential assigment
+  template <typename... Args>
+  explicit Empty(const Args&...) {}
+};
+}  // namespace detail
 
 /// An exception signalling an cancellation
 class CancellationException : public std::runtime_error {
@@ -28,7 +58,7 @@ class CancellationException : public std::runtime_error {
                                             ? "timeout"
                                             : "manual cancellation",
                                         ". Stage: ", details)} {
-    AD_CONTRACT_CHECK(reason != CancellationState::NOT_CANCELLED);
+    AD_CONTRACT_CHECK(detail::isCancelled(reason));
   }
 };
 
@@ -37,9 +67,37 @@ static_assert(std::atomic<CancellationState>::is_always_lock_free);
 
 /// Thread safe wrapper around an atomic variable, providing efficient
 /// checks for cancellation across threads.
+template <bool WatchDogEnabled = areExpensiveChecksEnabled>
 class CancellationHandle {
+  static_assert(WatchDogEnabled == areExpensiveChecksEnabled);
+
   std::atomic<CancellationState> cancellationState_ =
       CancellationState::NOT_CANCELLED;
+
+  template <typename T>
+  using WatchDogOnly = std::conditional_t<WatchDogEnabled, T, detail::Empty>;
+  [[no_unique_address]] WatchDogOnly<std::atomic_bool> watchDogRunning_ = false;
+  [[no_unique_address]] WatchDogOnly<ad_utility::JThread> watchDogThread_;
+
+  template <typename... ArgTypes>
+  void pleaseWatchDog(CancellationState state,
+                      const InvocableWithConvertibleReturnType<
+                          std::string_view, ArgTypes...> auto& detailSupplier,
+                      ArgTypes&&... argTypes) requires WatchDogEnabled {
+    AD_CORRECTNESS_CHECK(watchDogRunning_.load(std::memory_order_relaxed));
+    if (state == CancellationState::CHECK_WINDOW_MISSED) {
+      LOG(WARN) << "Cancellation check missed deadline of "
+                << ParseableDuration{detail::DESIRED_CHECK_INTERVAL}
+                << ". Stage: "
+                << std::invoke(detailSupplier, AD_FWD(argTypes)...)
+                << std::endl;
+    }
+
+    cancellationState_.compare_exchange_strong(
+        state, CancellationState::NOT_CANCELLED, std::memory_order_relaxed);
+  }
+
+  void startWatchDogInternal() requires WatchDogEnabled;
 
  public:
   /// Sets the cancellation flag so the next call to throwIfCancelled will throw
@@ -49,7 +107,7 @@ class CancellationHandle {
   /// expression, or computed in advance. If that's not the case do not use
   /// this overload and use the overload that takes a callable that creates
   /// the exception message (see below).
-  AD_ALWAYS_INLINE void throwIfCancelled(std::string_view detail) const {
+  AD_ALWAYS_INLINE void throwIfCancelled(std::string_view detail) {
     throwIfCancelled(std::identity{}, detail);
   }
 
@@ -61,10 +119,16 @@ class CancellationHandle {
   AD_ALWAYS_INLINE void throwIfCancelled(
       const InvocableWithConvertibleReturnType<
           std::string_view, ArgTypes...> auto& detailSupplier,
-      ArgTypes&&... argTypes) const {
+      ArgTypes&&... argTypes) {
     auto state = cancellationState_.load(std::memory_order_relaxed);
     if (state == CancellationState::NOT_CANCELLED) [[likely]] {
       return;
+    }
+    if constexpr (WatchDogEnabled) {
+      if (!detail::isCancelled(state)) {
+        pleaseWatchDog(state, detailSupplier, AD_FWD(argTypes)...);
+        return;
+      }
     }
     throw CancellationException{
         state, std::invoke(detailSupplier, AD_FWD(argTypes)...)};
@@ -75,9 +139,13 @@ class CancellationHandle {
   /// value with relaxed memory ordering, as this may lead to out-of-thin-air
   /// values.
   AD_ALWAYS_INLINE bool isCancelled() const {
-    return cancellationState_.load(std::memory_order_relaxed) !=
-           CancellationState::NOT_CANCELLED;
+    return detail::isCancelled(
+        cancellationState_.load(std::memory_order_relaxed));
   }
+
+  void startWatchDog();
+
+  ~CancellationHandle();
 };
 }  // namespace ad_utility
 

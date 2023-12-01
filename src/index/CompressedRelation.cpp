@@ -29,7 +29,8 @@ static auto getBeginAndEnd(auto& range) {
 CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
     auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+    std::shared_ptr<ad_utility::CancellationHandle<>> cancellationHandle)
+    const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
     co_return;
@@ -93,7 +94,8 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata, std::optional<Id> col1Id,
     std::vector<CompressedBlockMetadata> blockMetadata,
     ColumnIndices additionalColumns,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+    std::shared_ptr<ad_utility::CancellationHandle<>> cancellationHandle)
+    const {
   AD_CONTRACT_CHECK(cancellationHandle);
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
   auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
@@ -292,7 +294,8 @@ IdTable CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
     std::span<const CompressedBlockMetadata> blocks,
     ColumnIndicesRef additionalColumns,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+    std::shared_ptr<ad_utility::CancellationHandle<>> cancellationHandle)
+    const {
   auto columnIndices = prepareColumnIndices(col1Id, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
 
