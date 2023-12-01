@@ -76,7 +76,8 @@ class VocabularyMerger {
     IdRangeForPrefix internalEntities_{INTERNAL_ENTITIES_URI_PREFIX};
 
     // Return true iff the `id` belongs to one of the two ranges that contain
-    // the internal IDs that were added by QLever and not part of the input.
+    // the internal IDs that were added by QLever and were not part of the
+    // input.
     bool isQleverInternalId(Id id) const {
       return internalEntities_.contains(id) ||
              langTaggedPredicates_.contains(id);

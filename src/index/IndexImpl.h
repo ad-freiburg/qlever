@@ -715,8 +715,7 @@ class IndexImpl {
   // Functions to create the pairs of permutations during the index build. Each
   // of them takes the following arguments:
   // * `isQleverInternalId` a callable that takes an `Id` and returns true iff
-  // the
-  //    corresponding IRI was internally added by QLever and not part of the
+  //    the corresponding IRI was internally added by QLever and not part of the
   //    knowledge graph.
   // * `sortedInput`  The input, must be sorted by the first permutation in the
   //    function name.
