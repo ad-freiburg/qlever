@@ -489,6 +489,8 @@ class IndexImpl {
   void processWordsForInvertedLists(const string& contextFile,
                                     bool addWordsFromLiterals, TextVec& vec);
 
+  // TODO<joka921> Get rid of the `numColumns` by including them into the
+  // `sortedTriples` argument.
   std::pair<IndexMetaDataMmapDispatcher::WriteType,
             IndexMetaDataMmapDispatcher::WriteType>
   createPermutationPairImpl(size_t numColumns, const string& fileName1,

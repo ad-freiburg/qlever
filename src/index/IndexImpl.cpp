@@ -439,8 +439,10 @@ IndexImpl::convertPartialToGlobalIds(
                 std::move(triples).toDynamic())] {
       result.pushBlock(*triples);
       size_t newI = i + triples->size();
-      if ((newI / 100'000'000) > (i / 100'000'000)) {
-        LOG(INFO) << "Triples converted: " << i << std::endl;
+      static constexpr size_t progressInterval = 100'000'000;
+      if ((newI / progressInterval) > (i / progressInterval)) {
+        LOG(INFO) << "Triples converted: "
+                  << (newI / progressInterval) * progressInterval << std::endl;
       }
       i = newI;
     };
