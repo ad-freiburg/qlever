@@ -9,6 +9,7 @@
 #include <fstream>
 
 #include "./IndexTestHelpers.h"
+#include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
@@ -19,6 +20,7 @@
 using namespace ad_utility::testing;
 
 namespace {
+using ad_utility::source_location;
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
 // Return a lambda that runs a scan for two fixed elements `c0` and `c1`
@@ -191,38 +193,28 @@ TEST(CreatePatterns, createPatterns) {
         "<a2> <b2> <c2> .\n"
         "<a2> <d>  <c2> .";
 
-    const IndexImpl& index = getQec(kb)->getIndex().getImpl();
+    const Index& indexNoImpl = getQec(kb)->getIndex();
+    const IndexImpl& index = indexNoImpl.getImpl();
 
     ASSERT_EQ(2u, index.getHasPattern().size());
     ASSERT_EQ(0u, index.getHasPredicate().size());
-    std::vector<VocabIndex> p0;
-    std::vector<VocabIndex> p1;
-    VocabIndex idx;
+    auto getId = ad_utility::testing::makeGetId(indexNoImpl);
     // Pattern p0 (for subject <a>) consists of <b> and <b2)
-    ASSERT_TRUE(index.getVocab().getId("<b>", &idx));
-    p0.push_back(idx);
-    ASSERT_TRUE(index.getVocab().getId("<b2>", &idx));
-    p0.push_back(idx);
+    std::vector<Id> p0{getId("<b>"), getId("<b2>")};
+    // Pattern p1 (for subject <a2>) consists of <b2> and <d>)
+    std::vector<Id> p1{getId("<b2>"), getId("<d>")};
 
-    // Pattern p1 (for subject <as>) consists of <b2> and <d>)
-    p1.push_back(idx);
-    ASSERT_TRUE(index.getVocab().getId("<d>", &idx));
-    p1.push_back(idx);
-
-    auto checkPattern = [](const auto& expected, const auto& actual) {
+    auto checkPattern = [&index](const auto& expected, Id subject) {
+      PatternID patternIdx =
+          index.getHasPattern()[subject.getVocabIndex().get()];
+      const auto& actual = index.getPatterns()[patternIdx];
       for (size_t i = 0; i < actual.size(); i++) {
-        ASSERT_EQ(Id::makeFromVocabIndex(expected[i]), actual[i]);
+        ASSERT_EQ(expected[i], actual[i]);
       }
     };
 
-    ASSERT_TRUE(index.getVocab().getId("<a>", &idx));
-    LOG(INFO) << idx << std::endl;
-    for (size_t i = 0; i < index.getHasPattern().size(); ++i) {
-      LOG(INFO) << index.getHasPattern()[i] << std::endl;
-    }
-    checkPattern(p0, index.getPatterns()[index.getHasPattern()[idx.get()]]);
-    ASSERT_TRUE(index.getVocab().getId("<a2>", &idx));
-    checkPattern(p1, index.getPatterns()[index.getHasPattern()[idx.get()]]);
+    checkPattern(p0, getId("<a>"));
+    checkPattern(p1, getId("<a2>"));
   }
 }
 

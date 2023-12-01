@@ -4,20 +4,17 @@
 
 #include "index/PatternCreator.h"
 
-/*
 #include "global/SpecialIds.h"
 
 static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
-static const Id hasPredicateId = qlever::specialIds.at(HAS_PREDICATE_PREDICATE);
- */
-static constexpr Id hasPatternId = Id::fromBits(42);
-static constexpr Id hasPredicateId = Id::fromBits(43);
+[[maybe_unused]] static const Id hasPredicateId =
+    qlever::specialIds.at(HAS_PREDICATE_PREDICATE);
 
 // _________________________________________________________________________
 void PatternCreatorNew::processTriple(std::array<Id, 3> triple,
                                       bool ignoreForPatterns) {
-  _tripleBuffer.emplace_back(triple, ignoreForPatterns);
   if (ignoreForPatterns) {
+    _tripleBuffer.emplace_back(triple, ignoreForPatterns);
     return;
   }
   if (!_currentSubjectIndex.has_value()) {
@@ -29,6 +26,7 @@ void PatternCreatorNew::processTriple(std::array<Id, 3> triple,
     _currentSubjectIndex = triple[0].getVocabIndex();
     _currentPattern.clear();
   }
+  _tripleBuffer.emplace_back(triple, ignoreForPatterns);
   // Don't list predicates twice in the same pattern.
   if (_currentPattern.empty() || _currentPattern.back() != triple[1]) {
     _currentPattern.push_back(triple[1]);
@@ -66,14 +64,17 @@ void PatternCreatorNew::finishSubject(VocabIndex subjectIndex,
     it->second._count++;
   }
 
-  _additionalTriplesPsoSorter.push(
-      std::array{Id::makeFromVocabIndex(subjectIndex), hasPatternId,
-                 Id::makeFromInt(patternId)});
-  std::ranges::for_each(_tripleBuffer, [this, patternId](const auto& t) {
-    const auto& [s, p, o] = t.first;
-    fullPsoSorter().push(std::array{
-        s, p, o, Id::makeFromInt(t.second ? NO_PATTERN : patternId)});
-  });
+  auto additionalTriple = std::array{Id::makeFromVocabIndex(subjectIndex),
+                                     hasPatternId, Id::makeFromInt(patternId)};
+  _additionalTriplesPsoSorter.push(additionalTriple);
+  auto curSubject = Id::makeFromVocabIndex(_currentSubjectIndex.value());
+  std::ranges::for_each(
+      _tripleBuffer, [this, patternId, &curSubject](const auto& t) {
+        const auto& [s, p, o] = t.first;
+        auto fullTriple = std::array{
+            s, p, o, Id::makeFromInt(curSubject != s ? NO_PATTERN : patternId)};
+        fullPsoSorter().push(fullTriple);
+      });
   _tripleBuffer.clear();
 }
 
