@@ -12,13 +12,7 @@ template <bool WatchDogEnabled>
 void CancellationHandle<WatchDogEnabled>::cancel(CancellationState reason) {
   AD_CONTRACT_CHECK(detail::isCancelled(reason));
 
-  CancellationState state = cancellationState_.load(std::memory_order_relaxed);
-  while (!detail::isCancelled(state)) {
-    if (cancellationState_.compare_exchange_weak(state, reason,
-                                                 std::memory_order_relaxed)) {
-      break;
-    }
-  }
+  setStatePreservingCancel(reason);
 }
 
 // _____________________________________________________________________________
@@ -49,6 +43,30 @@ template <bool WatchDogEnabled>
 void CancellationHandle<WatchDogEnabled>::startWatchDog() {
   if constexpr (WatchDogEnabled) {
     startWatchDogInternal();
+  }
+}
+
+// _____________________________________________________________________________
+template <bool WatchDogEnabled>
+void CancellationHandle<WatchDogEnabled>::setStatePreservingCancel(
+    CancellationState newState) {
+  if constexpr (WatchDogEnabled) {
+    CancellationState state =
+        cancellationState_.load(std::memory_order_relaxed);
+    while (!detail::isCancelled(state)) {
+      if (cancellationState_.compare_exchange_weak(state, newState,
+                                                   std::memory_order_relaxed)) {
+        break;
+      }
+    }
+  }
+}
+
+// _____________________________________________________________________________
+template <bool WatchDogEnabled>
+void CancellationHandle<WatchDogEnabled>::resetWatchDogState() {
+  if constexpr (WatchDogEnabled) {
+    setStatePreservingCancel(CancellationState::NOT_CANCELLED);
   }
 }
 

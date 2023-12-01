@@ -533,6 +533,7 @@ auto Server::setupCancellationHandle(
     const std::shared_ptr<Operation>& rootOperation, TimeLimit timeLimit) const
     -> ad_utility::InvocableWithExactReturnType<void> auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
+  cancellationHandle->startWatchDog();
   AD_CORRECTNESS_CHECK(cancellationHandle);
   rootOperation->recursivelySetCancellationHandle(
       std::move(cancellationHandle));
@@ -659,7 +660,7 @@ boost::asio::awaitable<void> Server::processQuery(
     auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
       auto responseGenerator = co_await computeInNewThread([&] {
         queryRegistry_.getCancellationHandle(messageSender.getQueryId())
-            ->startWatchDog();
+            ->resetWatchDogState();
         return ExportQueryExecutionTrees::computeResultAsStream(
             plannedQuery.value().parsedQuery_, qet, mediaType);
       });

@@ -99,6 +99,8 @@ class CancellationHandle {
 
   void startWatchDogInternal() requires WatchDogEnabled;
 
+  void setStatePreservingCancel(CancellationState newState);
+
  public:
   /// Sets the cancellation flag so the next call to throwIfCancelled will throw
   void cancel(CancellationState reason);
@@ -144,6 +146,8 @@ class CancellationHandle {
   }
 
   void startWatchDog();
+
+  void resetWatchDogState();
 
   ~CancellationHandle();
 };
