@@ -78,6 +78,8 @@ class CancellationHandle {
   using WatchDogOnly = std::conditional_t<WatchDogEnabled, T, detail::Empty>;
   [[no_unique_address]] WatchDogOnly<std::atomic_bool> watchDogRunning_ = false;
   [[no_unique_address]] WatchDogOnly<ad_utility::JThread> watchDogThread_;
+  [[no_unique_address]] WatchDogOnly<std::chrono::steady_clock::rep>
+      startTimeoutWindow_ = 0;
 
   template <typename... ArgTypes>
   void pleaseWatchDog(CancellationState state,
@@ -87,8 +89,8 @@ class CancellationHandle {
     AD_CORRECTNESS_CHECK(watchDogRunning_.load(std::memory_order_relaxed));
     if (state == CancellationState::CHECK_WINDOW_MISSED) {
       LOG(WARN) << "Cancellation check missed deadline of "
-                << ParseableDuration{detail::DESIRED_CHECK_INTERVAL}
-                << ". Stage: "
+                << ParseableDuration{detail::DESIRED_CHECK_INTERVAL} << " by "
+                << ParseableDuration{computeCheckMissDuration()} << ". Stage: "
                 << std::invoke(detailSupplier, AD_FWD(argTypes)...)
                 << std::endl;
     }
@@ -96,6 +98,9 @@ class CancellationHandle {
     cancellationState_.compare_exchange_strong(
         state, CancellationState::NOT_CANCELLED, std::memory_order_relaxed);
   }
+
+  decltype(detail::DESIRED_CHECK_INTERVAL) computeCheckMissDuration() const
+      requires WatchDogEnabled;
 
   void startWatchDogInternal() requires WatchDogEnabled;
 

@@ -30,8 +30,11 @@ void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
         cancellationState_.compare_exchange_strong(
             state, CancellationState::WAITING_FOR_CHECK);
       } else if (state == CancellationState::WAITING_FOR_CHECK) {
-        cancellationState_.compare_exchange_strong(
-            state, CancellationState::CHECK_WINDOW_MISSED);
+        if (cancellationState_.compare_exchange_strong(
+                state, CancellationState::CHECK_WINDOW_MISSED)) {
+          startTimeoutWindow_ =
+              std::chrono::steady_clock::now().time_since_epoch().count();
+        }
       }
       std::this_thread::sleep_for(detail::DESIRED_CHECK_INTERVAL);
     }
@@ -66,7 +69,7 @@ void CancellationHandle<WatchDogEnabled>::setStatePreservingCancel(
 template <bool WatchDogEnabled>
 void CancellationHandle<WatchDogEnabled>::resetWatchDogState() {
   if constexpr (WatchDogEnabled) {
-    setStatePreservingCancel(CancellationState::NOT_CANCELLED);
+    setStatePreservingCancel(CancellationState::WAITING_FOR_CHECK);
   }
 }
 
@@ -76,6 +79,19 @@ CancellationHandle<WatchDogEnabled>::~CancellationHandle() {
   if constexpr (WatchDogEnabled) {
     watchDogRunning_.store(false, std::memory_order_relaxed);
   }
+}
+
+// _____________________________________________________________________________
+template <bool WatchDogEnabled>
+decltype(detail::DESIRED_CHECK_INTERVAL)
+CancellationHandle<WatchDogEnabled>::computeCheckMissDuration() const
+    requires WatchDogEnabled {
+  using namespace std::chrono;
+  using DurationType =
+      std::remove_const_t<decltype(detail::DESIRED_CHECK_INTERVAL)>;
+  return duration_cast<DurationType>(
+      steady_clock::now() -
+      steady_clock::time_point{steady_clock::duration{startTimeoutWindow_}});
 }
 
 // Make sure to compile correctly.
