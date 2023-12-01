@@ -175,9 +175,10 @@ Index::WordEntityPostings Index::getContextEntityScoreListsForWords(
 }
 
 // ____________________________________________________________________________
-Index::WordEntityPostings Index::getWordPostingsForTerm(
-    const std::string& term) const {
-  return pimpl_->getWordPostingsForTerm(term);
+IdTable Index::getWordPostingsForTerm(
+    const std::string& term,
+    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+  return pimpl_->getWordPostingsForTerm(term, allocator);
 }
 
 // ____________________________________________________________________________
@@ -187,9 +188,10 @@ Index::WordEntityPostings Index::getEntityPostingsForTerm(
 }
 
 // ____________________________________________________________________________
-Index::WordEntityPostings Index::getEntityMentionsForWord(
-    const string& term) const {
-  return pimpl_->getEntityMentionsForWord(term);
+IdTable Index::getEntityMentionsForWord(
+    const string& term,
+    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+  return pimpl_->getEntityMentionsForWord(term, allocator);
 }
 
 // ____________________________________________________________________________

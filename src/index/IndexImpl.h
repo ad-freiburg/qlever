@@ -330,20 +330,35 @@ class IndexImpl {
 
   // Returns a superset of textRecords and their corresponding words
   // and scores. Each textRecord has to contain the term.
-  Index::WordEntityPostings getWordPostingsForTerm(const string& term) const;
+  Index::WordEntityPostings getWordPostingsForTermWep(const string& term) const;
+
+  // Returns a superset of textRecords and their corresponding words
+  // and scores. Each textRecord has to contain the term.
+  IdTable getWordPostingsForTerm(
+      const string& term,
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   Index::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
 
   // Returns a superset of textRecords and their corresponding entities and
   // scores. Each textRecord has to contain the term.
-  Index::WordEntityPostings getEntityMentionsForWord(const string& term) const;
+  IdTable getEntityMentionsForWord(
+      const string& term,
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
-  Index::WordEntityPostings readWordCl(const TextBlockMetaData& tbmd) const;
+  Index::WordEntityPostings readWordClWep(const TextBlockMetaData& tbmd) const;
 
-  Index::WordEntityPostings readWordEntityCl(
+  IdTable readWordCl(const TextBlockMetaData& tbmd,
+                     const ad_utility::AllocatorWithLimit<Id>& allocator) const;
+
+  Index::WordEntityPostings readWordEntityClWep(
       const TextBlockMetaData& tbmd) const;
+
+  IdTable readWordEntityCl(
+      const TextBlockMetaData& tbmd,
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= docsDB_._size) {

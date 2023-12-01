@@ -186,11 +186,15 @@ class Index {
   WordEntityPostings getContextEntityScoreListsForWords(
       const std::string& words) const;
 
-  WordEntityPostings getWordPostingsForTerm(const std::string& term) const;
+  IdTable getWordPostingsForTerm(
+      const std::string& term,
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   WordEntityPostings getEntityPostingsForTerm(const std::string& term) const;
 
-  Index::WordEntityPostings getEntityMentionsForWord(const string& term) const;
+  IdTable getEntityMentionsForWord(
+      const string& term,
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 

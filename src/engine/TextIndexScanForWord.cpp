@@ -10,19 +10,16 @@ TextIndexScanForWord::TextIndexScanForWord(QueryExecutionContext* qec,
 
 // _____________________________________________________________________________
 ResultTable TextIndexScanForWord::computeResult() {
-  IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(getResultWidth());
-  Index::WordEntityPostings wep =
-      getExecutionContext()->getIndex().getWordPostingsForTerm(word_);
-  idTable.resize(wep.cids_.size());
-  decltype(auto) cidColumn = idTable.getColumn(0);
-  std::ranges::transform(wep.cids_, cidColumn.begin(),
-                         &Id::makeFromTextRecordIndex);
-  if (isPrefix_) {
-    decltype(auto) widColumn = idTable.getColumn(1);
-    std::ranges::transform(wep.wids_[0], widColumn.begin(), [](WordIndex id) {
-      return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
-    });
+  IdTable idTable = getExecutionContext()->getIndex().getWordPostingsForTerm(
+      word_, getExecutionContext()->getAllocator());
+
+  if (!isPrefix_) {
+    IdTable smallIdTable{getExecutionContext()->getAllocator()};
+    smallIdTable.setNumColumns(1);
+    smallIdTable.resize(idTable.numRows());
+    smallIdTable.getColumn(0) = std::move(idTable.getColumn(0));
+
+    return {std::move(smallIdTable), resultSortedOn(), LocalVocab{}};
   }
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};

@@ -15,10 +15,8 @@ EntityIndexScanForWord::EntityIndexScanForWord(
 
 // _____________________________________________________________________________
 ResultTable EntityIndexScanForWord::computeResult() {
-  IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(getResultWidth());
-  Index::WordEntityPostings wep =
-      getExecutionContext()->getIndex().getEntityMentionsForWord(word_);
+  IdTable idTable = getExecutionContext()->getIndex().getEntityMentionsForWord(
+      word_, getExecutionContext()->getAllocator());
 
   if (hasFixedEntity_) {
     VocabIndex idx;
@@ -29,26 +27,20 @@ ResultTable EntityIndexScanForWord::computeResult() {
                  << "not found in Vocab. Terminating\n";
       AD_FAIL();
     }
-    Index::WordEntityPostings filteredWep;
-    for (size_t i = 0; i < wep.eids_.size(); i++) {
-      if (wep.eids_[i].getVocabIndex() == idx) {
-        filteredWep.cids_.push_back(wep.cids_[i]);
-        filteredWep.eids_.push_back(wep.eids_[i]);
-        filteredWep.scores_.push_back(wep.scores_[i]);
+    IdTable filteredIdTable{getExecutionContext()->getAllocator()};
+    filteredIdTable.setNumColumns(2);
+    filteredIdTable.resize(idTable.getColumn(1).size());
+    size_t j = 0;
+    for (size_t i = 0; i < idTable.getColumn(1).size(); i++) {
+      if (idTable.getColumn(1)[i].getVocabIndex() == idx) {
+        filteredIdTable.getColumn(0)[j] = idTable.getColumn(0)[i];
+        filteredIdTable.getColumn(1)[j] = idTable.getColumn(2)[i];
+        j++;
       }
     }
-    wep = std::move(filteredWep);
+    filteredIdTable.resize(j);
+    idTable = std::move(filteredIdTable);
   }
-  idTable.resize(wep.cids_.size());
-  decltype(auto) cidColumn = idTable.getColumn(0);
-  std::ranges::transform(wep.cids_, cidColumn.begin(),
-                         &Id::makeFromTextRecordIndex);
-  if (!hasFixedEntity_) {
-    decltype(auto) eidColumn = idTable.getColumn(1);
-    std::ranges::copy(wep.eids_, eidColumn.begin());
-  }
-  decltype(auto) scoreColumn = idTable.getColumn(1 + !hasFixedEntity_);
-  std::ranges::transform(wep.scores_, scoreColumn.begin(), &Id::makeFromInt);
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }

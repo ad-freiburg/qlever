@@ -16,7 +16,7 @@
 using std::pair;
 
 // _____________________________________________________________________________
-Index::WordEntityPostings FTSAlgorithms::filterByRange(
+Index::WordEntityPostings FTSAlgorithms::filterByRangeWep(
     const IdRange<WordVocabIndex>& idRange,
     const WordEntityPostings& wepPreFilter) {
   AD_CONTRACT_CHECK(wepPreFilter.wids_.size() == 1);
@@ -61,6 +61,46 @@ Index::WordEntityPostings FTSAlgorithms::filterByRange(
   LOG(DEBUG) << "Filtering by ID range done. Result has "
              << wepResult.cids_.size() << " elements.\n";
   return wepResult;
+}
+
+// _____________________________________________________________________________
+IdTable FTSAlgorithms::filterByRange(const IdRange<WordVocabIndex>& idRange,
+                                     const IdTable& idTablePreFilter) {
+  AD_CONTRACT_CHECK(idTablePreFilter.numColumns() == 2);
+  LOG(DEBUG) << "Filtering " << idTablePreFilter.getColumn(0).size()
+             << " elements by ID range...\n";
+
+  IdTable idTableResult{idTablePreFilter.getAllocator()};
+  idTableResult.setNumColumns(2);
+  idTableResult.resize(idTablePreFilter.getColumn(0).size());
+  decltype(auto) wordIdsInput = idTablePreFilter.getColumn(1);
+
+  size_t nofResultElements = 0;
+
+  for (size_t i = 0; i < wordIdsInput.size(); ++i) {
+    // TODO<joka921> proper Ids for the text stuff.
+    // The mapping from words that appear in text records to `WordIndex`es is
+    // stored in a `Vocabulary` that stores `VocabIndex`es, so we have to
+    // convert between those two types.
+    // TODO<joka921> Can we make the returned `IndexType` a template parameter
+    // of the vocabulary, s.t. we have a vocabulary that stores `WordIndex`es
+    // directly?
+    if (wordIdsInput[i] >= Id::makeFromWordVocabIndex(
+                               WordVocabIndex::make(idRange._first.get())) &&
+        wordIdsInput[i] <= Id::makeFromWordVocabIndex(
+                               WordVocabIndex::make(idRange._last.get()))) {
+      idTableResult.getColumn(0)[nofResultElements] =
+          idTablePreFilter.getColumn(0)[i];
+      idTableResult.getColumn(1)[nofResultElements] =
+          idTablePreFilter.getColumn(1)[i];
+    }
+  }
+
+  idTableResult.resize(nofResultElements);
+
+  LOG(DEBUG) << "Filtering by ID range done. Result has "
+             << idTableResult.numRows() << " elements.\n";
+  return idTableResult;
 }
 
 // _____________________________________________________________________________
