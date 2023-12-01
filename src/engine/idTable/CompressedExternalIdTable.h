@@ -535,7 +535,7 @@ class CompressedExternalIdTableSorter
 
  public:
   // Constructor.
-  explicit CompressedExternalIdTableSorter(
+  CompressedExternalIdTableSorter(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
@@ -550,7 +550,7 @@ class CompressedExternalIdTableSorter
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
-  explicit CompressedExternalIdTableSorter(
+  CompressedExternalIdTableSorter(
       std::string filename, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
@@ -596,8 +596,23 @@ class CompressedExternalIdTableSorter
   cppcoro::generator<IdTableStatic<N>> sortedBlocks(
       std::optional<size_t> blocksize = std::nullopt) {
     if (!this->transformAndPushLastBlock()) {
-      // There was only one block, return it.
-      co_yield std::move(this->currentBlock_).template toStatic<N>();
+      // There was only one block, return it. If a blocksize was explicitly
+      // requested for the output, and the single block is larger than this
+      // blocksize, we manually have to split it into chunks.
+      auto& block = this->currentBlock_;
+      const auto blocksizeOutput = blocksize.value_or(block.numRows());
+      if (block.numRows() <= blocksizeOutput) {
+        co_yield std::move(this->currentBlock_).template toStatic<N>();
+      } else {
+        for (size_t i = 0; i < block.numRows(); i += blocksizeOutput) {
+          size_t upper = std::min(i + blocksizeOutput, block.numRows());
+          auto curBlock = IdTableStatic<NumStaticCols>(
+              this->numColumns_, this->writer_.allocator());
+          curBlock.reserve(upper - i);
+          curBlock.insertAtEnd(block.begin() + i, block.begin() + upper);
+          co_yield std::move(curBlock).template toStatic<N>();
+        }
+      }
       co_return;
     }
     auto rowGenerators =
