@@ -58,6 +58,12 @@ class MemorySize {
   // Default comparison operator.
   constexpr auto operator<=>(const MemorySize&) const = default;
 
+  // Hashing.
+  template <typename H>
+  friend H AbslHashValue(H h, const MemorySize& mem) {
+    return H::combine(std::move(h), mem.memoryInBytes_);
+  }
+
   /*
   Factory functions for creating an instance of this class with the wanted
   memory size saved internally. Always requries the exact memory size unit and

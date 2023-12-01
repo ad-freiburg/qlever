@@ -21,8 +21,6 @@
  */
 class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
  public:
-  using MediaType = ad_utility::MediaType;
-
   class Exception : public std::runtime_error {
     using std::runtime_error::runtime_error;
   };
@@ -43,13 +41,6 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
     std::string _message;
   };
 
-  explicit AcceptHeaderQleverVisitor(std::vector<MediaType> supportedMediaTypes)
-      : _supportedMediaTypes{std::move(supportedMediaTypes)} {}
-
- private:
-  std::vector<MediaType> _supportedMediaTypes;
-
- public:
   // ________________________________________________________________________
   antlrcpp::Any visitAcceptWithEof(
       AcceptHeaderParser::AcceptWithEofContext* ctx) override {
@@ -71,8 +62,7 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
       throw Exception{
           "Not a single media type known to this parser was detected in \"" +
           ctx->getText() + "\". " +
-          ad_utility::getErrorMessageForSupportedMediaTypes(
-              _supportedMediaTypes)};
+          ad_utility::getErrorMessageForSupportedMediaTypes()};
     }
     return {std::move(acceptedMediaTypes)};
   }

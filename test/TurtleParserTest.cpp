@@ -66,7 +66,7 @@ auto checkParseResult =
 
 // Formatted output of TurtleTriples in case of test failures.
 std::ostream& operator<<(std::ostream& os, const TurtleTriple& tr) {
-  os << "( " << tr.subject_ << " " << tr.object_ << " " << tr.predicate_ << ")";
+  os << "( " << tr.subject_ << " " << tr.predicate_ << " " << tr.object_ << ")";
   return os;
 }
 TEST(TurtleParserTest, prefixedName) {
@@ -246,17 +246,17 @@ TEST(TurtleParserTest, blankNode) {
 }
 
 TEST(TurtleParserTest, blankNodePropertyList) {
-  auto runCommonTests = [](auto p) {
+  auto testPropertyListAsObject = [](auto p) {
     p.activeSubject_ = "<s>";
     p.activePredicate_ = "<p1>";
 
     string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
-    std::vector<TurtleTriple> exp = {{"<s>", "<p1>", "_:g_5_0"},
-                                     {"_:g_5_0", "<p2>", "<ob2>"},
-                                     {"_:g_5_0", "<p3>", "<ob3>"}};
+    std::vector<TurtleTriple> exp = {{"_:g_5_0", "<p2>", "<ob2>"},
+                                     {"_:g_5_0", "<p3>", "<ob3>"},
+                                     {"<s>", "<p1>", "_:g_5_0"}};
     p.setInputStream(blankNodeL);
     p.setBlankNodePrefixOnlyForTesting(5);
-    ASSERT_TRUE(p.blankNodePropertyList());
+    ASSERT_TRUE(p.object());
     ASSERT_EQ(p.triples_, exp);
     ASSERT_EQ(p.getPosition(), blankNodeL.size());
 
@@ -265,8 +265,27 @@ TEST(TurtleParserTest, blankNodePropertyList) {
     ASSERT_THROW(p.blankNodePropertyList(),
                  TurtleParser<Tokenizer>::ParseException);
   };
-  runCommonTests(Re2Parser{});
-  runCommonTests(CtreParser{});
+  testPropertyListAsObject(Re2Parser{});
+  testPropertyListAsObject(CtreParser{});
+
+  auto testPropertyListAsSubject = [](auto p) {
+    string blankNodeL = "[<p2> <ob2>; <p3> <ob3>] <p1> <ob1>";
+    std::vector<TurtleTriple> exp = {{"_:g_5_0", "<p2>", "<ob2>"},
+                                     {"_:g_5_0", "<p3>", "<ob3>"},
+                                     {"_:g_5_0", "<p1>", "<ob1>"}};
+    p.setInputStream(blankNodeL);
+    p.setBlankNodePrefixOnlyForTesting(5);
+    ASSERT_TRUE(p.triples());
+    ASSERT_EQ(p.triples_, exp);
+    ASSERT_EQ(p.getPosition(), blankNodeL.size());
+
+    blankNodeL = "[<2> <ob2>; \"invalidPred\" <ob3>]";
+    p.setInputStream(blankNodeL);
+    ASSERT_THROW(p.blankNodePropertyList(),
+                 TurtleParser<Tokenizer>::ParseException);
+  };
+  testPropertyListAsSubject(Re2Parser{});
+  testPropertyListAsSubject(CtreParser{});
 }
 
 TEST(TurtleParserTest, object) {

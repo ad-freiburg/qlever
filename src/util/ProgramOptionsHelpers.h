@@ -5,13 +5,12 @@
 #ifndef QLEVER_PROGRAMOPTIONSHELPERS_H
 #define QLEVER_PROGRAMOPTIONSHELPERS_H
 
-#include <util/Concepts.h>
-#include <util/Parameters.h>
-
 #include <boost/program_options.hpp>
 #include <vector>
 
+#include "util/Concepts.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Parameters.h"
 namespace ad_utility {
 
 // An implicit wrapper that can be implicitly converted to and from `size_t`.

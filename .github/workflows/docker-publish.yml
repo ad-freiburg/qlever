@@ -1,0 +1,64 @@
+name: Docker Publish
+
+on:
+  workflow_run:
+    workflows : ["Docker build"]
+    branches: ["master"]
+    types:
+      - completed
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  docker:
+    runs-on: ubuntu-20.04
+    # Run if this is a push on master and Docker Build succeeded
+    # or if a tag was pushed
+    if: ${{ github.event.workflow_run.conclusion == 'success' ||  github.ref_name != 'master' }}
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Get short sha
+        id: sha
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - name: Get PR number
+        id: pr
+        run: echo "pr_num=$(git log --format=%s -n 1 | sed -nr 's/.*\(\#([0-9]+)\)/\1/p')" >> $GITHUB_OUTPUT
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          # Docker multiplatform images require an entry in their manifests. If this
+          # entry is missing, then the images for each platform are considered seperate.
+          # If this action runs on a single runner (i.e. the attribute `platforms`
+          # contains a list of all platforms) then the manifest is configured automatically.
+          # If the build and push is split over multiple runners, then the action requires an additional `merge`
+          # job, which merges the images for each platform into a single multiplatform image.
+          # References:
+          # https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
+          # https://www.docker.com/blog/multi-arch-build-and-images-the-simple-way/
+          platforms: linux/amd64,linux/arm64
+          push: true
+          # If this is a push on master, publish with short commit sha
+          # else use the ref name, which has to be the tag in this case.
+          # We have to explicitly add the "qlever:latest" tag for it to work correctly,
+          # see e.g. https://stackoverflow.com/questions/27643017/do-i-need-to-manually-tag-latest-when-pushing-to-docker-public-repository
+          tags: >
+            ${{ secrets.DOCKERHUB_USERNAME }}/qlever:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }},
+            ${{ secrets.DOCKERHUB_USERNAME }}/qlever:commit-${{ steps.sha.outputs.sha_short }},
+            ${{ secrets.DOCKERHUB_USERNAME }}/qlever:latest
+

@@ -12,8 +12,8 @@ template <bool isSender>
 net::awaitable<std::shared_ptr<
     QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
 QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
-  while (socketDistributors_.contains(queryId)) {
-    auto& reference = socketDistributors_.at(queryId);
+  while (socketDistributors_->contains(queryId)) {
+    auto& reference = socketDistributors_->at(queryId);
     if (auto ptr = reference.pointer_.lock()) {
       if constexpr (isSender) {
         // Ensure only single sender reference is acquired for a single session
@@ -30,24 +30,32 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
     co_await net::post(net::bind_executor(globalStrand_, net::use_awaitable));
   }
 
-  auto distributor =
-      std::make_shared<QueryToSocketDistributor>(ioContext_, [this, queryId]() {
+  auto distributor = std::make_shared<QueryToSocketDistributor>(
+      // We pass a copy of the `shared_pointer socketDistributors_` here,
+      // because in unit tests the callback might be invoked after this
+      // `QueryHub` was destroyed.
+      ioContext_, [&ioContext = ioContext_, globalStrand = globalStrand_,
+                   socketDistributors = socketDistributors_, queryId]() {
         auto future = net::dispatch(net::bind_executor(
-            globalStrand_, std::packaged_task<void()>([this, &queryId]() {
-              bool wasErased = socketDistributors_.erase(queryId);
+            globalStrand,
+            std::packaged_task<void()>([&socketDistributors, &queryId]() {
+              bool wasErased = socketDistributors->erase(queryId);
               AD_CORRECTNESS_CHECK(wasErased);
             })));
         // As long as the destructor would have to block anyway, perform work
         // on the `ioContext_`. This avoids blocking in case the destructor
         // already runs inside the `ioContext_`.
         // Note: When called on a strand this may block the current strand.
+        // If the ioContext has been stopped for some reason don't wait
+        // for the result, or this will never terminate.
         while (future.wait_for(std::chrono::seconds(0)) !=
-               std::future_status::ready) {
-          ioContext_.poll_one();
+                   std::future_status::ready &&
+               !ioContext.stopped()) {
+          ioContext.poll_one();
         }
       });
-  socketDistributors_.emplace(queryId,
-                              WeakReferenceHolder{distributor, isSender});
+  socketDistributors_->emplace(queryId,
+                               WeakReferenceHolder{distributor, isSender});
   co_return distributor;
 }
 

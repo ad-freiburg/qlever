@@ -2,6 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
+#include <boost/url.hpp>
+
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
 
@@ -158,7 +160,7 @@ class SubstrImpl {
       return std::string{};
     }
 
-    // In SPARQL indices are 1-based, but the implemenetation we use is 0 based,
+    // In SPARQL indices are 1-based, but the implementation we use is 0 based,
     // hence the `- 1`.
     int64_t startInt = std::visit(round, start) - 1;
     int64_t lengthInt = std::visit(round, length);
@@ -362,6 +364,27 @@ class ConcatExpression : public detail::VariadicExpression {
   }
 };
 
+// ENCODE_FOR_URI
+[[maybe_unused]] auto encodeForUriImpl =
+    [](std::optional<std::string> input) -> IdOrString {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    std::string_view value{input.value()};
+
+    if (value.starts_with("\"")) {
+      auto contentEnd = ad_utility::findLiteralEnd(value, "\"");
+      if (contentEnd != 0) {
+        std::string_view content = value.substr(1, contentEnd - 1);
+        return boost::urls::encode(content, boost::urls::unreserved_chars);
+      }
+    }
+    return boost::urls::encode(value, boost::urls::unreserved_chars);
+  }
+};
+using EncodeForUriExpression =
+    StringExpressionImpl<1, decltype(encodeForUriImpl)>;
+
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
 using std::make_unique;
@@ -410,4 +433,9 @@ Expr makeContainsExpression(Expr child1, Expr child2) {
 Expr makeConcatExpression(std::vector<Expr> children) {
   return std::make_unique<ConcatExpression>(std::move(children));
 }
+
+Expr makeEncodeForUriExpression(Expr child) {
+  return make<EncodeForUriExpression>(child);
+}
+
 }  // namespace sparqlExpression

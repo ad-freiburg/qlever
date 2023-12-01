@@ -77,6 +77,11 @@ class SparqlTriple {
   TripleComponent _s;
   PropertyPath _p;
   TripleComponent _o;
+  // The additional columns (e.g. patterns) that are to be attached when
+  // performing an index scan using this triple.
+  // TODO<joka921> On this level we should not store `ColumnIndex`, but the
+  // special predicate IRIs that are to be attached here.
+  std::vector<std::pair<ColumnIndex, Variable>> _additionalScanColumns;
 
   [[nodiscard]] string asString() const;
 };
