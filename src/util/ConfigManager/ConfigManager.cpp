@@ -553,30 +553,70 @@ nlohmann::ordered_json ConfigManager::generateConfigurationDocJson(
 
 // ____________________________________________________________________________
 std::string ConfigManager::generateConfigurationDocDetailedList(
-    std::string_view pathPrefix) const {
+    std::string_view pathPrefix,
+    const ConfigurationDocValidatorAssignment& assignment) const {
   // For collecting the string representations of the hash map entries.
   std::vector<std::string> stringRepresentations;
   stringRepresentations.reserve(configurationOptions_.size());
 
+  /*
+  @brief Calls `assignment.getEntriesUnderKey(key)` and  generates the string
+  representation of the returned list of validators.
+  Note:
+  - An empty list will be returned as an empty `std::optional`.
+
+  @param prefix If the list is not empty, this prefix will the added to the
+  front of the string representation.
+  */
+  auto generateValidatorListString =
+      [&assignment](
+          const auto& key,
+          std::string_view stringPrefix) -> std::optional<std::string> {
+    if (const auto& validators = assignment.getEntriesUnderKey(key);
+        !validators.empty()) {
+      // Validators should be sorted by their creation order.
+      AD_CORRECTNESS_CHECK(std::ranges::is_sorted(
+          validators, {}, [](const ConfigOptionValidatorManager& validator) {
+            return validator.getInitializationId();
+          }));
+      return absl::StrCat(
+          stringPrefix, "Required invariants:\n",
+          ad_utility::addIndentation(
+              ad_utility::lazyStrJoin(
+                  ad_utility::transform(
+                      validators,
+                      [](const ConfigOptionValidatorManager& validator) {
+                        return absl::StrCat("- ", validator.getDescription());
+                      }),
+                  "\n"),
+              "    "));
+    } else {
+      return std::nullopt;
+    }
+  };
+
   visitHashMapEntries(
-      [&pathPrefix, &stringRepresentations]<typename T>(std::string_view path,
-                                                        T& optionOrSubManager) {
+      [&pathPrefix, &stringRepresentations, &assignment,
+       &generateValidatorListString]<typename T>(std::string_view path,
+                                                 T& optionOrSubManager) {
         // Getting rid of the first `/` for printing, based on user feedback.
         std::string_view adjustedPath = path.substr(1, path.length());
 
         // Either add the string representation of the option, or recursively
         // add the sub manager.
         if constexpr (isSimilar<T, ConfigOption>) {
-          stringRepresentations.emplace_back(absl::StrCat(
-              "Option '", adjustedPath, "' [",
-              optionOrSubManager.getActualValueTypeAsString(), "]\n",
-              static_cast<std::string>(optionOrSubManager)));
+          stringRepresentations.emplace_back(
+              absl::StrCat("Option '", adjustedPath, "' [",
+                           optionOrSubManager.getActualValueTypeAsString(),
+                           "]\n", static_cast<std::string>(optionOrSubManager),
+                           generateValidatorListString(optionOrSubManager, "\n")
+                               .value_or("")));
         } else if constexpr (isSimilar<T, ConfigManager>) {
           stringRepresentations.emplace_back(absl::StrCat(
               "Sub manager '", adjustedPath, "'\n",
               ad_utility::addIndentation(
                   optionOrSubManager.generateConfigurationDocDetailedList(
-                      absl::StrCat(pathPrefix, path)),
+                      absl::StrCat(pathPrefix, path), assignment),
                   "    ")));
         } else {
           AD_FAIL();
@@ -584,29 +624,8 @@ std::string ConfigManager::generateConfigurationDocDetailedList(
       },
       true, pathPrefix);
 
-  /*
-  List of local validators. Validators inside sub managers can be found
-  there in the string representation.
-  Also note, that `validators_` is always sorted by their creation order.
-  */
-  AD_CORRECTNESS_CHECK(std::ranges::is_sorted(
-      validators_, {}, [](const ConfigOptionValidatorManager& validator) {
-        return validator.getInitializationId();
-      }));
-  const std::string& listValidators = ad_utility::lazyStrJoin(
-      ad_utility::transform(validators_,
-                            [](const ConfigOptionValidatorManager& validator) {
-                              return absl::StrCat("- ",
-                                                  validator.getDescription());
-                            }),
-      "\n");
-
   return absl::StrCat(ad_utility::lazyStrJoin(stringRepresentations, "\n\n"),
-                      "\n\nRequired invariants:",
-                      listValidators.empty()
-                          ? " None."
-                          : absl::StrCat("\n", ad_utility::addIndentation(
-                                                   listValidators, "    ")));
+                      generateValidatorListString(*this, "\n\n").value_or(""));
 }
 
 // ____________________________________________________________________________
@@ -621,10 +640,78 @@ std::string ConfigManager::printConfigurationDoc(bool detailed) const {
   if (configurationOptions_.empty()) {
     return "No configuration options were defined.";
   }
-  return absl::StrCat(
-      "Configuration:\n", generateConfigurationDocJson("").dump(2),
-      detailed ? absl::StrCat("\n\n", generateConfigurationDocDetailedList(""))
-               : "");
+
+  // We always print the configuration doc json.
+  const std::string& configurationDocJsonString{absl::StrCat(
+      "Configuration:\n", generateConfigurationDocJson("").dump(2))};
+
+  if (!detailed) {
+    return configurationDocJsonString;
+  } else {
+    /*
+    First thing, we need to create a `ConfigurationDocValidatorAssignment`.
+
+    Our current strategy for assigning the the printing the of the
+    `ConfigOptionValidatorManager` is:
+    - Validator, that only check a single configuration option, are printed
+    together with that option.
+    - The remaining validators, are printed together with the configuration
+    manager, that hold them.
+    - Any list of `ConfigOptionValidatorManager` is sorted by their creation
+    order.
+
+    To do that, we first get all the validators sorted by their creation order,
+    collect the ones, who only check one option, and assign those to that
+    option, in that order.
+    Then we collect all `ConfigManager`, including this instance, and assign
+    their held validators to them in the same order, as they saved them, unless
+    a validator was already assigned, in which case we skip it. `ConfigManager`
+    always add a newly created validator to the end of a vector, so they should
+    already be ordered by creation, if we only look at the validators in one
+    `ConfigManager`.
+    */
+    ConfigurationDocValidatorAssignment assignment{};
+
+    // Assign to the configuration options.
+    const auto& allValidators = validators(true);
+    std::ranges::for_each(
+        std::views::filter(allValidators,
+                           [](const ConfigOptionValidatorManager& val) {
+                             return val.configOptionToBeChecked().size() == 1;
+                           }),
+        [&assignment](const ConfigOptionValidatorManager& val) {
+          // The validator manager only has one element, so this should be okay.
+          const ConfigOption& opt = **val.configOptionToBeChecked().begin();
+          assignment.addEntryUnderKey(opt, val);
+        });
+
+    // Assign to the configuration managers.
+    std::vector<std::reference_wrapper<const ConfigManager>> allManager{
+        ad_utility::transform(
+            allHashMapEntries("",
+                              [](const HashMapEntry& entry) {
+                                return entry.holdsSubManager();
+                              }),
+            [](const auto& pair) {
+              return std::reference_wrapper<const ConfigManager>(
+                  *pair.second.getSubManager().value());
+            })};
+    allManager.emplace_back(*this);
+    std::ranges::for_each(
+        allManager, [&assignment](const ConfigManager& manager) {
+          std::ranges::for_each(
+              std::views::filter(manager.validators_,
+                                 [&assignment](const auto& validator) {
+                                   return !assignment.containsValue(validator);
+                                 }),
+              [&assignment, &manager](const auto& validator) {
+                assignment.addEntryUnderKey(manager, validator);
+              });
+        });
+
+    return absl::StrCat(configurationDocJsonString, "\n\n",
+                        generateConfigurationDocDetailedList("", assignment));
+  }
 }
 
 // ____________________________________________________________________________

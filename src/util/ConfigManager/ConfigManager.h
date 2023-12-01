@@ -716,17 +716,21 @@ class ConfigManager {
 
   /*
   @brief Create a detailed list about the configuration options, with their
-  types, values, default values,  etc. shown, followed by a list of the
-  validator invariants and organized by the sub managers, that hold them.
+  types, values, default values,  etc. shown and organized by the sub managers,
+  that hold them. Validator invariant descriptions will be printed according to
+  `ConfigurationDocValidatorAssignment`.
 
   @param pathPrefix Only used for improved error messages. For example: You
   have a sub manager with the path `subManagers/sub1` and call
   `visitHashMapEntries` with it. The sub manager doesn't know its own path, so
   that information will only be included in generated error messages, if you
   pass it along.
+  @param assignment Whenever printing a `ConfigOption`/`ConfigManager`, the
+  validators assigned to them, will be printed with them.
   */
   std::string generateConfigurationDocDetailedList(
-      std::string_view pathPrefix) const;
+      std::string_view pathPrefix,
+      const ConfigurationDocValidatorAssignment& assignment) const;
 };
 
 }  // namespace ad_utility
