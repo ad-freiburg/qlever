@@ -141,8 +141,8 @@ void IndexImpl::createFromFile(const string& filename) {
   // case any of the permutations fail.
   writeConfiguration();
 
-  auto isInternalId = [&](const auto& id) {
-    return indexBuilderData.vocabularyMetaData_.isInternalId(id);
+  auto isQleverInternalId = [&](const auto& id) {
+    return indexBuilderData.vocabularyMetaData_.isQleverInternalId(id);
   };
 
   // auto secondSorter = makeSorter<SecondPermutation>("second");
@@ -154,32 +154,32 @@ void IndexImpl::createFromFile(const string& filename) {
 
   if (!loadAllPermutations_) {
     auto secondSorter =
-        createFirstPermutationPair(NumColumnsIndexBuilding, isInternalId,
+        createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                    std::move(firstSorterWithUnique));
     configurationJson_["has-all-permutations"] = false;
   } else if (loadAllPermutations_ && !usePatterns_) {
     auto secondSorter = makeSorter<SecondPermutation>("second");
-    createFirstPermutationPair(NumColumnsIndexBuilding, isInternalId,
+    createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                std::move(firstSorterWithUnique), secondSorter);
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
-    createSecondPermutationPair(NumColumnsIndexBuilding, isInternalId,
+    createSecondPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                 secondSorter.getSortedBlocks<0>(), thirdSorter);
     secondSorter.clear();
-    createThirdPermutationPair(NumColumnsIndexBuilding, isInternalId,
+    createThirdPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                thirdSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
 
   } else if (loadAllPermutations_) {
     auto secondSorter =
-        createFirstPermutationPair(NumColumnsIndexBuilding, isInternalId,
+        createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                    std::move(firstSorterWithUnique));
     auto thirdSorter =
         makeSorter<ThirdPermutation, NumColumnsIndexBuilding + 1>("third");
-    createSecondPermutationPair(NumColumnsIndexBuilding + 1, isInternalId,
+    createSecondPermutationPair(NumColumnsIndexBuilding + 1, isQleverInternalId,
                                 secondSorter.value()->getSortedBlocks<0>(),
                                 thirdSorter);
     secondSorter.value()->clear();
-    createThirdPermutationPair(NumColumnsIndexBuilding + 1, isInternalId,
+    createThirdPermutationPair(NumColumnsIndexBuilding + 1, isQleverInternalId,
                                thirdSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   }
@@ -1367,22 +1367,23 @@ namespace {
 
 // Return a lambda that is called repeatedly with triples that are sorted by the
 // `idx`-th column and counts the number of distinct entities that occur in a
-// triple where none of the elements fulfills the `isInternalId` predicate.
-// This is used to cound the number of distinct subjects, objects, and
-// predicates during the index building.
+// triple where none of the elements fulfills the `isQleverInternalId`
+// predicate. This is used to cound the number of distinct subjects, objects,
+// and predicates during the index building.
 template <size_t idx>
 auto makeNumDistinctIdsCounter =
     [](size_t& numDistinctIds,
-       ad_utility::InvocableWithExactReturnType<bool, Id> auto isInternalId) {
-      return
-          [lastId = std::optional<Id>{}, &numDistinctIds,
-           isInternalId = std::move(isInternalId)](const auto& triple) mutable {
-            const auto& id = triple[idx];
-            if (id != lastId && !std::ranges::any_of(triple, isInternalId)) {
-              numDistinctIds++;
-              lastId = id;
-            }
-          };
+       ad_utility::InvocableWithExactReturnType<bool, Id> auto
+           isQleverInternalId) {
+      return [lastId = std::optional<Id>{}, &numDistinctIds,
+              isInternalId =
+                  std::move(isQleverInternalId)](const auto& triple) mutable {
+        const auto& id = triple[idx];
+        if (id != lastId && !std::ranges::any_of(triple, isInternalId)) {
+          numDistinctIds++;
+          lastId = id;
+        }
+      };
     };
 }  // namespace
 
