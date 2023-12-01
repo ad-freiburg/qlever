@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <gtest/gtest.h>
+
 #include "./util/AllocatorTestHelpers.h"
 #include "absl/cleanup/cleanup.h"
 #include "engine/QueryExecutionContext.h"
@@ -68,7 +70,7 @@ inline Index makeTestIndex(
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,
     bool usePrefixCompression = true,
-    ad_utility::MemorySize blocksizePermutations = 32_B) {
+    ad_utility::MemorySize blocksizePermutations = 16_B) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
@@ -93,15 +95,27 @@ inline Index makeTestIndex(
     // multiple blocks. Should this value or the semantics of it (how many
     // triples it may store) ever change, then some unit tests might have to be
     // adapted.
-    index.blocksizePermutations() = blocksizePermutations;
+    index.blocksizePermutationsPerColumn() = blocksizePermutations;
     index.setOnDiskBase(indexBasename);
-    index.setUsePatterns(usePatterns);
+    index.usePatterns() = usePatterns;
     index.setPrefixCompression(usePrefixCompression);
+    index.loadAllPermutations() = loadAllPermutations;
     index.createFromFile(inputFilename);
   }
+  if (!usePatterns || !loadAllPermutations) {
+    // If we have no patterns, or only two permutations, then check the graceful
+    // fallback even if the options were not explicitly specified during the
+    // loading of the server.
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.usePatterns() = true;
+    index.loadAllPermutations() = true;
+    EXPECT_NO_THROW(index.createFromOnDiskIndex(indexBasename));
+    EXPECT_EQ(index.loadAllPermutations(), loadAllPermutations);
+    EXPECT_EQ(index.usePatterns(), usePatterns);
+  }
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-  index.setUsePatterns(usePatterns);
-  index.setLoadAllPermutations(loadAllPermutations);
+  index.usePatterns() = usePatterns;
+  index.loadAllPermutations() = loadAllPermutations;
   index.createFromOnDiskIndex(indexBasename);
   ad_utility::setGlobalLoggingStream(&std::cout);
   return index;
@@ -115,7 +129,7 @@ inline QueryExecutionContext* getQec(
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,
     bool usePrefixCompression = true,
-    ad_utility::MemorySize blocksizePermutations = 32_B) {
+    ad_utility::MemorySize blocksizePermutations = 16_B) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.

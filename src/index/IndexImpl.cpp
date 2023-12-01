@@ -578,10 +578,11 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
 
-  CompressedRelationWriter writer1{ad_utility::File(fileName1, "w"),
-                                   blocksizePermutation_};
-  CompressedRelationWriter writer2{ad_utility::File(fileName2, "w"),
-                                   blocksizePermutation_};
+  static constexpr size_t NumColumns = 2;
+  CompressedRelationWriter writer1{NumColumns, ad_utility::File(fileName1, "w"),
+                                   blocksizePermutationPerColumn_};
+  CompressedRelationWriter writer2{NumColumns, ad_utility::File(fileName2, "w"),
+                                   blocksizePermutationPerColumn_};
 
   // Lift a callback that works on single elements to a callback that works on
   // blocks.
@@ -692,10 +693,20 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   }
 
   if (usePatterns_) {
-    PatternCreator::readPatternsFromFile(
-        onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
-        avgNumDistinctPredicatesPerSubject_, numDistinctSubjectPredicatePairs_,
-        patterns_, hasPattern_);
+    try {
+      PatternCreator::readPatternsFromFile(
+          onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
+          avgNumDistinctPredicatesPerSubject_,
+          numDistinctSubjectPredicatePairs_, patterns_, hasPattern_);
+    } catch (const std::exception& e) {
+      LOG(WARN) << "Could not load the patterns. The internal predicate "
+                   "`ql:has-predicate` is therefore not available (and certain "
+                   "queries that benefit from that predicate will be slower)."
+                   "To suppress this warning, start the server with "
+                   "the `--no-patterns` option. The error message was "
+                << e.what() << std::endl;
+      usePatterns_ = false;
+    }
   }
 }
 
@@ -787,12 +798,10 @@ void IndexImpl::setKeepTempFiles(bool keepTempFiles) {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::setUsePatterns(bool usePatterns) { usePatterns_ = usePatterns; }
+bool& IndexImpl::usePatterns() { return usePatterns_; }
 
 // _____________________________________________________________________________
-void IndexImpl::setLoadAllPermutations(bool loadAllPermutations) {
-  loadAllPermutations_ = loadAllPermutations;
-}
+bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
 
 // ____________________________________________________________________________
 void IndexImpl::setSettingsFile(const std::string& filename) {
@@ -908,28 +917,32 @@ void IndexImpl::readConfiguration() {
         configurationJson_["languages-internal"]);
   }
 
-  if (configurationJson_.find("has-all-permutations") !=
-          configurationJson_.end() &&
-      configurationJson_["has-all-permutations"] == false) {
-    // If the permutations simply don't exist, then we can never load them.
-    loadAllPermutations_ = false;
-  }
-
-  auto loadRequestedDataMember = [this](std::string_view key, auto& target) {
+  auto loadDataMember = [this]<typename Target>(
+                            std::string_view key, Target& target,
+                            std::optional<std::type_identity_t<Target>>
+                                defaultValue = std::nullopt) {
     auto it = configurationJson_.find(key);
     if (it == configurationJson_.end()) {
-      throw std::runtime_error{absl::StrCat(
-          "The required key \"", key,
-          "\" was not found in the `meta-data.json`. Most likely this index "
-          "was built with an older version of QLever and should be rebuilt")};
+      if (defaultValue.has_value()) {
+        target = std::move(defaultValue.value());
+      } else {
+        throw std::runtime_error{absl::StrCat(
+            "The required key \"", key,
+            "\" was not found in the `meta-data.json`. Most likely this index "
+            "was built with an older version of QLever and should be rebuilt")};
+      }
+    } else {
+      target = Target{*it};
     }
-    target = std::decay_t<decltype(target)>{*it};
   };
 
-  loadRequestedDataMember("num-predicates-normal", numPredicatesNormal_);
-  loadRequestedDataMember("num-subjects-normal", numSubjectsNormal_);
-  loadRequestedDataMember("num-objects-normal", numObjectsNormal_);
-  loadRequestedDataMember("num-triples-normal", numTriplesNormal_);
+  loadDataMember("has-all-permutations", loadAllPermutations_, true);
+
+  loadDataMember("num-predicates-normal", numPredicatesNormal_);
+  // These might be missing if there are only two permutations.
+  loadDataMember("num-subjects-normal", numSubjectsNormal_, 0);
+  loadDataMember("num-objects-normal", numObjectsNormal_, 0);
+  loadDataMember("num-triples-normal", numTriplesNormal_);
 }
 
 // ___________________________________________________________________________
@@ -1364,6 +1377,7 @@ IdTable IndexImpl::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
     const Permutation::Enum& permutation,
+    Permutation::ColumnIndicesRef additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
   std::optional<Id> col1Id =
@@ -1373,14 +1387,16 @@ IdTable IndexImpl::scan(
     size_t numColumns = col1String.has_value() ? 1 : 2;
     return IdTable{numColumns, allocator_};
   }
-  return scan(col0Id.value(), col1Id, permutation,
+  return scan(col0Id.value(), col1Id, permutation, additionalColumns,
               std::move(cancellationHandle));
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+    Permutation::ColumnIndicesRef additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
-  return getPermutation(p).scan(col0Id, col1Id, std::move(cancellationHandle));
+  return getPermutation(p).scan(col0Id, col1Id, additionalColumns,
+                                std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________

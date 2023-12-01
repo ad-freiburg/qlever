@@ -118,12 +118,6 @@ class File {
 
   // read from current file pointer position
   // returns the number of bytes read
-  size_t readFromBeginning(void* targetBuffer, size_t nofBytesToRead) {
-    return read(targetBuffer, nofBytesToRead, (off_t)0);
-  }
-
-  // read from current file pointer position
-  // returns the number of bytes read
   size_t read(void* targetBuffer, size_t nofBytesToRead) {
     assert(_file);
     return fread(targetBuffer, (size_t)1, nofBytesToRead, _file);
@@ -199,7 +193,7 @@ class File {
   //! Read nofBytesToRead bytes from file starting at the given offset.
   //! Returns the number of bytes read or the error returned by pread()
   //! which is < 0
-  ssize_t read(void* targetBuffer, size_t nofBytesToRead, off_t offset) {
+  ssize_t read(void* targetBuffer, size_t nofBytesToRead, off_t offset) const {
     assert(_file);
     const int fd = fileno(_file);
     size_t bytesRead = 0;

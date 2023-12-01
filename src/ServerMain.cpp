@@ -3,20 +3,20 @@
 //   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <CompilationInfo.h>
-#include <engine/Server.h>
-#include <global/Constants.h>
-#include <util/ProgramOptionsHelpers.h>
-#include <util/ReadableNumberFact.h>
-
 #include <boost/program_options.hpp>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
 
+#include "CompilationInfo.h"
+#include "engine/Server.h"
+#include "global/Constants.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/MemorySize/MemorySizeParser.h"
+#include "util/ParseableDuration.h"
+#include "util/ProgramOptionsHelpers.h"
+#include "util/ReadableNumberFact.h"
 
 using std::size_t;
 using std::string;
@@ -104,6 +104,10 @@ int main(int argc, char** argv) {
       po::bool_switch(&onlyPsoAndPosPermutations),
       "Only load the PSO and POS permutations. This disables queries with "
       "predicate variables.");
+  add("default-query-timeout,s",
+      optionFactory.getProgramOption<"default-query-timeout">(),
+      "Set the default timeout in seconds after which queries are cancelled"
+      "automatically.");
   po::variables_map optionsMap;
 
   try {

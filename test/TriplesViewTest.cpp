@@ -28,7 +28,7 @@ struct DummyPermutation {
   cppcoro::generator<IdTable> lazyScan(
       Id col0Id, std::optional<Id> col1Id,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
-      const auto&) const {
+      std::span<const ColumnIndex>, const auto&) const {
     AD_CORRECTNESS_CHECK(!blocks.has_value());
     auto table = scan(col0Id, col1Id);
     co_yield table;
