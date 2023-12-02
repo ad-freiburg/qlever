@@ -53,14 +53,11 @@ void CancellationHandle<WatchDogEnabled>::startWatchDog() {
 template <bool WatchDogEnabled>
 void CancellationHandle<WatchDogEnabled>::setStatePreservingCancel(
     CancellationState newState) {
-  if constexpr (WatchDogEnabled) {
-    CancellationState state =
-        cancellationState_.load(std::memory_order_relaxed);
-    while (!detail::isCancelled(state)) {
-      if (cancellationState_.compare_exchange_weak(state, newState,
-                                                   std::memory_order_relaxed)) {
-        break;
-      }
+  CancellationState state = cancellationState_.load(std::memory_order_relaxed);
+  while (!detail::isCancelled(state)) {
+    if (cancellationState_.compare_exchange_weak(state, newState,
+                                                 std::memory_order_relaxed)) {
+      break;
     }
   }
 }
@@ -95,5 +92,6 @@ CancellationHandle<WatchDogEnabled>::computeCheckMissDuration() const
 }
 
 // Make sure to compile correctly.
-template class CancellationHandle<areExpensiveChecksEnabled>;
+template class CancellationHandle<true>;
+template class CancellationHandle<false>;
 }  // namespace ad_utility

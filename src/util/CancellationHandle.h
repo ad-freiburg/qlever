@@ -6,6 +6,7 @@
 #define QLEVER_CANCELLATIONHANDLE_H
 
 #include <absl/strings/str_cat.h>
+#include <gtest/gtest_prod.h>
 
 #include <atomic>
 #include <type_traits>
@@ -69,17 +70,15 @@ static_assert(std::atomic<CancellationState>::is_always_lock_free);
 /// checks for cancellation across threads.
 template <bool WatchDogEnabled = areExpensiveChecksEnabled>
 class CancellationHandle {
-  static_assert(WatchDogEnabled == areExpensiveChecksEnabled);
-
   std::atomic<CancellationState> cancellationState_ =
       CancellationState::NOT_CANCELLED;
 
   template <typename T>
   using WatchDogOnly = std::conditional_t<WatchDogEnabled, T, detail::Empty>;
-  [[no_unique_address]] WatchDogOnly<std::atomic_bool> watchDogRunning_ = false;
+  [[no_unique_address]] WatchDogOnly<std::atomic_bool> watchDogRunning_{false};
   [[no_unique_address]] WatchDogOnly<ad_utility::JThread> watchDogThread_;
   [[no_unique_address]] WatchDogOnly<std::chrono::steady_clock::rep>
-      startTimeoutWindow_ = 0;
+      startTimeoutWindow_{0};
 
   template <typename... ArgTypes>
   void pleaseWatchDog(CancellationState state,
@@ -155,6 +154,16 @@ class CancellationHandle {
   void resetWatchDogState();
 
   ~CancellationHandle();
+
+  FRIEND_TEST(CancellationHandle, verifyWatchDogDoesChangeState);
+  FRIEND_TEST(CancellationHandle,
+              verifyResetWatchDogStateDoesProperlyResetState);
+  FRIEND_TEST(CancellationHandle,
+              verifyResetWatchDogStateIsNoOpWithoutWatchDog);
+  FRIEND_TEST(CancellationHandle, verifyCheckDoesPleaseWatchDog);
+  FRIEND_TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState);
+  FRIEND_TEST(CancellationHandle,
+              verifyCheckAfterDeadlineMissDoesReportProperly);
 };
 
 using SharedCancellationHandle = std::shared_ptr<CancellationHandle<>>;
