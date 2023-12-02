@@ -6,23 +6,15 @@
 #include <array>
 #include <tuple>
 
-#include "../global/Id.h"
-
-using std::array;
-using std::tuple;
+#include "global/Id.h"
 
 template <int i0, int i1, int i2>
 struct SortTriple {
   using T = std::array<Id, 3>;
   // comparison function
   bool operator()(const auto& a, const auto& b) const {
-    if (a[i0] == b[i0]) {
-      if (a[i1] == b[i1]) {
-        return a[i2] < b[i2];
-      }
-      return a[i1] < b[i1];
-    }
-    return a[i0] < b[i0];
+    auto permute = [](const auto& x) { return std::tie(x[i0], x[i1], x[i2]); };
+    return permute(a) < permute(b);
   }
 
   // Value that is strictly smaller than any input element.
@@ -33,11 +25,8 @@ struct SortTriple {
 };
 
 using SortByPSO = SortTriple<1, 0, 2>;
-using SortByPOS = SortTriple<1, 2, 0>;
 using SortBySPO = SortTriple<0, 1, 2>;
-using SortBySOP = SortTriple<0, 2, 1>;
 using SortByOSP = SortTriple<2, 0, 1>;
-using SortByOPS = SortTriple<2, 1, 0>;
 
 // TODO<joka921> Which of those are actually "IDs" and which are something else?
 struct SortText {
@@ -45,23 +34,11 @@ struct SortText {
                        Score, bool>;
   // comparison function
   bool operator()(const T& a, const T& b) const {
-    if (std::get<0>(a) == std::get<0>(b)) {
-      if (std::get<4>(a) == std::get<4>(b)) {
-        if (std::get<1>(a) == std::get<1>(b)) {
-          if (std::get<2>(a) == std::get<2>(b)) {
-            return std::get<3>(a) < std::get<3>(b);
-          } else {
-            return std::get<2>(a) < std::get<2>(b);
-          }
-        } else {
-          return std::get<1>(a) < std::get<1>(b);
-        }
-      } else {
-        return !std::get<4>(a);
-      }
-    } else {
-      return std::get<0>(a) < std::get<0>(b);
-    }
+    auto permute = [](const T& x) {
+      using namespace std;
+      return tie(get<0>(x), get<4>(x), get<1>(x), get<2>(x), get<3>(x));
+    };
+    return permute(a) < permute(b);
   }
 
   // min sentinel = value which is strictly smaller that any input element
