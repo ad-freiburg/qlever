@@ -82,7 +82,8 @@ cppcoro::generator<ValueType> uniqueView(SortedView view) {
 // Takes a view of blocks and yields the elements of the same view, but removes
 // consecutive duplicates inside the blocks and across block boundaries.
 template <typename SortedBlockView,
-          typename ValueType = SortedBlockView::value_type::value_type>
+          typename ValueType = std::ranges::range_value_t<
+              std::ranges::range_value_t<SortedBlockView>>>
 cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
     SortedBlockView view) {
   size_t numInputs = 0;
