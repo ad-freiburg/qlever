@@ -149,18 +149,15 @@ TEST(CancellationHandle, verifyResetWatchDogStateDoesProperlyResetState) {
 
   handle.cancellationState_ = CancellationState::NOT_CANCELLED;
   handle.resetWatchDogState();
-  // Technically NOT_CANCELLED would be valid behaviour too, but it would
-  // make the code slightly longer, so we just always set it to this state
-  // if it's not cancelled.
-  EXPECT_EQ(handle.cancellationState_, CancellationState::WAITING_FOR_CHECK);
+  EXPECT_EQ(handle.cancellationState_, CancellationState::NOT_CANCELLED);
 
   handle.cancellationState_ = CancellationState::WAITING_FOR_CHECK;
   handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CancellationState::WAITING_FOR_CHECK);
+  EXPECT_EQ(handle.cancellationState_, CancellationState::NOT_CANCELLED);
 
   handle.cancellationState_ = CancellationState::CHECK_WINDOW_MISSED;
   handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CancellationState::WAITING_FOR_CHECK);
+  EXPECT_EQ(handle.cancellationState_, CancellationState::NOT_CANCELLED);
 
   handle.cancellationState_ = CancellationState::MANUAL;
   handle.resetWatchDogState();

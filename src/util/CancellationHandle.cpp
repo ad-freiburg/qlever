@@ -66,7 +66,7 @@ void CancellationHandle<WatchDogEnabled>::setStatePreservingCancel(
 template <bool WatchDogEnabled>
 void CancellationHandle<WatchDogEnabled>::resetWatchDogState() {
   if constexpr (WatchDogEnabled) {
-    setStatePreservingCancel(CancellationState::WAITING_FOR_CHECK);
+    setStatePreservingCancel(CancellationState::NOT_CANCELLED);
   }
 }
 
