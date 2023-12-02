@@ -135,7 +135,8 @@ TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
   EXPECT_EQ(handle.cancellationState_, CancellationState::NOT_CANCELLED);
   handle.startWatchDog();
 
-  std::this_thread::sleep_for(detail::DESIRED_CHECK_INTERVAL);
+  // Give thread some time to start
+  std::this_thread::sleep_for(10ms);
   EXPECT_EQ(handle.cancellationState_, CancellationState::WAITING_FOR_CHECK);
 
   std::this_thread::sleep_for(detail::DESIRED_CHECK_INTERVAL);
