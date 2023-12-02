@@ -363,6 +363,7 @@ class CompressedExternalIdTableBase {
       compressAndWriteFuture_.get();
     }
     writer_.clear();
+    numBlocksPushed_ = 0;
   }
 
  protected:
@@ -534,7 +535,7 @@ class CompressedExternalIdTableSorter
 
  public:
   // Constructor.
-  explicit CompressedExternalIdTableSorter(
+  CompressedExternalIdTableSorter(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
@@ -549,7 +550,7 @@ class CompressedExternalIdTableSorter
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
-  explicit CompressedExternalIdTableSorter(
+  CompressedExternalIdTableSorter(
       std::string filename, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
@@ -559,22 +560,30 @@ class CompressedExternalIdTableSorter
                                         blocksizeCompression, comp) {}
 
   // Transition from the input phase, where `push()` can be called, to the
-  // output phase and return a generator that yields the sorted elements. This
-  // function must be called exactly once.
-  cppcoro::generator<
-      const typename IdTableStatic<NumStaticCols>::const_row_reference>
-  sortedView() {
-    size_t numYielded = 0;
+  // output phase and return a generator that yields the sorted elements one by
+  // one. Either this function or the following function must be called exactly
+  // once.
+  auto sortedView() {
+    return std::views::join(ad_utility::OwningView{getSortedBlocks()});
+  }
+
+  // Similar to `sortedView` (see above), but the elements are yielded in
+  // blocks. The size of the blocks is `blocksize` if specified, otherwise it
+  // will be automatically determined from the given memory limit.
+  template <size_t N = NumStaticCols>
+  requires(N == NumStaticCols || N == 0)
+  cppcoro::generator<IdTableStatic<N>> getSortedBlocks(
+      std::optional<size_t> blocksize = std::nullopt) {
     mergeIsActive_.store(true);
-    for (const auto& block : ad_utility::streams::runStreamAsync(
-             sortedBlocks(), std::max(1, numBufferedOutputBlocks_ - 2))) {
-      for (typename IdTableStatic<NumStaticCols>::const_row_reference row :
-           block) {
-        ++numYielded;
-        co_yield row;
-      }
+    // Explanation for the second argument: One block is buffered by this
+    // generator, one block is buffered inside the `sortedBlocks` generator, so
+    // `numBufferedOutputBlocks_ - 2` blocks may be buffered by the async
+    // stream.
+    for (auto& block : ad_utility::streams::runStreamAsync(
+             sortedBlocks<N>(blocksize),
+             std::max(1, numBufferedOutputBlocks_ - 2))) {
+      co_yield block;
     }
-    AD_CORRECTNESS_CHECK(numYielded == this->numElementsPushed_);
     mergeIsActive_.store(false);
   }
 
@@ -582,17 +591,35 @@ class CompressedExternalIdTableSorter
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return a generator that yields the sorted elements. This
   // function may be called exactly once.
-  cppcoro::generator<IdTableStatic<NumStaticCols>> sortedBlocks() {
+  template <size_t N = NumStaticCols>
+  requires(N == NumStaticCols || N == 0)
+  cppcoro::generator<IdTableStatic<N>> sortedBlocks(
+      std::optional<size_t> blocksize = std::nullopt) {
     if (!this->transformAndPushLastBlock()) {
-      // There was only one block, return it.
-      co_yield this->currentBlock_;
+      // There was only one block, return it. If a blocksize was explicitly
+      // requested for the output, and the single block is larger than this
+      // blocksize, we manually have to split it into chunks.
+      auto& block = this->currentBlock_;
+      const auto blocksizeOutput = blocksize.value_or(block.numRows());
+      if (block.numRows() <= blocksizeOutput) {
+        co_yield std::move(this->currentBlock_).template toStatic<N>();
+      } else {
+        for (size_t i = 0; i < block.numRows(); i += blocksizeOutput) {
+          size_t upper = std::min(i + blocksizeOutput, block.numRows());
+          auto curBlock = IdTableStatic<NumStaticCols>(
+              this->numColumns_, this->writer_.allocator());
+          curBlock.reserve(upper - i);
+          curBlock.insertAtEnd(block.begin() + i, block.begin() + upper);
+          co_yield std::move(curBlock).template toStatic<N>();
+        }
+      }
       co_return;
     }
     auto rowGenerators =
         this->writer_.template getAllRowGenerators<NumStaticCols>();
 
     const size_t blockSizeOutput =
-        computeBlockSizeForMergePhase(rowGenerators.size());
+        blocksize.value_or(computeBlockSizeForMergePhase(rowGenerators.size()));
 
     using P = std::pair<decltype(rowGenerators[0].begin()),
                         decltype(rowGenerators[0].end())>;
@@ -626,7 +653,7 @@ class CompressedExternalIdTableSorter
       }
       if (result.size() >= blockSizeOutput) {
         numPopped += result.numRows();
-        co_yield result;
+        co_yield std::move(result).template toStatic<N>();
         // The `result` will be moved away, so we have to reset it again.
         result = IdTableStatic<NumStaticCols>(this->writer_.numColumns(),
                                               this->writer_.allocator());
@@ -634,7 +661,7 @@ class CompressedExternalIdTableSorter
       }
     }
     numPopped += result.numRows();
-    co_yield result;
+    co_yield std::move(result).template toStatic<N>();
     AD_CORRECTNESS_CHECK(numPopped == this->numElementsPushed_);
   }
 

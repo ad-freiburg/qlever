@@ -4,24 +4,28 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/Parameters.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Parameters.h"
+
 using namespace ad_utility;
 using namespace memory_literals;
-
 using namespace detail::parameterShortNames;
-using namespace memory_literals;
+using namespace std::chrono_literals;
 
 TEST(Parameters, First) {
   using FloatParameter = Float<"Float">;
   using IntParameter = SizeT<"SizeT">;
   using DoubleParameter = Double<"Double">;
+  using BoolParameter = Bool<"Bool">;
+  using BoolParameter2 = Bool<"Bool2">;  // to test both results of toString
 
   Parameters pack2(FloatParameter{2.0f}, IntParameter{3ull},
-                   DoubleParameter{42.1});
+                   DoubleParameter{42.1}, BoolParameter{true},
+                   BoolParameter2{true});
   ASSERT_EQ(3ul, pack2.get<"SizeT">());
   ASSERT_FLOAT_EQ(2.0, pack2.get<"Float">());
   ASSERT_DOUBLE_EQ(42.1, pack2.get<"Double">());
+  ASSERT_TRUE(pack2.get<"Bool">());
 
   pack2.set("Float", "42.0");
   ASSERT_EQ(3ul, pack2.get<"SizeT">());
@@ -33,15 +37,20 @@ TEST(Parameters, First) {
   pack2.set("SizeT", "134");
   ASSERT_EQ(pack2.get<"SizeT">(), 134);
 
+  pack2.set("Bool", "false");
+  ASSERT_FALSE(pack2.get<"Bool">());
+
   ASSERT_THROW(pack2.set("NoKey", "24.1"), std::runtime_error);
   // TODO<joka921>: Make this unit test work.
   // ASSERT_THROW(pack2.set("Float", "24.nofloat1"), std::runtime_error);
 
   auto map = pack2.toMap();
-  ASSERT_EQ(3ul, map.size());
+  ASSERT_EQ(5ul, map.size());
   ASSERT_EQ("134", map.at("SizeT"));
   ASSERT_EQ("42.000000", map.at("Float"));
   ASSERT_EQ("16.200000", map.at("Double"));
+  ASSERT_EQ("false", map.at("Bool"));
+  ASSERT_EQ("true", map.at("Bool2"));
 }
 
 // Basic test, if the parameter for `MemorySize` works.
@@ -77,8 +86,49 @@ TEST(Parameters, ParameterConcept) {
   static_assert(IsParameter<SizeT<"SizeT">>);
   static_assert(IsParameter<String<"String">>);
   static_assert(IsParameter<MemorySizeParameter<"MemorySizeParameter">>);
+  static_assert(IsParameter<Bool<"Bool">>);
+  static_assert(
+      IsParameter<DurationParameter<std::chrono::seconds, "Seconds">>);
 
   // Test some other random types.
   static_assert(!IsParameter<std::string>);
   static_assert(!IsParameter<ParameterName>);
+}
+
+// _____________________________________________________________________________
+TEST(Parameter, verifyParameterConstraint) {
+  Parameter<size_t, szt, toString, "test"> parameter{42};
+
+  EXPECT_NO_THROW(parameter.set(1337));
+
+  // Check constraint is tested for existing value
+  EXPECT_THROW(parameter.setParameterConstraint(
+                   [](const auto& value, std::string_view name) {
+                     EXPECT_EQ(value, 1337);
+                     EXPECT_EQ(name, "test");
+                     throw std::runtime_error{"Test"};
+                   }),
+               std::runtime_error);
+
+  // Assert constraint was not set
+  EXPECT_NO_THROW(parameter.set(0));
+  EXPECT_EQ(parameter.get(), 0);
+
+  parameter.setParameterConstraint([](const auto& value, std::string_view) {
+    if (value != 0) {
+      throw std::runtime_error{"Test"};
+    }
+  });
+
+  EXPECT_THROW(parameter.set(1), std::runtime_error);
+  EXPECT_EQ(parameter.get(), 0);
+}
+
+// _____________________________________________________________________________
+TEST(Parameter, verifyDurationParameterSerializationWorks) {
+  DurationParameter<std::chrono::seconds, "Seconds"> durationParameter{0s};
+  EXPECT_EQ(durationParameter.toString(), "0s");
+
+  durationParameter.setFromString("10s");
+  EXPECT_EQ(durationParameter.get(), 10s);
 }

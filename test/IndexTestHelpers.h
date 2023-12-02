@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <gtest/gtest.h>
+
 #include "./util/AllocatorTestHelpers.h"
 #include "absl/cleanup/cleanup.h"
 #include "engine/QueryExecutionContext.h"
@@ -68,7 +70,7 @@ inline Index makeTestIndex(
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,
     bool usePrefixCompression = true,
-    size_t blocksizePermutationsInBytes = 32) {
+    ad_utility::MemorySize blocksizePermutations = 16_B) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
@@ -93,15 +95,27 @@ inline Index makeTestIndex(
     // multiple blocks. Should this value or the semantics of it (how many
     // triples it may store) ever change, then some unit tests might have to be
     // adapted.
-    index.blocksizePermutationsInBytes() = blocksizePermutationsInBytes;
+    index.blocksizePermutationsPerColumn() = blocksizePermutations;
     index.setOnDiskBase(indexBasename);
-    index.setUsePatterns(usePatterns);
+    index.usePatterns() = usePatterns;
     index.setPrefixCompression(usePrefixCompression);
+    index.loadAllPermutations() = loadAllPermutations;
     index.createFromFile(inputFilename);
   }
+  if (!usePatterns || !loadAllPermutations) {
+    // If we have no patterns, or only two permutations, then check the graceful
+    // fallback even if the options were not explicitly specified during the
+    // loading of the server.
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.usePatterns() = true;
+    index.loadAllPermutations() = true;
+    EXPECT_NO_THROW(index.createFromOnDiskIndex(indexBasename));
+    EXPECT_EQ(index.loadAllPermutations(), loadAllPermutations);
+    EXPECT_EQ(index.usePatterns(), usePatterns);
+  }
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-  index.setUsePatterns(usePatterns);
-  index.setLoadAllPermutations(loadAllPermutations);
+  index.usePatterns() = usePatterns;
+  index.loadAllPermutations() = loadAllPermutations;
   index.createFromOnDiskIndex(indexBasename);
   ad_utility::setGlobalLoggingStream(&std::cout);
   return index;
@@ -115,7 +129,7 @@ inline QueryExecutionContext* getQec(
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,
     bool usePrefixCompression = true,
-    size_t blocksizePermutationsInBytes = 32) {
+    ad_utility::MemorySize blocksizePermutations = 16_B) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -150,30 +164,31 @@ inline QueryExecutionContext* getQec(
             *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{});
   };
 
-  using Key = std::tuple<std::optional<string>, bool, bool, bool, size_t>;
+  using Key = std::tuple<std::optional<string>, bool, bool, bool,
+                         ad_utility::MemorySize>;
   static ad_utility::HashMap<Key, Context> contextMap;
 
   auto key = Key{turtleInput, loadAllPermutations, usePatterns,
-                 usePrefixCompression, blocksizePermutationsInBytes};
+                 usePrefixCompression, blocksizePermutations};
 
   if (!contextMap.contains(key)) {
     std::string testIndexBasename =
         "_staticGlobalTestIndex" + std::to_string(contextMap.size());
     contextMap.emplace(
-        key, Context{TypeErasedCleanup{[testIndexBasename]() {
-                       for (const std::string& indexFilename :
-                            getAllIndexFilenames(testIndexBasename)) {
-                         // Don't log when a file can't be deleted,
-                         // because the logging might already be
-                         // destroyed.
-                         ad_utility::deleteFile(indexFilename, false);
-                       }
-                     }},
-                     std::make_unique<Index>(makeTestIndex(
-                         testIndexBasename, turtleInput, loadAllPermutations,
-                         usePatterns, usePrefixCompression,
-                         blocksizePermutationsInBytes)),
-                     std::make_unique<QueryResultCache>()});
+        key,
+        Context{TypeErasedCleanup{[testIndexBasename]() {
+                  for (const std::string& indexFilename :
+                       getAllIndexFilenames(testIndexBasename)) {
+                    // Don't log when a file can't be deleted,
+                    // because the logging might already be
+                    // destroyed.
+                    ad_utility::deleteFile(indexFilename, false);
+                  }
+                }},
+                std::make_unique<Index>(makeTestIndex(
+                    testIndexBasename, turtleInput, loadAllPermutations,
+                    usePatterns, usePrefixCompression, blocksizePermutations)),
+                std::make_unique<QueryResultCache>()});
   }
   return contextMap.at(key).qec_.get();
 }

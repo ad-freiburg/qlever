@@ -1689,6 +1689,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "coalesce") {
     AD_CORRECTNESS_CHECK(ctx->expressionList());
     return makeCoalesceExpression(visit(ctx->expressionList()));
+  } else if (functionName == "encode_for_uri") {
+    return createUnary(&makeEncodeForUriExpression);
   } else if (functionName == "concat") {
     AD_CORRECTNESS_CHECK(ctx->expressionList());
     return makeConcatExpression(visit(ctx->expressionList()));

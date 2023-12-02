@@ -30,6 +30,7 @@
 #include "util/HashMap.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/TupleHelpers.h"
+#include "util/TypeTraits.h"
 #include "util/json.h"
 
 using std::array;
@@ -46,7 +47,7 @@ IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
     : allocator_{std::move(allocator)} {};
 
 // _____________________________________________________________________________
-IndexBuilderDataAsPsoSorter IndexImpl::createIdTriplesAndVocab(
+IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
     std::shared_ptr<TurtleParserBase> parser) {
   auto indexBuilderData =
       passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
@@ -66,63 +67,21 @@ IndexBuilderDataAsPsoSorter IndexImpl::createIdTriplesAndVocab(
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
   vocab_.clear();
-  auto psoSorter = convertPartialToGlobalIds(
+  auto firstSorter = convertPartialToGlobalIds(
       *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
       NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
-  return {indexBuilderData, std::move(psoSorter)};
-}
-
-// Compute patterns and write them to `filename`. Triples where the predicate is
-// in [langPredLowerBound, langPredUpperBound). `spoTriplesView` must be
-// input-spoTriplesView and yield SPO-sorted triples of IDs.
-void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
-                                      const std::string& filename,
-                                      auto&& isInternalId) {
-  PatternCreator patternCreator{filename};
-  for (const auto& triple : spoTriplesView) {
-    if (!std::ranges::any_of(triple, isInternalId)) {
-      patternCreator.processTriple(static_cast<std::array<Id, 3>>(triple));
-    }
-  }
-  patternCreator.finish();
+  return {indexBuilderData, std::move(firstSorter)};
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromFile(const string& filename) {
-  LOG(INFO) << "Processing input triples from " << filename << " ..."
-            << std::endl;
-  string indexFilename = onDiskBase_ + ".index";
-
-  readIndexBuilderSettingsFromFile();
-
-  auto setTokenizer = [this,
-                       &filename]<template <typename> typename ParserTemplate>()
-      -> std::unique_ptr<TurtleParserBase> {
-    if (onlyAsciiTurtlePrefixes_) {
-      return std::make_unique<ParserTemplate<TokenizerCtre>>(filename);
-    } else {
-      return std::make_unique<ParserTemplate<Tokenizer>>(filename);
-    }
-  };
-
-  std::unique_ptr<TurtleParserBase> parser = [&setTokenizer, this]() {
-    if (useParallelParser_) {
-      return setTokenizer.template operator()<TurtleParallelParser>();
-    } else {
-      return setTokenizer.template operator()<TurtleStreamParser>();
-    }
-  }();
-
-  IndexBuilderDataAsPsoSorter indexBuilderData =
-      createIdTriplesAndVocab(std::move(parser));
-
+void IndexImpl::compressInternalVocabularyIfSpecified(
+    const std::vector<std::string>& prefixes) {
   // If we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
   // hurt.
   string vocabFile = onDiskBase_ + INTERNAL_VOCAB_SUFFIX;
   string vocabFileTmp = onDiskBase_ + ".vocabularyTmp";
-  const std::vector<string>& prefixes = indexBuilderData.prefixes_;
   if (vocabPrefixCompressed_) {
     auto prefixFile = ad_utility::makeOfstream(onDiskBase_ + PREFIX_FILE);
     for (const auto& prefix : prefixes) {
@@ -139,111 +98,77 @@ void IndexImpl::createFromFile(const string& filename) {
     wordWriter.push(word);
   }
   wordWriter.finish();
-
   LOG(DEBUG) << "Finished writing compressed vocabulary" << std::endl;
 
-  // TODO<joka921> maybe move this to its own function.
   if (std::rename(vocabFileTmp.c_str(), vocabFile.c_str())) {
     LOG(INFO) << "Error: Rename the prefixed vocab file " << vocabFileTmp
               << " to " << vocabFile << " set errno to " << errno
               << ". Terminating..." << std::endl;
     AD_FAIL();
   }
+}
+
+std::unique_ptr<TurtleParserBase> IndexImpl::makeTurtleParser(
+    const std::string& filename) {
+  auto setTokenizer = [this,
+                       &filename]<template <typename> typename ParserTemplate>()
+      -> std::unique_ptr<TurtleParserBase> {
+    if (onlyAsciiTurtlePrefixes_) {
+      return std::make_unique<ParserTemplate<TokenizerCtre>>(filename);
+    } else {
+      return std::make_unique<ParserTemplate<Tokenizer>>(filename);
+    }
+  };
+
+  if (useParallelParser_) {
+    return setTokenizer.template operator()<TurtleParallelParser>();
+  } else {
+    return setTokenizer.template operator()<TurtleStreamParser>();
+  }
+}
+// _____________________________________________________________________________
+void IndexImpl::createFromFile(const string& filename) {
+  if (!loadAllPermutations_ && usePatterns_) {
+    throw std::runtime_error{
+        "The patterns can only be built when all 6 permutations are created"};
+  }
+  LOG(INFO) << "Processing input triples from " << filename << " ..."
+            << std::endl;
+
+  readIndexBuilderSettingsFromFile();
+
+  IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
+      createIdTriplesAndVocab(makeTurtleParser(filename));
+
+  compressInternalVocabularyIfSpecified(indexBuilderData.prefixes_);
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
   writeConfiguration();
 
-  auto isInternalId = [&](const auto& id) {
-    const auto& v = indexBuilderData.vocabularyMetaData_;
-    auto isInRange = [&](const auto& range) {
-      return range.begin() <= id && id < range.end();
-    };
-    return isInRange(v.internalEntities_) || isInRange(v.langTaggedPredicates_);
+  auto isQleverInternalId = [&](const auto& id) {
+    return indexBuilderData.vocabularyMetaData_.isQleverInternalId(id);
   };
 
-  auto makeNumEntitiesCounter = [&isInternalId](size_t& numEntities,
-                                                size_t idx) {
-    // TODO<joka921> Make the `index` a template parameter.
-    return [lastEntity = std::optional<Id>{}, &numEntities, &isInternalId,
-            idx](const auto& triple) mutable {
-      const auto& id = triple[idx];
-      if (id != lastEntity && !std::ranges::any_of(triple, isInternalId)) {
-        numEntities++;
-      }
-      lastEntity = id;
-    };
-  };
+  auto secondSorter = makeSorter<SecondPermutation>("second");
+  auto& firstSorter = *indexBuilderData.sorter_;
 
-  size_t numTriplesNormal = 0;
-  auto countActualTriples = [&numTriplesNormal,
-                             &isInternalId](const auto& triple) mutable {
-    numTriplesNormal += !std::ranges::any_of(triple, isInternalId);
-  };
-
-  ExternalSorter<SortBySPO> spoSorter{
-      onDiskBase_ + ".spo-sorter.dat",
-      memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
-      allocator_};
-  auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
-  auto uniqueSorter = ad_utility::uniqueView<decltype(psoSorter.sortedView()),
-                                             IdTableStatic<3>::row_type>(
-      psoSorter.sortedView());
+  auto firstSorterWithUnique =
+      ad_utility::uniqueBlockView(firstSorter.getSortedBlocks<0>());
 
-  size_t numPredicatesNormal = 0;
-  createPermutationPair(
-      std::move(uniqueSorter), pso_, pos_, spoSorter.makePushCallback(),
-      makeNumEntitiesCounter(numPredicatesNormal, 1), countActualTriples);
-  configurationJson_["num-predicates-normal"] = numPredicatesNormal;
-  configurationJson_["num-triples-normal"] = numTriplesNormal;
-  writeConfiguration();
-  psoSorter.clear();
-
+  createFirstPermutationPair(isQleverInternalId,
+                             std::move(firstSorterWithUnique), secondSorter);
+  configurationJson_["has-all-permutations"] = false;
   if (loadAllPermutations_) {
-    // After the SPO permutation, create patterns if so desired.
-    ExternalSorter<SortByOSP> ospSorter{
-        onDiskBase_ + ".osp-sorter.dat",
-        memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
-        allocator_};
-    size_t numSubjectsNormal = 0;
-    auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
-    if (usePatterns_) {
-      PatternCreator patternCreator{onDiskBase_ + ".index.patterns"};
-      auto pushTripleToPatterns = [&patternCreator,
-                                   &isInternalId](const auto& triple) {
-        if (!std::ranges::any_of(triple, isInternalId)) {
-          patternCreator.processTriple(static_cast<std::array<Id, 3>>(triple));
-        }
-      };
-      createPermutationPair(spoSorter.sortedView(), spo_, sop_,
-                            ospSorter.makePushCallback(), pushTripleToPatterns,
-                            numSubjectCounter);
-      patternCreator.finish();
-    } else {
-      createPermutationPair(spoSorter.sortedView(), spo_, sop_,
-                            ospSorter.makePushCallback(), numSubjectCounter);
-    }
-    spoSorter.clear();
-    configurationJson_["num-subjects-normal"] = numSubjectsNormal;
-    writeConfiguration();
-
-    // For the last pair of permutations we don't need a next sorter, so we have
-    // no fourth argument.
-    size_t numObjectsNormal = 0;
-    createPermutationPair(ospSorter.sortedView(), osp_, ops_,
-                          makeNumEntitiesCounter(numObjectsNormal, 2));
-    configurationJson_["num-objects-normal"] = numObjectsNormal;
+    auto thirdSorter = makeSorter<ThirdPermutation>("third");
+    createSecondPermutationPair(isQleverInternalId,
+                                secondSorter.getSortedBlocks<0>(), thirdSorter);
+    secondSorter.clear();
+    createThirdPermutationPair(isQleverInternalId,
+                               thirdSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
-  } else {
-    if (usePatterns_) {
-      createPatternsFromSpoTriplesView(spoSorter.sortedView(),
-                                       onDiskBase_ + ".index.patterns",
-                                       isInternalId);
-    }
-    configurationJson_["has-all-permutations"] = false;
   }
-  LOG(DEBUG) << "Finished writing permutations" << std::endl;
 
   // Dump the configuration again in case the permutations have added some
   // information.
@@ -437,7 +362,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
+std::unique_ptr<FirstPermutationSorter> IndexImpl::convertPartialToGlobalIds(
     TripleVec& data, const vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial) {
   LOG(INFO) << "Converting triples from local IDs to global IDs ..."
@@ -446,7 +371,7 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
              << std::endl;
 
   // Iterate over all partial vocabularies.
-  auto resultPtr = std::make_unique<PsoSorter>(
+  auto resultPtr = std::make_unique<FirstPermutationSorter>(
       onDiskBase_ + ".pso-sorter.dat",
       memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
       allocator_);
@@ -567,124 +492,70 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
 }
 
 // _____________________________________________________________________________
-std::optional<std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
-                        IndexImpl::IndexMetaDataMmapDispatcher::WriteType>>
+std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
+          IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
 IndexImpl::createPermutationPairImpl(const string& fileName1,
                                      const string& fileName2,
-                                     auto&& sortedTriples, size_t c0, size_t c1,
-                                     size_t c2, auto&&... perTripleCallbacks) {
+                                     auto&& sortedTriples,
+                                     std::array<size_t, 3> permutation,
+                                     auto&&... perTripleCallbacks) {
+  LOG(INFO) << "Creating a pair of index permutations ..." << std::endl;
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
-  if constexpr (MetaData::_isMmapBased) {
-    metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
-    metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
-  }
+  static_assert(MetaData::_isMmapBased);
+  metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
+  metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
 
-  CompressedRelationWriter writer1{ad_utility::File(fileName1, "w"),
-                                   blocksizePermutationInBytes_};
-  CompressedRelationWriter writer2{ad_utility::File(fileName2, "w"),
-                                   blocksizePermutationInBytes_};
+  static constexpr size_t NumColumns = 2;
+  CompressedRelationWriter writer1{NumColumns, ad_utility::File(fileName1, "w"),
+                                   blocksizePermutationPerColumn_};
+  CompressedRelationWriter writer2{NumColumns, ad_utility::File(fileName2, "w"),
+                                   blocksizePermutationPerColumn_};
 
-  // Iterate over the vector and identify "relation" boundaries, where a
-  // "relation" is the sequence of sortedTriples equal first component. For PSO
-  // and POS, this is a predicate (of which "relation" is a synonym).
-  LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
-  size_t from = 0;
-  std::optional<Id> currentRel;
-  BufferedIdTable buffer{
-      2,
-      std::array{
-          ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                         fileName1 + ".tmp.mmap-buffer-col0"},
-          ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                         fileName1 + ".tmp.mmap-buffer-col1"}}};
-  size_t distinctCol1 = 0;
-  Id lastLhs = ID_NO_VALUE;
-  uint64_t totalNumTriples = 0;
-  auto addCurrentRelation = [&metaData1, &metaData2, &writer1, &writer2,
-                             &currentRel, &buffer, &distinctCol1]() {
-    auto md1 = writer1.addRelation(currentRel.value(), buffer, distinctCol1);
-    auto md2 = writeSwitchedRel(&writer2, currentRel.value(), &buffer);
-    md1.setCol2Multiplicity(md2.getCol1Multiplicity());
-    md2.setCol2Multiplicity(md1.getCol1Multiplicity());
-    metaData1.add(md1);
-    metaData2.add(md2);
+  // Lift a callback that works on single elements to a callback that works on
+  // blocks.
+  auto liftCallback = [](auto callback) {
+    return [callback](const auto& block) mutable {
+      std::ranges::for_each(block, callback);
+    };
   };
-  for (const auto& triple : AD_FWD(sortedTriples)) {
-    if (!currentRel.has_value()) {
-      currentRel = triple[c0];
-    }
-    // Call each of the `perTripleCallbacks` for the current triple
-    (..., perTripleCallbacks(triple));
-    ++totalNumTriples;
-    if (triple[c0] != currentRel) {
-      addCurrentRelation();
-      buffer.clear();
-      distinctCol1 = 1;
-      currentRel = triple[c0];
-    } else {
-      distinctCol1 += triple[c1] != lastLhs;
-    }
-    buffer.push_back(std::array{triple[c1], triple[c2]});
-    lastLhs = triple[c1];
-  }
-  if (from < totalNumTriples) {
-    addCurrentRelation();
-  }
+  auto callback1 =
+      liftCallback([&metaData1](const auto& md) { metaData1.add(md); });
+  auto callback2 =
+      liftCallback([&metaData2](const auto& md) { metaData2.add(md); });
 
-  metaData1.blockData() = std::move(writer1).getFinishedBlocks();
-  metaData2.blockData() = std::move(writer2).getFinishedBlocks();
+  std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
+      liftCallback(perTripleCallbacks)...};
 
-  return std::make_pair(std::move(metaData1), std::move(metaData2));
-}
+  std::tie(metaData1.blockData(), metaData2.blockData()) =
+      CompressedRelationWriter::createPermutationPair(
+          fileName1, {writer1, callback1}, {writer2, callback2},
+          AD_FWD(sortedTriples), permutation, perBlockCallbacks);
 
-// __________________________________________________________________________
-CompressedRelationMetadata IndexImpl::writeSwitchedRel(
-    CompressedRelationWriter* out, Id currentRel, BufferedIdTable* bufPtr) {
-  // Sort according to the "switched" relation.
-  // TODO<joka921> The swapping is rather inefficient, as we have to iterate
-  // over the whole file. Maybe the `CompressedRelationWriter` should take
-  // the switched relations directly.
-  auto& buffer = *bufPtr;
+  // There previously was a bug in the CompressedIdTableSorter that lead to
+  // semantically correct blocks, but with too large block sizes for the twin
+  // relation. This assertion would have caught this bug.
+  AD_CORRECTNESS_CHECK(metaData1.blockData().size() ==
+                       metaData2.blockData().size());
 
-  AD_CONTRACT_CHECK(buffer.numColumns() == 2);
-  for (BufferedIdTable::row_reference row : buffer) {
-    std::swap(row[0], row[1]);
-  }
-  // std::ranges::sort(buffer, [](const auto& a, const auto& b) {
-  std::ranges::sort(buffer.begin(), buffer.end(),
-                    [](const auto& a, const auto& b) {
-                      return std::ranges::lexicographical_compare(a, b);
-                    });
-  Id lastLhs = std::numeric_limits<Id>::max();
-
-  size_t distinctC1 = 0;
-  for (const auto& el : buffer.getColumn(0)) {
-    distinctC1 += el != lastLhs;
-    lastLhs = el;
-  }
-  return out->addRelation(currentRel, buffer, distinctC1);
+  return {std::move(metaData1), std::move(metaData2)};
 }
 
 // ________________________________________________________________________
-std::optional<std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
-                        IndexImpl::IndexMetaDataMmapDispatcher::WriteType>>
+std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
+          IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
 IndexImpl::createPermutations(auto&& sortedTriples, const Permutation& p1,
                               const Permutation& p2,
                               auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl(
       onDiskBase_ + ".index" + p1.fileSuffix_,
       onDiskBase_ + ".index" + p2.fileSuffix_, AD_FWD(sortedTriples),
-      p1.keyOrder_[0], p1.keyOrder_[1], p1.keyOrder_[2],
-      AD_FWD(perTripleCallbacks)...);
+      p1.keyOrder_, AD_FWD(perTripleCallbacks)...);
 
-  if (metaData.has_value()) {
-    auto& mdv = metaData.value();
-    LOG(INFO) << "Statistics for " << p1.readableName_ << ": "
-              << mdv.first.statistics() << std::endl;
-    LOG(INFO) << "Statistics for " << p2.readableName_ << ": "
-              << mdv.second.statistics() << std::endl;
-  }
+  LOG(INFO) << "Statistics for " << p1.readableName_ << ": "
+            << metaData.first.statistics() << std::endl;
+  LOG(INFO) << "Statistics for " << p2.readableName_ << ": "
+            << metaData.second.statistics() << std::endl;
 
   return metaData;
 }
@@ -694,22 +565,22 @@ void IndexImpl::createPermutationPair(auto&& sortedTriples,
                                       const Permutation& p1,
                                       const Permutation& p2,
                                       auto&&... perTripleCallbacks) {
-  auto metaData = createPermutations(AD_FWD(sortedTriples), p1, p2,
-                                     AD_FWD(perTripleCallbacks)...);
+  auto [metaData1, metaData2] = createPermutations(
+      AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
   // NOTE: When `setKbName` was called, it set the name of pso_.meta_,
   // pso_.meta_, ... which however are not used during index building.
   // `getKbName` simple reads one of these names.
-  metaData.value().first.setName(getKbName());
-  metaData.value().second.setName(getKbName());
-  if (metaData) {
-    LOG(INFO) << "Writing meta data for " << p1.readableName_ << " and "
-              << p2.readableName_ << " ..." << std::endl;
-    ad_utility::File f1(onDiskBase_ + ".index" + p1.fileSuffix_, "r+");
-    metaData.value().first.appendToFile(&f1);
-    ad_utility::File f2(onDiskBase_ + ".index" + p2.fileSuffix_, "r+");
-    metaData.value().second.appendToFile(&f2);
-  }
+  auto writeMetadata = [this](auto& metaData, const auto& permutation) {
+    metaData.setName(getKbName());
+    ad_utility::File f(
+        absl::StrCat(onDiskBase_, ".index", permutation.fileSuffix_), "r+");
+    metaData.appendToFile(&f);
+  };
+  LOG(INFO) << "Writing meta data for " << p1.readableName_ << " and "
+            << p2.readableName_ << " ..." << std::endl;
+  writeMetadata(metaData1, p1);
+  writeMetadata(metaData2, p2);
 }
 
 // _____________________________________________________________________________
@@ -756,10 +627,20 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   }
 
   if (usePatterns_) {
-    PatternCreator::readPatternsFromFile(
-        onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
-        avgNumDistinctPredicatesPerSubject_, numDistinctSubjectPredicatePairs_,
-        patterns_, hasPattern_);
+    try {
+      PatternCreator::readPatternsFromFile(
+          onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
+          avgNumDistinctPredicatesPerSubject_,
+          numDistinctSubjectPredicatePairs_, patterns_, hasPattern_);
+    } catch (const std::exception& e) {
+      LOG(WARN) << "Could not load the patterns. The internal predicate "
+                   "`ql:has-predicate` is therefore not available (and certain "
+                   "queries that benefit from that predicate will be slower)."
+                   "To suppress this warning, start the server with "
+                   "the `--no-patterns` option. The error message was "
+                << e.what() << std::endl;
+      usePatterns_ = false;
+    }
   }
 }
 
@@ -851,12 +732,10 @@ void IndexImpl::setKeepTempFiles(bool keepTempFiles) {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::setUsePatterns(bool usePatterns) { usePatterns_ = usePatterns; }
+bool& IndexImpl::usePatterns() { return usePatterns_; }
 
 // _____________________________________________________________________________
-void IndexImpl::setLoadAllPermutations(bool loadAllPermutations) {
-  loadAllPermutations_ = loadAllPermutations;
-}
+bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
 
 // ____________________________________________________________________________
 void IndexImpl::setSettingsFile(const std::string& filename) {
@@ -917,8 +796,8 @@ void IndexImpl::readConfiguration() {
 
   // TODO Write a description.
   config.addOption("num-predicates-normal", "", &numPredicatesNormal_);
-  config.addOption("num-subjects-normal", "", &numSubjectsNormal_);
-  config.addOption("num-objects-normal", "", &numObjectsNormal_);
+  config.addOption("num-subjects-normal", "", &numSubjectsNormal_, 0UL);
+  config.addOption("num-objects-normal", "", &numObjectsNormal_, 0UL);
   config.addOption("num-triples-normal", "", &numTriplesNormal_);
 
   /*
@@ -1485,6 +1364,7 @@ IdTable IndexImpl::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
     const Permutation::Enum& permutation,
+    Permutation::ColumnIndicesRef additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
   std::optional<Id> col1Id =
@@ -1494,14 +1374,16 @@ IdTable IndexImpl::scan(
     size_t numColumns = col1String.has_value() ? 1 : 2;
     return IdTable{numColumns, allocator_};
   }
-  return scan(col0Id.value(), col1Id, permutation,
+  return scan(col0Id.value(), col1Id, permutation, additionalColumns,
               std::move(cancellationHandle));
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+    Permutation::ColumnIndicesRef additionalColumns,
     std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
-  return getPermutation(p).scan(col0Id, col1Id, std::move(cancellationHandle));
+  return getPermutation(p).scan(col0Id, col1Id, additionalColumns,
+                                std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________
@@ -1522,4 +1404,107 @@ void IndexImpl::deleteTemporaryFile(const string& path) {
   if (!keepTempFiles_) {
     ad_utility::deleteFile(path);
   }
+}
+
+namespace {
+
+// Return a lambda that is called repeatedly with triples that are sorted by the
+// `idx`-th column and counts the number of distinct entities that occur in a
+// triple where none of the elements fulfills the `isQleverInternalId`
+// predicate. This is used to cound the number of distinct subjects, objects,
+// and predicates during the index building.
+template <size_t idx>
+auto makeNumDistinctIdsCounter =
+    [](size_t& numDistinctIds,
+       ad_utility::InvocableWithExactReturnType<bool, Id> auto
+           isQleverInternalId) {
+      return [lastId = std::optional<Id>{}, &numDistinctIds,
+              isInternalId =
+                  std::move(isQleverInternalId)](const auto& triple) mutable {
+        const auto& id = triple[idx];
+        if (id != lastId && !std::ranges::any_of(triple, isInternalId)) {
+          numDistinctIds++;
+          lastId = id;
+        }
+      };
+    };
+}  // namespace
+
+// _____________________________________________________________________________
+template <typename... NextSorter>
+requires(sizeof...(NextSorter) <= 1)
+void IndexImpl::createPSOAndPOS(auto& isInternalId,
+                                BlocksOfTriples sortedTriples,
+                                NextSorter&&... nextSorter)
+
+{
+  size_t numTriplesNormal = 0;
+  auto countTriplesNormal = [&numTriplesNormal,
+                             &isInternalId](const auto& triple) mutable {
+    numTriplesNormal += std::ranges::none_of(triple, isInternalId);
+  };
+  size_t numPredicatesNormal = 0;
+  createPermutationPair(
+      AD_FWD(sortedTriples), pso_, pos_, nextSorter.makePushCallback()...,
+      makeNumDistinctIdsCounter<1>(numPredicatesNormal, isInternalId),
+      countTriplesNormal);
+  configurationJson_["num-predicates-normal"] = numPredicatesNormal;
+  configurationJson_["num-triples-normal"] = numTriplesNormal;
+  writeConfiguration();
+};
+
+// _____________________________________________________________________________
+template <typename... NextSorter>
+requires(sizeof...(NextSorter) <= 1)
+void IndexImpl::createSPOAndSOP(auto& isInternalId,
+                                BlocksOfTriples sortedTriples,
+                                NextSorter&&... nextSorter) {
+  size_t numSubjectsNormal = 0;
+  auto numSubjectCounter =
+      makeNumDistinctIdsCounter<0>(numSubjectsNormal, isInternalId);
+  if (usePatterns_) {
+    PatternCreator patternCreator{onDiskBase_ + ".index.patterns"};
+    auto pushTripleToPatterns = [&patternCreator,
+                                 &isInternalId](const auto& triple) {
+      if (!std::ranges::any_of(triple, isInternalId)) {
+        patternCreator.processTriple(
+            std::array{triple[0], triple[1], triple[2]});
+      }
+    };
+    createPermutationPair(AD_FWD(sortedTriples), spo_, sop_,
+                          nextSorter.makePushCallback()...,
+                          pushTripleToPatterns, numSubjectCounter);
+    patternCreator.finish();
+  } else {
+    createPermutationPair(AD_FWD(sortedTriples), spo_, sop_,
+                          nextSorter.makePushCallback()..., numSubjectCounter);
+  }
+  configurationJson_["num-subjects-normal"] = numSubjectsNormal;
+  writeConfiguration();
+};
+
+// _____________________________________________________________________________
+template <typename... NextSorter>
+requires(sizeof...(NextSorter) <= 1)
+void IndexImpl::createOSPAndOPS(auto& isInternalId,
+                                BlocksOfTriples sortedTriples,
+                                NextSorter&&... nextSorter) {
+  // For the last pair of permutations we don't need a next sorter, so we
+  // have no fourth argument.
+  size_t numObjectsNormal = 0;
+  createPermutationPair(
+      AD_FWD(sortedTriples), osp_, ops_, nextSorter.makePushCallback()...,
+      makeNumDistinctIdsCounter<2>(numObjectsNormal, isInternalId));
+  configurationJson_["num-objects-normal"] = numObjectsNormal;
+  configurationJson_["has-all-permutations"] = true;
+  writeConfiguration();
+};
+
+// _____________________________________________________________________________
+template <typename Comparator>
+ExternalSorter<Comparator> IndexImpl::makeSorter(
+    std::string_view permutationName) const {
+  return {absl::StrCat(onDiskBase_, ".", permutationName, "-sorter.dat"),
+          memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
+          allocator_};
 }

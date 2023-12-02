@@ -218,6 +218,21 @@ queries:
       - contains_row: [ 280, "<New_York_City>" ]
       - order_numeric: { "dir": "DESC", "var": "?count" }
 
+  - query: scientists-group-by-join-avg
+    type: no-text
+    sparql: |
+      SELECT ?place (AVG(?height) as ?avg_height) WHERE {
+          ?x <Country_of_nationality> ?place .
+          ?x <Height> ?height .
+      }
+      GROUP BY ?place
+    checks:
+      - num_cols : 2
+      - num_rows: 40
+      - selected: [ "?place", "?avg_height" ]
+      - contains_row: [ "<Austria>", 1.72 ]
+      - order_string: { "dir": "ASC", var: "?place" }
+
   - query: group-by-and-rand
     type: no-text
     sparql: |

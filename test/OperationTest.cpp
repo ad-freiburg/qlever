@@ -96,7 +96,7 @@ class OperationTestFixture : public testing::Test {
   std::vector<std::string> jsonHistory;
 
   Index index =
-      makeTestIndex("OperationTest", std::nullopt, true, true, true, 32);
+      makeTestIndex("OperationTest", std::nullopt, true, true, true, 32_B);
   QueryResultCache cache;
   QueryExecutionContext qec{
       index, &cache, makeAllocator(), SortPerformanceEstimator{},
