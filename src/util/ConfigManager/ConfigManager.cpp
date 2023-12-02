@@ -408,7 +408,7 @@ nlohmann::json ConfigManager::parseShortHand(
 }
 
 // ____________________________________________________________________________
-void ConfigManager::parseConfig(const nlohmann::json& j) {
+void ConfigManager::parseConfig(const nlohmann::json& j) const {
   // Anything else but a literal json object is not something, we want.
   if (!j.is_object()) {
     throw ConfigManagerParseConfigNotJsonObjectLiteralException(j);

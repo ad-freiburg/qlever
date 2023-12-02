@@ -247,7 +247,7 @@ class ConfigManager {
   - `j` is anything but a json object literal.
   - Any of the added validators return false.
   */
-  void parseConfig(const nlohmann::json& j);
+  void parseConfig(const nlohmann::json& j) const;
 
   /*
   @brief Parses the given short hand and returns it as a json object,
