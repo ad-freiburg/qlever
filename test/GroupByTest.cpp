@@ -569,8 +569,8 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
 TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationNonTrivial) {
   /* Setup query:
   SELECT ?x (AVG(?y) as ?avg)
-            (AVG(?y) + ((2 * AVG(?y)) * AVG(4 * ?y)) as ?complexAvg)
-            (2 as ?const) WHERE {
+            (?avg + ((2 * AVG(?y)) * AVG(4 * ?y)) as ?complexAvg)
+            (5.0 as ?const) WHERE {
     ?z <is-a> ?x .
     ?z <is> ?y
   } GROUP BY ?x
@@ -586,6 +586,8 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationNonTrivial) {
   std::vector<ColumnIndex> sortedColumns = {1};
   Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
 
+  Variable varAvg{"?avg"};
+
   SparqlExpressionPimpl avgYPimpl = makeAvgPimpl(varY);
 
   auto fourTimesYExpr = makeMultiplyExpression(makeLiteralDoubleExpr(4.0),
@@ -594,21 +596,20 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationNonTrivial) {
       std::make_unique<AvgExpression>(false, std::move(fourTimesYExpr));
   auto avgYExpr =
       std::make_unique<AvgExpression>(false, makeVariableExpression(varY));
-  auto avgYExpr2 =
-      std::make_unique<AvgExpression>(false, makeVariableExpression(varY));
   auto twoTimesAvgYExpr =
       makeMultiplyExpression(makeLiteralDoubleExpr(2.0), std::move(avgYExpr));
   auto twoTimesAvgY_times_avgFourTimesYExpr = makeMultiplyExpression(
       std::move(twoTimesAvgYExpr), std::move(avgFourTimesYExpr));
-  auto avgY_plus_twoTimesAvgY_times_avgFourTimesYExpr = makeAddExpression(
-      std::move(avgYExpr2), std::move(twoTimesAvgY_times_avgFourTimesYExpr));
+  auto avgY_plus_twoTimesAvgY_times_avgFourTimesYExpr =
+      makeAddExpression(makeVariableExpression(varAvg),
+                        std::move(twoTimesAvgY_times_avgFourTimesYExpr));
   SparqlExpressionPimpl avgY_plus_twoTimesAvgY_times_avgFourTimesYPimpl(
       std::move(avgY_plus_twoTimesAvgY_times_avgFourTimesYExpr),
-      "(AVG(?y) + ((2 * AVG(?y)) * AVG(4 * ?y)) as ?complexAvg)");
+      "(?avg + ((2 * AVG(?y)) * AVG(4 * ?y)) as ?complexAvg)");
   SparqlExpressionPimpl constantFive = makeLiteralDoublePimpl(5.0);
 
   std::vector<Alias> aliasesAvgY{
-      Alias{avgYPimpl, Variable{"?avg"}},
+      Alias{avgYPimpl, varAvg},
       Alias{avgY_plus_twoTimesAvgY_times_avgFourTimesYPimpl,
             Variable{"?complexAvg"}},
       Alias{constantFive, Variable{"?const"}}};

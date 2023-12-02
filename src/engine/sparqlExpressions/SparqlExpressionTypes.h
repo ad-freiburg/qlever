@@ -108,6 +108,7 @@ template <typename T>
 concept SingleExpressionResult =
     ad_utility::isTypeContainedIn<T, ExpressionResult>;
 
+// TODO: Consider if we even need this anymore
 // If the `ExpressionResult` holds a value that is cheap to copy (a constant or
 // a variable), return a copy. Else throw an exception the message of which
 // implies that this is not a valid usage of this function.
@@ -124,6 +125,20 @@ inline ExpressionResult copyExpressionResultIfNotVector(
           "never happen, as this code should only be called for the results of "
           "expressions in a GROUP BY clause which all should be aggregates. "
           "Please report this.");
+    }
+  };
+  return std::visit(copyIfCopyable, result);
+}
+
+// TODO: Docs
+inline ExpressionResult copyExpressionResult(const ExpressionResult& result) {
+  auto copyIfCopyable =
+      []<SingleExpressionResult R>(const R& x) -> ExpressionResult {
+    if constexpr (std::is_copy_assignable_v<R> &&
+                  std::is_copy_constructible_v<R>) {
+      return x;
+    } else {
+      return x.clone();
     }
   };
   return std::visit(copyIfCopyable, result);
@@ -249,8 +264,7 @@ struct EvaluationContext {
     ColumnIndex idx = map.at(var).columnIndex_;
     AD_CONTRACT_CHECK(idx < _previousResultsFromSameGroup.size());
 
-    return copyExpressionResultIfNotVector(
-        _previousResultsFromSameGroup.at(idx));
+    return copyExpressionResult(_previousResultsFromSameGroup.at(idx));
   }
 };
 

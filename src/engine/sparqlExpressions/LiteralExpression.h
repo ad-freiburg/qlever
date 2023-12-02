@@ -59,6 +59,11 @@ class LiteralExpression : public SparqlExpression {
       return getIdOrString(_value);
     } else if constexpr (std::is_same_v<Variable, T>) {
       return evaluateIfVariable(context, _value);
+    } else if constexpr (std::is_same_v<VectorWithMemoryLimit<ValueId>, T>) {
+      // TODO: Is it smart to clone the vector here? Cannot move it, since
+      //       that would invalidate this expression. In any case, this happens
+      //       once per block.
+      return _value.clone();
     } else {
       return _value;
     }
@@ -96,6 +101,11 @@ class LiteralExpression : public SparqlExpression {
       return absl::StrCat("#valueId ", _value.getBits(), "#");
     } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
       return absl::StrCat("#literal: ", _value.rawContent());
+    } else if constexpr (std::is_same_v<T, VectorWithMemoryLimit<ValueId>>) {
+      // We should never cache this, as objects of this type of expression are
+      // used exactly *once* in the HashMap optimization of the GROUP BY
+      // operation
+      AD_THROW("Trying to get cache key for value that should not be cached.");
     } else {
       return {std::to_string(_value)};
     }
@@ -170,4 +180,6 @@ using IriExpression = detail::LiteralExpression<string>;
 using StringLiteralExpression =
     detail::LiteralExpression<TripleComponent::Literal>;
 using IdExpression = detail::LiteralExpression<ValueId>;
+using VectorIdExpression =
+    detail::LiteralExpression<VectorWithMemoryLimit<ValueId>>;
 }  // namespace sparqlExpression
