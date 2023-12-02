@@ -144,7 +144,7 @@ TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
     // Wrong input column type.
     table = createTestTable(NUM_ROWS, 2, ColumnNumWithType<T>{0});
     doForTypeInResultTableEntryType(
-        [&columnCopyLambda, &table, &trivialLambda]<typename WrongType>() {
+        [&table, &trivialLambda]<typename WrongType>() {
           if constexpr (!ad_utility::isSimilar<WrongType, T>) {
             ASSERT_ANY_THROW(generateColumnWithColumnInput(
                 &table, trivialLambda, ColumnNumWithType<bool>{1},

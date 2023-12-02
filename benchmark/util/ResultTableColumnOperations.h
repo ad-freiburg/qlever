@@ -6,6 +6,7 @@
 #pragma once
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
+#include "util/Exception.h"
 #include "util/TypeTraits.h"
 
 /*
@@ -33,5 +34,20 @@ requires(sizeof...(ColumnInputTypes) > 0) void generateColumnWithColumnInput(
     ad_utility::InvocableWithSimilarReturnType<
         ColumnReturnType, const ColumnInputTypes&...> auto&& generator,
     const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn,
-    const ColumnNumWithType<ColumnInputTypes>&... inputColumns);
+    const ColumnNumWithType<ColumnInputTypes>&... inputColumns) {
+  // Using a column more than once is the sign of an error.
+  std::array<size_t, sizeof...(ColumnInputTypes)> allColumnNums{
+      {inputColumns.columnNum_...}};
+  std::ranges::sort(allColumnNums);
+  AD_CONTRACT_CHECK(std::ranges::adjacent_find(allColumnNums) ==
+                    allColumnNums.end());
+
+  // Fill the result column.
+  for (size_t row = 0; row < table->numRows(); row++) {
+    table->setEntry(
+        row, columnToPutResultIn.columnNum_,
+        std::invoke(generator, table->getEntry<ColumnInputTypes>(
+                                   row, inputColumns.columnNum_)...));
+  }
+}
 }  // namespace ad_benchmark

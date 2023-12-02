@@ -336,7 +336,7 @@ addLinkAndDiscoverTest(RandomTest testUtil)
 
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark testUtil)
 
-addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark)
+addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
 
 addLinkAndDiscoverTest(FindUndefRangesTest engine)
 
