@@ -1025,12 +1025,19 @@ void IndexImpl::readConfiguration() {
   };
 
   loadDataMember("has-all-permutations", loadAllPermutations_, true);
-
   loadDataMember("num-predicates-normal", numPredicatesNormal_);
   // These might be missing if there are only two permutations.
   loadDataMember("num-subjects-normal", numSubjectsNormal_, 0);
   loadDataMember("num-objects-normal", numObjectsNormal_, 0);
   loadDataMember("num-triples-normal", numTriplesNormal_);
+
+  // Compute unique ID for this index.
+  //
+  // TODO: This is a simplistic way. It would be better to incorporate bytes
+  // from the index files.
+  indexId_ = absl::StrCat("#", getKbName(), ".", numTriplesNormal_, ".",
+                          numSubjectsNormal_, ".", numPredicatesNormal_, ".",
+                          numObjectsNormal_);
 }
 
 // ___________________________________________________________________________

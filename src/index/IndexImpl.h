@@ -158,6 +158,7 @@ class IndexImpl {
   size_t numPredicatesNormal_ = 0;
   size_t numObjectsNormal_ = 0;
   size_t numTriplesNormal_ = 0;
+  string indexId_;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
@@ -420,6 +421,8 @@ class IndexImpl {
   const string& getTextName() const { return textMeta_.getName(); }
 
   const string& getKbName() const { return pso_.metaData().getName(); }
+
+  const string& getIndexId() const { return indexId_; }
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
