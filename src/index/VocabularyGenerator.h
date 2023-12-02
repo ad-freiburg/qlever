@@ -4,21 +4,19 @@
 #pragma once
 
 #include <string>
-#include <stxxl/vector>
 #include <utility>
 
-#include "../global/Constants.h"
-#include "../global/Id.h"
-#include "../util/HashMap.h"
-#include "../util/MmapVector.h"
-#include "./ConstantsIndexBuilding.h"
-#include "./IndexBuilderTypes.h"
-#include "Vocabulary.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/Constants.h"
+#include "global/Id.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/IndexBuilderTypes.h"
+#include "index/Vocabulary.h"
+#include "util/HashMap.h"
+#include "util/MmapVector.h"
 
 using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
-using std::string;
 
 using TripleVec = ad_utility::CompressedExternalIdTable<3>;
 
@@ -41,7 +39,8 @@ class VocabularyMerger {
     // sorted order. After that, the range `[begin(), end())` is the range of
     // all the words that start with the prefix.
     struct IdRangeForPrefix {
-      IdRangeForPrefix(std::string prefix) : prefix_{std::move(prefix)} {}
+      explicit IdRangeForPrefix(std::string prefix)
+          : prefix_{std::move(prefix)} {}
       // Check if `word` starts with the `prefix_`. If so, `wordIndex`
       // will become part of the range that this struct represents.
       // For this to work, all the words that start with the `prefix_` have to
@@ -61,6 +60,9 @@ class VocabularyMerger {
       Id begin() const { return begin_; }
       Id end() const { return end_; }
 
+      // Return true iff the `id` belongs to this range.
+      bool contains(Id id) const { return begin_ <= id && id < end_; }
+
      private:
       Id begin_ = ID_NO_VALUE;
       Id end_ = ID_NO_VALUE;
@@ -72,6 +74,14 @@ class VocabularyMerger {
                                 // the vocabulary)
     IdRangeForPrefix langTaggedPredicates_{"@"};
     IdRangeForPrefix internalEntities_{INTERNAL_ENTITIES_URI_PREFIX};
+
+    // Return true iff the `id` belongs to one of the two ranges that contain
+    // the internal IDs that were added by QLever and were not part of the
+    // input.
+    bool isQleverInternalId(Id id) const {
+      return internalEntities_.contains(id) ||
+             langTaggedPredicates_.contains(id);
+    }
   };
 
  private:

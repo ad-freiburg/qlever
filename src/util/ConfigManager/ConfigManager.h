@@ -12,6 +12,7 @@
 #include <any>
 #include <concepts>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -41,6 +42,65 @@ Manages a bunch of `ConfigOption`s.
 */
 class ConfigManager {
   /*
+  Our hash map always saves either a configuration option, or a sub manager
+  (another `ConfigManager`).
+
+  This class makes the handeling more explicit and allows for more information
+  to be saved alongside the configuration options and sub managers.
+  For example: The order, in which they were created.
+  */
+  class HashMapEntry {
+   public:
+    using Data = std::variant<ConfigOption, ConfigManager>;
+
+   private:
+    std::unique_ptr<Data> data_;
+
+    // Describes the order of initialization.
+    static inline std::atomic_size_t numberOfInstances_{0};
+    size_t initializationId_{numberOfInstances_++};
+
+   public:
+    // Construct an instance of this class managing `data`.
+    explicit HashMapEntry(Data&& data);
+
+    // Does this instance hold a configuration option?
+    bool holdsConfigOption() const;
+
+    // Does this instance hold a sub manager?
+    bool holdsSubManager() const;
+
+    /*
+    Currently held configuration option, if there is one. Note: If there is a
+    pointer, it's never a `nullptr`.
+    */
+    std::optional<ConfigOption*> getConfigOption() const;
+
+    /*
+    Currently held sub manager, if there is one. Note: If there is a
+    pointer, it's never a `nullptr`.
+    */
+    std::optional<ConfigManager*> getSubManager() const;
+
+    // Return, how many instances of this class were initialized before this
+    // instance.
+    size_t getInitializationId() const;
+
+    // Wrapper for calling `std::visit` on the saved `Data`.
+    decltype(auto) visit(auto&& vis) const {
+      // Make sure, that it is not a null pointer.
+      AD_CORRECTNESS_CHECK(data_);
+
+      return std::visit(AD_FWD(vis), *data_);
+    }
+
+   private:
+    // Implementation for `holdsConfigOption` and `holdsSubManager`.
+    template <typename T>
+    requires isTypeContainedIn<T, Data> bool implHolds() const;
+  };
+
+  /*
   The added configuration options. Configuration managers are used by the user
   to describe a json object literal more explicitly.
 
@@ -51,8 +111,6 @@ class ConfigManager {
   The string key describes their location in the json object literal, by
   representing a json pointer in string form.
   */
-  using HashMapEntry =
-      std::unique_ptr<std::variant<ConfigOption, ConfigManager>>;
   ad_utility::HashMap<std::string, HashMapEntry> configurationOptions_;
 
   /*
@@ -354,7 +412,28 @@ class ConfigManager {
   FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
   FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
   FRIEND_TEST(ConfigManagerTest, ContainsOption);
-  FRIEND_TEST(ConfigManagerTest, CheckForBrokenPaths);
+  FRIEND_TEST(ConfigManagerTest, CollectionFunctionsSorting);
+
+  /*
+  @brief Collect all `HashMapEntry` contained in the given
+  `configurationOptions`, including the ones in sub managern and return them
+  together with their json paths.
+  Note: Also checks integrity of all entries via `verifyHashMapEntry`.
+
+  @param sortByInitialization If true, the order of the returned `HashMapEntry`
+  is by initialization order. If false, the order is random.
+  @param pathPrefix This prefix will be added to all json paths, that will be
+  returned.
+  @param predicate Only the `HashMapEntry` for which a true is returned, will be
+  given back.
+  */
+  template <ad_utility::InvocableWithExactReturnType<bool, const HashMapEntry&>
+                Predicate>
+  static std::vector<std::pair<std::string, const HashMapEntry&>>
+  allHashMapEntries(
+      const ad_utility::HashMap<std::string, HashMapEntry>& entries,
+      const bool sortByInitialization, std::string_view pathPrefix,
+      const Predicate& predicate);
 
   /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
@@ -426,9 +505,12 @@ class ConfigManager {
     verifyPath(pathToOption);
 
     /*
-    The `unqiue_ptr` was created, by creating a new `ConfigOption` via it's
-    move constructor. Which is why, we can't just return the `ConfigOption`
-    we created here.
+    We can't just create a `ConfigOption` variable, pass it and return it,
+    because the hash map has ownership of the newly added `ConfigOption`.
+    Which was transfered via creating a new internal `ConfigOption` with move
+    constructors.
+    Which would mean, that our local `ConfigOption` isn't the `ConfigOption` we
+    want to return a reference to.
     */
     return ConstConfigOptionProxy<OptionType>(addConfigOption(
         pathToOption,
@@ -440,20 +522,25 @@ class ConfigManager {
   @brief A vector to all the configuratio options, held by this manager,
   represented with their json paths and reference to them. Options held by a sub
   manager, are also included with the path to the sub manager as prefix.
+
+  @param sortByInitialization If true, the order of the returned `ConfigOption`
+  is by initialization order. If false, the order is random.
   */
-  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions();
-  std::vector<std::pair<std::string, const ConfigOption&>>
-  configurationOptions() const;
+  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions(
+      const bool sortByInitialization);
+  std::vector<std::pair<std::string, const ConfigOption&>> configurationOptions(
+      const bool sortByInitialization) const;
 
   /*
   @brief Return all `ConfigOptionValidatorManager` held by this manager and its
   sub managers.
 
-  @param patPrefix Prefix for the paths in the exception message. Needed, so
-  that a sub manager can include its own path in the error messages.
+  @param sortByInitialization If true, the order of the returned
+  `ConfigOptionValidatorManager` is by initialization order. If false, the order
+  is random.
   */
   std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
-  validators(std::string_view pathPrefix = "") const;
+  validators(const bool sortByInitialization) const;
 
   /*
   @brief The implementation for `configurationOptions`.
@@ -461,15 +548,16 @@ class ConfigManager {
   @tparam ReturnReference Should be either `ConfigOption&`, or `const
   ConfigOption&`.
 
-  @param pathPrefix This prefix will be added to all configuration option json
-  paths, that will be returned.
+  @param sortByInitialization If true, the order of the returned `ConfigOption`
+  is by initialization order. If false, the order is random.
   */
   template <typename ReturnReference>
   requires std::same_as<ReturnReference, ConfigOption&> ||
            std::same_as<ReturnReference, const ConfigOption&>
   static std::vector<std::pair<std::string, ReturnReference>>
-  configurationOptionsImpl(auto& configurationOptions,
-                           std::string_view pathPrefix = "");
+  configurationOptionsImpl(const ad_utility::HashMap<std::string, HashMapEntry>&
+                               configurationOptions,
+                           const bool sortByInitialization);
 
   /*
   @brief Call all the validators to check, if the current value is valid.
@@ -532,15 +620,13 @@ class ConfigManager {
   }
 
   /*
-  @brief Throw an exception, if the given entry of `configurationOptions_` is a
-  null pointer, or contains an empty sub manager, which would point to a logic
-  error.
+  @brief Throw an exception, if the given entry of `configurationOptions_`
+  contains an empty sub manager, which would point to a logic error.
 
   @param jsonPathToEntry For a better exception message.
-  @param entryPointer Pointer to the object managed by the pointer in the hash
-  map.
+  @param entry The object managed by the hash map.
   */
   static void verifyHashMapEntry(std::string_view jsonPathToEntry,
-                                 const HashMapEntry::pointer entryPointer);
+                                 const HashMapEntry& entry);
 };
 }  // namespace ad_utility

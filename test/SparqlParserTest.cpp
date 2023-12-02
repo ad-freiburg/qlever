@@ -1178,11 +1178,13 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ(
         (SparqlTriple{"<somebody>", PropertyPath::fromIri("?p"), Var{"?y"}}),
         triples[0]);
-    ASSERT_EQ((SparqlTriple{
-                  Var{"?y"},
-                  PropertyPath::fromIri("<QLever-internal-function/langtag>"),
-                  "<QLever-internal-function/@en>"}),
-              triples[1]);
+    ASSERT_EQ(
+        (SparqlTriple{
+            Var{"?y"},
+            PropertyPath::fromIri(
+                "<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>"),
+            "<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>"}),
+        triples[1]);
   }
 
   // Test that the language filter never changes triples with
@@ -1218,10 +1220,12 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
                             PropertyPath::fromIri(CONTAINS_ENTITY_PREDICATE),
                             Var{"?y"}}),
               triples[1]);
-    ASSERT_EQ((SparqlTriple{
-                  Var{"?y"},
-                  PropertyPath::fromIri("<QLever-internal-function/langtag>"),
-                  "<QLever-internal-function/@en>"}),
-              triples[2]);
+    ASSERT_EQ(
+        (SparqlTriple{
+            Var{"?y"},
+            PropertyPath::fromIri(
+                "<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>"),
+            "<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>"}),
+        triples[2]);
   }
 }

@@ -2,13 +2,16 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "util/http/websocket/QueryId.h"
 
 using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryRegistry;
+using ::testing::ElementsAre;
+using ::testing::IsEmpty;
+using ::testing::UnorderedElementsAre;
 
 TEST(QueryId, checkIdEqualityRelation) {
   auto queryIdOne = QueryId::idFromString("some-id");
@@ -37,6 +40,13 @@ TEST(QueryId, checkEmptyAfterMove) {
   auto queryId = QueryId::idFromString("53.32794768794578, -2.230040905974742");
   { auto temporary = std::move(queryId); }
   EXPECT_TRUE(queryId.empty());
+}
+
+// _____________________________________________________________________________
+
+TEST(QueryId, veriyToJsonWorks) {
+  nlohmann::json json = QueryId::idFromString("test-id");
+  EXPECT_EQ(json.get<std::string_view>(), "test-id");
 }
 
 // _____________________________________________________________________________
@@ -88,6 +98,8 @@ TEST(QueryRegistry, demonstrateRegistryLocalUniqueness) {
   EXPECT_EQ(optQidOne->toQueryId(), optQidTwo->toQueryId());
 }
 
+// _____________________________________________________________________________
+
 // The code should guard against the case where the ids outlive their registries
 // so this should not segfault or raise any address sanitizer errors
 TEST(QueryRegistry, performCleanupFromDestroyedRegistry) {
@@ -96,4 +108,55 @@ TEST(QueryRegistry, performCleanupFromDestroyedRegistry) {
     QueryRegistry registry{};
     holder = std::make_unique<OwningQueryId>(registry.uniqueId());
   }
+}
+
+// _____________________________________________________________________________
+
+TEST(QueryRegistry, verifyCancellationHandleIsCreated) {
+  QueryRegistry registry{};
+  auto queryId = registry.uniqueId();
+
+  auto handle1 = registry.getCancellationHandle(queryId.toQueryId());
+  auto handle2 = registry.getCancellationHandle(queryId.toQueryId());
+
+  EXPECT_EQ(handle1, handle2);
+  EXPECT_NE(handle1, nullptr);
+  EXPECT_NE(handle2, nullptr);
+}
+
+// _____________________________________________________________________________
+
+TEST(QueryRegistry, verifyCancellationHandleIsNullptrIfNotPresent) {
+  QueryRegistry registry{};
+
+  auto handle =
+      registry.getCancellationHandle(QueryId::idFromString("does not exist"));
+
+  EXPECT_EQ(handle, nullptr);
+}
+
+// _____________________________________________________________________________
+
+TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
+  QueryRegistry registry{};
+
+  EXPECT_THAT(registry.getActiveQueries(), IsEmpty());
+
+  {
+    auto queryId1 = registry.uniqueId();
+
+    EXPECT_THAT(registry.getActiveQueries(), ElementsAre(queryId1.toQueryId()));
+
+    {
+      auto queryId2 = registry.uniqueId();
+
+      EXPECT_THAT(
+          registry.getActiveQueries(),
+          UnorderedElementsAre(queryId1.toQueryId(), queryId2.toQueryId()));
+    }
+
+    EXPECT_THAT(registry.getActiveQueries(), ElementsAre(queryId1.toQueryId()));
+  }
+
+  EXPECT_THAT(registry.getActiveQueries(), IsEmpty());
 }

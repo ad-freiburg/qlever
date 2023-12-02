@@ -101,7 +101,7 @@ void testExternalSorter(size_t numDynamicColumns, size_t numRows,
   using namespace ad_utility::memory_literals;
 
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  ad_utility::CompressedExternalIdTableSorter<SortByOPS, NumStaticColumns>
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NumStaticColumns>
       writer{filename, numDynamicColumns, memoryToUse,
              ad_utility::testing::makeAllocator(), 5_kB};
 
@@ -114,7 +114,7 @@ void testExternalSorter(size_t numDynamicColumns, size_t numRows,
       writer.push(row);
     }
 
-    std::ranges::sort(randomTable, SortByOPS{});
+    std::ranges::sort(randomTable, SortByOSP{});
 
     auto generator = writer.sortedView();
 
@@ -142,7 +142,7 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
 
   // only 100 bytes of memory, not sufficient for merging
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
-  ad_utility::CompressedExternalIdTableSorter<SortByOPS, 0> writer{
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> writer{
       filename, 3, 100_B, ad_utility::testing::makeAllocator()};
 
   CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100, 3);

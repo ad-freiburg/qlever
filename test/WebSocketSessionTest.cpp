@@ -2,28 +2,42 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 
 #include "util/AsyncTestHelpers.h"
 #include "util/BeastTestHelpers.h"
+#include "util/GTestHelpers.h"
+#include "util/http/websocket/MessageSender.h"
 #include "util/http/websocket/WebSocketSession.h"
 
 using ad_utility::websocket::QueryHub;
 using ad_utility::websocket::QueryId;
+using ad_utility::websocket::QueryRegistry;
 using ad_utility::websocket::WebSocketSession;
 namespace net = boost::asio;
 namespace http = boost::beast::http;
 using net::ip::tcp;
 using namespace boost::asio::experimental::awaitable_operators;
+using ::testing::HasSubstr;
+
+// _____________________________________________________________________________
 
 http::request<http::string_body> withPath(std::string_view path) {
   http::request<http::string_body> request{};
   request.target(path);
   return request;
 }
+
+// _____________________________________________________________________________
+
+auto toBuffer(std::string_view view) {
+  return net::const_buffer{view.data(), view.size()};
+}
+
+// _____________________________________________________________________________
 
 TEST(WebSocketSession, EnsureCorrectPathAcceptAndRejectBehaviour) {
   auto testFunc = WebSocketSession::getErrorResponseIfPathIsInvalid;
@@ -48,23 +62,50 @@ TEST(WebSocketSession, EnsureCorrectPathAcceptAndRejectBehaviour) {
 
 // _____________________________________________________________________________
 
+struct WebSocketTestContainer {
+  net::strand<net::io_context::executor_type> strand_;
+  QueryHub queryHub_;
+  QueryRegistry registry_;
+  tcp::socket server_;
+  tcp::socket client_;
+
+  net::awaitable<void> serverLogic(auto&& completionToken) {
+    boost::beast::tcp_stream stream{std::move(server_)};
+    boost::beast::flat_buffer buffer;
+    http::request<http::string_body> request;
+    co_await http::async_read(stream, buffer, request, completionToken);
+    co_await WebSocketSession::handleSession(queryHub_, registry_, request,
+                                             std::move(stream.socket()));
+  }
+
+  auto serverLogic() { return serverLogic(net::use_awaitable); }
+};
+
+net::awaitable<WebSocketTestContainer> createTestContainer(
+    net::io_context& ioContext) {
+  auto strand = net::make_strand(ioContext);
+  WebSocketTestContainer container{strand, QueryHub{ioContext}, QueryRegistry{},
+                                   tcp::socket{strand}, tcp::socket{strand}};
+  co_await connect(container.server_, container.client_);
+  co_return std::move(container);
+}
+
+// _____________________________________________________________________________
+
 // Hack to allow ASSERT_*() macros to work with ASYNC_TEST
 #define return co_return
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
-  QueryHub queryHub{ioContext};
+  auto c = co_await createTestContainer(ioContext);
 
-  auto distributor = co_await queryHub.createOrAcquireDistributorForSending(
+  auto distributor = co_await c.queryHub_.createOrAcquireDistributorForSending(
       QueryId::idFromString("some-id"));
 
   co_await distributor->addQueryStatusUpdate("my-event");
 
-  tcp::socket server{ioContext};
-  tcp::socket client{ioContext};
-  co_await connect(server, client);
-
   auto controllerActions = [&]() -> net::awaitable<void> {
-    boost::beast::websocket::stream<tcp::socket> webSocket{std::move(client)};
+    boost::beast::websocket::stream<tcp::socket> webSocket{
+        std::move(c.client_)};
     boost::beast::flat_buffer buffer;
     co_await webSocket.async_handshake("localhost", "/watch/some-id",
                                        net::use_awaitable);
@@ -78,29 +119,18 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
                                    net::use_awaitable);
   };
 
-  auto serverLogic = [&]() -> net::awaitable<void> {
-    boost::beast::tcp_stream stream{std::move(server)};
-    boost::beast::flat_buffer buffer;
-    http::request<http::string_body> request;
-    co_await http::async_read(stream, buffer, request, net::use_awaitable);
-    co_await WebSocketSession::handleSession(queryHub, request,
-                                             std::move(stream.socket()));
-  };
-
-  co_await (serverLogic() && controllerActions());
+  co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
+                         net::use_awaitable);
 }
 
 // _____________________________________________________________________________
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
-  QueryHub queryHub{ioContext};
-
-  tcp::socket server{ioContext};
-  tcp::socket client{ioContext};
-  co_await connect(server, client);
+  auto c = co_await createTestContainer(ioContext);
 
   auto controllerActions = [&]() -> net::awaitable<void> {
-    boost::beast::websocket::stream<tcp::socket> webSocket{std::move(client)};
+    boost::beast::websocket::stream<tcp::socket> webSocket{
+        std::move(c.client_)};
     boost::beast::flat_buffer buffer;
     co_await webSocket.async_handshake("localhost", "/watch/some-id",
                                        net::use_awaitable);
@@ -109,34 +139,23 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
                                    net::use_awaitable);
   };
 
-  auto serverLogic = [&]() -> net::awaitable<void> {
-    boost::beast::tcp_stream stream{std::move(server)};
-    boost::beast::flat_buffer buffer;
-    http::request<http::string_body> request;
-    co_await http::async_read(stream, buffer, request, net::use_awaitable);
-    co_await WebSocketSession::handleSession(queryHub, request,
-                                             std::move(stream.socket()));
-  };
-
-  co_await (serverLogic() && controllerActions());
+  co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
+                         net::use_awaitable);
 }
 
 // _____________________________________________________________________________
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
-  QueryHub queryHub{ioContext};
+  auto c = co_await createTestContainer(ioContext);
 
-  auto distributor = co_await queryHub.createOrAcquireDistributorForSending(
+  auto distributor = co_await c.queryHub_.createOrAcquireDistributorForSending(
       QueryId::idFromString("some-id"));
 
   co_await distributor->addQueryStatusUpdate("my-event");
 
-  tcp::socket server{ioContext};
-  tcp::socket client{ioContext};
-  co_await connect(server, client);
-
   auto controllerActions = [&]() -> net::awaitable<void> {
-    boost::beast::websocket::stream<tcp::socket> webSocket{std::move(client)};
+    boost::beast::websocket::stream<tcp::socket> webSocket{
+        std::move(c.client_)};
     boost::beast::flat_buffer buffer;
     co_await webSocket.async_handshake("localhost", "/watch/some-id",
                                        net::use_awaitable);
@@ -152,14 +171,254 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
                  boost::system::system_error);
   };
 
-  auto serverLogic = [&]() -> net::awaitable<void> {
-    boost::beast::tcp_stream stream{std::move(server)};
+  co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
+                         net::use_awaitable);
+}
+
+// _____________________________________________________________________________
+
+ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
+  auto c = co_await createTestContainer(ioContext);
+
+  auto queryId = c.registry_.uniqueIdFromString("some-id");
+  ASSERT_TRUE(queryId.has_value());
+  auto cancellationHandle =
+      c.registry_.getCancellationHandle(queryId->toQueryId());
+
+  auto controllerActions = [&]() -> net::awaitable<void> {
+    constexpr auto clientTimeout = std::chrono::milliseconds{50};
+    boost::beast::websocket::stream<tcp::socket> webSocket{
+        std::move(c.client_)};
+    co_await webSocket.async_handshake("localhost", "/watch/some-id",
+                                       net::use_awaitable);
+    ASSERT_TRUE(webSocket.is_open());
+
+    EXPECT_FALSE(cancellationHandle->isCancelled());
+
+    // Wrong keyword should be ignored
+    co_await webSocket.async_write(toBuffer("other"), net::use_awaitable);
+
+    // Give server some time to process cancellation request
+    net::steady_timer timer{c.strand_, clientTimeout};
+    co_await timer.async_wait(net::use_awaitable);
+
+    EXPECT_FALSE(cancellationHandle->isCancelled());
+
+    co_await webSocket.async_write(toBuffer("cancel"), net::use_awaitable);
+
+    // Give server some time to process cancellation request
+    timer.expires_after(clientTimeout);
+    co_await timer.async_wait(net::use_awaitable);
+
+    EXPECT_TRUE(cancellationHandle->isCancelled());
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        cancellationHandle->throwIfCancelled(""),
+        HasSubstr("manual cancellation"), ad_utility::CancellationException);
+
+    // Cancel should not close connection immediately
+    EXPECT_TRUE(webSocket.is_open());
+
+    {
+      // Trigger connection close by creating and destroying message sender
+      co_await ad_utility::websocket::MessageSender::create(
+          std::move(queryId).value(), c.queryHub_);
+      co_await net::post(net::use_awaitable);
+    }
+
+    // Expect socket will be closed
     boost::beast::flat_buffer buffer;
-    http::request<http::string_body> request;
-    co_await http::async_read(stream, buffer, request, net::use_awaitable);
-    co_await WebSocketSession::handleSession(queryHub, request,
-                                             std::move(stream.socket()));
+    EXPECT_THROW(co_await webSocket.async_read(buffer, net::use_awaitable),
+                 boost::system::system_error);
   };
 
-  co_await (serverLogic() && controllerActions());
+  co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
+                         net::use_awaitable);
+}
+
+// _____________________________________________________________________________
+
+ASYNC_TEST(WebSocketSession, verifyWrongExecutorConfigThrows) {
+  auto runTestWithDummyClient =
+      [&](WebSocketTestContainer& c,
+          net::awaitable<void> serverLogic) -> net::awaitable<void> {
+    auto clientLogic = [&]() -> net::awaitable<void> {
+      boost::beast::websocket::stream<tcp::socket> webSocket{
+          std::move(c.client_)};
+      try {
+        co_await webSocket.async_handshake("localhost", "/watch/some-id",
+                                           net::use_awaitable);
+        co_await webSocket.async_close(
+            boost::beast::websocket::close_code::normal, net::use_awaitable);
+      } catch (...) {
+        // Ignore any exceptions here, they are expected because we test
+        // scenarios which interrupt the websocket connection abruptly
+      }
+    };
+    auto serverLogicTestWrapper = [&]() -> net::awaitable<void> {
+      EXPECT_THROW(co_await std::move(serverLogic), ad_utility::Exception);
+    };
+    co_await (serverLogicTestWrapper() && clientLogic());
+  };
+
+  {
+    auto c = co_await createTestContainer(ioContext);
+    co_await runTestWithDummyClient(c, c.serverLogic());
+  }
+  auto otherStrand = net::make_strand(ioContext);
+  {
+    auto c = co_await createTestContainer(ioContext);
+    co_await runTestWithDummyClient(
+        c, net::co_spawn(c.strand_,
+                         c.serverLogic(net::bind_executor(otherStrand,
+                                                          net::use_awaitable)),
+                         net::use_awaitable));
+  }
+  {
+    auto c = co_await createTestContainer(ioContext);
+    co_await runTestWithDummyClient(
+        c, net::co_spawn(otherStrand, c.serverLogic(), net::use_awaitable));
+  }
+}
+
+// _____________________________________________________________________________
+
+ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
+  auto c = co_await createTestContainer(ioContext);
+
+  auto queryId = c.registry_.uniqueIdFromString("some-id");
+  ASSERT_TRUE(queryId.has_value());
+  auto cancellationHandle =
+      c.registry_.getCancellationHandle(queryId->toQueryId());
+
+  auto controllerActions = [&]() -> net::awaitable<void> {
+    constexpr auto clientTimeout = std::chrono::milliseconds{50};
+    boost::beast::websocket::stream<tcp::socket> webSocket{
+        std::move(c.client_)};
+    co_await webSocket.async_handshake("localhost", "/watch/some-id",
+                                       net::use_awaitable);
+    ASSERT_TRUE(webSocket.is_open());
+
+    EXPECT_FALSE(cancellationHandle->isCancelled());
+
+    // Wrong keyword should be ignored
+    co_await webSocket.async_write(toBuffer("other"), net::use_awaitable);
+
+    EXPECT_FALSE(cancellationHandle->isCancelled());
+
+    co_await webSocket.async_write(toBuffer("cancel_on_close"),
+                                   net::use_awaitable);
+
+    EXPECT_FALSE(cancellationHandle->isCancelled());
+
+    // Wrong keyword should be ignored
+    co_await webSocket.async_write(toBuffer("other2"), net::use_awaitable);
+
+    // Give server some time to process request
+    net::steady_timer timer{c.strand_, clientTimeout};
+    co_await timer.async_wait(net::use_awaitable);
+
+    EXPECT_FALSE(cancellationHandle->isCancelled());
+
+    co_await webSocket.async_close(boost::beast::websocket::close_code::normal,
+                                   net::use_awaitable);
+
+    // Give server some time to process cancellation request
+    timer.expires_after(clientTimeout);
+    co_await timer.async_wait(net::use_awaitable);
+
+    EXPECT_TRUE(cancellationHandle->isCancelled());
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        cancellationHandle->throwIfCancelled(""),
+        HasSubstr("manual cancellation"), ad_utility::CancellationException);
+
+    {
+      // Trigger connection close by creating and destroying message sender
+      co_await ad_utility::websocket::MessageSender::create(
+          std::move(queryId).value(), c.queryHub_);
+      co_await net::post(net::use_awaitable);
+    }
+
+    // Expect socket will be closed
+    boost::beast::flat_buffer buffer;
+    EXPECT_THROW(co_await webSocket.async_read(buffer, net::use_awaitable),
+                 boost::system::system_error);
+  };
+
+  co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
+                         net::use_awaitable);
+}
+
+// _____________________________________________________________________________
+
+ASYNC_TEST(WebSocketSession, verifyWithoutClientActionNoCancelDoesHappen) {
+  auto c = co_await createTestContainer(ioContext);
+
+  auto queryId = c.registry_.uniqueIdFromString("some-id");
+  ASSERT_TRUE(queryId.has_value());
+  auto cancellationHandle =
+      c.registry_.getCancellationHandle(queryId->toQueryId());
+
+  auto controllerActions = [&]() -> net::awaitable<void> {
+    boost::beast::websocket::stream<tcp::socket> webSocket{
+        std::move(c.client_)};
+    co_await webSocket.async_handshake("localhost", "/watch/some-id",
+                                       net::use_awaitable);
+    ASSERT_TRUE(webSocket.is_open());
+
+    EXPECT_FALSE(cancellationHandle->isCancelled());
+
+    // Wrong keyword should be ignored
+    co_await webSocket.async_write(toBuffer("other"), net::use_awaitable);
+  };
+
+  co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
+                         net::use_awaitable);
+
+  EXPECT_FALSE(cancellationHandle->isCancelled());
+}
+
+// _____________________________________________________________________________
+
+ASYNC_TEST(WebSocketSession, verifyCancelStringDoesNotThrowWithoutHandle) {
+  auto c = co_await createTestContainer(ioContext);
+
+  auto controllerActions = [&]() -> net::awaitable<void> {
+    boost::beast::websocket::stream<tcp::socket> webSocket{
+        std::move(c.client_)};
+    co_await webSocket.async_handshake("localhost", "/watch/does-not-exist",
+                                       net::use_awaitable);
+    ASSERT_TRUE(webSocket.is_open());
+
+    co_await webSocket.async_write(toBuffer("cancel"), net::use_awaitable);
+
+    co_await webSocket.async_close(boost::beast::websocket::close_code::normal,
+                                   net::use_awaitable);
+  };
+
+  EXPECT_NO_THROW(co_await net::co_spawn(
+      c.strand_, c.serverLogic() && controllerActions(), net::use_awaitable));
+}
+
+// _____________________________________________________________________________
+
+ASYNC_TEST(WebSocketSession,
+           verifyCancelOnCloseStringDoesNotThrowWithoutHandle) {
+  auto c = co_await createTestContainer(ioContext);
+
+  auto controllerActions = [&]() -> net::awaitable<void> {
+    boost::beast::websocket::stream<tcp::socket> webSocket{
+        std::move(c.client_)};
+    co_await webSocket.async_handshake("localhost", "/watch/does-not-exist",
+                                       net::use_awaitable);
+    ASSERT_TRUE(webSocket.is_open());
+
+    co_await webSocket.async_write(toBuffer("cancel_on_close"),
+                                   net::use_awaitable);
+
+    co_await webSocket.async_close(boost::beast::websocket::close_code::normal,
+                                   net::use_awaitable);
+  };
+
+  EXPECT_NO_THROW(co_await net::co_spawn(
+      c.strand_, c.serverLogic() && controllerActions(), net::use_awaitable));
 }

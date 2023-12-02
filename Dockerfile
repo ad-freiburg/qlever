@@ -16,7 +16,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app/build/
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -GNinja .. && ninja
-RUN make test
+RUN ctest
 
 FROM base as runtime
 WORKDIR /app
@@ -28,7 +28,7 @@ RUN groupadd -r qlever && useradd --no-log-init -r -u $UID -g qlever qlever && c
 USER qlever
 ENV PATH=/app/:$PATH
 
-COPY --from=builder /app/build/*Main /app/src/web/* /app/
+COPY --from=builder /app/build/*Main /app/
 COPY --from=builder /app/e2e/* /app/e2e/
 ENV PATH=/app/:$PATH
 

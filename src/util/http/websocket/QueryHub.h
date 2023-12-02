@@ -37,7 +37,9 @@ class QueryHub {
   net::io_context& ioContext_;
   /// Strand for synchronization
   net::strand<net::any_io_executor> globalStrand_;
-  absl::flat_hash_map<QueryId, WeakReferenceHolder> socketDistributors_{};
+  std::shared_ptr<absl::flat_hash_map<QueryId, WeakReferenceHolder>>
+      socketDistributors_ =
+          std::make_shared<absl::flat_hash_map<QueryId, WeakReferenceHolder>>();
 
   // Expose internal API for testing
   friend net::awaitable<void>

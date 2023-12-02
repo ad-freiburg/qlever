@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <concepts>
 #include <functional>
 #include <optional>
@@ -97,6 +98,10 @@ class ConfigOptionValidatorManager {
 
   // A descripton of the invariant, this validator imposes.
   std::string descriptor_;
+
+  // Describes the order of initialization.
+  static inline std::atomic_size_t numberOfInstances_{0};
+  size_t initializationId_{numberOfInstances_++};
 
  public:
   /*
@@ -209,6 +214,10 @@ class ConfigOptionValidatorManager {
   saved validator function, imposes upon the configuration options.
   */
   std::string_view getDescription() const;
+
+  // Return, how many instances of this class were initialized before this
+  // instance.
+  size_t getInitializationId() const;
 };
 
 }  // namespace ad_utility

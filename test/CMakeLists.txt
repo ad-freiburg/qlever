@@ -240,7 +240,7 @@ addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
 
-addLinkAndDiscoverTest(TriplesViewTest util)
+addLinkAndDiscoverTest(TriplesViewTest util OpenSSL::SSL OpenSSL::Crypto)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 
@@ -379,3 +379,7 @@ addLinkAndDiscoverTest(CancellationHandleTest util)
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
 addLinkAndDiscoverTest(ParallelMultiwayMergeTest)
+
+addLinkAndDiscoverTest(ParseableDurationTest)
+
+addLinkAndDiscoverTest(ConstantsTest)
