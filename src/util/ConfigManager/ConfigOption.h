@@ -239,6 +239,7 @@ class ConfigOption {
  private:
   // Needed for testing.
   FRIEND_TEST(ConfigManagerTest, AddNonExceptionValidator);
+  FRIEND_TEST(ConfigManagerTest, PrintConfigurationDocComparison);
 
   // This is a test helper function.
   template <typename... Ts>
