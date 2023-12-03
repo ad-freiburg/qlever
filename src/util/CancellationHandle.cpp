@@ -54,12 +54,10 @@ template <bool WatchDogEnabled>
 void CancellationHandle<WatchDogEnabled>::setStatePreservingCancel(
     CancellationState newState) {
   CancellationState state = cancellationState_.load(std::memory_order_relaxed);
-  while (!detail::isCancelled(state)) {
-    if (cancellationState_.compare_exchange_weak(state, newState,
-                                                 std::memory_order_relaxed)) {
-      break;
-    }
-  }
+  while (!detail::isCancelled(state) &&
+         !cancellationState_.compare_exchange_weak(state, newState,
+                                                   std::memory_order_relaxed))
+    ;
 }
 
 // _____________________________________________________________________________

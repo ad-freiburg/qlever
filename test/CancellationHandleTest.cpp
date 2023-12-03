@@ -11,7 +11,7 @@
 
 using ad_utility::CancellationException;
 using ad_utility::CancellationHandle;
-using ad_utility::CancellationState;
+using enum ad_utility::CancellationState;
 using ::testing::AllOf;
 using ::testing::ContainsRegex;
 using ::testing::HasSubstr;
@@ -37,9 +37,8 @@ TEST(CancellationHandle, verifyConstructorMessageIsPassed) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyConstructorDoesNotAcceptNoReason) {
-  EXPECT_THROW(
-      CancellationException exception(CancellationState::NOT_CANCELLED, ""),
-      ad_utility::Exception);
+  EXPECT_THROW(CancellationException exception(NOT_CANCELLED, ""),
+               ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
@@ -56,8 +55,7 @@ TYPED_TEST(CancellationHandleFixture, verifyNotCancelledByDefault) {
 
 TYPED_TEST(CancellationHandleFixture, verifyCancelWithWrongReasonThrows) {
   auto& handle = this->handle_;
-  EXPECT_THROW(handle.cancel(CancellationState::NOT_CANCELLED),
-               ad_utility::Exception);
+  EXPECT_THROW(handle.cancel(NOT_CANCELLED), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
@@ -67,7 +65,7 @@ auto detail = "Some Detail";
 TYPED_TEST(CancellationHandleFixture, verifyTimeoutCancellationWorks) {
   auto& handle = this->handle_;
 
-  handle.cancel(CancellationState::TIMEOUT);
+  handle.cancel(TIMEOUT);
 
   auto timeoutMessageMatcher = AllOf(HasSubstr(detail), HasSubstr("timeout"));
   EXPECT_TRUE(handle.isCancelled());
@@ -84,7 +82,7 @@ TYPED_TEST(CancellationHandleFixture, verifyTimeoutCancellationWorks) {
 TYPED_TEST(CancellationHandleFixture, verifyManualCancellationWorks) {
   auto& handle = this->handle_;
 
-  handle.cancel(CancellationState::MANUAL);
+  handle.cancel(MANUAL);
 
   auto cancellationMessageMatcher =
       AllOf(HasSubstr(detail), HasSubstr("manual cancellation"));
@@ -105,7 +103,7 @@ TYPED_TEST(CancellationHandleFixture,
 
   ad_utility::JThread thread{[&]() {
     std::this_thread::sleep_for(5ms);
-    handle.cancel(CancellationState::TIMEOUT);
+    handle.cancel(TIMEOUT);
   }};
 
   EXPECT_THROW(
@@ -130,17 +128,41 @@ TEST(CancellationHandle, ensureObjectLifetimeIsValidWithoutWatchDogStarted) {
 namespace ad_utility {
 
 TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
+#ifdef __APPLE__
+  GTEST_SKIP_("sleep_for is unreliable for macos builds");
+#endif
   CancellationHandle<true> handle;
 
-  EXPECT_EQ(handle.cancellationState_, CancellationState::NOT_CANCELLED);
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   handle.startWatchDog();
 
   // Give thread some time to start
   std::this_thread::sleep_for(10ms);
-  EXPECT_EQ(handle.cancellationState_, CancellationState::WAITING_FOR_CHECK);
+  EXPECT_EQ(handle.cancellationState_, WAITING_FOR_CHECK);
 
   std::this_thread::sleep_for(detail::DESIRED_CHECK_INTERVAL);
-  EXPECT_EQ(handle.cancellationState_, CancellationState::CHECK_WINDOW_MISSED);
+  EXPECT_EQ(handle.cancellationState_, CHECK_WINDOW_MISSED);
+}
+
+// _____________________________________________________________________________
+
+TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
+#ifdef __APPLE__
+  GTEST_SKIP_("sleep_for is unreliable for macos builds");
+#endif
+  CancellationHandle<true> handle;
+  handle.startWatchDog();
+
+  // Give thread some time to start
+  std::this_thread::sleep_for(10ms);
+
+  handle.cancellationState_ = MANUAL;
+  std::this_thread::sleep_for(detail::DESIRED_CHECK_INTERVAL);
+  EXPECT_EQ(handle.cancellationState_, MANUAL);
+
+  handle.cancellationState_ = TIMEOUT;
+  std::this_thread::sleep_for(detail::DESIRED_CHECK_INTERVAL);
+  EXPECT_EQ(handle.cancellationState_, TIMEOUT);
 }
 
 // _____________________________________________________________________________
@@ -148,25 +170,25 @@ TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
 TEST(CancellationHandle, verifyResetWatchDogStateDoesProperlyResetState) {
   CancellationHandle<true> handle;
 
-  handle.cancellationState_ = CancellationState::NOT_CANCELLED;
+  handle.cancellationState_ = NOT_CANCELLED;
   handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CancellationState::NOT_CANCELLED);
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
 
-  handle.cancellationState_ = CancellationState::WAITING_FOR_CHECK;
+  handle.cancellationState_ = WAITING_FOR_CHECK;
   handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CancellationState::NOT_CANCELLED);
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
 
-  handle.cancellationState_ = CancellationState::CHECK_WINDOW_MISSED;
+  handle.cancellationState_ = CHECK_WINDOW_MISSED;
   handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CancellationState::NOT_CANCELLED);
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
 
-  handle.cancellationState_ = CancellationState::MANUAL;
+  handle.cancellationState_ = MANUAL;
   handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CancellationState::MANUAL);
+  EXPECT_EQ(handle.cancellationState_, MANUAL);
 
-  handle.cancellationState_ = CancellationState::TIMEOUT;
+  handle.cancellationState_ = TIMEOUT;
   handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CancellationState::TIMEOUT);
+  EXPECT_EQ(handle.cancellationState_, TIMEOUT);
 }
 
 // _____________________________________________________________________________
@@ -174,25 +196,25 @@ TEST(CancellationHandle, verifyResetWatchDogStateDoesProperlyResetState) {
 TEST(CancellationHandle, verifyResetWatchDogStateIsNoOpWithoutWatchDog) {
   CancellationHandle<false> handle;
 
-  handle.cancellationState_ = CancellationState::NOT_CANCELLED;
+  handle.cancellationState_ = NOT_CANCELLED;
   handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CancellationState::NOT_CANCELLED);
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
 
-  handle.cancellationState_ = CancellationState::WAITING_FOR_CHECK;
+  handle.cancellationState_ = WAITING_FOR_CHECK;
   handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CancellationState::WAITING_FOR_CHECK);
+  EXPECT_EQ(handle.cancellationState_, WAITING_FOR_CHECK);
 
-  handle.cancellationState_ = CancellationState::CHECK_WINDOW_MISSED;
+  handle.cancellationState_ = CHECK_WINDOW_MISSED;
   handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CancellationState::CHECK_WINDOW_MISSED);
+  EXPECT_EQ(handle.cancellationState_, CHECK_WINDOW_MISSED);
 
-  handle.cancellationState_ = CancellationState::MANUAL;
+  handle.cancellationState_ = MANUAL;
   handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CancellationState::MANUAL);
+  EXPECT_EQ(handle.cancellationState_, MANUAL);
 
-  handle.cancellationState_ = CancellationState::TIMEOUT;
+  handle.cancellationState_ = TIMEOUT;
   handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CancellationState::TIMEOUT);
+  EXPECT_EQ(handle.cancellationState_, TIMEOUT);
 }
 
 // _____________________________________________________________________________
@@ -202,13 +224,13 @@ TEST(CancellationHandle, verifyCheckDoesPleaseWatchDog) {
   // Because watch dog operates async, simulate it here for stable tests.
   handle.watchDogRunning_ = true;
 
-  handle.cancellationState_ = CancellationState::WAITING_FOR_CHECK;
+  handle.cancellationState_ = WAITING_FOR_CHECK;
   EXPECT_NO_THROW(handle.throwIfCancelled(""));
-  EXPECT_EQ(handle.cancellationState_, CancellationState::NOT_CANCELLED);
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
 
-  handle.cancellationState_ = CancellationState::CHECK_WINDOW_MISSED;
+  handle.cancellationState_ = CHECK_WINDOW_MISSED;
   EXPECT_NO_THROW(handle.throwIfCancelled(""));
-  EXPECT_EQ(handle.cancellationState_, CancellationState::NOT_CANCELLED);
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
 }
 
 // _____________________________________________________________________________
@@ -216,13 +238,13 @@ TEST(CancellationHandle, verifyCheckDoesPleaseWatchDog) {
 TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
   CancellationHandle<true> handle;
 
-  handle.cancellationState_ = CancellationState::MANUAL;
+  handle.cancellationState_ = MANUAL;
   EXPECT_THROW(handle.throwIfCancelled(""), CancellationException);
-  EXPECT_EQ(handle.cancellationState_, CancellationState::MANUAL);
+  EXPECT_EQ(handle.cancellationState_, MANUAL);
 
-  handle.cancellationState_ = CancellationState::TIMEOUT;
+  handle.cancellationState_ = TIMEOUT;
   EXPECT_THROW(handle.throwIfCancelled(""), CancellationException);
-  EXPECT_EQ(handle.cancellationState_, CancellationState::TIMEOUT);
+  EXPECT_EQ(handle.cancellationState_, TIMEOUT);
 }
 
 // _____________________________________________________________________________
@@ -241,9 +263,9 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 
   handle.startTimeoutWindow_ =
       std::chrono::steady_clock::now().time_since_epoch().count();
-  handle.cancellationState_ = CancellationState::CHECK_WINDOW_MISSED;
+  handle.cancellationState_ = CHECK_WINDOW_MISSED;
   EXPECT_NO_THROW(handle.throwIfCancelled("my-detail"));
-  EXPECT_EQ(handle.cancellationState_, CancellationState::NOT_CANCELLED);
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
 
   EXPECT_THAT(
       std::move(testStream).str(),
