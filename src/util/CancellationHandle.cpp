@@ -19,6 +19,7 @@ void CancellationHandle<WatchDogEnabled>::cancel(CancellationState reason) {
 template <bool WatchDogEnabled>
 void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
     requires WatchDogEnabled {
+  using enum CancellationState;
   // Setting the atomic here does synchronize memory for assignment,
   // so this is safe without a mutex
   bool running = watchDogRunning_.exchange(true);
@@ -26,12 +27,11 @@ void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
   watchDogThread_ = ad_utility::JThread{[this]() {
     while (watchDogRunning_.load(std::memory_order_relaxed)) {
       auto state = cancellationState_.load(std::memory_order_relaxed);
-      if (state == CancellationState::NOT_CANCELLED) {
-        cancellationState_.compare_exchange_strong(
-            state, CancellationState::WAITING_FOR_CHECK);
-      } else if (state == CancellationState::WAITING_FOR_CHECK) {
-        if (cancellationState_.compare_exchange_strong(
-                state, CancellationState::CHECK_WINDOW_MISSED)) {
+      if (state == NOT_CANCELLED) {
+        cancellationState_.compare_exchange_strong(state, WAITING_FOR_CHECK);
+      } else if (state == WAITING_FOR_CHECK) {
+        if (cancellationState_.compare_exchange_strong(state,
+                                                       CHECK_WINDOW_MISSED)) {
           startTimeoutWindow_ =
               std::chrono::steady_clock::now().time_since_epoch().count();
         }
@@ -80,12 +80,10 @@ CancellationHandle<WatchDogEnabled>::~CancellationHandle() {
 
 // _____________________________________________________________________________
 template <bool WatchDogEnabled>
-decltype(detail::DESIRED_CHECK_INTERVAL)
+CancellationHandle<WatchDogEnabled>::DurationType
 CancellationHandle<WatchDogEnabled>::computeCheckMissDuration() const
     requires WatchDogEnabled {
   using namespace std::chrono;
-  using DurationType =
-      std::remove_const_t<decltype(detail::DESIRED_CHECK_INTERVAL)>;
   return duration_cast<DurationType>(
       steady_clock::now() -
       steady_clock::time_point{steady_clock::duration{startTimeoutWindow_}});

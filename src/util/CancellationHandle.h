@@ -97,9 +97,10 @@ class CancellationHandle {
     cancellationState_.compare_exchange_strong(
         state, CancellationState::NOT_CANCELLED, std::memory_order_relaxed);
   }
+  using DurationType =
+      std::remove_const_t<decltype(detail::DESIRED_CHECK_INTERVAL)>;
 
-  decltype(detail::DESIRED_CHECK_INTERVAL) computeCheckMissDuration() const
-      requires WatchDogEnabled;
+  DurationType computeCheckMissDuration() const requires WatchDogEnabled;
 
   void startWatchDogInternal() requires WatchDogEnabled;
 
@@ -153,6 +154,9 @@ class CancellationHandle {
 
   void resetWatchDogState();
 
+  CancellationHandle() = default;
+  CancellationHandle(const CancellationHandle&) = delete;
+  CancellationHandle& operator=(const CancellationHandle&) = delete;
   ~CancellationHandle();
 
   FRIEND_TEST(CancellationHandle, verifyWatchDogDoesChangeState);
