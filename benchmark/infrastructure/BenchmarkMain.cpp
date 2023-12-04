@@ -85,6 +85,22 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
 }
 
 /*
+Print the configuration documentation of all registered benchmarks.
+*/
+static void printConfigurationOptions() {
+  std::ranges::for_each(
+      BenchmarkRegister::getAllRegisteredBenchmarks(),
+      [](const BenchmarkInterface* bench) {
+        std::cerr << createCategoryTitle(
+                         absl::StrCat("Benchmark class '", bench->name(), "'"))
+                  << "\n"
+                  << bench->getConfigManager().printConfigurationDoc(true)
+                  << "\n\n";
+      });
+  exit(0);
+}
+
+/*
  * @brief Goes through all types of registered benchmarks, measures their time
  * and prints their measured time in a fitting format.
  */
@@ -149,16 +165,7 @@ int main(int argc, char** argv) {
 
   // Print all the available configuration options, if wanted.
   if (vm.count("configuration-options")) {
-    std::ranges::for_each(
-        BenchmarkRegister::getAllRegisteredBenchmarks(),
-        [](const BenchmarkInterface* bench) {
-          std::cerr << createCategoryTitle(absl::StrCat("Benchmark class '",
-                                                        bench->name(), "'"))
-                    << "\n"
-                    << bench->getConfigManager().printConfigurationDoc(true)
-                    << "\n\n";
-        });
-    exit(0);
+    printConfigurationOptions();
   }
 
   /*
