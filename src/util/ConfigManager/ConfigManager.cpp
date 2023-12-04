@@ -682,10 +682,11 @@ auto ConfigManager::getValidatorAssignment() const
   std::ranges::for_each(
       allManager, [&assignment](const ConfigManager& manager) {
         std::ranges::for_each(
-            std::views::filter(manager.validators_,
-                               [&assignment](const auto& validator) {
-                                 return !assignment.containsValue(validator);
-                               }),
+            std::views::filter(
+                manager.validators_,
+                [](const auto& validator) {
+                  return validator.configOptionToBeChecked().size() > 1;
+                }),
             [&assignment, &manager](const auto& validator) {
               assignment.addEntryUnderKey(manager, validator);
             });
@@ -792,7 +793,6 @@ void ConfigManager::ConfigurationDocValidatorAssignment::addEntryUnderKey(
   } else {
     hashMap.emplace(&key, std::vector{&manager});
   }
-  validatorSet_.emplace(&manager);
 }
 // Explicit instantiation for `ConfigOption` and `ConfigManager`.
 template void ConfigManager::ConfigurationDocValidatorAssignment::
@@ -830,11 +830,5 @@ ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
 template std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
 ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
     const ConfigManager&) const;
-
-// ____________________________________________________________________________
-bool ConfigManager::ConfigurationDocValidatorAssignment::containsValue(
-    const ConfigOptionValidatorManager& manager) const {
-  return validatorSet_.contains(&manager);
-}
 
 }  // namespace ad_utility

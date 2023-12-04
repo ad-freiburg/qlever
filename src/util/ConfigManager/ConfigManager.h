@@ -664,10 +664,6 @@ class ConfigManager {
     MemoryAdressHashMap<ConfigOption> configOption_;
     MemoryAdressHashMap<ConfigManager> configManager_;
 
-    // For fast lookup, if an `ConfigOptionValidatorManager` was ever assigned
-    // to anything.
-    std::unordered_set<const ConfigOptionValidatorManager*> validatorSet_;
-
    public:
     /*
     @brief Add a validator to the list of validators, that are assigned to a
@@ -688,9 +684,6 @@ class ConfigManager {
     requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
     std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
     getEntriesUnderKey(const T& key) const;
-
-    // Was the given `ConfigOptionValidatorManager` ever assigned to anything?
-    bool containsValue(const ConfigOptionValidatorManager& manager) const;
 
    private:
     // Return either `configOption_` or `configManager_`, based on type.
