@@ -31,8 +31,7 @@ Index makeIndexWithTestSettings();
 // the files it creates and provides a member function to obtain all their
 // names. But for now this is good enough (and better then what we had before
 // when the files were not deleted after the test).
-std::vector<std::string> getAllIndexFilenames(
-    const std::string indexBasename);
+std::vector<std::string> getAllIndexFilenames(const std::string& indexBasename);
 
 // Create an `Index` from the given `turtleInput`. If the `turtleInput` is not
 // specified, a default input will be used and the resulting index will have the
@@ -59,6 +58,6 @@ QueryExecutionContext* getQec(
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the
 // string cannot be found in the vocabulary.
-std::function<Id(const std::string&)> makeGetId (const Index& index);
+std::function<Id(const std::string&)> makeGetId(const Index& index);
 
 }  // namespace ad_utility::testing

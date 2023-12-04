@@ -20,7 +20,7 @@ Index makeIndexWithTestSettings() {
 }
 
 std::vector<std::string> getAllIndexFilenames(
-    const std::string indexBasename) {
+    const std::string& indexBasename) {
   return {indexBasename + ".ttl",
           indexBasename + ".index.pos",
           indexBasename + ".index.pso",
@@ -39,6 +39,37 @@ std::vector<std::string> getAllIndexFilenames(
           indexBasename + ".vocabulary.external",
           indexBasename + ".vocabulary.external.idsAndOffsets.mmap"};
 }
+
+namespace {
+// Check that the old pattern implementation (separate patterns in separate
+// files) have exactly the same contents as the patterns that are folded into
+// the PSO and POS permutation.
+void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
+  auto checkConsistency = [&](Id predicate) {
+    auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle>();
+    // TODO<joka921> Also test the other permutations.
+    auto scanResult = index.scan(predicate, std::nullopt, Permutation::PSO,
+                                 std::array{ColumnIndex{2}}, cancellationDummy);
+    ASSERT_EQ(scanResult.numColumns(), 3u);
+    for (const auto& row : scanResult) {
+      auto subject = row[0].getVocabIndex().get();
+      auto patternIdx = row[2].getInt();
+      if (subject >= index.getHasPattern().size()) {
+        EXPECT_EQ(patternIdx, NO_PATTERN);
+      } else {
+        EXPECT_EQ(patternIdx, index.getHasPattern()[subject])
+            << subject << ' '
+            << index.idToOptionalString(row[0].getVocabIndex()).value() << ' '
+            << index.getHasPattern().size() << ' ' << NO_PATTERN;
+      }
+    }
+  };
+  const auto& predicates = index.getImpl().PSO().metaData().data();
+  for (const auto& predicate : predicates) {
+    checkConsistency(predicate.col0Id_);
+  }
+}
+}  // namespace
 
 // ______________________________________________________________
 Index makeTestIndex(const std::string& indexBasename,
@@ -94,44 +125,17 @@ Index makeTestIndex(const std::string& indexBasename,
   index.createFromOnDiskIndex(indexBasename);
   ad_utility::setGlobalLoggingStream(&std::cout);
 
-  // TODO<joka921> Factor this out into a separate function.
   if (usePatterns && loadAllPermutations) {
-    auto checkConsistency = [&](Id predicate, source_location l =
-                                                  source_location::current()) {
-      auto tr = generateLocationTrace(l);
-      auto cancellationDummy =
-          std::make_shared<ad_utility::CancellationHandle>();
-      auto scanResult =
-          index.scan(predicate, std::nullopt, Permutation::PSO,
-                     std::array{ColumnIndex{2}}, cancellationDummy);
-      ASSERT_EQ(scanResult.numColumns(), 3u);
-      for (const auto& row : scanResult) {
-        auto subject = row[0].getVocabIndex().get();
-        auto patternIdx = row[2].getInt();
-        if (subject >= index.getHasPattern().size()) {
-          EXPECT_EQ(patternIdx, NO_PATTERN);
-        } else {
-          EXPECT_EQ(patternIdx, index.getHasPattern()[subject])
-              << subject << ' '
-              << index.idToOptionalString(row[0].getVocabIndex()).value() << ' '
-              << index.getHasPattern().size() << ' ' << NO_PATTERN;
-        }
-      }
-    };
-    const auto& predicates = index.getImpl().PSO().metaData().data();
-    for (const auto& predicate : predicates) {
-      checkConsistency(predicate.col0Id_);
-    }
+    checkConsistencyBetweenOldAndNewPatterns(index);
   }
   return index;
 }
 
 // ________________________________________________________________________________
-QueryExecutionContext* getQec(
-    std::optional<std::string> turtleInput,
-    bool loadAllPermutations, bool usePatterns,
-    bool usePrefixCompression,
-    ad_utility::MemorySize blocksizePermutations) {
+QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
+                              bool loadAllPermutations, bool usePatterns,
+                              bool usePrefixCompression,
+                              ad_utility::MemorySize blocksizePermutations) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -167,7 +171,7 @@ QueryExecutionContext* getQec(
   };
 
   using Key = std::tuple<std::optional<string>, bool, bool, bool,
-      ad_utility::MemorySize>;
+                         ad_utility::MemorySize>;
   static ad_utility::HashMap<Key, Context> contextMap;
 
   auto key = Key{turtleInput, loadAllPermutations, usePatterns,
@@ -179,14 +183,14 @@ QueryExecutionContext* getQec(
     contextMap.emplace(
         key,
         Context{TypeErasedCleanup{[testIndexBasename]() {
-          for (const std::string& indexFilename :
-              getAllIndexFilenames(testIndexBasename)) {
-            // Don't log when a file can't be deleted,
-            // because the logging might already be
-            // destroyed.
-            ad_utility::deleteFile(indexFilename, false);
-          }
-        }},
+                  for (const std::string& indexFilename :
+                       getAllIndexFilenames(testIndexBasename)) {
+                    // Don't log when a file can't be deleted,
+                    // because the logging might already be
+                    // destroyed.
+                    ad_utility::deleteFile(indexFilename, false);
+                  }
+                }},
                 std::make_unique<Index>(makeTestIndex(
                     testIndexBasename, turtleInput, loadAllPermutations,
                     usePatterns, usePrefixCompression, blocksizePermutations)),

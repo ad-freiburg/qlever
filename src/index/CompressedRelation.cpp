@@ -934,8 +934,9 @@ CompressedRelationWriter::createPermutationPair(
                          4_GB, alloc);
 
   DistinctIdCounter distinctCol1Counter;
-  auto addBlockForLargeRelation = [&numBlocksCurrentRel, &writer1, &col0IdCurrentRelation,
-                                   &relation, &twinRelationSorter, &blocksize] {
+  auto addBlockForLargeRelation = [&numBlocksCurrentRel, &writer1,
+                                   &col0IdCurrentRelation, &relation,
+                                   &twinRelationSorter, &blocksize] {
     if (relation.empty()) {
       return;
     }
@@ -953,10 +954,10 @@ CompressedRelationWriter::createPermutationPair(
   };
 
   auto finishRelation = [&twinRelationSorter, &writer2, &writer1,
-                         &numBlocksCurrentRel, &col0IdCurrentRelation, &relation,
-                         &distinctCol1Counter, &addBlockForLargeRelation,
-                         &compare, &blocksize, &writeMetadata,
-                         &largeTwinRelationTimer]() {
+                         &numBlocksCurrentRel, &col0IdCurrentRelation,
+                         &relation, &distinctCol1Counter,
+                         &addBlockForLargeRelation, &compare, &blocksize,
+                         &writeMetadata, &largeTwinRelationTimer]() {
     if (numBlocksCurrentRel > 0 || static_cast<double>(relation.numRows()) >
                                        0.8 * static_cast<double>(blocksize)) {
       // The relation is large;
@@ -964,7 +965,8 @@ CompressedRelationWriter::createPermutationPair(
       auto md1 = writer1.finishLargeRelation(distinctCol1Counter.getAndReset());
       largeTwinRelationTimer.cont();
       auto md2 = writer2.addCompleteLargeRelation(
-          col0IdCurrentRelation.value(), twinRelationSorter.getSortedBlocks(blocksize));
+          col0IdCurrentRelation.value(),
+          twinRelationSorter.getSortedBlocks(blocksize));
       largeTwinRelationTimer.stop();
       twinRelationSorter.clear();
       writeMetadata(md1, md2);
@@ -1047,14 +1049,15 @@ CompressedRelationWriter::createPermutationPair(
   blockCallbackQueue.finish();
   blockCallbackTimer.stop();
   LOG(TIMING) << "Time spent waiting for the input "
-            << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
-            << std::endl;
+              << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
+              << std::endl;
   LOG(TIMING) << "Time spent waiting for large twin relations "
-            << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
-            << "s" << std::endl;
-  LOG(TIMING) << "Time spent waiting for triple callbacks (e.g. the next sorter) "
-            << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs()) << "s"
-            << std::endl;
+              << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
+              << "s" << std::endl;
+  LOG(TIMING)
+      << "Time spent waiting for triple callbacks (e.g. the next sorter) "
+      << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs()) << "s"
+      << std::endl;
   return std::pair{std::move(writer1).getFinishedBlocks(),
                    std::move(writer2).getFinishedBlocks()};
 }

@@ -513,7 +513,6 @@ class CompressedExternalIdTableSorterTypeErased {
 inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 
-
 // The implementation of sorting a single block
 template <typename Comparator>
 struct BlockSorter {
@@ -604,7 +603,8 @@ class CompressedExternalIdTableSorter
     mergeIsActive_.store(false);
   }
 
-  // The implementation of the type-erased interface. Push a complete block at once.
+  // The implementation of the type-erased interface. Push a complete block at
+  // once.
   void pushBlock(const IdTableStatic<0>& block) override {
     AD_CONTRACT_CHECK(block.numColumns() == this->numColumns_);
     for (const auto& row : block) {
@@ -612,8 +612,9 @@ class CompressedExternalIdTableSorter
     }
   }
 
-  // The implementation of the type-erased interface. Get the sorted blocks as dynamic IdTables.
-  virtual cppcoro::generator<IdTableStatic<0>> getSortedOutput(
+  // The implementation of the type-erased interface. Get the sorted blocks as
+  // dynamic IdTables.
+  cppcoro::generator<IdTableStatic<0>> getSortedOutput(
       std::optional<size_t> blocksize) override {
     return getSortedBlocks<0>(blocksize);
   }

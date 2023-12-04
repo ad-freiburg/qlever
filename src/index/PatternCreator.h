@@ -26,11 +26,11 @@
 struct PatternStatistics {
  public:
   // The number of distinct subject-predicate pairs contained in the patterns.
-  uint64_t _numDistinctSubjectPredicatePairs;
+  uint64_t numDistinctSubjectPredicatePairs_;
   // The average number of distinct predicates per subject.
-  double _avgNumDistinctPredicatesPerSubject;
+  double avgNumDistinctPredicatesPerSubject_;
   // The average number of distinct subjects per predicate.
-  double _avgNumDistinctSubjectsPerPredicate;
+  double avgNumDistinctSubjectsPerPredicate_;
 
   /// Uninitialized default construction, necessary for the serialization to
   /// work.
@@ -42,19 +42,19 @@ struct PatternStatistics {
   PatternStatistics(uint64_t numDistinctSubjectPredicate,
                     uint64_t numDistinctSubjects,
                     uint64_t numDistinctPredicates)
-      : _numDistinctSubjectPredicatePairs{numDistinctSubjectPredicate},
-        _avgNumDistinctPredicatesPerSubject{
-            static_cast<double>(_numDistinctSubjectPredicatePairs) /
+      : numDistinctSubjectPredicatePairs_{numDistinctSubjectPredicate},
+        avgNumDistinctPredicatesPerSubject_{
+            static_cast<double>(numDistinctSubjectPredicatePairs_) /
             static_cast<double>(numDistinctSubjects)},
-        _avgNumDistinctSubjectsPerPredicate{
-            static_cast<double>(_numDistinctSubjectPredicatePairs) /
+        avgNumDistinctSubjectsPerPredicate_{
+            static_cast<double>(numDistinctSubjectPredicatePairs_) /
             static_cast<double>(numDistinctPredicates)} {}
 
   /// Symmetric serialization.
   AD_SERIALIZE_FRIEND_FUNCTION(PatternStatistics) {
-    serializer | arg._avgNumDistinctPredicatesPerSubject;
-    serializer | arg._avgNumDistinctSubjectsPerPredicate;
-    serializer | arg._numDistinctSubjectPredicatePairs;
+    serializer | arg.avgNumDistinctPredicatesPerSubject_;
+    serializer | arg.avgNumDistinctSubjectsPerPredicate_;
+    serializer | arg.numDistinctSubjectPredicatePairs_;
   }
 };
 
@@ -76,26 +76,26 @@ class PatternCreatorNew {
 
  private:
   // The file to which the patterns will be written.
-  std::string _filename;
+  std::string filename_;
 
   // Store the ID of a pattern, and the number of distinct subjects it occurs
   // with.
   struct PatternIdAndCount {
-    PatternID _patternId = 0;
-    uint64_t _count = 0;
+    PatternID patternId_ = 0;
+    uint64_t count_ = 0;
   };
   using PatternToIdAndCount = ad_utility::HashMap<Pattern, PatternIdAndCount>;
-  PatternToIdAndCount _patternToIdAndCount;
+  PatternToIdAndCount patternToIdAndCount_;
 
   // Between the calls to `processTriple` we have to remember the current
   // subject (the subject of the last triple for which `processTriple` was
   // called).
-  std::optional<VocabIndex> _currentSubjectIndex;
-  // The pattern of `_currentSubjectIndex`. This might still be incomplete,
+  std::optional<VocabIndex> currentSubjectIndex_;
+  // The pattern of `currentSubjectIndex_`. This might still be incomplete,
   // because more triples with the same subject might be pushed.
-  Pattern _currentPattern;
+  Pattern currentPattern_;
 
-  ad_utility::serialization::FileWriteSerializer _patternSerializer;
+  ad_utility::serialization::FileWriteSerializer patternSerializer_;
 
   // Store the additional triples that are created by the pattern mechanism for
   // the `has-pattern` and `has-predicate` predicates.
@@ -104,31 +104,31 @@ class PatternCreatorNew {
     std::array<Id, 3> triple_;
     bool isInternal_;
   };
-  std::vector<TripleAndIsInternal> _tripleBuffer;
-  PSOSorter _additionalTriplesPsoSorter;
-  std::unique_ptr<OSPSorter4Cols> _ospSorterTriplesWithPattern;
+  std::vector<TripleAndIsInternal> tripleBuffer_;
+  PSOSorter additionalTriplesPsoSorter_;
+  std::unique_ptr<OSPSorter4Cols> ospSorterTriplesWithPattern_;
 
   // The predicates which have already occured in one of the patterns. Needed to
   // count the number of distinct predicates.
-  ad_utility::HashSet<Pattern::value_type> _distinctPredicates;
+  ad_utility::HashSet<Pattern::value_type> distinctPredicates_;
 
   // The number of distinct subjects and distinct subject-predicate pairs.
-  uint64_t _numDistinctSubjects = 0;
-  uint64_t _numDistinctSubjectPredicatePairs = 0;
+  uint64_t numDistinctSubjects_ = 0;
+  uint64_t numDistinctSubjectPredicatePairs_ = 0;
 
   // True if `finish()` was already called.
-  bool _isFinished = false;
+  bool isFinished_ = false;
 
  public:
   // The patterns will be written to files starting with `basename`.
   explicit PatternCreatorNew(const string& basename,
                              ad_utility::MemorySize memoryLimit)
-      : _filename{basename},
-        _patternSerializer{{basename}},
-        _additionalTriplesPsoSorter{basename + ".additionalTriples.pso.dat",
+      : filename_{basename},
+        patternSerializer_{{basename}},
+        additionalTriplesPsoSorter_{basename + ".additionalTriples.pso.dat",
                                     memoryLimit / 2,
                                     ad_utility::makeUnlimitedAllocator<Id>()},
-        _ospSorterTriplesWithPattern{std::make_unique<OSPSorter4Cols>(
+        ospSorterTriplesWithPattern_{std::make_unique<OSPSorter4Cols>(
             basename + ".withPatterns.pso.dat", memoryLimit / 2,
             ad_utility::makeUnlimitedAllocator<Id>())} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
@@ -165,11 +165,11 @@ class PatternCreatorNew {
   // Move the sorted `has-pattern` and `has-predicate` triples out.
   PSOSorter&& getHasPatternSortedByPSO() && {
     finish();
-    return std::move(_additionalTriplesPsoSorter);
+    return std::move(additionalTriplesPsoSorter_);
   }
   std::unique_ptr<OSPSorter4Cols> getAllTriplesWithPatternSortedByOSP() && {
     finish();
-    return std::move(_ospSorterTriplesWithPattern);
+    return std::move(ospSorterTriplesWithPattern_);
   }
 
  private:
@@ -177,7 +177,7 @@ class PatternCreatorNew {
 
   void printStatistics(PatternStatistics patternStatistics) const;
 
-  auto& ospSorterTriplesWithPattern() { return *_ospSorterTriplesWithPattern; }
+  auto& ospSorterTriplesWithPattern() { return *ospSorterTriplesWithPattern_; }
 };
 
 // The old version of the pattern creator.
@@ -199,7 +199,7 @@ class PatternCreator {
   // subject (the subject of the last triple for which `processTriple` was
   // called).
   std::optional<VocabIndex> _currentSubjectIndex;
-  // The pattern of `_currentSubjectIndex`. This might still be incomplete,
+  // The pattern of `currentSubjectIndex_`. This might still be incomplete,
   // because more triples with the same subject might be pushed.
   Pattern _currentPattern;
 
