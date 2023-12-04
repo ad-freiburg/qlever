@@ -4349,12 +4349,14 @@ Sub manager 'subManager'
   ConfigManager& subManger{topManager.addSubManager({"subManager"})};
   addDefaultExampleOptionsAndSingleOptionValidators(&subManger);
   bool boolForDoubleArgumentValidatorOptions{false};
-  addDefaultValidator(
-      &subManger,
+  decltype(auto) doubleArgumentValidatorFirstArgument{
       subManger.addOption("doubleArgumentValidatorFirstArgument", "",
-                          &boolForDoubleArgumentValidatorOptions),
+                          &boolForDoubleArgumentValidatorOptions)};
+  decltype(auto) doubleArgumentValidatorSecondArgument{
       subManger.addOption("doubleArgumentValidatorSecondArgument", "",
-                          &boolForDoubleArgumentValidatorOptions));
+                          &boolForDoubleArgumentValidatorOptions)};
+  addDefaultValidator(&subManger, doubleArgumentValidatorFirstArgument,
+                      doubleArgumentValidatorSecondArgument);
 
   // Finally, check, if the expected and actual output is the same.
   assertStringEqual(exampleConfigManagerExpectedNotDetailedString,
