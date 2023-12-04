@@ -715,6 +715,21 @@ class ConfigManager {
   };
 
   /*
+  @brief Create the validator assignments based on this instance. Note, that
+  these assignments are done based on all the held sub manager und configuration
+  options. In other words, you only need to call it with the top manager.
+
+  Our current assignment strategy is:
+  - Validator, that only check a single configuration option, are assigned to
+  that option.
+  - Validator, that check more than one single configuration option, are
+  assigned to the configuration manager, that holds them.
+  - Any list of `ConfigOptionValidatorManager` is sorted by their creation
+  order.
+  */
+  ConfigurationDocValidatorAssignment getValidatorAssignment() const;
+
+  /*
   @brief Create a detailed list about the configuration options, with their
   types, values, default values,  etc. shown and organized by the sub managers,
   that hold them. Validator invariant descriptions will be printed according to

@@ -628,26 +628,8 @@ std::string ConfigManager::generateConfigurationDocDetailedList(
 }
 
 // ____________________________________________________________________________
-std::string ConfigManager::printConfigurationDoc(bool detailed) const {
-  /*
-  This works, because sub managers are not allowed to be empty. (This invariant
-  is checked by the helper function for walking over the hash map entries, that
-  is used by the `generateConfigurationDoc...` helper functions.)
-  So, the only way for a valid lack of configuration options to be true, is on
-  the top level. A.k.a. the object, on which `printConfigurationDoc` was called.
-  */
-  if (configurationOptions_.empty()) {
-    return "No configuration options were defined.";
-  }
-
-  // We always print the configuration doc json.
-  const std::string& configurationDocJsonString{absl::StrCat(
-      "Configuration:\n", generateConfigurationDocJson("").dump(2))};
-
-  if (!detailed) {
-    return configurationDocJsonString;
-  }
-
+auto ConfigManager::getValidatorAssignment() const
+    -> ConfigurationDocValidatorAssignment {
   /*
   First thing, we need to create a `ConfigurationDocValidatorAssignment`.
 
@@ -709,8 +691,33 @@ std::string ConfigManager::printConfigurationDoc(bool detailed) const {
             });
       });
 
-  return absl::StrCat(configurationDocJsonString, "\n\n",
-                      generateConfigurationDocDetailedList("", assignment));
+  return assignment;
+}
+
+// ____________________________________________________________________________
+std::string ConfigManager::printConfigurationDoc(bool detailed) const {
+  /*
+  This works, because sub managers are not allowed to be empty. (This invariant
+  is checked by the helper function for walking over the hash map entries, that
+  is used by the `generateConfigurationDoc...` helper functions.)
+  So, the only way for a valid lack of configuration options to be true, is on
+  the top level. A.k.a. the object, on which `printConfigurationDoc` was called.
+  */
+  if (configurationOptions_.empty()) {
+    return "No configuration options were defined.";
+  }
+
+  // We always print the configuration doc json.
+  const std::string& configurationDocJsonString{absl::StrCat(
+      "Configuration:\n", generateConfigurationDocJson("").dump(2))};
+
+  if (!detailed) {
+    return configurationDocJsonString;
+  }
+
+  return absl::StrCat(
+      configurationDocJsonString, "\n\n",
+      generateConfigurationDocDetailedList("", getValidatorAssignment()));
 }
 
 // ____________________________________________________________________________
