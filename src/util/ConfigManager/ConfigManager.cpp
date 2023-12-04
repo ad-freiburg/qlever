@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -26,6 +24,7 @@
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -109,33 +108,32 @@ requires ad_utility::InvocableWithExactReturnType<
              Visitor, void, std::string_view, ConfigOption&>
 void ConfigManager::visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
                                         std::string_view pathPrefix) const {
+  // For less code duplication.
+  using Pair = decltype(configurationOptions_)::value_type;
+
+  // Check the hash map entries before using them.
+  std::ranges::for_each(configurationOptions_, [&pathPrefix](const Pair& pair) {
+    const auto& [jsonPath, hashMapEntry] = pair;
+    verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath), hashMapEntry);
+  });
+
   // `std::reference_wrapper` works with `std::ranges::sort`. `const
-  // HashMapEntry&` does not.
-  auto transformedHashMap =
-      std::views::transform(configurationOptions_, [&pathPrefix](auto& pair) {
-        const auto& [jsonPath, hashMapEntry] = pair;
-        // Check the hash map entry, before doing anything.
-        verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath), hashMapEntry);
-        return std::pair<std::string_view,
-                         std::reference_wrapper<const HashMapEntry>>(
-            jsonPath, hashMapEntry);
-      });
-  std::vector<
-      std::pair<std::string_view, std::reference_wrapper<const HashMapEntry>>>
-      hashMapEntries(transformedHashMap.begin(), transformedHashMap.end());
+  // Pair&` does not.
+  std::vector<std::reference_wrapper<const Pair>> hashMapEntries(
+      configurationOptions_.begin(), configurationOptions_.end());
 
   // Sort the collected `HashMapEntry`s, if wanted.
   if (sortByCreationOrder) {
-    std::ranges::sort(hashMapEntries, {}, [](const auto& pair) {
+    std::ranges::sort(hashMapEntries, {}, [](const Pair& pair) {
       const HashMapEntry& hashMapEntry = pair.second;
       return hashMapEntry.getInitializationId();
     });
   }
 
   // Call a wrapper for `vis` with the `HashMapEntry::visit` of every entry.
-  std::ranges::for_each(hashMapEntries, [&vis](auto& pair) {
+  std::ranges::for_each(hashMapEntries, [&vis](const Pair& pair) {
     auto& [jsonPath, hashMapEntry] = pair;
-    hashMapEntry.get().visit(
+    hashMapEntry.visit(
         [&jsonPath, &vis](auto& data) { std::invoke(vis, jsonPath, data); });
   });
 }
