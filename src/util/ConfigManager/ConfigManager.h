@@ -669,8 +669,7 @@ class ConfigManager {
     @brief Add a validator to the list of validators, that are assigned to a
     `ConfigOption`/`ConfigManager`.
     */
-    template <typename T>
-    requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
+    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
     void addEntryUnderKey(const T& key,
                           const ConfigOptionValidatorManager& manager);
 
@@ -680,15 +679,13 @@ class ConfigManager {
 
     @returns If there is no entry for `Key`, return an empty `std::vector`.
     */
-    template <typename T>
-    requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
+    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
     std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
     getEntriesUnderKey(const T& key) const;
 
    private:
     // Return either `configOption_` or `configManager_`, based on type.
-    template <typename T>
-    requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
+    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
     constexpr const MemoryAdressHashMap<T>& getHashMapBasedOnType() const {
       if constexpr (std::same_as<T, ConfigOption>) {
         return configOption_;
@@ -696,8 +693,7 @@ class ConfigManager {
         return configManager_;
       }
     }
-    template <typename T>
-    requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
+    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
     constexpr MemoryAdressHashMap<T>& getHashMapBasedOnType() {
       if constexpr (std::same_as<T, ConfigOption>) {
         return configOption_;

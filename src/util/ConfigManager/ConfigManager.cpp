@@ -780,8 +780,7 @@ bool ConfigManager::containsOption(const ConfigOption& opt) const {
 }
 
 // ____________________________________________________________________________
-template <typename T>
-requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
+template <isTypeAnyOf<ConfigOption, ConfigManager> T>
 void ConfigManager::ConfigurationDocValidatorAssignment::addEntryUnderKey(
     const T& key, const ConfigOptionValidatorManager& manager) {
   getHashMapBasedOnType<T>()[&key].push_back(&manager);
@@ -795,8 +794,7 @@ template void ConfigManager::ConfigurationDocValidatorAssignment::
                                     const ConfigOptionValidatorManager&);
 
 // ____________________________________________________________________________
-template <typename T>
-requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
+template <isTypeAnyOf<ConfigOption, ConfigManager> T>
 std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
 ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
     const T& key) const {
