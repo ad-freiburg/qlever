@@ -859,21 +859,73 @@ void GroupBy::createResultFromHashMap(
 
     for (auto& alias : aggregateAliases) {
       auto& info = alias.aggregateInfo_;
-      for (auto& aggregate : info) {
+
+      // No aggregates inside this alias, we can evaluate it directly.
+      if (info.empty()) {
+        // Evaluate top-level alias expression
+        sparqlExpression::ExpressionResult expressionResult =
+            alias.expr_.getPimpl()->evaluate(&evaluationContext);
+
+        // Copy the result so that future aliases may reuse it
+        evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
+            sparqlExpression::copyExpressionResult(expressionResult);
+
+        // Extract values
+        auto visitor =
+            [&evaluationContext, &result, &i, &localVocab, &alias,
+             &currentBlockSize]<sparqlExpression::SingleExpressionResult T>(
+                T&& singleResult) mutable {
+              auto generator = sparqlExpression::detail::makeGenerator(
+                  std::forward<T>(singleResult), currentBlockSize,
+                  &evaluationContext);
+
+              // TODO<C++23> use views::enumerate
+              auto idx = 0;
+              for (sparqlExpression::IdOrString val : generator) {
+                (*result)(i + idx++, alias.outCol_) =
+                    sparqlExpression::detail::constantExpressionResultToId(
+                        std::move(val), *localVocab);
+              }
+            };
+
+        std::visit(visitor, std::move(expressionResult));
+      } else if (info.size() == 1 && info.at(0).parent_ == nullptr) {
+        // Only one aggregate, and it is at the top of the alias.
+        auto& aggregate = info.at(0);
+
+        // Store in a vector such that we can copy it to
+        // `_previousResultsFromSameGroup`.
         sparqlExpression::VectorWithMemoryLimit<ValueId> aggregateResults(
             getExecutionContext()->getAllocator());
 
-        // Get all aggregate results as a vector
+        // Store aggregate results
         for (size_t j = evaluationContext._beginIndex;
              j < evaluationContext._endIndex; j++) {
           auto& val = (*result)(j, 0);
           auto& aggregateData = map.at(val).at(aggregate.hashMapIndex_);
-          aggregateResults.push_back(aggregateData.calculateResult());
+          auto aggregateResult = aggregateData.calculateResult();
+          (*result)(j, alias.outCol_) = aggregateResult;
+          aggregateResults.push_back(aggregateResult);
         }
 
-        // If the aggregate is a child of some other expression, we need
-        // to substitute in its result and evaluate the parent expression.
-        if (aggregate.nThChild_.has_value()) {
+        // Copy the result so that future aliases may reuse it
+        evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
+            sparqlExpression::copyExpressionResult(std::move(aggregateResults));
+      } else {
+        // Multiple aggregates, need to substitute them away and then finally
+        // evaluate the top-level expression.
+        for (auto& aggregate : info) {
+          sparqlExpression::VectorWithMemoryLimit<ValueId> aggregateResults(
+              getExecutionContext()->getAllocator());
+
+          // Get all aggregate results as a vector
+          for (size_t j = evaluationContext._beginIndex;
+               j < evaluationContext._endIndex; j++) {
+            auto& val = (*result)(j, 0);
+            auto& aggregateData = map.at(val).at(aggregate.hashMapIndex_);
+            aggregateResults.push_back(aggregateData.calculateResult());
+          }
+
           // Substitute the resulting vector as a literal
           std::unique_ptr<sparqlExpression::SparqlExpression> newExpression =
               std::make_unique<sparqlExpression::VectorIdExpression>(
@@ -881,49 +933,8 @@ void GroupBy::createResultFromHashMap(
 
           aggregate.parent_->replaceChild(aggregate.nThChild_.value(),
                                           std::move(newExpression));
-
-          // Evaluate top-level alias expression
-          sparqlExpression::ExpressionResult expressionResult =
-              alias.expr_.getPimpl()->evaluate(&evaluationContext);
-
-          // Copy the result so that future aliases may reuse it
-          evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
-              sparqlExpression::copyExpressionResult(expressionResult);
-
-          // Extract values
-          auto visitor =
-              [&evaluationContext, &result, &i, &localVocab, &alias,
-               &currentBlockSize]<sparqlExpression::SingleExpressionResult T>(
-                  T&& singleResult) mutable {
-                auto generator = sparqlExpression::detail::makeGenerator(
-                    std::forward<T>(singleResult), currentBlockSize,
-                    &evaluationContext);
-
-                // TODO<C++23> use views::enumerate
-                auto idx = 0;
-                for (sparqlExpression::IdOrString val : generator) {
-                  (*result)(i + idx++, alias.outCol_) =
-                      sparqlExpression::detail::constantExpressionResultToId(
-                          std::move(val), *localVocab);
-                }
-              };
-
-          std::visit(visitor, std::move(expressionResult));
-        } else {
-          // If the aggregate has no parent, then no further evaluation is
-          // required
-          for (size_t j = 0; j < currentBlockSize; j++) {
-            (*result)(i + j, alias.outCol_) = aggregateResults.at(j);
-          }
-
-          // Save the result so that future aliases may use it
-          evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
-              std::move(aggregateResults);
         }
-      }
 
-      // No aggregates inside this alias, we can evaluate it directly.
-      if (info.empty()) {
         // Evaluate top-level alias expression
         sparqlExpression::ExpressionResult expressionResult =
             alias.expr_.getPimpl()->evaluate(&evaluationContext);
