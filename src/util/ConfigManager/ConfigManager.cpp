@@ -646,71 +646,71 @@ std::string ConfigManager::printConfigurationDoc(bool detailed) const {
 
   if (!detailed) {
     return configurationDocJsonString;
-  } else {
-    /*
-    First thing, we need to create a `ConfigurationDocValidatorAssignment`.
-
-    Our current strategy for assigning the the printing the of the
-    `ConfigOptionValidatorManager` is:
-    - Validator, that only check a single configuration option, are printed
-    together with that option.
-    - The remaining validators, are printed together with the configuration
-    manager, that hold them.
-    - Any list of `ConfigOptionValidatorManager` is sorted by their creation
-    order.
-
-    To do that, we first get all the validators sorted by their creation order,
-    collect the ones, who only check one option, and assign those to that
-    option, in that order.
-    Then we collect all `ConfigManager`, including this instance, and assign
-    their held validators to them in the same order, as they saved them, unless
-    a validator was already assigned, in which case we skip it. `ConfigManager`
-    always add a newly created validator to the end of a vector, so they should
-    already be ordered by creation, if we only look at the validators in one
-    `ConfigManager`.
-    */
-    ConfigurationDocValidatorAssignment assignment{};
-
-    // Assign to the configuration options.
-    const auto& allValidators = validators(true);
-    std::ranges::for_each(
-        std::views::filter(allValidators,
-                           [](const ConfigOptionValidatorManager& val) {
-                             return val.configOptionToBeChecked().size() == 1;
-                           }),
-        [&assignment](const ConfigOptionValidatorManager& val) {
-          // The validator manager only has one element, so this should be okay.
-          const ConfigOption& opt = **val.configOptionToBeChecked().begin();
-          assignment.addEntryUnderKey(opt, val);
-        });
-
-    // Assign to the configuration managers.
-    std::vector<std::reference_wrapper<const ConfigManager>> allManager{
-        ad_utility::transform(
-            allHashMapEntries("",
-                              [](const HashMapEntry& entry) {
-                                return entry.holdsSubManager();
-                              }),
-            [](const auto& pair) {
-              return std::reference_wrapper<const ConfigManager>(
-                  *pair.second.getSubManager().value());
-            })};
-    allManager.emplace_back(*this);
-    std::ranges::for_each(
-        allManager, [&assignment](const ConfigManager& manager) {
-          std::ranges::for_each(
-              std::views::filter(manager.validators_,
-                                 [&assignment](const auto& validator) {
-                                   return !assignment.containsValue(validator);
-                                 }),
-              [&assignment, &manager](const auto& validator) {
-                assignment.addEntryUnderKey(manager, validator);
-              });
-        });
-
-    return absl::StrCat(configurationDocJsonString, "\n\n",
-                        generateConfigurationDocDetailedList("", assignment));
   }
+
+  /*
+  First thing, we need to create a `ConfigurationDocValidatorAssignment`.
+
+  Our current strategy for assigning the the printing the of the
+  `ConfigOptionValidatorManager` is:
+  - Validator, that only check a single configuration option, are printed
+  together with that option.
+  - The remaining validators, are printed together with the configuration
+  manager, that hold them.
+  - Any list of `ConfigOptionValidatorManager` is sorted by their creation
+  order.
+
+  To do that, we first get all the validators sorted by their creation order,
+  collect the ones, who only check one option, and assign those to that
+  option, in that order.
+  Then we collect all `ConfigManager`, including this instance, and assign
+  their held validators to them in the same order, as they saved them, unless
+  a validator was already assigned, in which case we skip it. `ConfigManager`
+  always add a newly created validator to the end of a vector, so they should
+  already be ordered by creation, if we only look at the validators in one
+  `ConfigManager`.
+  */
+  ConfigurationDocValidatorAssignment assignment{};
+
+  // Assign to the configuration options.
+  const auto& allValidators = validators(true);
+  std::ranges::for_each(
+      std::views::filter(allValidators,
+                         [](const ConfigOptionValidatorManager& val) {
+                           return val.configOptionToBeChecked().size() == 1;
+                         }),
+      [&assignment](const ConfigOptionValidatorManager& val) {
+        // The validator manager only has one element, so this should be okay.
+        const ConfigOption& opt = **val.configOptionToBeChecked().begin();
+        assignment.addEntryUnderKey(opt, val);
+      });
+
+  // Assign to the configuration managers.
+  std::vector<std::reference_wrapper<const ConfigManager>> allManager{
+      ad_utility::transform(
+          allHashMapEntries("",
+                            [](const HashMapEntry& entry) {
+                              return entry.holdsSubManager();
+                            }),
+          [](const auto& pair) {
+            return std::reference_wrapper<const ConfigManager>(
+                *pair.second.getSubManager().value());
+          })};
+  allManager.emplace_back(*this);
+  std::ranges::for_each(
+      allManager, [&assignment](const ConfigManager& manager) {
+        std::ranges::for_each(
+            std::views::filter(manager.validators_,
+                               [&assignment](const auto& validator) {
+                                 return !assignment.containsValue(validator);
+                               }),
+            [&assignment, &manager](const auto& validator) {
+              assignment.addEntryUnderKey(manager, validator);
+            });
+      });
+
+  return absl::StrCat(configurationDocJsonString, "\n\n",
+                      generateConfigurationDocDetailedList("", assignment));
 }
 
 // ____________________________________________________________________________
