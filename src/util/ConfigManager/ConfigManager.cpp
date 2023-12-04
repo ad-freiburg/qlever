@@ -784,15 +784,7 @@ template <typename T>
 requires std::same_as<T, ConfigOption> || std::same_as<T, ConfigManager>
 void ConfigManager::ConfigurationDocValidatorAssignment::addEntryUnderKey(
     const T& key, const ConfigOptionValidatorManager& manager) {
-  // The concerned hash map.
-  MemoryAdressHashMap<T>& hashMap{getHashMapBasedOnType<T>()};
-
-  // If we already have a vector, append. Else, create.
-  if (auto mapIterator = hashMap.find(&key); mapIterator != hashMap.end()) {
-    (*mapIterator).second.push_back(&manager);
-  } else {
-    hashMap.emplace(&key, std::vector{&manager});
-  }
+  getHashMapBasedOnType<T>()[&key].push_back(&manager);
 }
 // Explicit instantiation for `ConfigOption` and `ConfigManager`.
 template void ConfigManager::ConfigurationDocValidatorAssignment::
