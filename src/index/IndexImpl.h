@@ -761,14 +761,27 @@ class IndexImpl {
   template <typename Comparator, size_t N = NumColumnsIndexBuilding>
   ExternalSorter<Comparator, N> makeSorter(
       std::string_view permutationName) const;
+  // Same as the same function, but return a `unique_ptr`.
+  template <typename Comparator, size_t N = NumColumnsIndexBuilding>
+  std::unique_ptr<ExternalSorter<Comparator, N>> makeSorterPtr(
+      std::string_view permutationName) const;
+  // The common implementation of the above two functions.
+  template <typename Comparator, size_t N, bool returnPtr>
+  auto makeSorterImpl(std::string_view permutationName) const;
 
   // Aliases for the three functions above that should be consistently used.
   // They assert that the order of the permutations as communicated by the
   // function names are consistent with the aliases for the sorters, i.e. that
   // `createFirstPermutationPair` corresponds to the `FirstPermutation`.
+
+  // The `createFirstPermutationPair` has a special implementation for the case
+  // of only two permutations (where we have to build the Pxx permutations). In
+  // all other cases the Sxx permutations are built first because we need the
+  // patterns.
   std::optional<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>>
   createFirstPermutationPair(auto&&... args) {
     static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
+    static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
     if (loadAllPermutations()) {
       return createSPOAndSOP(AD_FWD(args)...);
     } else {
