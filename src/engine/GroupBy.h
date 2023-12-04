@@ -178,40 +178,43 @@ class GroupBy : public Operation {
     }
   };
 
-  // Data to perform COUNT aggregation using the HashMap optimization.
-  struct CountAggregationData {
-    bool error_ = false;
-    int64_t count_ = 0;
-    void increment() { ++count_; }
-    [[nodiscard]] ValueId calculateResult() const {
-      if (error_)
-        return ValueId::makeUndefined();
-      else
-        return ValueId::makeFromInt(count_);
-    }
-  };
-
   using KeyType = ValueId;
   template <size_t numAggregates>
   using ValueType = std::array<AverageAggregationData, numAggregates>;
 
+  // Stores information required for evaluation of an aggregate as well
+  // as the alias containing it.
   struct HashMapAggregateInformation {
+    // The expression of this aggregate.
     sparqlExpression::SparqlExpression* expr_ = nullptr;
+    // The parent expression of this aggregate.
     sparqlExpression::SparqlExpression* parent_ = nullptr;
+    // If `_parent != nullptr`, stores at what index this expression appears in
+    // the parents' children, so that it may be substituted away.
     std::optional<size_t> nThChild_ = std::nullopt;
+    // The index in the `std::array` of the Hash Map where results of this
+    // aggregate are stored.
     size_t hashMapIndex_ = 0;
   };
 
+  // Stores alias information, especially all aggregates contained
+  // in an alias.
   struct HashMapAliasInformation {
+    // The expression of this alias.
     sparqlExpression::SparqlExpressionPimpl expr_;
+    // The column where the result will be stored in the output.
     size_t outCol_;
+    // Information about all aggregates contained in this alias.
     std::vector<HashMapAggregateInformation> aggregateInfo_;
   };
 
   // Required data to perform HashMap optimization.
   struct HashMapOptimizationData {
+    // The index of the column that is grouped by.
     size_t subtreeColumnIndex_;
+    // All aliases and the aggregates they contain.
     std::vector<HashMapAliasInformation> aggregateAliases_;
+    // The total number of aggregates.
     size_t numAggregates_;
   };
 
@@ -235,15 +238,14 @@ class GroupBy : public Operation {
   // the following conditions hold true:
   // - Runtime parameter is set
   // - Child operation is SORT
-  // - Only top-level aggregations
   // - All aggregates are AVG
-  // - Maximum 5 aggregates
+  // - Maximum 5 aliases and 5 aggregates
   // - Only one grouped variable
   std::optional<HashMapOptimizationData> checkIfHashMapOptimizationPossible(
       std::vector<Aggregate>& aggregates);
 
   // Find all aggregates of expression `expr`, collecting this information in
-  // the vector `info`. Returns `false` in case an unsupported aggregate is
+  // the vector `info`. Returns false in case an unsupported aggregate is
   // found.
   bool findAggregateMultiple(sparqlExpression::SparqlExpression* parent,
                              sparqlExpression::SparqlExpression* expr,

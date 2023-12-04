@@ -728,7 +728,7 @@ GroupBy::checkIfHashMapOptimizationPossible(
 
   // TODO<kcaliban> remove this as soon as we have a better implementation
   //                for multiple aggregates
-  // Only allow up to 5 aggregates for now (because of CallFixedSize)
+  // Only allow up to 5 aliases for now (because of CallFixedSize)
   if (aggregates.size() > 5) {
     return std::nullopt;
   }
@@ -749,6 +749,13 @@ GroupBy::checkIfHashMapOptimizationPossible(
 
     aliasAggregates.push_back({aggregateAlias._expression,
                                aggregateAlias._outCol, aliasAggregateInfo});
+  }
+
+  // TODO<kcaliban> remove this as soon as we have a better implementation
+  //                for multiple aggregates
+  // Only allow up to 5 aggregates for now (because of CallFixedSize)
+  if (numAggregates > 5) {
+    return std::nullopt;
   }
 
   // Make sure that there are no nested aggregates
@@ -830,8 +837,6 @@ void GroupBy::createResultFromHashMap(
   }
 
   // Initialize evaluation context
-  // TODO: Check that "variableColumns" is correct, might refer to
-  //       columns in original table, not in the intermediate result.
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), *result,
       getExecutionContext()->getAllocator(), *localVocab);
@@ -918,7 +923,7 @@ void GroupBy::createResultFromHashMap(
       }
 
       // No aggregates inside this alias, we can evaluate it directly.
-      if (info.size() == 0) {
+      if (info.empty()) {
         // Evaluate top-level alias expression
         sparqlExpression::ExpressionResult expressionResult =
             alias.expr_.getPimpl()->evaluate(&evaluationContext);
@@ -966,8 +971,6 @@ void GroupBy::computeGroupByForHashMapOptimization(
 
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};
-  evaluationContext._variableToColumnMapPreviousResults =
-      getInternallyVisibleVariableColumns();
   evaluationContext._isPartOfGroupBy = true;
 
   size_t blockSize = 65536;
