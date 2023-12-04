@@ -256,7 +256,7 @@ void doConstructorTest(
   // checks the given `ConfigOption`.
   auto checkContainsOptions =
       [](const ConfigOptionValidatorManager& manager,
-         const std::unordered_set<const ConfigOption*>& expectedConfigOption) {
+         const ad_utility::HashSet<const ConfigOption*>& expectedConfigOption) {
         ASSERT_EQ(manager.configOptionToBeChecked(), expectedConfigOption);
       };
 
@@ -297,7 +297,7 @@ void doConstructorTest(
               singleArgumentValidatorDescriptor, getValueTranslation, proxy1)};
 
   // The options, both single argument validators should be checking.
-  const std::unordered_set<const ConfigOption*> singleArgumentValidatorOptions{
+  const ad_utility::HashSet<const ConfigOption*> singleArgumentValidatorOptions{
       &opt1};
 
   // Check the single argument validators.
@@ -348,7 +348,7 @@ void doConstructorTest(
               proxy2)};
 
   // The options, both double argument validators should be checking.
-  const std::unordered_set<const ConfigOption*> doubleArgumentValidatorOptions{
+  const ad_utility::HashSet<const ConfigOption*> doubleArgumentValidatorOptions{
       &opt1, &opt2};
 
   // Check the double argument validators.

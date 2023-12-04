@@ -15,6 +15,7 @@
 
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
+#include "util/HashSet.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {
@@ -102,7 +103,7 @@ class ConfigOptionValidatorManager {
   std::string descriptor_;
 
   // Pointer to the `configOption`, that will be checked.
-  std::unordered_set<const ConfigOption*> configOptionsToBeChecked_;
+  ad_utility::HashSet<const ConfigOption*> configOptionsToBeChecked_;
 
   // Describes the order of initialization.
   static inline std::atomic_size_t numberOfInstances_{0};
@@ -229,7 +230,7 @@ class ConfigOptionValidatorManager {
   size_t getInitializationId() const;
 
   // The `configOption`s, that this validator will check.
-  const std::unordered_set<const ConfigOption*>& configOptionToBeChecked()
+  const ad_utility::HashSet<const ConfigOption*>& configOptionToBeChecked()
       const;
 };
 
