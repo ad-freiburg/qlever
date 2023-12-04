@@ -542,7 +542,7 @@ nlohmann::ordered_json ConfigManager::generateConfigurationDocJson(
               optionOrSubManager.generateConfigurationDocJson(
                   absl::StrCat(pathPrefix, path));
         } else {
-          AD_FAIL();
+          static_assert(ad_utility::alwaysFalse<T>);
         }
       },
       true, pathPrefix);
@@ -618,7 +618,7 @@ std::string ConfigManager::generateConfigurationDocDetailedList(
                       absl::StrCat(pathPrefix, path), assignment),
                   "    ")));
         } else {
-          AD_FAIL();
+          static_assert(ad_utility::alwaysFalse<T>);
         }
       },
       true, pathPrefix);
