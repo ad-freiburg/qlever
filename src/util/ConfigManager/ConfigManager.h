@@ -654,6 +654,12 @@ class ConfigManager {
   for `C` they will have the order `a`, followed by `b`.
   */
   class ConfigurationDocValidatorAssignment {
+   public:
+    // The return type for value getter.
+    using ValueGetterReturnType =
+        std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>;
+
+   private:
     /*
     Hash maps of the memory address.
     */
@@ -680,8 +686,7 @@ class ConfigManager {
     @returns If there is no entry for `Key`, return an empty `std::vector`.
     */
     template <isTypeAnyOf<ConfigOption, ConfigManager> T>
-    std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
-    getEntriesUnderKey(const T& key) const;
+    ValueGetterReturnType getEntriesUnderKey(const T& key) const;
 
    private:
     // Return either `configOption_` or `configManager_`, based on type.

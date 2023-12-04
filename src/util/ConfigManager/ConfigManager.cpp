@@ -795,9 +795,8 @@ template void ConfigManager::ConfigurationDocValidatorAssignment::
 
 // ____________________________________________________________________________
 template <isTypeAnyOf<ConfigOption, ConfigManager> T>
-std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
-ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
-    const T& key) const {
+auto ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
+    const T& key) const -> ValueGetterReturnType {
   // The concerned hash map.
   const MemoryAdressHashMap<T>& hashMap{getHashMapBasedOnType<T>()};
 
@@ -805,8 +804,7 @@ ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
   if (auto mapIterator = hashMap.find(&key); mapIterator != hashMap.end()) {
     return transform(
         (*mapIterator).second,
-        [](const auto* pointer)
-            -> std::reference_wrapper<const ConfigOptionValidatorManager> {
+        [](const auto* pointer) -> ValueGetterReturnType::value_type {
           return *pointer;
         });
   } else {
@@ -814,11 +812,13 @@ ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
   }
 }
 // Explicit instantiation for `ConfigOption` and `ConfigManager`.
-template std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
-ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
-    const ConfigOption&) const;
-template std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
-ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
-    const ConfigManager&) const;
+template ConfigManager::ConfigurationDocValidatorAssignment::
+    ValueGetterReturnType
+    ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
+        const ConfigOption&) const;
+template ConfigManager::ConfigurationDocValidatorAssignment::
+    ValueGetterReturnType
+    ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
+        const ConfigManager&) const;
 
 }  // namespace ad_utility
