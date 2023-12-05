@@ -75,30 +75,63 @@ class ConfigManager {
     Currently held configuration option, if there is one. Note: If there is a
     pointer, it's never a `nullptr`.
     */
-    std::optional<ConfigOption*> getConfigOption() const;
+    std::optional<ConfigOption*> getConfigOption();
+    std::optional<const ConfigOption*> getConfigOption() const;
 
     /*
     Currently held sub manager, if there is one. Note: If there is a
     pointer, it's never a `nullptr`.
     */
-    std::optional<ConfigManager*> getSubManager() const;
+    std::optional<ConfigManager*> getSubManager();
+    std::optional<const ConfigManager*> getSubManager() const;
 
     // Return, how many instances of this class were initialized before this
     // instance.
     size_t getInitializationId() const;
 
     // Wrapper for calling `std::visit` on the saved `Data`.
-    decltype(auto) visit(auto&& vis) const {
-      // Make sure, that it is not a null pointer.
-      AD_CORRECTNESS_CHECK(data_);
-
-      return std::visit(AD_FWD(vis), *data_);
-    }
+    template <typename Visitor>
+    requires std::invocable<Visitor, ConfigOption&> &&
+             std::invocable<Visitor, ConfigManager&>
+    decltype(auto) visit(Visitor&& vis);
+    template <typename Visitor>
+    requires std::invocable<Visitor, const ConfigOption&> &&
+             std::invocable<Visitor, const ConfigManager&>
+    decltype(auto) visit(Visitor&& vis) const;
 
    private:
     // Implementation for `holdsConfigOption` and `holdsSubManager`.
     template <typename T>
     requires isTypeContainedIn<T, Data> bool implHolds() const;
+
+    /*
+    @brief Implementation for `getConfigOption` and `getSubManager`. You can
+    specify which one via `ReturnType`.
+
+    @tparam ReturnType Should be `(const) ConfigOption`, or `(const)
+    ConfigManager`.
+
+    @param instance The `HashMapEntry` you want this from.
+    */
+    template <typename ReturnType>
+    requires isTypeContainedIn<ReturnType, Data> && std::is_object_v<ReturnType>
+    static std::optional<ReturnType*> getConfigOptionOrSubManager(
+        ad_utility::SimilarTo<HashMapEntry> auto& instance);
+
+    /*
+    @brief The implementation for `visit`. Follows the same signature as
+    `std::variant::visit`:
+    */
+    template <typename Visitor, ad_utility::SimilarTo<std::unique_ptr<
+                                    ConfigManager::HashMapEntry::Data>>
+                                    PointerType>
+    requires std::invocable<Visitor, std::conditional_t<
+                                         std::is_const_v<PointerType>,
+                                         const ConfigOption&, ConfigOption&>> &&
+             std::invocable<Visitor, std::conditional_t<
+                                         std::is_const_v<PointerType>,
+                                         const ConfigManager&, ConfigManager&>>
+    static decltype(auto) visitImpl(Visitor&& vis, PointerType& data);
   };
 
   /*
@@ -247,7 +280,7 @@ class ConfigManager {
   - `j` is anything but a json object literal.
   - Any of the added validators return false.
   */
-  void parseConfig(const nlohmann::json& j) const;
+  void parseConfig(const nlohmann::json& j);
 
   /*
   @brief Parses the given short hand and returns it as a json object,
@@ -444,20 +477,26 @@ class ConfigManager {
                            std::string_view pathPrefix) const;
 
   /*
-  @brief Collect all `HashMapEntry` contained in the `configurationOptions_`,
-  including the ones in sub managern and return them together with their json
-  paths in a random order.
-  Note: Also checks integrity of all entries via `verifyHashMapEntry`.
+  @brief Collect all `HashMapEntry` contained in the `hashMap`, including the
+  ones in sub managern and return them together with their json paths in a
+  random order. Note: Also checks integrity of all entries via
+  `verifyHashMapEntry`.
 
   @param pathPrefix This prefix will be added to all json paths, that will be
   returned.
   @param predicate Only the `HashMapEntry` for which a true is returned, will be
   given back.
   */
-  template <ad_utility::InvocableWithExactReturnType<bool, const HashMapEntry&>
-                Predicate>
-  std::vector<std::pair<std::string, const HashMapEntry&>> allHashMapEntries(
-      std::string_view pathPrefix, const Predicate& predicate) const;
+  template <typename HashMapType>
+  requires SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>,
+                     HashMapType> &&
+           std::is_object_v<HashMapType> static std::conditional_t<
+      std::is_const_v<HashMapType>,
+      const std::vector<std::pair<const std::string, const HashMapEntry&>>,
+      std::vector<std::pair<std::string, HashMapEntry&>>>
+  allHashMapEntries(HashMapType& hashMap, std::string_view pathPrefix,
+                    const ad_utility::InvocableWithSimilarReturnType<
+                        bool, const HashMapEntry&> auto& predicate);
 
   /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
@@ -541,8 +580,23 @@ class ConfigManager {
   held by a sub manager, are also included with the path to the sub manager as
   prefix.
   */
-  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions()
-      const;
+  std::vector<std::pair<std::string, ConfigOption&>> configurationOptions();
+  std::vector<std::pair<std::string, const ConfigOption&>>
+  configurationOptions() const;
+
+  /*
+  @brief The implementation for `configurationOptions()`.
+
+  @tparam ReturnReference Should be either `ConfigOption&`, or `const
+  ConfigOption&`.
+  */
+  template <typename ReturnReference>
+  requires std::same_as<ReturnReference, ConfigOption&> ||
+           std::same_as<ReturnReference, const ConfigOption&>
+  static std::vector<std::pair<std::string, ReturnReference>>
+  configurationOptionsImpl(
+      SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>> auto&
+          configurationOptions);
 
   /*
   @brief Return all `ConfigOptionValidatorManager` held by this manager and its
