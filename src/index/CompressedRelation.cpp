@@ -990,9 +990,11 @@ CompressedRelationWriter::createPermutationPair(
     numBlocksCurrentRel = 0;
   };
   size_t i = 0;
-  std::vector<ColumnIndex> relationCols{c1, c2};
+  // All columns but the `col0` in the order in which they have to be added to
+  // the relation.
+  std::vector<ColumnIndex> remainingColIndices{c1, c2};
   for (size_t colIdx = 2; colIdx < numColumns; ++colIdx) {
-    relationCols.push_back(colIdx + 1);
+    remainingColIndices.push_back(colIdx + 1);
   }
   inputWaitTimer.cont();
   for (auto& block : AD_FWD(sortedTriples)) {
@@ -1003,20 +1005,20 @@ CompressedRelationWriter::createPermutationPair(
       continue;
     }
     auto firstCol = block.getColumn(c0);
-    auto remainingCols = block.asColumnSubsetView(relationCols);
+    auto remainingCols = block.asColumnSubsetView(remainingColIndices);
     if (!col0IdCurrentRelation.has_value()) {
       col0IdCurrentRelation = firstCol[0];
     }
     // TODO<C++23> Use `views::zip`
     for (size_t idx : ad_utility::integerRange(block.numRows())) {
       Id col0Id = firstCol[idx];
-      decltype(auto) curTriple = remainingCols[idx];
+      decltype(auto) curRemainingCols = remainingCols[idx];
       if (col0Id != col0IdCurrentRelation) {
         finishRelation();
         col0IdCurrentRelation = col0Id;
       }
-      distinctCol1Counter(curTriple[0]);
-      relation.push_back(curTriple);
+      distinctCol1Counter(curRemainingCols[0]);
+      relation.push_back(curRemainingCols);
       if (relation.size() >= blocksize) {
         addBlockForLargeRelation();
       }

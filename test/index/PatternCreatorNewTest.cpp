@@ -33,7 +33,7 @@ TripleVec getVectorFromSorter(PatternCreatorNew::PSOSorter&& sorter) {
 using ad_utility::source_location;
 }  // namespace
 
-TEST(PatternStatisticsNex, Initialization) {
+TEST(PatternStatisticsNew, Initialization) {
   PatternStatistics patternStatistics{50, 25, 4};
   ASSERT_EQ(patternStatistics.numDistinctSubjectPredicatePairs_, 50u);
   ASSERT_FLOAT_EQ(patternStatistics.avgNumDistinctPredicatesPerSubject_, 2.0);
@@ -54,6 +54,7 @@ TEST(PatternStatisticsNew, Serialization) {
   ASSERT_FLOAT_EQ(statistics2.avgNumDistinctPredicatesPerSubject_, 2.0);
   ASSERT_FLOAT_EQ(statistics2.avgNumDistinctSubjectsPerPredicate_, 12.5);
 }
+
 // Create patterns from a small SPO-sorted sequence of triples.
 void createExamplePatterns(PatternCreatorNew& creator) {
   using A = std::array<Id, 4>;
@@ -62,9 +63,9 @@ void createExamplePatterns(PatternCreatorNew& creator) {
   // push the `triple` with the `isIgnored` information to the pattern creator,
   // and expect that the triple gets the `patternIdx` assigned by pushing the
   // corresponding info to `expected`.
-  auto push = [&creator, &expected](std::array<Id, 3> triple, bool isIgnored,
-                                    size_t patternIdx) {
-    creator.processTriple(triple, isIgnored);
+  auto push = [&creator, &expected](std::array<Id, 3> triple,
+                                    bool isIgnoredTriple, size_t patternIdx) {
+    creator.processTriple(triple, isIgnoredTriple);
     expected.push_back(A{triple[0], triple[1], triple[2], I(patternIdx)});
   };
 

@@ -730,15 +730,15 @@ class IndexImpl {
   //    blocks in the input. Typically used to set up the sorting for the
   //    subsequent pair of permutations.
 
-  // Create the SPO and SOP permutations. Also count the number of distinct
-  // actual (not internal) subjects in the input and write it to the metadata.
-  // Also builds the patterns if specified.
+  // Create the SPO and SOP permutations. Additionally, count the number of
+  // distinct actual (not internal) subjects in the input and write it to the
+  // metadata. Also builds the patterns if specified.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   std::optional<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>>
   createSPOAndSOP(size_t numColumns, auto& isInternalId,
                   BlocksOfTriples sortedTriples, NextSorter&&... nextSorter);
-  // Create the OSP and OPS permutations. Additionally count the number of
+  // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
@@ -746,7 +746,7 @@ class IndexImpl {
                        BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
-  // Create the PSO and POS permutations. Additionally count the number of
+  // Create the PSO and POS permutations. Additionally, count the number of
   // distinct predicates and the number of actual triples and write them to the
   // metadata.
   template <typename... NextSorter>

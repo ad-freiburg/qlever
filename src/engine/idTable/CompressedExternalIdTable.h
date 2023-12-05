@@ -575,8 +575,8 @@ class CompressedExternalIdTableSorter
                                         memory, std::move(allocator),
                                         blocksizeCompression, comp) {}
 
-  // Explicitly inherit the `push` function, s.t. we can use it unqualified
-  // withing this class.
+  // Explicitly inherit the `push` function, such that we can use it unqualified
+  // within this class.
   using Base::push;
 
   // Transition from the input phase, where `push()` can be called, to the

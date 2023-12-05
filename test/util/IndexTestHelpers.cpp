@@ -45,29 +45,49 @@ namespace {
 // files) have exactly the same contents as the patterns that are folded into
 // the PSO and POS permutation.
 void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
-  auto checkConsistency = [&](Id predicate) {
-    auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle>();
-    // TODO<joka921> Also test the other permutations.
-    auto scanResult = index.scan(predicate, std::nullopt, Permutation::PSO,
-                                 std::array{ColumnIndex{2}}, cancellationDummy);
-    ASSERT_EQ(scanResult.numColumns(), 3u);
-    for (const auto& row : scanResult) {
-      auto subject = row[0].getVocabIndex().get();
-      auto patternIdx = row[2].getInt();
-      if (subject >= index.getHasPattern().size()) {
-        EXPECT_EQ(patternIdx, NO_PATTERN);
-      } else {
-        EXPECT_EQ(patternIdx, index.getHasPattern()[subject])
-            << subject << ' '
-            << index.idToOptionalString(row[0].getVocabIndex()).value() << ' '
-            << index.getHasPattern().size() << ' ' << NO_PATTERN;
-      }
-    }
+  auto checkConsistencyForCol0IdAndPermutation =
+      [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx) {
+        auto cancellationDummy =
+            std::make_shared<ad_utility::CancellationHandle>();
+        auto scanResult =
+            index.scan(col0Id, std::nullopt, permutation,
+                       std::array{ColumnIndex{2}}, cancellationDummy);
+        ASSERT_EQ(scanResult.numColumns(), 3u);
+        for (const auto& row : scanResult) {
+          auto subject = row[subjectColIdx].getVocabIndex().get();
+          auto patternIdx = row[2].getInt();
+          if (subject >= index.getHasPattern().size()) {
+            EXPECT_EQ(patternIdx, NO_PATTERN);
+          } else {
+            EXPECT_EQ(patternIdx, index.getHasPattern()[subject])
+                << subject << ' '
+                << index.idToOptionalString(row[subjectColIdx].getVocabIndex())
+                       .value()
+                << ' ' << index.getHasPattern().size() << ' ' << NO_PATTERN;
+          }
+        }
+      };
+
+  auto checkConsistencyForPredicate = [&](Id predicateId) {
+    using enum Permutation::Enum;
+    checkConsistencyForCol0IdAndPermutation(predicateId, PSO, 0);
+    checkConsistencyForCol0IdAndPermutation(predicateId, POS, 1);
+  };
+  auto checkConsistencyForObject = [&](Id objectId) {
+    using enum Permutation::Enum;
+    checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1);
+    checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0);
   };
   const auto& predicates = index.getImpl().PSO().metaData().data();
   for (const auto& predicate : predicates) {
-    checkConsistency(predicate.col0Id_);
+    checkConsistencyForPredicate(predicate.col0Id_);
   }
+  const auto& objects = index.getImpl().OSP().metaData().data();
+  for (const auto& object : objects) {
+    checkConsistencyForObject(object.col0Id_);
+  }
+  // NOTE: The SPO and SOP permutations currently don't have patterns stored.
+  // with them.
 }
 }  // namespace
 

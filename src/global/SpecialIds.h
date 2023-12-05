@@ -16,8 +16,8 @@ namespace qlever {
 // `Undefined` datatype s.t. they do not accidentally interfere with other IDs.
 static const inline ad_utility::HashMap<std::string, Id> specialIds = []() {
   ad_utility::HashMap<std::string, Id> result{
-      {HAS_PREDICATE_PREDICATE, Id::fromBits(21)},
-      {HAS_PATTERN_PREDICATE, Id::fromBits(22)}};
+      {HAS_PREDICATE_PREDICATE, Id::fromBits(1)},
+      {HAS_PATTERN_PREDICATE, Id::fromBits(2)}};
 
   // Perform the following checks: All the special IDs are unique, all of them
   // have the `Undefined` datatype, but none of them is equal to the "actual"
