@@ -27,22 +27,18 @@ struct TransitivePathSide {
 
   bool isBoundVariable() const { return treeAndCol_.has_value(); };
 
-  std::string asString(size_t indent) const {
+  std::string getCacheKey() const {
     std::ostringstream os;
-    for (size_t i = 0; i < indent; i++) {
-      os << " ";
-    }
-    if (isVariable()) {
-      os << "Variable name: " << std::get<Variable>(value_)._name;
-    } else if (isBoundVariable()) {
+    if (!isVariable()) {
       os << "Id: " << std::get<Id>(value_);
     }
 
-    os << ", Column: " << subCol_;
+    os << ", subColumn: " << subCol_ << "to " << outputCol_;
 
     if (treeAndCol_.has_value()) {
+      const auto& [tree, col] = treeAndCol_.value();
       os << ", Subtree:\n";
-      os << treeAndCol_.value().first->asString(indent) << "\n";
+      os << tree->asString() << "with join column " << col << "\n";
     }
     return std::move(os).str();
   }

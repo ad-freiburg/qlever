@@ -231,7 +231,6 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
       writer.clear(), ::testing::ContainsRegex("currently being iterated"));
 
   auto it = generator.begin();
-  // TODO<joka921> check the exception message;
   AD_EXPECT_THROW_WITH_MESSAGE(
       pushAll(), ::testing::ContainsRegex("currently being iterated"));
   AD_EXPECT_THROW_WITH_MESSAGE(

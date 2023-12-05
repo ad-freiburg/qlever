@@ -48,13 +48,13 @@ std::string TransitivePath::asStringImpl(size_t indent) const {
     os << " ";
   }
   os << "Left side:\n";
-  os << lhs_.asString(indent + 1);
+  os << lhs_.getCacheKey();
 
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
   os << "Right side:\n";
-  os << rhs_.asString(indent + 1);
+  os << rhs_.getCacheKey();
 
   return std::move(os).str();
 }
@@ -138,6 +138,8 @@ float TransitivePath::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
+  static constexpr uint64_t subtreeBlowupFactor = 1000;
+  static constexpr uint64_t numPathsPerInput = 10;
   if (std::holds_alternative<Id>(lhs_.value_) ||
       std::holds_alternative<Id>(rhs_.value_)) {
     // If the subject or object is fixed, assume that the number of matching
@@ -146,13 +148,24 @@ uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
     // results and only then merge them with a triple such as this. In the
     // lhs_.isVar && rhs_.isVar case below, we assume a worst-case blowup of
     // 10000; see the comment there.
-    return 1000;
+    return subtreeBlowupFactor;
   }
+
+  auto sizeOfSubtree = subtree_->getSizeEstimate() * subtreeBlowupFactor;
+
+  // TODO<joka921, joburo> These estimates are much too high (but better to high
+  // than to low for now). We should do something for the sizes and costs that
+  // is consistent with the join class:
+  // * Estimate the number of matches in the join column (can be taken
+  // identically from the Join class).
+  // * Estimate the blowup for a single match due to the transitivity (maybe
+  // using a constant).
+  // * Edit: Johannes: Maybe I'll do this right now...
   if (lhs_.treeAndCol_.has_value()) {
-    return lhs_.treeAndCol_.value().first->getSizeEstimate();
+    return lhs_.treeAndCol_.value().first->getSizeEstimate() * numPathsPerInput;
   }
   if (rhs_.treeAndCol_.has_value()) {
-    return rhs_.treeAndCol_.value().first->getSizeEstimate();
+    return rhs_.treeAndCol_.value().first->getSizeEstimate() * numPathsPerInput;
   }
   // Set costs to something very large, so that we never compute the complete
   // transitive hull (unless the variables on both sides are not bound in any
@@ -164,15 +177,8 @@ uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
   // Wikidata, the predicate with the largest blowup when taking the
   // transitive hull is wdt:P2789 (connects with). The blowup is then from 90K
   // (without +) to 110M (with +), so about 1000 times larger.
-  if (lhs_.isVariable() && rhs_.isVariable()) {
-    return subtree_->getSizeEstimate() * 10000;
-  }
-  // TODO(Florian): this is not necessarily a good estimator
-  if (lhs_.isVariable()) {
-    auto multiplicity = static_cast<size_t>(getMultiplicity(lhs_.subCol_));
-    return subtree_->getSizeEstimate() / multiplicity;
-  }
-  return subtree_->getSizeEstimate();
+  AD_CORRECTNESS_CHECK(lhs_.isVariable() && rhs_.isVariable());
+    return sizeOfSubtree;
 }
 
 // _____________________________________________________________________________
