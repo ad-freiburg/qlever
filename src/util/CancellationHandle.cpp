@@ -36,7 +36,7 @@ void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
               std::chrono::steady_clock::now().time_since_epoch().count();
         }
       }
-      std::this_thread::sleep_for(detail::DESIRED_CHECK_INTERVAL);
+      std::this_thread::sleep_for(DESIRED_CANCELLATION_CHECK_INTERVAL);
     }
   }};
 }

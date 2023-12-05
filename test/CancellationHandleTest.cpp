@@ -140,7 +140,7 @@ TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
   std::this_thread::sleep_for(10ms);
   EXPECT_EQ(handle.cancellationState_, WAITING_FOR_CHECK);
 
-  std::this_thread::sleep_for(detail::DESIRED_CHECK_INTERVAL);
+  std::this_thread::sleep_for(DESIRED_CANCELLATION_CHECK_INTERVAL);
   EXPECT_EQ(handle.cancellationState_, CHECK_WINDOW_MISSED);
 }
 
@@ -157,11 +157,11 @@ TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
   std::this_thread::sleep_for(10ms);
 
   handle.cancellationState_ = MANUAL;
-  std::this_thread::sleep_for(detail::DESIRED_CHECK_INTERVAL);
+  std::this_thread::sleep_for(DESIRED_CANCELLATION_CHECK_INTERVAL);
   EXPECT_EQ(handle.cancellationState_, MANUAL);
 
   handle.cancellationState_ = TIMEOUT;
-  std::this_thread::sleep_for(detail::DESIRED_CHECK_INTERVAL);
+  std::this_thread::sleep_for(DESIRED_CANCELLATION_CHECK_INTERVAL);
   EXPECT_EQ(handle.cancellationState_, TIMEOUT);
 }
 
@@ -270,8 +270,8 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
   EXPECT_THAT(
       std::move(testStream).str(),
       AllOf(HasSubstr("my-detail"),
-            HasSubstr(
-                ParseableDuration{detail::DESIRED_CHECK_INTERVAL}.toString()),
+            HasSubstr(ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
+                          .toString()),
             // Check for small miss window
             ContainsRegex("by [0-9]ms")));
 }

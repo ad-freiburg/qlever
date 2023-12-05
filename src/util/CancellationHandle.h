@@ -11,6 +11,7 @@
 #include <atomic>
 #include <type_traits>
 
+#include "global/Constants.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -29,8 +30,6 @@ enum class CancellationState {
 };
 
 namespace detail {
-
-constexpr std::chrono::milliseconds DESIRED_CHECK_INTERVAL{50};
 
 AD_ALWAYS_INLINE constexpr bool isCancelled(
     CancellationState cancellationState) {
@@ -88,8 +87,9 @@ class CancellationHandle {
     AD_CORRECTNESS_CHECK(watchDogRunning_.load(std::memory_order_relaxed));
     if (state == CancellationState::CHECK_WINDOW_MISSED) {
       LOG(WARN) << "Cancellation check missed deadline of "
-                << ParseableDuration{detail::DESIRED_CHECK_INTERVAL} << " by "
-                << ParseableDuration{computeCheckMissDuration()} << ". Stage: "
+                << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
+                << " by " << ParseableDuration{computeCheckMissDuration()}
+                << ". Stage: "
                 << std::invoke(detailSupplier, AD_FWD(argTypes)...)
                 << std::endl;
     }
@@ -97,8 +97,9 @@ class CancellationHandle {
     cancellationState_.compare_exchange_strong(
         state, CancellationState::NOT_CANCELLED, std::memory_order_relaxed);
   }
+
   using DurationType =
-      std::remove_const_t<decltype(detail::DESIRED_CHECK_INTERVAL)>;
+      std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
 
   DurationType computeCheckMissDuration() const requires WatchDogEnabled;
 

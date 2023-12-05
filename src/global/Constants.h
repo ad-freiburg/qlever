@@ -187,6 +187,8 @@ static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
 // compiler limits for the evaluation of constexpr functions and templates.
 static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
+constexpr std::chrono::milliseconds DESIRED_CANCELLATION_CHECK_INTERVAL{50};
+
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Bool;
   using ad_utility::detail::parameterShortNames::Double;
