@@ -178,7 +178,7 @@ class AllocatorWithLimit {
   requires(!std::same_as<U, T>)
   AllocatorWithLimit(const AllocatorWithLimit<U>& other)
       : memoryLeft_{other.getMemoryLeft()},
-        clearOnAllocation_(other.clearOnAllocation_){};
+        clearOnAllocation_(other.clearOnAllocation()){};
 
   // Defaulted copy operations.
   AllocatorWithLimit(const AllocatorWithLimit&) = default;
@@ -256,6 +256,7 @@ class AllocatorWithLimit {
   }
 
   const auto& getMemoryLeft() const { return memoryLeft_; }
+  const auto& clearOnAllocation() const {return clearOnAllocation_;}
 
   // The STL needs two allocators to be equal if and only they refer to the same
   // memory pool. For us, they are hence equal if they use the same
