@@ -7,8 +7,6 @@
 #include "global/SpecialIds.h"
 
 static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
-[[maybe_unused]] static const Id hasPredicateId =
-    qlever::specialIds.at(HAS_PREDICATE_PREDICATE);
 
 // _________________________________________________________________________
 void PatternCreatorNew::processTriple(std::array<Id, 3> triple,
@@ -30,13 +28,6 @@ void PatternCreatorNew::processTriple(std::array<Id, 3> triple,
   // Don't list predicates twice in the same pattern.
   if (currentPattern_.empty() || currentPattern_.back() != triple[1]) {
     currentPattern_.push_back(triple[1]);
-    // This is wasteful and currently not needed. If we use those lines, then we
-    // get a fully materialized `has-predicate` relation.
-    /*
-    additionalTriplesPsoSorter_.push(
-        std::array{Id::makeFromVocabIndex(currentSubjectIndex_.value()),
-                   hasPredicateId, triple[1]});
-                   */
   }
 }
 
@@ -50,7 +41,7 @@ void PatternCreatorNew::finishSubject(VocabIndex subjectIndex,
   if (it == patternToIdAndCount_.end()) {
     // This is a new pattern, assign a new pattern ID and a count of 1.
     patternId = static_cast<PatternID>(patternToIdAndCount_.size());
-    patternToIdAndCount_[pattern] = PatternIdAndCount{patternId, 1ul};
+    patternToIdAndCount_[pattern] = PatternIdAndCount{patternId, 1UL};
 
     // Count the total number of distinct predicates that appear in the
     // pattern and have not been counted before.
@@ -187,7 +178,7 @@ void PatternCreator::finishSubject(VocabIndex subjectIndex,
   if (it == _patternToIdAndCount.end()) {
     // This is a new pattern, assign a new pattern ID and a count of 1.
     patternId = static_cast<PatternID>(_patternToIdAndCount.size());
-    _patternToIdAndCount[pattern] = PatternIdAndCount{patternId, 1ul};
+    _patternToIdAndCount[pattern] = PatternIdAndCount{patternId, 1UL};
 
     // Count the total number of distinct predicates that appear in the
     // pattern and have not been counted before.

@@ -575,6 +575,10 @@ class CompressedExternalIdTableSorter
                                         memory, std::move(allocator),
                                         blocksizeCompression, comp) {}
 
+  // Explicitly inherit the `push` function, s.t. we can use it unqualified
+  // withing this class.
+  using Base::push;
+
   // Transition from the input phase, where `push()` can be called, to the
   // output phase and return a generator that yields the sorted elements one by
   // one. Either this function or the following function must be called exactly
@@ -607,9 +611,8 @@ class CompressedExternalIdTableSorter
   // once.
   void pushBlock(const IdTableStatic<0>& block) override {
     AD_CONTRACT_CHECK(block.numColumns() == this->numColumns_);
-    for (const auto& row : block) {
-      this->push(row);
-    }
+    std::ranges::for_each(block,
+                          [ptr = this](const auto& row) { ptr->push(row); });
   }
 
   // The implementation of the type-erased interface. Get the sorted blocks as

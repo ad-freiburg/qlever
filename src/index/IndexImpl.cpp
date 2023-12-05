@@ -413,7 +413,7 @@ IndexImpl::convertPartialToGlobalIds(
   ad_utility::TaskQueue<true> writeQueue(30, 1, "Writing global Ids to file");
 
   // For all triple elements find their mapping from partial to global ids.
-  auto transformTriple = [](auto&& curTriple, auto& idMap) {
+  auto transformTriple = [](Buffer::row_reference& curTriple, auto& idMap) {
     for (auto& id : curTriple) {
       // TODO<joka92> Since the mapping only maps `VocabIndex->VocabIndex`,
       // probably the mapping should also be defined as `HashMap<VocabIndex,

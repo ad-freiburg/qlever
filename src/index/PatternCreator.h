@@ -15,8 +15,8 @@
 #include "global/Id.h"
 #include "global/Pattern.h"
 #include "index/StxxlSortFunctors.h"
+#include "util/BufferedVector.h"
 #include "util/ExceptionHandling.h"
-#include "util/MmapVector.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
@@ -99,12 +99,11 @@ class PatternCreatorNew {
 
   // Store the additional triples that are created by the pattern mechanism for
   // the `has-pattern` and `has-predicate` predicates.
-  // TODO<joka921> Use something buffered for this.
   struct TripleAndIsInternal {
     std::array<Id, 3> triple_;
     bool isInternal_;
   };
-  std::vector<TripleAndIsInternal> tripleBuffer_;
+  ad_utility::BufferedVector<TripleAndIsInternal> tripleBuffer_;
   PSOSorter additionalTriplesPsoSorter_;
   std::unique_ptr<OSPSorter4Cols> ospSorterTriplesWithPattern_;
 
@@ -125,11 +124,12 @@ class PatternCreatorNew {
                              ad_utility::MemorySize memoryLimit)
       : filename_{basename},
         patternSerializer_{{basename}},
+        tripleBuffer_(100'000, basename + ".tripleBufferForPatterns.dat"),
         additionalTriplesPsoSorter_{basename + ".additionalTriples.pso.dat",
                                     memoryLimit / 2,
                                     ad_utility::makeUnlimitedAllocator<Id>()},
         ospSorterTriplesWithPattern_{std::make_unique<OSPSorter4Cols>(
-            basename + ".withPatterns.pso.dat", memoryLimit / 2,
+            basename + ".withPatterns.osp.dat", memoryLimit / 2,
             ad_utility::makeUnlimitedAllocator<Id>())} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
@@ -252,9 +252,6 @@ class PatternCreator {
   // Read the patterns from `filename`. The patterns must have been written to
   // this file using a `PatternCreator`. The patterns and all their statistics
   // will be written to the various arguments.
-  // TODO<joka921> The storage of the pattern will change soon, so we have
-  // chosen an interface here that requires as little change as possible in the
-  // `Index` class.
   static void readPatternsFromFile(const std::string& filename,
                                    double& avgNumSubjectsPerPredicate,
                                    double& avgNumPredicatesPerSubject,

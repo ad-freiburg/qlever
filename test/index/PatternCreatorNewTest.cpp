@@ -55,17 +55,51 @@ TEST(PatternStatisticsNew, Serialization) {
   ASSERT_FLOAT_EQ(statistics2.avgNumDistinctSubjectsPerPredicate_, 12.5);
 }
 // Create patterns from a small SPO-sorted sequence of triples.
-// TODO<joka921> Also add some triples that are NOT considered for the patterns.
 void createExamplePatterns(PatternCreatorNew& creator) {
-  creator.processTriple({V(0), V(10), V(20)}, false);
-  creator.processTriple({V(0), V(10), V(21)}, false);
-  creator.processTriple({V(0), V(11), V(18)}, false);
-  creator.processTriple({V(1), V(10), V(18)}, false);
-  creator.processTriple({V(1), V(12), V(18)}, false);
-  creator.processTriple({V(1), V(13), V(18)}, false);
-  creator.processTriple({V(3), V(10), V(28)}, false);
-  creator.processTriple({V(3), V(11), V(29)}, false);
-  creator.processTriple({V(3), V(11), V(45)}, false);
+  using A = std::array<Id, 4>;
+  std::vector<A> expected;
+
+  // push the `triple` with the `isIgnored` information to the pattern creator,
+  // and expect that the triple gets the `patternIdx` assigned by pushing the
+  // corresponding info to `expected`.
+  auto push = [&creator, &expected](std::array<Id, 3> triple, bool isIgnored,
+                                    size_t patternIdx) {
+    creator.processTriple(triple, isIgnored);
+    expected.push_back(A{triple[0], triple[1], triple[2], I(patternIdx)});
+  };
+
+  // The first subject gets the first pattern.
+  push({V(0), V(10), V(20)}, false, 0);
+  push({V(0), V(10), V(21)}, false, 0);
+  push({V(0), V(11), V(18)}, false, 0);
+
+  // New subject, different predicates, so a new pattern
+  push({V(1), V(10), V(18)}, false, 1);
+  // ignored triple, but `V(1)` has other non-ignored triple, so it will have a
+  // pattern, but `V(11)` will not contribute to that pattern.
+  push({V(1), V(11), V(18)}, true, 1);
+  push({V(1), V(12), V(18)}, false, 1);
+  push({V(1), V(13), V(18)}, false, 1);
+
+  // All the triples for subject `V(2)` are ignored, so it will not have a
+  // pattern.
+  push({V(2), V(13), V(18)}, true, NO_PATTERN);
+  push({V(2), V(14), V(18)}, true, NO_PATTERN);
+
+  // New subject, but has the same predicate and therefore patterns as `V(0)`.
+  push({V(3), V(10), V(28)}, false, 0);
+  push({V(3), V(11), V(29)}, false, 0);
+  push({V(3), V(11), V(45)}, false, 0);
+
+  std::ranges::sort(expected, SortByOSP{});
+  auto triples = std::move(creator).getAllTriplesWithPatternSortedByOSP();
+  std::vector<std::array<Id, 4>> actual;
+  for (auto& block : triples->getSortedBlocks<4>()) {
+    for (const auto& row : block) {
+      actual.push_back(static_cast<std::array<Id, 4>>(row));
+    }
+  }
+  EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));
 }
 
 // Assert that the contents of patterns read from `filename` match the triples
@@ -82,7 +116,6 @@ void assertPatternContents(const std::string& filename,
   PatternCreatorNew::readPatternsFromFile(
       filename, averageNumSubjectsPerPredicate, averageNumPredicatesPerSubject,
       numDistinctSubjectPredicatePairs, patterns);
-  // TODO<joka921> Also test the created triples.
 
   ASSERT_EQ(numDistinctSubjectPredicatePairs, 7);
   ASSERT_FLOAT_EQ(averageNumPredicatesPerSubject, 7.0 / 3.0);
@@ -109,15 +142,6 @@ void assertPatternContents(const std::string& filename,
   expectedTriples.push_back(std::array{V(0), pat, I(0)});
   expectedTriples.push_back(std::array{V(1), pat, I(1)});
   expectedTriples.push_back(std::array{V(3), pat, I(0)});
-  /*
-  expectedTriples.push_back(std::array{V(0), pred, V(10)});
-  expectedTriples.push_back(std::array{V(0), pred, V(11)});
-  expectedTriples.push_back(std::array{V(1), pred, V(10)});
-  expectedTriples.push_back(std::array{V(1), pred, V(12)});
-  expectedTriples.push_back(std::array{V(1), pred, V(13)});
-  expectedTriples.push_back(std::array{V(3), pred, V(10)});
-  expectedTriples.push_back(std::array{V(3), pred, V(11)});
-   */
   std::ranges::sort(expectedTriples, SortByPSO{});
   EXPECT_THAT(addedTriples, ::testing::ElementsAreArray(expectedTriples));
 }
