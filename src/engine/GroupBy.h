@@ -182,19 +182,39 @@ class GroupBy : public Operation {
   template <size_t numAggregates>
   using ValueType = std::array<AverageAggregationData, numAggregates>;
 
+  // Stores information required for substitution of an expression in an
+  // expression tree.
+  struct ParentAndChildIndex {
+    sparqlExpression::SparqlExpression* parent_;
+    size_t nThChild_;
+
+    ParentAndChildIndex(sparqlExpression::SparqlExpression* parent,
+                        size_t nThChild)
+        : parent_{parent}, nThChild_{nThChild} {
+      AD_CONTRACT_CHECK(parent != nullptr);
+    }
+  };
+
   // Stores information required for evaluation of an aggregate as well
   // as the alias containing it.
   struct HashMapAggregateInformation {
     // The expression of this aggregate.
-    sparqlExpression::SparqlExpression* expr_ = nullptr;
-    // The parent expression of this aggregate.
-    sparqlExpression::SparqlExpression* parent_ = nullptr;
-    // If `_parent != nullptr`, stores at what index this expression appears in
-    // the parents' children, so that it may be substituted away.
-    std::optional<size_t> nThChild_ = std::nullopt;
+    sparqlExpression::SparqlExpression* expr_;
     // The index in the `std::array` of the Hash Map where results of this
     // aggregate are stored.
-    size_t hashMapIndex_ = 0;
+    size_t hashMapIndex_;
+    // The parent expression of this aggregate, and the index this expression
+    // appears in the parents' children, so that it may be substituted away.
+    std::optional<ParentAndChildIndex> parentAndIndex_ = std::nullopt;
+
+    HashMapAggregateInformation(
+        sparqlExpression::SparqlExpression* expr, size_t hashMapIndex,
+        std::optional<ParentAndChildIndex> parentAndIndex = std::nullopt)
+        : expr_{expr},
+          hashMapIndex_{hashMapIndex},
+          parentAndIndex_{parentAndIndex} {
+      AD_CONTRACT_CHECK(expr != nullptr);
+    }
   };
 
   // Stores alias information, especially all aggregates contained
@@ -244,13 +264,56 @@ class GroupBy : public Operation {
   std::optional<HashMapOptimizationData> checkIfHashMapOptimizationPossible(
       std::vector<Aggregate>& aggregates);
 
+  // Extract values from `expressionResult` and store them in the rows of
+  // `resultTable` specified by the indices in `evaluationContext`, in column
+  // `outCol`.
+  static void extractValues(
+      sparqlExpression::ExpressionResult&& expressionResult,
+      sparqlExpression::EvaluationContext& evaluationContext,
+      IdTable* resultTable, LocalVocab* localVocab, size_t outCol);
+
+  // In case of aliases that contain an aggregate at the top-level of the
+  // expression tree, e.g. "AVG(?y) as ?avg", we can directly store the values
+  // calculated in our HashMap in the result table.
+  template <size_t numAggregates>
+  sparqlExpression::VectorWithMemoryLimit<ValueId> extractValuesDirectlyFromMap(
+      sparqlExpression::EvaluationContext& evaluationContext,
+      const ad_utility::HashMapWithMemoryLimit<KeyType,
+                                               ValueType<numAggregates>>& map,
+      IdTable* resultTable, size_t hashMapIndex, size_t outCol);
+
+  // Substitute the results for all aggregates in `info`. The values of the
+  // grouped variable should be at column 0 in `groupValues`.
+  template <size_t numAggregates>
+  void substituteAllAggregates(
+      std::vector<HashMapAggregateInformation>& info,
+      sparqlExpression::EvaluationContext& evaluationContext,
+      const ad_utility::HashMapWithMemoryLimit<KeyType,
+                                               ValueType<numAggregates>>& map,
+      IdTable* groupValues);
+
+  // Check if an expression is of a certain type.
+  template <class T>
+  static bool hasType(sparqlExpression::SparqlExpression* expr);
+
+  // Check if an expression is a currently supported aggregate.
+  // TODO<kcaliban> As soon as all aggregates are supported, implement and use a
+  //                `isAggregate` function in SparqlExpressions instead.
+  static bool isSupportedAggregate(sparqlExpression::SparqlExpression* expr);
+
+  // Find all aggregates for expression `expr`. Return `std::nullopt`
+  // if an unsupported aggregate is found.
+  // TODO<kcaliban> Remove std::optional as soon as all aggregates are supported
+  static std::optional<std::vector<HashMapAggregateInformation>> findAggregates(
+      sparqlExpression::SparqlExpression* expr);
+
   // Find all aggregates of expression `expr`, collecting this information in
   // the vector `info`. Returns false in case an unsupported aggregate is
   // found.
-  bool findAggregateMultiple(sparqlExpression::SparqlExpression* parent,
-                             sparqlExpression::SparqlExpression* expr,
-                             std::optional<size_t> index,
-                             std::vector<HashMapAggregateInformation>& info);
+  static bool findAggregatesImpl(
+      sparqlExpression::SparqlExpression* parent,
+      sparqlExpression::SparqlExpression* expr, std::optional<size_t> index,
+      std::vector<HashMapAggregateInformation>& info);
 
   // The check whether the optimization just described can be applied and its
   // actual computation are split up in two functions. This struct contains

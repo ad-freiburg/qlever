@@ -60,9 +60,8 @@ class LiteralExpression : public SparqlExpression {
     } else if constexpr (std::is_same_v<Variable, T>) {
       return evaluateIfVariable(context, _value);
     } else if constexpr (std::is_same_v<VectorWithMemoryLimit<ValueId>, T>) {
-      // TODO: Is it smart to clone the vector here? Cannot move it, since
-      //       that would invalidate this expression. In any case, this happens
-      //       once per block.
+      // TODO<kcaliban> Change ExpressionResult such that it might point or
+      //                refer to this vector instead of having to clone it.
       return _value.clone();
     } else {
       return _value;

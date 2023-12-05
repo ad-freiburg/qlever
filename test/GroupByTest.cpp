@@ -460,7 +460,41 @@ TEST_F(GroupByOptimizations, getPermutationForThreeVariableTriple) {
 }
 
 // _____________________________________________________________________________
-// TEST_F(GroupByOptimizations, findAggregateMultiple) {}
+TEST_F(GroupByOptimizations, findAggregates) {
+  // ((2 * AVG(?y)) * AVG(4 * ?y))
+  auto fourTimesYExpr = makeMultiplyExpression(makeLiteralDoubleExpr(4.0),
+                                               makeVariableExpression(varY));
+  auto avgFourTimesYExpr =
+      std::make_unique<AvgExpression>(false, std::move(fourTimesYExpr));
+  auto avgYExpr =
+      std::make_unique<AvgExpression>(false, makeVariableExpression(varY));
+  auto twoTimesAvgYExpr =
+      makeMultiplyExpression(makeLiteralDoubleExpr(2.0), std::move(avgYExpr));
+  auto twoTimesAvgY_times_avgFourTimesYExpr = makeMultiplyExpression(
+      std::move(twoTimesAvgYExpr), std::move(avgFourTimesYExpr));
+
+  auto foundAggregates =
+      GroupBy::findAggregates(twoTimesAvgY_times_avgFourTimesYExpr.get());
+  ASSERT_TRUE(foundAggregates.has_value());
+  auto value = foundAggregates.value();
+  ASSERT_EQ(value.size(), 2);
+  ASSERT_EQ(value.at(0).parentAndIndex_.value().nThChild_, 1);
+  ASSERT_EQ(value.at(1).parentAndIndex_.value().nThChild_, 1);
+  ASSERT_EQ(value.at(0).parentAndIndex_.value().parent_,
+            twoTimesAvgY_times_avgFourTimesYExpr->children()[0].get());
+  ASSERT_EQ(value.at(1).parentAndIndex_.value().parent_,
+            twoTimesAvgY_times_avgFourTimesYExpr.get());
+
+  // (MIN(?y) + AVG(?x))
+  auto minYExpr =
+      std::make_unique<MinExpression>(false, makeVariableExpression(varY));
+  auto avgXExpr =
+      std::make_unique<AvgExpression>(false, makeVariableExpression(varX));
+  auto minYPlusAvgXExpr =
+      makeAddExpression(std::move(minYExpr), std::move(avgXExpr));
+  auto unsupportedAggregates = GroupBy::findAggregates(minYPlusAvgXExpr.get());
+  ASSERT_FALSE(unsupportedAggregates.has_value());
+}
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
@@ -522,9 +556,8 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   // Check aggregate info is correct
   auto aggregateInfo = aggregateAlias.aggregateInfo_[0];
   ASSERT_EQ(aggregateInfo.hashMapIndex_, 0);
-  ASSERT_EQ(aggregateInfo.parent_, nullptr);  // has no parent
+  ASSERT_FALSE(aggregateInfo.parentAndIndex_.has_value());
   ASSERT_EQ(aggregateInfo.expr_, avgXPimpl.getPimpl());
-  ASSERT_EQ(aggregateInfo.nThChild_, std::nullopt);
 }
 
 // _____________________________________________________________________________
@@ -606,6 +639,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationNonTrivial) {
   SparqlExpressionPimpl avgY_plus_twoTimesAvgY_times_avgFourTimesYPimpl(
       std::move(avgY_plus_twoTimesAvgY_times_avgFourTimesYExpr),
       "(?avg + ((2 * AVG(?y)) * AVG(4 * ?y)) as ?complexAvg)");
+
   SparqlExpressionPimpl constantFive = makeLiteralDoublePimpl(5.0);
 
   std::vector<Alias> aliasesAvgY{
