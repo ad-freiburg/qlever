@@ -9,8 +9,8 @@
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
-#include "util/Exception.h"
 #include "engine/JoinCostEstimation.h"
+#include "util/Exception.h"
 
 // _____________________________________________________________________________
 TransitivePath::TransitivePath(QueryExecutionContext* qec,
@@ -179,7 +179,21 @@ uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
   // transitive hull is wdt:P2789 (connects with). The blowup is then from 90K
   // (without +) to 110M (with +), so about 1000 times larger.
   AD_CORRECTNESS_CHECK(lhs_.isVariable() && rhs_.isVariable());
-    return sizeOfSubtree;
+  return sizeOfSubtree;
+}
+
+void TransitivePath::computeSizeEstimateAndMultiplicities() {
+  auto subtreeJoinCol = [&, this]() {
+    if (lhs_.treeAndCol_.has_value()) {
+      return lhs_.subCol_;
+    } else if (rhs_.treeAndCol_.has_value()) {
+      return rhs_.subCol_;
+    } else {
+      return size_t{0};
+    }
+  }();
+  auto estimatesSubtree = estimatesFromQet(*subtree_, subtreeJoinCol);
+  // TODO<joka921> continue here.
 }
 
 // _____________________________________________________________________________
@@ -206,7 +220,7 @@ void TransitivePath::computeTransitivePathBound(
   auto [edges, nodes] = setupMapAndNodes<SUB_WIDTH, SIDE_WIDTH>(
       dynSub, startSide, targetSide, startSideTable);
 
-  Map hull;
+  Map hull(getExecutionContext()->getAllocator());
   if (!targetSide.isVariable()) {
     hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value_));
   } else {
@@ -230,7 +244,7 @@ void TransitivePath::computeTransitivePath(
   auto [edges, nodes] =
       setupMapAndNodes<SUB_WIDTH>(dynSub, startSide, targetSide);
 
-  Map hull;
+  Map hull{getExecutionContext()->getAllocator()};
   if (!targetSide.isVariable()) {
     hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value_));
   } else {
@@ -363,18 +377,19 @@ TransitivePath::Map TransitivePath::transitiveHull(
     std::optional<Id> target) const {
   using MapIt = TransitivePath::Map::const_iterator;
   // For every node do a dfs on the graph
-  Map hull;
+  Map hull(getExecutionContext()->getAllocator());
 
   // Stores nodes we already have a path to. This avoids cycles.
-  ad_utility::HashSet<Id> marks;
+  ad_utility::HashSetWithMemoryLimit<Id> marks{
+      getExecutionContext()->getAllocator()};
 
   // The stack used to store the dfs' progress
-  std::vector<ad_utility::HashSet<Id>::const_iterator> positions;
+  std::vector<ad_utility::HashSetWithMemoryLimit<Id>::const_iterator> positions;
 
   // Used to store all edges leading away from a node for every level.
   // Reduces access to the hashmap, and is safe as the map will not
   // be modified after this point.
-  std::vector<const ad_utility::HashSet<Id>*> edgeCache;
+  std::vector<const ad_utility::HashSetWithMemoryLimit<Id>*> edgeCache;
 
   for (Id currentStartNode : startNodes) {
     if (hull.contains(currentStartNode)) {
@@ -392,7 +407,9 @@ TransitivePath::Map TransitivePath::transitiveHull(
     }
     if (minDist_ == 0 &&
         (!target.has_value() || currentStartNode == target.value())) {
-      hull[currentStartNode].insert(currentStartNode);
+      auto [it, success] = hull.try_emplace(
+          currentStartNode, getExecutionContext()->getAllocator());
+      it->second.insert(currentStartNode);
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -401,8 +418,10 @@ TransitivePath::Map TransitivePath::transitiveHull(
       checkCancellation();
       size_t stackIndex = positions.size() - 1;
       // Process the next child of the node at the top of the stack
-      ad_utility::HashSet<Id>::const_iterator& pos = positions[stackIndex];
-      const ad_utility::HashSet<Id>* nodeEdges = edgeCache.back();
+      ad_utility::HashSetWithMemoryLimit<Id>::const_iterator& pos =
+          positions[stackIndex];
+      const ad_utility::HashSetWithMemoryLimit<Id>* nodeEdges =
+          edgeCache.back();
 
       if (pos == nodeEdges->end()) {
         // We finished processing this node
@@ -419,7 +438,9 @@ TransitivePath::Map TransitivePath::transitiveHull(
         if (childDepth >= minDist_) {
           marks.insert(child);
           if (!target.has_value() || child == target.value()) {
-            hull[currentStartNode].insert(child);
+            auto [it, success] = hull.try_emplace(
+                currentStartNode, getExecutionContext()->getAllocator());
+            it->second.insert(child);
           }
         }
         // Add the child to the stack
@@ -534,7 +555,7 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
-  Map edges;
+  Map edges(getExecutionContext()->getAllocator());
   decltype(auto) startCol = sub.getColumn(startSide.subCol_);
   decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
 
@@ -544,7 +565,9 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
     Id targetId = targetCol[i];
     MapIt it = edges.find(startId);
     if (it == edges.end()) {
-      edges[startId].insert(targetId);
+      auto [it, succ] =
+          edges.try_emplace(startId, getExecutionContext()->getAllocator());
+      it->second.insert(targetId);
     } else {
       // If r is not in the vector insert it
       it->second.insert(targetId);

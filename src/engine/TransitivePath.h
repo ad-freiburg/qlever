@@ -57,7 +57,8 @@ struct TransitivePathSide {
 };
 
 class TransitivePath : public Operation {
-  using Map = ad_utility::HashMap<Id, ad_utility::HashSet<Id>>;
+  using Map = ad_utility::HashMapWithMemoryLimit<
+      Id, ad_utility::HashSetWithMemoryLimit<Id>>;
   using MapIt = Map::iterator;
 
   std::shared_ptr<QueryExecutionTree> subtree_;
@@ -67,6 +68,8 @@ class TransitivePath : public Operation {
   size_t minDist_;
   size_t maxDist_;
   VariableToColumnMap variableColumns_;
+  std::vector<double> multiplicities_;
+  [[maybe_unused]] size_t sizeEstimate_;
 
  public:
   TransitivePath(QueryExecutionContext* qec,
@@ -190,6 +193,8 @@ class TransitivePath : public Operation {
   virtual ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  void computeSizeEstimateAndMultiplicities();
 
   // The internal implementation of `bindLeftSide` and `bindRightSide` which
   // share a lot of code.

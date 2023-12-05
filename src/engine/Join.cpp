@@ -369,26 +369,21 @@ void Join::computeSizeEstimateAndMultiplicities() {
           : 1;
 
   auto joinEstimates = computeSizeEstimateAndMultiplicitiesForJoin(
-      *_left, *_right, _leftJoinCol, _rightJoinCol, corrFactor);
+      estimatesFromQet(*_left, _leftJoinCol),
+      estimatesFromQet(*_right, _rightJoinCol), corrFactor);
 
   _sizeEstimate = joinEstimates.sizeEstimate_;
 
   for (auto i = isFullScanDummy(_left) ? ColumnIndex{1} : ColumnIndex{0};
        i < _left->getResultWidth(); ++i) {
-    if (i != _leftJoinCol) {
-      _multiplicities.emplace_back(
-          joinEstimates.getMultiplicityNonJoinColumn_(*_left, i));
-    } else {
-      _multiplicities.emplace_back(joinEstimates.multiplicityJoinColumn_);
-    }
+    _multiplicities.push_back(joinEstimates.multiplicitesLeft_.at(i));
   }
 
   for (auto i = ColumnIndex{0}; i < _right->getResultWidth(); ++i) {
     if (i == _rightJoinCol && !isFullScanDummy(_left)) {
       continue;
     }
-    _multiplicities.emplace_back(
-        joinEstimates.getMultiplicityNonJoinColumn_(*_right, i));
+    _multiplicities.emplace_back(joinEstimates.multiplicitesRight_.at(i));
   }
 
   AD_CORRECTNESS_CHECK(_multiplicities.size() == getResultWidth());
