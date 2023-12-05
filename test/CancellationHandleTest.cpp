@@ -261,8 +261,7 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
   std::ostringstream testStream;
   choice.setStream(&testStream);
 
-  handle.startTimeoutWindow_ =
-      std::chrono::steady_clock::now().time_since_epoch().count();
+  handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
   EXPECT_NO_THROW(handle.throwIfCancelled("my-detail"));
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);

@@ -84,6 +84,7 @@ static_assert(std::atomic<CancellationState>::is_always_lock_free);
 /// checks for cancellation across threads.
 template <bool WatchDogEnabled = detail::ENABLE_QUERY_CANCELLATION_WATCH_DOG>
 class CancellationHandle {
+  using steady_clock = std::chrono::steady_clock;
   std::atomic<CancellationState> cancellationState_ =
       CancellationState::NOT_CANCELLED;
 
@@ -92,11 +93,9 @@ class CancellationHandle {
   // TODO<Clang18> Use std::jthread and its builtin stop_token.
   [[no_unique_address]] WatchDogOnly<std::atomic_bool> watchDogRunning_{false};
   [[no_unique_address]] WatchDogOnly<ad_utility::JThread> watchDogThread_;
-  [[no_unique_address]] WatchDogOnly<
-      std::atomic<std::chrono::steady_clock::time_point>>
-      startTimeoutWindow_{0};
-  static_assert(
-      std::atomic<std::chrono::steady_clock::time_point>::is_always_lock_free);
+  [[no_unique_address]] WatchDogOnly<std::atomic<steady_clock::time_point>>
+      startTimeoutWindow_{steady_clock::now()};
+  static_assert(std::atomic<steady_clock::time_point>::is_always_lock_free);
 
   /// Make sure internal state is set back to
   /// `CancellationState::NOT_CANCELLED`, in order to prevent logging warnings
@@ -106,7 +105,6 @@ class CancellationHandle {
                       const InvocableWithConvertibleReturnType<
                           std::string_view, ArgTypes...> auto& detailSupplier,
                       ArgTypes&&... argTypes) requires WatchDogEnabled {
-    using namespace std::chrono;
     using DurationType =
         std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
 

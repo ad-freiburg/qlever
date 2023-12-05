@@ -33,7 +33,7 @@ void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
       } else if (state == WAITING_FOR_CHECK) {
         if (cancellationState_.compare_exchange_strong(state,
                                                        CHECK_WINDOW_MISSED)) {
-          startTimeoutWindow_ = std::chrono::steady_clock::now();
+          startTimeoutWindow_ = steady_clock::now();
         }
       }
       std::this_thread::sleep_for(DESIRED_CANCELLATION_CHECK_INTERVAL);
