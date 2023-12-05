@@ -227,7 +227,9 @@ class AllocatorWithLimit {
         memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
             bytesNeeded);
     if (!wasEnoughLeft) {
-      clearOnAllocation_(bytesNeeded);
+      if (clearOnAllocation_) {
+        clearOnAllocation_(bytesNeeded);
+      }
       memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(bytesNeeded);
     }
     // the actual allocation
