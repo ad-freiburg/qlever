@@ -20,13 +20,6 @@ struct JThread : public std::thread {
   using Base = std::thread;
   using Base::Base;
   JThread(JThread&&) noexcept = default;
-  JThread& operator=(JThread&& other) noexcept {
-    if (joinable()) {
-      join();
-    }
-    Base::operator=(std::move(other));
-    return *this;
-  }
   ~JThread() {
     if (joinable()) {
       join();

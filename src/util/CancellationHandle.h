@@ -91,7 +91,7 @@ class CancellationHandle {
   template <typename T>
   using WatchDogOnly = std::conditional_t<WatchDogEnabled, T, detail::Empty>;
   // TODO<Clang18> Use std::jthread and its builtin stop_token.
-  [[no_unique_address]] WatchDogOnly<std::atomic_bool> watchDogRunning_{false};
+  [[no_unique_address]] WatchDogOnly<std::atomic_bool> watchDogRunning_{true};
   [[no_unique_address]] WatchDogOnly<ad_utility::JThread> watchDogThread_;
   [[no_unique_address]] WatchDogOnly<std::atomic<steady_clock::time_point>>
       startTimeoutWindow_{steady_clock::now()};
@@ -124,14 +124,25 @@ class CancellationHandle {
         state, CancellationState::NOT_CANCELLED, std::memory_order_relaxed);
   }
 
-  /// Internal function that starts the watch dog. It will set this
+  /// Internal function that creates and starts the watch dog. It will set this
   /// `CancellationHandle` instance into a state that will log a warning in the
   /// console if `throwIfCancelled` is not called frequently enough.
-  void startWatchDogInternal() requires WatchDogEnabled;
+  ad_utility::JThread createWatchDogInternal() requires WatchDogEnabled;
+
+  /// Create a `ad_utility::JThread` representing the watch dog thread. If
+  /// `WatchDogEnabled` is false, this will return a default-initialized
+  /// instance that does nothing.
+  ad_utility::JThread createWatchDog();
 
   /// Helper function that sets the internal state atomically given that it has
   /// not been cancelled yet. Otherwise no-op.
   void setStatePreservingCancel(CancellationState newState);
+
+  /// Constructor exposed for testing to allow to test this class without
+  /// interference of a watchdog thread that runs in the background.
+  explicit CancellationHandle(ad_utility::JThread&& watchDogThread)
+      requires WatchDogEnabled
+      : watchDogThread_{std::move(watchDogThread)} {}
 
  public:
   /// Sets the cancellation flag so the next call to throwIfCancelled will
@@ -179,17 +190,17 @@ class CancellationHandle {
         cancellationState_.load(std::memory_order_relaxed));
   }
 
-  /// Start the watch dog. Must only be called once per `CancellationHandle`
-  /// instance.
-  void startWatchDog();
-
   /// If this `CancellationHandle` is not cancelled, reset the internal
   /// `cancellationState_` to `CancellationState::NOT_CANCELED`.
   /// Useful to ignore expected gaps in the execution flow.
   void resetWatchDogState();
 
-  // Explicit move-semantics
-  CancellationHandle() = default;
+  /// Default constructor that starts a watch dog thread in the background.
+  /// Note that if `WatchDogEnabled` is false, this will create and destroy
+  /// a default-initialized `ad_utility::JThread` without storing it somewhere.
+  CancellationHandle() : watchDogThread_{createWatchDog()} {}
+
+  // Explicitly delete the copy and move operations
   CancellationHandle(const CancellationHandle&) = delete;
   CancellationHandle& operator=(const CancellationHandle&) = delete;
   ~CancellationHandle();

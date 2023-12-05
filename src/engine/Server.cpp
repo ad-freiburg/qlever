@@ -533,7 +533,6 @@ auto Server::setupCancellationHandle(
     const std::shared_ptr<Operation>& rootOperation, TimeLimit timeLimit) const
     -> ad_utility::InvocableWithExactReturnType<void> auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
-  cancellationHandle->startWatchDog();
   AD_CORRECTNESS_CHECK(cancellationHandle);
   rootOperation->recursivelySetCancellationHandle(
       std::move(cancellationHandle));

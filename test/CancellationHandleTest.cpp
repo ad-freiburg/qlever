@@ -119,12 +119,6 @@ TYPED_TEST(CancellationHandleFixture,
 
 // _____________________________________________________________________________
 
-TEST(CancellationHandle, ensureObjectLifetimeIsValidWithoutWatchDogStarted) {
-  EXPECT_NO_THROW(CancellationHandle<true>{});
-}
-
-// _____________________________________________________________________________
-
 namespace ad_utility {
 
 TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
@@ -132,9 +126,6 @@ TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
   GTEST_SKIP_("sleep_for is unreliable for macos builds");
 #endif
   CancellationHandle<true> handle;
-
-  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  handle.startWatchDog();
 
   // Give thread some time to start
   std::this_thread::sleep_for(10ms);
@@ -151,7 +142,6 @@ TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
   GTEST_SKIP_("sleep_for is unreliable for macos builds");
 #endif
   CancellationHandle<true> handle;
-  handle.startWatchDog();
 
   // Give thread some time to start
   std::this_thread::sleep_for(10ms);
@@ -168,7 +158,7 @@ TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyResetWatchDogStateDoesProperlyResetState) {
-  CancellationHandle<true> handle;
+  CancellationHandle<true> handle{{}};
 
   handle.cancellationState_ = NOT_CANCELLED;
   handle.resetWatchDogState();
@@ -220,9 +210,7 @@ TEST(CancellationHandle, verifyResetWatchDogStateIsNoOpWithoutWatchDog) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckDoesPleaseWatchDog) {
-  CancellationHandle<true> handle;
-  // Because watch dog operates async, simulate it here for stable tests.
-  handle.watchDogRunning_ = true;
+  CancellationHandle<true> handle{{}};
 
   handle.cancellationState_ = WAITING_FOR_CHECK;
   EXPECT_NO_THROW(handle.throwIfCancelled(""));
@@ -236,7 +224,7 @@ TEST(CancellationHandle, verifyCheckDoesPleaseWatchDog) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
-  CancellationHandle<true> handle;
+  CancellationHandle<true> handle{{}};
 
   handle.cancellationState_ = MANUAL;
   EXPECT_THROW(handle.throwIfCancelled(""), CancellationException);
@@ -251,9 +239,7 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
   auto& choice = ad_utility::LogstreamChoice::get();
-  CancellationHandle<true> handle;
-  // Because watch dog operates async, simulate it here for stable tests.
-  handle.watchDogRunning_ = true;
+  CancellationHandle<true> handle{{}};
 
   auto& originalOStream = choice.getStream();
   absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
@@ -274,11 +260,4 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
             // Check for small miss window
             ContainsRegex("by [0-9]ms")));
 }
-
-// Make sure member functions still exist when no watch dog functionality
-// is available to make the code simpler. In this case the functions should
-// be no-op.
-static_assert(std::is_member_function_pointer_v<
-              decltype(&CancellationHandle<false>::startWatchDog)>);
-
 }  // namespace ad_utility

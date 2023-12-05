@@ -17,16 +17,14 @@ void CancellationHandle<WatchDogEnabled>::cancel(CancellationState reason) {
 
 // _____________________________________________________________________________
 template <bool WatchDogEnabled>
-void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
+ad_utility::JThread
+CancellationHandle<WatchDogEnabled>::createWatchDogInternal()
     requires WatchDogEnabled {
   using enum CancellationState;
-  // Setting the atomic here does synchronize memory for assignment,
-  // so this is safe without a mutex
-  bool running = watchDogRunning_.exchange(true);
-  // This function is only supposed to be run once.
-  AD_CONTRACT_CHECK(!running);
-  watchDogThread_ = ad_utility::JThread{[this]() {
-    while (watchDogRunning_.load(std::memory_order_relaxed)) {
+  // This should be called in the constructor only!
+  AD_CORRECTNESS_CHECK(watchDogRunning_);
+  return ad_utility::JThread{[this]() {
+    while (watchDogRunning_) {
       auto state = cancellationState_.load(std::memory_order_relaxed);
       if (state == NOT_CANCELLED) {
         cancellationState_.compare_exchange_strong(state, WAITING_FOR_CHECK);
@@ -43,9 +41,11 @@ void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
 
 // _____________________________________________________________________________
 template <bool WatchDogEnabled>
-void CancellationHandle<WatchDogEnabled>::startWatchDog() {
+ad_utility::JThread CancellationHandle<WatchDogEnabled>::createWatchDog() {
   if constexpr (WatchDogEnabled) {
-    startWatchDogInternal();
+    return createWatchDogInternal();
+  } else {
+    return {};
   }
 }
 
