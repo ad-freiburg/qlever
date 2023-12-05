@@ -76,7 +76,8 @@ class CancellationHandle {
   using WatchDogOnly = std::conditional_t<WatchDogEnabled, T, detail::Empty>;
   [[no_unique_address]] WatchDogOnly<std::atomic_bool> watchDogRunning_{false};
   [[no_unique_address]] WatchDogOnly<ad_utility::JThread> watchDogThread_;
-  [[no_unique_address]] WatchDogOnly<std::chrono::steady_clock::rep>
+  [[no_unique_address]] WatchDogOnly<
+      std::atomic<std::chrono::steady_clock::rep>>
       startTimeoutWindow_{0};
 
   template <typename... ArgTypes>
