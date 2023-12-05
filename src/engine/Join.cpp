@@ -375,29 +375,23 @@ void Join::computeSizeEstimateAndMultiplicities() {
 
   for (auto i = isFullScanDummy(_left) ? ColumnIndex{1} : ColumnIndex{0};
        i < _left->getResultWidth(); ++i) {
-    double m = joinEstimates.multiplicityJoinColumn_;
-    if (i != _leftJoinCol && nofDistinctLeft != nofDistinctInResult) {
-      m = joinEstimates.getMultiplicityNonJoinColumn_(left, i);
+    if (i != _leftJoinCol) {
+      _multiplicities.emplace_back(
+          joinEstimates.getMultiplicityNonJoinColumn_(*_left, i));
+    } else {
+      _multiplicities.emplace_back(joinEstimates.multiplicityJoinColumn_);
     }
-    _multiplicities.emplace_back(m);
   }
 
   for (auto i = ColumnIndex{0}; i < _right->getResultWidth(); ++i) {
     if (i == _rightJoinCol && !isFullScanDummy(_left)) {
       continue;
     }
-    double oldMult = _right->getMultiplicity(i);
-    double m = std::max(
-        1.0, oldMult * _left->getMultiplicity(_leftJoinCol) * corrFactor);
-    if (i != _rightJoinCol && nofDistinctRight != nofDistinctInResult) {
-      double oldDist = _right->getSizeEstimate() / oldMult;
-      double newDist = std::min(oldDist, adaptSizeRight);
-      m = (_sizeEstimate / corrFactor) / newDist;
-    }
-    _multiplicities.emplace_back(m);
+    _multiplicities.emplace_back(
+        joinEstimates.getMultiplicityNonJoinColumn_(*_right, i));
   }
 
-  assert(_multiplicities.size() == getResultWidth());
+  AD_CORRECTNESS_CHECK(_multiplicities.size() == getResultWidth());
 }
 
 // ______________________________________________________________________________

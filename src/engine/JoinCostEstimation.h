@@ -14,43 +14,61 @@ struct JoinEstimates {
   std::function<double(QueryExecutionTree&, ColumnIndex)> getMultiplicityNonJoinColumn_;
 };
 
-JoinEstimates computeSizeEstimateAndMultiplicitiesForJoin(
-    QueryExecutionTree& left,
-    QueryExecutionTree& right, ColumnIndex joinColLeft,
-    ColumnIndex joinColRight, double corrFactor) {
-  auto getNumDistinct = [](auto& qet, ColumnIndex col) {
-    return std::max(size_t(1), static_cast<size_t>(qet.getSizeEstimate() /
-                                                   qet.getMultiplicity(col)));
-  };
-  size_t nofDistinctLeft = getNumDistinct(left, joinColLeft);
-  size_t nofDistinctRight = getNumDistinct(right, joinColRight);
+struct Estimates {
+  std::vector<float> multiplicities_;
+  uint64_t sizeEstimate_;
+  ColumnIndex joinColumn_;
+
+  size_t numDistinct(ColumnIndex  col) const {
+    return std::max(
+        size_t(1),
+        static_cast<size_t>(sizeEstimate_ / multiplicities_.at(col)));
+  }
+  size_t numDistinctInJoinCol() const { return numDistinct(joinColumn_); }
+  float multiplicityJoinCol() const { return multiplicities_.at(joinColumn_); }
+};
+
+inline JoinEstimates computeSizeEstimateAndMultiplicitiesForJoin(
+    Estimates left,
+    Estimates right,
+    double corrFactor) {
+  size_t nofDistinctLeft = left.numDistinctInJoinCol();
+  size_t nofDistinctRight = right.numDistinctInJoinCol());
   size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
 
-  auto adaptSize = [nofDistinctInResult](auto& qet, size_t numDistinct) {
-    return qet.getSizeEstimate() *
-           (static_cast<double>(nofDistinctInResult) / numDistinct);
+  auto adaptSize = [nofDistinctInResult](const Estimates& est, ColumnIndex colIdx) {
+    return est.sizeEstimate_ *
+           (static_cast<double>(nofDistinctInResult) / est.numDistinct(colIdx));
   };
 
-  double adaptSizeLeft = adaptSize(left, nofDistinctLeft);
-  double adaptSizeRight = adaptSize(right, nofDistinctRight);
-
-  double jcMultiplicityInResult =
-      left.getMultiplicity(joinColLeft) * right.getMultiplicity(joinColRight);
+  double multiplicityJoinCol = left.multiplicityJoinCol() *
+                               right.multiplicityJoinCol() * corrFactor;
+  multiplicityJoinCol = std::max(1.0, multiplicityJoinCol);
   auto sizeEstimate = std::max(
-      size_t(1), static_cast<size_t>(corrFactor * jcMultiplicityInResult *
-                                     nofDistinctInResult));
+      size_t(1), static_cast<size_t>(multiplicityJoinCol *
+                                     nofDistinctInResult);
 
-  auto getMultiplicityNonJoinCol = [corrFactor, getNumDistinct, adaptSize,
-                                    sizeEstimate](auto& qet,
-                                                  ColumnIndex colIdx) {
-    double oldDist = getNumDistinct(qet, colIdx);
-    double newDist = std::min(oldDist, adaptSize(qet, oldDist));
+
+  auto getMultiplicityJoinColOrFromSmallerTree = [corrFactor](const Estimates& estimates, ColumnIndex colIdx, const Estimates& other) {
+    auto otherJoinCol = isLeft ? joinColRight : joinColLeft;
+    double oldMult = estimates.multiplicities_.at(colIdx);
+    return std::max(1.0, oldMult * other.multiplicityJoinCol() * corrFactor);
+  };
+
+
+
+  auto getMultiplicityNonJoinCol = [corrFactor, getNumDistinct, adaptSize,nofDistinctInResult,
+                                    sizeEstimate, smallerDistinctnessTrees, &left, &right, getMultiplicityJoinColOrFromSmallerTree](const Estimates& estimates,
+                                                  ColumnIndex colIdx, const Estimates& other) {
+    if (colIdx = estimates.joinColumn_ || estimates.numDistinctInJoinCol() == nofDistinctInResult) {
+      return getMultiplicityJoinColOrFromSmallerTree(estimates, colIdx, other);
+    }
+    double oldDist = estimates.numDistinct(colIdx);
+    double newDist = std::min(oldDist, adaptSize(estimates, colIdx));
     return sizeEstimate / corrFactor / newDist;
   };
 
-  double multiplicityJoinCol = left.getMultiplicity(joinColLeft) *
-                               right.getMultiplicity(joinColRight) * corrFactor;
-  multiplicityJoinCol = std::max(1.0, multiplicityJoinCol);
+
 
   return {sizeEstimate, multiplicityJoinCol, getMultiplicityNonJoinCol};
 }

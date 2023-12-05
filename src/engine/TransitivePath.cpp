@@ -10,6 +10,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "util/Exception.h"
+#include "engine/JoinCostEstimation.h"
 
 // _____________________________________________________________________________
 TransitivePath::TransitivePath(QueryExecutionContext* qec,
