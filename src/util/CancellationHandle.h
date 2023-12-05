@@ -31,6 +31,17 @@ enum class CancellationState {
 
 namespace detail {
 
+#if !defined(QLEVER_DISABLE_QUERY_CANCELLATION_WATCH_DO) && LOGLEVEL >= WARN
+constexpr bool ENABLE_QUERY_CANCELLATION_WATCH_DOG = true;
+#else
+#if LOGLEVEL < WARN
+#warning \
+    "QLEVER_ENABLE_QUERY_CANCELLATION_WATCH_DOG is ignored if WARN logging \
+level is disabled"
+#endif
+constexpr bool ENABLE_QUERY_CANCELLATION_WATCH_DOG = false;
+#endif
+
 AD_ALWAYS_INLINE constexpr bool isCancelled(
     CancellationState cancellationState) {
   using enum CancellationState;
@@ -67,7 +78,7 @@ static_assert(std::atomic<CancellationState>::is_always_lock_free);
 
 /// Thread safe wrapper around an atomic variable, providing efficient
 /// checks for cancellation across threads.
-template <bool WatchDogEnabled = areExpensiveChecksEnabled>
+template <bool WatchDogEnabled = detail::ENABLE_QUERY_CANCELLATION_WATCH_DOG>
 class CancellationHandle {
   std::atomic<CancellationState> cancellationState_ =
       CancellationState::NOT_CANCELLED;
