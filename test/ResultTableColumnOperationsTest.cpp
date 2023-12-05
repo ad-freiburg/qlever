@@ -18,6 +18,8 @@
 #include "util/TypeTraits.h"
 
 namespace ad_benchmark {
+// How many rows should the test tables have?
+constexpr size_t NUM_ROWS = 10;
 
 // Does `T` support addition?
 template <typename T>
@@ -77,6 +79,84 @@ static void compareToColumn(
   }
 }
 
+/*
+@brief Test the general exception cases for a function of
+`ResultTableColumnOperations`, that takes an unlimited number of input columns.
+
+@param callTransform Lambda, that transforms the call arguments into arguments
+for the function, that you want to test. Must have the signature `ResultTable*
+,const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn, const
+ColumnNumWithType<ColumnInputTypes>&... inputColumns`.
+*/
+static void generalExceptionTest(
+    const auto& callTransform,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{generateLocationTrace(l, "generalExceptionTest")};
+
+  doForTypeInResultTableEntryType([&callTransform]<typename T>() {
+    // A call with a `ResultTable`, who has no rows, is valid.
+    auto table{createTestTable(0, 3, ColumnNumWithType<T>{0},
+                               ColumnNumWithType<T>{1})};
+    ASSERT_NO_THROW(callTransform(&table, ColumnNumWithType<T>{2},
+                                  ColumnNumWithType<T>{1},
+                                  ColumnNumWithType<T>{0}));
+
+    // A call, in which the result column is also an input column, is valid.
+    table = createTestTable(NUM_ROWS, 3, ColumnNumWithType<T>{0},
+                            ColumnNumWithType<T>{1});
+    ASSERT_NO_THROW(callTransform(&table, ColumnNumWithType<T>{1},
+                                  ColumnNumWithType<T>{1},
+                                  ColumnNumWithType<T>{0}));
+
+    // Exception tests.
+    // A column contains more than 1 type.
+    table = createTestTable(std::variant_size_v<ResultTable::EntryType> - 1, 3);
+    doForTypeInResultTableEntryType([row = 0, &table]<typename T2>() mutable {
+      table.setEntry(row++, 0, createDummyValueEntryType<T2>());
+    });
+    ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<T>{1},
+                                   ColumnNumWithType<T>{0},
+                                   ColumnNumWithType<T>{2}));
+
+    // Wrong input column type.
+    table = createTestTable(NUM_ROWS, 3, ColumnNumWithType<T>{0},
+                            ColumnNumWithType<T>{1});
+    doForTypeInResultTableEntryType([&table,
+                                     &callTransform]<typename WrongType>() {
+      if constexpr (!ad_utility::isSimilar<WrongType, T>) {
+        ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<WrongType>{2},
+                                       ColumnNumWithType<WrongType>{1},
+                                       ColumnNumWithType<WrongType>{0}));
+      }
+    });
+
+    // Column is outside boundaries.
+    table = createTestTable(NUM_ROWS, 4, ColumnNumWithType<T>{0},
+                            ColumnNumWithType<T>{1}, ColumnNumWithType<T>{2},
+                            ColumnNumWithType<T>{3});
+    ASSERT_ANY_THROW(
+        callTransform(&table, ColumnNumWithType<T>{10}, ColumnNumWithType<T>{1},
+                      ColumnNumWithType<T>{2}, ColumnNumWithType<T>{3}));
+    ASSERT_ANY_THROW(
+        callTransform(&table, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{10},
+                      ColumnNumWithType<T>{2}, ColumnNumWithType<T>{3}));
+    ASSERT_ANY_THROW(
+        callTransform(&table, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{1},
+                      ColumnNumWithType<T>{20}, ColumnNumWithType<T>{3}));
+    ASSERT_ANY_THROW(
+        callTransform(&table, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{1},
+                      ColumnNumWithType<T>{2}, ColumnNumWithType<T>{30}));
+
+    // One column is used more than once as an input.
+    table = createTestTable(NUM_ROWS, 2, ColumnNumWithType<T>{0},
+                            ColumnNumWithType<T>{1});
+    ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<T>{1},
+                                   ColumnNumWithType<T>{0},
+                                   ColumnNumWithType<T>{0}));
+  });
+}
+
 TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
   // How many rows should the test table have?
   constexpr size_t NUM_ROWS = 10;
@@ -84,11 +164,7 @@ TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
   // A lambda, that copies on column into another.
   auto columnCopyLambda = [](const auto& d) { return d; };
 
-  // A lambda, that always return true.
-  auto trivialLambda = [](const auto&...) { return true; };
-
-  doForTypeInResultTableEntryType([&NUM_ROWS, &columnCopyLambda,
-                                   &trivialLambda]<typename T>() {
+  doForTypeInResultTableEntryType([&NUM_ROWS, &columnCopyLambda]<typename T>() {
     // Single parameter operators.
     // Two columns. Transcribe column 0 into column 1.
     ResultTable table{createTestTable(NUM_ROWS, 2, ColumnNumWithType<T>{0})};
@@ -124,72 +200,62 @@ TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
       // We need more cases!
       AD_FAIL();
     };
+  });
 
-    // A call with a `ResultTable`, who has no rows, is valid.
-    table = createTestTable(0, 2, ColumnNumWithType<T>{0});
+  // Exception tests.
+  generalExceptionTest([](ResultTable* table, const auto& columnToPutResultIn,
+                          const auto&... inputColumns) {
     generateColumnWithColumnInput(
-        &table, [](const auto& d) { return d; }, ColumnNumWithType<T>{1},
-        ColumnNumWithType<T>{0});
+        table,
+        [](const auto& firstInput, const auto&...) { return firstInput; },
+        columnToPutResultIn, inputColumns...);
+  });
+}
 
-    // Exception tests.
-    // A column contains more than 1 type.
-    table = createTestTable(std::variant_size_v<ResultTable::EntryType> - 1, 3);
-    doForTypeInResultTableEntryType([row = 0, &table]<typename T2>() mutable {
-      table.setEntry(row++, 0, createDummyValueEntryType<T2>());
-    });
-    ASSERT_ANY_THROW(generateColumnWithColumnInput(&table, columnCopyLambda,
-                                                   ColumnNumWithType<T>{1},
-                                                   ColumnNumWithType<T>{0}));
+TEST(ResultTableColumnOperations, SumUpColumns) {
+  // Normal tests.
+  doForTypeInResultTableEntryType([]<typename T>() {
+    // We only do tests on types, that support addition.
+    if constexpr (SupportsAddition<T>) {
+      // Minimal amount of columns.
+      ResultTable table{createTestTable(NUM_ROWS, 3, ColumnNumWithType<T>{0},
+                                        ColumnNumWithType<T>{1})};
+      sumUpColumns(&table, ColumnNumWithType<T>{2}, ColumnNumWithType<T>{1},
+                   ColumnNumWithType<T>{0});
+      compareToColumn(
+          std::vector<T>(NUM_ROWS, createDummyValueEntryType<T>() +
+                                       createDummyValueEntryType<T>()),
+          table, ColumnNumWithType<T>{2});
 
-    // Wrong input column type.
-    table = createTestTable(NUM_ROWS, 2, ColumnNumWithType<T>{0});
-    doForTypeInResultTableEntryType(
-        [&table, &trivialLambda]<typename WrongType>() {
-          if constexpr (!ad_utility::isSimilar<WrongType, T>) {
-            ASSERT_ANY_THROW(generateColumnWithColumnInput(
-                &table, trivialLambda, ColumnNumWithType<bool>{1},
-                ColumnNumWithType<WrongType>{0}));
-          }
-        });
+      // Test with more columns.
+      table = createTestTable(NUM_ROWS, 10, ColumnNumWithType<T>{0},
+                              ColumnNumWithType<T>{1}, ColumnNumWithType<T>{2},
+                              ColumnNumWithType<T>{3}, ColumnNumWithType<T>{4},
+                              ColumnNumWithType<T>{5}, ColumnNumWithType<T>{6},
+                              ColumnNumWithType<T>{7}, ColumnNumWithType<T>{8});
+      sumUpColumns(&table, ColumnNumWithType<T>{9}, ColumnNumWithType<T>{0},
+                   ColumnNumWithType<T>{1}, ColumnNumWithType<T>{2},
+                   ColumnNumWithType<T>{3}, ColumnNumWithType<T>{4},
+                   ColumnNumWithType<T>{5}, ColumnNumWithType<T>{6},
+                   ColumnNumWithType<T>{7}, ColumnNumWithType<T>{8});
+      compareToColumn(
+          std::vector<T>(NUM_ROWS, createDummyValueEntryType<T>() +
+                                       createDummyValueEntryType<T>() +
+                                       createDummyValueEntryType<T>() +
+                                       createDummyValueEntryType<T>() +
+                                       createDummyValueEntryType<T>() +
+                                       createDummyValueEntryType<T>() +
+                                       createDummyValueEntryType<T>() +
+                                       createDummyValueEntryType<T>() +
+                                       createDummyValueEntryType<T>()),
+          table, ColumnNumWithType<T>{9});
+    }
+  });
 
-    // Column is outside boundaries.
-    table = createTestTable(NUM_ROWS, 2, ColumnNumWithType<T>{0},
-                            ColumnNumWithType<T>{1});
-    ASSERT_ANY_THROW(generateColumnWithColumnInput(&table, columnCopyLambda,
-                                                   ColumnNumWithType<T>{2},
-                                                   ColumnNumWithType<T>{0}));
-    ASSERT_ANY_THROW(generateColumnWithColumnInput(&table, columnCopyLambda,
-                                                   ColumnNumWithType<T>{2},
-                                                   ColumnNumWithType<T>{1}));
-    ASSERT_ANY_THROW(generateColumnWithColumnInput(&table, columnCopyLambda,
-                                                   ColumnNumWithType<T>{3},
-                                                   ColumnNumWithType<T>{4}));
-    table = createTestTable(NUM_ROWS, 4, ColumnNumWithType<T>{0},
-                            ColumnNumWithType<T>{1}, ColumnNumWithType<T>{2},
-                            ColumnNumWithType<T>{3});
-    ASSERT_ANY_THROW(generateColumnWithColumnInput(
-        &table, trivialLambda, ColumnNumWithType<bool>{10},
-        ColumnNumWithType<T>{1}, ColumnNumWithType<T>{2},
-        ColumnNumWithType<T>{3}));
-    ASSERT_ANY_THROW(generateColumnWithColumnInput(
-        &table, trivialLambda, ColumnNumWithType<bool>{0},
-        ColumnNumWithType<T>{10}, ColumnNumWithType<T>{2},
-        ColumnNumWithType<T>{3}));
-    ASSERT_ANY_THROW(generateColumnWithColumnInput(
-        &table, trivialLambda, ColumnNumWithType<bool>{0},
-        ColumnNumWithType<T>{1}, ColumnNumWithType<T>{20},
-        ColumnNumWithType<T>{3}));
-    ASSERT_ANY_THROW(generateColumnWithColumnInput(
-        &table, trivialLambda, ColumnNumWithType<bool>{0},
-        ColumnNumWithType<T>{1}, ColumnNumWithType<T>{2},
-        ColumnNumWithType<T>{30}));
-
-    // One column is used more than once as an input.
-    table = createTestTable(NUM_ROWS, 2, ColumnNumWithType<T>{0},
-                            ColumnNumWithType<T>{1});
-    ASSERT_ANY_THROW(generateColumnWithColumnInput(
-        &table, trivialLambda, ColumnNumWithType<bool>{1},
-        ColumnNumWithType<T>{0}, ColumnNumWithType<T>{0}));
+  // Exception tests.
+  generalExceptionTest([](ResultTable* table, const auto& columnToPutResultIn,
+                          const auto&... inputColumns) {
+    sumUpColumns(table, columnToPutResultIn, inputColumns...);
   });
 }
 }  // namespace ad_benchmark

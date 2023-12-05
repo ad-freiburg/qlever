@@ -50,4 +50,22 @@ requires(sizeof...(ColumnInputTypes) > 0) void generateColumnWithColumnInput(
                                    row, inputColumns.columnNum_)...));
   }
 }
+
+/*
+@brief Vector addition with `ResultTable` columns.
+*/
+template <typename ColumnReturnType,
+          std::same_as<ColumnNumWithType<ColumnReturnType>>... ColumnInputTypes>
+requires(sizeof...(ColumnInputTypes) > 1) void sumUpColumns(
+    ResultTable* const table,
+    const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn,
+    const ColumnInputTypes&... columnsToSumUp) {
+  // We can simply pass this to `generateColumnWithColumnInput`.
+  generateColumnWithColumnInput(
+      table,
+      [](const ColumnInputTypes::ColumnType&... values) -> ColumnReturnType {
+        return (values + ...);
+      },
+      columnToPutResultIn, columnsToSumUp...);
+}
 }  // namespace ad_benchmark
