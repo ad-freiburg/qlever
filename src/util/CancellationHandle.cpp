@@ -23,6 +23,7 @@ void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
   // Setting the atomic here does synchronize memory for assignment,
   // so this is safe without a mutex
   bool running = watchDogRunning_.exchange(true);
+  // This function is only supposed to be run once.
   AD_CONTRACT_CHECK(!running);
   watchDogThread_ = ad_utility::JThread{[this]() {
     while (watchDogRunning_.load(std::memory_order_relaxed)) {
@@ -32,8 +33,7 @@ void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
       } else if (state == WAITING_FOR_CHECK) {
         if (cancellationState_.compare_exchange_strong(state,
                                                        CHECK_WINDOW_MISSED)) {
-          startTimeoutWindow_ =
-              std::chrono::steady_clock::now().time_since_epoch().count();
+          startTimeoutWindow_ = std::chrono::steady_clock::now();
         }
       }
       std::this_thread::sleep_for(DESIRED_CANCELLATION_CHECK_INTERVAL);
@@ -76,17 +76,6 @@ CancellationHandle<WatchDogEnabled>::~CancellationHandle() {
   if constexpr (WatchDogEnabled) {
     watchDogRunning_.store(false, std::memory_order_relaxed);
   }
-}
-
-// _____________________________________________________________________________
-template <bool WatchDogEnabled>
-CancellationHandle<WatchDogEnabled>::DurationType
-CancellationHandle<WatchDogEnabled>::computeCheckMissDuration() const
-    requires WatchDogEnabled {
-  using namespace std::chrono;
-  return duration_cast<DurationType>(
-      steady_clock::now() -
-      steady_clock::time_point{steady_clock::duration{startTimeoutWindow_}});
 }
 
 // Make sure to compile correctly.

@@ -42,6 +42,9 @@ level is disabled"
 constexpr bool ENABLE_QUERY_CANCELLATION_WATCH_DOG = false;
 #endif
 
+/// Helper function that safely checks if the passed `cancellationState`
+/// represents one of the cancelled states with a single comparison for
+/// efficiency.
 AD_ALWAYS_INLINE constexpr bool isCancelled(
     CancellationState cancellationState) {
   using enum CancellationState;
@@ -52,6 +55,7 @@ AD_ALWAYS_INLINE constexpr bool isCancelled(
   return cancellationState > CHECK_WINDOW_MISSED;
 }
 
+/// Helper struct to allow to conditionally compile fields into a class.
 struct Empty {
   // Ignore potential assigment
   template <typename... Args>
@@ -85,22 +89,34 @@ class CancellationHandle {
 
   template <typename T>
   using WatchDogOnly = std::conditional_t<WatchDogEnabled, T, detail::Empty>;
+  // TODO<Clang18> Use std::jthread and its builtin stop_token.
   [[no_unique_address]] WatchDogOnly<std::atomic_bool> watchDogRunning_{false};
   [[no_unique_address]] WatchDogOnly<ad_utility::JThread> watchDogThread_;
   [[no_unique_address]] WatchDogOnly<
-      std::atomic<std::chrono::steady_clock::rep>>
+      std::atomic<std::chrono::steady_clock::time_point>>
       startTimeoutWindow_{0};
+  static_assert(
+      std::atomic<std::chrono::steady_clock::time_point>::is_always_lock_free);
 
+  /// Make sure internal state is set back to
+  /// `CancellationState::NOT_CANCELLED`, in order to prevent logging warnings
+  /// in the console that would otherwise be triggered by the watchdog.
   template <typename... ArgTypes>
   void pleaseWatchDog(CancellationState state,
                       const InvocableWithConvertibleReturnType<
                           std::string_view, ArgTypes...> auto& detailSupplier,
                       ArgTypes&&... argTypes) requires WatchDogEnabled {
+    using namespace std::chrono;
+    using DurationType =
+        std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
+
     AD_CORRECTNESS_CHECK(watchDogRunning_.load(std::memory_order_relaxed));
     if (state == CancellationState::CHECK_WINDOW_MISSED) {
       LOG(WARN) << "Cancellation check missed deadline of "
                 << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
-                << " by " << ParseableDuration{computeCheckMissDuration()}
+                << " by "
+                << ParseableDuration{duration_cast<DurationType>(
+                       steady_clock::now() - startTimeoutWindow_.load())}
                 << ". Stage: "
                 << std::invoke(detailSupplier, AD_FWD(argTypes)...)
                 << std::endl;
@@ -110,17 +126,18 @@ class CancellationHandle {
         state, CancellationState::NOT_CANCELLED, std::memory_order_relaxed);
   }
 
-  using DurationType =
-      std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
-
-  DurationType computeCheckMissDuration() const requires WatchDogEnabled;
-
+  /// Internal function that starts the watch dog. It will set this
+  /// `CancellationHandle` instance into a state that will log a warning in the
+  /// console if `throwIfCancelled` is not called frequently enough.
   void startWatchDogInternal() requires WatchDogEnabled;
 
+  /// Helper function that sets the internal state atomically given that it has
+  /// not been cancelled yet. Otherwise no-op.
   void setStatePreservingCancel(CancellationState newState);
 
  public:
-  /// Sets the cancellation flag so the next call to throwIfCancelled will throw
+  /// Sets the cancellation flag so the next call to throwIfCancelled will
+  /// throw. No-op if this instance is already in a cancelled state.
   void cancel(CancellationState reason);
 
   /// Overload for static exception messages, make sure the string is a constant
@@ -134,7 +151,8 @@ class CancellationHandle {
   /// Throw an `CancellationException` when this handle has been cancelled. Do
   /// nothing otherwise. The arg types are passed to the `detailSupplier` only
   /// if an exception is about to be thrown. If no exception is thrown,
-  /// `detailSupplier` will not be evaluated.
+  /// `detailSupplier` will not be evaluated. If `WatchDogEnabled` is true,
+  /// this will log a warning if this check is not called frequently enough.
   template <typename... ArgTypes>
   AD_ALWAYS_INLINE void throwIfCancelled(
       const InvocableWithConvertibleReturnType<
@@ -163,10 +181,16 @@ class CancellationHandle {
         cancellationState_.load(std::memory_order_relaxed));
   }
 
+  /// Start the watch dog. Must only be called once per `CancellationHandle`
+  /// instance.
   void startWatchDog();
 
+  /// If this `CancellationHandle` is not cancelled, reset the internal
+  /// `cancellationState_` to `CancellationState::NOT_CANCELED`.
+  /// Useful to ignore expected gaps in the execution flow.
   void resetWatchDogState();
 
+  // Explicit move-semantics
   CancellationHandle() = default;
   CancellationHandle(const CancellationHandle&) = delete;
   CancellationHandle& operator=(const CancellationHandle&) = delete;

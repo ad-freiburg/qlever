@@ -24,7 +24,7 @@ struct JThread : public std::thread {
     if (joinable()) {
       join();
     }
-    Base::operator=(std::forward<JThread>(other));
+    Base::operator=(std::move(other));
     return *this;
   }
   ~JThread() {
