@@ -26,13 +26,14 @@ void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
   // This function is only supposed to be run once.
   AD_CONTRACT_CHECK(!running);
   watchDogThread_ = ad_utility::JThread{[this]() {
-    while (watchDogRunning_.load(std::memory_order_relaxed)) {
+    while (watchDogRunning_) {
       auto state = cancellationState_.load(std::memory_order_relaxed);
       if (state == NOT_CANCELLED) {
-        cancellationState_.compare_exchange_strong(state, WAITING_FOR_CHECK);
+        cancellationState_.compare_exchange_strong(state, WAITING_FOR_CHECK,
+                                                   std::memory_order_relaxed);
       } else if (state == WAITING_FOR_CHECK) {
-        if (cancellationState_.compare_exchange_strong(state,
-                                                       CHECK_WINDOW_MISSED)) {
+        if (cancellationState_.compare_exchange_strong(
+                state, CHECK_WINDOW_MISSED, std::memory_order_relaxed)) {
           startTimeoutWindow_ = steady_clock::now();
         }
       }
@@ -74,7 +75,7 @@ void CancellationHandle<WatchDogEnabled>::resetWatchDogState() {
 template <bool WatchDogEnabled>
 CancellationHandle<WatchDogEnabled>::~CancellationHandle() {
   if constexpr (WatchDogEnabled) {
-    watchDogRunning_.store(false, std::memory_order_relaxed);
+    watchDogRunning_ = false;
   }
 }
 
