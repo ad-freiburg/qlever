@@ -4,16 +4,14 @@
 
 #include "./GeoSparqlHelpers.h"
 
+#include <ctre/ctre.h>
+
 #include <cmath>
 #include <limits>
 #include <numbers>
-#include <optional>
-#include <string>
 #include <string_view>
 
 #include "./Exception.h"
-#include "absl/strings/charconv.h"
-#include "ctre/ctre.h"
 
 namespace ad_utility {
 
@@ -35,10 +33,8 @@ static constexpr double invalidCoordinate =
 std::pair<double, double> parseWktPoint(const std::string_view point) {
   double lng = invalidCoordinate, lat = invalidCoordinate;
   if (auto match = ctre::search<wktPointRegex>(point)) {
-    std::string_view lng_sv = match.get<1>();
-    std::string_view lat_sv = match.get<2>();
-    absl::from_chars(lng_sv.data(), lng_sv.data() + lng_sv.size(), lng);
-    absl::from_chars(lat_sv.data(), lat_sv.data() + lat_sv.size(), lat);
+    lng = match.get<1>().to_number<double>();
+    lat = match.get<2>().to_number<double>();
     // This should never happen: if the regex matches, then each of the two
     // coordinate strings should also parse to a double.
     AD_CONTRACT_CHECK(lng != invalidCoordinate);
@@ -51,8 +47,7 @@ std::pair<double, double> parseWktPoint(const std::string_view point) {
 double wktLongitudeImpl(const std::string_view point) {
   double lng = invalidCoordinate;
   if (auto match = ctre::search<wktPointRegex>(point)) {
-    std::string_view lng_sv = match.get<1>();
-    absl::from_chars(lng_sv.data(), lng_sv.data() + lng_sv.size(), lng);
+    lng = match.get<1>().to_number<double>();
     AD_CONTRACT_CHECK(lng != invalidCoordinate);
   }
   return lng;
@@ -62,8 +57,7 @@ double wktLongitudeImpl(const std::string_view point) {
 double wktLatitudeImpl(const std::string_view point) {
   double lat = invalidCoordinate;
   if (auto match = ctre::search<wktPointRegex>(point)) {
-    std::string_view lat_sv = match.get<2>();
-    absl::from_chars(lat_sv.data(), lat_sv.data() + lat_sv.size(), lat);
+    lat = match.get<2>().to_number<double>();
     AD_CONTRACT_CHECK(lat != invalidCoordinate);
   }
   return lat;

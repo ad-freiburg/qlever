@@ -27,7 +27,7 @@ Url::Url(std::string_view url) {
         "URL \"", url, "\" malformed, must match regex ", urlRegexString));
   }
   protocol_ =
-      match.get<1>().to_string() == "http" ? Protocol::HTTP : Protocol::HTTPS;
+      match.get<1>().to_view() == "http" ? Protocol::HTTP : Protocol::HTTPS;
   host_ = match.get<2>().to_string();
   port_ = match.get<4>().to_string();
   if (port_.empty()) {
