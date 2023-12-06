@@ -290,7 +290,7 @@ class GroupBy : public Operation {
       sparqlExpression::EvaluationContext& evaluationContext,
       const ad_utility::HashMapWithMemoryLimit<KeyType,
                                                ValueType<numAggregates>>& map,
-      IdTable* groupValues);
+      IdTable* resultTable);
 
   // Check if an expression is of a certain type.
   template <class T>

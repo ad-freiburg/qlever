@@ -866,8 +866,9 @@ GroupBy::extractValuesDirectlyFromMap(
       getExecutionContext()->getAllocator());
 
   // Store aggregate results in table and in vector.
+  decltype(auto) groupValues = resultTable->getColumn(0);
   for (size_t j = beginIndex; j < endIndex; j++) {
-    auto& val = (*resultTable)(j, 0);
+    Id val = groupValues[j];
     auto& aggregateData = map.at(val).at(hashMapIndex);
     auto aggregateResult = aggregateData.calculateResult();
     (*resultTable)(j, outCol) = aggregateResult;
@@ -884,17 +885,17 @@ void GroupBy::substituteAllAggregates(
     sparqlExpression::EvaluationContext& evaluationContext,
     const ad_utility::HashMapWithMemoryLimit<KeyType, ValueType<numAggregates>>&
         map,
-    IdTable* groupValues) {
-  // Multiple aggregates, need to substitute them away and then finally
-  // evaluate the top-level expression.
+    IdTable* resultTable) {
+  // Substitute in the results of all aggregates of `info`.
   for (auto& aggregate : info) {
     sparqlExpression::VectorWithMemoryLimit<ValueId> aggregateResults(
         getExecutionContext()->getAllocator());
 
     // Get all aggregate results as a vector
+    decltype(auto) groupValues = resultTable->getColumn(0);
     for (size_t j = evaluationContext._beginIndex;
          j < evaluationContext._endIndex; j++) {
-      auto& val = (*groupValues)(j, 0);
+      Id val = groupValues[j];
       auto& aggregateData = map.at(val).at(aggregate.hashMapIndex_);
       aggregateResults.push_back(aggregateData.calculateResult());
     }
@@ -966,7 +967,9 @@ void GroupBy::createResultFromHashMap(
 
         // Copy the result so that future aliases may reuse it
         evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
-            sparqlExpression::copyExpressionResult(std::move(aggregateResults));
+            sparqlExpression::copyExpressionResult(
+                sparqlExpression::ExpressionResult{
+                    std::move(aggregateResults)});
       } else {
         // Substitute in the results of all aggregates contained in the
         // expression of the current alias, if `info` is non-empty.

@@ -109,17 +109,17 @@ concept SingleExpressionResult =
     ad_utility::isTypeContainedIn<T, ExpressionResult>;
 
 // Copy an expression result.
-inline ExpressionResult copyExpressionResult(const ExpressionResult& result) {
+inline ExpressionResult copyExpressionResult(
+    ad_utility::SimilarTo<ExpressionResult> auto&& result) {
   auto copyIfCopyable =
       []<SingleExpressionResult R>(const R& x) -> ExpressionResult {
-    if constexpr (std::is_copy_assignable_v<R> &&
-                  std::is_copy_constructible_v<R>) {
-      return x;
+    if constexpr (requires { R{AD_FWD(x)}; }) {
+      return AD_FWD(x);
     } else {
       return x.clone();
     }
   };
-  return std::visit(copyIfCopyable, result);
+  return std::visit(copyIfCopyable, AD_FWD(result));
 }
 
 /// True iff T represents a constant.
