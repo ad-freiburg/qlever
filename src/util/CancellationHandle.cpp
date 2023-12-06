@@ -20,13 +20,13 @@ template <bool WatchDogEnabled>
 void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
     requires WatchDogEnabled {
   using enum CancellationState;
-  // Setting the atomic here does synchronize memory for assignment,
-  // so this is safe without a mutex
-  bool running = watchDogRunning_.exchange(true);
+  std::unique_lock lock{watchDogState_.mutex_};
   // This function is only supposed to be run once.
-  AD_CONTRACT_CHECK(!running);
+  AD_CONTRACT_CHECK(!watchDogState_.running_);
+  watchDogState_.running_ = true;
   watchDogThread_ = ad_utility::JThread{[this]() {
-    while (watchDogRunning_) {
+    std::unique_lock lock{watchDogState_.mutex_};
+    do {
       auto state = cancellationState_.load(std::memory_order_relaxed);
       if (state == NOT_CANCELLED) {
         cancellationState_.compare_exchange_strong(state, WAITING_FOR_CHECK,
@@ -37,8 +37,9 @@ void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
           startTimeoutWindow_ = steady_clock::now();
         }
       }
-      std::this_thread::sleep_for(DESIRED_CANCELLATION_CHECK_INTERVAL);
-    }
+    } while (!watchDogState_.conditionVariable_.wait_for(
+        lock, DESIRED_CANCELLATION_CHECK_INTERVAL,
+        [this]() { return !watchDogState_.running_; }));
   }};
 }
 
@@ -75,7 +76,11 @@ void CancellationHandle<WatchDogEnabled>::resetWatchDogState() {
 template <bool WatchDogEnabled>
 CancellationHandle<WatchDogEnabled>::~CancellationHandle() {
   if constexpr (WatchDogEnabled) {
-    watchDogRunning_ = false;
+    {
+      std::unique_lock lock{watchDogState_.mutex_};
+      watchDogState_.running_ = false;
+    }
+    watchDogState_.conditionVariable_.notify_all();
   }
 }
 

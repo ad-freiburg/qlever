@@ -9,6 +9,8 @@
 #include <gtest/gtest_prod.h>
 
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <type_traits>
 
 #include "global/Constants.h"
@@ -61,6 +63,15 @@ struct Empty {
   template <typename... Args>
   explicit Empty(const Args&...) {}
 };
+
+/// Helper struct that imitates functionality similar to `std::stop_token`,
+/// until it has broader compiler support.
+struct PseudoStopToken {
+  std::condition_variable conditionVariable_;
+  std::mutex mutex_;
+  bool running_;
+  explicit PseudoStopToken(bool running) : running_{running} {}
+};
 }  // namespace detail
 
 /// An exception signalling an cancellation
@@ -91,7 +102,8 @@ class CancellationHandle {
   template <typename T>
   using WatchDogOnly = std::conditional_t<WatchDogEnabled, T, detail::Empty>;
   // TODO<Clang18> Use std::jthread and its builtin stop_token.
-  [[no_unique_address]] WatchDogOnly<std::atomic_bool> watchDogRunning_{false};
+  [[no_unique_address]] WatchDogOnly<detail::PseudoStopToken> watchDogState_{
+      false};
   [[no_unique_address]] WatchDogOnly<ad_utility::JThread> watchDogThread_;
   [[no_unique_address]] WatchDogOnly<std::atomic<steady_clock::time_point>>
       startTimeoutWindow_{steady_clock::now()};
@@ -108,7 +120,6 @@ class CancellationHandle {
     using DurationType =
         std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
 
-    AD_CORRECTNESS_CHECK(watchDogRunning_.load(std::memory_order_relaxed));
     if (state == CancellationState::CHECK_WINDOW_MISSED) {
       LOG(WARN) << "Cancellation check missed deadline of "
                 << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}

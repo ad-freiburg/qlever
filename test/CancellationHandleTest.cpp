@@ -167,6 +167,20 @@ TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
 
 // _____________________________________________________________________________
 
+TEST(CancellationHandle, ensureDestructorReturnsFastWithActiveWatchDog) {
+  std::chrono::steady_clock::time_point start;
+  {
+    CancellationHandle<true> handle;
+    handle.startWatchDog();
+    start = std::chrono::steady_clock::now();
+  }
+  auto duration = std::chrono::steady_clock::now() - start;
+  // Ensure we don't need to wait for the entire interval to finish.
+  EXPECT_LT(duration, DESIRED_CANCELLATION_CHECK_INTERVAL);
+}
+
+// _____________________________________________________________________________
+
 TEST(CancellationHandle, verifyResetWatchDogStateDoesProperlyResetState) {
   CancellationHandle<true> handle;
 
@@ -221,8 +235,6 @@ TEST(CancellationHandle, verifyResetWatchDogStateIsNoOpWithoutWatchDog) {
 
 TEST(CancellationHandle, verifyCheckDoesPleaseWatchDog) {
   CancellationHandle<true> handle;
-  // Because watch dog operates async, simulate it here for stable tests.
-  handle.watchDogRunning_ = true;
 
   handle.cancellationState_ = WAITING_FOR_CHECK;
   EXPECT_NO_THROW(handle.throwIfCancelled(""));
@@ -252,8 +264,6 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<true> handle;
-  // Because watch dog operates async, simulate it here for stable tests.
-  handle.watchDogRunning_ = true;
 
   auto& originalOStream = choice.getStream();
   absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
