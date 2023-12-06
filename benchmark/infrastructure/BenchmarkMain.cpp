@@ -87,7 +87,7 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
 /*
 Print the configuration documentation of all registered benchmarks.
 */
-static void printConfigurationOptions() {
+static __attribute__((noreturn)) void printConfigurationOptionsAndExit() {
   std::ranges::for_each(
       BenchmarkRegister::getAllRegisteredBenchmarks(),
       [](const BenchmarkInterface* bench) {
@@ -165,7 +165,7 @@ int main(int argc, char** argv) {
 
   // Print all the available configuration options, if wanted.
   if (vm.count("configuration-options")) {
-    printConfigurationOptions();
+    printConfigurationOptionsAndExit();
   }
 
   /*

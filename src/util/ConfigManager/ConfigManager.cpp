@@ -229,7 +229,7 @@ auto ConfigManager::allHashMapEntries(
   returns true.
   */
   auto addHashMapEntryToCollectedOptions = [&allHashMapEntry, &pathPrefix,
-                                            &predicate](auto&& pair) {
+                                            &predicate](auto pair) {
     auto& [jsonPath, hashMapEntry] = pair;
 
     const std::string& pathToCurrentEntry = absl::StrCat(pathPrefix, jsonPath);
