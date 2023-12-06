@@ -572,7 +572,6 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
     (void)succ;
     it->second.insert(targetId);
   }
-  throw std::runtime_error("blim");
   return edges;
 }
 
