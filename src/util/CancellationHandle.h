@@ -191,7 +191,9 @@ class CancellationHandle {
   }
 
   /// Start the watch dog. Must only be called once per `CancellationHandle`
-  /// instance.
+  /// instance. This allows the constructor to be used to cheaply
+  /// default-initialize an instance of this class (as dummy non-null pointer
+  /// for example).
   void startWatchDog();
 
   /// If this `CancellationHandle` is not cancelled, reset the internal
