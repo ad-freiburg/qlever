@@ -322,9 +322,6 @@ add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
 
-add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/ConstexprSmallString.h)
-qlever_target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
-
 add_executable(ServerMain src/ServerMain.cpp)
 qlever_target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
 target_precompile_headers(ServerMain REUSE_FROM engine)

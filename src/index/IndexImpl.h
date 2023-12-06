@@ -56,15 +56,16 @@ using std::vector;
 
 using json = nlohmann::json;
 
-template <typename Comparator>
+static constexpr size_t NumColumnsIndexBuilding = 3;
+template <typename Comparator, size_t I = NumColumnsIndexBuilding>
 using ExternalSorter =
-    ad_utility::CompressedExternalIdTableSorter<Comparator, 3>;
+    ad_utility::CompressedExternalIdTableSorter<Comparator, I>;
 
 // The Order in which the permutations are created during the index building.
-using FirstPermutation = SortByPSO;
+using FirstPermutation = SortBySPO;
 using FirstPermutationSorter = ExternalSorter<FirstPermutation>;
-using SecondPermutation = SortBySPO;
-using ThirdPermutation = SortByOSP;
+using SecondPermutation = SortByOSP;
+using ThirdPermutation = SortByPSO;
 
 // Several data that are passed along between different phases of the
 // index builder.
@@ -88,7 +89,8 @@ struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
 // All the data from IndexBuilderDataBase and a ExternalSorter that stores all
 // ID triples sorted by the first permutation.
 struct IndexBuilderDataAsFirstPermutationSorter : IndexBuilderDataBase {
-  using SorterPtr = std::unique_ptr<FirstPermutationSorter>;
+  using SorterPtr =
+      std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>;
   SorterPtr sorter_;
   IndexBuilderDataAsFirstPermutationSorter(const IndexBuilderDataBase& base,
                                            SorterPtr sorter)
@@ -215,8 +217,6 @@ class IndexImpl {
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
   void createFromFile(const string& filename);
-
-  void addPatternsToExistingIndex();
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -469,9 +469,10 @@ class IndexImpl {
   std::unique_ptr<TurtleParserBase> makeTurtleParser(
       const std::string& filename);
 
-  std::unique_ptr<FirstPermutationSorter> convertPartialToGlobalIds(
-      TripleVec& data, const vector<size_t>& actualLinesPerPartial,
-      size_t linesPerPartial);
+  std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>
+  convertPartialToGlobalIds(TripleVec& data,
+                            const vector<size_t>& actualLinesPerPartial,
+                            size_t linesPerPartial);
 
   // Generator that returns all words in the given context file (if not empty)
   // and then all words in all literals (if second argument is true).
@@ -488,10 +489,12 @@ class IndexImpl {
   void processWordsForInvertedLists(const string& contextFile,
                                     bool addWordsFromLiterals, TextVec& vec);
 
+  // TODO<joka921> Get rid of the `numColumns` by including them into the
+  // `sortedTriples` argument.
   std::pair<IndexMetaDataMmapDispatcher::WriteType,
             IndexMetaDataMmapDispatcher::WriteType>
-  createPermutationPairImpl(const string& fileName1, const string& fileName2,
-                            auto&& sortedTriples,
+  createPermutationPairImpl(size_t numColumns, const string& fileName1,
+                            const string& fileName2, auto&& sortedTriples,
                             std::array<size_t, 3> permutation,
                             auto&&... perTripleCallbacks);
 
@@ -506,8 +509,8 @@ class IndexImpl {
   // the SPO permutation is also needed for patterns (see usage in
   // IndexImpl::createFromFile function)
 
-  void createPermutationPair(auto&& sortedTriples, const Permutation& p1,
-                             const Permutation& p2,
+  void createPermutationPair(size_t numColumns, auto&& sortedTriples,
+                             const Permutation& p1, const Permutation& p2,
                              auto&&... perTripleCallbacks);
 
   // wrapper for createPermutation that saves a lot of code duplications
@@ -521,8 +524,9 @@ class IndexImpl {
   // the optional is std::nullopt if vec and thus the index is empty
   std::pair<IndexMetaDataMmapDispatcher::WriteType,
             IndexMetaDataMmapDispatcher::WriteType>
-  createPermutations(auto&& sortedTriples, const Permutation& p1,
-                     const Permutation& p2, auto&&... perTripleCallbacks);
+  createPermutations(size_t numColumns, auto&& sortedTriples,
+                     const Permutation& p1, const Permutation& p2,
+                     auto&&... perTripleCallbacks);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 
@@ -726,50 +730,73 @@ class IndexImpl {
   //    blocks in the input. Typically used to set up the sorting for the
   //    subsequent pair of permutations.
 
-  // Create the SPO and SOP permutations. Also count the number of distinct
-  // actual (not internal) subjects in the input and write it to the metadata.
-  // Also builds the patterns if specified.
+  // Create the SPO and SOP permutations. Additionally, count the number of
+  // distinct actual (not internal) subjects in the input and write it to the
+  // metadata. Also builds the patterns if specified.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createSPOAndSOP(auto& isInternalId, BlocksOfTriples sortedTriples,
-                       NextSorter&&... nextSorter);
-  // Create the OSP and OPS permutations. Additionally count the number of
+  std::optional<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>>
+  createSPOAndSOP(size_t numColumns, auto& isInternalId,
+                  BlocksOfTriples sortedTriples, NextSorter&&... nextSorter);
+  // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createOSPAndOPS(auto& isInternalId, BlocksOfTriples sortedTriples,
+  void createOSPAndOPS(size_t numColumns, auto& isInternalId,
+                       BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
-  // Create the PSO and POS permutations. Additionally count the number of
+  // Create the PSO and POS permutations. Additionally, count the number of
   // distinct predicates and the number of actual triples and write them to the
   // metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createPSOAndPOS(auto& isInternalId, BlocksOfTriples sortedTriples,
+  void createPSOAndPOS(size_t numColumns, auto& isInternalId,
+                       BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
   // The `permutationName` is used to determine the filename and must be unique
   // for each call during one index build.
-  template <typename Comparator>
-  ExternalSorter<Comparator> makeSorter(std::string_view permutationName) const;
+  template <typename Comparator, size_t N = NumColumnsIndexBuilding>
+  ExternalSorter<Comparator, N> makeSorter(
+      std::string_view permutationName) const;
+  // Same as the same function, but return a `unique_ptr`.
+  template <typename Comparator, size_t N = NumColumnsIndexBuilding>
+  std::unique_ptr<ExternalSorter<Comparator, N>> makeSorterPtr(
+      std::string_view permutationName) const;
+  // The common implementation of the above two functions.
+  template <typename Comparator, size_t N, bool returnPtr>
+  auto makeSorterImpl(std::string_view permutationName) const;
 
   // Aliases for the three functions above that should be consistently used.
   // They assert that the order of the permutations as communicated by the
   // function names are consistent with the aliases for the sorters, i.e. that
   // `createFirstPermutationPair` corresponds to the `FirstPermutation`.
-  void createFirstPermutationPair(auto&&... args) {
-    static_assert(std::is_same_v<FirstPermutation, SortByPSO>);
-    return createPSOAndPOS(AD_FWD(args)...);
+
+  // The `createFirstPermutationPair` has a special implementation for the case
+  // of only two permutations (where we have to build the Pxx permutations). In
+  // all other cases the Sxx permutations are built first because we need the
+  // patterns.
+  std::optional<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>>
+  createFirstPermutationPair(auto&&... args) {
+    static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
+    static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
+    if (loadAllPermutations()) {
+      return createSPOAndSOP(AD_FWD(args)...);
+    } else {
+      createPSOAndPOS(AD_FWD(args)...);
+      return std::nullopt;
+    }
   }
 
   void createSecondPermutationPair(auto&&... args) {
-    static_assert(std::is_same_v<SecondPermutation, SortBySPO>);
-    return createSPOAndSOP(AD_FWD(args)...);
+    static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
+    return createOSPAndOPS(AD_FWD(args)...);
   }
 
   void createThirdPermutationPair(auto&&... args) {
-    static_assert(std::is_same_v<ThirdPermutation, SortByOSP>);
-    return createOSPAndOPS(AD_FWD(args)...);
+    static_assert(std::is_same_v<ThirdPermutation, SortByPSO>);
+    return createPSOAndPOS(AD_FWD(args)...);
   }
 };
