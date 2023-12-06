@@ -177,8 +177,8 @@ class AllocatorWithLimit {
   template <typename U>
   requires(!std::same_as<U, T>)
   AllocatorWithLimit(const AllocatorWithLimit<U>& other)
-      : memoryLeft_{other.getMemoryLeft()} {}
-       // clearOnAllocation_(other.clearOnAllocation()){};
+      : memoryLeft_{other.getMemoryLeft()},
+        clearOnAllocation_(other.clearOnAllocation()){};
 
   // Defaulted copy operations.
   AllocatorWithLimit(const AllocatorWithLimit&) = default;
@@ -228,7 +228,7 @@ class AllocatorWithLimit {
         memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
             bytesNeeded);
     if (!wasEnoughLeft) {
-      //AD_CORRECTNESS_CHECK(clearOnAllocation_);
+      AD_CORRECTNESS_CHECK(clearOnAllocation_);
       clearOnAllocation_(bytesNeeded);
       memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(bytesNeeded);
     }

@@ -221,6 +221,7 @@ void TransitivePath::computeTransitivePathBound(
       dynSub, startSide, targetSide, startSideTable);
 
   Map hull(getExecutionContext()->getAllocator());
+  //Map hull;
   if (!targetSide.isVariable()) {
     hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value_));
   } else {
@@ -384,12 +385,12 @@ TransitivePath::Map TransitivePath::transitiveHull(
       getExecutionContext()->getAllocator()};
 
   // The stack used to store the dfs' progress
-  std::vector<ad_utility::HashSetWithMemoryLimit<Id>::const_iterator> positions;
+  std::vector<Set::const_iterator> positions;
 
   // Used to store all edges leading away from a node for every level.
   // Reduces access to the hashmap, and is safe as the map will not
   // be modified after this point.
-  std::vector<const ad_utility::HashSetWithMemoryLimit<Id>*> edgeCache;
+  std::vector<const Set*> edgeCache;
 
   for (Id currentStartNode : startNodes) {
     if (hull.contains(currentStartNode)) {
@@ -409,6 +410,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
         (!target.has_value() || currentStartNode == target.value())) {
       auto [it, success] = hull.try_emplace(
           currentStartNode, getExecutionContext()->getAllocator());
+//          currentStartNode);
       it->second.insert(currentStartNode);
     }
 
@@ -418,9 +420,9 @@ TransitivePath::Map TransitivePath::transitiveHull(
       checkCancellation();
       size_t stackIndex = positions.size() - 1;
       // Process the next child of the node at the top of the stack
-      ad_utility::HashSetWithMemoryLimit<Id>::const_iterator& pos =
+      Set::const_iterator& pos =
           positions[stackIndex];
-      const ad_utility::HashSetWithMemoryLimit<Id>* nodeEdges =
+      const Set* nodeEdges =
           edgeCache.back();
 
       if (pos == nodeEdges->end()) {
@@ -440,6 +442,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
           if (!target.has_value() || child == target.value()) {
             auto [it, success] = hull.try_emplace(
                 currentStartNode, getExecutionContext()->getAllocator());
+//                currentStartNode);
             it->second.insert(child);
           }
         }
@@ -556,6 +559,7 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
     const TransitivePathSide& targetSide) const {
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
   Map edges(getExecutionContext()->getAllocator());
+  //Map edges;
   decltype(auto) startCol = sub.getColumn(startSide.subCol_);
   decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
 
@@ -563,16 +567,13 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
     checkCancellation();
     Id startId = startCol[i];
     Id targetId = targetCol[i];
-    MapIt it = edges.find(startId);
-    if (it == edges.end()) {
-      auto [it, succ] =
-          edges.try_emplace(startId, getExecutionContext()->getAllocator());
-      it->second.insert(targetId);
-    } else {
-      // If r is not in the vector insert it
-      it->second.insert(targetId);
-    }
+    if (!edges.contains(startId)) {
+    auto [it, succ] =
+               edges.try_emplace(startId, getExecutionContext()->getAllocator());
+    (void) succ;
+    it->second.insert(targetId);
   }
+  throw std::runtime_error("blim");
   return edges;
 }
 

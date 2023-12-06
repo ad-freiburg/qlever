@@ -57,8 +57,10 @@ struct TransitivePathSide {
 };
 
 class TransitivePath : public Operation {
-  using Map = ad_utility::HashMapWithMemoryLimit<
-      Id, ad_utility::HashSetWithMemoryLimit<Id>>;
+  constexpr static auto hash = [](Id id) {
+  return std::hash<uint64_t>{}(id.getBits());};
+  using Set = std::unordered_set<Id, decltype(hash), std::equal_to<Id>, ad_utility::AllocatorWithLimit<Id>>;
+  using Map = std::unordered_map<Id, Set, decltype(hash), std::equal_to<Id>, ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
   using MapIt = Map::iterator;
 
   std::shared_ptr<QueryExecutionTree> subtree_;
