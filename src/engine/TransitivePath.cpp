@@ -567,10 +567,9 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
     checkCancellation();
     Id startId = startCol[i];
     Id targetId = targetCol[i];
-    if (!edges.contains(startId)) {
     auto [it, succ] =
-               edges.try_emplace(startId, getExecutionContext()->getAllocator());
-    (void) succ;
+        edges.try_emplace(startId, getExecutionContext()->getAllocator());
+    (void)succ;
     it->second.insert(targetId);
   }
   throw std::runtime_error("blim");
