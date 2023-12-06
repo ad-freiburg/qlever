@@ -14,7 +14,9 @@
 #include "../benchmark/util/ResultTableColumnOperations.h"
 #include "../test/util/BenchmarkMeasurementContainerHelpers.h"
 #include "../test/util/GTestHelpers.h"
+#include "gmock/gmock.h"
 #include "util/Exception.h"
+#include "util/Random.h"
 #include "util/TypeTraits.h"
 
 namespace ad_benchmark {
@@ -81,18 +83,19 @@ static void compareToColumn(
 
 /*
 @brief Test the general exception cases for a function of
-`ResultTableColumnOperations`, that takes an unlimited number of input columns.
+`ResultTableColumnOperations`, that takes two input columns.
 
 @param callTransform Lambda, that transforms the call arguments into arguments
 for the function, that you want to test. Must have the signature `ResultTable*
 ,const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn, const
-ColumnNumWithType<ColumnInputTypes>&... inputColumns`.
+ColumnNumWithType<ColumnInputTypeOne> inputColumnOne, const
+ColumnNumWithType<ColumnInputTypeTwo> inputColumnTwo`.
 */
-static void generalExceptionTest(
+static void generalExceptionTestTwoInputColumns(
     const auto& callTransform,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
-  auto trace{generateLocationTrace(l, "generalExceptionTest")};
+  auto trace{generateLocationTrace(l, "generalExceptionTestTwoInputColumns")};
 
   doForTypeInResultTableEntryType([&callTransform]<typename T>() {
     // A call with a `ResultTable`, who has no rows, is valid.
@@ -132,9 +135,52 @@ static void generalExceptionTest(
     });
 
     // Column is outside boundaries.
-    table = createTestTable(NUM_ROWS, 4, ColumnNumWithType<T>{0},
-                            ColumnNumWithType<T>{1}, ColumnNumWithType<T>{2},
-                            ColumnNumWithType<T>{3});
+    table = createTestTable(NUM_ROWS, 3, ColumnNumWithType<T>{0},
+                            ColumnNumWithType<T>{1}, ColumnNumWithType<T>{2});
+    ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<T>{10},
+                                   ColumnNumWithType<T>{1},
+                                   ColumnNumWithType<T>{2}));
+    ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<T>{0},
+                                   ColumnNumWithType<T>{10},
+                                   ColumnNumWithType<T>{2}));
+    ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<T>{0},
+                                   ColumnNumWithType<T>{1},
+                                   ColumnNumWithType<T>{20}));
+
+    // One column is used more than once as an input.
+    table = createTestTable(NUM_ROWS, 2, ColumnNumWithType<T>{0},
+                            ColumnNumWithType<T>{1});
+    ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<T>{1},
+                                   ColumnNumWithType<T>{0},
+                                   ColumnNumWithType<T>{0}));
+  });
+}
+
+/*
+@brief Test the general exception cases for a function of
+`ResultTableColumnOperations`, that takes an unlimited number of input columns
+and has a minimum of two input columns.
+
+@param callTransform Lambda, that transforms the call arguments into arguments
+for the function, that you want to test. Must have the signature `ResultTable*
+,const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn, const
+ColumnNumWithType<ColumnInputTypes>&... inputColumns`.
+*/
+static void generalExceptionTestUnlimitedInputColumns(
+    const auto& callTransform,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{
+      generateLocationTrace(l, "generalExceptionTestUnlimitedInputColumns")};
+
+  // We can pass a lot to `generalExceptionTestTwoInputColumns`.
+  generalExceptionTestTwoInputColumns(callTransform);
+
+  doForTypeInResultTableEntryType([&callTransform]<typename T>() {
+    // Column is outside boundaries.
+    ResultTable table{createTestTable(
+        NUM_ROWS, 4, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{1},
+        ColumnNumWithType<T>{2}, ColumnNumWithType<T>{3})};
     ASSERT_ANY_THROW(
         callTransform(&table, ColumnNumWithType<T>{10}, ColumnNumWithType<T>{1},
                       ColumnNumWithType<T>{2}, ColumnNumWithType<T>{3}));
@@ -147,13 +193,6 @@ static void generalExceptionTest(
     ASSERT_ANY_THROW(
         callTransform(&table, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{1},
                       ColumnNumWithType<T>{2}, ColumnNumWithType<T>{30}));
-
-    // One column is used more than once as an input.
-    table = createTestTable(NUM_ROWS, 2, ColumnNumWithType<T>{0},
-                            ColumnNumWithType<T>{1});
-    ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<T>{1},
-                                   ColumnNumWithType<T>{0},
-                                   ColumnNumWithType<T>{0}));
   });
 }
 
@@ -203,8 +242,9 @@ TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
   });
 
   // Exception tests.
-  generalExceptionTest([](ResultTable* table, const auto& columnToPutResultIn,
-                          const auto&... inputColumns) {
+  generalExceptionTestUnlimitedInputColumns([](ResultTable* table,
+                                               const auto& columnToPutResultIn,
+                                               const auto&... inputColumns) {
     generateColumnWithColumnInput(
         table,
         [](const auto& firstInput, const auto&...) { return firstInput; },
@@ -253,9 +293,139 @@ TEST(ResultTableColumnOperations, SumUpColumns) {
   });
 
   // Exception tests.
-  generalExceptionTest([](ResultTable* table, const auto& columnToPutResultIn,
-                          const auto&... inputColumns) {
+  generalExceptionTestUnlimitedInputColumns([](ResultTable* table,
+                                               const auto& columnToPutResultIn,
+                                               const auto&... inputColumns) {
     sumUpColumns(table, columnToPutResultIn, inputColumns...);
   });
+}
+
+TEST(ResultTableColumnOperations, calculateSpeedupOfColumn) {
+  // Fill two columns so, that they have the desired speedup.
+  auto fillColumnsForSpeedup = [](ResultTable* table, const float wantedSpeedup,
+                                  const ColumnNumWithType<float>& columnOne,
+                                  const ColumnNumWithType<float>& columnTwo) {
+    /*
+    For the math:
+    wantedSpeedup = columnTwo / columnOne
+    <=> wantedSpeeup * columnOne = columnTwo
+    */
+    for (size_t row = 0; row < table->numRows(); row++) {
+      table->setEntry(row, columnOne.columnNum_, static_cast<float>(row + 1));
+      table->setEntry(row, columnTwo.columnNum_, (row + 1) * wantedSpeedup);
+    }
+  };
+
+  // Test things for a range of speedups.
+  std::ranges::for_each(
+      std::array{2.f, 16.f, 73.696f, 4.2f},
+      [&fillColumnsForSpeedup](const float wantedSpeedup,
+                               ad_utility::source_location l =
+                                   ad_utility::source_location::current()) {
+        // For generating better messages, when failing a test.
+        auto trace{generateLocationTrace(l, "testRangeOfSpeedups")};
+        ResultTable table{createTestTable(NUM_ROWS, 10)};
+
+        /*
+        Needed for exception test, to choose a random entry inside a column.
+        Note: The described range is inclusive.
+        */
+        ad_utility::SlowRandomIntGenerator<size_t> rowGenerator(
+            0, table.numRows() - 1);
+
+        // Test things trough for all possible input and output columns.
+        for (size_t outputColumn = 0; outputColumn < table.numColumns();
+             outputColumn++) {
+          for (size_t firstInputColumn = 0;
+               firstInputColumn < table.numColumns(); firstInputColumn++) {
+            for (size_t secondInputColumn = 0;
+                 secondInputColumn < table.numColumns(); secondInputColumn++) {
+              // The same column repeated as input is not allowed.
+              if (firstInputColumn == secondInputColumn) {
+                continue;
+              }
+
+              // Test, if things are calculated as wanted.
+              fillColumnsForSpeedup(&table, wantedSpeedup, {firstInputColumn},
+                                    {secondInputColumn});
+              calculateSpeedupOfColumn(&table, {outputColumn},
+                                       {firstInputColumn}, {secondInputColumn});
+              compareToColumn(std::vector(NUM_ROWS, wantedSpeedup), table,
+                              ColumnNumWithType<float>{outputColumn});
+
+              // Exception test, if input values, that are smaller than 0, are
+              // not allowed.
+              const size_t firstInputColumnRow{rowGenerator()};
+              const size_t secondInputColumnRow{rowGenerator()};
+              const float firstInputColumnOldEntry{
+                  table.getEntry<float>(firstInputColumnRow, firstInputColumn)};
+              const float secondInputColumnOldEntry{table.getEntry<float>(
+                  secondInputColumnRow, secondInputColumn)};
+              auto doExceptionTest = [&table, &outputColumn, &firstInputColumn,
+                                      &secondInputColumn]() {
+                ASSERT_ANY_THROW(calculateSpeedupOfColumn(
+                    &table, {outputColumn}, {firstInputColumn},
+                    {secondInputColumn}));
+              };
+
+              // The actual test.
+              // Only an error in the first column.
+              table.setEntry(firstInputColumnRow, firstInputColumn,
+                             -firstInputColumnOldEntry);
+              doExceptionTest();
+              table.setEntry(firstInputColumnRow, firstInputColumn, 0);
+              doExceptionTest();
+
+              // Only an error in the second column.
+              table.setEntry(firstInputColumnRow, firstInputColumn,
+                             firstInputColumnOldEntry);
+              table.setEntry(secondInputColumnRow, secondInputColumn,
+                             -secondInputColumnOldEntry);
+              doExceptionTest();
+              table.setEntry(secondInputColumnRow, secondInputColumn, 0);
+              doExceptionTest();
+
+              // Error in both the input columns.
+              table.setEntry(firstInputColumnRow, firstInputColumn, 0);
+              table.setEntry(secondInputColumnRow, secondInputColumn, 0);
+              doExceptionTest();
+              table.setEntry(firstInputColumnRow, firstInputColumn,
+                             -firstInputColumnOldEntry);
+              table.setEntry(secondInputColumnRow, secondInputColumn, 0);
+              doExceptionTest();
+              table.setEntry(firstInputColumnRow, firstInputColumn, 0);
+              table.setEntry(secondInputColumnRow, secondInputColumn,
+                             -secondInputColumnOldEntry);
+              doExceptionTest();
+              table.setEntry(firstInputColumnRow, firstInputColumn,
+                             -firstInputColumnOldEntry);
+              table.setEntry(secondInputColumnRow, secondInputColumn,
+                             -secondInputColumnOldEntry);
+              doExceptionTest();
+            }
+          }
+        }
+      });
+
+  // General exception tests.
+  generalExceptionTestTwoInputColumns(
+      []<typename FirstType, typename SecondType>(
+          ResultTable* table, const auto& columnToPutResultIn,
+          const ColumnNumWithType<FirstType>& firstInputColumns,
+          const ColumnNumWithType<SecondType>& secondInputColumns) {
+        /*
+        Unlike the other functions, `` only works with measured execution times.
+        So, whenever the inputs are not for type `float`, we pass the
+        responsibility to a trivial function.
+        */
+        if constexpr (std::same_as<FirstType, float> &&
+                      std::same_as<SecondType, float>) {
+          calculateSpeedupOfColumn(table, columnToPutResultIn,
+                                   firstInputColumns, secondInputColumns);
+        } else {
+          sumUpColumns(table, columnToPutResultIn, firstInputColumns,
+                       secondInputColumns);
+        };
+      });
 }
 }  // namespace ad_benchmark

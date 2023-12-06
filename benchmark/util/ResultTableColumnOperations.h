@@ -68,4 +68,33 @@ requires(sizeof...(ColumnInputTypes) > 1) void sumUpColumns(
       },
       columnToPutResultIn, columnsToSumUp...);
 }
+
+/*
+@brief Reads two floating point columns, calculates the relativ speedup between
+their entries and writes it in a third column.
+
+@param columnToCalculateFor, columnToCompareAgainst The columns, with which
+the question "How much faster than the entries of `columnToCompareAgainst`
+are the entires of `columnToCalculateFor`?".
+@param columnToPlaceResultIn This is where the speedup calculation results
+will be placed in.
+*/
+inline void calculateSpeedupOfColumn(
+    ResultTable* const table,
+    const ColumnNumWithType<float>& columnToPlaceResultIn,
+    const ColumnNumWithType<float>& columnToCalculateFor,
+    const ColumnNumWithType<float>& columnToCompareAgainst) {
+  // We can simply pass this to `generateColumnWithColumnInput`.
+  generateColumnWithColumnInput(
+      table,
+      [](const float compareAgainst, const float calculateFor) -> float {
+        /*
+        Speedup calculations only makes sense, if ALL values are bigger than
+        0.
+        */
+        AD_CONTRACT_CHECK(compareAgainst > 0.f && calculateFor > 0.f);
+        return compareAgainst / calculateFor;
+      },
+      columnToPlaceResultIn, columnToCompareAgainst, columnToCalculateFor);
+}
 }  // namespace ad_benchmark
