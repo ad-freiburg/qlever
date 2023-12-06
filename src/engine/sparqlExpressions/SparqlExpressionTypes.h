@@ -108,29 +108,7 @@ template <typename T>
 concept SingleExpressionResult =
     ad_utility::isTypeContainedIn<T, ExpressionResult>;
 
-// TODO: Consider if we even need this anymore
-// If the `ExpressionResult` holds a value that is cheap to copy (a constant or
-// a variable), return a copy. Else throw an exception the message of which
-// implies that this is not a valid usage of this function.
-inline ExpressionResult copyExpressionResultIfNotVector(
-    const ExpressionResult& result) {
-  auto copyIfCopyable =
-      []<SingleExpressionResult R>(const R& x) -> ExpressionResult {
-    if constexpr (std::is_copy_assignable_v<R> &&
-                  std::is_copy_constructible_v<R>) {
-      return x;
-    } else {
-      AD_THROW(
-          "Tried to copy an expression result that is a vector. This should "
-          "never happen, as this code should only be called for the results of "
-          "expressions in a GROUP BY clause which all should be aggregates. "
-          "Please report this.");
-    }
-  };
-  return std::visit(copyIfCopyable, result);
-}
-
-// TODO: Docs
+// Copy an expression result.
 inline ExpressionResult copyExpressionResult(const ExpressionResult& result) {
   auto copyIfCopyable =
       []<SingleExpressionResult R>(const R& x) -> ExpressionResult {

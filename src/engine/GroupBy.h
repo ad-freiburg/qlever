@@ -277,7 +277,7 @@ class GroupBy : public Operation {
   // calculated in our HashMap in the result table.
   template <size_t numAggregates>
   sparqlExpression::VectorWithMemoryLimit<ValueId> extractValuesDirectlyFromMap(
-      sparqlExpression::EvaluationContext& evaluationContext,
+      size_t beginIndex, size_t endIndex,
       const ad_utility::HashMapWithMemoryLimit<KeyType,
                                                ValueType<numAggregates>>& map,
       IdTable* resultTable, size_t hashMapIndex, size_t outCol);
@@ -307,9 +307,7 @@ class GroupBy : public Operation {
   static std::optional<std::vector<HashMapAggregateInformation>> findAggregates(
       sparqlExpression::SparqlExpression* expr);
 
-  // Find all aggregates of expression `expr`, collecting this information in
-  // the vector `info`. Returns false in case an unsupported aggregate is
-  // found.
+  // The recursive implementation of `findAggregates` (see above).
   static bool findAggregatesImpl(
       sparqlExpression::SparqlExpression* parent,
       sparqlExpression::SparqlExpression* expr, std::optional<size_t> index,

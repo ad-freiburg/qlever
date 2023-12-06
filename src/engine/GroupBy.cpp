@@ -193,7 +193,7 @@ void GroupBy::processGroup(
   // Copy the result to the evaluation context in case one of the following
   // aliases has to reuse it.
   evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
-      sparqlExpression::copyExpressionResultIfNotVector(expressionResult);
+      sparqlExpression::copyExpressionResult(expressionResult);
 
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
@@ -759,16 +759,6 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
     return std::nullopt;
   }
 
-  // Make sure that there are no nested aggregates
-  for (auto& alias : aliasesWithAggregateInfo) {
-    for (auto& aggregateInfo : alias.aggregateInfo_) {
-      auto aggregateExpression = aggregateInfo.expr_;
-
-      if (aggregateExpression->children().front()->containsAggregate())
-        return std::nullopt;
-    }
-  }
-
   const Variable& groupByVariable = _groupByVariables.front();
   auto child = _subtree->getRootOperation()->getChildren().at(0);
   auto columnIndex = child->getVariableColumn(groupByVariable);
@@ -807,12 +797,16 @@ bool GroupBy::findAggregatesImpl(
     sparqlExpression::SparqlExpression* parent,
     sparqlExpression::SparqlExpression* expr, std::optional<size_t> index,
     std::vector<GroupBy::HashMapAggregateInformation>& info) {
-  if (dynamic_cast<sparqlExpression::AvgExpression*>(expr) != nullptr) {
+  if (hasType<sparqlExpression::AvgExpression>(expr)) {
     if (parent != nullptr && index.has_value()) {
       ParentAndChildIndex parentAndChildIndex{parent, index.value()};
       info.emplace_back(expr, 0, parentAndChildIndex);
     } else
       info.emplace_back(expr, 0, std::nullopt);
+
+    // Make sure this is not a nested aggregate.
+    if (expr->children().front()->containsAggregate()) return false;
+
     return true;
   }
 
@@ -845,12 +839,12 @@ void GroupBy::extractValues(
         evaluationContext._endIndex - evaluationContext._beginIndex,
         &evaluationContext);
 
-    // TODO<C++23> use views::enumerate
-    auto idx = 0;
+    auto targetIterator =
+        resultTable->getColumn(outCol).begin() + evaluationContext._beginIndex;
     for (sparqlExpression::IdOrString val : generator) {
-      (*resultTable)(evaluationContext._beginIndex + idx++, outCol) =
-          sparqlExpression::detail::constantExpressionResultToId(std::move(val),
-                                                                 *localVocab);
+      *targetIterator = sparqlExpression::detail::constantExpressionResultToId(
+          std::move(val), *localVocab);
+      ++targetIterator;
     }
   };
 
@@ -862,7 +856,7 @@ void GroupBy::extractValues(
 template <size_t numAggregates>
 sparqlExpression::VectorWithMemoryLimit<ValueId>
 GroupBy::extractValuesDirectlyFromMap(
-    sparqlExpression::EvaluationContext& evaluationContext,
+    size_t beginIndex, size_t endIndex,
     const ad_utility::HashMapWithMemoryLimit<KeyType, ValueType<numAggregates>>&
         map,
     IdTable* resultTable, size_t hashMapIndex, size_t outCol) {
@@ -872,8 +866,7 @@ GroupBy::extractValuesDirectlyFromMap(
       getExecutionContext()->getAllocator());
 
   // Store aggregate results in table and in vector.
-  for (size_t j = evaluationContext._beginIndex;
-       j < evaluationContext._endIndex; j++) {
+  for (size_t j = beginIndex; j < endIndex; j++) {
     auto& val = (*resultTable)(j, 0);
     auto& aggregateData = map.at(val).at(hashMapIndex);
     auto aggregateResult = aggregateData.calculateResult();
@@ -907,9 +900,8 @@ void GroupBy::substituteAllAggregates(
     }
 
     // Substitute the resulting vector as a literal
-    std::unique_ptr<sparqlExpression::SparqlExpression> newExpression =
-        std::make_unique<sparqlExpression::VectorIdExpression>(
-            std::move(aggregateResults));
+    auto newExpression = std::make_unique<sparqlExpression::VectorIdExpression>(
+        std::move(aggregateResults));
 
     AD_CONTRACT_CHECK(aggregate.parentAndIndex_.has_value());
     auto parentAndIndex = aggregate.parentAndIndex_.value();
@@ -969,8 +961,8 @@ void GroupBy::createResultFromHashMap(
 
         // Store results in table
         auto aggregateResults = extractValuesDirectlyFromMap(
-            evaluationContext, map, result, aggregate.hashMapIndex_,
-            alias.outCol_);
+            evaluationContext._beginIndex, evaluationContext._endIndex, map,
+            result, aggregate.hashMapIndex_, alias.outCol_);
 
         // Copy the result so that future aliases may reuse it
         evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
