@@ -85,14 +85,13 @@ IdTable FTSAlgorithms::filterByRange(const IdRange<WordVocabIndex>& idRange,
     // TODO<joka921> Can we make the returned `IndexType` a template parameter
     // of the vocabulary, s.t. we have a vocabulary that stores `WordIndex`es
     // directly?
-    if (wordIdsInput[i] >= Id::makeFromWordVocabIndex(
-                               WordVocabIndex::make(idRange._first.get())) &&
-        wordIdsInput[i] <= Id::makeFromWordVocabIndex(
-                               WordVocabIndex::make(idRange._last.get()))) {
+    if (wordIdsInput[i].getWordVocabIndex() >= idRange._first &&
+        wordIdsInput[i].getWordVocabIndex() <= idRange._last) {
       idTableResult.getColumn(0)[nofResultElements] =
           idTablePreFilter.getColumn(0)[i];
       idTableResult.getColumn(1)[nofResultElements] =
           idTablePreFilter.getColumn(1)[i];
+      nofResultElements++;
     }
   }
 

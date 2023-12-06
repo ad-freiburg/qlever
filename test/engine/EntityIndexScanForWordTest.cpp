@@ -33,7 +33,7 @@ TEST(EntityIndexScanForWord, EntityScanBasic) {
       "<a> <p> \"he failed the test\" . <b> <p> \"some other "
       "sentence\" . <a> <p> \"testing can help\" . <b> <p> \"the test on "
       "friday was really hard\" . <b> <x2> <x> . <b> <x2> <xb2> .",
-      true, true, true, 32UL, true);
+      true, true, true, 16_B, true);
 
   EntityIndexScanForWord s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};

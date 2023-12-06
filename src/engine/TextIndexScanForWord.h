@@ -32,7 +32,10 @@ class TextIndexScanForWord : public Operation {
 
   uint64_t getSizeEstimateBeforeLimit() override { return 5; }
 
-  float getMultiplicity(size_t col) override { return 0; }
+  float getMultiplicity(size_t col) override {
+    (void)col;
+    return 1;
+  }
 
   bool knownEmptyResult() override { return false; }
 

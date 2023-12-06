@@ -43,7 +43,7 @@ TEST(TextIndexScanForWord, WordScanBasic) {
       "<a> <p> \"he failed the test\" . <a> <p> \"testing can help\" . <a> <p> "
       "\"some other sentence\" . <b> <p> \"the test on friday was really "
       "hard\" . <b> <x2> <x> . <b> <x2> <xb2> .",
-      true, true, true, 32UL, true);
+      true, true, true, 16_B, true);
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test*"};
   TextIndexScanForWord s2{qec, Variable{"?text2"}, "test*"};
