@@ -29,6 +29,7 @@
 #include "util/HashMap.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/TupleHelpers.h"
+#include "util/json.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
@@ -808,8 +809,8 @@ void IndexImpl::readConfiguration() {
   // TODO Write a description.
   config.addOption("num-predicates-normal", "", &numPredicatesNormal_);
   // These might be missing if there are only two permutations.
-  config.addOption("num-subjects-normal", "", &numSubjectsNormal_, 0);
-  config.addOption("num-objects-normal", "", &numObjectsNormal_, 0);
+  config.addOption("num-subjects-normal", "", &numSubjectsNormal_, 0UL);
+  config.addOption("num-objects-normal", "", &numObjectsNormal_, 0UL);
   config.addOption("num-triples-normal", "", &numTriplesNormal_);
 
   /*
