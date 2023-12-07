@@ -865,15 +865,21 @@ GroupBy::extractValuesDirectlyFromMap(
   sparqlExpression::VectorWithMemoryLimit<ValueId> aggregateResults(
       getExecutionContext()->getAllocator());
 
+  aggregateResults.resize(endIndex - beginIndex);
+
   // Store aggregate results in table and in vector.
   decltype(auto) groupValues = resultTable->getColumn(0);
-  for (size_t j = beginIndex; j < endIndex; j++) {
-    Id val = groupValues[j];
-    auto& aggregateData = map.at(val).at(hashMapIndex);
-    auto aggregateResult = aggregateData.calculateResult();
-    (*resultTable)(j, outCol) = aggregateResult;
-    aggregateResults.push_back(aggregateResult);
-  }
+  decltype(auto) outValues = resultTable->getColumn(outCol);
+
+  auto op = [&map, &hashMapIndex](Id val) {
+    auto aggregateData = map.at(val).at(hashMapIndex);
+    return aggregateData.calculateResult();
+  };
+
+  std::ranges::transform(groupValues.begin(), groupValues.end(),
+                         outValues.begin(), op);
+  std::ranges::transform(groupValues.begin(), groupValues.end(),
+                         aggregateResults.begin(), op);
 
   return aggregateResults;
 }
@@ -891,14 +897,18 @@ void GroupBy::substituteAllAggregates(
     sparqlExpression::VectorWithMemoryLimit<ValueId> aggregateResults(
         getExecutionContext()->getAllocator());
 
+    aggregateResults.resize(evaluationContext._endIndex -
+                            evaluationContext._beginIndex);
+
     // Get all aggregate results as a vector
     decltype(auto) groupValues = resultTable->getColumn(0);
-    for (size_t j = evaluationContext._beginIndex;
-         j < evaluationContext._endIndex; j++) {
-      Id val = groupValues[j];
+    auto op = [&map, &aggregate](Id val) {
       auto& aggregateData = map.at(val).at(aggregate.hashMapIndex_);
-      aggregateResults.push_back(aggregateData.calculateResult());
-    }
+      return aggregateData.calculateResult();
+    };
+
+    std::ranges::transform(groupValues.begin(), groupValues.end(),
+                           aggregateResults.begin(), op);
 
     // Substitute the resulting vector as a literal
     auto newExpression = std::make_unique<sparqlExpression::VectorIdExpression>(
