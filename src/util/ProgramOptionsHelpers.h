@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "util/Concepts.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
-
 namespace ad_utility {
 
 // An implicit wrapper that can be implicitly converted to and from `size_t`.
@@ -59,6 +59,21 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   // Wrap the T inside std::optional
   AD_CONTRACT_CHECK(!v.empty());
   v = std::optional<T>(boost::any_cast<T>(v));
+}
+
+// This function is required  to use `MemorySize` in `boost::program_options`.
+inline void validate(boost::any& v, const std::vector<std::string>& values,
+                     MemorySize*, int) {
+  using namespace boost::program_options;
+
+  // Make sure no previous assignment to 'v' was made.
+  validators::check_first_occurrence(v);
+  // Extract the first string from 'values'. If there is more than
+  // one string, it's an error, and exception will be thrown.
+  const string& s = validators::get_single_string(values);
+
+  // Convert the string to `MemorySize` and put it into the option.
+  v = MemorySize::parse(s);
 }
 
 /// Create `boost::program_options::value`s (command-line options) from
