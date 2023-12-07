@@ -2,6 +2,7 @@
 // Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include <functional>
@@ -9,6 +10,7 @@
 #include <sstream>
 #include <string>
 
+#include "../test/util/GTestHelpers.h"
 #include "util/Forward.h"
 #include "util/Generator.h"
 #include "util/StringUtils.h"
@@ -159,4 +161,129 @@ TEST(StringUtilsTest, addIndentation) {
             ad_utility::addIndentation(withLineBreaks, "\t"));
   ASSERT_EQ("Not \nNot Hello\nNot world\nNot !",
             ad_utility::addIndentation(withLineBreaks, "Not "));
+}
+
+TEST(StringUtilsTest, insertThousandDelimiter) {
+  /*
+  Do the tests, that are not exception tests, with the given arguments for
+  `insertThousandDelimiter`.
+  */
+  auto doNotExceptionTest = [](const char delimiterSymbol,
+                               const char floatingPointSignifier,
+                               ad_utility::source_location l =
+                                   ad_utility::source_location::current()) {
+    // For generating better messages, when failing a test.
+    auto trace{generateLocationTrace(l, "doNotExceptionTest")};
+
+    // For easier usage with `absl::StrCat()`.
+    const std::string floatingPointSignifierString{floatingPointSignifier};
+
+    /*
+    @brief Make a comparison check, that the given string, given in pieces,
+    generates the wanted string, when called with `insertThousandDelimiter` with
+    the arguments from `doNotExceptionTest`.
+
+    @param stringPieces The input for `insertThousandDelimiter` are those pieces
+    concatenated and the expected output are those pieces concatenated with
+    `delimiterSymbol` between them. For example: `{"This number 4", "198."}`.
+    */
+    auto simpleComparisonTest =
+        [&floatingPointSignifier, &delimiterSymbol](
+            const std::vector<std::string>& stringPieces,
+            ad_utility::source_location l =
+                ad_utility::source_location::current()) {
+          // For generating better messages, when failing a test.
+          auto trace{generateLocationTrace(l, "simpleComparisonTest")};
+          ASSERT_STREQ(ad_utility::lazyStrJoin(stringPieces,
+                                               std::string{delimiterSymbol})
+                           .c_str(),
+                       ad_utility::insertThousandDelimiter(
+                           ad_utility::lazyStrJoin(stringPieces, ""),
+                           delimiterSymbol, floatingPointSignifier)
+                           .c_str());
+        };
+
+    // No numbers.
+    simpleComparisonTest(
+        {"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do "
+         "eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim "
+         "ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut "
+         "aliquip ex ea commodo consequat. Duis aute irure dolor in "
+         "reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla "
+         "pariatur. Excepteur sint occaecat cupidatat non proident, sunt in "
+         "culpa qui officia deserunt mollit anim id est laborum."});
+
+    // Only whole numbers.
+    simpleComparisonTest({"1"});
+    simpleComparisonTest({"21"});
+    simpleComparisonTest({"321"});
+    simpleComparisonTest({"4", "321"});
+    simpleComparisonTest({"54", "321"});
+    simpleComparisonTest({"654", "321"});
+    simpleComparisonTest({"7", "654", "321"});
+    simpleComparisonTest({"87", "654", "321"});
+    simpleComparisonTest({"987", "654", "321"});
+
+    // Floating points.
+    simpleComparisonTest(
+        {absl::StrCat("1", floatingPointSignifierString, "000")});
+    simpleComparisonTest(
+        {absl::StrCat("2", floatingPointSignifierString, "1")});
+    simpleComparisonTest(
+        {absl::StrCat("362", floatingPointSignifierString, "1")});
+    simpleComparisonTest(
+        {absl::StrCat("3", floatingPointSignifierString, "21")});
+    simpleComparisonTest(
+        {"876", absl::StrCat("703", floatingPointSignifierString, "21")});
+    simpleComparisonTest(
+        {absl::StrCat("3", floatingPointSignifierString,
+                      "217710466665135481349068158967136466")});
+    simpleComparisonTest(
+        {"140", "801",
+         absl::StrCat("813", floatingPointSignifierString,
+                      "217710466665135481349068158967136466")});
+
+    // Mixing numbers and normal symbols.
+    simpleComparisonTest(
+        {"140", "801",
+         absl::StrCat("813", floatingPointSignifierString,
+                      "217710466665135481349068158967136466", " 3",
+                      floatingPointSignifierString,
+                      "217710466665135481349068158967136466"),
+         absl::StrCat("703", floatingPointSignifierString, "21 3",
+                      floatingPointSignifierString, "21 362",
+                      floatingPointSignifierString, "1 2",
+                      floatingPointSignifierString, "1 987"),
+         "654", "321 87", "654", "321 7", "654", "321 654", "321 54", "321 4",
+         "321 321 21 1"});
+    simpleComparisonTest(
+        {absl::StrCat("Lorem ipsum dolor sit "
+                      "813",
+                      floatingPointSignifierString,
+                      "217710466665135481349068158967136466 amet, "
+                      "consectetur adipiscing elit. Quippe:  876"),
+         absl::StrCat(
+             "703", floatingPointSignifierString,
+             "21 habes enim a rhetoribus; Bork Falli igitur possumus. Bonum "
+             "integritas corporis: misera debilitas 987"),
+         "654",
+         "321.  Nos commodius agimus.Duo "
+         "Reges : constructio interrete 42.  Quod cum dixissent, ille "
+         "contra.Tuo "
+         "vero id quidem, inquam, arbitratu.Omnia contraria, quos etiam "
+         "insanos esse vultis.Sed haec in pueris; "});
+  };
+  doNotExceptionTest(' ', '.');
+  doNotExceptionTest(' ', ',');
+  doNotExceptionTest('.', ' ');
+  doNotExceptionTest('t', '+');
+
+  // Numbers as `delimiterSymbol`, or `floatingPointSignifier`, are not allowed.
+  for (size_t num1 = 0; num1 < 10; num1++) {
+    for (size_t num2 = 0; num2 < 10; num2++) {
+      const std::string numAsString = absl::StrCat(num1, num2);
+      ASSERT_ANY_THROW(
+          doNotExceptionTest(numAsString.front(), numAsString.back()));
+    }
+  }
 }

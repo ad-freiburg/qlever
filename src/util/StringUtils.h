@@ -22,6 +22,7 @@
 #include "util/Concepts.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/TypeTraits.h"
 
 using std::string;
 using std::string_view;
@@ -85,6 +86,22 @@ characters.
 */
 inline std::string addIndentation(std::string_view str,
                                   std::string_view indentationSymbol);
+
+/*
+@brief Insert the given delimiter symbol between groups of thousands. For
+example: `insertThousandDelimiter("The number 48900.", ' ', '.')` returns `"The
+number 48 900."`.
+
+@param r A range of chars.
+@param delimiterSymbol What symbol to put between groups of thousands.
+@param floatingPointSignifier The symbol that, if between two ranges of numbers,
+signifies, that the two ranges of numbers build one floating point number.
+*/
+template <std::ranges::random_access_range Range>
+requires isSimilar<std::iter_value_t<std::ranges::iterator_t<Range>>, char>
+std::string insertThousandDelimiter(const Range& r,
+                                    const char delimiterSymbol = ' ',
+                                    const char floatingPointSignifier = '.');
 
 // *****************************************************************************
 // Definitions:
