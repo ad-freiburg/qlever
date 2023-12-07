@@ -678,9 +678,16 @@ class IndexImpl {
   void deleteTemporaryFile(const string& path);
 
  public:
-  // Count the number of "QLever-internal" triples (predicate ql:langtag or
-  // predicate starts with @) and all other triples (that were actually part of
-  // the input).
+  /*
+  @brief Print the detailed documentation of the options for the index builder.
+  */
+  std::string getConfigurationDocForIndexBuilder();
+
+  /*
+  Count the number of "QLever-internal" triples (predicate ql:langtag or
+  predicate starts with @) and all other triples (that were actually part of the
+  input).
+  */
   NumNormalAndInternal numTriples() const;
 
   // The index contains several triples that are not part of the "actual"
