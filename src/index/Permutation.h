@@ -33,6 +33,8 @@ class Permutation {
 
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
+  using ColumnIndicesRef = CompressedRelationReader::ColumnIndicesRef;
+  using ColumnIndices = CompressedRelationReader::ColumnIndices;
 
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
@@ -51,9 +53,9 @@ class Permutation {
   // If `col1Id` is specified, only the col2 is returned for triples that
   // additionally have the specified col1. .This is just a thin wrapper around
   // `CompressedRelationMetaData::scan`.
-  IdTable scan(
-      Id col0Id, std::optional<Id> col1Id,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+  IdTable scan(Id col0Id, std::optional<Id> col1Id,
+               ColumnIndicesRef additionalColumns,
+               ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;
@@ -75,7 +77,8 @@ class Permutation {
   IdTableGenerator lazyScan(
       Id col0Id, std::optional<Id> col1Id,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+      ColumnIndicesRef additionalColumns,
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Return the metadata for the relation specified by the `col0Id`
   // along with the metadata for all the blocks that contain this relation (also
@@ -91,6 +94,8 @@ class Permutation {
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }
 
+  const CompressedRelationReader& reader() const { return reader_.value(); }
+
   // for Log output, e.g. "POS"
   const std::string readableName_;
   // e.g. ".pos"
@@ -102,9 +107,10 @@ class Permutation {
   const MetaData& metaData() const { return meta_; }
   MetaData meta_;
 
-  mutable ad_utility::File file_;
-
-  CompressedRelationReader reader_;
+  // This member is `optional` because we initialize it in a deferred way in the
+  // `loadFromDisk` method.
+  std::optional<CompressedRelationReader> reader_;
+  Allocator allocator_;
 
   bool isLoaded_ = false;
 };

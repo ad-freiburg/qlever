@@ -96,7 +96,7 @@ class OperationTestFixture : public testing::Test {
   std::vector<std::string> jsonHistory;
 
   Index index =
-      makeTestIndex("OperationTest", std::nullopt, true, true, true, 32);
+      makeTestIndex("OperationTest", std::nullopt, true, true, true, 32_B);
   QueryResultCache cache;
   QueryExecutionContext qec{
       index, &cache, makeAllocator(), SortPerformanceEstimator{},
@@ -143,7 +143,7 @@ TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
 
 TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
   auto qec = getQec();
-  auto handle = std::make_shared<CancellationHandle>();
+  auto handle = std::make_shared<CancellationHandle<>>();
   ShallowParentOperation operation =
       ShallowParentOperation::of<StallForeverOperation>(qec);
   operation.recursivelySetCancellationHandle(handle);

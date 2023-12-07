@@ -101,7 +101,7 @@ void testExternalSorter(size_t numDynamicColumns, size_t numRows,
   using namespace ad_utility::memory_literals;
 
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  ad_utility::CompressedExternalIdTableSorter<SortByOPS, NumStaticColumns>
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NumStaticColumns>
       writer{filename, numDynamicColumns, memoryToUse,
              ad_utility::testing::makeAllocator(), 5_kB};
 
@@ -114,7 +114,7 @@ void testExternalSorter(size_t numDynamicColumns, size_t numRows,
       writer.push(row);
     }
 
-    std::ranges::sort(randomTable, SortByOPS{});
+    std::ranges::sort(randomTable, SortByOSP{});
 
     auto generator = writer.sortedView();
 
@@ -142,7 +142,7 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
 
   // only 100 bytes of memory, not sufficient for merging
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
-  ad_utility::CompressedExternalIdTableSorter<SortByOPS, 0> writer{
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> writer{
       filename, 3, 100_B, ad_utility::testing::makeAllocator()};
 
   CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100, 3);
@@ -243,4 +243,18 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
   // All generators have ended, we should be able to push and clear.
   ASSERT_NO_THROW(pushAll());
   ASSERT_NO_THROW(writer.clear());
+}
+
+TEST(CompressedExternalIdTable, WrongNumberOfColsWhenPushing) {
+  std::string filename = "idTableCompressor.wrongNumCols.dat";
+  using namespace ad_utility::memory_literals;
+  auto alloc = ad_utility::testing::makeAllocator();
+
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 3> writer{filename, 3,
+                                                                   10_B, alloc};
+  ad_utility::CompressedExternalIdTableSorterTypeErased& erased = writer;
+  IdTableStatic<0> t1{3, alloc};
+  EXPECT_NO_THROW(erased.pushBlock(t1));
+  EXPECT_NO_THROW(t1.setNumColumns(4));
+  EXPECT_ANY_THROW(erased.pushBlock(t1));
 }

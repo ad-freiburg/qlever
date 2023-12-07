@@ -7,7 +7,7 @@ add_subdirectory(util)
 # general test utilities and all libraries that are specified as additional
 # arguments.
 function (linkTest basename)
-    qlever_target_link_libraries(${basename} ${ARGN} gtest gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(${basename} ${ARGN} gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
 
 # Add the exectutable ${basename} that is compiled from the source file
@@ -86,6 +86,7 @@ endfunction()
 
 add_subdirectory(engine)
 add_subdirectory(parser)
+add_subdirectory(index)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
@@ -115,7 +116,7 @@ addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
 addLinkAndDiscoverTest(EngineTest engine)
 
-addLinkAndDiscoverTest(JoinTest engine testUtil)
+addLinkAndDiscoverTest(JoinTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
@@ -240,7 +241,7 @@ addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
 
-addLinkAndDiscoverTest(TriplesViewTest util)
+addLinkAndDiscoverTest(TriplesViewTest util OpenSSL::SSL OpenSSL::Crypto)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 
@@ -322,11 +323,11 @@ addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
 addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
 
-addLinkAndDiscoverTest(ConfigManagerTest configManager testUtil)
+addLinkAndDiscoverTest(ConfigManagerTest configManager)
 
 addLinkAndDiscoverTest(ConfigOptionTest configManager)
 
-addLinkAndDiscoverTest(ValidatorTest configManager testUtil)
+addLinkAndDiscoverTest(ValidatorTest configManager)
 
 addLinkAndDiscoverTest(ConfigOptionProxyTest configManager)
 
@@ -346,7 +347,7 @@ addLinkAndDiscoverTest(ComparisonWithNanTest)
 
 addLinkAndDiscoverTest(ThreadSafeQueueTest)
 
-addLinkAndDiscoverTest(IdTableHelpersTest testUtil)
+addLinkAndDiscoverTest(IdTableHelpersTest)
 
 addLinkAndDiscoverTest(GeneratorTest)
 
@@ -377,3 +378,9 @@ addLinkAndDiscoverTest(CancellationHandleTest util)
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
 addLinkAndDiscoverTest(ParallelMultiwayMergeTest)
+
+addLinkAndDiscoverTest(ParseableDurationTest)
+
+addLinkAndDiscoverTest(ConstantsTest)
+
+addLinkAndDiscoverTest(JThreadTest)

@@ -52,6 +52,12 @@ class Server {
   Index& index() { return index_; }
   const Index& index() const { return index_; }
 
+  /// Helper struct bundling a parsed query with a query execution tree.
+  struct PlannedQuery {
+    ParsedQuery parsedQuery_;
+    QueryExecutionTree queryExecutionTree_;
+  };
+
  private:
   const size_t numThreads_;
   unsigned short port_;
@@ -64,15 +70,16 @@ class Server {
 
   bool enablePatternTrick_;
 
-  // Because HttpServer is not a member of this class, we need to assign
-  // this pointer after HttpServer is instanced. It is also set back to
-  // nullptr once the object is destroyed which only happens on shutdown.
-  ad_utility::websocket::QueryHub* queryHub_ = nullptr;
+  /// Non-owning reference to the `QueryHub` instance living inside
+  /// the `WebSocketHandler` created for `HttpServer`.
+  std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
   mutable net::static_thread_pool threadPool_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
+
+  using TimeLimit = std::chrono::seconds;
 
   /// Parse the path and URL parameters from the given request. Supports both
   /// GET and POST request according to the SPARQL 1.1 standard.
@@ -97,9 +104,12 @@ class Server {
   /// \param request The HTTP request.
   /// \param send The action that sends a http:response (see the
   ///             `HttpServer.h` for documentation).
+  /// \param timeLimit Duration in seconds after which the query will be
+  ///                  cancelled.
   Awaitable<void> processQuery(
       const ParamValueMap& params, ad_utility::Timer& requestTimer,
-      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+      TimeLimit timeLimit);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
@@ -138,14 +148,52 @@ class Server {
   /// means or because the task has been completed successfully.
   static auto cancelAfterDeadline(
       const net::any_io_executor& executor,
-      std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
-      std::chrono::seconds timeLimit);
+      std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
+      TimeLimit timeLimit)
+      -> ad_utility::InvocableWithExactReturnType<void> auto;
 
-  /// Create a cancellation handle, pass it to the operation and configure
-  /// it to get cancelled automatically if a time limit is passed by calling
-  /// `cancelAfterDeadline`. If `timeLimit` is empty, return a no-op lambda.
-  static std::function<void()> setupCancellationHandle(
-      const net::any_io_executor& executor,
-      const std::shared_ptr<Operation>& rootOperation,
-      std::optional<std::chrono::seconds> timeLimit);
+  /// Acquire the cancellation handle based on `queryId`, pass it to the
+  /// operation and configure it to get cancelled automatically by calling
+  /// `cancelAfterDeadline`. The return value can be used to cancel the timer.
+  auto setupCancellationHandle(const net::any_io_executor& executor,
+                               const ad_utility::websocket::QueryId& queryId,
+                               const std::shared_ptr<Operation>& rootOperation,
+                               TimeLimit timeLimit) const
+      -> ad_utility::InvocableWithExactReturnType<void> auto;
+
+  /// Run the SPARQL parser and then the query planner on the `query`. All
+  /// computation is performed on the `threadPool_`.
+  net::awaitable<PlannedQuery> parseAndPlan(const std::string& query,
+                                            QueryExecutionContext& qec) const;
+
+  /// Check if the access token is valid. Return true if the access token
+  /// exists and is valid. Return false if there's no access token passed.
+  /// Throw an exception if there is a token passed but it doesn't match,
+  /// or there is no access token set by the server config. The error message is
+  /// formulated towards end users, it can be sent directly as the text of an
+  /// HTTP error response.
+  bool checkAccessToken(std::optional<std::string_view> accessToken) const;
+
+  /// Checks if a URL parameter exists in the request, if we are allowed to
+  /// access it and it matches the expected `value`. If yes, return the value,
+  /// otherwise return `std::nullopt`. If `value` is `std::nullopt`, only check
+  /// if the key exists. We need this because we have parameters like
+  /// "cmd=stats", where a fixed combination of the key and value determines the
+  /// kind of action, as well as parameters like "index-decription=...", where
+  /// the key determines the kind of action. If the key is not found, always
+  /// return `std::nullopt`. If `accessAllowed` is false and a value is present,
+  /// throw an exception.
+  static std::optional<std::string_view> checkParameter(
+      const ad_utility::HashMap<std::string, std::string>& parameters,
+      std::string_view key, std::optional<std::string_view> value,
+      bool accessAllowed);
+
+  /// Check if user-provided timeout is authorized with a valid access-token or
+  /// lower than the server default. Return an empty optional and send a 403
+  /// Forbidden HTTP response if the change is not allowed. Return the new
+  /// timeout otherwise.
+  net::awaitable<std::optional<Server::TimeLimit>>
+  verifyUserSubmittedQueryTimeout(
+      std::optional<std::string_view> userTimeout, bool accessTokenOk,
+      const ad_utility::httpUtils::HttpRequest auto& request, auto& send) const;
 };

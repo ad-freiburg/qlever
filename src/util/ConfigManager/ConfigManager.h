@@ -12,12 +12,14 @@
 #include <any>
 #include <concepts>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <typeinfo>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -41,6 +43,98 @@ Manages a bunch of `ConfigOption`s.
 */
 class ConfigManager {
   /*
+  Our hash map always saves either a configuration option, or a sub manager
+  (another `ConfigManager`).
+
+  This class makes the handeling more explicit and allows for more information
+  to be saved alongside the configuration options and sub managers.
+  For example: The order, in which they were created.
+  */
+  class HashMapEntry {
+   public:
+    using Data = std::variant<ConfigOption, ConfigManager>;
+
+   private:
+    std::unique_ptr<Data> data_;
+
+    // Describes the order of initialization.
+    static inline std::atomic_size_t numberOfInstances_{0};
+    size_t initializationId_{numberOfInstances_++};
+
+   public:
+    // Construct an instance of this class managing `data`.
+    explicit HashMapEntry(Data&& data);
+
+    // Does this instance hold a configuration option?
+    bool holdsConfigOption() const;
+
+    // Does this instance hold a sub manager?
+    bool holdsSubManager() const;
+
+    /*
+    Currently held configuration option, if there is one. Note: If there is a
+    pointer, it's never a `nullptr`.
+    */
+    std::optional<ConfigOption*> getConfigOption();
+    std::optional<const ConfigOption*> getConfigOption() const;
+
+    /*
+    Currently held sub manager, if there is one. Note: If there is a
+    pointer, it's never a `nullptr`.
+    */
+    std::optional<ConfigManager*> getSubManager();
+    std::optional<const ConfigManager*> getSubManager() const;
+
+    // Return, how many instances of this class were initialized before this
+    // instance.
+    size_t getInitializationId() const;
+
+    // Wrapper for calling `std::visit` on the saved `Data`.
+    template <typename Visitor>
+    requires std::invocable<Visitor, ConfigOption&> &&
+             std::invocable<Visitor, ConfigManager&>
+    decltype(auto) visit(Visitor&& vis);
+    template <typename Visitor>
+    requires std::invocable<Visitor, const ConfigOption&> &&
+             std::invocable<Visitor, const ConfigManager&>
+    decltype(auto) visit(Visitor&& vis) const;
+
+   private:
+    // Implementation for `holdsConfigOption` and `holdsSubManager`.
+    template <typename T>
+    requires isTypeContainedIn<T, Data> bool implHolds() const;
+
+    /*
+    @brief Implementation for `getConfigOption` and `getSubManager`. You can
+    specify which one via `ReturnType`.
+
+    @tparam ReturnType Should be `(const) ConfigOption`, or `(const)
+    ConfigManager`.
+
+    @param instance The `HashMapEntry` you want this from.
+    */
+    template <typename ReturnType>
+    requires isTypeContainedIn<ReturnType, Data> && std::is_object_v<ReturnType>
+    static std::optional<ReturnType*> getConfigOptionOrSubManager(
+        ad_utility::SimilarTo<HashMapEntry> auto& instance);
+
+    /*
+    @brief The implementation for `visit`. Follows the same signature as
+    `std::variant::visit`:
+    */
+    template <typename Visitor, ad_utility::SimilarTo<std::unique_ptr<
+                                    ConfigManager::HashMapEntry::Data>>
+                                    PointerType>
+    requires std::invocable<Visitor, std::conditional_t<
+                                         std::is_const_v<PointerType>,
+                                         const ConfigOption&, ConfigOption&>> &&
+             std::invocable<Visitor, std::conditional_t<
+                                         std::is_const_v<PointerType>,
+                                         const ConfigManager&, ConfigManager&>>
+    static decltype(auto) visitImpl(Visitor&& vis, PointerType& data);
+  };
+
+  /*
   The added configuration options. Configuration managers are used by the user
   to describe a json object literal more explicitly.
 
@@ -51,8 +145,6 @@ class ConfigManager {
   The string key describes their location in the json object literal, by
   representing a json pointer in string form.
   */
-  using HashMapEntry =
-      std::unique_ptr<std::variant<ConfigOption, ConfigManager>>;
   ad_utility::HashMap<std::string, HashMapEntry> configurationOptions_;
 
   /*
@@ -201,17 +293,16 @@ class ConfigManager {
   static nlohmann::json parseShortHand(const std::string& shortHandString);
 
   /*
-  @brief Returns a string containing a json configuration and the
-  string representations of all added configuration options. Followed by a list
-  of all the configuration options, that kept their default values.
+  @brief Returns a string containing a json configuration and, optionally, the
+  string representations of all added configuration options, togehter with the
+  validator invariants.
 
-  @param printCurrentJsonConfiguration If true, the current values of the
-  configuration options will be used for printing the json configuration. If
-  false, an example json configuration will be printed, that uses the default
-  values of the configuration options, and, if an option doesn't have a default
-  value, a dummy value.
+  @param detailed Iff false, only print the json configuration. Otherwise, print
+  the json configuration, followed by the string representations of all added
+  configuration options, which contain more detailed information about the
+  configuration options, togehter with the validator invariants
   */
-  std::string printConfigurationDoc(bool printCurrentJsonConfiguration) const;
+  std::string printConfigurationDoc(bool detailed) const;
 
   /*
   @brief Add a function to the configuration manager for verifying, that the
@@ -354,7 +445,58 @@ class ConfigManager {
   FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
   FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
   FRIEND_TEST(ConfigManagerTest, ContainsOption);
-  FRIEND_TEST(ConfigManagerTest, CheckForBrokenPaths);
+  FRIEND_TEST(ConfigManagerTest, ValidatorsSorting);
+  FRIEND_TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment);
+
+  /*
+  @brief Visit the entries of `configurationOptions_` by visiting the content of
+  the `HashMapEntry`s, see `std::visit`, paired with the key for the
+  `HashMapEntry`.
+  Note: Also checks integrity of all entries via `verifyHashMapEntry` before
+  passing them to `vis`.
+
+  @param vis The visitor function. Will either be called with
+  `std::string_view, ConfigManager&`, or
+  `std::string_view, ConfigOption&`. Both represent the content of
+  a `HashMapEntry`.
+  @param sortByCreationOrder Should `vis` get the entries of
+  `configurationOptions_` ordered by their creation order, when set to true, or
+  should the order be random?
+  @param pathPrefix Only used for improved error messages and not passed to
+  `vis`. For example: You have a sub manager with the path `subManagers/sub1`
+  and call `visitHashMapEntries` with it. The sub manager doesn't know its own
+  path, so that information will only be included in generated error messages,
+  if you pass it along.
+  */
+  template <typename Visitor>
+  requires ad_utility::InvocableWithExactReturnType<
+               Visitor, void, std::string_view, ConfigManager&> &&
+           ad_utility::InvocableWithExactReturnType<
+               Visitor, void, std::string_view, ConfigOption&>
+  void visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
+                           std::string_view pathPrefix) const;
+
+  /*
+  @brief Collect all `HashMapEntry` contained in the `hashMap`, including the
+  ones in sub managern and return them together with their json paths in a
+  random order. Note: Also checks integrity of all entries via
+  `verifyHashMapEntry`.
+
+  @param pathPrefix This prefix will be added to all json paths, that will be
+  returned.
+  @param predicate Only the `HashMapEntry` for which a true is returned, will be
+  given back.
+  */
+  template <typename HashMapType>
+  requires SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>,
+                     HashMapType> &&
+           std::is_object_v<HashMapType> static std::conditional_t<
+      std::is_const_v<HashMapType>,
+      const std::vector<std::pair<const std::string, const HashMapEntry&>>,
+      std::vector<std::pair<std::string, HashMapEntry&>>>
+  allHashMapEntries(HashMapType& hashMap, std::string_view pathPrefix,
+                    const ad_utility::InvocableWithSimilarReturnType<
+                        bool, const HashMapEntry&> auto& predicate);
 
   /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
@@ -389,13 +531,6 @@ class ConfigManager {
       const std::vector<std::string>& keys);
 
   /*
-  @brief Return a string, containing a list of all entries from
-  `getListOfNotChangedConfigOptionsWithDefaultValues`, in the form of
-  "Configuration option 'x' was not set at runtime, using default value 'y'.".
-  */
-  std::string getListOfNotChangedConfigOptionsWithDefaultValuesAsString() const;
-
-  /*
   @brief Creates and adds a new configuration option.
 
   @tparam OptionType The type of value, the configuration option can hold.
@@ -426,9 +561,12 @@ class ConfigManager {
     verifyPath(pathToOption);
 
     /*
-    The `unqiue_ptr` was created, by creating a new `ConfigOption` via it's
-    move constructor. Which is why, we can't just return the `ConfigOption`
-    we created here.
+    We can't just create a `ConfigOption` variable, pass it and return it,
+    because the hash map has ownership of the newly added `ConfigOption`.
+    Which was transfered via creating a new internal `ConfigOption` with move
+    constructors.
+    Which would mean, that our local `ConfigOption` isn't the `ConfigOption` we
+    want to return a reference to.
     */
     return ConstConfigOptionProxy<OptionType>(addConfigOption(
         pathToOption,
@@ -437,39 +575,39 @@ class ConfigManager {
   }
 
   /*
-  @brief A vector to all the configuratio options, held by this manager,
-  represented with their json paths and reference to them. Options held by a sub
-  manager, are also included with the path to the sub manager as prefix.
+  @brief A vector to all the configuratio options, held by this manager and in a
+  random order, represented with their json paths and reference to them. Options
+  held by a sub manager, are also included with the path to the sub manager as
+  prefix.
   */
   std::vector<std::pair<std::string, ConfigOption&>> configurationOptions();
   std::vector<std::pair<std::string, const ConfigOption&>>
   configurationOptions() const;
 
   /*
-  @brief Return all `ConfigOptionValidatorManager` held by this manager and its
-  sub managers.
-
-  @param patPrefix Prefix for the paths in the exception message. Needed, so
-  that a sub manager can include its own path in the error messages.
-  */
-  std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
-  validators(std::string_view pathPrefix = "") const;
-
-  /*
-  @brief The implementation for `configurationOptions`.
+  @brief The implementation for `configurationOptions()`.
 
   @tparam ReturnReference Should be either `ConfigOption&`, or `const
   ConfigOption&`.
-
-  @param pathPrefix This prefix will be added to all configuration option json
-  paths, that will be returned.
   */
   template <typename ReturnReference>
   requires std::same_as<ReturnReference, ConfigOption&> ||
            std::same_as<ReturnReference, const ConfigOption&>
   static std::vector<std::pair<std::string, ReturnReference>>
-  configurationOptionsImpl(auto& configurationOptions,
-                           std::string_view pathPrefix = "");
+  configurationOptionsImpl(
+      SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>> auto&
+          configurationOptions);
+
+  /*
+  @brief Return all `ConfigOptionValidatorManager` held by this manager and its
+  sub managers.
+
+  @param sortByInitialization If true, the order of the returned
+  `ConfigOptionValidatorManager` is by initialization order. If false, the order
+  is random.
+  */
+  std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
+  validators(const bool sortByInitialization) const;
 
   /*
   @brief Call all the validators to check, if the current value is valid.
@@ -532,15 +670,130 @@ class ConfigManager {
   }
 
   /*
-  @brief Throw an exception, if the given entry of `configurationOptions_` is a
-  null pointer, or contains an empty sub manager, which would point to a logic
-  error.
+  @brief Throw an exception, if the given entry of `configurationOptions_`
+  contains an empty sub manager, which would point to a logic error.
 
   @param jsonPathToEntry For a better exception message.
-  @param entryPointer Pointer to the object managed by the pointer in the hash
-  map.
+  @param entry The object managed by the hash map.
   */
   static void verifyHashMapEntry(std::string_view jsonPathToEntry,
-                                 const HashMapEntry::pointer entryPointer);
+                                 const HashMapEntry& entry);
+
+  /*
+  @brief Generate the json representation the current config manager
+  configuration.
+
+  @param pathPrefix Only used for improved error messages. For example: You have
+  a sub manager with the path `subManagers/sub1` and call `visitHashMapEntries`
+  with it. The sub manager doesn't know its own path, so that information will
+  only be included in generated error messages, if you pass it along.
+  */
+  nlohmann::ordered_json generateConfigurationDocJson(
+      std::string_view pathPrefix) const;
+
+  /*
+  When printing the configuration documentation, the assignment of `Validators`
+  isn't 100% clear.
+  Should they be printed as part of a sub manager? As part of every
+  `ConfigOption`, they check? Or a split up between sub managers and
+  `ConfigOption`?
+  This class is for clearing up those assignments, by assigning
+  `ConfigOptionValidatorManager` to `ConfigOption` and `ConfigManager`.
+  Note:
+  - Those assignments will be done using memory addresses and pointers. No
+  objects will be copied.
+  - Keys and values are identified via identity/memory address.
+  - The insertion order under a key will be preserved. For example: If you add
+  validator `a` and `b` under `ConfigOption C`, then when retrieving the entries
+  for `C` they will have the order `a`, followed by `b`.
+  */
+  class ConfigurationDocValidatorAssignment {
+   public:
+    // The return type for value getter.
+    using ValueGetterReturnType =
+        std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>;
+
+   private:
+    /*
+    Hash maps of the memory address.
+    */
+    template <typename PointerObject>
+    using MemoryAdressHashMap =
+        ad_utility::HashMap<const std::decay_t<PointerObject>*,
+                            std::vector<const ConfigOptionValidatorManager*>>;
+    MemoryAdressHashMap<ConfigOption> configOption_;
+    MemoryAdressHashMap<ConfigManager> configManager_;
+
+   public:
+    /*
+    @brief Add a validator to the list of validators, that are assigned to a
+    `ConfigOption`/`ConfigManager`.
+    */
+    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+    void addEntryUnderKey(const T& key,
+                          const ConfigOptionValidatorManager& manager);
+
+    /*
+    @brief Retrieve the list of validators, that are assigned to a
+    `ConfigOption`/`ConfigManager`.
+
+    @returns If there is no entry for `Key`, return an empty `std::vector`.
+    */
+    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+    ValueGetterReturnType getEntriesUnderKey(const T& key) const;
+
+   private:
+    // Return either `configOption_` or `configManager_`, based on type.
+    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+    constexpr const MemoryAdressHashMap<T>& getHashMapBasedOnType() const {
+      if constexpr (std::same_as<T, ConfigOption>) {
+        return configOption_;
+      } else if constexpr (std::same_as<T, ConfigManager>) {
+        return configManager_;
+      }
+    }
+    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+    constexpr MemoryAdressHashMap<T>& getHashMapBasedOnType() {
+      if constexpr (std::same_as<T, ConfigOption>) {
+        return configOption_;
+      } else if constexpr (std::same_as<T, ConfigManager>) {
+        return configManager_;
+      }
+    }
+  };
+
+  /*
+  @brief Create the validator assignments based on this instance. Note, that
+  these assignments are done based on all the held sub manager und configuration
+  options. In other words, you only need to call it with the top manager.
+
+  Our current assignment strategy is:
+  - Validator, that only check a single configuration option, are assigned to
+  that option.
+  - Validator, that check more than one single configuration option, are
+  assigned to the configuration manager, that holds them.
+  - Any list of `ConfigOptionValidatorManager` is sorted by their creation
+  order.
+  */
+  ConfigurationDocValidatorAssignment getValidatorAssignment() const;
+
+  /*
+  @brief Create a detailed list about the configuration options, with their
+  types, values, default values,  etc. shown and organized by the sub managers,
+  that hold them. Validator invariant descriptions will be printed according to
+  `ConfigurationDocValidatorAssignment`.
+
+  @param pathPrefix Only used for improved error messages. For example: You
+  have a sub manager with the path `subManagers/sub1` and call
+  `visitHashMapEntries` with it. The sub manager doesn't know its own path, so
+  that information will only be included in generated error messages, if you
+  pass it along.
+  @param assignment Whenever printing a `ConfigOption`/`ConfigManager`, the
+  validators assigned to them, will be printed with them.
+  */
+  std::string generateConfigurationDocDetailedList(
+      std::string_view pathPrefix,
+      const ConfigurationDocValidatorAssignment& assignment) const;
 };
+
 }  // namespace ad_utility

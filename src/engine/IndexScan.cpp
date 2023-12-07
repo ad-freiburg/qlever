@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 
+#include "absl/strings/str_join.h"
 #include "index/IndexImpl.h"
 #include "index/TriplesView.h"
 #include "parser/ParsedQuery.h"
@@ -25,8 +26,13 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       object_(triple._o),
       numVariables_(static_cast<size_t>(subject_.isVariable()) +
                     static_cast<size_t>(predicate_.isVariable()) +
-                    static_cast<size_t>(object_.isVariable())),
-      sizeEstimate_(computeSizeEstimate()) {
+                    static_cast<size_t>(object_.isVariable())) {
+  for (auto& [idx, variable] : triple._additionalScanColumns) {
+    additionalColumns_.push_back(idx);
+    additionalVariables_.push_back(variable);
+  }
+  sizeEstimate_ = computeSizeEstimate();
+
   // Check the following invariant: The permuted input triple must contain at
   // least one variable, and all the variables must be at the end of the
   // permuted triple. For example in the PSO permutation, either only the O, or
@@ -50,24 +56,25 @@ string IndexScan::asStringImpl(size_t indent) const {
 
   auto permutationString = Permutation::toString(permutation_);
 
-  if (getResultWidth() == 3) {
-    AD_CORRECTNESS_CHECK(getResultWidth() == 3);
+  if (numVariables_ == 3) {
     os << "SCAN FOR FULL INDEX " << permutationString << " (DUMMY OPERATION)";
 
   } else {
-    auto firstKeyString = permutationString.at(0);
-    auto permutedTriple = getPermutedTriple();
-    const auto& firstKey = permutedTriple.at(0)->toRdfLiteral();
-    if (getResultWidth() == 1) {
-      auto secondKeyString = permutationString.at(1);
-      const auto& secondKey = permutedTriple.at(1)->toRdfLiteral();
-      os << "SCAN " << permutationString << " with " << firstKeyString
-         << " = \"" << firstKey << "\", " << secondKeyString << " = \""
-         << secondKey << "\"";
-    } else if (getResultWidth() == 2) {
-      os << "SCAN " << permutationString << " with " << firstKeyString
-         << " = \"" << firstKey << "\"";
+    os << "SCAN " << permutationString << " with ";
+    auto addKey = [&os, &permutationString, this](size_t idx) {
+      auto keyString = permutationString.at(idx);
+      const auto& key = getPermutedTriple().at(idx)->toRdfLiteral();
+      os << keyString << " = \"" << key << "\"";
+    };
+    addKey(0);
+    if (numVariables_ == 1) {
+      os << ", ";
+      addKey(1);
     }
+  }
+  if (!additionalColumns_.empty()) {
+    os << " Additional Columns: ";
+    os << absl::StrJoin(additionalColumns(), " ");
   }
   return std::move(os).str();
 }
@@ -79,11 +86,13 @@ string IndexScan::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-size_t IndexScan::getResultWidth() const { return numVariables_; }
+size_t IndexScan::getResultWidth() const {
+  return numVariables_ + additionalVariables_.size();
+}
 
 // _____________________________________________________________________________
 vector<ColumnIndex> IndexScan::resultSortedOn() const {
-  switch (getResultWidth()) {
+  switch (numVariables_) {
     case 1:
       return {ColumnIndex{0}};
     case 2:
@@ -98,16 +107,19 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
 // _____________________________________________________________________________
 VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   VariableToColumnMap variableToColumnMap;
-  // All the columns of an index scan only contain defined values.
-  auto makeCol = makeAlwaysDefinedColumn;
-  auto nextColIdx = ColumnIndex{0};
+  auto addCol = [&variableToColumnMap,
+                 nextColIdx = ColumnIndex{0}](const Variable& var) mutable {
+    // All the columns of an index scan only contain defined values.
+    variableToColumnMap[var] = makeAlwaysDefinedColumn(nextColIdx);
+    ++nextColIdx;
+  };
 
   for (const TripleComponent* const ptr : getPermutedTriple()) {
     if (ptr->isVariable()) {
-      variableToColumnMap[ptr->getVariable()] = makeCol(nextColIdx);
-      ++nextColIdx;
+      addCol(ptr->getVariable());
     }
   }
+  std::ranges::for_each(additionalVariables_, addCol);
   return variableToColumnMap;
 }
 // _____________________________________________________________________________
@@ -121,27 +133,27 @@ ResultTable IndexScan::computeResult() {
   const auto permutedTriple = getPermutedTriple();
   if (numVariables_ == 2) {
     idTable = index.scan(*permutedTriple[0], std::nullopt, permutation_,
-                         cancellationHandle_);
+                         additionalColumns(), cancellationHandle_);
   } else if (numVariables_ == 1) {
     idTable = index.scan(*permutedTriple[0], *permutedTriple[1], permutation_,
-                         cancellationHandle_);
+                         additionalColumns(), cancellationHandle_);
   } else {
     AD_CORRECTNESS_CHECK(numVariables_ == 3);
     computeFullScan(&idTable, permutation_);
   }
-  AD_CORRECTNESS_CHECK(idTable.numColumns() == numVariables_);
+  AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   LOG(DEBUG) << "IndexScan result computation done.\n";
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
 
 // _____________________________________________________________________________
-size_t IndexScan::computeSizeEstimate() {
+size_t IndexScan::computeSizeEstimate() const {
   if (_executionContext) {
     // Should always be in this branch. Else is only for test cases.
 
     // We have to do a simple scan anyway so might as well do it now
-    if (getResultWidth() == 1) {
+    if (numVariables_ == 1) {
       // TODO<C++23> Use the monadic operation `std::optional::or_else`.
       // Note: we cannot use `optional::value_or()` here, because the else
       // case is expensive to compute, and we need it lazily evaluated.
@@ -153,10 +165,10 @@ size_t IndexScan::computeSizeEstimate() {
         // This call explicitly has to read two blocks of triples from memory to
         // obtain an exact size estimate.
         return getIndex().getResultSizeOfScan(
-            *getPermutedTriple()[0], *getPermutedTriple()[1], permutation_);
+            *getPermutedTriple()[0], *getPermutedTriple().at(1), permutation_);
       }
-    } else if (getResultWidth() == 2) {
-      const TripleComponent& firstKey = *getPermutedTriple()[0];
+    } else if (numVariables_ == 2) {
+      const TripleComponent& firstKey = *getPermutedTriple().at(0);
       return getIndex().getCardinality(firstKey, permutation_);
     } else {
       // The triple consists of three variables.
@@ -165,26 +177,22 @@ size_t IndexScan::computeSizeEstimate() {
       // internal triples, this estimate should be changed to only return
       // the number of triples in the actual knowledge graph (excluding the
       // internal triples).
-      AD_CORRECTNESS_CHECK(getResultWidth() == 3);
+      AD_CORRECTNESS_CHECK(numVariables_ == 3);
       return getIndex().numTriples().normalAndInternal_();
     }
   } else {
     // Only for test cases. The handling of the objects is to make the
     // strange query planner tests pass.
-    // TODO<joka921> Code duplication.
-    std::string objectStr =
-        object_.isString() ? object_.getString() : object_.toString();
-    std::string subjectStr =
-        subject_.isString() ? subject_.getString() : subject_.toString();
-    std::string predStr =
-        predicate_.isString() ? predicate_.getString() : predicate_.toString();
-    return 1000 + subjectStr.size() + predStr.size() + objectStr.size();
+    auto strLen = [](const auto& el) {
+      return (el.isString() ? el.getString() : el.toString()).size();
+    };
+    return 1000 + strLen(subject_) + strLen(object_) + strLen(predicate_);
   }
 }
 
 // _____________________________________________________________________________
 size_t IndexScan::getCostEstimate() {
-  if (getResultWidth() != 3) {
+  if (numVariables_ != 3) {
     return getSizeEstimateBeforeLimit();
   } else {
     // The computation of the `full scan` estimate must be consistent with the
@@ -214,23 +222,31 @@ void IndexScan::determineMultiplicities() {
   multiplicity_.clear();
   if (_executionContext) {
     const auto& idx = getIndex();
-    if (getResultWidth() == 1) {
+    if (numVariables_ == 1) {
+      // There are no duplicate triples in RDF and two elements are fixed.
       multiplicity_.emplace_back(1);
-    } else if (getResultWidth() == 2) {
+    } else if (numVariables_ == 2) {
       const auto permutedTriple = getPermutedTriple();
       multiplicity_ = idx.getMultiplicities(*permutedTriple[0], permutation_);
     } else {
-      AD_CORRECTNESS_CHECK(getResultWidth() == 3);
+      AD_CORRECTNESS_CHECK(numVariables_ == 3);
       multiplicity_ = idx.getMultiplicities(permutation_);
     }
   } else {
+    // This branch is only used in certain unit tests.
     multiplicity_.emplace_back(1);
-    multiplicity_.emplace_back(1);
-    if (getResultWidth() == 3) {
+    if (numVariables_ == 2) {
+      multiplicity_.emplace_back(1);
+    }
+    if (numVariables_ == 3) {
       multiplicity_.emplace_back(1);
     }
   }
-  assert(multiplicity_.size() >= 1 || multiplicity_.size() <= 3);
+  for ([[maybe_unused]] size_t i :
+       std::views::iota(multiplicity_.size(), getResultWidth())) {
+    multiplicity_.emplace_back(1);
+  }
+  AD_CONTRACT_CHECK(multiplicity_.size() == getResultWidth());
 }
 
 // ________________________________________________________________________
@@ -290,7 +306,8 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
     col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
   }
   return index.getPermutation(s.permutation())
-      .lazyScan(col0Id, col1Id, std::move(blocks), s.cancellationHandle_);
+      .lazyScan(col0Id, col1Id, std::move(blocks), s.additionalColumns(),
+                s.cancellationHandle_);
 };
 
 // ________________________________________________________________
