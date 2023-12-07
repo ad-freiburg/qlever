@@ -179,8 +179,7 @@ class GroupBy : public Operation {
   };
 
   using KeyType = ValueId;
-  template <size_t numAggregates>
-  using ValueType = std::array<AverageAggregationData, numAggregates>;
+  using ValueType = size_t;
 
   // Stores information required for substitution of an expression in an
   // expression tree.
@@ -240,18 +239,17 @@ class GroupBy : public Operation {
 
   // Create result IdTable by using a HashMap mapping groups to aggregation data
   // and subsequently calling `createResultFromHashMap`.
-  template <size_t OUT_WIDTH, size_t numAliases, size_t numAggregates>
   void computeGroupByForHashMapOptimization(
       IdTable* result, std::vector<HashMapAliasInformation>& aggregateAliases,
-      const IdTable& subresult, size_t columnIndex, LocalVocab* localVocab);
+      size_t numAggregates, const IdTable& subresult, size_t columnIndex,
+      LocalVocab* localVocab);
 
   // Sort the HashMap by key and create result table.
-  template <size_t OUT_WIDTH, size_t numAliases, size_t numAggregates>
   void createResultFromHashMap(
       IdTable* result,
-      const ad_utility::HashMapWithMemoryLimit<KeyType,
-                                               ValueType<numAggregates>>& map,
+      const ad_utility::HashMapWithMemoryLimit<KeyType, ValueType>& map,
       std::vector<HashMapAliasInformation>& aggregateAliases,
+      const std::vector<std::vector<AverageAggregationData>>& aggregationData,
       LocalVocab* localVocab);
 
   // Check if hash map optimization is applicable. This is the case when
@@ -275,21 +273,19 @@ class GroupBy : public Operation {
   // In case of aliases that contain an aggregate at the top-level of the
   // expression tree, e.g. "AVG(?y) as ?avg", we can directly store the values
   // calculated in our HashMap in the result table.
-  template <size_t numAggregates>
   sparqlExpression::VectorWithMemoryLimit<ValueId> extractValuesDirectlyFromMap(
       size_t beginIndex, size_t endIndex,
-      const ad_utility::HashMapWithMemoryLimit<KeyType,
-                                               ValueType<numAggregates>>& map,
+      const ad_utility::HashMapWithMemoryLimit<KeyType, ValueType>& map,
+      const std::vector<std::vector<AverageAggregationData>>& aggregationData,
       IdTable* resultTable, size_t hashMapIndex, size_t outCol);
 
   // Substitute the results for all aggregates in `info`. The values of the
   // grouped variable should be at column 0 in `groupValues`.
-  template <size_t numAggregates>
   void substituteAllAggregates(
       std::vector<HashMapAggregateInformation>& info,
       sparqlExpression::EvaluationContext& evaluationContext,
-      const ad_utility::HashMapWithMemoryLimit<KeyType,
-                                               ValueType<numAggregates>>& map,
+      const ad_utility::HashMapWithMemoryLimit<KeyType, ValueType>& map,
+      const std::vector<std::vector<AverageAggregationData>>& aggregationData,
       IdTable* resultTable);
 
   // Check if an expression is of a certain type.
