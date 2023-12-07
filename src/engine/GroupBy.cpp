@@ -723,13 +723,6 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
     return std::nullopt;
   }
 
-  // TODO<kcaliban> remove this as soon as we have a better implementation
-  //                for multiple aggregates
-  // Only allow up to 5 aliases for now (because of CallFixedSize)
-  if (aliases.size() > 5) {
-    return std::nullopt;
-  }
-
   // Get pointers to all aggregate expressions and their parents
   size_t numAggregates = 0;
   std::vector<HashMapAliasInformation> aliasesWithAggregateInfo;
@@ -748,13 +741,6 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
 
     aliasesWithAggregateInfo.emplace_back(alias._expression, alias._outCol,
                                           foundAggregates.value());
-  }
-
-  // TODO<kcaliban> remove this as soon as we have a better implementation
-  //                for multiple aggregates
-  // Only allow up to 5 aggregates for now (because of CallFixedSize)
-  if (numAggregates > 5) {
-    return std::nullopt;
   }
 
   const Variable& groupByVariable = _groupByVariables.front();
