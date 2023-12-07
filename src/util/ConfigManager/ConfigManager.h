@@ -293,6 +293,19 @@ class ConfigManager {
   static nlohmann::json parseShortHand(const std::string& shortHandString);
 
   /*
+  @brief Generate a string containing a json representation of the current
+  config manager configuration.
+  */
+  std::string printConfigurationDocJson() const;
+
+  /*
+  @brief Create a detailed list about the configuration options, with their
+  types, values, default values, etc. shown and organized by the sub managers,
+  that hold them. Validators are also printed.
+  */
+  std::string printConfigurationDocDetailedList() const;
+
+  /*
   @brief Returns a string containing a json configuration and, optionally, the
   string representations of all added configuration options, togehter with the
   validator invariants.
@@ -779,7 +792,7 @@ class ConfigManager {
 
   /*
   @brief Create a detailed list about the configuration options, with their
-  types, values, default values,  etc. shown and organized by the sub managers,
+  types, values, default values, etc. shown and organized by the sub managers,
   that hold them. Validator invariant descriptions will be printed according to
   `ConfigurationDocValidatorAssignment`.
 
