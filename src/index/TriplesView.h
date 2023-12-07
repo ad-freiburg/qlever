@@ -34,7 +34,7 @@ inline auto alwaysReturnFalse = [](auto&&...) { return false; };
 template <typename IsTripleIgnored = decltype(detail::alwaysReturnFalse)>
 cppcoro::generator<std::array<Id, 3>> TriplesView(
     const auto& permutation,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle,
+    ad_utility::SharedCancellationHandle cancellationHandle,
     detail::IgnoredRelations ignoredRanges = {},
     IsTripleIgnored isTripleIgnored = IsTripleIgnored{}) {
   std::sort(ignoredRanges.begin(), ignoredRanges.end());

@@ -127,6 +127,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       signalQueryUpdate();
       ResultTable result = computeResult();
 
+      checkCancellation([this]() { return "After " + getDescriptor(); });
       // Compute the datatypes that occur in each column of the result.
       // Also assert, that if a column contains UNDEF values, then the
       // `mightContainUndef` flag for that columns is set.
@@ -136,7 +137,6 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       // change in the DEBUG builds.
       AD_EXPENSIVE_CHECK(
           result.checkDefinedness(getExternallyVisibleVariableColumns()));
-      checkCancellation([this]() { return "In " + getDescriptor(); });
       // Make sure that the results that are written to the cache have the
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as

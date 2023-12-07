@@ -382,3 +382,5 @@ addLinkAndDiscoverTest(ParallelMultiwayMergeTest)
 addLinkAndDiscoverTest(ParseableDurationTest)
 
 addLinkAndDiscoverTest(ConstantsTest)
+
+addLinkAndDiscoverTest(JThreadTest)

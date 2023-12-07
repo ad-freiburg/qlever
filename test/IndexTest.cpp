@@ -36,7 +36,7 @@ auto makeTestScanWidthOne = [](const IndexImpl& index) {
     TripleComponent c1Tc{c1};
     IdTable result = index.scan(
         c0, std::cref(c1Tc), permutation, Permutation::ColumnIndicesRef{},
-        std::make_shared<ad_utility::CancellationHandle>());
+        std::make_shared<ad_utility::CancellationHandle<>>());
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
 };
@@ -53,7 +53,7 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index) {
     auto t = generateLocationTrace(l);
     IdTable wol = index.scan(
         c0, std::nullopt, permutation, Permutation::ColumnIndicesRef{},
-        std::make_shared<ad_utility::CancellationHandle>());
+        std::make_shared<ad_utility::CancellationHandle<>>());
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };

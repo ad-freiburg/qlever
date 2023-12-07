@@ -221,6 +221,12 @@ if (ENABLE_EXPENSIVE_CHECKS)
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
 endif()
 
+if (DISABLE_QUERY_CANCELLATION_WATCH_DOG)
+    message(STATUS "Disable periodic checks that the cancellation flag is checked frequently enough while the result of
+    a query is being computed with a small runtime overhead")
+    add_definitions("-DQLEVER_DISABLE_QUERY_CANCELLATION_WATCH_DOG")
+endif()
+
 ################################
 # STXXL
 ################################
