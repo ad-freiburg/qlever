@@ -4,15 +4,15 @@
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./IndexImpl.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <future>
+#include <memory>
 #include <optional>
 #include <unordered_map>
 
+#include "./IndexImpl.h"
 #include "CompilationInfo.h"
 #include "absl/strings/str_join.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -29,7 +29,6 @@
 #include "util/HashMap.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/TupleHelpers.h"
-#include "util/json.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
@@ -953,21 +952,22 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
 }
 
 // ___________________________________________________________________________
-void IndexImpl::readIndexBuilderSettingsFromFile() {
+std::pair<ad_utility::ConfigManager,
+          std::unique_ptr<IndexImpl::IndexBuilderSettingsVariables>>
+IndexImpl::generateConfigManagerForIndexBuilderSettings() {
+  auto variables{std::make_unique<IndexImpl::IndexBuilderSettingsVariables>()};
   ad_utility::ConfigManager config{};
 
-  std::vector<std::string> prefixesExternal;
   config.addOption("prefixes-external",
                    "Literals or IRIs that start with any of these prefixes "
                    "will be stored in the external vocabulary. For example "
                    "`[\"<\"] will externalize all IRIs",
-                   &prefixesExternal, {});
+                   &variables->prefixesExternal_, {});
 
-  std::vector<std::string> languagesInternal;
   config.addOption("languages-internal",
                    "Literals with one of these langauge tag will be stored in "
                    "the internal vocabulary by default",
-                   &languagesInternal, {"en"});
+                   &variables->languagesInternal_, {"en"});
 
   // TODO<joka921, schlegan> It would be nice to add a description to this
   // submanager directly, e.g. "The locale used for all operations that depend
@@ -975,23 +975,20 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   decltype(auto) localeManager = config.addSubManager({"locale"s});
 
   // Should be self-explanatory with the default value.
-  std::string lang;
-  decltype(auto) langOption =
-      localeManager.addOption("language", "", &lang, LOCALE_DEFAULT_LANG);
+  decltype(auto) langOption = localeManager.addOption(
+      "language", "", &variables->localLang_, LOCALE_DEFAULT_LANG);
 
   // Should be self-explanatory with the default value.
-  std::string country;
-  decltype(auto) countryOption =
-      localeManager.addOption("country", "", &country, LOCALE_DEFAULT_COUNTRY);
+  decltype(auto) countryOption = localeManager.addOption(
+      "country", "", &variables->localCountry_, LOCALE_DEFAULT_COUNTRY);
 
-  bool ignorePunctuation;
   decltype(auto) ignorePunctuationOption = localeManager.addOption(
       "ignore-punctuation",
       "If set to true, then punctuation characters will only be considered on "
       "the last level of comparisons. This will for example lead to the order "
       "\"aa\", \"a.a\", \"ab\" (the first two are basically equal and the dot "
       "is only used as a tie break)",
-      &ignorePunctuation, LOCALE_DEFAULT_IGNORE_PUNCTUATION);
+      &variables->localIgnorePunctuation_, LOCALE_DEFAULT_IGNORE_PUNCTUATION);
 
   // Validator for the entries under `locale`. Either they all must use the
   // default value, or all must be set at runtime.
@@ -1041,30 +1038,32 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                    "there is no need to change this parameter.",
                    &parserBatchSize_, PARSER_BATCH_SIZE);
 
-  std::string parserIntegerOverflowBehavior;
   decltype(auto) overflowOption = config.addOption(
       "parser-integer-overflow-behavior",
       "QLever stores all integer values with a fixed number of bits. This "
       "option configures the behavior when an integer in the turtle input "
       "cannot be represented by QLever. Note that this doesn't affect the "
       "behavior of overflows during the query processing",
-      &parserIntegerOverflowBehavior, "overflowing-integers-throw"s);
+      &variables->parserIntegerOverflowBehavior_,
+      "overflowing-integers-throw"s);
 
-  using OverflowMap =
-      ad_utility::HashMap<std::string, TurtleParserIntegerOverflowBehavior>;
-  const OverflowMap overflowMap = []() -> OverflowMap {
-    using enum TurtleParserIntegerOverflowBehavior;
-    return {{"overflowing-integers-throw", Error},
-            {"overflowing-integers-become-doubles", OverflowingToDouble},
-            {"all-integers-become-doubles", AllToDouble}};
-  }();
   config.addValidator(
-      [&overflowMap](std::string_view input) -> bool {
-        return overflowMap.contains(input);
+      [](std::string_view input) -> bool {
+        return turtleParserIntegerOverflowBehaviorMap_.contains(input);
       },
       "value must be one of " +
-          ad_utility::lazyStrJoin(std::views::keys(overflowMap), ", "),
+          ad_utility::lazyStrJoin(
+              std::views::keys(turtleParserIntegerOverflowBehaviorMap_), ", "),
       "dummy description for the overflow behavior validator", overflowOption);
+
+  return std::make_pair(std::move(config), std::move(variables));
+}
+
+// ___________________________________________________________________________
+void IndexImpl::readIndexBuilderSettingsFromFile() {
+  auto [config,
+        configVariablesPointer]{generateConfigManagerForIndexBuilderSettings()};
+  auto& configVariables{*configVariablesPointer};
 
   // Set the options.
   if (!settingsFileName_.empty()) {
@@ -1073,8 +1072,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     config.parseConfig(json(json::value_t::object));
   }
 
-  vocab_.initializeExternalizePrefixes(prefixesExternal);
-  configurationJson_["prefixes-external"] = prefixesExternal;
+  vocab_.initializeExternalizePrefixes(configVariables.prefixesExternal_);
+  configurationJson_["prefixes-external"] = configVariables.prefixesExternal_;
 
   /**
    * ICU uses two separate arguments for each Locale, the language ("en" or
@@ -1083,11 +1082,13 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
    * locale setting.
    */
 
-  LOG(INFO) << "You specified \"locale = " << lang << "_" << country << "\" "
-            << "and \"ignore-punctuation = " << ignorePunctuation << "\""
-            << std::endl;
+  LOG(INFO) << "You specified \"locale = " << configVariables.localLang_ << "_"
+            << configVariables.localCountry_ << "\" "
+            << "and \"ignore-punctuation = "
+            << configVariables.localIgnorePunctuation_ << "\"" << std::endl;
 
-  if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
+  if (configVariables.localLang_ != LOCALE_DEFAULT_LANG ||
+      configVariables.localCountry_ != LOCALE_DEFAULT_COUNTRY) {
     LOG(WARN) << "You are using Locale settings that differ from the default "
                  "language or country.\n\t"
               << "This should work but is untested by the QLever team. If "
@@ -1096,14 +1097,18 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                  "filing a bug report. Also note that changing the\n\t"
               << "locale requires to completely rebuild the index\n";
   }
-  vocab_.setLocale(lang, country, ignorePunctuation);
-  textVocab_.setLocale(lang, country, ignorePunctuation);
-  configurationJson_["locale"]["language"] = lang;
-  configurationJson_["locale"]["country"] = country;
-  configurationJson_["locale"]["ignore-punctuation"] = ignorePunctuation;
+  vocab_.setLocale(configVariables.localLang_, configVariables.localCountry_,
+                   configVariables.localIgnorePunctuation_);
+  textVocab_.setLocale(configVariables.localLang_,
+                       configVariables.localCountry_,
+                       configVariables.localIgnorePunctuation_);
+  configurationJson_["locale"]["language"] = configVariables.localLang_;
+  configurationJson_["locale"]["country"] = configVariables.localCountry_;
+  configurationJson_["locale"]["ignore-punctuation"] =
+      configVariables.localIgnorePunctuation_;
 
-  vocab_.initializeInternalizedLangs(languagesInternal);
-  configurationJson_["languages-internal"] = languagesInternal;
+  vocab_.initializeInternalizedLangs(configVariables.languagesInternal_);
+  configurationJson_["languages-internal"] = configVariables.languagesInternal_;
 
   if (onlyAsciiTurtlePrefixes_) {
     LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
@@ -1114,7 +1119,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   }
 
   turtleParserIntegerOverflowBehavior_ =
-      overflowMap.at(parserIntegerOverflowBehavior);
+      turtleParserIntegerOverflowBehaviorMap_.at(
+          configVariables.parserIntegerOverflowBehavior_);
 
   // Logging used configuration options.
   LOG(INFO)
