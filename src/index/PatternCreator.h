@@ -104,7 +104,7 @@ class PatternCreatorNew {
     bool isInternal_;
   };
   ad_utility::BufferedVector<TripleAndIsInternal> tripleBuffer_;
-  PSOSorter additionalTriplesPsoSorter_;
+  std::unique_ptr<PSOSorter> additionalTriplesPsoSorter_;
   std::unique_ptr<OSPSorter4Cols> ospSorterTriplesWithPattern_;
 
   // The predicates which have already occured in one of the patterns. Needed to
@@ -125,9 +125,9 @@ class PatternCreatorNew {
       : filename_{basename},
         patternSerializer_{{basename}},
         tripleBuffer_(100'000, basename + ".tripleBufferForPatterns.dat"),
-        additionalTriplesPsoSorter_{basename + ".additionalTriples.pso.dat",
-                                    memoryLimit / 2,
-                                    ad_utility::makeUnlimitedAllocator<Id>()},
+        additionalTriplesPsoSorter_{std::make_unique<PSOSorter>(
+            basename + ".additionalTriples.pso.dat", memoryLimit / 2,
+            ad_utility::makeUnlimitedAllocator<Id>())},
         ospSorterTriplesWithPattern_{std::make_unique<OSPSorter4Cols>(
             basename + ".withPatterns.osp.dat", memoryLimit / 2,
             ad_utility::makeUnlimitedAllocator<Id>())} {
@@ -163,7 +163,7 @@ class PatternCreatorNew {
                                    CompactVectorOfStrings<Id>& patterns);
 
   // Move the sorted `has-pattern` and `has-predicate` triples out.
-  PSOSorter&& getHasPatternSortedByPSO() && {
+  std::unique_ptr<PSOSorter>&& getHasPatternSortedByPSO() && {
     finish();
     return std::move(additionalTriplesPsoSorter_);
   }

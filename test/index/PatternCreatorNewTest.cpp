@@ -154,8 +154,8 @@ TEST(PatternCreatorNew, writeAndReadWithFinish) {
   creator.finish();
 
   assertPatternContents(
-      filename,
-      getVectorFromSorter(std::move(creator).getHasPatternSortedByPSO()));
+      filename, getVectorFromSorter(
+                    std::move(*std::move(creator).getHasPatternSortedByPSO())));
   ad_utility::deleteFile(filename);
 }
 
@@ -166,8 +166,8 @@ TEST(PatternCreatorNew, writeAndReadWithDestructor) {
     PatternCreatorNew creator{filename, memForStxxl};
     createExamplePatterns(creator);
     // the extraction of the sorter automatically calls `finish`.
-    triples =
-        getVectorFromSorter(std::move(creator).getHasPatternSortedByPSO());
+    triples = getVectorFromSorter(
+        std::move(*std::move(creator).getHasPatternSortedByPSO()));
   }
 
   assertPatternContents(filename, triples);
@@ -181,8 +181,8 @@ TEST(PatternCreatorNew, writeAndReadWithDestructorAndFinish) {
     PatternCreatorNew creator{filename, memForStxxl};
     createExamplePatterns(creator);
     creator.finish();
-    triples =
-        getVectorFromSorter(std::move(creator).getHasPatternSortedByPSO());
+    triples = getVectorFromSorter(
+        std::move(*std::move(creator).getHasPatternSortedByPSO()));
   }
 
   assertPatternContents(filename, triples);

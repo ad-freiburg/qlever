@@ -174,38 +174,8 @@ void IndexImpl::createFromFile(const string& filename) {
     // Load all permutations and also load the patterns. In this case the
     // `createFirstPermutationPair` function returns the next sorter, already
     // enriched with the patterns of the subjects in the triple.
-    auto secondSorter =
-        createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
-                                   std::move(firstSorterWithUnique));
-    // We have one additional column (the patterns).
-    auto thirdSorter =
-        makeSorter<ThirdPermutation, NumColumnsIndexBuilding + 1>("third");
-    createSecondPermutationPair(NumColumnsIndexBuilding + 1, isQleverInternalId,
-                                secondSorter.value()->getSortedBlocks<0>(),
-                                thirdSorter);
-    secondSorter.value()->clear();
-    createThirdPermutationPair(NumColumnsIndexBuilding + 1, isQleverInternalId,
-                               thirdSorter.getSortedBlocks<0>());
-  if (!loadAllPermutations_) {
-    auto secondSorter =
-        createFirstPermutationPair(NumColumnsIndexBuilding, isInternalId,
-                                   std::move(firstSorterWithUnique));
-    configurationJson_["has-all-permutations"] = false;
-  } else if (loadAllPermutations_ && !usePatterns_) {
-    auto secondSorter = makeSorter<SecondPermutation>("second");
-    createFirstPermutationPair(NumColumnsIndexBuilding, isInternalId,
-                               std::move(firstSorterWithUnique), secondSorter);
-    auto thirdSorter = makeSorter<ThirdPermutation>("third");
-    createSecondPermutationPair(NumColumnsIndexBuilding, isInternalId,
-                                secondSorter.getSortedBlocks<0>(), thirdSorter);
-    secondSorter.clear();
-    createThirdPermutationPair(NumColumnsIndexBuilding, isInternalId,
-                               thirdSorter.getSortedBlocks<0>());
-    configurationJson_["has-all-permutations"] = true;
-
-  } else if (loadAllPermutations_) {
     auto [secondSorter, patternsPSO] =
-        createFirstPermutationPair(NumColumnsIndexBuilding, isInternalId,
+        createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                    std::move(firstSorterWithUnique))
             .value();
     auto makePtrAndBool = [](auto range)
@@ -304,10 +274,10 @@ void IndexImpl::createFromFile(const string& filename) {
     // auto opsViewWithBothPatternColumns = std::views::join(blockGenerator);
     auto thirdSorter =
         makeSorter<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
-    createSecondPermutationPair(NumColumnsIndexBuilding + 2, isInternalId,
+    createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
                                 std::move(blockGenerator), thirdSorter);
     secondSorter->clear();
-    createThirdPermutationPair(NumColumnsIndexBuilding + 2, isInternalId,
+    createThirdPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
                                thirdSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   }
@@ -1536,14 +1506,17 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-std::optional<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>>
+std::optional<std::pair<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>,
+                        std::unique_ptr<PatternCreatorNew::PSOSorter>>>
 IndexImpl::createSPOAndSOP(size_t numColumns, auto& isInternalId,
                            BlocksOfTriples sortedTriples,
                            NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
   auto numSubjectCounter =
       makeNumDistinctIdsCounter<0>(numSubjectsNormal, isInternalId);
-  std::optional<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>> result;
+  std::optional<std::pair<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>,
+                          std::unique_ptr<PatternCreatorNew::PSOSorter>>>
+      result;
   if (usePatterns_) {
     // We will return the next sorter.
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 0);
@@ -1568,7 +1541,9 @@ IndexImpl::createSPOAndSOP(size_t numColumns, auto& isInternalId,
     patternCreator.finish();
     configurationJson_["num-subjects-normal"] = numSubjectsNormal;
     writeConfiguration();
-    result = std::move(patternCreator).getAllTriplesWithPatternSortedByOSP();
+    result = std::pair{
+        std::move(patternCreator).getAllTriplesWithPatternSortedByOSP(),
+        std::move(patternCreator).getHasPatternSortedByPSO()};
   } else {
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     createPermutationPair(numColumns, AD_FWD(sortedTriples), spo_, sop_,
