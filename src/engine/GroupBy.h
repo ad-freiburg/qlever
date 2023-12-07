@@ -156,19 +156,6 @@ class GroupBy : public Operation {
   // `?z`.
   bool computeGroupByForJoinWithFullScan(IdTable* result);
 
-  // Create result IdTable by using a HashMap mapping groups to aggregation data
-  // and subsequently calling `createResultFromHashMap`.
-  template <size_t OUT_WIDTH, size_t numAggregates>
-  void computeGroupByForHashMapOptimization(
-      IdTable* result, const std::vector<Aggregate>& aggregates,
-      const IdTable& subresult, size_t columnIndex,
-      const LocalVocab* localVocab);
-
-  // Required data to perform HashMap optimization.
-  struct HashMapOptimizationData {
-    size_t subtreeColumnIndex_;
-  };
-
   // Data to perform the AVG aggregation using the HashMap optimization.
   struct AverageAggregationData {
     bool error_ = false;
@@ -181,7 +168,7 @@ class GroupBy : public Operation {
         sum_ += *dval;
       else
         error_ = true;
-      count_++;
+      ++count_;
     };
     [[nodiscard]] ValueId calculateResult() const {
       if (error_)
@@ -195,22 +182,136 @@ class GroupBy : public Operation {
   template <size_t numAggregates>
   using ValueType = std::array<AverageAggregationData, numAggregates>;
 
+  // Stores information required for substitution of an expression in an
+  // expression tree.
+  struct ParentAndChildIndex {
+    sparqlExpression::SparqlExpression* parent_;
+    size_t nThChild_;
+
+    ParentAndChildIndex(sparqlExpression::SparqlExpression* parent,
+                        size_t nThChild)
+        : parent_{parent}, nThChild_{nThChild} {
+      AD_CONTRACT_CHECK(parent != nullptr);
+    }
+  };
+
+  // Stores information required for evaluation of an aggregate as well
+  // as the alias containing it.
+  struct HashMapAggregateInformation {
+    // The expression of this aggregate.
+    sparqlExpression::SparqlExpression* expr_;
+    // The index in the `std::array` of the Hash Map where results of this
+    // aggregate are stored.
+    size_t hashMapIndex_;
+    // The parent expression of this aggregate, and the index this expression
+    // appears in the parents' children, so that it may be substituted away.
+    std::optional<ParentAndChildIndex> parentAndIndex_ = std::nullopt;
+
+    HashMapAggregateInformation(
+        sparqlExpression::SparqlExpression* expr, size_t hashMapIndex,
+        std::optional<ParentAndChildIndex> parentAndIndex = std::nullopt)
+        : expr_{expr},
+          hashMapIndex_{hashMapIndex},
+          parentAndIndex_{parentAndIndex} {
+      AD_CONTRACT_CHECK(expr != nullptr);
+    }
+  };
+
+  // Stores alias information, especially all aggregates contained
+  // in an alias.
+  struct HashMapAliasInformation {
+    // The expression of this alias.
+    sparqlExpression::SparqlExpressionPimpl expr_;
+    // The column where the result will be stored in the output.
+    size_t outCol_;
+    // Information about all aggregates contained in this alias.
+    std::vector<HashMapAggregateInformation> aggregateInfo_;
+  };
+
+  // Required data to perform HashMap optimization.
+  struct HashMapOptimizationData {
+    // The index of the column that is grouped by.
+    size_t subtreeColumnIndex_;
+    // All aliases and the aggregates they contain.
+    std::vector<HashMapAliasInformation> aggregateAliases_;
+    // The total number of aggregates.
+    size_t numAggregates_;
+  };
+
+  // Create result IdTable by using a HashMap mapping groups to aggregation data
+  // and subsequently calling `createResultFromHashMap`.
+  template <size_t OUT_WIDTH, size_t numAliases, size_t numAggregates>
+  void computeGroupByForHashMapOptimization(
+      IdTable* result, std::vector<HashMapAliasInformation>& aggregateAliases,
+      const IdTable& subresult, size_t columnIndex, LocalVocab* localVocab);
+
   // Sort the HashMap by key and create result table.
-  template <size_t OUT_WIDTH, size_t numAggregates>
-  void createResultFromHashMap(IdTable* result,
-                               const ad_utility::HashMapWithMemoryLimit<
-                                   KeyType, ValueType<numAggregates>>& map);
+  template <size_t OUT_WIDTH, size_t numAliases, size_t numAggregates>
+  void createResultFromHashMap(
+      IdTable* result,
+      const ad_utility::HashMapWithMemoryLimit<KeyType,
+                                               ValueType<numAggregates>>& map,
+      std::vector<HashMapAliasInformation>& aggregateAliases,
+      LocalVocab* localVocab);
 
   // Check if hash map optimization is applicable. This is the case when
   // the following conditions hold true:
   // - Runtime parameter is set
   // - Child operation is SORT
-  // - Only top-level aggregations
   // - All aggregates are AVG
-  // - Maximum 5 aggregates
+  // - Maximum 5 aliases and 5 aggregates
   // - Only one grouped variable
   std::optional<HashMapOptimizationData> checkIfHashMapOptimizationPossible(
-      const std::vector<Aggregate>& aggregates);
+      std::vector<Aggregate>& aggregates);
+
+  // Extract values from `expressionResult` and store them in the rows of
+  // `resultTable` specified by the indices in `evaluationContext`, in column
+  // `outCol`.
+  static void extractValues(
+      sparqlExpression::ExpressionResult&& expressionResult,
+      sparqlExpression::EvaluationContext& evaluationContext,
+      IdTable* resultTable, LocalVocab* localVocab, size_t outCol);
+
+  // In case of aliases that contain an aggregate at the top-level of the
+  // expression tree, e.g. "AVG(?y) as ?avg", we can directly store the values
+  // calculated in our HashMap in the result table.
+  template <size_t numAggregates>
+  sparqlExpression::VectorWithMemoryLimit<ValueId> extractValuesDirectlyFromMap(
+      size_t beginIndex, size_t endIndex,
+      const ad_utility::HashMapWithMemoryLimit<KeyType,
+                                               ValueType<numAggregates>>& map,
+      IdTable* resultTable, size_t hashMapIndex, size_t outCol);
+
+  // Substitute the results for all aggregates in `info`. The values of the
+  // grouped variable should be at column 0 in `groupValues`.
+  template <size_t numAggregates>
+  void substituteAllAggregates(
+      std::vector<HashMapAggregateInformation>& info,
+      sparqlExpression::EvaluationContext& evaluationContext,
+      const ad_utility::HashMapWithMemoryLimit<KeyType,
+                                               ValueType<numAggregates>>& map,
+      IdTable* resultTable);
+
+  // Check if an expression is of a certain type.
+  template <class T>
+  static bool hasType(sparqlExpression::SparqlExpression* expr);
+
+  // Check if an expression is a currently supported aggregate.
+  // TODO<kcaliban> As soon as all aggregates are supported, implement and use a
+  //                `isAggregate` function in SparqlExpressions instead.
+  static bool isSupportedAggregate(sparqlExpression::SparqlExpression* expr);
+
+  // Find all aggregates for expression `expr`. Return `std::nullopt`
+  // if an unsupported aggregate is found.
+  // TODO<kcaliban> Remove std::optional as soon as all aggregates are supported
+  static std::optional<std::vector<HashMapAggregateInformation>> findAggregates(
+      sparqlExpression::SparqlExpression* expr);
+
+  // The recursive implementation of `findAggregates` (see above).
+  static bool findAggregatesImpl(
+      sparqlExpression::SparqlExpression* parent,
+      sparqlExpression::SparqlExpression* expr, std::optional<size_t> index,
+      std::vector<HashMapAggregateInformation>& info);
 
   // The check whether the optimization just described can be applied and its
   // actual computation are split up in two functions. This struct contains
