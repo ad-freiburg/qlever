@@ -149,7 +149,8 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
 
   ASSERT_EQ(metaData.size(), inputs.size());
 
-  auto cancellationHandle = std::make_shared<ad_utility::CancellationHandle>();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
   // Check the contents of the metadata.
 
   auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(

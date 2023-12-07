@@ -27,8 +27,7 @@
 class QueryExecutionTree;
 
 class Operation {
-  using SharedCancellationHandle =
-      std::shared_ptr<ad_utility::CancellationHandle>;
+  using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using Milliseconds = std::chrono::milliseconds;
 
  public:

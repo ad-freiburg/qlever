@@ -485,6 +485,21 @@ class CompressedExternalIdTable
   }
 };
 
+// A virtual base class for the `CompressedExternalIdTableSorter` (see below)
+// that type-erases the used comparator as well as the statically known number
+// of columns. The interface only deals in blocks, so that the costs of the
+// virtual calls and the checking of the correct number of columns disappear.
+class CompressedExternalIdTableSorterTypeErased {
+ public:
+  // Push a complete block at once.
+  virtual void pushBlock(const IdTableStatic<0>& block) = 0;
+  // Get the sorted output after all blocks have been pushed. If `blocksize ==
+  // nullopt`, the size of the returned blocks will be chosen automatically.
+  virtual cppcoro::generator<IdTableStatic<0>> getSortedOutput(
+      std::optional<size_t> blocksize = std::nullopt) = 0;
+  virtual ~CompressedExternalIdTableSorterTypeErased() = default;
+};
+
 // This class allows the external (on-disk) sorting of an `IdTable` that is too
 // large to be stored in RAM. `NumStaticCols == 0` means that the IdTable is
 // stored dynamically (see `IdTable.h` and `CallFixedSize.h` for details). The
@@ -519,7 +534,8 @@ BlockSorter(Comparator) -> BlockSorter<Comparator>;
 template <typename Comparator, size_t NumStaticCols>
 class CompressedExternalIdTableSorter
     : public CompressedExternalIdTableBase<NumStaticCols,
-                                           BlockSorter<Comparator>> {
+                                           BlockSorter<Comparator>>,
+      public CompressedExternalIdTableSorterTypeErased {
  private:
   using Base =
       CompressedExternalIdTableBase<NumStaticCols, BlockSorter<Comparator>>;
@@ -559,6 +575,10 @@ class CompressedExternalIdTableSorter
                                         memory, std::move(allocator),
                                         blocksizeCompression, comp) {}
 
+  // Explicitly inherit the `push` function, such that we can use it unqualified
+  // within this class.
+  using Base::push;
+
   // Transition from the input phase, where `push()` can be called, to the
   // output phase and return a generator that yields the sorted elements one by
   // one. Either this function or the following function must be called exactly
@@ -585,6 +605,21 @@ class CompressedExternalIdTableSorter
       co_yield block;
     }
     mergeIsActive_.store(false);
+  }
+
+  // The implementation of the type-erased interface. Push a complete block at
+  // once.
+  void pushBlock(const IdTableStatic<0>& block) override {
+    AD_CONTRACT_CHECK(block.numColumns() == this->numColumns_);
+    std::ranges::for_each(block,
+                          [ptr = this](const auto& row) { ptr->push(row); });
+  }
+
+  // The implementation of the type-erased interface. Get the sorted blocks as
+  // dynamic IdTables.
+  cppcoro::generator<IdTableStatic<0>> getSortedOutput(
+      std::optional<size_t> blocksize) override {
+    return getSortedBlocks<0>(blocksize);
   }
 
  private:

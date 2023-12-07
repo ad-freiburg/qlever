@@ -503,14 +503,14 @@ ad_utility::websocket::OwningQueryId Server::getQueryId(
 
 auto Server::cancelAfterDeadline(
     const net::any_io_executor& executor,
-    std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
+    std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
     TimeLimit timeLimit)
     -> ad_utility::InvocableWithExactReturnType<void> auto {
   auto strand = net::make_strand(executor);
   auto timer = std::make_shared<net::steady_timer>(strand, timeLimit);
 
   auto cancelAfterTimeout =
-      [](std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
+      [](std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
          std::shared_ptr<net::steady_timer> timer) -> net::awaitable<void> {
     // Ignore cancellation exceptions, they are normal
     co_await timer->async_wait(net::as_tuple(net::use_awaitable));
@@ -533,6 +533,7 @@ auto Server::setupCancellationHandle(
     const std::shared_ptr<Operation>& rootOperation, TimeLimit timeLimit) const
     -> ad_utility::InvocableWithExactReturnType<void> auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
+  cancellationHandle->startWatchDog();
   AD_CORRECTNESS_CHECK(cancellationHandle);
   rootOperation->recursivelySetCancellationHandle(
       std::move(cancellationHandle));
@@ -658,6 +659,8 @@ boost::asio::awaitable<void> Server::processQuery(
     // (tsv, csv, octet-stream, turtle).
     auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
       auto responseGenerator = co_await computeInNewThread([&] {
+        queryRegistry_.getCancellationHandle(messageSender.getQueryId())
+            ->resetWatchDogState();
         return ExportQueryExecutionTrees::computeResultAsStream(
             plannedQuery.value().parsedQuery_, qet, mediaType);
       });

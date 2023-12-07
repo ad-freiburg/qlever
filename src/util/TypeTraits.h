@@ -118,7 +118,7 @@ concept SimilarTo = isSimilar<T, U>;
 
 /// True iff `T` is similar (see above) to any of the `Ts...`.
 template <typename T, typename... Ts>
-constexpr static bool isTypeAnyOf = (... || isSimilar<T, Ts>);
+concept isTypeAnyOf = (... || isSimilar<T, Ts>);
 
 /// isTypeContainedIn<T, U> It is true iff type U is a pair, tuple or variant
 /// and T `isSimilar` (see above) to one of the types contained in the tuple,
