@@ -194,7 +194,7 @@ void TransitivePath::computeTransitivePathBound(
       dynSub, startSide, targetSide, startSideTable);
 
   Map hull(allocator());
-  //Map hull;
+  // Map hull;
   if (!targetSide.isVariable()) {
     hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value_));
   } else {
@@ -390,10 +390,8 @@ TransitivePath::Map TransitivePath::transitiveHull(
       checkCancellation();
       size_t stackIndex = positions.size() - 1;
       // Process the next child of the node at the top of the stack
-      Set::const_iterator& pos =
-          positions[stackIndex];
-      const Set* nodeEdges =
-          edgeCache.back();
+      Set::const_iterator& pos = positions[stackIndex];
+      const Set* nodeEdges = edgeCache.back();
 
       if (pos == nodeEdges->end()) {
         // We finished processing this node

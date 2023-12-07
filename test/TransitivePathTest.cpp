@@ -5,16 +5,15 @@
 #include <gtest/gtest.h>
 
 #include <array>
-#include <string>
-#include <vector>
 
+#include "./IndexTestHelpers.h"
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/TransitivePath.h"
 #include "global/Id.h"
 
-using ad_utility::testing::makeAllocator;
 using ad_utility::testing::getQec;
+using ad_utility::testing::makeAllocator;
 namespace {
 auto V = ad_utility::testing::VocabId;
 
