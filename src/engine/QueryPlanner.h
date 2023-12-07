@@ -36,36 +36,36 @@ class QueryPlanner {
     TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
 
     struct Node {
-      Node(size_t id, SparqlTriple t) : _id(id), _triple(std::move(t)) {
-        if (isVariable(_triple._s)) {
-          _variables.insert(_triple._s.getVariable());
+      Node(size_t id, SparqlTriple t) : id_(id), triple_(std::move(t)) {
+        if (isVariable(triple_._s)) {
+          _variables.insert(triple_._s.getVariable());
         }
-        if (isVariable(_triple._p)) {
-          _variables.insert(Variable{_triple._p._iri});
+        if (isVariable(triple_._p)) {
+          _variables.insert(Variable{triple_._p._iri});
         }
-        if (isVariable(_triple._o)) {
-          _variables.insert(_triple._o.getVariable());
+        if (isVariable(triple_._o)) {
+          _variables.insert(triple_._o.getVariable());
         }
       }
 
-      Node(size_t id, const Variable& cvar, const std::string& word,
+      Node(size_t id, const Variable cvar, const std::string word,
            SparqlTriple t)
-          : _id(id),
+          : id_(id),
             // TODO<joka921> What is this triple used for? If it is just a
             // dummy, then we can replace it by a `variant<Triple,
             // TextNodeData>`.
-            _triple(std::move(t)),
-            _cvar(cvar),
-            _wordPart(word) {
-        _variables.insert(cvar);
-        if (isVariable(_triple._s)) {
-          _variables.insert(_triple._s.getVariable());
+            triple_(std::move(t)),
+            cvar_(std::move(cvar)),
+            wordPart_(std::move(word)) {
+        _variables.insert(cvar_.value());
+        if (isVariable(triple_._s)) {
+          _variables.insert(triple_._s.getVariable());
         }
-        if (isVariable(_triple._p)) {
-          _variables.insert(Variable{_triple._p._iri});
+        if (isVariable(triple_._p)) {
+          _variables.insert(Variable{triple_._p._iri});
         }
-        if (isVariable(_triple._o)) {
-          _variables.insert(_triple._o.getVariable());
+        if (isVariable(triple_._o)) {
+          _variables.insert(triple_._o.getVariable());
         }
       }
 
@@ -76,32 +76,32 @@ class QueryPlanner {
       // Returns true if the two nodes equal apart from the id
       // and the order of variables
       bool isSimilar(const Node& other) const {
-        return _triple == other._triple && _cvar == other._cvar &&
-               _wordPart == other._wordPart && _variables == other._variables;
+        return triple_ == other.triple_ && cvar_ == other.cvar_ &&
+               wordPart_ == other.wordPart_ && _variables == other._variables;
       }
 
-      bool isTextNode() const { return _cvar.has_value(); }
+      bool isTextNode() const { return cvar_.has_value(); }
 
       friend std::ostream& operator<<(std::ostream& out, const Node& n) {
-        out << "id: " << n._id << " triple: " << n._triple.asString()
+        out << "id: " << n.id_ << " triple: " << n.triple_.asString()
             << " vars_ ";
         for (const auto& s : n._variables) {
           out << s.name() << ", ";
         }
         // TODO<joka921> Should the `cvar` and the `wordPart` be stored
         // together?
-        if (n._cvar.has_value()) {
-          out << " cvar " << n._cvar.value().name() << " wordPart "
-              << n._wordPart.value();
+        if (n.cvar_.has_value()) {
+          out << " cvar " << n.cvar_.value().name() << " wordPart "
+              << n.wordPart_.value();
         }
         return out;
       }
 
-      size_t _id;
-      SparqlTriple _triple;
+      size_t id_;
+      SparqlTriple triple_;
       ad_utility::HashSet<Variable> _variables;
-      std::optional<Variable> _cvar = std::nullopt;
-      std::optional<std::string> _wordPart = std::nullopt;
+      std::optional<Variable> cvar_ = std::nullopt;
+      std::optional<std::string> wordPart_ = std::nullopt;
     };
 
     // Allows for manually building triple graphs for testing

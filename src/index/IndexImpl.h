@@ -334,20 +334,26 @@ class IndexImpl {
   Index::WordEntityPostings getContextEntityScoreListsForWords(
       const string& words) const;
 
-  // Returns a superset of textRecords and their corresponding words
-  // and scores. Each textRecord has to contain the term.
+  // Returns a subset of textRecords and their corresponding words
+  // and scores. Words can be the term itself or words that have the term as a
+  // prefix. Each textRecord contains its corresponding word. Returns a
+  // WordEntityPosting. Sorted by textRecord.
   Index::WordEntityPostings getWordPostingsForTermWep(const string& term) const;
 
-  // Returns a superset of textRecords and their corresponding words
-  // and scores. Each textRecord has to contain the term.
+  // Returns a subset of textRecords and their corresponding words. Words can be
+  // the term itself or words that have the term as a prefix. Each textRecord
+  // contains its corresponding word. Returned IdTable has columns: textRecord,
+  // word. Sorted by textRecord.
   IdTable getWordPostingsForTerm(
       const string& term,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   Index::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
 
-  // Returns a superset of textRecords and their corresponding entities and
-  // scores. Each textRecord has to contain the term.
+  // Returns a subset of textRecords and their corresponding entities and
+  // scores. Each textRecord contains its corresponding entity and the term.
+  // Returned IdTable has columns: textRecord, entity, score. Sorted by
+  // textRecord.
   IdTable getEntityMentionsForWord(
       const string& term,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;

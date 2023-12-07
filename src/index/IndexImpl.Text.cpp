@@ -806,8 +806,7 @@ Index::WordEntityPostings IndexImpl::readWordClWep(
 IdTable IndexImpl::readWordCl(
     const TextBlockMetaData& tbmd,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  IdTable idTable{allocator};
-  idTable.setNumColumns(2);
+  IdTable idTable{2, allocator};
   vector<TextRecordIndex> cids = readGapComprList<TextRecordIndex>(
       tbmd._cl._nofElements, tbmd._cl._startContextlist,
       static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),
@@ -851,8 +850,7 @@ Index::WordEntityPostings IndexImpl::readWordEntityClWep(
 IdTable IndexImpl::readWordEntityCl(
     const TextBlockMetaData& tbmd,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  IdTable idTable{allocator};
-  idTable.setNumColumns(3);
+  IdTable idTable{3, allocator};
   vector<TextRecordIndex> cids = readGapComprList<TextRecordIndex>(
       tbmd._entityCl._nofElements, tbmd._entityCl._startContextlist,
       static_cast<size_t>(tbmd._entityCl._startWordlist -
