@@ -4,10 +4,8 @@
 
 #pragma once
 
-#include <sys/timeb.h>
-#include <time.h>
-
 #include <chrono>
+#include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <locale>
@@ -17,7 +15,7 @@
 #include "./StringUtils.h"
 
 #ifndef LOGLEVEL
-#define LOGLEVEL 3
+#define LOGLEVEL INFO
 #endif
 
 #define LOG(x)      \
@@ -26,22 +24,22 @@
   else              \
     ad_utility::Log::getLog<x>()  // NOLINT
 
-#define AD_POS_IN_CODE                                                     \
-  '[' << ad_utility::getLastPartOfString(__FILE__, '/') << ':' << __LINE__ \
-      << "] "  // NOLINT
+enum class LogLevel {
+  FATAL = 0,
+  ERROR = 1,
+  WARN = 2,
+  INFO = 3,
+  DEBUG = 4,
+  TIMING = 5,
+  TRACE = 6
+};
 
-static constexpr size_t TRACE = 6;
-static constexpr size_t TIMING = 5;
-static constexpr size_t DEBUG = 4;
-static constexpr size_t INFO = 3;
-static constexpr size_t WARN = 2;
-static constexpr size_t ERROR = 1;
-static constexpr size_t FATAL = 0;
+using enum LogLevel;
 
 namespace ad_utility {
 /* A singleton (According to Scott Meyer's pattern that holds
- * a pointer to a single std::ostream. This enables us to globally
- * redirect the LOG(LEVEL) Makros to another location.
+ * a pointer to a single std::ostream). This enables us to globally
+ * redirect the LOG(LEVEL) macros to another location.
  */
 struct LogstreamChoice {
   std::ostream& getStream() { return *_stream; }
@@ -101,7 +99,7 @@ inline string to_string(long in) {
 //! Log
 class Log {
  public:
-  template <unsigned char LEVEL>
+  template <LogLevel LEVEL>
   static std::ostream& getLog() {
     // use the singleton logging stream as target.
     return LogstreamChoice::get().getStream()
@@ -123,28 +121,24 @@ class Log {
     return std::move(ss).str();
   }
 
-  template <unsigned char LEVEL>
-  static string getLevel() {
-    if (LEVEL == TRACE) {
+  template <LogLevel LEVEL>
+  static constexpr std::string_view getLevel() {
+    if constexpr (LEVEL == TRACE) {
       return "TRACE: ";
-    }
-    if (LEVEL == TIMING) {
+    } else if constexpr (LEVEL == TIMING) {
       return "TIMING: ";
-    }
-    if (LEVEL == DEBUG) {
+    } else if constexpr (LEVEL == DEBUG) {
       return "DEBUG: ";
-    }
-    if (LEVEL == INFO) {
+    } else if constexpr (LEVEL == INFO) {
       return "INFO:  ";
-    }
-    if (LEVEL == WARN) {
+    } else if constexpr (LEVEL == WARN) {
       return "WARN:  ";
-    }
-    if (LEVEL == ERROR) {
+    } else if constexpr (LEVEL == ERROR) {
       return "ERROR: ";
-    }
-    if (LEVEL == FATAL) {
+    } else if constexpr (LEVEL == FATAL) {
       return "FATAL: ";
+    } else {
+      static_assert(ad_utility::alwaysFalse<LEVEL>);
     }
   }
 };
