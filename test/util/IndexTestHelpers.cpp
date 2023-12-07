@@ -48,7 +48,7 @@ void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
   auto checkConsistencyForCol0IdAndPermutation =
       [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx) {
         auto cancellationDummy =
-            std::make_shared<ad_utility::CancellationHandle>();
+            std::make_shared<ad_utility::CancellationHandle<>>();
         auto scanResult =
             index.scan(col0Id, std::nullopt, permutation,
                        std::array{ColumnIndex{2}}, cancellationDummy);
