@@ -64,13 +64,30 @@ bool ConfigManager::HashMapEntry::holdsSubManager() const {
 }
 
 // ____________________________________________________________________________
-std::optional<ConfigOption*> ConfigManager::HashMapEntry::getConfigOption()
-    const {
-  if (holdsConfigOption()) {
-    return std::get_if<ConfigOption>(data_.get());
+template <typename ReturnType>
+requires isTypeContainedIn<ReturnType, ConfigManager::HashMapEntry::Data> &&
+         std::is_object_v<ReturnType> std::optional<ReturnType*>
+ConfigManager::HashMapEntry::getConfigOptionOrSubManager(
+    ad_utility::SimilarTo<ConfigManager::HashMapEntry> auto& instance) {
+  using DecayReturnType = std::decay_t<ReturnType>;
+  /*
+  We cheat a bit, by using `implHolds`, because so we can reduce the amount
+  of needed code by quite a bit.
+  */
+  if (instance.template implHolds<DecayReturnType>()) {
+    return std::get_if<DecayReturnType>(instance.data_.get());
   } else {
     return std::nullopt;
   }
+}
+
+// ____________________________________________________________________________
+std::optional<ConfigOption*> ConfigManager::HashMapEntry::getConfigOption() {
+  return getConfigOptionOrSubManager<ConfigOption>(*this);
+}
+std::optional<const ConfigOption*>
+ConfigManager::HashMapEntry::getConfigOption() const {
+  return getConfigOptionOrSubManager<const ConfigOption>(*this);
 }
 
 // ____________________________________________________________________________
@@ -79,13 +96,45 @@ size_t ConfigManager::HashMapEntry::getInitializationId() const {
 }
 
 // ____________________________________________________________________________
-std::optional<ConfigManager*> ConfigManager::HashMapEntry::getSubManager()
+std::optional<ConfigManager*> ConfigManager::HashMapEntry::getSubManager() {
+  return getConfigOptionOrSubManager<ConfigManager>(*this);
+}
+std::optional<const ConfigManager*> ConfigManager::HashMapEntry::getSubManager()
     const {
-  if (holdsSubManager()) {
-    return std::get_if<ConfigManager>(data_.get());
-  } else {
-    return std::nullopt;
-  }
+  return getConfigOptionOrSubManager<const ConfigManager>(*this);
+}
+
+// ____________________________________________________________________________
+template <typename Visitor>
+requires std::invocable<Visitor, ConfigOption&> &&
+         std::invocable<Visitor, ConfigManager&>
+decltype(auto) ConfigManager::HashMapEntry::visit(Visitor&& vis) {
+  return visitImpl(AD_FWD(vis), data_);
+}
+template <typename Visitor>
+requires std::invocable<Visitor, const ConfigOption&> &&
+         std::invocable<Visitor, const ConfigManager&>
+decltype(auto) ConfigManager::HashMapEntry::visit(Visitor&& vis) const {
+  return visitImpl(AD_FWD(vis), data_);
+}
+
+// ____________________________________________________________________________
+template <
+    typename Visitor,
+    ad_utility::SimilarTo<std::unique_ptr<ConfigManager::HashMapEntry::Data>>
+        PointerType>
+requires std::invocable<
+             Visitor, std::conditional_t<std::is_const_v<PointerType>,
+                                         const ConfigOption&, ConfigOption&>> &&
+         std::invocable<
+             Visitor, std::conditional_t<std::is_const_v<PointerType>,
+                                         const ConfigManager&, ConfigManager&>>
+decltype(auto) ConfigManager::HashMapEntry::visitImpl(Visitor&& vis,
+                                                      PointerType& data) {
+  // Make sure, that it is not a null pointer.
+  AD_CORRECTNESS_CHECK(data);
+
+  return std::visit(AD_FWD(vis), *data);
 }
 
 // ____________________________________________________________________________
@@ -93,7 +142,7 @@ void ConfigManager::verifyHashMapEntry(std::string_view jsonPathToEntry,
                                        const HashMapEntry& entry) {
   // An empty sub manager tends to point to a logic error on the user
   // side.
-  if (const std::optional<ConfigManager*>& ptr = entry.getSubManager();
+  if (const std::optional<const ConfigManager*>& ptr = entry.getSubManager();
       ptr.has_value() && ptr.value()->configurationOptions_.empty()) {
     throw std::runtime_error(
         absl::StrCat("The sub manager at '", jsonPathToEntry,
@@ -102,26 +151,69 @@ void ConfigManager::verifyHashMapEntry(std::string_view jsonPathToEntry,
 }
 
 // ____________________________________________________________________________
-template <ad_utility::InvocableWithExactReturnType<
-    bool, const ConfigManager::HashMapEntry&>
-              Predicate>
-std::vector<std::pair<std::string, const ConfigManager::HashMapEntry&>>
-ConfigManager::allHashMapEntries(
-    const ad_utility::HashMap<std::string, HashMapEntry>& entries,
-    const bool sortByInitialization, std::string_view pathPrefix,
-    const Predicate& predicate) {
+template <typename Visitor>
+requires ad_utility::InvocableWithExactReturnType<
+             Visitor, void, std::string_view, ConfigManager&> &&
+         ad_utility::InvocableWithExactReturnType<
+             Visitor, void, std::string_view, ConfigOption&>
+void ConfigManager::visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
+                                        std::string_view pathPrefix) const {
+  // For less code duplication.
+  using Pair = decltype(configurationOptions_)::value_type;
+
+  // Check the hash map entries before using them.
+  std::ranges::for_each(configurationOptions_, [&pathPrefix](const Pair& pair) {
+    const auto& [jsonPath, hashMapEntry] = pair;
+    verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath), hashMapEntry);
+  });
+
   // `std::reference_wrapper` works with `std::ranges::sort`. `const
-  // HashMapEntry&` does not.
-  std::vector<
-      std::pair<std::string, std::reference_wrapper<const HashMapEntry>>>
+  // Pair&` does not.
+  std::vector<std::reference_wrapper<const Pair>> hashMapEntries(
+      configurationOptions_.begin(), configurationOptions_.end());
+
+  // Sort the collected `HashMapEntry`s, if wanted.
+  if (sortByCreationOrder) {
+    std::ranges::sort(hashMapEntries, {}, [](const Pair& pair) {
+      const HashMapEntry& hashMapEntry = pair.second;
+      return hashMapEntry.getInitializationId();
+    });
+  }
+
+  // Call a wrapper for `vis` with the `HashMapEntry::visit` of every entry.
+  std::ranges::for_each(hashMapEntries, [&vis](const Pair& pair) {
+    auto& [jsonPath, hashMapEntry] = pair;
+    hashMapEntry.visit(
+        [&jsonPath, &vis](auto& data) { std::invoke(vis, jsonPath, data); });
+  });
+}
+
+// ____________________________________________________________________________
+template <typename HashMapType>
+requires SimilarTo<
+             ad_utility::HashMap<std::string, ConfigManager::HashMapEntry>,
+             HashMapType> &&
+         std::is_object_v<HashMapType>
+auto ConfigManager::allHashMapEntries(
+    HashMapType& hashMap, std::string_view pathPrefix,
+    const ad_utility::InvocableWithSimilarReturnType<
+        bool, const HashMapEntry&> auto& predicate)
+    -> std::conditional_t<
+        std::is_const_v<HashMapType>,
+        const std::vector<std::pair<const std::string, const HashMapEntry&>>,
+        std::vector<std::pair<std::string, HashMapEntry&>>> {
+  std::conditional_t<
+      std::is_const_v<HashMapType>,
+      std::vector<std::pair<const std::string, const HashMapEntry&>>,
+      std::vector<std::pair<std::string, HashMapEntry&>>>
       allHashMapEntry;
 
   /*
-  Takes one entry of an instance of `entries`, checks it with
+  Takes one entry of an instance of `hashMap`, checks it with
   `verifyHashMapEntry` and passes it on.
   */
-  auto verifyEntry = [&pathPrefix](const auto& pair) {
-    const auto& [jsonPath, hashMapEntry] = pair;
+  auto verifyEntry = [&pathPrefix](auto& pair) {
+    auto& [jsonPath, hashMapEntry] = pair;
 
     // Check the hash map entry.
     verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath), hashMapEntry);
@@ -131,14 +223,14 @@ ConfigManager::allHashMapEntries(
   };
 
   /*
-  Takes one entry of an instance of `entries`, that was transformed
+  Takes one entry of an instance of `hashMap`, that was transformed
   with `verifyEntry`, and adds the `HashMapEntry`, that can be found inside it,
   together with the paths to them, to `allHashMapEntry`, iff the predicate
   returns true.
   */
   auto addHashMapEntryToCollectedOptions = [&allHashMapEntry, &pathPrefix,
-                                            &predicate](const auto pair) {
-    const auto& [jsonPath, hashMapEntry] = pair;
+                                            &predicate](auto pair) {
+    auto& [jsonPath, hashMapEntry] = pair;
 
     const std::string& pathToCurrentEntry = absl::StrCat(pathPrefix, jsonPath);
 
@@ -149,39 +241,21 @@ ConfigManager::allHashMapEntries(
 
     // Recursively add, if we have a sub manager.
     if (hashMapEntry.holdsSubManager()) {
-      /*
-      Move the recursive results.
-      Note: There is no use in calling with `sortByInitialization` set to true.
-      If there was a config option 'optionA' created, after creating this sub
-      manager and before adding configuration options to this sub manager, then
-      the configuration options of the sub manager would be added to
-      `allHashMapEntries` before 'optionA'.
-      Which is no the creation order.
-      */
+      // Move the recursive results.
       auto recursiveResults = allHashMapEntries(
-          hashMapEntry.getSubManager().value()->configurationOptions_, false,
+          hashMapEntry.getSubManager().value()->configurationOptions_,
           pathToCurrentEntry, predicate);
       allHashMapEntry.reserve(recursiveResults.size());
-      std::ranges::move(recursiveResults, std::back_inserter(allHashMapEntry));
+      std::ranges::move(std::move(recursiveResults),
+                        std::back_inserter(allHashMapEntry));
     }
   };
 
-  // Collect all the entries in the given `entries`.
-  std::ranges::for_each(entries, addHashMapEntryToCollectedOptions,
+  // Collect all the entries in the given `hashMap`.
+  std::ranges::for_each(hashMap, addHashMapEntryToCollectedOptions,
                         verifyEntry);
 
-  // Sort the collected `HashMapEntry`s, if wanted.
-  if (sortByInitialization) {
-    std::ranges::sort(allHashMapEntry, {}, [](const auto& pair) {
-      const auto& [jsonPath, hashMapEntry] = pair;
-      return hashMapEntry.get().getInitializationId();
-    });
-  }
-
-  return ad_utility::transform(std::move(allHashMapEntry), [](auto&& pair) {
-    return std::pair<std::string, const ConfigManager::HashMapEntry&>(
-        AD_FWD(pair).first, pair.second.get());
-  });
+  return allHashMapEntry;
 }
 
 // ____________________________________________________________________________
@@ -190,31 +264,28 @@ requires std::same_as<ReturnReference, ConfigOption&> ||
          std::same_as<ReturnReference, const ConfigOption&>
 std::vector<std::pair<std::string, ReturnReference>>
 ConfigManager::configurationOptionsImpl(
-    const ad_utility::HashMap<std::string, HashMapEntry>& configurationOptions,
-    const bool sortByInitialization) {
+    SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>> auto&
+        configurationOptions) {
   return ad_utility::transform(
       allHashMapEntries(
-          configurationOptions, sortByInitialization, "",
+          configurationOptions, "",
           [](const HashMapEntry& entry) { return entry.holdsConfigOption(); }),
       [](auto&& pair) {
         return std::pair<std::string, ReturnReference>(
             AD_FWD(pair).first, *pair.second.getConfigOption().value());
       });
-  ;
 }
 
 // ____________________________________________________________________________
 std::vector<std::pair<std::string, ConfigOption&>>
-ConfigManager::configurationOptions(const bool sortByInitialization) {
-  return configurationOptionsImpl<ConfigOption&>(configurationOptions_,
-                                                 sortByInitialization);
+ConfigManager::configurationOptions() {
+  return configurationOptionsImpl<ConfigOption&>(configurationOptions_);
 }
 
 // ____________________________________________________________________________
 std::vector<std::pair<std::string, const ConfigOption&>>
-ConfigManager::configurationOptions(const bool sortByInitialization) const {
-  return configurationOptionsImpl<const ConfigOption&>(configurationOptions_,
-                                                       sortByInitialization);
+ConfigManager::configurationOptions() const {
+  return configurationOptionsImpl<const ConfigOption&>(configurationOptions_);
 }
 
 // ____________________________________________________________________________
@@ -252,8 +323,8 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
   }
 
   /*
-  A string must be a valid `NAME` in the short hand. Otherwise, an option can't
-  get accessed with the short hand.
+  A string must be a valid `NAME` in the short hand. Otherwise, an option
+  can't get accessed with the short hand.
   */
   if (auto failedKey = std::ranges::find_if_not(path, isNameInShortHand);
       failedKey != path.end()) {
@@ -272,11 +343,12 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
   - Same path. Makes it impossible for the user to later identify the correct
   one.
   - Prefix of the path of an already exiting option/manager. This would mean,
-  that the old config option, or sub manager, are part of the new config option,
-  or sub manager from the view of json. This is not allowed for a new config
-  option, because there is currently no support to put config options, or sub
-  managers, inside config options. For a new sub manager it's not allowed,
-  because nesting should be done on the `C++` level, not on the json path level.
+  that the old config option, or sub manager, are part of the new config
+  option, or sub manager from the view of json. This is not allowed for a new
+  config option, because there is currently no support to put config options,
+  or sub managers, inside config options. For a new sub manager it's not
+  allowed, because nesting should be done on the `C++` level, not on the json
+  path level.
   - The path of an already exiting option/manager is a prefix of the new path.
   The reasons, why it's not allowed, are basically the same.
   */
@@ -308,24 +380,25 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
           The general json pointer syntax is `/x1/x2/x3/.../xN`, with all `x`
           valid strings, or natural numbers, in json and `N` a natural number.
           We define a true prefix as `/y1/y2/y3/.../yU`, with `U` a natural
-          number, `U <= N` and `x1 = y1, x2 = y2, ..., xU = yU`. (The grammar of
-          json pointer is a bit more complicated in reality, but this is enough
-          to understand the problem.)
+          number, `U <= N` and `x1 = y1, x2 = y2, ..., xU = yU`. (The grammar
+          of json pointer is a bit more complicated in reality, but this is
+          enough to understand the problem.)
 
           Now, this IS different from a normal string prefix, because it
           requires `xi = yi`, for `all i in [0, U]`, to be EQUAL. A string
           prefix has weaker requirements, because it only requires `xi = yi`,
-          for `all i in [0, U - 1]`, and for `yU` to be a string prefix of `xU`.
-          Example: The json pointer `some/option` is not a prefix of
+          for `all i in [0, U - 1]`, and for `yU` to be a string prefix of
+          `xU`. Example: The json pointer `some/option` is not a prefix of
           `some/options/optionA` in json pointer terms, but in string terms,
           because `"option"` is a prefix of `"options"`.
 
           This can be fixed, by adding the seperator `/` at the end of both
-          string representation. Because the symbol `/` is not allowed in `xi`,
-          for `any i in [0, N]`, but must be between them, it forces all the
-          `xi` and `yi` to be equal.
+          string representation. Because the symbol `/` is not allowed in
+          `xi`, for `any i in [0, N]`, but must be between them, it forces all
+          the `xi` and `yi` to be equal.
 
-          Now, we already covered the equality case, so we only need to add the
+          Now, we already covered the equality case, so we only need to add
+          the
           `/` to the (maybe) prefix, for it to work right.
           */
           return jsonPointerString.starts_with(absl::StrCat(prefix, "/"));
@@ -405,8 +478,8 @@ nlohmann::json ConfigManager::parseShortHand(
   ConfigShorthandParser::ShortHandStringContext* shortHandStringContext{
       parser.shortHandString()};
 
-  // Walk through the parser tree and build the json equivalent out of the short
-  // hand.
+  // Walk through the parser tree and build the json equivalent out of the
+  // short hand.
   return ToJsonConfigShorthandVisitor{}.visitShortHandString(
       shortHandStringContext);
 }
@@ -420,21 +493,21 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
 
   /*
   We can't write something along the lines of `for (const auto& bla :
-  j.flatten().items())` for iteration, because, when iterating over the entries
-  of a `nlohmann::json` object using `items()`, there can be error/problems, IF
-  the life time of the object, on which one called `items()` on, doesn't exceeds
-  the life time of the iteration. (See the nlohmann json documentation for more
-  information.)
+  j.flatten().items())` for iteration, because, when iterating over the
+  entries of a `nlohmann::json` object using `items()`, there can be
+  error/problems, IF the life time of the object, on which one called
+  `items()` on, doesn't exceeds the life time of the iteration. (See the
+  nlohmann json documentation for more information.)
   */
   const auto& jFlattend = j.flatten();
 
   // All the configuration options together with their paths.
   const auto allConfigOptions{[this]() {
     std::vector<std::pair<std::string, ConfigOption&>> allConfigOption =
-        configurationOptions(false);
+        configurationOptions();
 
-    // `absl::flat_hash_map` doesn't allow the values to be l-value references,
-    // but `std::unordered_map` does.
+    // `absl::flat_hash_map` doesn't allow the values to be l-value
+    // references, but `std::unordered_map` does.
     return std::unordered_map<std::string, ConfigOption&>(
         allConfigOption.begin(), allConfigOption.end());
   }()};
@@ -450,8 +523,8 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
     contain paths to entries, that are the same paths as we have saved here?
 
     For example: If on of our paths in `configurationOptions` was
-    `/classA/5/entryNumber5`, then a path like `/clasA/5/entryNumber5`` would be
-    invalid, because of the typo.
+    `/classA/5/entryNumber5`, then a path like `/clasA/5/entryNumber5`` would
+    be invalid, because of the typo.
     */
     for (const auto& item : jFlattend.items()) {
       // Only returns true, if the given pointer is the path to a
@@ -467,8 +540,8 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
       father.
       `currentPtr` is valid if either:
       - It's the exact path to a configuration option
-      - Its father is the exact path to a configuration option, and it points to
-      an array.
+      - Its father is the exact path to a configuration option, and it points
+      to an array.
       */
       const nlohmann::json::json_pointer currentPtr{item.key()};
 
@@ -486,9 +559,9 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   }
 
   /*
-  Alright, time to actually set the configuration options. This will only throw
-  an exception, if a configuration option was given a value of the wrong type,
-  or if it HAD to be set, but wasn't.
+  Alright, time to actually set the configuration options. This will only
+  throw an exception, if a configuration option was given a value of the wrong
+  type, or if it HAD to be set, but wasn't.
   */
   for (auto&& [key, option] : allConfigOptions) {
     // Set the option, if possible, with the pointer to the position of the
@@ -515,93 +588,217 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
 }
 
 // ____________________________________________________________________________
-std::string ConfigManager::printConfigurationDoc(
-    bool printCurrentJsonConfiguration) const {
-  // All the configuration options together with their paths.
-  const std::vector<std::pair<std::string, const ConfigOption&>>
-      allConfigOptions = configurationOptions(true);
+nlohmann::ordered_json ConfigManager::generateConfigurationDocJson(
+    std::string_view pathPrefix) const {
+  nlohmann::ordered_json configurationDocJson;
 
-  // Handeling, for when there are no configuration options.
-  if (allConfigOptions.empty()) {
+  visitHashMapEntries(
+      [&configurationDocJson, &pathPrefix]<typename T>(std::string_view path,
+                                                       T& optionOrSubManager) {
+        /*
+        Pointer to the position of this option, or sub manager, in
+        `configurationDocJson`.
+        */
+        const nlohmann::ordered_json::json_pointer jsonPointer{
+            std::string{path}};
+
+        // Either add the option, or recursively add the sub manager.
+        if constexpr (isSimilar<T, ConfigOption>) {
+          /*
+          Add the paths of `configOptions_` and have them point to either:
+          - The current value of the configuration option. Which is the
+          default value, if the option was never set and has a default value.
+          - A "[must be specified]", if we are not sure, the current
+          value of the configuration option was initialized.
+          */
+          configurationDocJson[jsonPointer] =
+              optionOrSubManager.wasSet() ? optionOrSubManager.getValueAsJson()
+                                          : "[must be specified]";
+        } else if constexpr (isSimilar<T, ConfigManager>) {
+          // `visitHashMapEntries` already checks, that sub manager aren't
+          // empty.
+          configurationDocJson[jsonPointer] =
+              optionOrSubManager.generateConfigurationDocJson(
+                  absl::StrCat(pathPrefix, path));
+        } else {
+          static_assert(ad_utility::alwaysFalse<T>);
+        }
+      },
+      true, pathPrefix);
+
+  return configurationDocJson;
+}
+
+// ____________________________________________________________________________
+std::string ConfigManager::generateConfigurationDocDetailedList(
+    std::string_view pathPrefix,
+    const ConfigurationDocValidatorAssignment& assignment) const {
+  // For collecting the string representations of the hash map entries.
+  std::vector<std::string> stringRepresentations;
+  stringRepresentations.reserve(configurationOptions_.size());
+
+  /*
+  @brief Calls `assignment.getEntriesUnderKey(key)` and  generates the string
+  representation of the returned list of validators.
+  Note:
+  - An empty list will be returned as an empty `std::optional`.
+
+  @param prefix If the list is not empty, this prefix will the added to the
+  front of the string representation.
+  */
+  auto generateValidatorListString =
+      [&assignment](
+          const auto& key,
+          std::string_view stringPrefix) -> std::optional<std::string> {
+    if (const auto& validators = assignment.getEntriesUnderKey(key);
+        !validators.empty()) {
+      // Validators should be sorted by their creation order.
+      AD_CORRECTNESS_CHECK(std::ranges::is_sorted(
+          validators, {}, [](const ConfigOptionValidatorManager& validator) {
+            return validator.getInitializationId();
+          }));
+      return absl::StrCat(
+          stringPrefix, "Required invariants:\n",
+          ad_utility::addIndentation(
+              ad_utility::lazyStrJoin(
+                  ad_utility::transform(
+                      validators,
+                      [](const ConfigOptionValidatorManager& validator) {
+                        return absl::StrCat("- ", validator.getDescription());
+                      }),
+                  "\n"),
+              "    "));
+    } else {
+      return std::nullopt;
+    }
+  };
+
+  visitHashMapEntries(
+      [&pathPrefix, &stringRepresentations, &assignment,
+       &generateValidatorListString]<typename T>(std::string_view path,
+                                                 T& optionOrSubManager) {
+        // Getting rid of the first `/` for printing, based on user feedback.
+        std::string_view adjustedPath = path.substr(1, path.length());
+
+        // Either add the string representation of the option, or recursively
+        // add the sub manager.
+        if constexpr (isSimilar<T, ConfigOption>) {
+          stringRepresentations.emplace_back(
+              absl::StrCat("Option '", adjustedPath, "' [",
+                           optionOrSubManager.getActualValueTypeAsString(),
+                           "]\n", static_cast<std::string>(optionOrSubManager),
+                           generateValidatorListString(optionOrSubManager, "\n")
+                               .value_or("")));
+        } else if constexpr (isSimilar<T, ConfigManager>) {
+          stringRepresentations.emplace_back(absl::StrCat(
+              "Sub manager '", adjustedPath, "'\n",
+              ad_utility::addIndentation(
+                  optionOrSubManager.generateConfigurationDocDetailedList(
+                      absl::StrCat(pathPrefix, path), assignment),
+                  "    ")));
+        } else {
+          static_assert(ad_utility::alwaysFalse<T>);
+        }
+      },
+      true, pathPrefix);
+
+  return absl::StrCat(ad_utility::lazyStrJoin(stringRepresentations, "\n\n"),
+                      generateValidatorListString(*this, "\n\n").value_or(""));
+}
+
+// ____________________________________________________________________________
+auto ConfigManager::getValidatorAssignment() const
+    -> ConfigurationDocValidatorAssignment {
+  /*
+  First thing, we need to create a `ConfigurationDocValidatorAssignment`.
+
+  Our current strategy for assigning the the printing the of the
+  `ConfigOptionValidatorManager` is:
+  - Validator, that only check a single configuration option, are printed
+  together with that option.
+  - The remaining validators, are printed together with the configuration
+  manager, that hold them.
+  - Any list of `ConfigOptionValidatorManager` is sorted by their creation
+  order.
+
+  To do that, we first get all the validators sorted by their creation order,
+  collect the ones, who only check one option, and assign those to that
+  option, in that order.
+  Then we collect all `ConfigManager`, including this instance, and assign
+  their held validators to them in the same order, as they saved them, unless
+  a validator was already assigned, in which case we skip it. `ConfigManager`
+  always add a newly created validator to the end of a vector, so they should
+  already be ordered by creation, if we only look at the validators in one
+  `ConfigManager`.
+  */
+  ConfigurationDocValidatorAssignment assignment{};
+
+  // Assign to the configuration options.
+  const auto& allValidators = validators(true);
+  std::ranges::for_each(
+      std::views::filter(allValidators,
+                         [](const ConfigOptionValidatorManager& val) {
+                           return val.configOptionToBeChecked().size() == 1;
+                         }),
+      [&assignment](const ConfigOptionValidatorManager& val) {
+        // The validator manager only has one element, so this should be okay.
+        const ConfigOption& opt = **val.configOptionToBeChecked().begin();
+        assignment.addEntryUnderKey(opt, val);
+      });
+
+  // Assign to the configuration managers.
+  std::vector<std::reference_wrapper<const ConfigManager>> allManager{
+      ad_utility::transform(
+          allHashMapEntries(configurationOptions_, "",
+                            [](const HashMapEntry& entry) {
+                              return entry.holdsSubManager();
+                            }),
+          [](const auto& pair) {
+            return std::reference_wrapper<const ConfigManager>(
+                *pair.second.getSubManager().value());
+          })};
+  allManager.emplace_back(*this);
+  std::ranges::for_each(
+      allManager, [&assignment](const ConfigManager& manager) {
+        std::ranges::for_each(
+            std::views::filter(
+                manager.validators_,
+                [](const auto& validator) {
+                  return validator.configOptionToBeChecked().size() > 1;
+                }),
+            [&assignment, &manager](const auto& validator) {
+              assignment.addEntryUnderKey(manager, validator);
+            });
+      });
+
+  return assignment;
+}
+
+// ____________________________________________________________________________
+std::string ConfigManager::printConfigurationDoc(bool detailed) const {
+  /*
+  This works, because sub managers are not allowed to be empty. (This
+  invariant is checked by the helper function for walking over the hash map
+  entries, that is used by the `generateConfigurationDoc...` helper
+  functions.) So, the only way for a valid lack of configuration options to be
+  true, is on the top level. A.k.a. the object, on which
+  `printConfigurationDoc` was called.
+  */
+  if (configurationOptions_.empty()) {
     return "No configuration options were defined.";
   }
 
-  /*
-  Setup for printing the locations of the option in json format, so that
-  people can easier understand, where everything is.
-  Note: This json remembers the insertion order.
-  */
-  nlohmann::ordered_json configuratioOptionsVisualization;
+  // We always print the configuration doc json.
+  const std::string& configurationDocJsonString{absl::StrCat(
+      "Configuration:\n", generateConfigurationDocJson("").dump(2))};
 
-  /*
-  Add the paths of `configOptions_` and have them point to either:
-  - The current value of the configuration option.
-  - A "value was never initialized", if we are not sure, the current value of
-    the configuration option was initialized.
-  - The default value of the configuration option.
-  - An example value, of the correct type.
-  */
-  for (const auto& [path, option] : allConfigOptions) {
-    /*
-    Pointer to the position of this option in
-    `configuratioOptionsVisualization`.
-    */
-    const nlohmann::ordered_json::json_pointer jsonOptionPointer{path};
-
-    if (printCurrentJsonConfiguration) {
-      // We can only use the value, if we are sure, that the value was
-      // initialized.
-      configuratioOptionsVisualization[jsonOptionPointer] =
-          option.wasSet() ? option.getValueAsJson()
-                          : "value was never initialized";
-    } else {
-      configuratioOptionsVisualization[jsonOptionPointer] =
-          option.hasDefaultValue() ? option.getDefaultValueAsJson()
-                                   : option.getDummyValueAsJson();
-    }
+  if (!detailed) {
+    return configurationDocJsonString;
   }
 
-  const std::string& configuratioOptionsVisualizationAsString =
-      configuratioOptionsVisualization.dump(2);
-
-  // List the configuration options themselves.
-  const std::string& listOfConfigurationOptions = ad_utility::lazyStrJoin(
-      std::views::transform(allConfigOptions,
-                            [](const auto& pair) {
-                              // Add the location of the option and the option
-                              // itself.
-                              return absl::StrCat(
-                                  "Location : ", pair.first, "\n",
-                                  static_cast<std::string>(pair.second));
-                            }),
-      "\n\n");
-
-  // List of the validators.
-  const std::string& listOfAllValidators = ad_utility::lazyStrJoin(
-      ad_utility::transform(validators(true),
-                            [](const ConfigOptionValidatorManager& validator) {
-                              return absl::StrCat("- ",
-                                                  validator.getDescription());
-                            }),
-      "\n\n");
-
   return absl::StrCat(
-      "Locations of available configuration options with",
-      (printCurrentJsonConfiguration ? " their current values"
-                                     : " example values"),
-      ":\n",
-      ad_utility::addIndentation(configuratioOptionsVisualizationAsString,
-                                 "    "),
-      "\n\nAvailable configuration options:\n",
-      ad_utility::addIndentation(listOfConfigurationOptions, "    "),
-      "\n\nRequired invariants of the configuration options:",
-      listOfAllValidators.empty()
-          ? " None."
-          : absl::StrCat(
-                "\n", ad_utility::addIndentation(listOfAllValidators, "    ")),
-      "\n\nConfiguration options, that kept their default values:\n",
-      ad_utility::addIndentation(
-          getListOfNotChangedConfigOptionsWithDefaultValuesAsString(), "    "));
+      configurationDocJsonString, "\n\n",
+      generateConfigurationDocDetailedList("", getValidatorAssignment()));
 }
 
 // ____________________________________________________________________________
@@ -615,41 +812,6 @@ std::string ConfigManager::vectorOfKeysForJsonToString(
 }
 
 // ____________________________________________________________________________
-std::string
-ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
-    const {
-  // All the configuration options together with their paths.
-  const std::vector<std::pair<std::string, const ConfigOption&>>
-      allConfigOptions = configurationOptions(true);
-
-  // For only looking at the configuration options in our map.
-  auto onlyConfigurationOptionsView = std::views::values(allConfigOptions);
-
-  // Returns true, if the `ConfigOption` has a default value and wasn't set at
-  // runtime.
-  auto valueIsUnchangedFromDefault = [](const ConfigOption& option) {
-    return option.hasDefaultValue() && !option.wasSetAtRuntime();
-  };
-
-  // Prints the default value of a configuration option and the accompanying
-  // text.
-  auto defaultConfigurationOptionToString = [](const ConfigOption& option) {
-    return absl::StrCat("Configuration option '", option.getIdentifier(),
-                        "' was not set at runtime, using default value '",
-                        option.getDefaultValueAsString(), "'.");
-  };
-
-  // A string vector view of all our unchanged configuration options in the
-  // string form from `defaultConfigurationOptionToString`.
-  auto unchangedFromDefaultConfigOptions =
-      onlyConfigurationOptionsView |
-      std::views::filter(valueIsUnchangedFromDefault) |
-      std::views::transform(defaultConfigurationOptionToString);
-
-  return ad_utility::lazyStrJoin(unchangedFromDefaultConfigOptions, "\n");
-}
-
-// ____________________________________________________________________________
 std::vector<std::reference_wrapper<const ConfigOptionValidatorManager>>
 ConfigManager::validators(const bool sortByInitialization) const {
   // For the collected validators. Initialized with the validators inside this
@@ -659,9 +821,9 @@ ConfigManager::validators(const bool sortByInitialization) const {
           validators_, [](const auto& val) { return std::cref(val); }));
 
   // Collect the validators from the sub managers.
-  std::vector<std::pair<std::string, const ConfigManager::HashMapEntry&>>
+  std::vector<std::pair<const std::string, const ConfigManager::HashMapEntry&>>
       allSubManager{allHashMapEntries(
-          configurationOptions_, false, "",
+          configurationOptions_, "",
           [](const HashMapEntry& entry) { return entry.holdsSubManager(); })};
   std::ranges::for_each(
       std::views::values(allSubManager),
@@ -677,7 +839,6 @@ ConfigManager::validators(const bool sortByInitialization) const {
                         return validator.getInitializationId();
                       });
   }
-
   return allValidators;
 }
 
@@ -690,12 +851,54 @@ void ConfigManager::verifyWithValidators() const {
 
 // ____________________________________________________________________________
 bool ConfigManager::containsOption(const ConfigOption& opt) const {
-  const auto allOptions = configurationOptions(false);
+  const auto allOptions = configurationOptions();
   return ad_utility::contains(
       std::views::values(allOptions) |
           std::views::transform(
               [](const ConfigOption& option) { return &option; }),
       &opt);
 }
+
+// ____________________________________________________________________________
+template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+void ConfigManager::ConfigurationDocValidatorAssignment::addEntryUnderKey(
+    const T& key, const ConfigOptionValidatorManager& manager) {
+  getHashMapBasedOnType<T>()[&key].push_back(&manager);
+}
+// Explicit instantiation for `ConfigOption` and `ConfigManager`.
+template void ConfigManager::ConfigurationDocValidatorAssignment::
+    addEntryUnderKey<ConfigOption>(const ConfigOption&,
+                                   const ConfigOptionValidatorManager&);
+template void ConfigManager::ConfigurationDocValidatorAssignment::
+    addEntryUnderKey<ConfigManager>(const ConfigManager&,
+                                    const ConfigOptionValidatorManager&);
+
+// ____________________________________________________________________________
+template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+auto ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
+    const T& key) const -> ValueGetterReturnType {
+  // The concerned hash map.
+  const MemoryAdressHashMap<T>& hashMap{getHashMapBasedOnType<T>()};
+
+  // Get the vector from the hash map and convert it, if there is one.
+  if (auto mapIterator = hashMap.find(&key); mapIterator != hashMap.end()) {
+    return transform(
+        (*mapIterator).second,
+        [](const auto* pointer) -> ValueGetterReturnType::value_type {
+          return *pointer;
+        });
+  } else {
+    return {};
+  }
+}
+// Explicit instantiation for `ConfigOption` and `ConfigManager`.
+template ConfigManager::ConfigurationDocValidatorAssignment::
+    ValueGetterReturnType
+    ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
+        const ConfigOption&) const;
+template ConfigManager::ConfigurationDocValidatorAssignment::
+    ValueGetterReturnType
+    ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
+        const ConfigManager&) const;
 
 }  // namespace ad_utility
