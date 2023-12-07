@@ -3,8 +3,8 @@
 #include "../IndexTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
-#include "engine/EntityIndexScanForWord.h"
 #include "engine/IndexScan.h"
+#include "engine/TextIndexScanForEntity.h"
 #include "parser/ParsedQuery.h"
 
 using namespace ad_utility::testing;
@@ -28,16 +28,16 @@ string getEntityFromResultTable(const QueryExecutionContext* qec,
       .value();
 }
 
-TEST(EntityIndexScanForWord, EntityScanBasic) {
+TEST(TextIndexScanForEntity, EntityScanBasic) {
   auto qec = getQec(
       "<a> <p> \"he failed the test\" . <b> <p> \"some other "
       "sentence\" . <a> <p> \"testing can help\" . <b> <p> \"the test on "
       "friday was really hard\" . <b> <x2> <x> . <b> <x2> <xb2> .",
       true, true, true, 16_B, true);
 
-  EntityIndexScanForWord s1{qec, Variable{"?text"}, Variable{"?entityVar"},
+  TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
-  EntityIndexScanForWord s2{qec, Variable{"?text2"}, Variable{"?entityVar2"},
+  TextIndexScanForEntity s2{qec, Variable{"?text2"}, Variable{"?entityVar2"},
                             "test*"};
   ASSERT_EQ(s1.asStringImpl(0), s2.asStringImpl(0));
   ASSERT_EQ(s1.getResultWidth(), 3);
@@ -63,8 +63,7 @@ TEST(EntityIndexScanForWord, EntityScanBasic) {
 
   // fixed entity case
   string fixedEntity = "\"some other sentence\"";
-  EntityIndexScanForWord s3{qec, Variable{"?text3"}, std::nullopt, "sentence",
-                            fixedEntity};
+  TextIndexScanForEntity s3{qec, Variable{"?text3"}, fixedEntity, "sentence"};
 
   result = s3.computeResultOnlyForTesting();
   ASSERT_EQ(s3.getResultWidth(), 2);
@@ -82,7 +81,14 @@ TEST(EntityIndexScanForWord, EntityScanBasic) {
   ASSERT_EQ(fixedEntity, getTextFromResultTable(qec, result, 0));
 
   fixedEntity = "\"new entity\"";
-  EntityIndexScanForWord s4{qec, Variable{"?text4"}, std::nullopt, "sentence",
-                            fixedEntity};
+  TextIndexScanForEntity s4{qec, Variable{"?text4"}, fixedEntity, "sentence"};
   ASSERT_TRUE(s3.asStringImpl(0) != s4.asStringImpl(0));
+
+  fixedEntity = "\"he failed the test\"";
+  TextIndexScanForEntity s5{qec, Variable{"?text5"}, fixedEntity, "test*"};
+  result = s5.computeResultOnlyForTesting();
+  ASSERT_EQ(result.width(), 2);
+  ASSERT_EQ(result.size(), 1);
+
+  ASSERT_EQ(fixedEntity, getTextFromResultTable(qec, result, 0));
 }

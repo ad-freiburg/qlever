@@ -51,8 +51,8 @@ vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
 
 // _____________________________________________________________________________
 string TextIndexScanForWord::getDescriptor() const {
-  return "TextIndexScanForWord on " + textRecordVar_.name() + " with word " +
-         word_;
+  return absl::StrCat("TextIndexScanForWord on ", textRecordVar_.name(),
+                      " with word ", word_);
 }
 
 // _____________________________________________________________________________

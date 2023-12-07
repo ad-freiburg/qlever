@@ -14,7 +14,6 @@
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Distinct.h"
-#include "engine/EntityIndexScanForWord.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/HasPredicateScan.h"
@@ -27,6 +26,7 @@
 #include "engine/OrderBy.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TextOperationWithFilter.h"
 #include "engine/TextOperationWithoutFilter.h"
@@ -1028,13 +1028,12 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
       Variable evar = *(node._variables.begin()) == node._cvar.value()
                           ? *(++node._variables.begin())
                           : *(node._variables.begin());
-      plan = makeSubtreePlan<EntityIndexScanForWord>(_qec, node._cvar.value(),
+      plan = makeSubtreePlan<TextIndexScanForEntity>(_qec, node._cvar.value(),
                                                      evar, word);
     } else {
       // Fixed entity case
-      plan = makeSubtreePlan<EntityIndexScanForWord>(
-          _qec, node._cvar.value(), std::nullopt, word,
-          node._triple._o.toString());
+      plan = makeSubtreePlan<TextIndexScanForEntity>(
+          _qec, node._cvar.value(), node._triple._o.toString(), word);
     }
   } else {
     plan =

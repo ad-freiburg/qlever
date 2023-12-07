@@ -1117,7 +1117,6 @@ Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
 IdTable IndexImpl::getEntityMentionsForWord(
     const string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  LOG(DEBUG) << "Getting unadjusted entity postings for term: " << term << '\n';
   auto optTbmd = getTextBlockMetadataForWordOrPrefix(term);
   if (!optTbmd.has_value()) {
     return IdTable{allocator};

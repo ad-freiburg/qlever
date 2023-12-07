@@ -8,21 +8,19 @@
 // entities from the fulltext index that contain a certain word or prefix.
 // The entities are saved to the entityVar_. If the operation is called on a
 // fixed entity instead, it only returns entries that contain this entity.
-class EntityIndexScanForWord : public Operation {
+class TextIndexScanForEntity : public Operation {
  private:
-  const QueryExecutionContext* qec_;
   const Variable textRecordVar_;
-  const std::optional<Variable> entityVar_;
+  const std::variant<Variable, std::string> entity_;
   const string word_;
-  const std::optional<string> fixedEntity_;
   const bool hasFixedEntity_ = false;
 
  public:
-  EntityIndexScanForWord(QueryExecutionContext* qec, Variable textRecordVar,
-                         std::optional<Variable> entityVar, string word,
-                         std::optional<string> fixedEntity = std::nullopt);
+  TextIndexScanForEntity(QueryExecutionContext* qec, Variable textRecordVar,
+                         std::variant<Variable, std::string> entity_,
+                         string word);
 
-  virtual ~EntityIndexScanForWord() = default;
+  virtual ~TextIndexScanForEntity() = default;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
