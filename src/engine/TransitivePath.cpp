@@ -9,7 +9,6 @@
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
-#include "engine/JoinCostEstimation.h"
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
@@ -24,6 +23,7 @@ TransitivePath::TransitivePath(QueryExecutionContext* qec,
       rhs_(std::move(rightSide)),
       minDist_(minDist),
       maxDist_(maxDist) {
+  AD_CORRECTNESS_CHECK(qec != nullptr);
   if (lhs_.isVariable()) {
     variableColumns_[std::get<Variable>(lhs_.value_)] =
         makeAlwaysDefinedColumn(0);
@@ -139,8 +139,6 @@ float TransitivePath::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
-  static constexpr uint64_t subtreeBlowupFactor = 1000;
-  static constexpr uint64_t numPathsPerInput = 10;
   if (std::holds_alternative<Id>(lhs_.value_) ||
       std::holds_alternative<Id>(rhs_.value_)) {
     // If the subject or object is fixed, assume that the number of matching
@@ -149,24 +147,13 @@ uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
     // results and only then merge them with a triple such as this. In the
     // lhs_.isVar && rhs_.isVar case below, we assume a worst-case blowup of
     // 10000; see the comment there.
-    return subtreeBlowupFactor;
+    return 1000;
   }
-
-  auto sizeOfSubtree = subtree_->getSizeEstimate() * subtreeBlowupFactor;
-
-  // TODO<joka921, joburo> These estimates are much too high (but better to high
-  // than to low for now). We should do something for the sizes and costs that
-  // is consistent with the join class:
-  // * Estimate the number of matches in the join column (can be taken
-  // identically from the Join class).
-  // * Estimate the blowup for a single match due to the transitivity (maybe
-  // using a constant).
-  // * Edit: Johannes: Maybe I'll do this right now...
   if (lhs_.treeAndCol_.has_value()) {
-    return lhs_.treeAndCol_.value().first->getSizeEstimate() * numPathsPerInput;
+    return lhs_.treeAndCol_.value().first->getSizeEstimate();
   }
   if (rhs_.treeAndCol_.has_value()) {
-    return rhs_.treeAndCol_.value().first->getSizeEstimate() * numPathsPerInput;
+    return rhs_.treeAndCol_.value().first->getSizeEstimate();
   }
   // Set costs to something very large, so that we never compute the complete
   // transitive hull (unless the variables on both sides are not bound in any
@@ -179,21 +166,7 @@ uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
   // transitive hull is wdt:P2789 (connects with). The blowup is then from 90K
   // (without +) to 110M (with +), so about 1000 times larger.
   AD_CORRECTNESS_CHECK(lhs_.isVariable() && rhs_.isVariable());
-  return sizeOfSubtree;
-}
-
-void TransitivePath::computeSizeEstimateAndMultiplicities() {
-  auto subtreeJoinCol = [&, this]() {
-    if (lhs_.treeAndCol_.has_value()) {
-      return lhs_.subCol_;
-    } else if (rhs_.treeAndCol_.has_value()) {
-      return rhs_.subCol_;
-    } else {
-      return size_t{0};
-    }
-  }();
-  auto estimatesSubtree = estimatesFromQet(*subtree_, subtreeJoinCol);
-  // TODO<joka921> continue here.
+  return subtree_->getSizeEstimate() * 10000;
 }
 
 // _____________________________________________________________________________
@@ -220,7 +193,7 @@ void TransitivePath::computeTransitivePathBound(
   auto [edges, nodes] = setupMapAndNodes<SUB_WIDTH, SIDE_WIDTH>(
       dynSub, startSide, targetSide, startSideTable);
 
-  Map hull(getExecutionContext()->getAllocator());
+  Map hull(allocator());
   //Map hull;
   if (!targetSide.isVariable()) {
     hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value_));
@@ -245,7 +218,7 @@ void TransitivePath::computeTransitivePath(
   auto [edges, nodes] =
       setupMapAndNodes<SUB_WIDTH>(dynSub, startSide, targetSide);
 
-  Map hull{getExecutionContext()->getAllocator()};
+  Map hull{allocator()};
   if (!targetSide.isVariable()) {
     hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value_));
   } else {
@@ -268,7 +241,7 @@ ResultTable TransitivePath::computeResult() {
   }
   shared_ptr<const ResultTable> subRes = subtree_->getResult();
 
-  IdTable idTable{getExecutionContext()->getAllocator()};
+  IdTable idTable{allocator()};
 
   idTable.setNumColumns(getResultWidth());
 
@@ -376,9 +349,9 @@ bool TransitivePath::isBoundOrId() const {
 TransitivePath::Map TransitivePath::transitiveHull(
     const Map& edges, const std::vector<Id>& startNodes,
     std::optional<Id> target) const {
-  using MapIt = TransitivePath::Map::const_iterator;
+  using MapIt = Map::const_iterator;
   // For every node do a dfs on the graph
-  Map hull(getExecutionContext()->getAllocator());
+  Map hull{allocator()};
 
   // Stores nodes we already have a path to. This avoids cycles.
   ad_utility::HashSetWithMemoryLimit<Id> marks{
@@ -408,10 +381,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
     }
     if (minDist_ == 0 &&
         (!target.has_value() || currentStartNode == target.value())) {
-      auto [it, success] = hull.try_emplace(
-          currentStartNode, getExecutionContext()->getAllocator());
-//          currentStartNode);
-      it->second.insert(currentStartNode);
+      insertToMap(hull, currentStartNode, currentStartNode);
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -440,10 +410,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
         if (childDepth >= minDist_) {
           marks.insert(child);
           if (!target.has_value() || child == target.value()) {
-            auto [it, success] = hull.try_emplace(
-                currentStartNode, getExecutionContext()->getAllocator());
-//                currentStartNode);
-            it->second.insert(child);
+            insertToMap(hull, currentStartNode, child);
           }
         }
         // Add the child to the stack
@@ -558,19 +525,13 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
-  Map edges(getExecutionContext()->getAllocator());
-  //Map edges;
+  Map edges{allocator()};
   decltype(auto) startCol = sub.getColumn(startSide.subCol_);
   decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
 
   for (size_t i = 0; i < sub.size(); i++) {
     checkCancellation();
-    Id startId = startCol[i];
-    Id targetId = targetCol[i];
-    auto [it, succ] =
-        edges.try_emplace(startId, getExecutionContext()->getAllocator());
-    (void)succ;
-    it->second.insert(targetId);
+    insertToMap(edges, startCol[i], targetCol[i]);
   }
   return edges;
 }
@@ -600,4 +561,10 @@ void TransitivePath::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
     inCol++;
     outCol++;
   }
+}
+
+// _____________________________________________________________________________
+void TransitivePath::insertToMap(Map& map, Id key, Id value) const {
+  auto [it, success] = map.try_emplace(key, allocator());
+  it->second.insert(value);
 }

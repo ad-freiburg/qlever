@@ -79,6 +79,7 @@ class CancellationHandle {
            CancellationState::NOT_CANCELLED;
   }
 };
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_CANCELLATIONHANDLE_H

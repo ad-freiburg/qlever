@@ -58,10 +58,13 @@ struct TransitivePathSide {
 
 class TransitivePath : public Operation {
   constexpr static auto hash = [](Id id) {
-  return std::hash<uint64_t>{}(id.getBits());};
-  using Set = std::unordered_set<Id, decltype(hash), std::equal_to<Id>, ad_utility::AllocatorWithLimit<Id>>;
-  using Map = std::unordered_map<Id, Set, decltype(hash), std::equal_to<Id>, ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
-  using MapIt = Map::iterator;
+    return std::hash<uint64_t>{}(id.getBits());
+  };
+  using Set = std::unordered_set<Id, decltype(hash), std::equal_to<Id>,
+                                 ad_utility::AllocatorWithLimit<Id>>;
+  using Map = std::unordered_map<
+      Id, Set, decltype(hash), std::equal_to<Id>,
+      ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
 
   std::shared_ptr<QueryExecutionTree> subtree_;
   TransitivePathSide lhs_;
@@ -70,8 +73,6 @@ class TransitivePath : public Operation {
   size_t minDist_;
   size_t maxDist_;
   VariableToColumnMap variableColumns_;
-  std::vector<double> multiplicities_;
-  [[maybe_unused]] size_t sizeEstimate_;
 
  public:
   TransitivePath(QueryExecutionContext* qec,
@@ -196,8 +197,6 @@ class TransitivePath : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  void computeSizeEstimateAndMultiplicities();
-
   // The internal implementation of `bindLeftSide` and `bindRightSide` which
   // share a lot of code.
   std::shared_ptr<TransitivePath> bindLeftOrRightSide(
@@ -311,4 +310,9 @@ class TransitivePath : public Operation {
   static void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                           IdTableStatic<OUTPUT_WIDTH>& outputTable,
                           size_t inputRow, size_t outputRow, size_t skipCol);
+
+  // A small helper function: Insert the `value` to the set at `map[key]`.
+  // As the sets all have an allocator with memory limit, this construction is a
+  // little bit more involved, so this can be a separate helper function.
+  void insertToMap(Map& map, Id key, Id value) const;
 };

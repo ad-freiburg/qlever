@@ -4,21 +4,19 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "engine/Join.h"
+#include <engine/AddCombinedRowToTable.h>
+#include <engine/CallFixedSize.h>
+#include <engine/IndexScan.h>
+#include <engine/Join.h>
+#include <global/Constants.h>
+#include <global/Id.h>
+#include <util/Exception.h>
+#include <util/HashMap.h>
 
 #include <functional>
 #include <sstream>
 #include <type_traits>
 #include <vector>
-
-#include "engine/AddCombinedRowToTable.h"
-#include "engine/CallFixedSize.h"
-#include "engine/IndexScan.h"
-#include "engine/JoinCostEstimation.h"
-#include "global/Constants.h"
-#include "global/Id.h"
-#include "util/Exception.h"
-#include "util/HashMap.h"
 
 using std::string;
 
@@ -294,9 +292,8 @@ Join::ScanMethodType Join::getScanMethod(
   // during its lifetime
   const auto& idx = _executionContext->getIndex();
   const auto scanLambda =
-      [&idx, &scan](
-          const Permutation::Enum perm,
-          std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) {
+      [&idx, &scan](const Permutation::Enum perm,
+                    ad_utility::SharedCancellationHandle cancellationHandle) {
         return [&idx, perm, &scan,
                 cancellationHandle = std::move(cancellationHandle)](Id id) {
           return idx.scan(id, std::nullopt, perm, scan.additionalColumns(),
@@ -359,6 +356,22 @@ void Join::computeSizeEstimateAndMultiplicities() {
     return;
   }
 
+  size_t nofDistinctLeft = std::max(
+      size_t(1), static_cast<size_t>(_left->getSizeEstimate() /
+                                     _left->getMultiplicity(_leftJoinCol)));
+  size_t nofDistinctRight = std::max(
+      size_t(1), static_cast<size_t>(_right->getSizeEstimate() /
+                                     _right->getMultiplicity(_rightJoinCol)));
+
+  size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
+
+  double adaptSizeLeft =
+      _left->getSizeEstimate() *
+      (static_cast<double>(nofDistinctInResult) / nofDistinctLeft);
+  double adaptSizeRight =
+      _right->getSizeEstimate() *
+      (static_cast<double>(nofDistinctInResult) / nofDistinctRight);
+
   double corrFactor =
       _executionContext
           ? ((isFullScanDummy(_left) || isFullScanDummy(_right))
@@ -368,25 +381,44 @@ void Join::computeSizeEstimateAndMultiplicities() {
                        "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR"))
           : 1;
 
-  auto joinEstimates = computeSizeEstimateAndMultiplicitiesForJoin(
-      estimatesFromQet(*_left, _leftJoinCol),
-      estimatesFromQet(*_right, _rightJoinCol), corrFactor);
+  double jcMultiplicityInResult = _left->getMultiplicity(_leftJoinCol) *
+                                  _right->getMultiplicity(_rightJoinCol);
+  _sizeEstimate = std::max(
+      size_t(1), static_cast<size_t>(corrFactor * jcMultiplicityInResult *
+                                     nofDistinctInResult));
 
-  _sizeEstimate = joinEstimates.sizeEstimate_;
+  LOG(TRACE) << "Estimated size as: " << _sizeEstimate << " := " << corrFactor
+             << " * " << jcMultiplicityInResult << " * " << nofDistinctInResult
+             << std::endl;
 
   for (auto i = isFullScanDummy(_left) ? ColumnIndex{1} : ColumnIndex{0};
        i < _left->getResultWidth(); ++i) {
-    _multiplicities.push_back(joinEstimates.multiplicitesLeft_.at(i));
+    double oldMult = _left->getMultiplicity(i);
+    double m = std::max(
+        1.0, oldMult * _right->getMultiplicity(_rightJoinCol) * corrFactor);
+    if (i != _leftJoinCol && nofDistinctLeft != nofDistinctInResult) {
+      double oldDist = _left->getSizeEstimate() / oldMult;
+      double newDist = std::min(oldDist, adaptSizeLeft);
+      m = (_sizeEstimate / corrFactor) / newDist;
+    }
+    _multiplicities.emplace_back(m);
   }
-
   for (auto i = ColumnIndex{0}; i < _right->getResultWidth(); ++i) {
     if (i == _rightJoinCol && !isFullScanDummy(_left)) {
       continue;
     }
-    _multiplicities.emplace_back(joinEstimates.multiplicitesRight_.at(i));
+    double oldMult = _right->getMultiplicity(i);
+    double m = std::max(
+        1.0, oldMult * _left->getMultiplicity(_leftJoinCol) * corrFactor);
+    if (i != _rightJoinCol && nofDistinctRight != nofDistinctInResult) {
+      double oldDist = _right->getSizeEstimate() / oldMult;
+      double newDist = std::min(oldDist, adaptSizeRight);
+      m = (_sizeEstimate / corrFactor) / newDist;
+    }
+    _multiplicities.emplace_back(m);
   }
 
-  AD_CORRECTNESS_CHECK(_multiplicities.size() == getResultWidth());
+  assert(_multiplicities.size() == getResultWidth());
 }
 
 // ______________________________________________________________________________
