@@ -108,25 +108,18 @@ template <typename T>
 concept SingleExpressionResult =
     ad_utility::isTypeContainedIn<T, ExpressionResult>;
 
-// If the `ExpressionResult` holds a value that is cheap to copy (a constant or
-// a variable), return a copy. Else throw an exception the message of which
-// implies that this is not a valid usage of this function.
-inline ExpressionResult copyExpressionResultIfNotVector(
-    const ExpressionResult& result) {
+// Copy an expression result.
+inline ExpressionResult copyExpressionResult(
+    ad_utility::SimilarTo<ExpressionResult> auto&& result) {
   auto copyIfCopyable =
       []<SingleExpressionResult R>(const R& x) -> ExpressionResult {
-    if constexpr (std::is_copy_assignable_v<R> &&
-                  std::is_copy_constructible_v<R>) {
-      return x;
+    if constexpr (requires { R{AD_FWD(x)}; }) {
+      return AD_FWD(x);
     } else {
-      AD_THROW(
-          "Tried to copy an expression result that is a vector. This should "
-          "never happen, as this code should only be called for the results of "
-          "expressions in a GROUP BY clause which all should be aggregates. "
-          "Please report this.");
+      return x.clone();
     }
   };
-  return std::visit(copyIfCopyable, result);
+  return std::visit(copyIfCopyable, AD_FWD(result));
 }
 
 /// True iff T represents a constant.
@@ -249,8 +242,7 @@ struct EvaluationContext {
     ColumnIndex idx = map.at(var).columnIndex_;
     AD_CONTRACT_CHECK(idx < _previousResultsFromSameGroup.size());
 
-    return copyExpressionResultIfNotVector(
-        _previousResultsFromSameGroup.at(idx));
+    return copyExpressionResult(_previousResultsFromSameGroup.at(idx));
   }
 };
 

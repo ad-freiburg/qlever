@@ -4,110 +4,103 @@
 
 #include "index/PatternCreator.h"
 
-/*
 #include "global/SpecialIds.h"
 
 static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
-static const Id hasPredicateId = qlever::specialIds.at(HAS_PREDICATE_PREDICATE);
- */
-static constexpr Id hasPatternId = Id::fromBits(42);
-static constexpr Id hasPredicateId = Id::fromBits(43);
 
 // _________________________________________________________________________
 void PatternCreatorNew::processTriple(std::array<Id, 3> triple,
                                       bool ignoreForPatterns) {
-  _tripleBuffer.emplace_back(triple, ignoreForPatterns);
   if (ignoreForPatterns) {
+    tripleBuffer_.emplace_back(triple, ignoreForPatterns);
     return;
   }
-  if (!_currentSubjectIndex.has_value()) {
+  if (!currentSubjectIndex_.has_value()) {
     // This is the first triple
-    _currentSubjectIndex = triple[0].getVocabIndex();
-  } else if (triple[0].getVocabIndex() != _currentSubjectIndex) {
+    currentSubjectIndex_ = triple[0].getVocabIndex();
+  } else if (triple[0].getVocabIndex() != currentSubjectIndex_) {
     // New subject.
-    finishSubject(_currentSubjectIndex.value(), _currentPattern);
-    _currentSubjectIndex = triple[0].getVocabIndex();
-    _currentPattern.clear();
+    finishSubject(currentSubjectIndex_.value(), currentPattern_);
+    currentSubjectIndex_ = triple[0].getVocabIndex();
+    currentPattern_.clear();
   }
+  tripleBuffer_.emplace_back(triple, ignoreForPatterns);
   // Don't list predicates twice in the same pattern.
-  if (_currentPattern.empty() || _currentPattern.back() != triple[1]) {
-    _currentPattern.push_back(triple[1]);
-    // This is wasteful and currently not needed. If we use those lines, then we
-    // get a fully materialized `has-predicate` relation.
-    /*
-    _additionalTriplesPsoSorter.push(
-        std::array{Id::makeFromVocabIndex(_currentSubjectIndex.value()),
-                   hasPredicateId, triple[1]});
-                   */
+  if (currentPattern_.empty() || currentPattern_.back() != triple[1]) {
+    currentPattern_.push_back(triple[1]);
   }
 }
 
 // ________________________________________________________________________________
 void PatternCreatorNew::finishSubject(VocabIndex subjectIndex,
                                       const Pattern& pattern) {
-  _numDistinctSubjects++;
-  _numDistinctSubjectPredicatePairs += pattern.size();
+  numDistinctSubjects_++;
+  numDistinctSubjectPredicatePairs_ += pattern.size();
   PatternID patternId;
-  auto it = _patternToIdAndCount.find(pattern);
-  if (it == _patternToIdAndCount.end()) {
+  auto it = patternToIdAndCount_.find(pattern);
+  if (it == patternToIdAndCount_.end()) {
     // This is a new pattern, assign a new pattern ID and a count of 1.
-    patternId = static_cast<PatternID>(_patternToIdAndCount.size());
-    _patternToIdAndCount[pattern] = PatternIdAndCount{patternId, 1ul};
+    patternId = static_cast<PatternID>(patternToIdAndCount_.size());
+    patternToIdAndCount_[pattern] = PatternIdAndCount{patternId, 1UL};
 
     // Count the total number of distinct predicates that appear in the
     // pattern and have not been counted before.
     for (auto predicate : pattern) {
-      _distinctPredicates.insert(predicate);
+      distinctPredicates_.insert(predicate);
     }
   } else {
     // We have already seen the same pattern for a previous subject ID, reuse
     // the ID and increase the count.
-    patternId = it->second._patternId;
-    it->second._count++;
+    patternId = it->second.patternId_;
+    it->second.count_++;
   }
 
-  _additionalTriplesPsoSorter->push(
-      std::array{Id::makeFromVocabIndex(subjectIndex), hasPatternId,
-                 Id::makeFromInt(patternId)});
-  std::ranges::for_each(_tripleBuffer, [this, patternId](const auto& t) {
-    const auto& [s, p, o] = t.first;
-    fullPsoSorter().push(std::array{
-        s, p, o, Id::makeFromInt(t.second ? NO_PATTERN : patternId)});
+  auto additionalTriple = std::array{Id::makeFromVocabIndex(subjectIndex),
+                                     hasPatternId, Id::makeFromInt(patternId)};
+  additionalTriplesPsoSorter_.push(additionalTriple);
+  auto curSubject = Id::makeFromVocabIndex(currentSubjectIndex_.value());
+  std::ranges::for_each(tripleBuffer_, [this, patternId,
+                                        &curSubject](const auto& t) {
+    const auto& [s, p, o] = t.triple_;
+    // It might happen that the `tripleBuffer_` contains different subjects
+    // which are purely internal and therefore have no pattern.
+    auto actualPatternId =
+        Id::makeFromInt(curSubject != s ? NO_PATTERN : patternId);
+    AD_CORRECTNESS_CHECK(curSubject == s || t.isInternal_);
+    ospSorterTriplesWithPattern().push(std::array{s, p, o, actualPatternId});
   });
-  _tripleBuffer.clear();
+  tripleBuffer_.clear();
 }
 
 // ____________________________________________________________________________
 void PatternCreatorNew::finish() {
-  if (_isFinished) {
+  if (isFinished_) {
     return;
   }
-  _isFinished = true;
+  isFinished_ = true;
 
   // Write the pattern of the last subject.
-  if (_currentSubjectIndex.has_value()) {
-    finishSubject(_currentSubjectIndex.value(), _currentPattern);
+  if (currentSubjectIndex_.has_value()) {
+    finishSubject(currentSubjectIndex_.value(), currentPattern_);
   }
 
   // Store all data in the file
-  PatternStatistics patternStatistics(_numDistinctSubjectPredicatePairs,
-                                      _numDistinctSubjects,
-                                      _distinctPredicates.size());
-  _patternSerializer << patternStatistics;
+  PatternStatistics patternStatistics(numDistinctSubjectPredicatePairs_,
+                                      numDistinctSubjects_,
+                                      distinctPredicates_.size());
+  patternSerializer_ << patternStatistics;
 
   // Store the actual patterns ordered by their pattern ID. They are currently
   // stored in a hash map, so we first have to sort them.
-  std::vector<std::pair<Pattern, PatternIdAndCount>> orderedPatterns;
-  orderedPatterns.insert(orderedPatterns.end(), _patternToIdAndCount.begin(),
-                         _patternToIdAndCount.end());
-  std::sort(orderedPatterns.begin(), orderedPatterns.end(),
-            [](const auto& a, const auto& b) {
-              return a.second._patternId < b.second._patternId;
-            });
+  // TODO<C++23> Use `ranges::to<vector>`.
+  std::vector<std::pair<Pattern, PatternIdAndCount>> orderedPatterns{
+      patternToIdAndCount_.begin(), patternToIdAndCount_.end()};
+  std::ranges::sort(orderedPatterns, std::less<>{},
+                    [](const auto& a) { return a.second.patternId_; });
   CompactVectorOfStrings<Pattern::value_type>::Writer patternWriter{
-      std::move(_patternSerializer).file()};
-  for (const auto& p : orderedPatterns) {
-    patternWriter.push(p.first.data(), p.first.size());
+      std::move(patternSerializer_).file()};
+  for (const auto& pattern : orderedPatterns | std::views::keys) {
+    patternWriter.push(pattern.data(), pattern.size());
   }
   patternWriter.finish();
 
@@ -133,27 +126,27 @@ void PatternCreatorNew::readPatternsFromFile(
   patternReader >> patterns;
 
   numDistinctSubjectPredicatePairs =
-      statistics._numDistinctSubjectPredicatePairs;
-  avgNumSubjectsPerPredicate = statistics._avgNumDistinctSubjectsPerPredicate;
-  avgNumPredicatesPerSubject = statistics._avgNumDistinctPredicatesPerSubject;
+      statistics.numDistinctSubjectPredicatePairs_;
+  avgNumSubjectsPerPredicate = statistics.avgNumDistinctSubjectsPerPredicate_;
+  avgNumPredicatesPerSubject = statistics.avgNumDistinctPredicatesPerSubject_;
 }
 
 // ____________________________________________________________________________
 void PatternCreatorNew::printStatistics(
     PatternStatistics patternStatistics) const {
-  LOG(INFO) << "Number of distinct patterns: " << _patternToIdAndCount.size()
+  LOG(INFO) << "Number of distinct patterns: " << patternToIdAndCount_.size()
             << std::endl;
-  LOG(INFO) << "Number of subjects with pattern: " << _numDistinctSubjects
+  LOG(INFO) << "Number of subjects with pattern: " << numDistinctSubjects_
             << " [all]" << std::endl;
   LOG(INFO) << "Total number of distinct subject-predicate pairs: "
-            << _numDistinctSubjectPredicatePairs << std::endl;
+            << numDistinctSubjectPredicatePairs_ << std::endl;
   LOG(INFO) << "Average number of predicates per subject: " << std::fixed
             << std::setprecision(1)
-            << patternStatistics._avgNumDistinctPredicatesPerSubject
+            << patternStatistics.avgNumDistinctPredicatesPerSubject_
             << std::endl;
   LOG(INFO) << "Average number of subjects per predicate: " << std::fixed
             << std::setprecision(0)
-            << patternStatistics._avgNumDistinctSubjectsPerPredicate
+            << patternStatistics.avgNumDistinctSubjectsPerPredicate_
             << std::endl;
 }
 
@@ -185,7 +178,7 @@ void PatternCreator::finishSubject(VocabIndex subjectIndex,
   if (it == _patternToIdAndCount.end()) {
     // This is a new pattern, assign a new pattern ID and a count of 1.
     patternId = static_cast<PatternID>(_patternToIdAndCount.size());
-    _patternToIdAndCount[pattern] = PatternIdAndCount{patternId, 1ul};
+    _patternToIdAndCount[pattern] = PatternIdAndCount{patternId, 1UL};
 
     // Count the total number of distinct predicates that appear in the
     // pattern and have not been counted before.
@@ -277,9 +270,9 @@ void PatternCreator::readPatternsFromFile(
   patternReader >> patterns;
 
   numDistinctSubjectPredicatePairs =
-      statistics._numDistinctSubjectPredicatePairs;
-  avgNumSubjectsPerPredicate = statistics._avgNumDistinctSubjectsPerPredicate;
-  avgNumPredicatesPerSubject = statistics._avgNumDistinctPredicatesPerSubject;
+      statistics.numDistinctSubjectPredicatePairs_;
+  avgNumSubjectsPerPredicate = statistics.avgNumDistinctSubjectsPerPredicate_;
+  avgNumPredicatesPerSubject = statistics.avgNumDistinctPredicatesPerSubject_;
 }
 
 // ____________________________________________________________________________
@@ -293,10 +286,10 @@ void PatternCreator::printStatistics(
             << _numDistinctSubjectPredicatePairs << std::endl;
   LOG(INFO) << "Average number of predicates per subject: " << std::fixed
             << std::setprecision(1)
-            << patternStatistics._avgNumDistinctPredicatesPerSubject
+            << patternStatistics.avgNumDistinctPredicatesPerSubject_
             << std::endl;
   LOG(INFO) << "Average number of subjects per predicate: " << std::fixed
             << std::setprecision(0)
-            << patternStatistics._avgNumDistinctSubjectsPerPredicate
+            << patternStatistics.avgNumDistinctSubjectsPerPredicate_
             << std::endl;
 }

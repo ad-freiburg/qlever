@@ -15,11 +15,18 @@ struct JThread : public std::thread {
 #ifdef __cpp_lib_jthread
   static_assert(false,
                 "std::jthread is now supported by libc++, get rid of "
-                "ad_utility::Jthread");
+                "ad_utility::JThread");
 #endif
   using Base = std::thread;
   using Base::Base;
   JThread(JThread&&) noexcept = default;
+  JThread& operator=(JThread&& other) noexcept {
+    if (joinable()) {
+      join();
+    }
+    Base::operator=(std::move(other));
+    return *this;
+  }
   ~JThread() {
     if (joinable()) {
       join();

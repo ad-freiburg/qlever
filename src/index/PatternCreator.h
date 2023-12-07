@@ -15,8 +15,8 @@
 #include "global/Id.h"
 #include "global/Pattern.h"
 #include "index/StxxlSortFunctors.h"
+#include "util/BufferedVector.h"
 #include "util/ExceptionHandling.h"
-#include "util/MmapVector.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
@@ -26,11 +26,11 @@
 struct PatternStatistics {
  public:
   // The number of distinct subject-predicate pairs contained in the patterns.
-  uint64_t _numDistinctSubjectPredicatePairs;
+  uint64_t numDistinctSubjectPredicatePairs_;
   // The average number of distinct predicates per subject.
-  double _avgNumDistinctPredicatesPerSubject;
+  double avgNumDistinctPredicatesPerSubject_;
   // The average number of distinct subjects per predicate.
-  double _avgNumDistinctSubjectsPerPredicate;
+  double avgNumDistinctSubjectsPerPredicate_;
 
   /// Uninitialized default construction, necessary for the serialization to
   /// work.
@@ -42,19 +42,19 @@ struct PatternStatistics {
   PatternStatistics(uint64_t numDistinctSubjectPredicate,
                     uint64_t numDistinctSubjects,
                     uint64_t numDistinctPredicates)
-      : _numDistinctSubjectPredicatePairs{numDistinctSubjectPredicate},
-        _avgNumDistinctPredicatesPerSubject{
-            static_cast<double>(_numDistinctSubjectPredicatePairs) /
+      : numDistinctSubjectPredicatePairs_{numDistinctSubjectPredicate},
+        avgNumDistinctPredicatesPerSubject_{
+            static_cast<double>(numDistinctSubjectPredicatePairs_) /
             static_cast<double>(numDistinctSubjects)},
-        _avgNumDistinctSubjectsPerPredicate{
-            static_cast<double>(_numDistinctSubjectPredicatePairs) /
+        avgNumDistinctSubjectsPerPredicate_{
+            static_cast<double>(numDistinctSubjectPredicatePairs_) /
             static_cast<double>(numDistinctPredicates)} {}
 
   /// Symmetric serialization.
   AD_SERIALIZE_FRIEND_FUNCTION(PatternStatistics) {
-    serializer | arg._avgNumDistinctPredicatesPerSubject;
-    serializer | arg._avgNumDistinctSubjectsPerPredicate;
-    serializer | arg._numDistinctSubjectPredicatePairs;
+    serializer | arg.avgNumDistinctPredicatesPerSubject_;
+    serializer | arg.avgNumDistinctSubjectsPerPredicate_;
+    serializer | arg.numDistinctSubjectPredicatePairs_;
   }
 };
 
@@ -76,85 +76,86 @@ class PatternCreatorNew {
 
  private:
   // The file to which the patterns will be written.
-  std::string _filename;
+  std::string filename_;
 
-  // Store the Id of a pattern, and the number of distinct subjects it occurs
+  // Store the ID of a pattern, and the number of distinct subjects it occurs
   // with.
   struct PatternIdAndCount {
-    PatternID _patternId = 0;
-    uint64_t _count = 0;
+    PatternID patternId_ = 0;
+    uint64_t count_ = 0;
   };
   using PatternToIdAndCount = ad_utility::HashMap<Pattern, PatternIdAndCount>;
-  PatternToIdAndCount _patternToIdAndCount;
+  PatternToIdAndCount patternToIdAndCount_;
 
   // Between the calls to `processTriple` we have to remember the current
   // subject (the subject of the last triple for which `processTriple` was
   // called).
-  std::optional<VocabIndex> _currentSubjectIndex;
-  // The pattern of `_currentSubjectIndex`. This might still be incomplete,
+  std::optional<VocabIndex> currentSubjectIndex_;
+  // The pattern of `currentSubjectIndex_`. This might still be incomplete,
   // because more triples with the same subject might be pushed.
-  Pattern _currentPattern;
+  Pattern currentPattern_;
 
-  ad_utility::serialization::FileWriteSerializer _patternSerializer;
+  ad_utility::serialization::FileWriteSerializer patternSerializer_;
 
   // Store the additional triples that are created by the pattern mechanism for
   // the `has-pattern` and `has-predicate` predicates.
-  // TODO<joka921> Use something buffered for this.
-  std::vector<std::pair<std::array<Id, 3>, bool>> _tripleBuffer;
-  std::unique_ptr<PSOSorter> _additionalTriplesPsoSorter;
-  std::unique_ptr<OSPSorter4Cols> _fullPsoSorter;
+  struct TripleAndIsInternal {
+    std::array<Id, 3> triple_;
+    bool isInternal_;
+  };
+  ad_utility::BufferedVector<TripleAndIsInternal> tripleBuffer_;
+  PSOSorter additionalTriplesPsoSorter_;
+  std::unique_ptr<OSPSorter4Cols> ospSorterTriplesWithPattern_;
 
   // The predicates which have already occured in one of the patterns. Needed to
   // count the number of distinct predicates.
-  ad_utility::HashSet<Pattern::value_type> _distinctPredicates;
+  ad_utility::HashSet<Pattern::value_type> distinctPredicates_;
 
   // The number of distinct subjects and distinct subject-predicate pairs.
-  uint64_t _numDistinctSubjects = 0;
-  uint64_t _numDistinctSubjectPredicatePairs = 0;
+  uint64_t numDistinctSubjects_ = 0;
+  uint64_t numDistinctSubjectPredicatePairs_ = 0;
 
   // True if `finish()` was already called.
-  bool _isFinished = false;
+  bool isFinished_ = false;
 
  public:
-  /// The patterns will be written to `filename` as well as to other filenames
-  /// which have `filename` as a prefix.
-  explicit PatternCreatorNew(const string& filename,
-                             ad_utility::MemorySize memoryForStxxl)
-      : _filename{filename},
-        _patternSerializer{{filename}},
-        _additionalTriplesPsoSorter{std::make_unique<PSOSorter>(
-            filename + "additionalTriples.pso.dat", memoryForStxxl / 2,
-            ad_utility::makeUnlimitedAllocator<Id>())},
-        _fullPsoSorter{std::make_unique<OSPSorter4Cols>(
-            filename + "withPatterns.pso.dat", memoryForStxxl / 2,
+  // The patterns will be written to files starting with `basename`.
+  explicit PatternCreatorNew(const string& basename,
+                             ad_utility::MemorySize memoryLimit)
+      : filename_{basename},
+        patternSerializer_{{basename}},
+        tripleBuffer_(100'000, basename + ".tripleBufferForPatterns.dat"),
+        additionalTriplesPsoSorter_{basename + ".additionalTriples.pso.dat",
+                                    memoryLimit / 2,
+                                    ad_utility::makeUnlimitedAllocator<Id>()},
+        ospSorterTriplesWithPattern_{std::make_unique<OSPSorter4Cols>(
+            basename + ".withPatterns.osp.dat", memoryLimit / 2,
             ad_utility::makeUnlimitedAllocator<Id>())} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 
-  /// This function has to be called for all the triples in the SPO permutation
-  /// \param triple Must be >= all previously pushed triples wrt the SPO
-  /// permutation.
+  // This function has to be called for all the triples in the SPO permutation
+  // The `triple` must be >= all previously pushed triples wrt the SPO
+  // permutation.
   void processTriple(std::array<Id, 3> triple, bool ignoreForPatterns);
 
-  /// Write the patterns to disk after all triples have been pushed. Calls to
-  /// `processTriple` after calling `finish` lead to undefined behavior. Note
-  /// that the constructor also calls `finish` to give the `PatternCreatorNew`
-  /// proper RAII semantics.
+  // Write the patterns to disk after all triples have been pushed. Calls to
+  // `processTriple` after calling `finish` lead to undefined behavior. Note
+  // that the destructor also calls `finish` to give the `PatternCreatorNew`
+  // proper RAII semantics.
   void finish();
 
-  /// Destructor implicitly calls `finish`
+  // Destructor implicitly calls `finish`.
   ~PatternCreatorNew() {
     ad_utility::terminateIfThrows([this]() { finish(); },
                                   "Finishing the underlying file of a "
                                   "`PatternCreatorNew` during destruction.");
   }
 
-  /// Read the patterns from `filename`. The patterns must have been written to
-  /// this file using a `PatternCreatorNew`. The patterns and all their
-  /// statistics will be written to the various arguments.
-  /// TODO<joka921> The storage of the pattern will change soon, so we have
-  /// chosen an interface here that requires as little change as possible in the
-  /// `Index` class.
+  // Read the patterns from the files with the given `basename`. The patterns
+  // must have been written to files with this `basename` using
+  // `PatternCreatorNew`. The patterns and all their statistics will be written
+  // to the various arguments.
   static void readPatternsFromFile(const std::string& filename,
                                    double& avgNumSubjectsPerPredicate,
                                    double& avgNumPredicatesPerSubject,
@@ -162,13 +163,13 @@ class PatternCreatorNew {
                                    CompactVectorOfStrings<Id>& patterns);
 
   // Move the sorted `has-pattern` and `has-predicate` triples out.
-  std::unique_ptr<PSOSorter> getHasPatternSortedByPSO() && {
+  PSOSorter&& getHasPatternSortedByPSO() && {
     finish();
-    return std::move(_additionalTriplesPsoSorter);
+    return std::move(additionalTriplesPsoSorter_);
   }
   std::unique_ptr<OSPSorter4Cols> getAllTriplesWithPatternSortedByOSP() && {
     finish();
-    return std::move(_fullPsoSorter);
+    return std::move(ospSorterTriplesWithPattern_);
   }
 
  private:
@@ -176,7 +177,7 @@ class PatternCreatorNew {
 
   void printStatistics(PatternStatistics patternStatistics) const;
 
-  auto& fullPsoSorter() { return *_fullPsoSorter; }
+  auto& ospSorterTriplesWithPattern() { return *ospSorterTriplesWithPattern_; }
 };
 
 // The old version of the pattern creator.
@@ -198,7 +199,7 @@ class PatternCreator {
   // subject (the subject of the last triple for which `processTriple` was
   // called).
   std::optional<VocabIndex> _currentSubjectIndex;
-  // The pattern of `_currentSubjectIndex`. This might still be incomplete,
+  // The pattern of `currentSubjectIndex_`. This might still be incomplete,
   // because more triples with the same subject might be pushed.
   Pattern _currentPattern;
 
@@ -223,37 +224,34 @@ class PatternCreator {
   bool _isFinished = false;
 
  public:
-  /// The patterns will be written to `filename` as well as to other filenames
-  /// which have `filename` as a prefix.
+  // The patterns will be written to `filename` as well as to other filenames
+  // which have `filename` as a prefix.
   explicit PatternCreator(const string& filename)
       : _filename{filename}, _subjectToPatternSerializer{{filename}} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 
-  /// This function has to be called for all the triples in the SPO permutation
-  /// \param triple Must be >= all previously pushed triples wrt the SPO
-  /// permutation.
+  // This function has to be called for all the triples in the SPO permutation
+  // \param triple Must be >= all previously pushed triples wrt the SPO
+  // permutation.
   void processTriple(std::array<Id, 3> triple);
 
-  /// Write the patterns to disk after all triples have been pushed. Calls to
-  /// `processTriple` after calling `finish` lead to undefined behavior. Note
-  /// that the constructor also calls `finish` to give the `PatternCreator`
-  /// proper RAII semantics.
+  // Write the patterns to disk after all triples have been pushed. Calls to
+  // `processTriple` after calling `finish` lead to undefined behavior. Note
+  // that the constructor also calls `finish` to give the `PatternCreator`
+  // proper RAII semantics.
   void finish();
 
-  /// Destructor implicitly calls `finish`
+  // Destructor implicitly calls `finish`
   ~PatternCreator() {
     ad_utility::terminateIfThrows([this]() { finish(); },
                                   "Finishing the underlying file of a "
                                   "`PatternCreator` during destruction.");
   }
 
-  /// Read the patterns from `filename`. The patterns must have been written to
-  /// this file using a `PatternCreator`. The patterns and all their statistics
-  /// will be written to the various arguments.
-  /// TODO<joka921> The storage of the pattern will change soon, so we have
-  /// chosen an interface here that requires as little change as possible in the
-  /// `Index` class.
+  // Read the patterns from `filename`. The patterns must have been written to
+  // this file using a `PatternCreator`. The patterns and all their statistics
+  // will be written to the various arguments.
   static void readPatternsFromFile(const std::string& filename,
                                    double& avgNumSubjectsPerPredicate,
                                    double& avgNumPredicatesPerSubject,

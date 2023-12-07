@@ -83,6 +83,13 @@ class SparqlExpression {
     });
   }
 
+  // Replace child at index `childIndex` with `newExpression`
+  virtual void replaceChild(size_t childIndex,
+                            std::unique_ptr<SparqlExpression> newExpression) {
+    AD_CONTRACT_CHECK(childIndex < children().size());
+    children()[childIndex] = std::move(newExpression);
+  }
+
   /// Get a unique identifier for this expression, used as cache key.
   virtual string getCacheKey(const VariableToColumnMap& varColMap) const = 0;
 

@@ -264,13 +264,12 @@ class Index {
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Similar to the overload of `scan` above, but the keys are specified as IDs.
-  IdTable scan(
-      Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-      Permutation::ColumnIndicesRef additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+               Permutation::ColumnIndicesRef additionalColumns,
+               ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of
   // the scan result.

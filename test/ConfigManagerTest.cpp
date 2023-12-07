@@ -4,6 +4,7 @@
 // schlegea@informatik.uni-freiburg.de)
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -18,6 +19,7 @@
 
 #include "./util/ConfigOptionHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/PrintConfigurationDocComparisonString.h"
 #include "./util/ValidatorHelpers.h"
 #include "gtest/gtest.h"
 #include "util/Algorithm.h"
@@ -29,8 +31,13 @@
 #include "util/ConfigManager/Validator.h"
 #include "util/ConstexprUtils.h"
 #include "util/CtreHelpers.h"
+#include "util/Exception.h"
+#include "util/File.h"
 #include "util/Forward.h"
+#include "util/Random.h"
+#include "util/StringUtils.h"
 #include "util/TupleForEach.h"
+#include "util/TypeTraits.h"
 #include "util/json.h"
 
 using namespace std::string_literals;
@@ -2249,15 +2256,13 @@ struct ConfigOptionsAndValidatorsOrder {
 };
 
 /*
-This is for testing, if the internal helper functions
-`ConfigManager::validators` and `ConfigManager::configurationOptions` sort their
-return values correctly.
+This is for testing, if the internal helper function
+`ConfigManager::validators` sorts its return value correctly.
 */
-TEST(ConfigManagerTest, CollectionFunctionsSorting) {
+TEST(ConfigManagerTest, ValidatorsSorting) {
   /*
   Add dummy configuration option for all supported types and dummy validators
   for them to the given `configManager`.
-
   @returns The order of all added configuration options and validators.
   */
   auto addConfigOptionsAndValidators = [callNum =
@@ -2295,8 +2300,7 @@ TEST(ConfigManagerTest, CollectionFunctionsSorting) {
     return order;
   };
 
-  // Check the order of the configuration options and validators inside the
-  // configuration manager.
+  // Check the order of the validators inside the configuration manager.
   auto checkOrder = [](const ConfigManager& manager,
                        const ConfigOptionsAndValidatorsOrder& order,
                        ad_utility::source_location l =
@@ -2304,11 +2308,6 @@ TEST(ConfigManagerTest, CollectionFunctionsSorting) {
     // For generating better messages, when failing a test.
     auto trace{generateLocationTrace(l, "checkOrder")};
 
-    ASSERT_TRUE(std::ranges::equal(
-        manager.configurationOptions(true), order.configOptions_, {},
-        [](const std::pair<std::string, const ConfigOption&>& pair) {
-          return &pair.second;
-        }));
     ASSERT_TRUE(std::ranges::equal(
         manager.validators(true), order.validators_, {},
         [](const ConfigOptionValidatorManager& validatorManager) {
@@ -2357,5 +2356,335 @@ TEST(ConfigManagerTest, CollectionFunctionsSorting) {
   mSubManagerFirstSubOrder.append(std::move(mSubManagerFirstSubOrder2));
   checkOrder(mSubManagerFirst, mSubManagerFirstOrderOfAll);
   checkOrder(mSubManagerFirstSub, mSubManagerFirstSubOrder);
+}
+
+// Small test for the helper class
+// `ConfigManager::ConfigurationDocValidatorAssignment`.
+TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
+  // How many instances of `ConfigOption`s and `ConfigManager`s should be added
+  // for the test?
+  constexpr size_t NUM_CONFIG_OPTION = 1;
+  constexpr size_t NUM_CONFIG_MANAGER = NUM_CONFIG_OPTION;
+
+  // Generate a vector of dummy `ConfigOptionValidatorManager`. Note: They will
+  // not actually work.
+  auto generateDummyValidatorManager = [](const size_t numValidator) {
+    // Dummy configuration option needed for validator manager constructor.
+    bool b;
+    ConfigOption opt("d", "", &b);
+    ConstConfigOptionProxy<bool> proxy(opt);
+
+    // Dummy translator function needed for validator manager constructor.
+    auto translator{std::identity{}};
+
+    // Dummy validator function needed for validator manager constructor.
+    auto validator = [](const auto&) { return true; };
+
+    // Create the validators.
+    std::vector<ConfigOptionValidatorManager> validators;
+    validators.reserve(numValidator);
+    for (size_t v = 0; v < numValidator; v++) {
+      validators.emplace_back(validator, "", "", translator, proxy);
+    }
+    return validators;
+  };
+
+  /*
+  @brief Create a vector of key and `std::vector<ConfigOptionValidatorManager>`
+  pairs. The size of `std::vector<ConfigOptionValidatorManager>` is random.
+
+  @param keyFactory The constructor for the key elements. Should take no
+  arguments and return a a fresh instance every time, it is invoked.
+  @param numPairs How many pairs should be created?
+  */
+  auto createKeyAndValidatorPairVector =
+      [&generateDummyValidatorManager]<typename KeyFactory>(
+          const KeyFactory& keyFactory, const size_t numPairs) {
+        AD_CONTRACT_CHECK(numPairs > 0);
+
+        // The type of the keys.
+        using Key = std::invoke_result_t<KeyFactory>;
+
+        /*
+        A random number generator will be used, to determine the amount of
+        `ConfigOptionValidatorManager`s, that will be added for each key. (To
+        make the test less uniform.)
+        */
+        SlowRandomIntGenerator<size_t> generatorNumValidatorPerKey(0, 15);
+
+        // Generate the keys, together with their validators.
+        std::vector<std::pair<Key, std::vector<ConfigOptionValidatorManager>>>
+            keysAndValidators;
+        keysAndValidators.reserve(numPairs);
+        for (size_t i = 0; i < numPairs; i++) {
+          keysAndValidators.emplace_back(
+              std::invoke(keyFactory),
+              generateDummyValidatorManager(generatorNumValidatorPerKey()));
+        }
+
+        return keysAndValidators;
+      };
+
+  // Add a vector, generated by `createKeyAndValidatorPairVector`, to the given
+  // `ConfigurationDocValidatorAssignment`.
+  auto addPairVector =
+      []<typename T>(
+          ConfigManager::ConfigurationDocValidatorAssignment* assignment,
+          const std::vector<
+              std::pair<T, std::vector<ConfigOptionValidatorManager>>>&
+              pairVector) {
+        // Simply insert all the entries.
+        std::ranges::for_each(pairVector, [&assignment](const auto& pair) {
+          const auto& [key, validatorVector] = pair;
+          std::ranges::for_each(
+              validatorVector,
+              [&assignment,
+               &key](const ConfigOptionValidatorManager& validator) {
+                assignment->addEntryUnderKey(key, validator);
+              });
+        });
+      };
+
+  /*
+  Test if a vector, generated by `createKeyAndValidatorPairVector`, has entries
+  in `ConfigurationDocValidatorAssignment`, as described by the vector. Note:
+  This will be checked via identity, not equality.
+  */
+  auto testPairVector =
+      []<typename T>(
+          const ConfigManager::ConfigurationDocValidatorAssignment& assignment,
+          const std::vector<
+              std::pair<T, std::vector<ConfigOptionValidatorManager>>>&
+              pairVector,
+          ad_utility::source_location l =
+              ad_utility::source_location::current()) {
+        // For generating better messages, when failing a test.
+        auto trace{generateLocationTrace(l, "testPairVector")};
+        std::ranges::for_each(pairVector, [&assignment](const auto& pair) {
+          const auto& [key, expectedValidatorVector] = pair;
+
+          // Are the entries under `key` the objects in the expected vector?
+          auto toPointer = [](const ConfigOptionValidatorManager& x) {
+            return &x;
+          };
+          ASSERT_TRUE(std::ranges::equal(assignment.getEntriesUnderKey(key),
+                                         expectedValidatorVector, {}, toPointer,
+                                         toPointer));
+        });
+      };
+
+  /*
+  Generate the `ConfigOption`, together with their validators. Note: We do not
+  need working `ConfigOption`. As long as they exists, everythings fine.
+  */
+  const auto configOptionKeysAndValidators{createKeyAndValidatorPairVector(
+      []() {
+        bool b;
+        return ConfigOption("d", "", &b);
+      },
+      NUM_CONFIG_OPTION)};
+
+  /*
+  Generate the `ConfigManager`, together with their validators. Note: We do not
+  need working `ConfigManager`. As long as they exists, everythings fine.
+  */
+  const auto configManagerKeysAndValidators{createKeyAndValidatorPairVector(
+      []() { return ConfigManager{}; }, NUM_CONFIG_MANAGER)};
+
+  // Add and test the vectors.
+  ConfigManager::ConfigurationDocValidatorAssignment assignment{};
+  addPairVector(&assignment, configOptionKeysAndValidators);
+  testPairVector(assignment, configOptionKeysAndValidators);
+  addPairVector(&assignment, configManagerKeysAndValidators);
+  testPairVector(assignment, configOptionKeysAndValidators);
+  testPairVector(assignment, configManagerKeysAndValidators);
+
+  // Check the behavior, if the key has nothing assigned to it and the validator
+  // was never assigned to anything.
+  bool b;
+  ConfigOption notIncludedOpt("d", "", &b);
+  ConstConfigOptionProxy<bool> notIncludedOptProxy(notIncludedOpt);
+  ConfigManager notIncludedConfigManager{};
+  ConfigOptionValidatorManager notIncludedValidator(
+      [](const auto&) { return true; }, "", "", std::identity{},
+      notIncludedOptProxy);
+  ASSERT_TRUE(assignment.getEntriesUnderKey(notIncludedOpt).empty());
+  ASSERT_TRUE(assignment.getEntriesUnderKey(notIncludedConfigManager).empty());
+}
+
+// A simple hard coded comparison test.
+TEST(ConfigManagerTest, PrintConfigurationDocComparison) {
+  // For comparing strings.
+  auto assertStringEqual = [](const std::string_view a,
+                              const std::string_view b,
+                              ad_utility::source_location l =
+                                  ad_utility::source_location::current()) {
+    // For generating better messages, when failing a test.
+    auto trace{generateLocationTrace(l, "assertStringEqual")};
+
+    ASSERT_STREQ(a.data(), b.data());
+  };
+
+  // Empty config manager.
+  assertStringEqual(emptyConfigManagerExpectedString,
+                    ConfigManager{}.printConfigurationDoc(true));
+  assertStringEqual(emptyConfigManagerExpectedString,
+                    ConfigManager{}.printConfigurationDoc(false));
+
+  // Add a default validator to the given `ConfigManager`.
+  auto addDefaultValidator =
+      [](ConfigManager* configManager,
+         const ad_utility::isInstantiation<
+             ConstConfigOptionProxy> auto&... configOptionsToBeChecked) {
+        const std::string validatorDescription = absl::StrCat(
+            "Validator for configuration options ",
+            ad_utility::lazyStrJoin(
+                std::vector{configOptionsToBeChecked.getConfigOption()
+                                .getIdentifier()...},
+                ", "),
+            ".");
+        configManager->addValidator([](const auto&...) { return true; },
+                                    validatorDescription, validatorDescription,
+                                    configOptionsToBeChecked...);
+      };
+
+  // Add example config options and single option validators.
+  auto addDefaultExampleOptionsAndSingleOptionValidators =
+      [&addDefaultValidator](ConfigManager* configManager) {
+        // Add the example configuration options by calling `addOption` with all
+        // valid argument combinations.
+        doForTypeInConfigOptionValueType([&addDefaultValidator, &configManager]<
+                                             typename OptionType>() {
+          /*
+          @brief Add a configuration option with the wanted characteristics to
+          `configManager`.
+
+          @param configOptionVariable The variable, that the config option will
+          write to, whenever it is set.
+          @param hasDescription Should the configuration option have a
+          description?
+          @param hasDefaultValue Should the configuration option have a default
+          value?
+          @param keepsDefaultValue Should the configuration option keep the
+          default value, or should it be set to a different value?
+          @param hasOwnValidator Should the configuration option have a
+          validator, that only checks the option?
+          */
+          auto addOption = [&configManager, &addDefaultValidator](
+                               OptionType* configOptionVariable,
+                               const bool hasDescription,
+                               const bool hasDefaultValue,
+                               const bool keepsDefaultValue,
+                               const bool hasOwnValidator) {
+            // Default description.
+            const std::string description{
+                hasDescription
+                    ? absl::StrCat(
+                          "Description for type ",
+                          ConfigOption::availableTypesToString<OptionType>(),
+                          ".")
+                    : ""};
+
+            /*
+            Generate the identifier.
+            We use the string representation of the type, to make the identifier
+            unique, but the helper function for that was created for a different
+            usage, which leads to it creating strings, that are not valid in
+            identifiers. The easiest option was to just adjust them as needed.
+            */
+            auto withOrWithout = [](const bool isWith,
+                                    std::string_view postfix) {
+              return absl::StrCat(isWith ? "With" : "Without", postfix);
+            };
+            const std::string identifier = absl::StrCat(
+                absl::StrReplaceAll(
+                    ConfigOption::availableTypesToString<OptionType>(),
+                    {{" ", ""}}),
+                withOrWithout(hasDescription, "Description"),
+                withOrWithout(hasDefaultValue, "DefaultValue"),
+                hasDefaultValue
+                    ? withOrWithout(keepsDefaultValue, "KeepDefaultValue")
+                    : "",
+                withOrWithout(hasOwnValidator, "Validator"));
+
+            // Create the option.
+            const ConfigOption* createdOption{};
+            if (hasDefaultValue) {
+              createdOption =
+                  &configManager
+                       ->addOption(identifier, description,
+                                   configOptionVariable,
+                                   createDummyValueForValidator<OptionType>(0))
+                       .getConfigOption();
+              if (!keepsDefaultValue) {
+                /*
+                We have to get a bit hacky, because the setting of configuration
+                option, that was created via `ConfigManager`, should not be
+                possible. Only the parse function of `ConfigManager` should be
+                able to do that.
+                */
+                const_cast<ConfigOption*>(createdOption)
+                    ->setValue(createDummyValueForValidator<OptionType>(1));
+              }
+            } else {
+              createdOption = &configManager
+                                   ->addOption(identifier, description,
+                                               configOptionVariable)
+                                   .getConfigOption();
+            }
+
+            // Proxy object for the option
+            ConstConfigOptionProxy<OptionType> proxy{*createdOption};
+
+            // Add the validator.
+            if (hasOwnValidator) {
+              addDefaultValidator(configManager, proxy);
+            }
+
+            // Return the create option for further usage.
+            return proxy;
+          };
+
+          // All option of a type share a variable.
+          static OptionType var{};
+          addOption(&var, false, false, false, false);
+          addOption(&var, false, false, false, true);
+          addOption(&var, false, true, true, false);
+          addOption(&var, false, true, false, false);
+          addOption(&var, false, true, true, true);
+          addOption(&var, false, true, false, true);
+          addOption(&var, true, false, false, false);
+          addOption(&var, true, false, false, true);
+          addOption(&var, true, true, true, false);
+          addOption(&var, true, true, false, false);
+          addOption(&var, true, true, true, true);
+          addOption(&var, true, true, false, true);
+        });
+      };
+
+  /*
+  Lets create a configuration manager with a single sub manager.
+  The sub manager has a validator invariant for multiple configuration options,
+  the top manager only has single option validators.
+  */
+  ConfigManager topManager{};
+  addDefaultExampleOptionsAndSingleOptionValidators(&topManager);
+  ConfigManager& subManger{topManager.addSubManager({"subManager"})};
+  addDefaultExampleOptionsAndSingleOptionValidators(&subManger);
+  bool boolForDoubleArgumentValidatorOptions{false};
+  decltype(auto) doubleArgumentValidatorFirstArgument{
+      subManger.addOption("doubleArgumentValidatorFirstArgument", "",
+                          &boolForDoubleArgumentValidatorOptions)};
+  decltype(auto) doubleArgumentValidatorSecondArgument{
+      subManger.addOption("doubleArgumentValidatorSecondArgument", "",
+                          &boolForDoubleArgumentValidatorOptions)};
+  addDefaultValidator(&subManger, doubleArgumentValidatorFirstArgument,
+                      doubleArgumentValidatorSecondArgument);
+
+  // Finally, check, if the expected and actual output is the same.
+  assertStringEqual(exampleConfigManagerExpectedNotDetailedString,
+                    topManager.printConfigurationDoc(false));
+  assertStringEqual(exampleConfigManagerExpectedDetailedString,
+                    topManager.printConfigurationDoc(true));
 }
 }  // namespace ad_utility

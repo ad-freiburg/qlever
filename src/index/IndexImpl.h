@@ -410,13 +410,12 @@ class IndexImpl {
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       const Permutation::Enum& permutation,
       Permutation::ColumnIndicesRef additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // _____________________________________________________________________________
-  IdTable scan(
-      Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-      Permutation::ColumnIndicesRef additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+               Permutation::ColumnIndicesRef additionalColumns,
+               ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(const TripleComponent& col0,
@@ -462,8 +461,8 @@ class IndexImpl {
   void compressInternalVocabularyIfSpecified(
       const std::vector<std::string>& prefixes);
 
-  // Return a turtle parser that parser the `filename`. The parser will be
-  // configured to either parser in parallel or not, and to either use the
+  // Return a Turtle parser that parses the given file. The parser will be
+  // configured to either parse in parallel or not, and to either use the
   // CTRE-based relaxed parser or not, depending on the settings of the
   // corresponding member variables.
   std::unique_ptr<TurtleParserBase> makeTurtleParser(
@@ -489,6 +488,8 @@ class IndexImpl {
   void processWordsForInvertedLists(const string& contextFile,
                                     bool addWordsFromLiterals, TextVec& vec);
 
+  // TODO<joka921> Get rid of the `numColumns` by including them into the
+  // `sortedTriples` argument.
   std::pair<IndexMetaDataMmapDispatcher::WriteType,
             IndexMetaDataMmapDispatcher::WriteType>
   createPermutationPairImpl(size_t numColumns, const string& fileName1,
@@ -719,8 +720,8 @@ class IndexImpl {
 
   // Functions to create the pairs of permutations during the index build. Each
   // of them takes the following arguments:
-  // * `isInternalId` a callable that takes an `Id` and returns true iff the
-  //    corresponding IRI was internally added by QLever and not part of the
+  // * `isQleverInternalId` a callable that takes an `Id` and returns true iff
+  //    the corresponding IRI was internally added by QLever and not part of the
   //    knowledge graph.
   // * `sortedInput`  The input, must be sorted by the first permutation in the
   //    function name.
@@ -728,16 +729,15 @@ class IndexImpl {
   //    blocks in the input. Typically used to set up the sorting for the
   //    subsequent pair of permutations.
 
-  // Create the SPO and SOP permutations. Also count the number of distinct
-  // actual (not internal) subjects in the input and write it to the metadata.
-  // Also builds the patterns if specified.
+  // Create the SPO and SOP permutations. Additionally, count the number of
+  // distinct actual (not internal) subjects in the input and write it to the
+  // metadata. Also builds the patterns if specified.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  std::optional<std::pair<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>,
-                          std::unique_ptr<PatternCreatorNew::PSOSorter>>>
+  std::optional<std::pair<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>, std::unique_ptr<PatternCreatorNew::PSOsorter>>
   createSPOAndSOP(size_t numColumns, auto& isInternalId,
                   BlocksOfTriples sortedTriples, NextSorter&&... nextSorter);
-  // Create the OSP and OPS permutations. Additionally count the number of
+  // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
@@ -745,7 +745,7 @@ class IndexImpl {
                        BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
-  // Create the PSO and POS permutations. Additionally count the number of
+  // Create the PSO and POS permutations. Additionally, count the number of
   // distinct predicates and the number of actual triples and write them to the
   // metadata.
   template <typename... NextSorter>
@@ -760,15 +760,27 @@ class IndexImpl {
   template <typename Comparator, size_t N = NumColumnsIndexBuilding>
   ExternalSorter<Comparator, N> makeSorter(
       std::string_view permutationName) const;
+  // Same as the same function, but return a `unique_ptr`.
+  template <typename Comparator, size_t N = NumColumnsIndexBuilding>
+  std::unique_ptr<ExternalSorter<Comparator, N>> makeSorterPtr(
+      std::string_view permutationName) const;
+  // The common implementation of the above two functions.
+  template <typename Comparator, size_t N, bool returnPtr>
+  auto makeSorterImpl(std::string_view permutationName) const;
 
   // Aliases for the three functions above that should be consistently used.
   // They assert that the order of the permutations as communicated by the
   // function names are consistent with the aliases for the sorters, i.e. that
   // `createFirstPermutationPair` corresponds to the `FirstPermutation`.
-  std::optional<std::pair<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>,
-                          std::unique_ptr<PatternCreatorNew::PSOSorter>>>
+
+  // The `createFirstPermutationPair` has a special implementation for the case
+  // of only two permutations (where we have to build the Pxx permutations). In
+  // all other cases the Sxx permutations are built first because we need the
+  // patterns.
+  std::optional<std::pair<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>, std::unique_ptr<PatternCreatorNew::PSOSorter>>
   createFirstPermutationPair(auto&&... args) {
     static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
+    static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
     if (loadAllPermutations()) {
       return createSPOAndSOP(AD_FWD(args)...);
     } else {

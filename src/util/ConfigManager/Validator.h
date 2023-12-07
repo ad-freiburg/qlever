@@ -11,8 +11,11 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 
+#include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
+#include "util/HashSet.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {
@@ -99,6 +102,9 @@ class ConfigOptionValidatorManager {
   // A descripton of the invariant, this validator imposes.
   std::string descriptor_;
 
+  // Pointer to the `configOption`, that will be checked.
+  ad_utility::HashSet<const ConfigOption*> configOptionsToBeChecked_;
+
   // Describes the order of initialization.
   static inline std::atomic_size_t numberOfInstances_{0};
   size_t initializationId_{numberOfInstances_++};
@@ -126,16 +132,19 @@ class ConfigOptionValidatorManager {
   requires(std::invocable<TranslationFunction,
                           const ExceptionValidatorParameterTypes> &&
            ...) &&
-          ExceptionValidatorFunction<
-              ExceptionValidatorFunc,
-              std::invoke_result_t<TranslationFunction,
-                                   ExceptionValidatorParameterTypes>...> &&
-          (sizeof...(ExceptionValidatorParameterTypes) > 0)
+              ExceptionValidatorFunction<
+                  ExceptionValidatorFunc,
+                  std::invoke_result_t<
+                      TranslationFunction,
+                      const ExceptionValidatorParameterTypes>...> &&
+              (sizeof...(ExceptionValidatorParameterTypes) > 0)
   ConfigOptionValidatorManager(
       ExceptionValidatorFunc exceptionValidatorFunction, std::string descriptor,
       TranslationFunction translationFunction,
       const ExceptionValidatorParameterTypes... configOptionsToBeChecked)
-      : descriptor_{std::move(descriptor)} {
+      : descriptor_{std::move(descriptor)},
+        configOptionsToBeChecked_{
+            &configOptionsToBeChecked.getConfigOption()...} {
     wrappedValidatorFunction_ = [translationFunction =
                                      std::move(translationFunction),
                                  exceptionValidatorFunction =
@@ -188,16 +197,17 @@ class ConfigOptionValidatorManager {
             isInstantiation<ConstConfigOptionProxy>... ValidatorParameterTypes>
   requires(std::invocable<TranslationFunction, const ValidatorParameterTypes> &&
            ...) &&
-          ValidatorFunction<ValidatorFunc,
-                            std::invoke_result_t<TranslationFunction,
-                                                 ValidatorParameterTypes>...> &&
+          ValidatorFunction<
+              ValidatorFunc,
+              std::invoke_result_t<TranslationFunction,
+                                   const ValidatorParameterTypes>...> &&
           (sizeof...(ValidatorParameterTypes) > 0) ConfigOptionValidatorManager(
       ValidatorFunc validatorFunction, std::string errorMessage,
       std::string descriptor, TranslationFunction translationFunction,
       const ValidatorParameterTypes... configOptionsToBeChecked)
       : ConfigOptionValidatorManager(
             transformValidatorIntoExceptionValidator<std::invoke_result_t<
-                TranslationFunction, ValidatorParameterTypes>...>(
+                TranslationFunction, const ValidatorParameterTypes>...>(
                 std::move(validatorFunction), std::move(errorMessage)),
             std::move(descriptor), std::move(translationFunction),
             configOptionsToBeChecked...) {}
@@ -218,6 +228,10 @@ class ConfigOptionValidatorManager {
   // Return, how many instances of this class were initialized before this
   // instance.
   size_t getInitializationId() const;
+
+  // The `configOption`s, that this validator will check.
+  const ad_utility::HashSet<const ConfigOption*>& configOptionToBeChecked()
+      const;
 };
 
 }  // namespace ad_utility

@@ -116,7 +116,7 @@ endif()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.81 COMPONENTS iostreams program_options REQUIRED)
+find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 
@@ -219,6 +219,12 @@ endif()
 if (ENABLE_EXPENSIVE_CHECKS)
     message(STATUS "Enabling checks that potentially have a significant runtime overhead")
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
+endif()
+
+if (DISABLE_QUERY_CANCELLATION_WATCH_DOG)
+    message(STATUS "Disable periodic checks that the cancellation flag is checked frequently enough while the result of
+    a query is being computed with a small runtime overhead")
+    add_definitions("-DQLEVER_DISABLE_QUERY_CANCELLATION_WATCH_DOG")
 endif()
 
 ################################

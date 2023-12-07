@@ -69,7 +69,7 @@ TEST(TriplesView, AllTriples) {
   std::vector<std::array<Id, 3>> result;
   for (auto triple :
        TriplesView(DummyPermutation{},
-                   std::make_shared<ad_utility::CancellationHandle>())) {
+                   std::make_shared<ad_utility::CancellationHandle<>>())) {
     result.push_back(triple);
   }
   ASSERT_EQ(result, expectedResult());
@@ -84,9 +84,10 @@ TEST(TriplesView, IgnoreRanges) {
   });
   std::vector<std::pair<Id, Id>> ignoredRanges{
       {V(0), V(4)}, {V(7), V(8)}, {V(13), V(87593)}};
-  for (auto triple : TriplesView(
-           DummyPermutation{},
-           std::make_shared<ad_utility::CancellationHandle>(), ignoredRanges)) {
+  for (auto triple :
+       TriplesView(DummyPermutation{},
+                   std::make_shared<ad_utility::CancellationHandle<>>(),
+                   ignoredRanges)) {
     result.push_back(triple);
   }
   ASSERT_EQ(result, expected);
@@ -101,7 +102,7 @@ TEST(TriplesView, IgnoreTriples) {
   std::erase_if(expected, isTripleIgnored);
   for (auto triple :
        TriplesView(DummyPermutation{},
-                   std::make_shared<ad_utility::CancellationHandle>(), {},
+                   std::make_shared<ad_utility::CancellationHandle<>>(), {},
                    isTripleIgnored)) {
     result.push_back(triple);
   }
