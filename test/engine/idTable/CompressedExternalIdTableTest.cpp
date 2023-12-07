@@ -244,3 +244,17 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
   ASSERT_NO_THROW(pushAll());
   ASSERT_NO_THROW(writer.clear());
 }
+
+TEST(CompressedExternalIdTable, WrongNumberOfColsWhenPushing) {
+  std::string filename = "idTableCompressor.wrongNumCols.dat";
+  using namespace ad_utility::memory_literals;
+  auto alloc = ad_utility::testing::makeAllocator();
+
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 3> writer{filename, 3,
+                                                                   10_B, alloc};
+  ad_utility::CompressedExternalIdTableSorterTypeErased& erased = writer;
+  IdTableStatic<0> t1{3, alloc};
+  EXPECT_NO_THROW(erased.pushBlock(t1));
+  EXPECT_NO_THROW(t1.setNumColumns(4));
+  EXPECT_ANY_THROW(erased.pushBlock(t1));
+}

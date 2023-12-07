@@ -31,4 +31,10 @@ std::string_view ConfigOptionValidatorManager::getDescription() const {
 size_t ConfigOptionValidatorManager::getInitializationId() const {
   return initializationId_;
 }
+
+// ____________________________________________________________________________
+const ad_utility::HashSet<const ConfigOption*>&
+ConfigOptionValidatorManager::configOptionToBeChecked() const {
+  return configOptionsToBeChecked_;
+}
 }  // namespace ad_utility

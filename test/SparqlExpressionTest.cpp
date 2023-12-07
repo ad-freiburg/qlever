@@ -227,9 +227,10 @@ auto testMinus = std::bind_front(testBinaryExpression, &makeSubtractExpression);
 auto testDivide = std::bind_front(testBinaryExpression, &makeDivideExpression);
 
 }  // namespace
-// Test `AndExpression` and `OrExpression`.
-//
+
+// _____________________________________________________________________________________
 TEST(SparqlExpression, logicalOperators) {
+  // Test `AndExpression` and `OrExpression`.
   V<Id> b{{B(false), B(true), B(true), B(false)}, alloc};
   V<Id> d{{D(1.0), D(2.0), D(std::numeric_limits<double>::quiet_NaN()), D(0.0)},
           alloc};
@@ -322,11 +323,12 @@ TEST(SparqlExpression, logicalOperators) {
   }
 }
 
-// Test `AddExpression`, `SubtractExpression`, `MultiplyExpression`, and
-// `DivideExpression`.
-//
-// TODO: Also test `UnaryMinusExpression`.
+// _____________________________________________________________________________________
 TEST(SparqlExpression, arithmeticOperators) {
+  // Test `AddExpression`, `SubtractExpression`, `MultiplyExpression`, and
+  // `DivideExpression`.
+  //
+  // TODO: Also test `UnaryMinusExpression`.
   V<Id> b{{B(true), B(false), B(false), B(true)}, alloc};
   V<Id> bAsInt{{I(1), I(0), I(0), I(1)}, alloc};
 
@@ -386,7 +388,7 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(times13, mixed, D(1.0 / 1.3));
 }
 
-//
+// _____________________________________________________________________________________
 // TODO: The tests above could also be simplified (and made much more readable)
 // in this vein.
 auto testUnaryExpression =
@@ -398,10 +400,9 @@ auto testUnaryExpression =
       testNaryExpression(makeFunction, liftVector(expected),
                          liftVector(operand));
     };
-
-// Test `YearExpression`, `MonthExpression`, `DayExpression`,
-//  `HoursExpression`, `MinutesExpression`, and `SecondsExpression`.
 TEST(SparqlExpression, dateOperators) {
+  // Test `YearExpression`, `MonthExpression`, `DayExpression`,
+  //  `HoursExpression`, `MinutesExpression`, and `SecondsExpression`.
   // Helper function that asserts that the date operators give the expected
   // result on the given date.
   auto checkYear = std::bind_front(testUnaryExpression, &makeYearExpression);
@@ -478,7 +479,7 @@ TEST(SparqlExpression, dateOperators) {
   testYear(IdOrStrings{"noDate"}, Ids{U});
 }
 
-// Test `StrlenExpression` and `StrExpression`.
+// _____________________________________________________________________________________
 auto checkStrlen = std::bind_front(testUnaryExpression, &makeStrlenExpression);
 auto checkStr = std::bind_front(testUnaryExpression, &makeStrExpression);
 static auto makeStrlenWithStr = [](auto arg) {
@@ -486,8 +487,8 @@ static auto makeStrlenWithStr = [](auto arg) {
 };
 auto checkStrlenWithStrChild =
     std::bind_front(testUnaryExpression, makeStrlenWithStr);
-
 TEST(SparqlExpression, stringOperators) {
+  // Test `StrlenExpression` and `StrExpression`.
   checkStrlen(IdOrStrings{"one", "two", "three", ""},
               Ids{I(3), I(3), I(5), I(0)});
   checkStrlenWithStrChild(IdOrStrings{"one", "two", "three", ""},
@@ -529,6 +530,8 @@ TEST(SparqlExpression, stringOperators) {
   EXPECT_NE(c2a, c3a);
   EXPECT_NE(c1a, c3a);
 }
+
+// _____________________________________________________________________________________
 auto checkUcase =
     std::bind_front(testUnaryExpression, &makeUppercaseExpression);
 auto checkLcase =
@@ -540,7 +543,7 @@ TEST(SparqlExpression, uppercaseAndLowercase) {
              IdOrStrings{"ONE", "TWÖ", U, U});
 }
 
-// Test STRSTARTS, STRENDS, CONTAINS, STRBEFORE, and STRAFTER.
+// _____________________________________________________________________________________
 auto checkStrStarts =
     std::bind_front(testBinaryExpressionVec, &makeStrStartsExpression);
 auto checkStrEnds =
@@ -552,6 +555,7 @@ auto checkStrAfter =
 auto checkStrBefore =
     std::bind_front(testBinaryExpressionVec, &makeStrBeforeExpression);
 TEST(SparqlExpression, binaryStringOperations) {
+  // Test STRSTARTS, STRENDS, CONTAINS, STRBEFORE, and STRAFTER.
   using S = IdOrStrings;
   auto F = Id::makeFromBool(false);
   auto T = Id::makeFromBool(true);
@@ -660,8 +664,9 @@ TEST(SparqlExpression, unaryMinus) {
   checkMinus(IdOrStrings{"true", "false", "", "<blibb>"}, Ids{U, U, U, U});
 }
 
-// Test the built-in numeric functions (floor, abs, round, ceil).
+// _____________________________________________________________________________________
 TEST(SparqlExpression, builtInNumericFunctions) {
+  // Test the built-in numeric functions (floor, abs, round, ceil).
   auto bindUnary = [](auto f) {
     return std::bind_front(testUnaryExpression, f);
   };
@@ -690,8 +695,9 @@ TEST(SparqlExpression, builtInNumericFunctions) {
   checkRound(input, round);
 }
 
-// Test the correctness of the math functions.
+// ________________________________________________________________________________________
 TEST(SparqlExpression, customNumericFunctions) {
+  // Test the correctness of the math functions.
   auto nan = std::numeric_limits<double>::quiet_NaN();
   auto inf = std::numeric_limits<double>::infinity();
   testUnaryExpression(makeLogExpression,
@@ -802,6 +808,7 @@ TEST(SparqlExpression, concatExpression) {
                              ::testing::ContainsRegex("<bim>, <bam>)")));
 }
 
+// ______________________________________________________________________________
 TEST(SparqlExpression, ReplaceExpression) {
   auto checkReplace =
       std::bind_front(testNaryExpressionVec, makeReplaceExpression);
@@ -838,6 +845,7 @@ TEST(SparqlExpression, ReplaceExpression) {
                           IdOrString{"e"}, Id::makeUndefined()});
 }
 
+// ______________________________________________________________________________
 TEST(SparqlExpression, literalExpression) {
   TestContext ctx;
   StringLiteralExpression expr{TripleComponent::Literal{
@@ -859,9 +867,9 @@ TEST(SparqlExpression, literalExpression) {
   }
 }
 
+// ______________________________________________________________________________
 auto checkEncodeForUri =
     std::bind_front(testUnaryExpression, &makeEncodeForUriExpression);
-
 TEST(SparqlExpression, encodeForUri) {
   checkEncodeForUri(IdOrStrings{"Los Angeles"}, IdOrStrings{"Los%20Angeles"});
   checkEncodeForUri(IdOrStrings{"\"Los Angeles\"@en"},
@@ -875,4 +883,14 @@ TEST(SparqlExpression, encodeForUri) {
   checkEncodeForUri(IdOrStrings{"L\"os \"Angeles"},
                     IdOrStrings{"L%22os%20%22Angeles"});
   checkEncodeForUri(IdOrStrings{U}, IdOrStrings{U});
+}
+
+// ______________________________________________________________________________
+TEST(SparqlExpression, replaceChildThrowsIfOutOfRange) {
+  sparqlExpression::IdExpression expr(ValueId::makeFromInt(42));
+  std::unique_ptr<SparqlExpression> exprToSubstitute =
+      std::make_unique<IdExpression>(ValueId::makeFromInt(42));
+
+  ASSERT_THROW(expr.replaceChild(1, std::move(exprToSubstitute)),
+               ad_utility::Exception);
 }

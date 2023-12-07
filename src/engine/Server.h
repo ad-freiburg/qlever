@@ -148,7 +148,7 @@ class Server {
   /// means or because the task has been completed successfully.
   static auto cancelAfterDeadline(
       const net::any_io_executor& executor,
-      std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
+      std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
       TimeLimit timeLimit)
       -> ad_utility::InvocableWithExactReturnType<void> auto;
 

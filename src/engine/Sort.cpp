@@ -79,6 +79,9 @@ ResultTable Sort::computeResult() {
   runtimeInfo().addDetail("time-cloning", t.msecs());
   Engine::sort(idTable, sortColumnIndices_);
 
+  // Don't report missed timeout check because sort is not cancellable
+  cancellationHandle_->resetWatchDogState();
+
   LOG(DEBUG) << "Sort result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }

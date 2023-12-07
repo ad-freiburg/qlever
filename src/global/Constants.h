@@ -61,6 +61,7 @@ static const std::string INTERNAL_TEXT_MATCH_PREDICATE =
     makeInternalIri("text");
 static const std::string HAS_PREDICATE_PREDICATE =
     makeInternalIri("has-predicate");
+static const std::string HAS_PATTERN_PREDICATE = makeInternalIri("has-pattern");
 static constexpr std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "<http://www.opengis.net/def/function/geosparql/"};
 static constexpr std::pair<std::string_view, std::string_view> MATH_PREFIX = {
@@ -187,6 +188,10 @@ static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
 // compiler limits for the evaluation of constexpr functions and templates.
 static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
+// Interval in which an enabled watchdog would check if
+// `CancellationHandle::throwIfCancelled` is called regularly.
+constexpr std::chrono::milliseconds DESIRED_CANCELLATION_CHECK_INTERVAL{50};
+
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Bool;
   using ad_utility::detail::parameterShortNames::Double;
@@ -224,7 +229,7 @@ inline auto& RuntimeParameters() {
             DurationParameter<std::chrono::seconds, "default-query-timeout">{
                 30s}),
         SizeT<"lazy-index-scan-max-size-materialization">{1'000'000},
-        Bool<"use-group-by-hash-map-optimization">{true}};
+        Bool<"use-group-by-hash-map-optimization">{false}};
   }();
   return params;
 }
