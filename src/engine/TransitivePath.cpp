@@ -194,7 +194,6 @@ void TransitivePath::computeTransitivePathBound(
       dynSub, startSide, targetSide, startSideTable);
 
   Map hull(allocator());
-  // Map hull;
   if (!targetSide.isVariable()) {
     hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value_));
   } else {
