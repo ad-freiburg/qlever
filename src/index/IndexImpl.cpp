@@ -178,114 +178,74 @@ void IndexImpl::createFromFile(const string& filename) {
         createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                    std::move(firstSorterWithUnique))
             .value();
-    auto makePtrAndBool = [](auto range)
-        -> cppcoro::generator<
-            std::pair<decltype(std::addressof(*range.begin())), bool>> {
-      for (auto& el : range) {
-        auto pair = std::pair{std::addressof(el), false};
-        co_yield pair;
-      }
+    auto setSubset = [](auto& idTable) {
+      idTable.setColumnSubset(std::array<ColumnIndex, 2>{0, 2});
     };
-    auto lazyPatternScan = std::views::transform(
-        ad_utility::OwningView{
-            makePtrAndBool(patternsPSO->template getSortedBlocks<0>())},
-        [](auto& idTableAndBool) -> decltype(auto) {
-          auto& idTable = *idTableAndBool.first;
-          if (idTableAndBool.second) {
-            return idTable;
-          }
-          idTableAndBool.second = true;
-          idTable.setColumnSubset(std::array<ColumnIndex, 2>{0, 2});
-          return idTable;
-        });
+    auto lazyPatternScan = ad_utility::repeatedTransformView(
+        ad_utility::OwningView{patternsPSO->template getSortedBlocks<0>()},
+        setSubset);
     ad_utility::data_structures::ThreadSafeQueue<IdTable> queue{4};
-    ad_utility::JThread joinWithPatternThread{[&] {
-      auto ospAsblocks = makePtrAndBool(secondSorter->getSortedBlocks<0>());
-
-      auto ospAsBlocksTransformed =
-          ospAsblocks |
-          std::views::transform(
-              [](auto& idTableAndBool) mutable -> decltype(auto) {
-                auto& idTable = *idTableAndBool.first;
-                if (idTableAndBool.second) {
-                  return idTable;
-                }
-                idTableAndBool.second = true;
-                idTable.setColumnSubset(std::array<ColumnIndex, 4>{2, 1, 0, 3});
-                return idTable;
-              });
-      auto projection = [](const auto& row) -> Id { return row[0]; };
-      auto compareProjection = []<typename T>(const T& row) {
-        if constexpr (ad_utility::SimilarTo<T, Id>) {
-          return row;
-        } else {
-          return row[0];
-        }
-      };
-      auto comparator = [&compareProjection](const auto& l, const auto& r) {
-        return compareProjection(l) < compareProjection(r);
-      };
-      IdTable outputBufferTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
-      auto pushToQueue = [&](IdTable& table) {
-        if (table.numRows() >= 50000) {
-          if (!outputBufferTable.empty()) {
-            queue.push(std::move(outputBufferTable));
-            outputBufferTable.clear();
-          }
-          queue.push(std::move(table));
-        } else {
-          outputBufferTable.insertAtEnd(table.begin(), table.end());
-          if (outputBufferTable.size() >= 50'000) {
-            queue.push(std::move(outputBufferTable));
-            outputBufferTable.clear();
-          }
-        }
-        table.clear();
-      };
-      IdTable outputTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
-      auto rowAdder =
-          ad_utility::AddCombinedRowToIdTable<decltype(pushToQueue)>{
-              1, std::move(outputTable), 100'000, pushToQueue};
-      ad_utility::zipperJoinForBlocksWithoutUndef(
-          ospAsBlocksTransformed, lazyPatternScan, comparator, rowAdder,
-          projection, projection, std::true_type{});
-      rowAdder.flush();
+  };
+  IdTable outputBufferTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
+  auto pushToQueue = [&](IdTable& table) {
+    if (table.numRows() >= 50000) {
       if (!outputBufferTable.empty()) {
         queue.push(std::move(outputBufferTable));
         outputBufferTable.clear();
       }
-      queue.finish();
-    }};
-
-    auto blockGenerator =
-        [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
-      while (auto block = queue.pop()) {
-        block.value().setColumnSubset(
-            std::array<ColumnIndex, 5>{2, 1, 0, 3, 4});
-        std::ranges::for_each(block.value().getColumn(4), [](Id& id) {
-          id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id;
-        });
-        IdTableStatic<0> staticBlock =
-            std::move(block.value()).template toStatic<0>();
-        co_yield staticBlock;
+      queue.push(std::move(table));
+    } else {
+      outputBufferTable.insertAtEnd(table.begin(), table.end());
+      if (outputBufferTable.size() >= 50'000) {
+        queue.push(std::move(outputBufferTable));
+        outputBufferTable.clear();
       }
-    }(queue);
-
-    // auto opsViewWithBothPatternColumns = std::views::join(blockGenerator);
-    auto thirdSorter =
-        makeSorter<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
-    createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
-                                std::move(blockGenerator), thirdSorter);
-    secondSorter->clear();
-    createThirdPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
-                               thirdSorter.getSortedBlocks<0>());
-    configurationJson_["has-all-permutations"] = true;
+    }
+    table.clear();
+  };
+  IdTable outputTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable<decltype(pushToQueue)>{
+      1, std::move(outputTable), 100'000, pushToQueue};
+  ad_utility::zipperJoinForBlocksWithoutUndef(
+      ospAsBlocksTransformed, lazyPatternScan, comparator, rowAdder, projection,
+      projection, std::true_type{});
+  rowAdder.flush();
+  if (!outputBufferTable.empty()) {
+    queue.push(std::move(outputBufferTable));
+    outputBufferTable.clear();
   }
+  queue.finish();
+}
+}
+;
 
-  // Dump the configuration again in case the permutations have added some
-  // information.
-  writeConfiguration();
-  LOG(INFO) << "Index build completed" << std::endl;
+auto blockGenerator = [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
+  while (auto block = queue.pop()) {
+    block.value().setColumnSubset(std::array<ColumnIndex, 5>{2, 1, 0, 3, 4});
+    std::ranges::for_each(block.value().getColumn(4), [](Id& id) {
+      id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id;
+    });
+    IdTableStatic<0> staticBlock =
+        std::move(block.value()).template toStatic<0>();
+    co_yield staticBlock;
+  }
+}(queue);
+
+// auto opsViewWithBothPatternColumns = std::views::join(blockGenerator);
+auto thirdSorter =
+    makeSorter<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
+createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
+                            std::move(blockGenerator), thirdSorter);
+secondSorter->clear();
+createThirdPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
+                           thirdSorter.getSortedBlocks<0>());
+configurationJson_["has-all-permutations"] = true;
+}
+
+// Dump the configuration again in case the permutations have added some
+// information.
+writeConfiguration();
+LOG(INFO) << "Index build completed" << std::endl;
 }
 
 // _____________________________________________________________________________

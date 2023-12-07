@@ -137,6 +137,29 @@ auto integerRange(Int upperBound) {
   return std::views::iota(Int{0}, upperBound);
 }
 
+// TODO<joka921> Comments, tests, concepts.
+auto repeatedTransformView(auto view, auto transformation) {
+  auto makePtrAndBool = [](auto range)
+      -> cppcoro::generator<
+          std::pair<decltype(std::addressof(*range.begin())), bool>> {
+    for (auto& el : range) {
+      auto pair = std::pair{std::addressof(el), false};
+      co_yield pair;
+    }
+  };
+  auto actualTransformation =
+      [transformation](auto& ptrAndBool) -> decltype(auto) {
+    auto& [ptr, alreadyTransformed] = ptrAndBool;
+    if (!alreadyTransformed) {
+      alreadyTransformed = true;
+      transformation(*ptr);
+    }
+    return *ptr;
+  };
+  return std::views::transform(makePtrAndBool(std::move(view)),
+                               actualTransformation);
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_VIEWS_H
