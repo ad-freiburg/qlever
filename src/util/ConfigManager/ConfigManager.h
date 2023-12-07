@@ -204,7 +204,7 @@ class ConfigManager {
   will stay valid, even after adding more options.
   */
   template <typename OptionType,
-            std::same_as<OptionType> DefaultValueType = OptionType>
+            std::convertible_to<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
   ConstConfigOptionProxy<OptionType> addOption(
@@ -245,7 +245,7 @@ class ConfigManager {
   will stay valid, even after adding more options.
   */
   template <typename OptionType,
-            std::same_as<OptionType> DefaultValueType = OptionType>
+            std::convertible_to<OptionType> DefaultValueType = OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
   ConstConfigOptionProxy<OptionType> addOption(

@@ -23,15 +23,14 @@
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/Date.h"
 #include "util/HashMap.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/TupleHelpers.h"
-#include "util/json.h"
 #include "util/TypeTraits.h"
+#include "util/json.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
@@ -1117,7 +1116,11 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
       overflowMap.at(parserIntegerOverflowBehavior);
 
   // Logging used configuration options.
-  LOG(INFO) << config.printConfigurationDoc(true);
+  LOG(INFO)
+      << "Printing the configuration from the settings json file (including "
+         "implictly defaulted values). For a detailed description of this "
+         "configuration call `IndexBuilderMain --help`:\n"
+      << config.printConfigurationDoc(false) << std::endl;
 }
 
 // ___________________________________________________________________________
