@@ -216,8 +216,6 @@ void IndexImpl::createFromFile(const string& filename) {
   }
   queue.finish();
 }
-}
-;
 
 auto blockGenerator = [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
   while (auto block = queue.pop()) {
