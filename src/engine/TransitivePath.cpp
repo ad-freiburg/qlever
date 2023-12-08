@@ -380,7 +380,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
     }
     if (minDist_ == 0 &&
         (!target.has_value() || currentStartNode == target.value())) {
-      insertToMap(hull, currentStartNode, currentStartNode);
+      insertIntoMap(hull, currentStartNode, currentStartNode);
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -407,7 +407,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
         if (childDepth >= minDist_) {
           marks.insert(child);
           if (!target.has_value() || child == target.value()) {
-            insertToMap(hull, currentStartNode, child);
+            insertIntoMap(hull, currentStartNode, child);
           }
         }
         // Add the child to the stack
@@ -528,7 +528,7 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
 
   for (size_t i = 0; i < sub.size(); i++) {
     checkCancellation();
-    insertToMap(edges, startCol[i], targetCol[i]);
+    insertIntoMap(edges, startCol[i], targetCol[i]);
   }
   return edges;
 }
@@ -561,7 +561,7 @@ void TransitivePath::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
 }
 
 // _____________________________________________________________________________
-void TransitivePath::insertToMap(Map& map, Id key, Id value) const {
+void TransitivePath::insertIntoMap(Map& map, Id key, Id value) const {
   auto [it, success] = map.try_emplace(key, allocator());
   it->second.insert(value);
 }

@@ -57,6 +57,8 @@ struct TransitivePathSide {
 };
 
 class TransitivePath : public Operation {
+  // We deliberately use the `std::` variants of a hash set and hash map because
+  // `absl`s types are not exception safe.
   constexpr static auto hash = [](Id id) {
     return std::hash<uint64_t>{}(id.getBits());
   };
@@ -314,5 +316,5 @@ class TransitivePath : public Operation {
   // A small helper function: Insert the `value` to the set at `map[key]`.
   // As the sets all have an allocator with memory limit, this construction is a
   // little bit more involved, so this can be a separate helper function.
-  void insertToMap(Map& map, Id key, Id value) const;
+  void insertIntoMap(Map& map, Id key, Id value) const;
 };
