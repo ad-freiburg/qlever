@@ -555,7 +555,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   ASSERT_EQ(aggregateAlias.expr_.getPimpl(), avgXPimpl.getPimpl());
   // Check aggregate info is correct
   auto aggregateInfo = aggregateAlias.aggregateInfo_[0];
-  ASSERT_EQ(aggregateInfo.hashMapIndex_, 0);
+  ASSERT_EQ(aggregateInfo.aggregateDataIndex, 0);
   ASSERT_FALSE(aggregateInfo.parentAndIndex_.has_value());
   ASSERT_EQ(aggregateInfo.expr_, avgXPimpl.getPimpl());
 }

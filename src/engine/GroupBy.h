@@ -201,16 +201,16 @@ class GroupBy : public Operation {
     sparqlExpression::SparqlExpression* expr_;
     // The index in the `std::array` of the Hash Map where results of this
     // aggregate are stored.
-    size_t hashMapIndex_;
+    size_t aggregateDataIndex;
     // The parent expression of this aggregate, and the index this expression
     // appears in the parents' children, so that it may be substituted away.
     std::optional<ParentAndChildIndex> parentAndIndex_ = std::nullopt;
 
     HashMapAggregateInformation(
-        sparqlExpression::SparqlExpression* expr, size_t hashMapIndex,
+        sparqlExpression::SparqlExpression* expr, size_t aggregateDataIndex,
         std::optional<ParentAndChildIndex> parentAndIndex = std::nullopt)
         : expr_{expr},
-          hashMapIndex_{hashMapIndex},
+          aggregateDataIndex{aggregateDataIndex},
           parentAndIndex_{parentAndIndex} {
       AD_CONTRACT_CHECK(expr != nullptr);
     }
@@ -244,12 +244,68 @@ class GroupBy : public Operation {
       size_t numAggregates, const IdTable& subresult, size_t columnIndex,
       LocalVocab* localVocab);
 
+  // Stores the map which associates Ids with vector offsets and
+  // the vectors containing the aggregation data.
+  struct HashMapAggregationData {
+    // Maps `Id` to vector offsets.
+    ad_utility::HashMapWithMemoryLimit<KeyType, ValueType> map_;
+    // Stores the actual aggregation data.
+    std::vector<std::vector<AverageAggregationData>> aggregationData_;
+
+    // If `id` is not in map, add an element to the `aggregationData_` vectors
+    // and store the index.
+    size_t getOrCreateIndex(Id id) {
+      auto [iterator, wasAdded] = map_.try_emplace(id);
+
+      if (wasAdded) {
+        iterator->second = aggregationData_.at(0).size();
+        for (auto& aggregation : aggregationData_) aggregation.emplace_back();
+      }
+
+      return iterator->second;
+    }
+
+    // Return the index of `id`.
+    [[nodiscard]] size_t getIndex(Id id) const { return map_.at(id); }
+
+    // Get vector containing the aggregation data at `aggregationDataIndex`.
+    std::vector<AverageAggregationData>& getAggregationDataVector(
+        size_t aggregationDataIndex) {
+      return aggregationData_.at(aggregationDataIndex);
+    }
+
+    // Get vector containing the aggregation data at `aggregationDataIndex`,
+    // but const.
+    [[nodiscard]] const std::vector<AverageAggregationData>&
+    getAggregationDataVector(size_t aggregationDataIndex) const {
+      return aggregationData_.at(aggregationDataIndex);
+    }
+
+    // Get the values of the grouped column in ascending order.
+    [[nodiscard]] std::vector<Id> getSortedGroupColumn() const {
+      std::vector<ValueId> sortedKeys;
+      for (const auto& val : map_) {
+        sortedKeys.push_back(val.first);
+      }
+      std::ranges::sort(sortedKeys);
+      return sortedKeys;
+    }
+
+    // Returns the number of groups.
+    [[nodiscard]] size_t getNumberOfGroups() const { return map_.size(); }
+  };
+
+  // Returns the aggregation results between `beginIndex` and `endIndex`
+  // of the aggregates stored at `dataIndex`,
+  // based on the groups stored in the first column of `resultTable`
+  sparqlExpression::VectorWithMemoryLimit<ValueId> getHashMapAggregationResults(
+      IdTable* resultTable, const HashMapAggregationData& aggregationData,
+      size_t dataIndex, size_t beginIndex, size_t endIndex);
+
   // Sort the HashMap by key and create result table.
   void createResultFromHashMap(
-      IdTable* result,
-      const ad_utility::HashMapWithMemoryLimit<KeyType, ValueType>& map,
+      IdTable* result, const HashMapAggregationData& aggregationData,
       std::vector<HashMapAliasInformation>& aggregateAliases,
-      const std::vector<std::vector<AverageAggregationData>>& aggregationData,
       LocalVocab* localVocab);
 
   // Check if hash map optimization is applicable. This is the case when
@@ -269,23 +325,12 @@ class GroupBy : public Operation {
       sparqlExpression::EvaluationContext& evaluationContext,
       IdTable* resultTable, LocalVocab* localVocab, size_t outCol);
 
-  // In case of aliases that contain an aggregate at the top-level of the
-  // expression tree, e.g. "AVG(?y) as ?avg", we can directly store the values
-  // calculated in our HashMap in the result table.
-  sparqlExpression::VectorWithMemoryLimit<ValueId> extractValuesDirectlyFromMap(
-      size_t beginIndex, size_t endIndex,
-      const ad_utility::HashMapWithMemoryLimit<KeyType, ValueType>& map,
-      const std::vector<std::vector<AverageAggregationData>>& aggregationData,
-      IdTable* resultTable, size_t hashMapIndex, size_t outCol);
-
   // Substitute the results for all aggregates in `info`. The values of the
   // grouped variable should be at column 0 in `groupValues`.
-  void substituteAllAggregates(
-      std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
-      size_t endIndex,
-      const ad_utility::HashMapWithMemoryLimit<KeyType, ValueType>& map,
-      const std::vector<std::vector<AverageAggregationData>>& aggregationData,
-      IdTable* resultTable);
+  void substituteAllAggregates(std::vector<HashMapAggregateInformation>& info,
+                               size_t beginIndex, size_t endIndex,
+                               const HashMapAggregationData& aggregationData,
+                               IdTable* resultTable);
 
   // Check if an expression is of a certain type.
   template <class T>
