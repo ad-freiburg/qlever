@@ -257,7 +257,6 @@ class GroupBy : public Operation {
   // - Runtime parameter is set
   // - Child operation is SORT
   // - All aggregates are AVG
-  // - Maximum 5 aliases and 5 aggregates
   // - Only one grouped variable
   std::optional<HashMapOptimizationData> checkIfHashMapOptimizationPossible(
       std::vector<Aggregate>& aggregates);
@@ -282,8 +281,8 @@ class GroupBy : public Operation {
   // Substitute the results for all aggregates in `info`. The values of the
   // grouped variable should be at column 0 in `groupValues`.
   void substituteAllAggregates(
-      std::vector<HashMapAggregateInformation>& info,
-      sparqlExpression::EvaluationContext& evaluationContext,
+      std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
+      size_t endIndex,
       const ad_utility::HashMapWithMemoryLimit<KeyType, ValueType>& map,
       const std::vector<std::vector<AverageAggregationData>>& aggregationData,
       IdTable* resultTable);

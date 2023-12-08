@@ -859,9 +859,11 @@ GroupBy::extractValuesDirectlyFromMap(
     return aggregateData.calculateResult();
   };
 
-  std::ranges::transform(groupValues.begin(), groupValues.end(),
-                         outValues.begin(), op);
-  std::ranges::transform(groupValues.begin(), groupValues.end(),
+  std::ranges::transform(groupValues.begin() + beginIndex,
+                         groupValues.begin() + endIndex,
+                         outValues.begin() + beginIndex, op);
+  std::ranges::transform(groupValues.begin() + beginIndex,
+                         groupValues.begin() + endIndex,
                          aggregateResults.begin(), op);
 
   return aggregateResults;
@@ -869,8 +871,8 @@ GroupBy::extractValuesDirectlyFromMap(
 
 // _____________________________________________________________________________
 void GroupBy::substituteAllAggregates(
-    std::vector<HashMapAggregateInformation>& info,
-    sparqlExpression::EvaluationContext& evaluationContext,
+    std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
+    size_t endIndex,
     const ad_utility::HashMapWithMemoryLimit<KeyType, ValueType>& map,
     const std::vector<std::vector<AverageAggregationData>>& aggregationData,
     IdTable* resultTable) {
@@ -879,8 +881,7 @@ void GroupBy::substituteAllAggregates(
     sparqlExpression::VectorWithMemoryLimit<ValueId> aggregateResults(
         getExecutionContext()->getAllocator());
 
-    aggregateResults.resize(evaluationContext._endIndex -
-                            evaluationContext._beginIndex);
+    aggregateResults.resize(endIndex - beginIndex);
 
     // Get all aggregate results as a vector
     decltype(auto) groupValues = resultTable->getColumn(0);
@@ -890,7 +891,8 @@ void GroupBy::substituteAllAggregates(
       return aggregateData.calculateResult();
     };
 
-    std::ranges::transform(groupValues.begin(), groupValues.end(),
+    std::ranges::transform(groupValues.begin() + beginIndex,
+                           groupValues.begin() + endIndex,
                            aggregateResults.begin(), op);
 
     // Substitute the resulting vector as a literal
@@ -965,8 +967,9 @@ void GroupBy::createResultFromHashMap(
       } else {
         // Substitute in the results of all aggregates contained in the
         // expression of the current alias, if `info` is non-empty.
-        substituteAllAggregates(info, evaluationContext, map, aggregationData,
-                                result);
+        substituteAllAggregates(info, evaluationContext._beginIndex,
+                                evaluationContext._endIndex, map,
+                                aggregationData, result);
 
         // Evaluate top-level alias expression
         sparqlExpression::ExpressionResult expressionResult =
