@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <ctre-unicode.hpp>
 #include <regex>
 
 #include "./HttpTestHelpers.h"
@@ -13,7 +14,6 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
-#include "ctre/ctre.h"
 #include "engine/Service.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/http/HttpUtils.h"

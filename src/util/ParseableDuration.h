@@ -6,9 +6,9 @@
 #define QLEVER_PARSEABLEDURATION_H
 
 #include <absl/strings/str_cat.h>
-#include <ctre/ctre.h>
 
 #include <boost/lexical_cast.hpp>
+#include <ctre-unicode.hpp>
 #include <iostream>
 
 #include "util/Exception.h"

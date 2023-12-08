@@ -6,7 +6,8 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
-#include <ctre/ctre.h>
+
+#include <ctre-unicode.hpp>
 
 #include "util/Log.h"
 

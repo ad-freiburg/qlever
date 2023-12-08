@@ -5,7 +5,7 @@
 
 #include "./HttpUtils.h"
 
-#include "ctre/ctre.h"
+#include <ctre-unicode.hpp>
 
 // TODO: Which other implementations that are currently still in `HttpUtils.h`
 // should we move here, to `HttpUtils.cpp`?

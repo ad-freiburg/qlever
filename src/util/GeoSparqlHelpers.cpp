@@ -4,9 +4,8 @@
 
 #include "./GeoSparqlHelpers.h"
 
-#include <ctre/ctre.h>
-
 #include <cmath>
+#include <ctre-unicode.hpp>
 #include <limits>
 #include <numbers>
 #include <string_view>
