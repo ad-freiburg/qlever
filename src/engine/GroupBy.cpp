@@ -848,8 +848,7 @@ void GroupBy::extractValues(
     }
   };
 
-  std::visit(visitor, std::move(
-                          expressionResult));
+  std::visit(visitor, std::move(expressionResult));
 }
 
 // _____________________________________________________________________________
