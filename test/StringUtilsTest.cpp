@@ -203,6 +203,9 @@ TEST(StringUtilsTest, insertThousandDelimiter) {
                            .c_str());
         };
 
+    // Empty string.
+    simpleComparisonTest({});
+
     // No numbers.
     simpleComparisonTest(
         {"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do "
@@ -249,7 +252,7 @@ TEST(StringUtilsTest, insertThousandDelimiter) {
          absl::StrCat("813", floatingPointSignifierString,
                       "217710466665135481349068158967136466", " 3",
                       floatingPointSignifierString,
-                      "217710466665135481349068158967136466"),
+                      "217710466665135481349068158967136466", " 876"),
          absl::StrCat("703", floatingPointSignifierString, "21 3",
                       floatingPointSignifierString, "21 362",
                       floatingPointSignifierString, "1 2",
@@ -275,8 +278,10 @@ TEST(StringUtilsTest, insertThousandDelimiter) {
   };
   doNotExceptionTest(' ', '.');
   doNotExceptionTest(' ', ',');
-  doNotExceptionTest('.', ' ');
   doNotExceptionTest('t', '+');
+  doNotExceptionTest('+', 't');
+  doNotExceptionTest('\"', '?');
+  doNotExceptionTest('~', '-');
 
   // Numbers as `delimiterSymbol`, or `floatingPointSignifier`, are not allowed.
   for (size_t num1 = 0; num1 < 10; num1++) {

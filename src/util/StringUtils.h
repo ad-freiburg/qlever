@@ -369,6 +369,70 @@ std::string addIndentation(std::string_view str,
                           {{"\n", absl::StrCat("\n", indentationSymbol)}}));
 }
 
+// ___________________________________________________________________________
+template <std::ranges::random_access_range Range>
+requires isSimilar<std::iter_value_t<std::ranges::iterator_t<Range>>, char>
+std::string insertThousandDelimiter(const Range& r, const char delimiterSymbol,
+                                    const char floatingPointSignifier) {
+  // For identification of a digit.
+  auto isDigit = [](const char c) {
+    // `char` is ASCII. So the number symbols are the codes from 48 to 57.
+    return '0' <= c && c <= '9';
+  };
+
+  // Numbers as `delimiterSymbol`, or `floatingPointSignifier` are not allowed.
+  AD_CONTRACT_CHECK(!isDigit(delimiterSymbol) &&
+                    !isDigit(floatingPointSignifier));
+
+  /*
+  Not all ranges support the option to insert new values between old values,
+  so we create a new string in the wanted format.
+  */
+  std::ostringstream ostream;
+
+  // Identifying groups of thousands is easier, when reversing the range.
+  auto reversedRange = std::views::reverse(r);
+  auto rSearchIterator = std::begin(reversedRange);
+  const auto rEnd = std::end(reversedRange);
+
+  /*
+  Alright, the parsing is done as follows:
+  - If the current symbol is not a digit, just add it.
+  - If the currenty symbol is a digit:
+    - If the next non digit symbol is not the `floatingPointSignifier`, add 3er
+      groups of digits, with the `delimiterSymbol` between them, as long as
+      there is enough distance to the next non digit symbol. A.k.a. there are at
+      least 4 digit remaining.
+    - Add the remaining digits.
+  */
+  while (rSearchIterator != rEnd) {
+    if (auto nextNonDigitIterator =
+            std::ranges::find_if_not(rSearchIterator, rEnd, isDigit);
+        rSearchIterator != nextNonDigitIterator) {
+      // `rSearchIterator` must be a digit.
+      if (nextNonDigitIterator == rEnd ||
+          *nextNonDigitIterator != floatingPointSignifier) {
+        while (std::distance(rSearchIterator, nextNonDigitIterator) > 3) {
+          ostream << *(rSearchIterator++) << *(rSearchIterator++)
+                  << *(rSearchIterator++) << delimiterSymbol;
+        }
+      }
+      while (rSearchIterator != nextNonDigitIterator) {
+        ostream << *(rSearchIterator++);
+      }
+    } else {
+      // `rSearchIterator` must be a non digit symbol.
+      ostream << *(rSearchIterator++);
+    }
+  }
+
+  // Remember: We copied a reversed `r`.
+  // TODO Is it possible, to just reverse the `ostream`?
+  std::string toReturn{std::move(ostream).str()};
+  std::ranges::reverse(toReturn);
+  return toReturn;
+}
+
 }  // namespace ad_utility
 
 // these overloads are missing in the STL
