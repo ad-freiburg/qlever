@@ -44,14 +44,11 @@ Server::Server(unsigned short port, size_t numThreads,
   // values of the parameters to the cache.
   RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
-  RuntimeParameters().setOnUpdateAction<"cache-max-size-gb">(
-      [this](size_t newValue) {
-        cache_.setMaxSize(ad_utility::MemorySize::gigabytes(newValue));
-      });
-  RuntimeParameters().setOnUpdateAction<"cache-max-size-gb-single-entry">(
-      [this](size_t newValue) {
-        cache_.setMaxSizeSingleEntry(
-            ad_utility::MemorySize::gigabytes(newValue));
+  RuntimeParameters().setOnUpdateAction<"cache-max-size">(
+      [this](ad_utility::MemorySize newValue) { cache_.setMaxSize(newValue); });
+  RuntimeParameters().setOnUpdateAction<"cache-max-size-single-entry">(
+      [this](ad_utility::MemorySize newValue) {
+        cache_.setMaxSizeSingleEntry(newValue);
       });
 }
 
