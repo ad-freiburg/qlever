@@ -41,7 +41,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
 // _____________________________________________________________________
 IdTable Permutation::scan(
     Id col0Id, std::optional<Id> col1Id, ColumnIndicesRef additionalColumns,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
                              readableName_ + ", which was not loaded");
@@ -130,7 +130,7 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     Id col0Id, std::optional<Id> col1Id,
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
     ColumnIndicesRef additionalColumns,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
   if (!meta_.col0IdExists(col0Id)) {
     return {};
   }

@@ -21,7 +21,7 @@ using namespace ad_utility::memory_literals;
 static const ad_utility::MemorySize DEFAULT_MEMORY_LIMIT_INDEX_BUILDING = 5_GB;
 static const ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
 
-static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 4;
+static constexpr ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
 
 static const size_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
@@ -61,6 +61,7 @@ static const std::string INTERNAL_TEXT_MATCH_PREDICATE =
     makeInternalIri("text");
 static const std::string HAS_PREDICATE_PREDICATE =
     makeInternalIri("has-predicate");
+static const std::string HAS_PATTERN_PREDICATE = makeInternalIri("has-pattern");
 static constexpr std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "<http://www.opengis.net/def/function/geosparql/"};
 static constexpr std::pair<std::string_view, std::string_view> MATH_PREFIX = {
@@ -187,10 +188,15 @@ static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
 // compiler limits for the evaluation of constexpr functions and templates.
 static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
+// Interval in which an enabled watchdog would check if
+// `CancellationHandle::throwIfCancelled` is called regularly.
+constexpr std::chrono::milliseconds DESIRED_CANCELLATION_CHECK_INTERVAL{50};
+
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Bool;
   using ad_utility::detail::parameterShortNames::Double;
   using ad_utility::detail::parameterShortNames::DurationParameter;
+  using ad_utility::detail::parameterShortNames::MemorySizeParameter;
   using ad_utility::detail::parameterShortNames::SizeT;
   // NOTE: It is important that the value of the static variable is created by
   // an immediately invoked lambda, otherwise we get really strange segfaults on
@@ -216,15 +222,15 @@ inline auto& RuntimeParameters() {
         // timeout exception.
         Double<"sort-estimate-cancellation-factor">{3.0},
         SizeT<"cache-max-num-entries">{1000},
-        SizeT<"cache-max-size-gb">{30},
-        SizeT<"cache-max-size-gb-single-entry">{5},
+        MemorySizeParameter<"cache-max-size">{30_GB},
+        MemorySizeParameter<"cache-max-size-single-entry">{5_GB},
         SizeT<"lazy-index-scan-queue-size">{20},
         SizeT<"lazy-index-scan-num-threads">{10},
         ensureStrictPositivity(
             DurationParameter<std::chrono::seconds, "default-query-timeout">{
                 30s}),
         SizeT<"lazy-index-scan-max-size-materialization">{1'000'000},
-        Bool<"use-group-by-hash-map-optimization">{true}};
+        Bool<"use-group-by-hash-map-optimization">{false}};
   }();
   return params;
 }

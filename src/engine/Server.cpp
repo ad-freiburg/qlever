@@ -44,14 +44,11 @@ Server::Server(unsigned short port, size_t numThreads,
   // values of the parameters to the cache.
   RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
-  RuntimeParameters().setOnUpdateAction<"cache-max-size-gb">(
-      [this](size_t newValue) {
-        cache_.setMaxSize(ad_utility::MemorySize::gigabytes(newValue));
-      });
-  RuntimeParameters().setOnUpdateAction<"cache-max-size-gb-single-entry">(
-      [this](size_t newValue) {
-        cache_.setMaxSizeSingleEntry(
-            ad_utility::MemorySize::gigabytes(newValue));
+  RuntimeParameters().setOnUpdateAction<"cache-max-size">(
+      [this](ad_utility::MemorySize newValue) { cache_.setMaxSize(newValue); });
+  RuntimeParameters().setOnUpdateAction<"cache-max-size-single-entry">(
+      [this](ad_utility::MemorySize newValue) {
+        cache_.setMaxSizeSingleEntry(newValue);
       });
 }
 
@@ -503,14 +500,14 @@ ad_utility::websocket::OwningQueryId Server::getQueryId(
 
 auto Server::cancelAfterDeadline(
     const net::any_io_executor& executor,
-    std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
+    std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
     TimeLimit timeLimit)
     -> ad_utility::InvocableWithExactReturnType<void> auto {
   auto strand = net::make_strand(executor);
   auto timer = std::make_shared<net::steady_timer>(strand, timeLimit);
 
   auto cancelAfterTimeout =
-      [](std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
+      [](std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
          std::shared_ptr<net::steady_timer> timer) -> net::awaitable<void> {
     // Ignore cancellation exceptions, they are normal
     co_await timer->async_wait(net::as_tuple(net::use_awaitable));
@@ -533,6 +530,7 @@ auto Server::setupCancellationHandle(
     const std::shared_ptr<Operation>& rootOperation, TimeLimit timeLimit) const
     -> ad_utility::InvocableWithExactReturnType<void> auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
+  cancellationHandle->startWatchDog();
   AD_CORRECTNESS_CHECK(cancellationHandle);
   rootOperation->recursivelySetCancellationHandle(
       std::move(cancellationHandle));
@@ -658,6 +656,8 @@ boost::asio::awaitable<void> Server::processQuery(
     // (tsv, csv, octet-stream, turtle).
     auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
       auto responseGenerator = co_await computeInNewThread([&] {
+        queryRegistry_.getCancellationHandle(messageSender.getQueryId())
+            ->resetWatchDogState();
         return ExportQueryExecutionTrees::computeResultAsStream(
             plannedQuery.value().parsedQuery_, qet, mediaType);
       });

@@ -10,18 +10,22 @@
 
 using namespace sparqlExpression;
 
-TEST(SparqlExpressionTypes, expressionResultCopyIfNotVector) {
+TEST(SparqlExpressionTypes, expressionResult) {
   ExpressionResult a = Id::makeFromDouble(42.3);
   ExpressionResult b = Id::makeFromDouble(1.0);
-  ASSERT_NO_THROW(b = copyExpressionResultIfNotVector(a));
+  ASSERT_NO_THROW(b = copyExpressionResult(a));
   ASSERT_EQ(a, b);
 
   a = VectorWithMemoryLimit<Id>(ad_utility::testing::makeAllocator());
-  ASSERT_ANY_THROW(b = copyExpressionResultIfNotVector(a));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      b = copyExpressionResultIfNotVector(a),
-      ::testing::StartsWith(
-          "Tried to copy an expression result that is a vector."));
+  a.emplace<Id>(Id::makeFromDouble(42.0));
+  ASSERT_NO_THROW(b = copyExpressionResult(a));
+  ASSERT_EQ(a, b);
+
+  auto c = VectorWithMemoryLimit<Id>(ad_utility::testing::makeAllocator());
+  c.emplace_back(Id::makeFromDouble(42.0));
+  ASSERT_EQ(c.size(), 1);
+  copyExpressionResult(static_cast<ExpressionResult>(std::move(c)));
+  ASSERT_TRUE(c.empty());
 }
 
 TEST(SparqlExpressionTypes, printIdOrString) {

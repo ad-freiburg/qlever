@@ -143,7 +143,7 @@ TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
 
 TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
   auto qec = getQec();
-  auto handle = std::make_shared<CancellationHandle>();
+  auto handle = std::make_shared<CancellationHandle<>>();
   ShallowParentOperation operation =
       ShallowParentOperation::of<StallForeverOperation>(qec);
   operation.recursivelySetCancellationHandle(handle);

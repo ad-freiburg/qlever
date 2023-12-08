@@ -27,22 +27,18 @@ struct TransitivePathSide {
 
   bool isBoundVariable() const { return treeAndCol_.has_value(); };
 
-  std::string asString(size_t indent) const {
+  std::string getCacheKey() const {
     std::ostringstream os;
-    for (size_t i = 0; i < indent; i++) {
-      os << " ";
-    }
-    if (isVariable()) {
-      os << "Variable name: " << std::get<Variable>(value_)._name;
-    } else if (isBoundVariable()) {
+    if (!isVariable()) {
       os << "Id: " << std::get<Id>(value_);
     }
 
-    os << ", Column: " << subCol_;
+    os << ", subColumn: " << subCol_ << "to " << outputCol_;
 
     if (treeAndCol_.has_value()) {
+      const auto& [tree, col] = treeAndCol_.value();
       os << ", Subtree:\n";
-      os << treeAndCol_.value().first->asString(indent) << "\n";
+      os << tree->asString() << "with join column " << col << "\n";
     }
     return std::move(os).str();
   }
@@ -61,8 +57,16 @@ struct TransitivePathSide {
 };
 
 class TransitivePath : public Operation {
-  using Map = ad_utility::HashMap<Id, ad_utility::HashSet<Id>>;
-  using MapIt = Map::iterator;
+  // We deliberately use the `std::` variants of a hash set and hash map because
+  // `absl`s types are not exception safe.
+  constexpr static auto hash = [](Id id) {
+    return std::hash<uint64_t>{}(id.getBits());
+  };
+  using Set = std::unordered_set<Id, decltype(hash), std::equal_to<Id>,
+                                 ad_utility::AllocatorWithLimit<Id>>;
+  using Map = std::unordered_map<
+      Id, Set, decltype(hash), std::equal_to<Id>,
+      ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
 
   std::shared_ptr<QueryExecutionTree> subtree_;
   TransitivePathSide lhs_;
@@ -308,4 +312,9 @@ class TransitivePath : public Operation {
   static void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                           IdTableStatic<OUTPUT_WIDTH>& outputTable,
                           size_t inputRow, size_t outputRow, size_t skipCol);
+
+  // A small helper function: Insert the `value` to the set at `map[key]`.
+  // As the sets all have an allocator with memory limit, this construction is a
+  // little bit more involved, so this can be a separate helper function.
+  void insertIntoMap(Map& map, Id key, Id value) const;
 };

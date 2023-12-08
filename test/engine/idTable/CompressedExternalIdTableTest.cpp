@@ -231,7 +231,6 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
       writer.clear(), ::testing::ContainsRegex("currently being iterated"));
 
   auto it = generator.begin();
-  // TODO<joka921> check the exception message;
   AD_EXPECT_THROW_WITH_MESSAGE(
       pushAll(), ::testing::ContainsRegex("currently being iterated"));
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -243,4 +242,18 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
   // All generators have ended, we should be able to push and clear.
   ASSERT_NO_THROW(pushAll());
   ASSERT_NO_THROW(writer.clear());
+}
+
+TEST(CompressedExternalIdTable, WrongNumberOfColsWhenPushing) {
+  std::string filename = "idTableCompressor.wrongNumCols.dat";
+  using namespace ad_utility::memory_literals;
+  auto alloc = ad_utility::testing::makeAllocator();
+
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 3> writer{filename, 3,
+                                                                   10_B, alloc};
+  ad_utility::CompressedExternalIdTableSorterTypeErased& erased = writer;
+  IdTableStatic<0> t1{3, alloc};
+  EXPECT_NO_THROW(erased.pushBlock(t1));
+  EXPECT_NO_THROW(t1.setNumColumns(4));
+  EXPECT_ANY_THROW(erased.pushBlock(t1));
 }
