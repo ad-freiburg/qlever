@@ -123,6 +123,88 @@ std::unique_ptr<TurtleParserBase> IndexImpl::makeTurtleParser(
     return setTokenizer.template operator()<TurtleStreamParser>();
   }
 }
+
+// ____________________________________________________________________________
+std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
+    PatternCreatorNew::TripleOutput patternOutput, auto isQleverInternalId) {
+  auto&& [patternsPSO, secondSorter] = patternOutput;
+  auto setSubset = [](auto& idTable) {
+    idTable.setColumnSubset(std::array<ColumnIndex, 2>{0, 2});
+  };
+  auto lazyPatternScan = ad_utility::repeatedTransformView(
+      ad_utility::OwningView{patternsPSO->template getSortedBlocks<0>()},
+      setSubset);
+  ad_utility::data_structures::ThreadSafeQueue<IdTable> queue{4};
+  ad_utility::JThread joinWithPatternThread{[&] {
+    IdTable outputBufferTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
+
+    auto setOspSubset = [](auto& idTable) {
+      idTable.setColumnSubset(std::array<ColumnIndex, 4>{2, 1, 0, 3});
+    };
+    auto ospAsBlocksTransformed = ad_utility::repeatedTransformView(
+        secondSorter->template getSortedBlocks<0>(), setOspSubset);
+    auto projection = [](const auto& row) -> Id { return row[0]; };
+    auto compareProjection = []<typename T>(const T& row) {
+      if constexpr (ad_utility::SimilarTo<T, Id>) {
+        return row;
+      } else {
+        return row[0];
+      }
+    };
+    auto comparator = [&compareProjection](const auto& l, const auto& r) {
+      return compareProjection(l) < compareProjection(r);
+    };
+    auto pushToQueue = [&](IdTable& table) {
+      if (table.numRows() >= 50000) {
+        if (!outputBufferTable.empty()) {
+          queue.push(std::move(outputBufferTable));
+          outputBufferTable.clear();
+        }
+        queue.push(std::move(table));
+      } else {
+        outputBufferTable.insertAtEnd(table.begin(), table.end());
+        if (outputBufferTable.size() >= 50'000) {
+          queue.push(std::move(outputBufferTable));
+          outputBufferTable.clear();
+        }
+      }
+      table.clear();
+    };
+
+    IdTable outputTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
+    auto rowAdder = ad_utility::AddCombinedRowToIdTable<decltype(pushToQueue)>{
+        1, std::move(outputTable), 100'000, pushToQueue};
+
+    ad_utility::zipperJoinForBlocksWithoutUndef(
+        ospAsBlocksTransformed, lazyPatternScan, comparator, rowAdder,
+        projection, projection, std::true_type{});
+    rowAdder.flush();
+    if (!outputBufferTable.empty()) {
+      queue.push(std::move(outputBufferTable));
+      outputBufferTable.clear();
+    }
+    queue.finish();
+  }};
+
+  auto blockGenerator =
+      [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
+    while (auto block = queue.pop()) {
+      block.value().setColumnSubset(std::array<ColumnIndex, 5>{2, 1, 0, 3, 4});
+      std::ranges::for_each(block.value().getColumn(4), [](Id& id) {
+        id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id;
+      });
+      IdTableStatic<0> staticBlock =
+          std::move(block.value()).template toStatic<0>();
+      co_yield staticBlock;
+    }
+  }(queue);
+
+  auto thirdSorter =
+      makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
+  createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
+                              std::move(blockGenerator), *thirdSorter);
+  return thirdSorter;
+}
 // _____________________________________________________________________________
 void IndexImpl::createFromFile(const string& filename) {
   if (!loadAllPermutations_ && usePatterns_) {
@@ -174,76 +256,20 @@ void IndexImpl::createFromFile(const string& filename) {
     // Load all permutations and also load the patterns. In this case the
     // `createFirstPermutationPair` function returns the next sorter, already
     // enriched with the patterns of the subjects in the triple.
-    auto [secondSorter, patternsPSO] =
+    auto patternOutput =
         createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
-                                   std::move(firstSorterWithUnique))
-            .value();
-    auto setSubset = [](auto& idTable) {
-      idTable.setColumnSubset(std::array<ColumnIndex, 2>{0, 2});
-    };
-    auto lazyPatternScan = ad_utility::repeatedTransformView(
-        ad_utility::OwningView{patternsPSO->template getSortedBlocks<0>()},
-        setSubset);
-    ad_utility::data_structures::ThreadSafeQueue<IdTable> queue{4};
-  };
-  IdTable outputBufferTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
-  auto pushToQueue = [&](IdTable& table) {
-    if (table.numRows() >= 50000) {
-      if (!outputBufferTable.empty()) {
-        queue.push(std::move(outputBufferTable));
-        outputBufferTable.clear();
-      }
-      queue.push(std::move(table));
-    } else {
-      outputBufferTable.insertAtEnd(table.begin(), table.end());
-      if (outputBufferTable.size() >= 50'000) {
-        queue.push(std::move(outputBufferTable));
-        outputBufferTable.clear();
-      }
-    }
-    table.clear();
-  };
-  IdTable outputTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable<decltype(pushToQueue)>{
-      1, std::move(outputTable), 100'000, pushToQueue};
-  ad_utility::zipperJoinForBlocksWithoutUndef(
-      ospAsBlocksTransformed, lazyPatternScan, comparator, rowAdder, projection,
-      projection, std::true_type{});
-  rowAdder.flush();
-  if (!outputBufferTable.empty()) {
-    queue.push(std::move(outputBufferTable));
-    outputBufferTable.clear();
+                                   std::move(firstSorterWithUnique));
+    auto thirdSorterPtr = buildOspWithPatterns(std::move(patternOutput.value()),
+                                               isQleverInternalId);
+    createThirdPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
+                               thirdSorterPtr->template getSortedBlocks<0>());
+    configurationJson_["has-all-permutations"] = true;
   }
-  queue.finish();
-}
 
-auto blockGenerator = [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
-  while (auto block = queue.pop()) {
-    block.value().setColumnSubset(std::array<ColumnIndex, 5>{2, 1, 0, 3, 4});
-    std::ranges::for_each(block.value().getColumn(4), [](Id& id) {
-      id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id;
-    });
-    IdTableStatic<0> staticBlock =
-        std::move(block.value()).template toStatic<0>();
-    co_yield staticBlock;
-  }
-}(queue);
-
-// auto opsViewWithBothPatternColumns = std::views::join(blockGenerator);
-auto thirdSorter =
-    makeSorter<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
-createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
-                            std::move(blockGenerator), thirdSorter);
-secondSorter->clear();
-createThirdPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
-                           thirdSorter.getSortedBlocks<0>());
-configurationJson_["has-all-permutations"] = true;
-}
-
-// Dump the configuration again in case the permutations have added some
-// information.
-writeConfiguration();
-LOG(INFO) << "Index build completed" << std::endl;
+  // Dump the configuration again in case the permutations have added some
+  // information.
+  writeConfiguration();
+  LOG(INFO) << "Index build completed" << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -1464,16 +1490,14 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-std::optional<std::pair<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>,
-                        std::unique_ptr<PatternCreatorNew::PSOSorter>>>
+std::optional<PatternCreatorNew::TripleOutput>
 IndexImpl::createSPOAndSOP(size_t numColumns, auto& isInternalId,
                            BlocksOfTriples sortedTriples,
                            NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
   auto numSubjectCounter =
       makeNumDistinctIdsCounter<0>(numSubjectsNormal, isInternalId);
-  std::optional<std::pair<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>,
-                          std::unique_ptr<PatternCreatorNew::PSOSorter>>>
+  std::optional<PatternCreatorNew::TripleOutput>
       result;
   if (usePatterns_) {
     // We will return the next sorter.
@@ -1499,9 +1523,7 @@ IndexImpl::createSPOAndSOP(size_t numColumns, auto& isInternalId,
     patternCreator.finish();
     configurationJson_["num-subjects-normal"] = numSubjectsNormal;
     writeConfiguration();
-    result = std::pair{
-        std::move(patternCreator).getAllTriplesWithPatternSortedByOSP(),
-        std::move(patternCreator).getHasPatternSortedByPSO()};
+    result = std::move(patternCreator).getTripleOutput();
   } else {
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     createPermutationPair(numColumns, AD_FWD(sortedTriples), spo_, sop_,

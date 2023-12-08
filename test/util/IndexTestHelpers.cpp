@@ -45,38 +45,50 @@ namespace {
 // files) have exactly the same contents as the patterns that are folded into
 // the PSO and POS permutation.
 void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
+
+  auto checkSingleElement = [](const Index& index, size_t patternIdx, Id id) {
+    const auto& hasPattern = index.getHasPattern();
+    auto expectedPattern = [&]{
+      if (id.getDatatype() != Datatype::VocabIndex) {
+        return NO_PATTERN;
+      }
+      auto idx = id.getVocabIndex().get();
+      if (idx >= hasPattern.size()) {
+        return NO_PATTERN;
+      }
+      return hasPattern[idx];
+    }();
+    EXPECT_EQ(patternIdx, expectedPattern)
+        << id << ' ' << index.getHasPattern().size() << ' ' << NO_PATTERN;
+  };
+
   auto checkConsistencyForCol0IdAndPermutation =
-      [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx) {
+      [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx, size_t objectColIdx) {
         auto cancellationDummy =
             std::make_shared<ad_utility::CancellationHandle<>>();
         auto scanResult =
             index.scan(col0Id, std::nullopt, permutation,
-                       std::array{ColumnIndex{2}}, cancellationDummy);
-        ASSERT_EQ(scanResult.numColumns(), 3u);
+                       std::array{ColumnIndex{2}, ColumnIndex{3}}, cancellationDummy);
+        ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
-          auto subject = row[subjectColIdx].getVocabIndex().get();
           auto patternIdx = row[2].getInt();
-          if (subject >= index.getHasPattern().size()) {
-            EXPECT_EQ(patternIdx, NO_PATTERN);
-          } else {
-            EXPECT_EQ(patternIdx, index.getHasPattern()[subject])
-                << subject << ' '
-                << index.idToOptionalString(row[subjectColIdx].getVocabIndex())
-                       .value()
-                << ' ' << index.getHasPattern().size() << ' ' << NO_PATTERN;
-          }
+          Id subjectId = row[subjectColIdx];
+          checkSingleElement(index, patternIdx, subjectId);
+          Id objectId = objectColIdx == 42 ? col0Id : row[objectColIdx];
+          auto patternIdxObject = row[3].getInt();
+          checkSingleElement(index, patternIdxObject, objectId);
         }
       };
 
   auto checkConsistencyForPredicate = [&](Id predicateId) {
     using enum Permutation::Enum;
-    checkConsistencyForCol0IdAndPermutation(predicateId, PSO, 0);
-    checkConsistencyForCol0IdAndPermutation(predicateId, POS, 1);
+    checkConsistencyForCol0IdAndPermutation(predicateId, PSO, 0, 1);
+    checkConsistencyForCol0IdAndPermutation(predicateId, POS, 1, 0);
   };
   auto checkConsistencyForObject = [&](Id objectId) {
     using enum Permutation::Enum;
-    checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1);
-    checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0);
+    checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1, 42);
+    checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, 42);
   };
   const auto& predicates = index.getImpl().PSO().metaData().data();
   for (const auto& predicate : predicates) {

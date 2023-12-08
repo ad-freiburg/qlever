@@ -156,8 +156,9 @@ auto repeatedTransformView(auto view, auto transformation) {
     }
     return *ptr;
   };
-  return std::views::transform(makePtrAndBool(std::move(view)),
-                               actualTransformation);
+  return std::views::transform(
+      ad_utility::OwningView{makePtrAndBool(std::move(view))},
+      actualTransformation);
 }
 
 }  // namespace ad_utility

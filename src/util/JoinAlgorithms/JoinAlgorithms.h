@@ -699,8 +699,13 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     return std::min(leftProjection(sameBlocksLeft.front().back()),
                     rightProjection(sameBlocksRight.front().back()), lessThan);
   };
-  // TODO<joka921> comment...
-  // Add the remaining blocks such that condition 3 from above is fulfilled.
+
+  // Fill the `targetBuffer` with blocks from the range `[it, end)` and advance
+  // `it` for each read buffer until all elements <= `minEl` are added to the
+  // `targetBuffer` or at most three blocks have been added to the targetBuffer. Calling this function requires that all blocks that contain
+  // elements `< minEl` have already been consumed.
+  // Returns `true` if all blocks have been added, and `false` if the function returned
+  // because 3 blocks were added without fulfilling the condition.
   auto fillEqualToMinimum = [&lessThan, &eq](auto& targetBuffer, auto& it,
                                              const auto& end,
                                              const auto& minEl) -> bool {
@@ -710,12 +715,16 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
         continue;
       }
       if (!eq((*it)[0], minEl)) {
+        AD_CORRECTNESS_CHECK(lessThan(minEl, (*it)[0]));
         return true;
       }
       AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it, lessThan));
       targetBuffer.emplace_back(std::move(*it));
       ++numBlocksRead;
       if (numBlocksRead >= 3) {
+        // As we have already consumed the block and will break after this
+        // function, we have to manually increment the iterator (without the
+        // break this would be handled by the `for` loop.
         ++it;
         break;
       }
@@ -725,8 +734,28 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
 
   enum struct BlockStatus { leftMissing, rightMissing, allFilled };
 
-  std::optional<BlockStatus> blockStatus_;
-  std::optional<ProjectedEl> currentMinEl_;
+  // TODO<joka921> Comment.
+  auto fillEqualToMinimumBothSides = [&](const auto& minEl) ->BlockStatus {
+    bool allBlocksFromLeft = false;
+    bool allBlocksFromRight = false;
+    while (!(allBlocksFromLeft || allBlocksFromRight)) {
+      allBlocksFromLeft = fillEqualToMinimum(sameBlocksLeft, it1, end1, minEl);
+      allBlocksFromRight =
+          fillEqualToMinimum(sameBlocksRight, it2, end2, minEl);
+    }
+    if (!allBlocksFromRight) {
+      AD_CORRECTNESS_CHECK(allBlocksFromLeft);
+      return BlockStatus::rightMissing;
+    } else if (!allBlocksFromLeft) {
+      AD_CORRECTNESS_CHECK(allBlocksFromRight);
+      return BlockStatus::leftMissing;
+    } else {
+      return BlockStatus::allFilled;
+    }
+  };
+
+  std::optional<BlockStatus> blockStatus;
+  std::optional<ProjectedEl> currentMinEl;
 
   // Read the minimal number of unread blocks from `leftBlocks` into
   // `sameBlocksLeft` and from `rightBlocks` into `sameBlocksRight` s.t. at
@@ -782,24 +811,8 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     }
 
     // Add the remaining blocks such that condition 3 from above is fulfilled.
-    auto minEl = getMinEl();
-    bool allBlocksFromLeft = false;
-    bool allBlocksFromRight = false;
-    while (!(allBlocksFromLeft || allBlocksFromRight)) {
-      allBlocksFromLeft = fillEqualToMinimum(sameBlocksLeft, it1, end1, minEl);
-      allBlocksFromRight =
-          fillEqualToMinimum(sameBlocksRight, it2, end2, minEl);
-    }
-    currentMinEl_ = getMinEl();
-    if (!allBlocksFromRight) {
-      AD_CORRECTNESS_CHECK(allBlocksFromLeft);
-      blockStatus_ = BlockStatus::rightMissing;
-    } else if (!allBlocksFromLeft) {
-      AD_CORRECTNESS_CHECK(allBlocksFromRight);
-      blockStatus_ = BlockStatus::leftMissing;
-    } else {
-      blockStatus_ = BlockStatus::allFilled;
-    }
+    blockStatus = fillEqualToMinimumBothSides(getMinEl());
+    currentMinEl = getMinEl();
   };
 
   // Call `compatibleRowAction` for all pairs of elements in the cartesian
@@ -939,7 +952,7 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     auto r = pushRelevantSubranges(sameBlocksRight);
     while (true) {
       addAll(l, r);
-      switch (blockStatus_.value()) {
+      switch (blockStatus.value()) {
         case BlockStatus::allFilled: {
           removeAllButUnjoined(sameBlocksLeft, minEl);
           removeAllButUnjoined(sameBlocksRight, minEl);
@@ -955,7 +968,7 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
           }
           r = pushRelevantSubranges(sameBlocksRight);
           if (allBlocksFromRight) {
-            blockStatus_ = BlockStatus::allFilled;
+            blockStatus = BlockStatus::allFilled;
           }
           continue;
         }
@@ -969,7 +982,7 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
           }
           l = pushRelevantSubranges(sameBlocksLeft);
           if (allBlocksFromLeft) {
-            blockStatus_ = BlockStatus::allFilled;
+            blockStatus = BlockStatus::allFilled;
           }
         }
           continue;
