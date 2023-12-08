@@ -48,7 +48,7 @@ int main(int argc, char** argv) {
   bool noPatternTrick;
   bool onlyPsoAndPosPermutations;
 
-  NonNegative memoryMaxSizeGb;
+  ad_utility::MemorySize memoryMaxSize;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &RuntimeParameters()};
@@ -68,26 +68,25 @@ int main(int argc, char** argv) {
   add("num-simultaneous-queries,j",
       po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
-  add("memory-max-size-gb,m",
-      po::value<NonNegative>(&memoryMaxSizeGb)
-          ->default_value(DEFAULT_MEM_FOR_QUERIES_IN_GB),
-      "Limit on the total amount of memory (in GB) that can be used for "
+  add("memory-max-size,m",
+      po::value<ad_utility::MemorySize>(&memoryMaxSize)
+          ->default_value(DEFAULT_MEM_FOR_QUERIES),
+      "Limit on the total amount of memory that can be used for "
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
-  add("cache-max-size-gb,c",
-      optionFactory.getProgramOption<"cache-max-size-gb">(),
-      "Maximum memory size in GB for all cache entries (pinned and "
+  add("cache-max-size,c", optionFactory.getProgramOption<"cache-max-size">(),
+      "Maximum memory size for all cache entries (pinned and "
       "not pinned). Note that the cache is part of the total memory "
-      "limited by --memory-max-size-gb.");
-  add("cache-max-size-gb-single-entry,e",
-      optionFactory.getProgramOption<"cache-max-size-gb-single-entry">(),
-      "Maximum size in GB for a single cache entry. That is, "
+      "limited by --memory-max-size.");
+  add("cache-max-size-single-entry,e",
+      optionFactory.getProgramOption<"cache-max-size-single-entry">(),
+      "Maximum size for a single cache entry. That is, "
       "results larger than this will not be cached unless pinned.");
   add("cache-max-num-entries,k",
       optionFactory.getProgramOption<"cache-max-num-entries">(),
       "Maximum number of entries in the cache. If exceeded, remove "
       "least-recently used non-pinned entries from the cache. Note that "
-      "this condition and the size limit specified via --cache-max-size-gb "
+      "this condition and the size limit specified via --cache-max-size "
       "both have to hold (logical AND).");
   add("no-patterns,P", po::bool_switch(&noPatterns),
       "Disable the use of patterns. If disabled, the special predicate "
@@ -128,10 +127,8 @@ int main(int argc, char** argv) {
             << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
 
   try {
-    Server server(
-        port, numSimultaneousQueries,
-        ad_utility::MemorySize::gigabytes(static_cast<size_t>(memoryMaxSizeGb)),
-        std::move(accessToken), !noPatternTrick);
+    Server server(port, numSimultaneousQueries, memoryMaxSize,
+                  std::move(accessToken), !noPatternTrick);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
