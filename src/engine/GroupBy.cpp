@@ -913,7 +913,7 @@ void GroupBy::createResultFromHashMap(
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
   evaluationContext._isPartOfGroupBy = true;
 
-  size_t blockSize = 1;
+  size_t blockSize = 65536;
 
   for (size_t i = 0; i < numberOfGroups; i += blockSize) {
     evaluationContext._beginIndex = i;
@@ -984,7 +984,7 @@ void GroupBy::computeGroupByForHashMapOptimization(
       _groupByVariables.begin(), _groupByVariables.end()};
   evaluationContext._isPartOfGroupBy = true;
 
-  size_t blockSize = 1;
+  size_t blockSize = 65536;
 
   for (size_t i = 0; i < subresult.size(); i += blockSize) {
     evaluationContext._beginIndex = i;
@@ -993,17 +993,11 @@ void GroupBy::computeGroupByForHashMapOptimization(
     auto currentBlockSize =
         evaluationContext._endIndex - evaluationContext._beginIndex;
 
-    auto getId = [&subresult, &evaluationContext, &columnIndex](size_t j) {
-      return subresult(evaluationContext._beginIndex + j, columnIndex);
-    };
-
     // Perform HashMap lookup once for all groups in current block
-    std::vector<size_t> hashEntries;
-    hashEntries.reserve(blockSize);
-    for (size_t j = 0; j < currentBlockSize; ++j) {
-      auto id = getId(j);
-      hashEntries.push_back(aggregationData.getOrCreateIndex(id));
-    }
+    auto groupValues =
+        subresult.getColumn(columnIndex)
+            .subspan(evaluationContext._beginIndex, currentBlockSize);
+    auto hashEntries = aggregationData.getHashEntries(groupValues);
 
     // TODO<C++23> use views::enumerate
     for (auto& aggregateAlias : aggregateAliases) {

@@ -265,6 +265,28 @@ class GroupBy : public Operation {
       return iterator->second;
     }
 
+    // Returns a vector containing the offsets for all ids of `ids`,
+    // inserting entries if necessary.
+    std::vector<size_t> getHashEntries(std::span<const Id> ids) {
+      std::vector<size_t> hashEntries;
+      hashEntries.reserve(ids.size());
+
+      for (auto& val : ids) {
+        auto [iterator, wasAdded] = map_.try_emplace(val);
+
+        if (wasAdded) {
+          iterator->second = getNumberOfGroups() - 1;
+        }
+
+        hashEntries.push_back(iterator->second);
+      }
+
+      for (auto& aggregation : aggregationData_)
+        aggregation.resize(getNumberOfGroups());
+
+      return hashEntries;
+    }
+
     // Return the index of `id`.
     [[nodiscard]] size_t getIndex(Id id) const { return map_.at(id); }
 
