@@ -159,6 +159,9 @@ class Index {
   // --------------------------------------------------------------------------
   [[nodiscard]] std::string_view wordIdToString(WordIndex wordIndex) const;
 
+  [[nodiscard]] size_t getTextRecordSizeEstimate(
+      const std::string& words) const;
+
   [[nodiscard]] size_t getSizeEstimate(const std::string& words) const;
 
   void getContextListForWords(const std::string& words, IdTable* result) const;

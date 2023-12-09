@@ -128,6 +128,11 @@ std::string_view Index::wordIdToString(WordIndex wordIndex) const {
 }
 
 // ____________________________________________________________________________
+size_t Index::getTextRecordSizeEstimate(const std::string& words) const {
+  return pimpl_->getTextRecordSizeEstimate(words);
+}
+
+// ____________________________________________________________________________
 size_t Index::getSizeEstimate(const std::string& words) const {
   return pimpl_->getSizeEstimate(words);
 }

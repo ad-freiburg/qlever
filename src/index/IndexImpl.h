@@ -304,6 +304,8 @@ class IndexImpl {
   // --------------------------------------------------------------------------
   std::string_view wordIdToString(WordIndex wordIndex) const;
 
+  size_t getTextRecordSizeEstimate(const string& words) const;
+
   size_t getSizeEstimate(const string& words) const;
 
   void callFixedGetContextListForWords(const string& words,

@@ -75,6 +75,29 @@ size_t TextIndexScanForEntity::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
+size_t TextIndexScanForEntity::getSizeEstimateBeforeLimit() {
+  if (hasFixedEntity_) {
+    return getExecutionContext()->getIndex().getAverageNofEntityContexts();
+  } else {
+    return getExecutionContext()->getIndex().getTextRecordSizeEstimate(word_);
+  }
+}
+
+// _____________________________________________________________________________
+bool TextIndexScanForEntity::knownEmptyResult() {
+  if (getExecutionContext()->getIndex().getSizeEstimate(word_) == 0) {
+    return true;
+  } else if (hasFixedEntity_) {
+    VocabIndex dummy;
+    if (!getExecutionContext()->getIndex().getVocab().getId(
+            std::get<std::string>(entity_), &dummy)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// _____________________________________________________________________________
 vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
   return {ColumnIndex(0)};
 }

@@ -32,16 +32,16 @@ class TextIndexScanForEntity : public Operation {
 
   void setTextLimit(size_t) override {}
 
-  size_t getCostEstimate() override { return 5; }
+  size_t getCostEstimate() override { return getSizeEstimateBeforeLimit(); }
 
-  uint64_t getSizeEstimateBeforeLimit() override { return 5; }
+  uint64_t getSizeEstimateBeforeLimit() override;
 
   float getMultiplicity(size_t col) override {
     (void)col;
     return 1;
   }
 
-  bool knownEmptyResult() override { return false; }
+  bool knownEmptyResult() override;
 
   vector<ColumnIndex> resultSortedOn() const override;
 

@@ -1466,6 +1466,18 @@ size_t IndexImpl::getIndexOfBestSuitedElTerm(
 }
 
 // _____________________________________________________________________________
+size_t IndexImpl::getTextRecordSizeEstimate(const string& word) const {
+  if (word.empty()) {
+    return 0;
+  }
+  auto optTbmd = getTextBlockMetadataForWordOrPrefix(word);
+  if (!optTbmd.has_value()) {
+    return 0;
+  }
+  return optTbmd.value().tbmd_._entityCl._nofElements;
+}
+
+// _____________________________________________________________________________
 size_t IndexImpl::getSizeEstimate(const string& words) const {
   // TODO vector can be of type std::string_view if called functions
   //  are updated to accept std::string_view instead of const std::string&

@@ -678,15 +678,14 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
     if (t._p._iri == CONTAINS_WORD_PREDICATE) {
-      string s = t._o.toString();
-      std::string_view sv{s};
+      std::string_view sv{t._o.toString()};
       // Add one node for each word
       for (const auto& term :
            absl::StrSplit(sv.substr(1, sv.size() - 2), ' ')) {
-        potentialTermsForCvar[t._s.getVariable()].push_back(term.data());
+        std::string s{term};
+        potentialTermsForCvar[t._s.getVariable()].push_back(s);
         addNodeToTripleGraph(
-            TripleGraph::Node(tg._nodeStorage.size(), t._s.getVariable(),
-                              term.data(), t),
+            TripleGraph::Node(tg._nodeStorage.size(), t._s.getVariable(), s, t),
             tg);
         numNodesInTripleGraph++;
       }

@@ -45,6 +45,11 @@ VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
 size_t TextIndexScanForWord::getResultWidth() const { return 1 + isPrefix_; }
 
 // _____________________________________________________________________________
+size_t TextIndexScanForWord::getSizeEstimateBeforeLimit() {
+  return getExecutionContext()->getIndex().getTextRecordSizeEstimate(word_);
+}
+
+// _____________________________________________________________________________
 vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
   return {ColumnIndex(0)};
 }
