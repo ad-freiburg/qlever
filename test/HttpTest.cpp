@@ -17,7 +17,7 @@ using namespace ad_utility::httpUtils;
 using namespace boost::beast::http;
 
 TEST(HttpServer, HttpTest) {
-  // Create and run a HTTP server, which replies to each request with three
+  // Create and run an HTTP server, which replies to each request with three
   // lines: the request method (GET, POST, or OTHER), a copy of the request
   // target (might be empty), and a copy of the request body (might be empty).
   TestHttpServer httpServer(

@@ -5,14 +5,14 @@
 #include <gtest/gtest.h>
 
 #include <array>
-#include <string>
-#include <vector>
 
+#include "./IndexTestHelpers.h"
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/TransitivePath.h"
 #include "global/Id.h"
 
+using ad_utility::testing::getQec;
 using ad_utility::testing::makeAllocator;
 namespace {
 auto V = ad_utility::testing::VocabId;
@@ -53,7 +53,7 @@ TEST(TransitivePathTest, idToId) {
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, V(3), 1);
-  TransitivePath T(nullptr, nullptr, left, right, 1,
+  TransitivePath T(getQec(), nullptr, left, right, 1,
                    std::numeric_limits<size_t>::max());
 
   T.computeTransitivePath<2, 2>(&result, sub, left, right);
@@ -76,7 +76,7 @@ TEST(TransitivePathTest, idToVar) {
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  TransitivePath T(nullptr, nullptr, left, right, 1,
+  TransitivePath T(getQec(), nullptr, left, right, 1,
                    std::numeric_limits<size_t>::max());
 
   T.computeTransitivePath<2, 2>(&result, sub, left, right);
@@ -102,7 +102,7 @@ TEST(TransitivePathTest, varTovar) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  TransitivePath T(nullptr, nullptr, right, left, 1,
+  TransitivePath T(getQec(), nullptr, right, left, 1,
                    std::numeric_limits<size_t>::max());
 
   T.computeTransitivePath<2, 2>(&result, sub, left, right);
@@ -144,7 +144,7 @@ TEST(TransitivePathTest, unlimitedMaxLength) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  TransitivePath T(nullptr, nullptr, left, right, 1,
+  TransitivePath T(getQec(), nullptr, left, right, 1,
                    std::numeric_limits<size_t>::max());
 
   T.computeTransitivePath<2, 2>(&result, sub, left, right);
@@ -182,7 +182,7 @@ TEST(TransitivePathTest, maxLength2) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  TransitivePath T(nullptr, nullptr, left, right, 1, 2);
+  TransitivePath T(getQec(), nullptr, left, right, 1, 2);
   T.computeTransitivePath<2, 2>(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
 

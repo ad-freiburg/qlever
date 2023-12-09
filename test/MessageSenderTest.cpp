@@ -14,6 +14,7 @@
 using ad_utility::websocket::MessageSender;
 using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryHub;
+using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryRegistry;
 
 using namespace boost::asio::experimental::awaitable_operators;
@@ -77,5 +78,24 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
   // The destructor of `MessageSender` calls `signalEnd` on the distributor
   // instance asynchronously, so we need to wait for it to be executed before
   // destroying the backing `QueryHub` instance.
+  co_await net::post(net::use_awaitable);
+}
+
+// _____________________________________________________________________________
+
+ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
+  QueryRegistry queryRegistry;
+  OwningQueryId queryId = queryRegistry.uniqueId();
+  QueryId reference = queryId.toQueryId();
+  QueryHub queryHub{ioContext};
+
+  {
+    auto messageSender =
+        co_await MessageSender::create(std::move(queryId), queryHub);
+    EXPECT_EQ(reference, messageSender.getQueryId());
+  }
+  // The destructor of `MessageSender` calls `signalEnd` on the underlying
+  // distributor instance asynchronously, so we need to wait for it to be
+  // executed before destroying the backing `QueryHub` instance.
   co_await net::post(net::use_awaitable);
 }
