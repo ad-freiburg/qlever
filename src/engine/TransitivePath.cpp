@@ -23,6 +23,7 @@ TransitivePath::TransitivePath(QueryExecutionContext* qec,
       rhs_(std::move(rightSide)),
       minDist_(minDist),
       maxDist_(maxDist) {
+  AD_CORRECTNESS_CHECK(qec != nullptr);
   if (lhs_.isVariable()) {
     variableColumns_[std::get<Variable>(lhs_.value_)] =
         makeAlwaysDefinedColumn(0);
@@ -48,13 +49,13 @@ std::string TransitivePath::asStringImpl(size_t indent) const {
     os << " ";
   }
   os << "Left side:\n";
-  os << lhs_.asString(indent + 1);
+  os << lhs_.getCacheKey();
 
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
   os << "Right side:\n";
-  os << rhs_.asString(indent + 1);
+  os << rhs_.getCacheKey();
 
   return std::move(os).str();
 }
@@ -164,15 +165,8 @@ uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
   // Wikidata, the predicate with the largest blowup when taking the
   // transitive hull is wdt:P2789 (connects with). The blowup is then from 90K
   // (without +) to 110M (with +), so about 1000 times larger.
-  if (lhs_.isVariable() && rhs_.isVariable()) {
-    return subtree_->getSizeEstimate() * 10000;
-  }
-  // TODO(Florian): this is not necessarily a good estimator
-  if (lhs_.isVariable()) {
-    auto multiplicity = static_cast<size_t>(getMultiplicity(lhs_.subCol_));
-    return subtree_->getSizeEstimate() / multiplicity;
-  }
-  return subtree_->getSizeEstimate();
+  AD_CORRECTNESS_CHECK(lhs_.isVariable() && rhs_.isVariable());
+  return subtree_->getSizeEstimate() * 10000;
 }
 
 // _____________________________________________________________________________
@@ -199,7 +193,7 @@ void TransitivePath::computeTransitivePathBound(
   auto [edges, nodes] = setupMapAndNodes<SUB_WIDTH, SIDE_WIDTH>(
       dynSub, startSide, targetSide, startSideTable);
 
-  Map hull;
+  Map hull(allocator());
   if (!targetSide.isVariable()) {
     hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value_));
   } else {
@@ -223,7 +217,7 @@ void TransitivePath::computeTransitivePath(
   auto [edges, nodes] =
       setupMapAndNodes<SUB_WIDTH>(dynSub, startSide, targetSide);
 
-  Map hull;
+  Map hull{allocator()};
   if (!targetSide.isVariable()) {
     hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value_));
   } else {
@@ -246,7 +240,7 @@ ResultTable TransitivePath::computeResult() {
   }
   shared_ptr<const ResultTable> subRes = subtree_->getResult();
 
-  IdTable idTable{getExecutionContext()->getAllocator()};
+  IdTable idTable{allocator()};
 
   idTable.setNumColumns(getResultWidth());
 
@@ -354,20 +348,21 @@ bool TransitivePath::isBoundOrId() const {
 TransitivePath::Map TransitivePath::transitiveHull(
     const Map& edges, const std::vector<Id>& startNodes,
     std::optional<Id> target) const {
-  using MapIt = TransitivePath::Map::const_iterator;
+  using MapIt = Map::const_iterator;
   // For every node do a dfs on the graph
-  Map hull;
+  Map hull{allocator()};
 
   // Stores nodes we already have a path to. This avoids cycles.
-  ad_utility::HashSet<Id> marks;
+  ad_utility::HashSetWithMemoryLimit<Id> marks{
+      getExecutionContext()->getAllocator()};
 
   // The stack used to store the dfs' progress
-  std::vector<ad_utility::HashSet<Id>::const_iterator> positions;
+  std::vector<Set::const_iterator> positions;
 
   // Used to store all edges leading away from a node for every level.
   // Reduces access to the hashmap, and is safe as the map will not
   // be modified after this point.
-  std::vector<const ad_utility::HashSet<Id>*> edgeCache;
+  std::vector<const Set*> edgeCache;
 
   for (Id currentStartNode : startNodes) {
     if (hull.contains(currentStartNode)) {
@@ -385,7 +380,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
     }
     if (minDist_ == 0 &&
         (!target.has_value() || currentStartNode == target.value())) {
-      hull[currentStartNode].insert(currentStartNode);
+      insertIntoMap(hull, currentStartNode, currentStartNode);
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -394,8 +389,8 @@ TransitivePath::Map TransitivePath::transitiveHull(
       checkCancellation();
       size_t stackIndex = positions.size() - 1;
       // Process the next child of the node at the top of the stack
-      ad_utility::HashSet<Id>::const_iterator& pos = positions[stackIndex];
-      const ad_utility::HashSet<Id>* nodeEdges = edgeCache.back();
+      Set::const_iterator& pos = positions[stackIndex];
+      const Set* nodeEdges = edgeCache.back();
 
       if (pos == nodeEdges->end()) {
         // We finished processing this node
@@ -412,7 +407,7 @@ TransitivePath::Map TransitivePath::transitiveHull(
         if (childDepth >= minDist_) {
           marks.insert(child);
           if (!target.has_value() || child == target.value()) {
-            hull[currentStartNode].insert(child);
+            insertIntoMap(hull, currentStartNode, child);
           }
         }
         // Add the child to the stack
@@ -527,21 +522,13 @@ TransitivePath::Map TransitivePath::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
-  Map edges;
+  Map edges{allocator()};
   decltype(auto) startCol = sub.getColumn(startSide.subCol_);
   decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
 
   for (size_t i = 0; i < sub.size(); i++) {
     checkCancellation();
-    Id startId = startCol[i];
-    Id targetId = targetCol[i];
-    MapIt it = edges.find(startId);
-    if (it == edges.end()) {
-      edges[startId].insert(targetId);
-    } else {
-      // If r is not in the vector insert it
-      it->second.insert(targetId);
-    }
+    insertIntoMap(edges, startCol[i], targetCol[i]);
   }
   return edges;
 }
@@ -571,4 +558,10 @@ void TransitivePath::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
     inCol++;
     outCol++;
   }
+}
+
+// _____________________________________________________________________________
+void TransitivePath::insertIntoMap(Map& map, Id key, Id value) const {
+  auto [it, success] = map.try_emplace(key, allocator());
+  it->second.insert(value);
 }

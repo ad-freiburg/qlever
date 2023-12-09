@@ -177,7 +177,8 @@ class AllocatorWithLimit {
   template <typename U>
   requires(!std::same_as<U, T>)
   AllocatorWithLimit(const AllocatorWithLimit<U>& other)
-      : memoryLeft_(other.getMemoryLeft()){};
+      : memoryLeft_{other.getMemoryLeft()},
+        clearOnAllocation_(other.clearOnAllocation()){};
 
   // Defaulted copy operations.
   AllocatorWithLimit(const AllocatorWithLimit&) = default;
@@ -227,6 +228,7 @@ class AllocatorWithLimit {
         memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
             bytesNeeded);
     if (!wasEnoughLeft) {
+      AD_CORRECTNESS_CHECK(clearOnAllocation_);
       clearOnAllocation_(bytesNeeded);
       memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(bytesNeeded);
     }
@@ -254,6 +256,7 @@ class AllocatorWithLimit {
   }
 
   const auto& getMemoryLeft() const { return memoryLeft_; }
+  const auto& clearOnAllocation() const { return clearOnAllocation_; }
 
   // The STL needs two allocators to be equal if and only they refer to the same
   // memory pool. For us, they are hence equal if they use the same

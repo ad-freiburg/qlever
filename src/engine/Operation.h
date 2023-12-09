@@ -180,6 +180,10 @@ class Operation {
     return _executionContext;
   }
 
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return getExecutionContext()->getAllocator();
+  }
+
   // If the result of this `Operation` is sorted (either because this
   // `Operation` enforces this sorting, or because it preserves the sorting of
   // its children), return the variable that is the primary sort key. Else
