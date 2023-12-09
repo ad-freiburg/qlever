@@ -287,6 +287,8 @@ TEST(StringUtilsTest, insertThousandDelimiter) {
   for (size_t num1 = 0; num1 < 10; num1++) {
     for (size_t num2 = 0; num2 < 10; num2++) {
       const std::string numAsString = absl::StrCat(num1, num2);
+      ASSERT_ANY_THROW(doNotExceptionTest(' ', numAsString.back()));
+      ASSERT_ANY_THROW(doNotExceptionTest(numAsString.front(), '.'));
       ASSERT_ANY_THROW(
           doNotExceptionTest(numAsString.front(), numAsString.back()));
     }
