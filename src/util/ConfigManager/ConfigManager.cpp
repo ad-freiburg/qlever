@@ -789,8 +789,9 @@ std::string ConfigManager::printConfigurationDoc(bool detailed) const {
   }
 
   // We always print the configuration doc json.
-  const std::string& configurationDocJsonString{absl::StrCat(
-      "Configuration:\n", generateConfigurationDocJson("").dump(2))};
+  const std::string& configurationDocJsonString{
+      insertThousandDelimiter(absl::StrCat(
+          "Configuration:\n", generateConfigurationDocJson("").dump(2)))};
 
   if (!detailed) {
     return configurationDocJsonString;
@@ -798,7 +799,8 @@ std::string ConfigManager::printConfigurationDoc(bool detailed) const {
 
   return absl::StrCat(
       configurationDocJsonString, "\n\n",
-      generateConfigurationDocDetailedList("", getValidatorAssignment()));
+      insertThousandDelimiter(
+          generateConfigurationDocDetailedList("", getValidatorAssignment())));
 }
 
 // ____________________________________________________________________________
