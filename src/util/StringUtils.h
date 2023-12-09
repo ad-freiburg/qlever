@@ -395,35 +395,36 @@ std::string insertThousandDelimiter(const Range& r, const char delimiterSymbol,
   auto rSearchIterator = std::begin(reversedRange);
   const auto rEnd = std::end(reversedRange);
 
-  /*
-  Alright, the parsing is done as follows:
-  - If the current symbol is not a digit, just add it.
-  - If the currenty symbol is a digit:
-    - If the next non digit symbol is not the `floatingPointSignifier`, add 3er
-      groups of digits, with the `delimiterSymbol` between them, as long as
-      there is enough distance to the next non digit symbol. A.k.a. there are at
-      least 4 digit remaining.
-    - Add the remaining digits.
-  */
+  // 'Parse' the string.
   while (rSearchIterator != rEnd) {
-    if (auto nextNonDigitIterator =
-            std::ranges::find_if_not(rSearchIterator, rEnd, isDigit);
-        rSearchIterator != nextNonDigitIterator) {
-      // `rSearchIterator` must be a digit.
-      if (nextNonDigitIterator == rEnd ||
-          *nextNonDigitIterator != floatingPointSignifier) {
-        while (std::distance(rSearchIterator, nextNonDigitIterator) > 3) {
-          ostream << *(rSearchIterator++) << *(rSearchIterator++)
-                  << *(rSearchIterator++) << delimiterSymbol;
-        }
+    auto nextNonDigitIterator =
+        std::ranges::find_if_not(rSearchIterator, rEnd, isDigit);
+
+    /*
+    If `rSearchIterator` is a digit and `nextNonDigitIterator` not  the
+    `floatingPointSignifier`, repeatedly add 3 digits, followed by the
+    delimiter, until there are less than 4 digits remaining between
+    `rSearchIterator` and `nextNonDigitIterator`.
+    Because there an no valid thousander delimiters anywhere between 3 digits.
+    */
+    if (rSearchIterator != nextNonDigitIterator &&
+        (nextNonDigitIterator == rEnd ||
+         *nextNonDigitIterator != floatingPointSignifier)) {
+      while (std::distance(rSearchIterator, nextNonDigitIterator) > 3) {
+        ostream << *(rSearchIterator++) << *(rSearchIterator++)
+                << *(rSearchIterator++) << delimiterSymbol;
       }
-      while (rSearchIterator != nextNonDigitIterator) {
-        ostream << *(rSearchIterator++);
-      }
-    } else {
-      // `rSearchIterator` must be a non digit symbol.
-      ostream << *(rSearchIterator++);
     }
+
+    /*
+    Find the start of the next digit sequence and add the remaining
+    unprocessed symbols before it.
+    */
+    auto nextDigitSequenceStartIterator =
+        std::ranges::find_if(nextNonDigitIterator, rEnd, isDigit);
+    std::ranges::for_each(rSearchIterator, nextDigitSequenceStartIterator,
+                          [&ostream](const char c) { ostream << c; });
+    rSearchIterator = nextDigitSequenceStartIterator;
   }
 
   // Remember: We copied a reversed `r`.
