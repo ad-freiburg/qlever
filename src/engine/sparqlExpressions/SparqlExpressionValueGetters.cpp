@@ -88,8 +88,8 @@ StringValueGetterImpl<removeQuotesAndAngleBrackets>::operator()(
     return std::nullopt;
   }
 }
-template struct StringValueGetterImpl<true>;
-template struct StringValueGetterImpl<false>;
+template struct sparqlExpression::detail::StringValueGetterImpl<true>;
+template struct sparqlExpression::detail::StringValueGetterImpl<false>;
 
 // ____________________________________________________________________________
 std::optional<string> LiteralFromIdGetter::operator()(
