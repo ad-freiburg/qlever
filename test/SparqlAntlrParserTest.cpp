@@ -1289,6 +1289,9 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("ceil(?x)", matchUnary(&makeCeilExpression));
   expectBuiltInCall("floor(?x)", matchUnary(&makeFloorExpression));
   expectBuiltInCall("round(?x)", matchUnary(&makeRoundExpression));
+  expectBuiltInCall("ISIRI(?x)", matchUnary(&makeIsIriExpression));
+  expectBuiltInCall("ISBLANK(?x)", matchUnary(&makeIsBlankExpression));
+  expectBuiltInCall("ISLITERAL(?x)", matchUnary(&makeIsLiteralExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
   expectBuiltInCall("COALESCE(?x)", matchUnary(makeCoalesceExpressionVariadic));
   expectBuiltInCall("COALESCE()", matchNary(makeCoalesceExpressionVariadic));
@@ -1481,7 +1484,7 @@ TEST(SparqlParser, substringExpression) {
   // Too few arguments
   expectBuiltInCallFails("SUBSTR(?x)");
   // Too many arguments
-  expectBuiltInCallFails("SUBSTR(?x), 3, 8, 12");
+  expectBuiltInCallFails("SUBSTR(?x, 3, 8, 12)");
 }
 
 // _________________________________________________________

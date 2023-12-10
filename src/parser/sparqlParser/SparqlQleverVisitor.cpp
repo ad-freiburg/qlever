@@ -1699,6 +1699,12 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "concat") {
     AD_CORRECTNESS_CHECK(ctx->expressionList());
     return makeConcatExpression(visit(ctx->expressionList()));
+  } else if (functionName == "isiri") {
+    return createUnary(&makeIsIriExpression);
+  } else if (functionName == "isblank") {
+    return createUnary(&makeIsBlankExpression);
+  } else if (functionName == "isliteral") {
+    return createUnary(&makeIsLiteralExpression);
   } else {
     reportError(
         ctx,

@@ -104,7 +104,8 @@ struct EffectiveBooleanValueGetter {
 
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a string value.
-struct StringValueGetter {
+template <bool removeQuotesAndAngleBrackets>
+struct StringValueGetterImpl {
   std::optional<string> operator()(ValueId, const EvaluationContext*) const;
 
   std::optional<string> operator()(string s, const EvaluationContext*) const {
@@ -122,6 +123,8 @@ struct StringValueGetter {
                       std::move(s));
   }
 };
+using StringValueGetter = StringValueGetterImpl<true>;
+using StringValueGetterRaw = StringValueGetterImpl<false>;
 
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a `std::optional<DateOrLargeYear>`.

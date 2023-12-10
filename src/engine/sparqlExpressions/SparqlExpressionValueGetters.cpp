@@ -75,17 +75,21 @@ auto EffectiveBooleanValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
-std::optional<std::string> StringValueGetter::operator()(
+template <bool removeQuotesAndAngleBrackets>
+std::optional<std::string>
+StringValueGetterImpl<removeQuotesAndAngleBrackets>::operator()(
     Id id, const EvaluationContext* context) const {
-  auto optionalStringAndType =
-      ExportQueryExecutionTrees::idToStringAndType<true>(
-          context->_qec.getIndex(), id, context->_localVocab);
+  auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType<
+      removeQuotesAndAngleBrackets>(context->_qec.getIndex(), id,
+                                    context->_localVocab);
   if (optionalStringAndType.has_value()) {
     return std::move(optionalStringAndType.value().first);
   } else {
     return std::nullopt;
   }
 }
+template struct StringValueGetterImpl<true>;
+template struct StringValueGetterImpl<false>;
 
 // ____________________________________________________________________________
 std::optional<string> LiteralFromIdGetter::operator()(

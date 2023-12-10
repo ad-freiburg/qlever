@@ -695,7 +695,7 @@ TEST(SparqlExpression, builtInNumericFunctions) {
   checkRound(input, round);
 }
 
-// ________________________________________________________________________________________
+// ___________________________________________________________________________
 TEST(SparqlExpression, customNumericFunctions) {
   // Test the correctness of the math functions.
   auto nan = std::numeric_limits<double>::quiet_NaN();
@@ -720,7 +720,23 @@ TEST(SparqlExpression, customNumericFunctions) {
                       std::vector<Id>{D(0), D(tan(1)), D(tan(2)), D(tan(-1))});
 }
 
-// ________________________________________________________________________________________
+// ____________________________________________________________________________
+TEST(SparqlExpression, isSomethingFunctions) {
+  const auto T = Id::makeFromBool(true);
+  const auto F = Id::makeFromBool(false);
+  // TODO(hannahbast): Without the \"\"lit, the last test fails. Why?
+  testUnaryExpression(makeIsIriExpression,
+                      IdOrStrings{"<iri>", "\"\"lit", "_:u", "x", I(42), U},
+                      Ids{T, F, F, F, F, F});
+  testUnaryExpression(makeIsBlankExpression,
+                      IdOrStrings{"<iri>", "\"\"lit", "_:u", "x", I(42), U},
+                      Ids{F, F, T, F, F, F});
+  testUnaryExpression(makeIsLiteralExpression,
+                      IdOrStrings{"<iri>", "\"\"lit", "_:u", "x", I(42), U},
+                      Ids{F, T, F, F, F, F});
+}
+
+// ____________________________________________________________________________
 TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLat = std::bind_front(testUnaryExpression, &makeLatitudeExpression);
   auto checkLong =
