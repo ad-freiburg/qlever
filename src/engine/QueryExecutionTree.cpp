@@ -228,6 +228,7 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
                   "New type of operation that was not yet registered");
   }
   _rootOperation = std::move(operation);
+  readFromCache();
 }
 
 template void QueryExecutionTree::setOperation(std::shared_ptr<IndexScan>);

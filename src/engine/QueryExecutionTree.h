@@ -239,7 +239,7 @@ class QueryExecutionTree {
   OperationType _type;
   string _asString;
   size_t _indent = 0;  // the indent with which the _asString repr was formatted
-  size_t _sizeEstimate;
+  size_t _sizeEstimate = std::numeric_limits<size_t>::max();
   bool _isRoot = false;  // used to distinguish the root from child
                          // operations/subtrees when pinning only the result.
 
