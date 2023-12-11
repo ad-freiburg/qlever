@@ -885,6 +885,37 @@ void GroupBy::substituteAllAggregates(
 }
 
 // _____________________________________________________________________________
+std::vector<size_t> GroupBy::HashMapAggregationData::getHashEntries(
+    std::span<const Id> ids) {
+  std::vector<size_t> hashEntries;
+  hashEntries.reserve(ids.size());
+
+  for (auto& val : ids) {
+    auto [iterator, wasAdded] = map_.try_emplace(val, getNumberOfGroups());
+
+    hashEntries.push_back(iterator->second);
+  }
+
+  for (auto& aggregation : aggregationData_)
+    aggregation.resize(getNumberOfGroups());
+
+  return hashEntries;
+}
+
+// _____________________________________________________________________________
+[[nodiscard]] std::vector<Id>
+GroupBy::HashMapAggregationData::getSortedGroupColumn() const {
+  std::vector<ValueId> sortedKeys;
+  sortedKeys.reserve(map_.size());
+  // TODO<C++23>: use ranges::to
+  for (const auto& val : map_) {
+    sortedKeys.push_back(val.first);
+  }
+  std::ranges::sort(sortedKeys);
+  return sortedKeys;
+}
+
+// _____________________________________________________________________________
 void GroupBy::createResultFromHashMap(
     IdTable* result, const HashMapAggregationData& aggregationData,
     std::vector<HashMapAliasInformation>& aggregateAliases,
@@ -895,11 +926,7 @@ void GroupBy::createResultFromHashMap(
   size_t numberOfGroups = aggregationData.getNumberOfGroups();
   result->resize(numberOfGroups);
 
-  auto targetIterator = result->getColumn(0).begin();
-  for (const auto& val : sortedKeys) {
-    *targetIterator = val;
-    ++targetIterator;
-  }
+  std::ranges::copy(sortedKeys, result->getColumn(0).begin());
 
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext(
@@ -933,7 +960,7 @@ void GroupBy::createResultFromHashMap(
 
         // Copy to result table
         decltype(auto) outValues = result->getColumn(alias.outCol_);
-        std::ranges::copy(aggregateResults.begin(), aggregateResults.end(),
+        std::ranges::copy(aggregateResults,
                           outValues.begin() + evaluationContext._beginIndex);
 
         // Copy the result so that future aliases may reuse it
@@ -970,10 +997,8 @@ void GroupBy::computeGroupByForHashMapOptimization(
     size_t numAggregates, const IdTable& subresult, size_t columnIndex,
     LocalVocab* localVocab) {
   // Initialize aggregation data
-  HashMapAggregationData aggregationData{
-      ad_utility::HashMapWithMemoryLimit<KeyType, ValueType>(
-          getExecutionContext()->getAllocator()),
-      std::vector<std::vector<AverageAggregationData>>(numAggregates)};
+  HashMapAggregationData aggregationData(getExecutionContext()->getAllocator(),
+                                         numAggregates);
 
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext(

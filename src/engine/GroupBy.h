@@ -252,40 +252,17 @@ class GroupBy : public Operation {
     // Stores the actual aggregation data.
     std::vector<std::vector<AverageAggregationData>> aggregationData_;
 
-    // If `id` is not in map, add an element to the `aggregationData_` vectors
-    // and store the index.
-    size_t getOrCreateIndex(Id id) {
-      auto [iterator, wasAdded] = map_.try_emplace(id);
-
-      if (wasAdded) {
-        iterator->second = aggregationData_.at(0).size();
-        for (auto& aggregation : aggregationData_) aggregation.emplace_back();
-      }
-
-      return iterator->second;
+    HashMapAggregationData(ad_utility::AllocatorWithLimit<Id> alloc,
+                           size_t numAggregates)
+        : map_{ad_utility::HashMapWithMemoryLimit<KeyType, ValueType>(alloc)},
+          aggregationData_{
+              std::vector<std::vector<AverageAggregationData>>(numAggregates)} {
+      AD_CONTRACT_CHECK(numAggregates > 0);
     }
 
     // Returns a vector containing the offsets for all ids of `ids`,
     // inserting entries if necessary.
-    std::vector<size_t> getHashEntries(std::span<const Id> ids) {
-      std::vector<size_t> hashEntries;
-      hashEntries.reserve(ids.size());
-
-      for (auto& val : ids) {
-        auto [iterator, wasAdded] = map_.try_emplace(val);
-
-        if (wasAdded) {
-          iterator->second = getNumberOfGroups() - 1;
-        }
-
-        hashEntries.push_back(iterator->second);
-      }
-
-      for (auto& aggregation : aggregationData_)
-        aggregation.resize(getNumberOfGroups());
-
-      return hashEntries;
-    }
+    std::vector<size_t> getHashEntries(std::span<const Id> ids);
 
     // Return the index of `id`.
     [[nodiscard]] size_t getIndex(Id id) const { return map_.at(id); }
@@ -304,14 +281,7 @@ class GroupBy : public Operation {
     }
 
     // Get the values of the grouped column in ascending order.
-    [[nodiscard]] std::vector<Id> getSortedGroupColumn() const {
-      std::vector<ValueId> sortedKeys;
-      for (const auto& val : map_) {
-        sortedKeys.push_back(val.first);
-      }
-      std::ranges::sort(sortedKeys);
-      return sortedKeys;
-    }
+    [[nodiscard]] std::vector<Id> getSortedGroupColumn() const;
 
     // Returns the number of groups.
     [[nodiscard]] size_t getNumberOfGroups() const { return map_.size(); }
