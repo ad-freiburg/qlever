@@ -12,3 +12,6 @@ runs:
     - name: Install boost from PPa
       run: sudo add-apt-repository -y ppa:mhier/libboost-latest && sudo apt update && sudo apt install -y libboost1.81-all-dev libboost-url1.81-dev
       shell: bash
+    - name: Install python packages for E2E tests
+      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
+      shell: bash
