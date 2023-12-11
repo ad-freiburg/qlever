@@ -1,6 +1,6 @@
-//
-// Created by beckermann on 12/11/23.
-//
+// Copyright 2023, University of Freiburg,
+//                 Chair of Algorithms and Data Structures.
+// Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
 #pragma once
 

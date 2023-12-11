@@ -1,7 +1,6 @@
 // Copyright 2023, University of Freiburg,
-// Chair of Algorithms and Data Structures
-// Authors:
-//   2023 -    Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
+//                 Chair of Algorithms and Data Structures.
+// Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
 #pragma once
 
