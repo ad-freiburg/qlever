@@ -7,15 +7,14 @@
 
 #include "../util/GTestHelpers.h"
 #include "parser/IriType.h"
-#include "parser/LiteralType.h"
 #include "parser/LiteralOrIriType.h"
+#include "parser/LiteralType.h"
 
 TEST(IriTypeTest, IriTypeCreation) {
   IriType iri("http://www.wikidata.org/entity/Q3138");
 
   EXPECT_THAT("http://www.wikidata.org/entity/Q3138", iri.getIri());
 }
-
 
 TEST(LiteralTypeTest, LiteralTypeTest) {
   LiteralType literal("Hello World");
@@ -46,7 +45,6 @@ TEST(LiteralTypeTest, LiteralTypeTestWithLanguagetag) {
   EXPECT_THAT("de", literal.getLanguageTag());
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 }
-
 
 TEST(LiteralOrIriType, LiteralOrIriTypeWithIri) {
   LiteralOrIriType iri(IriType("http://www.wikidata.org/entity/Q3138"));
@@ -79,7 +77,8 @@ TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteral) {
 }
 
 TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndDatatype) {
-  LiteralOrIriType literal(LiteralType("Hello World", "xsd:string", LiteralDescriptor::DATATYPE));
+  LiteralOrIriType literal(
+      LiteralType("Hello World", "xsd:string", LiteralDescriptor::DATATYPE));
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriTypeObject(), ad_utility::Exception);
@@ -94,7 +93,8 @@ TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndDatatype) {
 }
 
 TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndLanguageTag) {
-  LiteralOrIriType literal(LiteralType("Hej världen", "se", LiteralDescriptor::LANGUAGE_TAG));
+  LiteralOrIriType literal(
+      LiteralType("Hej världen", "se", LiteralDescriptor::LANGUAGE_TAG));
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriTypeObject(), ad_utility::Exception);
@@ -107,4 +107,3 @@ TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndLanguageTag) {
   EXPECT_THAT("se", literal.getLanguageTag());
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 }
-
