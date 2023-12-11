@@ -65,10 +65,8 @@ jobs:
     - name: Install compiler
       uses: ./.github/workflows/install-compiler-ubuntu
       with:
-        compiler: matrix.compiler
-        compiler-version: matrix.compiler-version
-    - name: Python dependencies
-      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
+        compiler: ${{matrix.compiler}}
+        compiler-version: ${{matrix.compiler-version}}
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
