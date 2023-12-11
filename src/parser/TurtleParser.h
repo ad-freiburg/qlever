@@ -610,6 +610,8 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
       QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS,
       "parallel parser"};
   std::future<void> parseFuture_;
+  std::atomic<size_t> batchIdx_ = 0;
+  std::atomic<size_t> numBatchesTotal_ = std::numeric_limits<size_t>::max();
 
   ParallelBuffer::BufferType remainingBatchFromInitialization_;
 };

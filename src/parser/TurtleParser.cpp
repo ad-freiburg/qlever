@@ -3,9 +3,10 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#include <parser/RdfEscaping.h>
-#include <parser/TurtleParser.h>
-#include <util/Conversions.h>
+#include "parser/RdfEscaping.h"
+#include "parser/TurtleParser.h"
+#include "util/Conversions.h"
+#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
 #include <cstring>
 
@@ -840,39 +841,48 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
   // This lambda fetches all the unparsed blocks of triples from the input
   // file and feeds them to the parallel parsers.
   auto feedBatches = [&, first = true, parsePosition = 0ull]() mutable {
+    auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([this]{
+      LOG(INFO) << "Cleaning up the feedBatches lambda" << std::endl;
+      // Wait until everything has been parsed.
+      parallelParser_.finish();
+      // Wait until all the parsed triples have been picked up.
+      tripleCollector_.finish();
+    });
     decltype(remainingBatchFromInitialization_) inputBatch;
-    while (true) {
-      if (first) {
-        inputBatch = std::move(remainingBatchFromInitialization_);
-        first = false;
-      } else {
-        auto nextOptional = fileBuffer_.getNextBlock();
-        if (!nextOptional) {
-          // Wait until everything has been parsed.
-          parallelParser_.finish();
-          // Wait until all the parsed triples have been picked up.
-          tripleCollector_.finish();
-          return;
+    try {
+      while (true) {
+        if (first) {
+          inputBatch = std::move(remainingBatchFromInitialization_);
+          first = false;
+        } else {
+          auto nextOptional = fileBuffer_.getNextBlock();
+          if (!nextOptional) {
+            return;
+          }
+          inputBatch = std::move(nextOptional.value());
         }
-        inputBatch = std::move(nextOptional.value());
-      }
-      auto batchSize = inputBatch.size();
-      auto parseBatch = [this, parsePosition,
-                         batch = std::move(inputBatch)]() mutable {
-        TurtleStringParser<Tokenizer_T> parser;
-        parser.prefixMap_ = this->prefixMap_;
-        parser.setPositionOffset(parsePosition);
-        parser.setInputStream(std::move(batch));
-        // TODO: raise error message if a prefix parsing fails;
-        // TODO: handle exceptions in threads;
-        std::vector<TurtleTriple> triples = parser.parseAndReturnAllTriples();
+        auto batchSize = inputBatch.size();
+        auto parseBatch = [this, parsePosition,
+                           batch = std::move(inputBatch)]() mutable {
+          TurtleStringParser<Tokenizer_T> parser;
+          parser.prefixMap_ = this->prefixMap_;
+          parser.setPositionOffset(parsePosition);
+          parser.setInputStream(std::move(batch));
+          // TODO: raise error message if a prefix parsing fails;
+          // TODO: handle exceptions in threads;
+          std::vector<TurtleTriple> triples = parser.parseAndReturnAllTriples();
 
-        tripleCollector_.push([triples = std::move(triples), this]() mutable {
-          triples_ = std::move(triples);
-        });
-      };
-      parsePosition += batchSize;
-      parallelParser_.push(parseBatch);
+          tripleCollector_.push([triples = std::move(triples), this]() mutable {
+            triples_ = std::move(triples);
+          });
+        };
+        parsePosition += batchSize;
+        parallelParser_.push(parseBatch);
+      }
+    } catch (std::exception& e) {
+      LOG(ERROR) << "Caught an exception while setting up batches for parallel "
+                    "parsing: "
+                 << e.what() << std::endl;
     }
   };
 
