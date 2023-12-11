@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <string>
+
 enum LiteralDescriptor { NONE, LANGUAGE_TAG, DATATYPE };
 
 class LiteralType {
@@ -14,7 +16,7 @@ class LiteralType {
   // Stores the optional language tag or the optional datatype if applicable
   std::string descriptorValue;
   // Stores information if the literal has a language tag, a datatype, or non of
-  // these two assinged to it
+  // these two assigned to it
   LiteralDescriptor descriptorType;
 
  public:

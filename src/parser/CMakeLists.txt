@@ -25,6 +25,8 @@ add_library(parser
         LiteralType.h
         IriType.h
         IriType.cpp
-        LiteralType.cpp)
+        LiteralType.cpp
+        LiteralOrIriType.cpp
+        LiteralOrIriType.h)
 qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine)
 
