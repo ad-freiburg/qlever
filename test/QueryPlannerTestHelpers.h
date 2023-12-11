@@ -14,6 +14,8 @@
 #include "engine/NeutralElementOperation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
+#include "engine/TextIndexScanForEntity.h"
+#include "engine/TextIndexScanForWord.h"
 #include "engine/TransitivePath.h"
 #include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
@@ -83,6 +85,32 @@ inline auto IndexScan =
             AD_PROPERTY(IndexScan, getSubject, Eq(subject)),
             AD_PROPERTY(IndexScan, getPredicate, Eq(predicate)),
             AD_PROPERTY(IndexScan, getObject, Eq(object))));
+};
+
+inline auto TextIndexScanForWord = [](Variable textRecordVar,
+                                      string word) -> QetMatcher {
+  std::string wordAndTextVar = absl::StrCat(
+      "TextIndexScanForWord on ", textRecordVar.name(), " with word ", word);
+  return RootOperation<::TextIndexScanForWord>(AllOf(
+      AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
+                  Eq(1 + word.ends_with('*'))),
+      AD_PROPERTY(::TextIndexScanForWord, getDescriptor, Eq(wordAndTextVar))));
+};
+
+inline auto TextIndexScanForEntity =
+    [](Variable textRecordVar, std::variant<Variable, std::string> entity,
+       string word) -> QetMatcher {
+  std::string wordAndEntityAndTextVar = absl::StrCat(
+      "TextIndexScanForEntity on text-variable ", textRecordVar.name(), " and ",
+      (std::holds_alternative<std::string>(entity)
+           ? ("fixed-entity " + std::get<std::string>(entity))
+           : ("entity-variable " + std::get<Variable>(entity).name())),
+      " with word ", word);
+  return RootOperation<::TextIndexScanForEntity>(
+      AllOf(AD_PROPERTY(::TextIndexScanForEntity, getResultWidth,
+                        Eq(2 + std::holds_alternative<Variable>(entity))),
+            AD_PROPERTY(::TextIndexScanForEntity, getDescriptor,
+                        Eq(wordAndEntityAndTextVar))));
 };
 
 inline auto Bind = [](const QetMatcher& childMatcher,

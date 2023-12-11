@@ -932,3 +932,56 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
       " BIND (3 + 5 AS ?x) }",
       h::Bind(h::NeutralElementOperation(), "3 + 5", Variable{"?x"}));
 }
+
+// __________________________________________________________________________
+TEST(QueryPlannerTest, TextIndexScanForWord) {
+  auto qec = ad_utility::testing::getQec(
+      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
+      "<p> \"testEntity\" . <a> <p> \"picking the right text can be a hard "
+      "test\" . <a> <p> \"sentence for multiple words tests\" . "
+      "<a> <p> \"testing and picking\"",
+      true, true, true, 16_B, true);
+  h::expect("SELECT * WHERE { ?text ql:contains-word \"test*\" }",
+            h::TextIndexScanForWord(Var{"?text"}, "test*"), qec);
+  h::expect("SELECT * WHERE { ?text2 ql:contains-word \"test\" }",
+            h::TextIndexScanForWord(Var{"?text2"}, "test"), qec);
+  h::expect(
+      "SELECT * WHERE { ?text2 ql:contains-word \"multiple words* test\" }",
+      h::Join(h::Join(h::TextIndexScanForWord(Var{"?text2"}, "test"),
+                      h::TextIndexScanForWord(Var{"?text2"}, "words*")),
+              h::TextIndexScanForWord(Var{"?text2"}, "multiple")),
+      qec);
+}
+
+// __________________________________________________________________________
+TEST(QueryPlannerTest, TextIndexScanForEntity) {
+  auto qec = ad_utility::testing::getQec(
+      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
+      "<p> \"testEntity\" . <a> <p> \"picking the right text can be a hard "
+      "test\" . <a> <p> \"only this text contains the word opti \" . "
+      "<a> <p> \"testing and picking\"",
+      true, true, true, 16_B, true);
+  h::expect(
+      "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
+      "ql:contains-word \"test*\" }",
+      h::Join(
+          h::TextIndexScanForWord(Var{"?text"}, "test*"),
+          h::TextIndexScanForEntity(Var{"?text"}, Var{"?scientist"}, "test*")),
+      qec);
+  h::expect(
+      "SELECT * WHERE { ?text ql:contains-entity <testEntity> . ?text "
+      "ql:contains-word \"test\" }",
+      h::Join(h::TextIndexScanForWord(Var{"?text"}, "test"),
+              h::TextIndexScanForEntity(Var{"?text"}, "<testEntity>", "test")),
+      qec);
+  h::expect(
+      "SELECT * WHERE { ?text ql:contains-word \"picking*\" . ?text "
+      "ql:contains-entity <testEntity> . ?text ql:contains-word "
+      "\"opti\" . ?text ql:contains-word \"testi*\"}",
+      h::Join(h::Join(h::Join(h::TextIndexScanForEntity(Var{"?text"},
+                                                        "<testEntity>", "opti"),
+                              h::TextIndexScanForWord(Var{"?text"}, "testi*")),
+                      h::TextIndexScanForWord(Var{"?text"}, "opti")),
+              h::TextIndexScanForWord(Var{"?text"}, "picking*")),
+      qec);
+}
