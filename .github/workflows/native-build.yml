@@ -12,13 +12,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checkout:
-    uses: actions/checkout@v3
-    with:
-      submodules: 'recursive'
-  install-dependencies:
-    uses: ./.github/workflows/install-dependencies-ubuntu.yml
-
   build:
     # The CMake configure and build commands are platform-agnostic and should work equally
     # well on Windows or Mac.  You can convert this to a matrix build if you need
@@ -64,6 +57,11 @@ jobs:
 
 
     steps:
+    - uses: actions/checkout@v3
+      with:
+          submodules: 'recursive'
+    - name: install-dependencies
+      uses: ./.github/workflows/install-dependencies-ubuntu
     - name: Install gcc 11
       run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-11 g++-11
       if :  matrix.compiler == 'gcc' && matrix.compiler-version == 11
