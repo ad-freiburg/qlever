@@ -4,16 +4,18 @@
 
 #include "LiteralOrIriType.h"
 
-LiteralOrIriType::LiteralOrIriType(IriType data): data(data) {}
-LiteralOrIriType::LiteralOrIriType(LiteralType data): data(data) {}
+LiteralOrIriType::LiteralOrIriType(IriType data) : data(data) {}
+LiteralOrIriType::LiteralOrIriType(LiteralType data) : data(data) {}
 
 bool LiteralOrIriType::isIri() const {
   return std::holds_alternative<IriType>(data);
 }
 
 IriType& LiteralOrIriType::getIriTypeObject() {
-  if(!isIri()) {
-    AD_THROW("LiteralOrIriType object does not contain an IriType object and thus cannot return it");
+  if (!isIri()) {
+    AD_THROW(
+        "LiteralOrIriType object does not contain an IriType object and thus "
+        "cannot return it");
   }
   return std::get<IriType>(data);
 }
@@ -28,8 +30,10 @@ bool LiteralOrIriType::isLiteral() const {
 }
 
 LiteralType& LiteralOrIriType::getLiteralTypeObject() {
-  if(!isLiteral()) {
-    AD_THROW("LiteralOrIriType object does not contain an LiteralType object and thus cannot return it");
+  if (!isLiteral()) {
+    AD_THROW(
+        "LiteralOrIriType object does not contain an LiteralType object and "
+        "thus cannot return it");
   }
   return std::get<LiteralType>(data);
 }
