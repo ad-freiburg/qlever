@@ -12,14 +12,17 @@ runs:
   using: "composite"
   steps:
     - name: Add PPA for GCC
+      if :  inputs.compiler == 'gcc'
       run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update
       shell: bash
-      if :  inputs.compiler == 'gcc'
+
     - name: Install gcc
-      run : sudo apt install -y gcc-${{inputs.compiler-version}} g++-${{inputs.compiler-version}}
       if :  inputs.compiler == 'gcc'
+      run : sudo apt install -y gcc-${{inputs.compiler-version}} g++-${{inputs.compiler-version}}
       shell: bash
+
     - name: Install clang
+      if :  inputs.compiler == 'clang'
       # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
       # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted
       # immediately after.
@@ -29,6 +32,6 @@ runs:
         sed   's/apt-key del/echo/' llvm.sh -iy
         sudo ./llvm.sh ${{inputs.compiler-version}}
         sudo apt install -y clang-${{inputs.compiler-version}}
-      if :  inputs.compiler == 'clang'
       shell: bash
-# TODO<joka921> Add assertion for unsupported compiler version.
+
+# TODO<joka921> Add assertion for unsupported compilers and versions.
