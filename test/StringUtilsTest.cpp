@@ -163,12 +163,12 @@ TEST(StringUtilsTest, addIndentation) {
             ad_utility::addIndentation(withLineBreaks, "Not "));
 }
 
-TEST(StringUtilsTest, insertThousandDelimiter) {
+TEST(StringUtilsTest, insertThousandSeparator) {
   /*
   Do the tests, that are not exception tests, with the given arguments for
-  `insertThousandDelimiter`.
+  `insertThousandSeparator`.
   */
-  auto doNotExceptionTest = [](const char delimiterSymbol,
+  auto doNotExceptionTest = [](const char separatorSymbol,
                                const char floatingPointSignifier,
                                ad_utility::source_location l =
                                    ad_utility::source_location::current()) {
@@ -180,26 +180,26 @@ TEST(StringUtilsTest, insertThousandDelimiter) {
 
     /*
     @brief Make a comparison check, that the given string, given in pieces,
-    generates the wanted string, when called with `insertThousandDelimiter` with
+    generates the wanted string, when called with `insertThousandSeparator` with
     the arguments from `doNotExceptionTest`.
 
-    @param stringPieces The input for `insertThousandDelimiter` are those pieces
+    @param stringPieces The input for `insertThousandSeparator` are those pieces
     concatenated and the expected output are those pieces concatenated with
-    `delimiterSymbol` between them. For example: `{"This number 4", "198."}`.
+    `separatorSymbol` between them. For example: `{"This number 4", "198."}`.
     */
     auto simpleComparisonTest =
-        [&floatingPointSignifier, &delimiterSymbol](
+        [&floatingPointSignifier, &separatorSymbol](
             const std::vector<std::string>& stringPieces,
             ad_utility::source_location l =
                 ad_utility::source_location::current()) {
           // For generating better messages, when failing a test.
           auto trace{generateLocationTrace(l, "simpleComparisonTest")};
           ASSERT_STREQ(ad_utility::lazyStrJoin(stringPieces,
-                                               std::string{delimiterSymbol})
+                                               std::string{separatorSymbol})
                            .c_str(),
-                       ad_utility::insertThousandDelimiter(
+                       ad_utility::insertThousandSeparator(
                            ad_utility::lazyStrJoin(stringPieces, ""),
-                           delimiterSymbol, floatingPointSignifier)
+                           separatorSymbol, floatingPointSignifier)
                            .c_str());
         };
 
@@ -283,7 +283,7 @@ TEST(StringUtilsTest, insertThousandDelimiter) {
   doNotExceptionTest('\"', '?');
   doNotExceptionTest('~', '-');
 
-  // Numbers as `delimiterSymbol`, or `floatingPointSignifier`, are not allowed.
+  // Numbers as `separatorSymbol`, or `floatingPointSignifier`, are not allowed.
   for (size_t num1 = 0; num1 < 10; num1++) {
     for (size_t num2 = 0; num2 < 10; num2++) {
       const std::string numAsString = absl::StrCat(num1, num2);

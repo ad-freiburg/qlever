@@ -92,7 +92,7 @@ addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
 addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
-addLinkAndDiscoverTest(StringUtilsTest)
+addLinkAndDiscoverTest(StringUtilsTest util)
 
 addLinkAndDiscoverTest(CacheTest)
 
