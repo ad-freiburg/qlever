@@ -246,12 +246,8 @@ class GroupBy : public Operation {
 
   // Stores the map which associates Ids with vector offsets and
   // the vectors containing the aggregation data.
-  struct HashMapAggregationData {
-    // Maps `Id` to vector offsets.
-    ad_utility::HashMapWithMemoryLimit<KeyType, ValueType> map_;
-    // Stores the actual aggregation data.
-    std::vector<std::vector<AverageAggregationData>> aggregationData_;
-
+  class HashMapAggregationData {
+   public:
     HashMapAggregationData(ad_utility::AllocatorWithLimit<Id> alloc,
                            size_t numAggregates)
         : map_{ad_utility::HashMapWithMemoryLimit<KeyType, ValueType>(alloc)},
@@ -285,6 +281,12 @@ class GroupBy : public Operation {
 
     // Returns the number of groups.
     [[nodiscard]] size_t getNumberOfGroups() const { return map_.size(); }
+
+   private:
+    // Maps `Id` to vector offsets.
+    ad_utility::HashMapWithMemoryLimit<KeyType, ValueType> map_;
+    // Stores the actual aggregation data.
+    std::vector<std::vector<AverageAggregationData>> aggregationData_;
   };
 
   // Returns the aggregation results between `beginIndex` and `endIndex`
