@@ -31,13 +31,10 @@ jobs:
         submodules: 'recursive'
 
     - name: Install dependencies
-      run:  |
-        sudo gem install apt-spy2 && sudo apt-spy2 fix --commit --launchpad --country=US
-        sudo apt-get update
-        sudo apt-get install build-essential 
+      uses: ./.github/workflows/install-dependencies-ubuntu
+      with:
+        install-third-party-libraries: "false"
 
-    - name: Python dependencies
-      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
     - name: Create build directory
       run: mkdir ${{github.workspace}}/build
     - name: Install and run conan

@@ -42,32 +42,19 @@ jobs:
         submodules: "recursive"
 
     - name: Install dependencies
-      run:  |
-        sudo gem install apt-spy2 && sudo apt-spy2 fix --commit --launchpad --country=US
-        sudo apt-get update
-    - name: Install clang 16
-      # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
-      # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted
-      # immediately after.
+      uses: ./.github/workflows/install-dependencies-ubuntu
+    - name: Install compiler
+      uses: ./.github/workflows/install-compiler-ubuntu
+      with:
+        compiler: "clang"
+        compiler-version: "16"
+    - name: Install coverage tools
       run: |
-        wget https://apt.llvm.org/llvm.sh
-        sudo chmod +x llvm.sh
-        sed   's/apt-key del/echo/' llvm.sh -iy
-        sudo ./llvm.sh 16
-        sudo apt install -y clang-16 llvm-16
+        sudo apt install -y llvm-16
     - name: Show path
       run: |
         which llvm-profdata-16
         which llvm-cov-16
-    - name: Install dependencies
-      run:  |
-        sudo gem install apt-spy2
-        sudo apt-spy2 fix --commit --launchpad --country=US
-        sudo add-apt-repository -y ppa:mhier/libboost-latest
-        sudo apt-get update
-        sudo apt-get install -y libicu-dev tzdata libzstd-dev libjemalloc-dev libboost1.81-all-dev libboost-url1.81-dev
-    - name: Python dependencies
-      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu python3-pip
     - name: Create build directory
       run: mkdir ${{github.workspace}}/build
     - name: Configure CMake
