@@ -822,8 +822,9 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
 
 // We will use the  following trick: For a batch that is forwarded to the
 // parallel parser, we will first increment `numBatchesTotal_` and then call
-// the following lambda after the batch has completely parsed and the result
-// pushed to  the `tripleCollector_`. We thus get the invariant that `batchIdx_
+// the following lambda after the batch has completely been parsed and the
+// result pushed to the `tripleCollector_`. We thus get the invariant that
+// `batchIdx_
 // == numBatchesTotal_` iff all batches that have been inserted to the
 // `parallelParser_` have been fully processed. After the last batch we will
 // push another call to this lambda to the `parallelParser_` which will then
