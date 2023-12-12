@@ -848,8 +848,7 @@ void GroupBy::extractValues(
     }
   };
 
-  std::visit(visitor, std::forward<sparqlExpression::ExpressionResult>(
-                          expressionResult));
+  std::visit(visitor, std::move(expressionResult));
 }
 
 // _____________________________________________________________________________
