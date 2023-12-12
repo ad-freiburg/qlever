@@ -180,6 +180,17 @@ size_t TransitivePath::getCostEstimate() {
       costEstimate += ptr->getCostEstimate();
     }
   }
+  // Add the cost for building the hash map.
+  //
+  // TODO: We currently compute the hash map for the complete relation even if
+  // the entry set is small. This is very wasteful, but until we fix it, it
+  // should at least be reflected in the cost estimate (so that better query
+  // plans are not discarded).
+  for (auto* ptr : getChildren()) {
+    if (ptr) {
+      costEstimate += ptr->getSizeEstimate() * 5;
+    }
+  }
   return costEstimate;
 }
 

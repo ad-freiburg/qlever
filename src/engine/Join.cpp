@@ -238,20 +238,31 @@ size_t Join::getCostEstimate() {
   // with the estimates for the materialization of a full scan. For a detailed
   // discussion see the comments in `IndexScan::getCostEstimate()` (in
   // `IndexScan.cpp`)
+  size_t leftSizeEst = _left->getSizeEstimate();
+  size_t rightSizeEst = _right->getSizeEstimate();
   if (isFullScanDummy(_left)) {
     size_t nofDistinctTabJc = static_cast<size_t>(
-        _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol));
+        rightSizeEst / _right->getMultiplicity(_rightJoinCol));
     float averageScanSize = _left->getMultiplicity(_leftJoinCol);
-
     costJoin = nofDistinctTabJc * averageScanSize * 10'000;
   } else if (isFullScanDummy(_right)) {
-    size_t nofDistinctTabJc = static_cast<size_t>(
-        _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol));
+    size_t nofDistinctTabJc =
+        static_cast<size_t>(leftSizeEst / _left->getMultiplicity(_leftJoinCol));
     float averageScanSize = _right->getMultiplicity(_rightJoinCol);
     costJoin = nofDistinctTabJc * averageScanSize * 10'000;
   } else {
-    // Normal case:
-    costJoin = _left->getSizeEstimate() + _right->getSizeEstimate();
+    // If the size estimates differ by a factor of GALLOP_THRESHOLD or more,
+    // we will perform a "galopping" (exponential search) join, otherwise
+    // assume that we will perform a "zipper" (linear) join.
+    if (leftSizeEst > rightSizeEst) {
+      std::swap(leftSizeEst, rightSizeEst);
+    }
+    leftSizeEst = std::max(leftSizeEst, size_t{1});
+    if (leftSizeEst * GALLOP_THRESHOLD <= rightSizeEst) {
+      costJoin = leftSizeEst * std::log2(1 + rightSizeEst / leftSizeEst);
+    } else {
+      costJoin = leftSizeEst + rightSizeEst;
+    }
   }
 
   // TODO<joka921> once the `getCostEstimate` functions are `const`,
