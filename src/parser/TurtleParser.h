@@ -592,13 +592,22 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
     return 0;
   }
 
-  // The
+  // The destructor has to clean up all the parallel structures that might be
+  // still running in the background, especially when it is called before the
+  // parsing has finished (e.g. in case of an exception in the code that uses
+  // the parser).
   ~TurtleParallelParser() override;
 
  private:
   // The documentation for this is in the `.cpp` file, because it closely
   // interacts with the functions next to it.
   void finishTripleCollectorIfLastBatch();
+  // Parse the single `batch` and push the result to the `triplesCollector_`.
+  void parseBatch(size_t parsePosition, auto batch);
+  // Read all the batches from the file and feed them to the parallel parser
+  // threads. The argument is the first batch which might have been leftover
+  // from the initialization phase where the prefixes are parsed.
+  void feedBatchesToParser(auto remainingBatchFromInitialization);
 
   using TurtleParser<Tokenizer_T>::tok_;
   using TurtleParser<Tokenizer_T>::triples_;
@@ -622,6 +631,4 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   std::atomic<size_t> batchIdx_ = 0;
   // `max()` means `not yet set`.
   std::atomic<size_t> numBatchesTotal_ = 0;
-
-  ParallelBuffer::BufferType remainingBatchFromInitialization_;
 };

@@ -647,20 +647,22 @@ std::vector<TurtleTriple> parseFromFile(const std::string& filename,
 // `useBatchInterface` argument) and possible additional args, and run this
 // function for all the different parsers that can read from a file (stream and
 // parallel parser, with all the combinations of the different tokenizers).
-auto forAllParsers(const auto& function, const auto&... args) {
-  function.template operator()<TurtleStreamParser<Tokenizer>>(true, args...);
-  function.template operator()<TurtleStreamParser<Tokenizer>>(false, args...);
+auto forAllParallelParsers(const auto& function, const auto&... args) {
   function.template operator()<TurtleParallelParser<Tokenizer>>(true, args...);
   function.template operator()<TurtleParallelParser<Tokenizer>>(false, args...);
-
-  function.template operator()<TurtleStreamParser<TokenizerCtre>>(true,
-                                                                  args...);
-  function.template operator()<TurtleStreamParser<TokenizerCtre>>(false,
-                                                                  args...);
   function.template operator()<TurtleParallelParser<TokenizerCtre>>(true,
                                                                     args...);
   function.template operator()<TurtleParallelParser<TokenizerCtre>>(false,
                                                                     args...);
+}
+auto forAllParsers(const auto& function, const auto&... args) {
+  function.template operator()<TurtleParallelParser<Tokenizer>>(true, args...);
+  function.template operator()<TurtleParallelParser<Tokenizer>>(false, args...);
+  function.template operator()<TurtleParallelParser<TokenizerCtre>>(true,
+                                                                    args...);
+  function.template operator()<TurtleParallelParser<TokenizerCtre>>(false,
+                                                                    args...);
+  forAllParallelParsers(function, args...);
 }
 
 TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
@@ -759,4 +761,40 @@ TEST(TurtleParserTest, multilineComments) {
                                      {"<s>", "<p>", "<o2>"}};
   sortTriples(expected);
   forAllParsers(testWithParser, input, expected);
+}
+
+// _______________________________________________________________________
+TEST(TurtleParserTest, exceptionPropagation) {
+  std::string filename{"turtleParserEmptyInput.dat"};
+  FILE_BUFFER_SIZE() = 1000;
+  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
+                                             std::string_view input) {
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (parseFromFile<Parser>(filename, useBatchInterface)),
+        ::testing::ContainsRegex("Parse error"));
+    ad_utility::deleteFile(filename);
+  };
+  forAllParsers(testWithParser, "<missing> <object> .");
+}
+
+// _______________________________________________________________________
+TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
+  std::string filename{"turtleParserEmptyInput.dat"};
+  FILE_BUFFER_SIZE() = 5;
+  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
+                                             std::string_view input) {
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (parseFromFile<Parser>(filename, useBatchInterface)),
+        ::testing::ContainsRegex("Please increase the FILE_BUFFER_SIZE"));
+    ad_utility::deleteFile(filename);
+  };
+  forAllParallelParsers(testWithParser, "<subject> <predicate> <object> .");
 }

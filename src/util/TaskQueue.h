@@ -34,9 +34,10 @@ class TaskQueue {
   using AtomicMs = std::atomic<std::chrono::milliseconds::rep>;
   using Queue = ad_utility::data_structures::ThreadSafeQueue<Task>;
 
-  std::vector<ad_utility::JThread> threads_;
+  std::atomic<bool> isFinished_ = false;
   size_t queueMaxSize_ = 1;
   Queue queuedTasks_{queueMaxSize_};
+  std::vector<ad_utility::JThread> threads_;
   std::string name_;
   // Keep track of the time spent waiting in the push/pop operation
   AtomicMs pushTime_ = 0, popTime_ = 0;
@@ -82,12 +83,14 @@ class TaskQueue {
   // Blocks until all tasks have been computed. After a call to finish, no more
   // calls to push are allowed.
   void finish() {
-    queuedTasks_.finish();
-    for (auto& thread : threads_) {
-      if (thread.joinable()) {
-        thread.join();
-      }
+    if (isFinished_.exchange(true)) {
+      // There was a previous call to `finish()` , so we don't need to do
+      // anything. The atomic exchange is required to not have a data race on
+      // the `threads_` variable.
+      return;
     }
+    queuedTasks_.finish();
+    threads_.clear();
   }
 
   void resetTimers() requires TrackTimes {
@@ -102,13 +105,12 @@ class TaskQueue {
   template <typename F>
   decltype(auto) executeAndUpdateTimer(F&& f, AtomicMs& duration) {
     if constexpr (TrackTimes) {
-    ad_utility::Timer t{ad_utility::Timer::Started};
-    auto cleanup =
-        absl::Cleanup{[&duration, &t] { duration += t.msecs().count(); }};
-    return f();
-  }
-  else {
-    return f();
+      ad_utility::Timer t{ad_utility::Timer::Started};
+      auto cleanup =
+          absl::Cleanup{[&duration, &t] { duration += t.msecs().count(); }};
+      return f();
+    } else {
+      return f();
     }
   }
 
