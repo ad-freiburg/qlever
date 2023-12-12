@@ -45,3 +45,7 @@ TEST(TaskQueue, SimpleSumWithWait) {
   q.finish();
   ASSERT_EQ(result, 500500);
 }
+
+TEST(TaskQueue, ThrowOnMaxQueueSizeZero) {
+  EXPECT_ANY_THROW((ad_utility::TaskQueue{0, 5}));
+}

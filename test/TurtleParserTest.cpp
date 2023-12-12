@@ -787,7 +787,6 @@ TEST(TurtleParserTest, exceptionPropagation) {
 // propagated.
 TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
   std::string filename{"turtleParserEmptyInput.dat"};
-  FILE_BUFFER_SIZE() = 40;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              std::string_view input) {
     {
@@ -799,13 +798,17 @@ TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
         ::testing::ContainsRegex("Please increase the FILE_BUFFER_SIZE"));
     ad_utility::deleteFile(filename);
   };
+  // Deliberately chosen s.t. the first triple fits in a block, but the second
+  // one doesn't.
+  FILE_BUFFER_SIZE() = 40;
   forAllParallelParsers(testWithParser,
                         "<subject> <predicate> <object> . \n <veryLongSubject> "
                         "<veryLongPredicate> <veryLongObject> .");
 }
 
-// Test that the parallel parsers destructor can be run quickly, even when there
-// are still lots of blocks in the pipeline that are currently being parsed.
+// Test that the parallel parser's destructor can be run quickly and without
+// blocking, even when there are still lots of blocks in the pipeline that are
+// currently being parsed.
 TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
   std::string filename{"turtleParserStopParsingOnOutsideFailure.dat"};
   auto testWithParser = [&]<typename Parser>(
@@ -822,7 +825,7 @@ TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
     }
     EXPECT_LE(t.msecs(), 20ms);
   };
-  auto input = []() {
+  const std::string input = []() {
     std::string singleBlock = "<subject> <predicate> <object> . \n ";
     std::string longBlock;
     longBlock.reserve(200 * singleBlock.size());

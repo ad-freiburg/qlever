@@ -127,7 +127,6 @@ class TaskQueue {
   // _________________________________________________________________________
   void function_for_thread() {
     while (auto task = queuedTasks_.pop()) {
-      // perform the task without actually holding the lock.
       task.value()();
     }
   }

@@ -567,8 +567,8 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   TurtleParallelParser() = default;
 
   // If the `sleepTimeForTesting` is set, then after the initialization the
-  // parser will sleep for the specified time for each batch s.t. certain corner
-  // cases can be tested.
+  // parser will sleep for the specified time before parsing each batch s.t.
+  // certain corner cases can be tested.
   explicit TurtleParallelParser(const string& filename,
                                 std::chrono::milliseconds sleepTimeForTesting =
                                     std::chrono::milliseconds{0})
@@ -636,7 +636,6 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   // the parser threads can be destroyed. The following two members are needed
   // for keeping track of this condition.
   std::atomic<size_t> batchIdx_ = 0;
-  // `max()` means `not yet set`.
   std::atomic<size_t> numBatchesTotal_ = 0;
 
   std::chrono::milliseconds sleepTimeForTesting_;
