@@ -819,6 +819,22 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
   return true;
 }
 
+// We will use the  following trick: For a batch that is forwarded to the
+// parallel parser, we will first increment `numBatchesTotal_` and then call
+// the following lambda from within the thread that parses that batch after
+// it has been completely parsed and pushed to the `tripleCollector`. With
+// this invariant we get that `batchIdx_ == numBatchesTotal_` iff all
+// batches that have been inserted to the `parallelParser_` have been fully
+// processed. After the last batch we will push another call to this lambda
+// to the `parallelParser_` which will then finish the `tripleCollector_` as
+// soon as all batches have been computed.
+template <typename Tokenizer_T>
+void TurtleParallelParser<Tokenizer_T>::finishTripleCollectorIfLastBatch() {
+    if (batchIdx_.fetch_add(1) == numBatchesTotal_) {
+      tripleCollector_.finish();
+    }
+}
+
 template <typename Tokenizer_T>
 void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
   fileBuffer_.open(filename);
@@ -842,15 +858,11 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
   // This lambda fetches all the unparsed blocks of triples from the input
   // file and feeds them to the parallel parsers.
   auto feedBatches = [&, first = true, parsePosition = 0ull]() mutable {
-    auto checkIfLastBatch = [this] {
-      if (batchIdx_.fetch_add(1) == numBatchesTotal_) {
-        tripleCollector_.finish();
-      }
-    };
     auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-        [this, checkIfLastBatch] {
-          // Wait until everything has been parsed.
-          parallelParser_.push([checkIfLastBatch] { checkIfLastBatch(); });
+        [this] {
+          // Wait until everything has been parsed and then also finish the
+          // triple collector.
+          parallelParser_.push([this] { finishTripleCollectorIfLastBatch(); });
           parallelParser_.finish();
         });
     decltype(remainingBatchFromInitialization_) inputBatch;
@@ -867,20 +879,26 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
           inputBatch = std::move(nextOptional.value());
         }
         auto batchSize = inputBatch.size();
-        auto parseBatch = [this, parsePosition, batch = std::move(inputBatch),
-                           checkIfLastBatch]() mutable {
-          TurtleStringParser<Tokenizer_T> parser;
-          parser.prefixMap_ = this->prefixMap_;
-          parser.setPositionOffset(parsePosition);
-          parser.setInputStream(std::move(batch));
-          // TODO: raise error message if a prefix parsing fails;
-          // TODO: handle exceptions in threads;
-          std::vector<TurtleTriple> triples = parser.parseAndReturnAllTriples();
+        auto parseBatch = [this, parsePosition, batch = std::move(inputBatch)
+                           ]() mutable {
+          try {
+            TurtleStringParser<Tokenizer_T> parser;
+            parser.prefixMap_ = this->prefixMap_;
+            parser.setPositionOffset(parsePosition);
+            parser.setInputStream(std::move(batch));
+            // TODO: raise error message if a prefix parsing fails;
+            std::vector<TurtleTriple> triples =
+                parser.parseAndReturnAllTriples();
 
-          tripleCollector_.push([triples = std::move(triples), this]() mutable {
-            triples_ = std::move(triples);
-          });
-          checkIfLastBatch();
+            tripleCollector_.push(
+                [triples = std::move(triples), this]() mutable {
+                  triples_ = std::move(triples);
+                });
+            finishTripleCollectorIfLastBatch();
+          } catch (std::exception& e) {
+            tripleCollector_.pushException(std::current_exception());
+            parallelParser_.finish();
+          }
         };
         parsePosition += batchSize;
         numBatchesTotal_.fetch_add(1);
@@ -937,10 +955,14 @@ std::optional<std::vector<TurtleTriple>> TurtleParallelParser<T>::getBatch() {
 
 // __________________________________________________________
 template <typename T>
-void TurtleParallelParser<T>::stop() {
-  parallelParser_.finish();
-  tripleCollector_.finish();
-  parseFuture_.get();
+void TurtleParallelParser<T>::~TurtleParallelParser() {
+  ad_utility::ignoreExceptionIfThrows(
+      [this] {
+        parallelParser_.finish();
+        tripleCollector_.finish();
+        parseFuture_.get();
+      },
+      "During the destruction of a TurtleParallelParser");
 }
 
 // Explicit instantiations

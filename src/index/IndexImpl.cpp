@@ -132,17 +132,8 @@ void IndexImpl::createFromFile(const string& filename) {
 
   readIndexBuilderSettingsFromFile();
 
-  std::shared_ptr<TurtleParserBase> turtleParser = makeTurtleParser(filename);
-
-  auto indexBuilderData = [&] {
-    try {
-      return createIdTriplesAndVocab(turtleParser);
-    } catch (const std::exception& e) {
-      LOG(ERROR) << "Error during the first pass of the index building: "
-                 << e.what() << std::endl;
-      throw;
-    }
-  }();
+  IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
+      createIdTriplesAndVocab(makeTurtleParser(filename));
 
   compressInternalVocabularyIfSpecified(indexBuilderData.prefixes_);
 

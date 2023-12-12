@@ -4,6 +4,8 @@
 #ifndef QLEVER_TASKQUEUE_H
 #define QLEVER_TASKQUEUE_H
 
+#include <absl/cleanup/cleanup.h>
+
 #include <functional>
 #include <optional>
 #include <queue>
@@ -32,12 +34,12 @@ class TaskQueue {
   using AtomicMs = std::atomic<std::chrono::milliseconds::rep>;
   using Queue = ad_utility::data_structures::ThreadSafeQueue<Task>;
 
-  std::vector<ad_utility::JThread> _threads;
-  size_t _queueMaxSize = 1;
-  Queue _queuedTasks{_queueMaxSize};
-  std::string _name;
+  std::vector<ad_utility::JThread> threads_;
+  size_t queueMaxSize_ = 1;
+  Queue queuedTasks_{queueMaxSize_};
+  std::string name_;
   // Keep track of the time spent waiting in the push/pop operation
-  AtomicMs _pushTime = 0, _popTime = 0;
+  AtomicMs pushTime_ = 0, popTime_ = 0;
 
  public:
   /// Construct from the maximum size of the queue, and the number of worker
@@ -56,11 +58,11 @@ class TaskQueue {
   /// workers are at least as fast as the "pusher", but the pusher is faster
   /// sometimes (which the queue can then accomodate).
   TaskQueue(size_t maxQueueSize, size_t numThreads, std::string name = "")
-      : _queueMaxSize{maxQueueSize}, _name{std::move(name)} {
-    AD_CONTRACT_CHECK(_queueMaxSize > 0);
-    _threads.reserve(numThreads);
+      : queueMaxSize_{maxQueueSize}, name_{std::move(name)} {
+    AD_CONTRACT_CHECK(queueMaxSize_ > 0);
+    threads_.reserve(numThreads);
     for (size_t i = 0; i < numThreads; ++i) {
-      _threads.emplace_back(&TaskQueue::function_for_thread, this);
+      threads_.emplace_back(&TaskQueue::function_for_thread, this);
     }
   }
 
@@ -70,18 +72,18 @@ class TaskQueue {
   /// called.
   bool push(Task t) {
     // the actual logic
-    auto action = [&, this] { return _queuedTasks.push(std::move(t)); };
+    auto action = [&, this] { return queuedTasks_.push(std::move(t)); };
 
-    // If TrackTimes==true, measure the time and add it to _pushTime,
+    // If TrackTimes==true, measure the time and add it to pushTime_,
     // else only perform the pushing.
-    return executeAndUpdateTimer(action, _pushTime);
+    return executeAndUpdateTimer(action, pushTime_);
   }
 
   // Blocks until all tasks have been computed. After a call to finish, no more
   // calls to push are allowed.
   void finish() {
-    _queuedTasks.finish();
-    for (auto& thread : _threads) {
+    queuedTasks_.finish();
+    for (auto& thread : threads_) {
       if (thread.joinable()) {
         thread.join();
       }
@@ -89,8 +91,8 @@ class TaskQueue {
   }
 
   void resetTimers() requires TrackTimes {
-    _pushTime = 0;
-    _popTime = 0;
+    pushTime_ = 0;
+    popTime_ = 0;
   }
 
   // Execute the callable f of type F. If TrackTimes==true, add the passed time
@@ -100,24 +102,21 @@ class TaskQueue {
   template <typename F>
   decltype(auto) executeAndUpdateTimer(F&& f, AtomicMs& duration) {
     if constexpr (TrackTimes) {
-      struct T {
-        ad_utility::Timer _t{ad_utility::Timer::Started};
-        AtomicMs& _target;
-        T(AtomicMs& target) : _target(target) {}
-        ~T() { _target += _t.msecs().count(); }
-      };
-      T timeHandler{duration};
-      return f();
-    } else {
-      return f();
+    ad_utility::Timer t{ad_utility::Timer::Started};
+    auto cleanup =
+        absl::Cleanup{[&duration, &t] { duration += t.msecs().count(); }};
+    return f();
+  }
+  else {
+    return f();
     }
   }
 
   // __________________________________________________________________________
   std::string getTimeStatistics() const requires TrackTimes {
-    return "Time spent waiting in queue " + _name + ": " +
-           std::to_string(_pushTime) + "ms (push), " +
-           std::to_string(_popTime) + "ms (pop)";
+    return "Time spent waiting in queue " + name_ + ": " +
+           std::to_string(pushTime_) + "ms (push), " +
+           std::to_string(popTime_) + "ms (pop)";
   }
 
   ~TaskQueue() { finish(); }
@@ -125,7 +124,7 @@ class TaskQueue {
  private:
   // _________________________________________________________________________
   void function_for_thread() {
-    while (auto task = _queuedTasks.pop()) {
+    while (auto task = queuedTasks_.pop()) {
       // perform the task without actually holding the lock.
       task.value()();
     }

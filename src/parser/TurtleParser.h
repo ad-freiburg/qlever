@@ -69,10 +69,7 @@ class TurtleParserBase {
   bool invalidLiteralsAreSkipped_ = false;
 
  public:
-  virtual ~TurtleParserBase() {
-    ad_utility::ignoreExceptionIfThrows(
-        [this] { stop(); }, "During the destruction of the Turtle parser");
-  }
+  virtual ~TurtleParserBase() = default;
   // Wrapper to getLine that is expected by the rest of QLever
   bool getLine(TurtleTriple& triple) { return getLine(&triple); }
 
@@ -121,9 +118,6 @@ class TurtleParserBase {
     }
     return result;
   }
-
- private:
-  virtual void stop() {}
 };
 
 /**
@@ -589,8 +583,6 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   void printAndResetQueueStatistics() override {
     LOG(TIMING) << parallelParser_.getTimeStatistics() << '\n';
     parallelParser_.resetTimers();
-    // LOG(TIMING) << tripleCollector_.getTimeStatistics() << '\n';
-    // tripleCollector_.resetTimers();
   }
 
   void initialize(const string& filename);
@@ -600,9 +592,13 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
     return 0;
   }
 
+  // The
+  ~TurtleParallelParser() override;
+
  private:
-  // __________________________________________________________
-  void stop() override;
+  // The documentation for this is in the `.cpp` file, because it closely
+  // interacts with the functions next to it.
+  void finishTripleCollectorIfLastBatch();
 
   using TurtleParser<Tokenizer_T>::tok_;
   using TurtleParser<Tokenizer_T>::triples_;
