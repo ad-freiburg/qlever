@@ -763,17 +763,23 @@ GroupBy::findAggregates(sparqlExpression::SparqlExpression* expr) {
 
 // _____________________________________________________________________________
 template <class T>
-bool GroupBy::hasType(sparqlExpression::SparqlExpression* expr) {
-  return dynamic_cast<T*>(expr) != nullptr;
+std::optional<T*> GroupBy::hasType(sparqlExpression::SparqlExpression* expr) {
+  auto value = dynamic_cast<T*>(expr);
+  if (value == nullptr)
+    return std::nullopt;
+  else
+    return value;
 }
 
 // _____________________________________________________________________________
 bool GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   using namespace sparqlExpression;
 
-  return !(hasType<SumExpression>(expr) || hasType<MinExpression>(expr) ||
-           hasType<MaxExpression>(expr) || hasType<CountExpression>(expr) ||
-           hasType<GroupConcatExpression>(expr));
+  return !(hasType<SumExpression>(expr).has_value() ||
+           hasType<MinExpression>(expr).has_value() ||
+           hasType<MaxExpression>(expr).has_value() ||
+           hasType<CountExpression>(expr).has_value() ||
+           hasType<GroupConcatExpression>(expr).has_value());
 }
 
 // _____________________________________________________________________________
@@ -781,7 +787,11 @@ bool GroupBy::findAggregatesImpl(
     sparqlExpression::SparqlExpression* parent,
     sparqlExpression::SparqlExpression* expr, std::optional<size_t> index,
     std::vector<GroupBy::HashMapAggregateInformation>& info) {
-  if (hasType<sparqlExpression::AvgExpression>(expr)) {
+  if (auto val = hasType<sparqlExpression::AvgExpression>(expr);
+      val.has_value()) {
+    // Do not support distinct aggregates
+    if (val.value()->isDistinct()) return false;
+
     if (parent != nullptr && index.has_value()) {
       ParentAndChildIndex parentAndChildIndex{parent, index.value()};
       info.emplace_back(expr, 0, parentAndChildIndex);

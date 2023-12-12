@@ -326,7 +326,7 @@ class GroupBy : public Operation {
 
   // Check if an expression is of a certain type.
   template <class T>
-  static bool hasType(sparqlExpression::SparqlExpression* expr);
+  static std::optional<T*> hasType(sparqlExpression::SparqlExpression* expr);
 
   // Check if an expression is a currently supported aggregate.
   // TODO<kcaliban> As soon as all aggregates are supported, implement and use a
