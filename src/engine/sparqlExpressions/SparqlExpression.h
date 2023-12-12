@@ -19,6 +19,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Id.h"
 #include "parser/data/Variable.h"
+#include "util/CancellationHandle.h"
 #include "util/ConstexprSmallString.h"
 
 namespace sparqlExpression {
@@ -37,9 +38,11 @@ class SparqlExpression {
  public:
   /// ________________________________________________________________________
   using Ptr = std::unique_ptr<SparqlExpression>;
+  using CancellationHandle = const ad_utility::CancellationHandle<>&;
 
   /// Evaluate a Sparql expression.
-  virtual ExpressionResult evaluate(EvaluationContext*) const = 0;
+  virtual ExpressionResult evaluate(EvaluationContext*,
+                                    CancellationHandle) const = 0;
 
   /// Return all variables and IRIs, needed for certain parser methods.
   /// TODO<joka921> should be called getStringLiteralsAndVariables

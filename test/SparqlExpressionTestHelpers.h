@@ -18,7 +18,8 @@ struct DummyExpression : public SparqlExpression {
   explicit DummyExpression(ExpressionResult result)
       : _result{std::move(result)} {}
   mutable ExpressionResult _result;
-  ExpressionResult evaluate(EvaluationContext*) const override {
+  ExpressionResult evaluate(EvaluationContext*,
+                            CancellationHandle) const override {
     return std::move(_result);
   }
   vector<Variable> getUnaggregatedVariables() override { return {}; }
@@ -47,6 +48,8 @@ struct TestContext {
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{*qec, varToColMap, table,
                                               qec->getAllocator(), localVocab};
+  ad_utility::SharedCancellationHandle cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
   TestContext() {
     // First get some IDs for strings from the vocabulary to later reuse them
     Id alpha;

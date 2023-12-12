@@ -259,8 +259,9 @@ ExpressionResult RegexExpression::evaluateNonPrefixRegex(
 
 // ___________________________________________________________________________
 ExpressionResult RegexExpression::evaluate(
-    sparqlExpression::EvaluationContext* context) const {
-  auto resultAsVariant = child_->evaluate(context);
+    sparqlExpression::EvaluationContext* context,
+    CancellationHandle handle) const {
+  auto resultAsVariant = child_->evaluate(context, handle);
   auto variablePtr = std::get_if<Variable>(&resultAsVariant);
   AD_CONTRACT_CHECK(variablePtr);
 

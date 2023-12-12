@@ -244,9 +244,9 @@ namespace sparqlExpression::relational {
 // ____________________________________________________________________________
 template <Comparison Comp>
 ExpressionResult RelationalExpression<Comp>::evaluate(
-    EvaluationContext* context) const {
-  auto resA = children_[0]->evaluate(context);
-  auto resB = children_[1]->evaluate(context);
+    EvaluationContext* context, CancellationHandle handle) const {
+  auto resA = children_[0]->evaluate(context, handle);
+  auto resB = children_[1]->evaluate(context, handle);
 
   // `resA` and `resB` are variants, so we need `std::visit`.
   auto visitor = [context](auto a, auto b) -> ExpressionResult {

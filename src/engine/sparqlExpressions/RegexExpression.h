@@ -30,7 +30,8 @@ class RegexExpression : public SparqlExpression {
   RegexExpression(SparqlExpression::Ptr child, SparqlExpression::Ptr regex,
                   std::optional<SparqlExpression::Ptr> optionalFlags);
 
-  ExpressionResult evaluate(EvaluationContext* context) const override;
+  ExpressionResult evaluate(EvaluationContext* context,
+                            CancellationHandle handle) const override;
 
   // _________________________________________________________________________
   [[nodiscard]] string getCacheKey(

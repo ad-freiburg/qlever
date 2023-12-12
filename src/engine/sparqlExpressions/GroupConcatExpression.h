@@ -25,7 +25,8 @@ class GroupConcatExpression : public SparqlExpression {
   }
 
   // __________________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context) const override {
+  ExpressionResult evaluate(EvaluationContext* context,
+                            CancellationHandle handle) const override {
     auto impl = [context,
                  this](SingleExpressionResult auto&& el) -> ExpressionResult {
       std::string result;
@@ -54,7 +55,7 @@ class GroupConcatExpression : public SparqlExpression {
       return IdOrString(std::move(result));
     };
 
-    auto childRes = child_->evaluate(context);
+    auto childRes = child_->evaluate(context, handle);
     return std::visit(impl, std::move(childRes));
   }
 

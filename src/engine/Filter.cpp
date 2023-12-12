@@ -74,7 +74,8 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
   evaluationContext._columnsByWhichResultIsSorted = inputResultTable.sortedBy();
 
   sparqlExpression::ExpressionResult expressionResult =
-      _expression.getPimpl()->evaluate(&evaluationContext);
+      _expression.getPimpl()->evaluate(&evaluationContext,
+                                       *cancellationHandle_);
 
   const auto input = inputResultTable.idTable().asStaticView<WIDTH>();
   auto output = std::move(*outputIdTable).toStatic<WIDTH>();

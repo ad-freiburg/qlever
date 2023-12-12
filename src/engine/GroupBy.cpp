@@ -183,7 +183,8 @@ void GroupBy::processGroup(
   evaluationContext._endIndex = blockEnd;
 
   sparqlExpression::ExpressionResult expressionResult =
-      aggregate._expression.getPimpl()->evaluate(&evaluationContext);
+      aggregate._expression.getPimpl()->evaluate(&evaluationContext,
+                                                 *cancellationHandle_);
 
   auto& resultEntry = result->operator()(resultRow, resultColumn);
 
@@ -1055,7 +1056,8 @@ void GroupBy::evaluateAlias(
 
     // Evaluate top-level alias expression
     sparqlExpression::ExpressionResult expressionResult =
-        alias.expr_.getPimpl()->evaluate(&evaluationContext);
+        alias.expr_.getPimpl()->evaluate(&evaluationContext,
+                                         *cancellationHandle_);
 
     // Copy the result so that future aliases may reuse it
     evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
@@ -1175,7 +1177,7 @@ void GroupBy::computeGroupByForHashMapOptimization(
         // Evaluate child expression on block
         auto exprChildren = aggregate.expr_->children();
         sparqlExpression::ExpressionResult expressionResult =
-            exprChildren[0]->evaluate(&evaluationContext);
+            exprChildren[0]->evaluate(&evaluationContext, *cancellationHandle_);
 
         auto& aggregationDataVariant =
             aggregationData.getAggregationDataVariant(

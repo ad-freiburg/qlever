@@ -206,7 +206,8 @@ TEST(SparqlExpressionParser, First) {
   LocalVocab localVocab;
   sparqlExpression::EvaluationContext input{*ad_utility::testing::getQec(), map,
                                             table, alloc, localVocab};
-  auto result = resultAsExpression->evaluate(&input);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  auto result = resultAsExpression->evaluate(&input, cancellationHandle);
   AD_CONTRACT_CHECK(std::holds_alternative<Id>(result));
   ASSERT_EQ(std::get<Id>(result).getDatatype(), Datatype::Int);
   ASSERT_EQ(25, std::get<Id>(result).getInt());

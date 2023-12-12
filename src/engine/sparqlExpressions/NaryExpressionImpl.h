@@ -32,7 +32,8 @@ class NaryExpression : public SparqlExpression {
       : NaryExpression{Children{std::move(children)...}} {}
 
   // __________________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context) const override;
+  ExpressionResult evaluate(EvaluationContext* context,
+                            CancellationHandle handle) const override;
 
   // _________________________________________________________________________
   [[nodiscard]] string getCacheKey(
@@ -145,9 +146,11 @@ NaryExpression<Op>::NaryExpression(Children&& children)
 template <typename NaryOperation>
 requires(isOperation<NaryOperation>)
 ExpressionResult NaryExpression<NaryOperation>::evaluate(
-    EvaluationContext* context) const {
+    EvaluationContext* context, CancellationHandle handle) const {
   auto resultsOfChildren = ad_utility::applyFunctionToEachElementOfTuple(
-      [context](const auto& child) { return child->evaluate(context); },
+      [context, &handle](const auto& child) {
+        return child->evaluate(context, handle);
+      },
       children_);
 
   // Bind the `evaluateOnChildrenOperands` to a lambda.

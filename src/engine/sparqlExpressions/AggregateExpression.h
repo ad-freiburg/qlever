@@ -49,7 +49,8 @@ class AggregateExpression : public SparqlExpression {
                       AggregateOperation aggregateOp = AggregateOperation{});
 
   // __________________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context) const override;
+  ExpressionResult evaluate(EvaluationContext* context,
+                            CancellationHandle handle) const override;
 
   // _________________________________________________________________________
   vector<Variable> getUnaggregatedVariables() override;

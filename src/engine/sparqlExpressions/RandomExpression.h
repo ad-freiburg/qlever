@@ -17,7 +17,8 @@ class RandomExpression : public SparqlExpression {
 
  public:
   // Evaluate a Sparql expression.
-  ExpressionResult evaluate(EvaluationContext* context) const override {
+  ExpressionResult evaluate(EvaluationContext* context,
+                            CancellationHandle handle) const override {
     VectorWithMemoryLimit<Id> result{context->_allocator};
     const size_t numElements = context->_endIndex - context->_beginIndex;
     result.reserve(numElements);
