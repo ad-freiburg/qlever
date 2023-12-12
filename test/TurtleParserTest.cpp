@@ -781,7 +781,7 @@ TEST(TurtleParserTest, exceptionPropagation) {
   forAllParsers(testWithParser, "<missing> <object> .");
 }
 
-// _______________________________________________________________________
+// Test that exceptions in the batched reading of the input file are properly propagated.
 TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
   std::string filename{"turtleParserEmptyInput.dat"};
   FILE_BUFFER_SIZE() = 40;
@@ -801,10 +801,10 @@ TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
                         "<veryLongPredicate> <veryLongObject> .");
 }
 
-// _______________________________________________________________________
+// 
 TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
-  std::string filename{"turtleParserEmptyInput.dat"};
-  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
+  std::string filename{"turtleParserStopParsingOnOutsideFailure.dat"};
+  auto testWithParser = [&]<typename Parser>([[maybe_unused]] bool useBatchInterface,
                                              std::string_view input) {
     {
       auto of = ad_utility::makeOfstream(filename);
@@ -813,7 +813,6 @@ TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
     ad_utility::Timer t{ad_utility::Timer::Stopped};
     {
       Parser parserChild{filename, 10ms};
-      TurtleParserBase& parser = parserChild;
       t.cont();
     }
     EXPECT_LE(t.msecs(), 20ms);
