@@ -11,6 +11,7 @@
 #include "util/Conversions.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
+using namespace std::chrono_literals;
 // _______________________________________________________________
 template <class T>
 bool TurtleParser<T>::statement() {
@@ -890,6 +891,9 @@ void TurtleParallelParser<Tokenizer_T>::feedBatchesToParser(
       };
       parsePosition += batchSize;
       numBatchesTotal_.fetch_add(1);
+      if (sleepTimeForTesting_ > 0ms) {
+        std::this_thread::sleep_for(sleepTimeForTesting_);
+      }
       bool stillActive = parallelParser_.push(parseThisBatch);
       if (!stillActive) {
         return;

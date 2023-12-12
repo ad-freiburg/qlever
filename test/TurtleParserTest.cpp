@@ -656,12 +656,12 @@ auto forAllParallelParsers(const auto& function, const auto&... args) {
                                                                     args...);
 }
 auto forAllParsers(const auto& function, const auto&... args) {
-  function.template operator()<TurtleParallelParser<Tokenizer>>(true, args...);
-  function.template operator()<TurtleParallelParser<Tokenizer>>(false, args...);
-  function.template operator()<TurtleParallelParser<TokenizerCtre>>(true,
-                                                                    args...);
-  function.template operator()<TurtleParallelParser<TokenizerCtre>>(false,
-                                                                    args...);
+  function.template operator()<TurtleStreamParser<Tokenizer>>(true, args...);
+  function.template operator()<TurtleStreamParser<Tokenizer>>(false, args...);
+  function.template operator()<TurtleStreamParser<TokenizerCtre>>(true,
+                                                                  args...);
+  function.template operator()<TurtleStreamParser<TokenizerCtre>>(false,
+                                                                  args...);
   forAllParallelParsers(function, args...);
 }
 
@@ -784,7 +784,7 @@ TEST(TurtleParserTest, exceptionPropagation) {
 // _______________________________________________________________________
 TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
   std::string filename{"turtleParserEmptyInput.dat"};
-  FILE_BUFFER_SIZE() = 5;
+  FILE_BUFFER_SIZE() = 40;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              std::string_view input) {
     {
@@ -796,5 +796,28 @@ TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
         ::testing::ContainsRegex("Please increase the FILE_BUFFER_SIZE"));
     ad_utility::deleteFile(filename);
   };
-  forAllParallelParsers(testWithParser, "<subject> <predicate> <object> .");
+  forAllParallelParsers(testWithParser,
+                        "<subject> <predicate> <object> . \n <veryLongSubject> "
+                        "<veryLongPredicate> <veryLongObject> .");
+}
+
+// _______________________________________________________________________
+TEST(TurtleParserTest, earlyCancellation) {
+  // TODO<joka921> Implement this test.
+  std::string filename{"turtleParserEmptyInput.dat"};
+  FILE_BUFFER_SIZE() = 40;
+  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
+                                             std::string_view input) {
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (parseFromFile<Parser>(filename, useBatchInterface)),
+        ::testing::ContainsRegex("Please increase the FILE_BUFFER_SIZE"));
+    ad_utility::deleteFile(filename);
+  };
+  forAllParallelParsers(testWithParser,
+                        "<subject> <predicate> <object> . \n <veryLongSubject> "
+                        "<veryLongPredicate> <veryLongObject> .");
 }

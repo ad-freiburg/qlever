@@ -565,7 +565,13 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   using Triple = std::array<string, 3>;
   // Default construction needed for tests
   TurtleParallelParser() = default;
-  explicit TurtleParallelParser(const string& filename) {
+
+  // If the `sleepTimeForTesting` is set, then after the initialization the
+  // parser will sleep for the specified time for each batch s.t. certain corner
+  // cases can be tested.
+  explicit TurtleParallelParser(const string& filename,
+                                std::chrono::milliseconds sleepTimeForTesting =
+                                    std::chrono::milliseconds{0}) : sleepTimeForTesting_(sleepTimeForTesting) {
     LOG(DEBUG)
         << "Initialize parallel Turtle Parsing from uncompressed file or "
            "stream "
@@ -631,4 +637,6 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   std::atomic<size_t> batchIdx_ = 0;
   // `max()` means `not yet set`.
   std::atomic<size_t> numBatchesTotal_ = 0;
+
+  std::chrono::milliseconds sleepTimeForTesting_;
 };
