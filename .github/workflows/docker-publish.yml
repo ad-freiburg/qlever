@@ -58,7 +58,7 @@ jobs:
           # We have to explicitly add the "qlever:latest" tag for it to work correctly,
           # see e.g. https://stackoverflow.com/questions/27643017/do-i-need-to-manually-tag-latest-when-pushing-to-docker-public-repository
           tags: >
-            ${{ secrets.DOCKERHUB_USERNAME }}/qlever:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }},
-            ${{ secrets.DOCKERHUB_USERNAME }}/qlever:commit-${{ steps.sha.outputs.sha_short }},
-            ${{ secrets.DOCKERHUB_USERNAME }}/qlever:latest
+            adfreiburg/qlever:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }},
+            adfreiburg/qlever:commit-${{ steps.sha.outputs.sha_short }},
+            adfreiburg/qlever:latest
 
