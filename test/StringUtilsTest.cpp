@@ -9,8 +9,10 @@
 #include <ranges>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "../test/util/GTestHelpers.h"
+#include "util/ConstexprUtils.h"
 #include "util/Forward.h"
 #include "util/Generator.h"
 #include "util/StringUtils.h"
@@ -168,10 +170,10 @@ TEST(StringUtilsTest, insertThousandSeparator) {
   Do the tests, that are not exception tests, with the given arguments for
   `insertThousandSeparator`.
   */
-  auto doNotExceptionTest = [](const char separatorSymbol,
-                               const char floatingPointSignifier,
-                               ad_utility::source_location l =
-                                   ad_utility::source_location::current()) {
+  auto doNotExceptionTest = []<const char floatingPointSignifier>(
+                                const char separatorSymbol,
+                                ad_utility::source_location l =
+                                    ad_utility::source_location::current()) {
     // For generating better messages, when failing a test.
     auto trace{generateLocationTrace(l, "doNotExceptionTest")};
 
@@ -188,19 +190,18 @@ TEST(StringUtilsTest, insertThousandSeparator) {
     `separatorSymbol` between them. For example: `{"This number 4", "198."}`.
     */
     auto simpleComparisonTest =
-        [&floatingPointSignifier, &separatorSymbol](
-            const std::vector<std::string>& stringPieces,
-            ad_utility::source_location l =
-                ad_utility::source_location::current()) {
+        [&separatorSymbol](const std::vector<std::string>& stringPieces,
+                           ad_utility::source_location l =
+                               ad_utility::source_location::current()) {
           // For generating better messages, when failing a test.
           auto trace{generateLocationTrace(l, "simpleComparisonTest")};
-          ASSERT_STREQ(ad_utility::lazyStrJoin(stringPieces,
-                                               std::string{separatorSymbol})
-                           .c_str(),
-                       ad_utility::insertThousandSeparator(
-                           ad_utility::lazyStrJoin(stringPieces, ""),
-                           separatorSymbol, floatingPointSignifier)
-                           .c_str());
+          ASSERT_STREQ(
+              ad_utility::lazyStrJoin(stringPieces,
+                                      std::string{separatorSymbol})
+                  .c_str(),
+              ad_utility::insertThousandSeparator<floatingPointSignifier>(
+                  ad_utility::lazyStrJoin(stringPieces, ""), separatorSymbol)
+                  .c_str());
         };
 
     // Empty string.
@@ -276,21 +277,37 @@ TEST(StringUtilsTest, insertThousandSeparator) {
          "vero id quidem, inquam, arbitratu.Omnia contraria, quos etiam "
          "insanos esse vultis.Sed haec in pueris; "});
   };
-  doNotExceptionTest(' ', '.');
-  doNotExceptionTest(' ', ',');
-  doNotExceptionTest('t', '+');
-  doNotExceptionTest('+', 't');
-  doNotExceptionTest('\"', '?');
-  doNotExceptionTest('~', '-');
+  doNotExceptionTest.template operator()<'.'>(' ');
+  doNotExceptionTest.template operator()<','>(' ');
+  doNotExceptionTest.template operator()<'+'>('t');
+  doNotExceptionTest.template operator()<'t'>('+');
+  doNotExceptionTest.template operator()<'?'>('\"');
+  doNotExceptionTest.template operator()<'-'>('~');
 
   // Numbers as `separatorSymbol`, or `floatingPointSignifier`, are not allowed.
-  for (size_t num1 = 0; num1 < 10; num1++) {
-    for (size_t num2 = 0; num2 < 10; num2++) {
-      const std::string numAsString = absl::StrCat(num1, num2);
-      ASSERT_ANY_THROW(doNotExceptionTest(' ', numAsString.back()));
-      ASSERT_ANY_THROW(doNotExceptionTest(numAsString.front(), '.'));
-      ASSERT_ANY_THROW(
-          doNotExceptionTest(numAsString.front(), numAsString.back()));
-    }
-  }
+  auto forbiddenSymbolTest =
+      [&doNotExceptionTest]<const char floatingPointSignifier>() {
+        for (size_t separatorSymbolNum = 0; separatorSymbolNum < 10;
+             separatorSymbolNum++) {
+          const char separatorSymbol{absl::StrCat(separatorSymbolNum).front()};
+          ASSERT_ANY_THROW(
+              doNotExceptionTest.template operator()<floatingPointSignifier>(
+                  ' '));
+          ASSERT_ANY_THROW(
+              doNotExceptionTest.template operator()<'.'>(separatorSymbol));
+          ASSERT_ANY_THROW(
+              doNotExceptionTest.template operator()<floatingPointSignifier>(
+                  separatorSymbol));
+        }
+      };
+  forbiddenSymbolTest.template operator()<'0'>();
+  forbiddenSymbolTest.template operator()<'1'>();
+  forbiddenSymbolTest.template operator()<'2'>();
+  forbiddenSymbolTest.template operator()<'3'>();
+  forbiddenSymbolTest.template operator()<'4'>();
+  forbiddenSymbolTest.template operator()<'5'>();
+  forbiddenSymbolTest.template operator()<'6'>();
+  forbiddenSymbolTest.template operator()<'7'>();
+  forbiddenSymbolTest.template operator()<'8'>();
+  forbiddenSymbolTest.template operator()<'9'>();
 }
