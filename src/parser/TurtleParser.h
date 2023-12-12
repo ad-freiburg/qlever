@@ -4,29 +4,30 @@
 
 #pragma once
 
-#include <absl/strings/str_cat.h>
-#include <global/Constants.h>
-#include <gtest/gtest.h>
-#include <index/ConstantsIndexBuilding.h>
-#include <parser/ParallelBuffer.h>
-#include <parser/Tokenizer.h>
-#include <parser/TokenizerCtre.h>
-#include <parser/TripleComponent.h>
-#include <parser/data/BlankNode.h>
-#include <sys/mman.h>
-#include <util/Exception.h>
-#include <util/File.h>
-#include <util/HashMap.h>
-#include <util/Log.h>
-#include <util/TaskQueue.h>
-
 #include <codecvt>
 #include <exception>
 #include <future>
 #include <locale>
 #include <string_view>
 
+#include "absl/strings/str_cat.h"
+#include "global/Constants.h"
+#include "gtest/gtest.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "parser/ParallelBuffer.h"
+#include "parser/Tokenizer.h"
+#include "parser/TokenizerCtre.h"
+#include "parser/TripleComponent.h"
+#include "parser/data/BlankNode.h"
+#include "sys/mman.h"
+#include "util/Exception.h"
+#include "util/ExceptionHandling.h"
+#include "util/File.h"
+#include "util/HashMap.h"
+#include "util/Log.h"
 #include "util/ParseException.h"
+#include "util/TaskQueue.h"
+#include "util/ThreadSafeQueue.h"
 
 using std::string;
 
@@ -68,7 +69,10 @@ class TurtleParserBase {
   bool invalidLiteralsAreSkipped_ = false;
 
  public:
-  virtual ~TurtleParserBase() = default;
+  virtual ~TurtleParserBase() {
+    ad_utility::ignoreExceptionIfThrows(
+        [this] { stop(); }, "During the destruction of the Turtle parser");
+  }
   // Wrapper to getLine that is expected by the rest of QLever
   bool getLine(TurtleTriple& triple) { return getLine(&triple); }
 
@@ -117,6 +121,9 @@ class TurtleParserBase {
     }
     return result;
   }
+
+ private:
+  virtual void stop() {}
 };
 
 /**
@@ -582,8 +589,8 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   void printAndResetQueueStatistics() override {
     LOG(TIMING) << parallelParser_.getTimeStatistics() << '\n';
     parallelParser_.resetTimers();
-    LOG(TIMING) << tripleCollector_.getTimeStatistics() << '\n';
-    tripleCollector_.resetTimers();
+    // LOG(TIMING) << tripleCollector_.getTimeStatistics() << '\n';
+    // tripleCollector_.resetTimers();
   }
 
   void initialize(const string& filename);
@@ -594,6 +601,9 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   }
 
  private:
+  // __________________________________________________________
+  void stop() override;
+
   using TurtleParser<Tokenizer_T>::tok_;
   using TurtleParser<Tokenizer_T>::triples_;
   using TurtleParser<Tokenizer_T>::isParserExhausted_;
@@ -604,14 +614,18 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
 
   ParallelBufferWithEndRegex fileBuffer_{bufferSize_, "\\.[\\t ]*([\\r\\n]+)"};
 
-  ad_utility::TaskQueue<true> tripleCollector_{
-      QUEUE_SIZE_AFTER_PARALLEL_PARSING, 0, "triple collector"};
+  ad_utility::data_structures::ThreadSafeQueue<std::function<void()>>
+      tripleCollector_{QUEUE_SIZE_AFTER_PARALLEL_PARSING};
   ad_utility::TaskQueue<true> parallelParser_{
       QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS,
       "parallel parser"};
   std::future<void> parseFuture_;
+  // The parallel parsers need to know when the last batch has been parsed, s.t.
+  // the parser threads can be destroyed. The following two members are needed
+  // for keeping track of this condition.
   std::atomic<size_t> batchIdx_ = 0;
-  std::atomic<size_t> numBatchesTotal_ = std::numeric_limits<size_t>::max();
+  // `max()` means `not yet set`.
+  std::atomic<size_t> numBatchesTotal_ = 0;
 
   ParallelBuffer::BufferType remainingBatchFromInitialization_;
 };

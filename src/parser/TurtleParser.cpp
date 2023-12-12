@@ -3,12 +3,13 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#include "parser/RdfEscaping.h"
 #include "parser/TurtleParser.h"
-#include "util/Conversions.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
 #include <cstring>
+
+#include "parser/RdfEscaping.h"
+#include "util/Conversions.h"
+#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
 // _______________________________________________________________
 template <class T>
@@ -841,13 +842,17 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
   // This lambda fetches all the unparsed blocks of triples from the input
   // file and feeds them to the parallel parsers.
   auto feedBatches = [&, first = true, parsePosition = 0ull]() mutable {
-    auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([this]{
-      LOG(INFO) << "Cleaning up the feedBatches lambda" << std::endl;
-      // Wait until everything has been parsed.
-      parallelParser_.finish();
-      // Wait until all the parsed triples have been picked up.
-      tripleCollector_.finish();
-    });
+    auto checkIfLastBatch = [this] {
+      if (batchIdx_.fetch_add(1) == numBatchesTotal_) {
+        tripleCollector_.finish();
+      }
+    };
+    auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+        [this, checkIfLastBatch] {
+          // Wait until everything has been parsed.
+          parallelParser_.push([checkIfLastBatch] { checkIfLastBatch(); });
+          parallelParser_.finish();
+        });
     decltype(remainingBatchFromInitialization_) inputBatch;
     try {
       while (true) {
@@ -862,8 +867,8 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
           inputBatch = std::move(nextOptional.value());
         }
         auto batchSize = inputBatch.size();
-        auto parseBatch = [this, parsePosition,
-                           batch = std::move(inputBatch)]() mutable {
+        auto parseBatch = [this, parsePosition, batch = std::move(inputBatch),
+                           checkIfLastBatch]() mutable {
           TurtleStringParser<Tokenizer_T> parser;
           parser.prefixMap_ = this->prefixMap_;
           parser.setPositionOffset(parsePosition);
@@ -875,14 +880,17 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
           tripleCollector_.push([triples = std::move(triples), this]() mutable {
             triples_ = std::move(triples);
           });
+          checkIfLastBatch();
         };
         parsePosition += batchSize;
-        parallelParser_.push(parseBatch);
+        numBatchesTotal_.fetch_add(1);
+        bool stillActive = parallelParser_.push(parseBatch);
+        if (!stillActive) {
+          return;
+        }
       }
     } catch (std::exception& e) {
-      LOG(ERROR) << "Caught an exception while setting up batches for parallel "
-                    "parsing: "
-                 << e.what() << std::endl;
+      tripleCollector_.pushException(std::current_exception());
     }
   };
 
@@ -896,7 +904,7 @@ bool TurtleParallelParser<T>::getLine(TurtleTriple* triple) {
   // contains no triples. (Theoretically this might happen, and it is safer this
   // way)
   while (triples_.empty()) {
-    auto optionalTripleTask = tripleCollector_.popManually();
+    auto optionalTripleTask = tripleCollector_.pop();
     if (!optionalTripleTask) {
       // Everything has been parsed
       return false;
@@ -916,7 +924,7 @@ std::optional<std::vector<TurtleTriple>> TurtleParallelParser<T>::getBatch() {
   // we need a while in case there is a batch that contains no triples
   // (this should be rare, // TODO warn about this
   while (triples_.empty()) {
-    auto optionalTripleTask = tripleCollector_.popManually();
+    auto optionalTripleTask = tripleCollector_.pop();
     if (!optionalTripleTask) {
       // everything has been parsed
       return std::nullopt;
@@ -925,6 +933,14 @@ std::optional<std::vector<TurtleTriple>> TurtleParallelParser<T>::getBatch() {
   }
 
   return std::move(triples_);
+}
+
+// __________________________________________________________
+template <typename T>
+void TurtleParallelParser<T>::stop() {
+  parallelParser_.finish();
+  tripleCollector_.finish();
+  parseFuture_.get();
 }
 
 // Explicit instantiations

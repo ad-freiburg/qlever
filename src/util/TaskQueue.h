@@ -10,9 +10,10 @@
 #include <string>
 #include <thread>
 
-#include "./Exception.h"
-#include "./Timer.h"
-#include "./jthread.h"
+#include "util/Exception.h"
+#include "util/ThreadSafeQueue.h"
+#include "util/Timer.h"
+#include "util/jthread.h"
 
 namespace ad_utility {
 /**
@@ -29,16 +30,11 @@ class TaskQueue {
   using Task = std::function<void()>;
   using Timer = ad_utility::Timer;
   using AtomicMs = std::atomic<std::chrono::milliseconds::rep>;
+  using Queue = ad_utility::data_structures::ThreadSafeQueue<Task>;
 
   std::vector<ad_utility::JThread> _threads;
-  std::queue<Task> _queuedTasks;
   size_t _queueMaxSize = 1;
-  // CV to notify that a new task has been added to the queue
-  std::condition_variable _newTaskWasPushed;
-  // CV to notify that a task was finished by a thread.
-  std::condition_variable _workerHasFinishedTask;
-  std::mutex _queueMutex;
-  std::atomic<bool> _shutdownQueue = false;
+  Queue _queuedTasks{_queueMaxSize};
   std::string _name;
   // Keep track of the time spent waiting in the push/pop operation
   AtomicMs _pushTime = 0, _popTime = 0;
@@ -70,54 +66,26 @@ class TaskQueue {
 
   /// Add a task to the queue for Execution. Blocks until there is at least
   /// one free spot in the queue.
-  void push(Task t) {
+  /// Note: If the execution of the task throws, `std::terminate` will be
+  /// called.
+  bool push(Task t) {
     // the actual logic
-    auto action = [&, this] {
-      std::unique_lock l{_queueMutex};
-      _workerHasFinishedTask.wait(
-          l, [&] { return _queuedTasks.size() < _queueMaxSize; });
-      _queuedTasks.push(std::move(t));
-      _newTaskWasPushed.notify_one();
-    };
+    auto action = [&, this] { return _queuedTasks.push(std::move(t)); };
 
     // If TrackTimes==true, measure the time and add it to _pushTime,
     // else only perform the pushing.
-    executeAndUpdateTimer(action, _pushTime);
+    return executeAndUpdateTimer(action, _pushTime);
   }
 
   // Blocks until all tasks have been computed. After a call to finish, no more
   // calls to push are allowed.
   void finish() {
-    std::unique_lock l{_queueMutex};
-
-    // empty queue and _shutdownQueue set is the way of signalling the
-    // destruction to the threads;
-    _shutdownQueue = true;
-    // Wait not only until the queue is empty, but also until the tasks are
-    // actually performed and the threads have joined.
-    l.unlock();
-    _newTaskWasPushed.notify_all();
+    _queuedTasks.finish();
     for (auto& thread : _threads) {
       if (thread.joinable()) {
         thread.join();
       }
     }
-  }
-
-  std::optional<Task> popManually() {
-    auto action = [&, this]() -> std::optional<Task> {
-      std::unique_lock l{_queueMutex};
-      _newTaskWasPushed.wait(
-          l, [&] { return !_queuedTasks.empty() || _shutdownQueue; });
-      if (_shutdownQueue && _queuedTasks.empty()) {
-        return std::nullopt;
-      }
-      auto task = std::move(_queuedTasks.front());
-      _queuedTasks.pop();
-      _workerHasFinishedTask.notify_one();
-      return task;
-    };
-    return executeAndUpdateTimer(action, _popTime);
   }
 
   void resetTimers() requires TrackTimes {
@@ -157,13 +125,9 @@ class TaskQueue {
  private:
   // _________________________________________________________________________
   void function_for_thread() {
-    while (true) {
-      auto optionalTask = popManually();
-      if (!optionalTask) {
-        return;
-      }
+    while (auto task = _queuedTasks.pop()) {
       // perform the task without actually holding the lock.
-      (*optionalTask)();
+      task.value()();
     }
   }
 };
