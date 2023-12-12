@@ -8,4 +8,4 @@ add_library(sparqlExpressions
         LangExpression.cpp NumericUnaryExpressions.cpp NumericBinaryExpressions.cpp DateExpressions.cpp StringExpressions.cpp
         ConditionalExpressions.cpp)
 
-qlever_target_link_libraries(sparqlExpressions index)
+qlever_target_link_libraries(sparqlExpressions index Boost::url)

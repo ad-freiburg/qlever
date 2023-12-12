@@ -15,9 +15,9 @@ auto V = ad_utility::testing::VocabId;
 
 TEST(PatternStatistics, Initialization) {
   PatternStatistics patternStatistics{50, 25, 4};
-  ASSERT_EQ(patternStatistics._numDistinctSubjectPredicatePairs, 50u);
-  ASSERT_FLOAT_EQ(patternStatistics._avgNumDistinctPredicatesPerSubject, 2.0);
-  ASSERT_FLOAT_EQ(patternStatistics._avgNumDistinctSubjectsPerPredicate, 12.5);
+  ASSERT_EQ(patternStatistics.numDistinctSubjectPredicatePairs_, 50u);
+  ASSERT_FLOAT_EQ(patternStatistics.avgNumDistinctPredicatesPerSubject_, 2.0);
+  ASSERT_FLOAT_EQ(patternStatistics.avgNumDistinctSubjectsPerPredicate_, 12.5);
 }
 
 TEST(PatternStatistics, Serialization) {
@@ -30,9 +30,9 @@ TEST(PatternStatistics, Serialization) {
   PatternStatistics statistics2;
   reader >> statistics2;
 
-  ASSERT_EQ(statistics2._numDistinctSubjectPredicatePairs, 50u);
-  ASSERT_FLOAT_EQ(statistics2._avgNumDistinctPredicatesPerSubject, 2.0);
-  ASSERT_FLOAT_EQ(statistics2._avgNumDistinctSubjectsPerPredicate, 12.5);
+  ASSERT_EQ(statistics2.numDistinctSubjectPredicatePairs_, 50u);
+  ASSERT_FLOAT_EQ(statistics2.avgNumDistinctPredicatesPerSubject_, 2.0);
+  ASSERT_FLOAT_EQ(statistics2.avgNumDistinctSubjectsPerPredicate_, 12.5);
 }
 
 // Create patterns from a small SPO-sorted sequence of triples.

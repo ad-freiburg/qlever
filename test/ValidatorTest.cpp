@@ -9,6 +9,7 @@
 #include <functional>
 #include <optional>
 #include <tuple>
+#include <unordered_set>
 
 #include "../test/util/GTestHelpers.h"
 #include "../test/util/TypeTraitsTestHelpers.h"
@@ -251,6 +252,14 @@ void doConstructorTest(
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doConstructorTest")};
 
+  // This helper function checks, if the given `ConfigOptionValidatorManager`
+  // checks the given `ConfigOption`.
+  auto checkContainsOptions =
+      [](const ConfigOptionValidatorManager& manager,
+         const ad_utility::HashSet<const ConfigOption*>& expectedConfigOption) {
+        ASSERT_EQ(manager.configOptionToBeChecked(), expectedConfigOption);
+      };
+
   // This translation function returns the internal value of the configuration
   // option.
   auto getValueTranslation = [](ConstConfigOptionProxy<bool> p) {
@@ -287,15 +296,23 @@ void doConstructorTest(
               "singleArgumentValidatorWithgetValueTranslation",
               singleArgumentValidatorDescriptor, getValueTranslation, proxy1)};
 
+  // The options, both single argument validators should be checking.
+  const ad_utility::HashSet<const ConfigOption*> singleArgumentValidatorOptions{
+      &opt1};
+
   // Check the single argument validators.
   ASSERT_STREQ(
       singleArgumentValidatorDescriptor.data(),
       singleArgumentValidatorWithWasSetTranslatorManager.getDescription()
           .data());
+  checkContainsOptions(singleArgumentValidatorWithWasSetTranslatorManager,
+                       singleArgumentValidatorOptions);
   ASSERT_STREQ(
       singleArgumentValidatorDescriptor.data(),
       singleArgumentValidatorWithGetValueTranslatorManager.getDescription()
           .data());
+  checkContainsOptions(singleArgumentValidatorWithGetValueTranslatorManager,
+                       singleArgumentValidatorOptions);
   AD_EXPECT_THROW_WITH_MESSAGE(
       singleArgumentValidatorWithWasSetTranslatorManager.checkValidator(),
       ::testing::ContainsRegex("singleArgumentValidatorWithwasSetTranslation"));
@@ -330,15 +347,23 @@ void doConstructorTest(
               doubleArgumentValidatorDescriptor, getValueTranslation, proxy1,
               proxy2)};
 
+  // The options, both double argument validators should be checking.
+  const ad_utility::HashSet<const ConfigOption*> doubleArgumentValidatorOptions{
+      &opt1, &opt2};
+
   // Check the double argument validators.
   ASSERT_STREQ(
       doubleArgumentValidatorDescriptor.data(),
       doubleArgumentValidatorWithGetValueTranslatorManager.getDescription()
           .data());
+  checkContainsOptions(doubleArgumentValidatorWithGetValueTranslatorManager,
+                       doubleArgumentValidatorOptions);
   ASSERT_STREQ(
       doubleArgumentValidatorDescriptor.data(),
       doubleArgumentValidatorWithWasSetTranlatorManager.getDescription()
           .data());
+  checkContainsOptions(doubleArgumentValidatorWithWasSetTranlatorManager,
+                       doubleArgumentValidatorOptions);
   AD_EXPECT_THROW_WITH_MESSAGE(
       doubleArgumentValidatorWithWasSetTranlatorManager.checkValidator(),
       ::testing::ContainsRegex(

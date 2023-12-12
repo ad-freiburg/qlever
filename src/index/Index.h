@@ -75,8 +75,6 @@ class Index {
   // setup by `createFromOnDiskIndex` after this call.
   void createFromFile(const std::string& filename);
 
-  void addPatternsToExistingIndex();
-
   // Create an index object from an on-disk index that has previously been
   // constructed using the `createFromFile` method which is typically called via
   // `IndexBuilderMain`. Read necessary metadata into memory and open file
@@ -277,13 +275,12 @@ class Index {
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Similar to the overload of `scan` above, but the keys are specified as IDs.
-  IdTable scan(
-      Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-      Permutation::ColumnIndicesRef additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+               Permutation::ColumnIndicesRef additionalColumns,
+               ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of
   // the scan result.

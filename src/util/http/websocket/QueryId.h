@@ -70,7 +70,6 @@ static_assert(!std::is_copy_assignable_v<OwningQueryId>);
 
 /// A factory class to create unique query ids within each individual instance.
 class QueryRegistry {
-  using SharedCancellationHandle = std::shared_ptr<CancellationHandle>;
   using SynchronizedType = ad_utility::Synchronized<
       ad_utility::HashMap<QueryId, SharedCancellationHandle>>;
   // Technically no shared pointer is required because the registry lives
@@ -92,7 +91,7 @@ class QueryRegistry {
     auto queryId = QueryId::idFromString(std::move(id));
     bool success =
         registry_->wlock()
-            ->emplace(queryId, std::make_shared<CancellationHandle>())
+            ->emplace(queryId, std::make_shared<CancellationHandle<>>())
             .second;
     if (success) {
       // Avoid undefined behavior when the registry is no longer alive at the

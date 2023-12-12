@@ -53,9 +53,9 @@ class Permutation {
   // If `col1Id` is specified, only the col2 is returned for triples that
   // additionally have the specified col1. .This is just a thin wrapper around
   // `CompressedRelationMetaData::scan`.
-  IdTable scan(
-      Id col0Id, std::optional<Id> col1Id, ColumnIndicesRef additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+  IdTable scan(Id col0Id, std::optional<Id> col1Id,
+               ColumnIndicesRef additionalColumns,
+               ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;
@@ -78,7 +78,7 @@ class Permutation {
       Id col0Id, std::optional<Id> col1Id,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       ColumnIndicesRef additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Return the metadata for the relation specified by the `col0Id`
   // along with the metadata for all the blocks that contain this relation (also

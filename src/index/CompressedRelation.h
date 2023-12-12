@@ -421,11 +421,11 @@ class CompressedRelationReader {
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
-  IdTable scan(
-      const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
-      std::span<const CompressedBlockMetadata> blocks,
-      ColumnIndicesRef additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+  IdTable scan(const CompressedRelationMetadata& metadata,
+               std::optional<Id> col1Id,
+               std::span<const CompressedBlockMetadata> blocks,
+               ColumnIndicesRef additionalColumns,
+               ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
@@ -434,7 +434,7 @@ class CompressedRelationReader {
       CompressedRelationMetadata metadata, std::optional<Id> col1Id,
       std::vector<CompressedBlockMetadata> blockMetadata,
       ColumnIndices additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
   // and Y. This can be done by scanning one or two blocks. Note: The overload
@@ -526,12 +526,11 @@ class CompressedRelationReader {
   // multiple worker threads.
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // A helper function to abstract away the timeout check:
   static void checkCancellation(
-      const std::shared_ptr<ad_utility::CancellationHandle>&
-          cancellationHandle) {
+      const ad_utility::SharedCancellationHandle& cancellationHandle) {
     // Not really expensive but since this should be called
     // very often, try to avoid any extra checks.
     AD_EXPENSIVE_CHECK(cancellationHandle);
