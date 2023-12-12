@@ -343,6 +343,7 @@ IdTable CompressedRelationReader::scan(
                                        return count + block.numRows_;
                                      });
   result.resize(totalResultSize);
+  checkCancellation(cancellationHandle);
 
   size_t rowIndexOfNextBlockStart = 0;
   // Lambda that appends a possibly incomplete block (the first or last block)
@@ -364,6 +365,7 @@ IdTable CompressedRelationReader::scan(
       };
 
   addIncompleteBlockIfExists(firstBlockResult);
+  checkCancellation(cancellationHandle);
 
   // Insert the complete blocks from the middle in parallel
   if (beginBlock < endBlock) {
@@ -401,6 +403,7 @@ IdTable CompressedRelationReader::scan(
       rowIndexOfNextBlockStart += block.numRows_;
     }  // end of parallel region
   }
+  checkCancellation(cancellationHandle);
   // Add the last block.
   addIncompleteBlockIfExists(lastBlockResult);
   AD_CORRECTNESS_CHECK(rowIndexOfNextBlockStart == result.size());

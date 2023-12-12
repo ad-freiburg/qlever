@@ -524,21 +524,6 @@ auto Server::cancelAfterDeadline(
 }
 
 // ____________________________________________________________________________
-auto Server::setupCancellationHandle(
-    const net::any_io_executor& executor,
-    const ad_utility::websocket::QueryId& queryId,
-    const std::shared_ptr<Operation>& rootOperation, TimeLimit timeLimit) const
-    -> ad_utility::InvocableWithExactReturnType<void> auto {
-  auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
-  cancellationHandle->startWatchDog();
-  AD_CORRECTNESS_CHECK(cancellationHandle);
-  rootOperation->recursivelySetCancellationHandle(
-      std::move(cancellationHandle));
-  rootOperation->recursivelySetTimeConstraint(timeLimit);
-  return cancelAfterDeadline(executor, cancellationHandle, timeLimit);
-}
-
-// ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
@@ -638,12 +623,19 @@ boost::asio::awaitable<void> Server::processQuery(
                               sortPerformanceEstimator_,
                               std::ref(messageSender), pinSubtrees, pinResult);
 
-    plannedQuery = co_await parseAndPlan(query, qec);
+    auto cancellationHandle =
+        queryRegistry_.getCancellationHandle(messageSender.getQueryId());
+    AD_CORRECTNESS_CHECK(cancellationHandle);
+    cancellationHandle->startWatchDog();
+    absl::Cleanup cancelCancellationHandle{cancelAfterDeadline(
+        co_await net::this_coro::executor, cancellationHandle, timeLimit)};
+
+    plannedQuery = co_await parseAndPlan(query, qec, cancellationHandle);
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
-    absl::Cleanup cancelCancellationHandle{setupCancellationHandle(
-        co_await net::this_coro::executor, messageSender.getQueryId(),
-        qet.getRootOperation(), timeLimit)};
+    qet.getRootOperation()->recursivelySetCancellationHandle(
+        std::move(cancellationHandle));
+    qet.getRootOperation()->recursivelySetTimeConstraint(timeLimit);
     auto timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
         qet.getRootOperation()->getRuntimeInfoWholeQuery();
@@ -656,8 +648,7 @@ boost::asio::awaitable<void> Server::processQuery(
     // (tsv, csv, octet-stream, turtle).
     auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
       auto responseGenerator = co_await computeInNewThread([&] {
-        queryRegistry_.getCancellationHandle(messageSender.getQueryId())
-            ->resetWatchDogState();
+        cancellationHandle->resetWatchDogState();
         return ExportQueryExecutionTrees::computeResultAsStream(
             plannedQuery.value().parsedQuery_, qet, mediaType);
       });
@@ -779,15 +770,20 @@ Awaitable<T> Server::computeInNewThread(Function function) const {
 
 // _____________________________________________________________________________
 net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
-    const std::string& query, QueryExecutionContext& qec) const {
-  return computeInNewThread(
-      [&query, &qec, enablePatternTrick = enablePatternTrick_]() {
-        auto pq = SparqlParser::parseQuery(query);
-        QueryPlanner qp(&qec);
-        qp.setEnablePatternTrick(enablePatternTrick);
-        auto qet = qp.createExecutionTree(pq);
-        return PlannedQuery{std::move(pq), std::move(qet)};
-      });
+    const std::string& query, QueryExecutionContext& qec,
+    SharedCancellationHandle handle) const {
+  return computeInNewThread([&query, &qec,
+                             enablePatternTrick = enablePatternTrick_,
+                             handle = std::move(handle)]() {
+    handle->resetWatchDogState();
+    auto pq = SparqlParser::parseQuery(query);
+    handle->throwIfCancelled("After parsing");
+    QueryPlanner qp(&qec);
+    qp.setEnablePatternTrick(enablePatternTrick);
+    auto qet = qp.createExecutionTree(pq);
+    handle->throwIfCancelled("After query planning");
+    return PlannedQuery{std::move(pq), std::move(qet)};
+  });
 }
 
 // _____________________________________________________________________________

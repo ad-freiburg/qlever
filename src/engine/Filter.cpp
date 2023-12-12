@@ -47,6 +47,7 @@ ResultTable Filter::computeResult() {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Filter result computation..." << endl;
+  checkCancellation();
 
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(subRes->idTable().numColumns());
@@ -54,6 +55,7 @@ ResultTable Filter::computeResult() {
   size_t width = idTable.numColumns();
   CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, &idTable, *subRes);
   LOG(DEBUG) << "Filter result computation done." << endl;
+  checkCancellation();
 
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
@@ -86,9 +88,11 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
                 return sum + (interval.second - interval.first);
               });
           output.reserve(totalSize);
+          checkCancellation();
           for (auto [beg, end] : singleResult._intervals) {
             AD_CONTRACT_CHECK(end <= input.size());
             output.insertAtEnd(input.cbegin() + beg, input.cbegin() + end);
+            checkCancellation();
           }
           AD_CONTRACT_CHECK(output.size() == totalSize);
         } else {
@@ -107,6 +111,7 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
             if (EBV{}(resultValue, &evaluationContext) == EBV::Result::True) {
               output.push_back(input[i]);
             }
+            checkCancellation();
             ++i;
           }
         }

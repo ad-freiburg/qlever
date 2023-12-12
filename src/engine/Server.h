@@ -81,6 +81,8 @@ class Server {
 
   using TimeLimit = std::chrono::seconds;
 
+  using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
+
   /// Parse the path and URL parameters from the given request. Supports both
   /// GET and POST request according to the SPARQL 1.1 standard.
   ad_utility::UrlParser::UrlPathAndParameters getUrlPathAndParameters(
@@ -152,19 +154,11 @@ class Server {
       TimeLimit timeLimit)
       -> ad_utility::InvocableWithExactReturnType<void> auto;
 
-  /// Acquire the cancellation handle based on `queryId`, pass it to the
-  /// operation and configure it to get cancelled automatically by calling
-  /// `cancelAfterDeadline`. The return value can be used to cancel the timer.
-  auto setupCancellationHandle(const net::any_io_executor& executor,
-                               const ad_utility::websocket::QueryId& queryId,
-                               const std::shared_ptr<Operation>& rootOperation,
-                               TimeLimit timeLimit) const
-      -> ad_utility::InvocableWithExactReturnType<void> auto;
-
   /// Run the SPARQL parser and then the query planner on the `query`. All
   /// computation is performed on the `threadPool_`.
-  net::awaitable<PlannedQuery> parseAndPlan(const std::string& query,
-                                            QueryExecutionContext& qec) const;
+  net::awaitable<PlannedQuery> parseAndPlan(
+      const std::string& query, QueryExecutionContext& qec,
+      SharedCancellationHandle handle) const;
 
   /// Check if the access token is valid. Return true if the access token
   /// exists and is valid. Return false if there's no access token passed.

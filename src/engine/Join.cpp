@@ -130,7 +130,9 @@ ResultTable Join::computeResult() {
   };
 
   auto leftResIfCached = getCachedOrSmallResult(*_left, _leftJoinCol);
+  checkCancellation();
   auto rightResIfCached = getCachedOrSmallResult(*_right, _rightJoinCol);
+  checkCancellation();
 
   if (_left->getType() == QueryExecutionTree::SCAN &&
       _right->getType() == QueryExecutionTree::SCAN) {
@@ -138,10 +140,12 @@ ResultTable Join::computeResult() {
       idTable = computeResultForIndexScanAndIdTable<true>(
           rightResIfCached->idTable(), _rightJoinCol,
           dynamic_cast<IndexScan&>(*_left->getRootOperation()), _leftJoinCol);
+      checkCancellation();
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 
     } else if (!leftResIfCached) {
       idTable = computeResultForTwoIndexScans();
+      checkCancellation();
       // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
       // index, the vocabularies of index scans will not necessarily be empty
       // and we need a mechanism to still retrieve them when using the lazy
@@ -152,6 +156,7 @@ ResultTable Join::computeResult() {
 
   shared_ptr<const ResultTable> leftRes =
       leftResIfCached ? leftResIfCached : _left->getResult();
+  checkCancellation();
   if (leftRes->size() == 0) {
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
@@ -172,14 +177,17 @@ ResultTable Join::computeResult() {
     idTable = computeResultForIndexScanAndIdTable<false>(
         leftRes->idTable(), _leftJoinCol,
         dynamic_cast<IndexScan&>(*_right->getRootOperation()), _rightJoinCol);
+    checkCancellation();
     return {std::move(idTable), resultSortedOn(),
             leftRes->getSharedLocalVocab()};
   }
 
   shared_ptr<const ResultTable> rightRes =
       rightResIfCached ? rightResIfCached : _right->getResult();
+  checkCancellation();
   join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
        &idTable);
+  checkCancellation();
 
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
@@ -272,6 +280,7 @@ ResultTable Join::computeResultForJoinWithFullScanDummy() {
 
   doComputeJoinWithFullScanDummyRight(nonDummyRes->idTable(), &idTable);
   LOG(DEBUG) << "Join (with dummy) done. Size: " << idTable.size() << endl;
+  checkCancellation();
   return {std::move(idTable), resultSortedOn(),
           nonDummyRes->getSharedLocalVocab()};
 }
@@ -478,6 +487,10 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
       joinColumnR.begin();
   std::pair undefRangeA{joinColumnL.begin(), joinColumnL.begin() + numUndefA};
   std::pair undefRangeB{joinColumnR.begin(), joinColumnR.begin() + numUndefB};
+  auto lessWithCancellationCheck = [this](auto&& a, auto&& b) {
+    checkCancellation();
+    return std::ranges::less{}(AD_FWD(a), AD_FWD(b));
+  };
 
   // Determine whether we should use the galloping join optimization.
   if (a.size() / b.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
@@ -487,14 +500,14 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
     auto inverseAddRow = [&addRow](const auto& rowA, const auto& rowB) {
       addRow(rowB, rowA);
     };
-    ad_utility::gallopingJoin(joinColumnR, joinColumnL, std::ranges::less{},
+    ad_utility::gallopingJoin(joinColumnR, joinColumnL,
+                              std::move(lessWithCancellationCheck),
                               inverseAddRow);
   } else if (b.size() / a.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
              numUndefB == 0) {
-    ad_utility::gallopingJoin(joinColumnL, joinColumnR, std::ranges::less{},
-                              addRow);
+    ad_utility::gallopingJoin(joinColumnL, joinColumnR,
+                              std::move(lessWithCancellationCheck), addRow);
   } else {
-    // TODO<joka921> Reinstate the timeout checks.
     auto findSmallerUndefRangeLeft =
         [undefRangeA](
             auto&&...) -> cppcoro::generator<decltype(undefRangeA.first)> {
@@ -513,13 +526,13 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
     auto numOutOfOrder = [&]() {
       if (numUndefB == 0 && numUndefA == 0) {
         return ad_utility::zipperJoinWithUndef(
-            joinColumnL, joinColumnR, std::ranges::less{}, addRow,
-            ad_utility::noop, ad_utility::noop);
+            joinColumnL, joinColumnR, std::move(lessWithCancellationCheck),
+            addRow, ad_utility::noop, ad_utility::noop);
 
       } else {
         return ad_utility::zipperJoinWithUndef(
-            joinColumnL, joinColumnR, std::ranges::less{}, addRow,
-            findSmallerUndefRangeLeft, findSmallerUndefRangeRight);
+            joinColumnL, joinColumnR, std::move(lessWithCancellationCheck),
+            addRow, findSmallerUndefRangeLeft, findSmallerUndefRangeRight);
       }
     }();
     AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
