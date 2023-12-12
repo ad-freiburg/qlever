@@ -250,9 +250,7 @@ class GroupBy : public Operation {
    public:
     HashMapAggregationData(ad_utility::AllocatorWithLimit<Id> alloc,
                            size_t numAggregates)
-        : map_{ad_utility::HashMapWithMemoryLimit<KeyType, ValueType>(alloc)},
-          aggregationData_{
-              std::vector<std::vector<AverageAggregationData>>(numAggregates)} {
+        : map_{alloc}, aggregationData_{numAggregates} {
       AD_CONTRACT_CHECK(numAggregates > 0);
     }
 
