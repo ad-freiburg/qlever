@@ -817,7 +817,7 @@ TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
     }
     ad_utility::Timer t{ad_utility::Timer::Stopped};
     {
-      Parser parserChild{filename, 10ms};
+      [[maybe_unused]] Parser parserChild{filename, 10ms};
       t.cont();
     }
     EXPECT_LE(t.msecs(), 20ms);
