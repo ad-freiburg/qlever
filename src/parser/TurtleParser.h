@@ -571,7 +571,8 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   // cases can be tested.
   explicit TurtleParallelParser(const string& filename,
                                 std::chrono::milliseconds sleepTimeForTesting =
-                                    std::chrono::milliseconds{0}) : sleepTimeForTesting_(sleepTimeForTesting) {
+                                    std::chrono::milliseconds{0})
+      : sleepTimeForTesting_(sleepTimeForTesting) {
     LOG(DEBUG)
         << "Initialize parallel Turtle Parsing from uncompressed file or "
            "stream "

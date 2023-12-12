@@ -802,22 +802,31 @@ TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
 }
 
 // _______________________________________________________________________
-TEST(TurtleParserTest, earlyCancellation) {
-  // TODO<joka921> Implement this test.
+TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
   std::string filename{"turtleParserEmptyInput.dat"};
-  FILE_BUFFER_SIZE() = 40;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              std::string_view input) {
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
     }
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        (parseFromFile<Parser>(filename, useBatchInterface)),
-        ::testing::ContainsRegex("Please increase the FILE_BUFFER_SIZE"));
-    ad_utility::deleteFile(filename);
+    ad_utility::Timer t{ad_utility::Timer::Stopped};
+    {
+      Parser parserChild{filename, 10ms};
+      TurtleParserBase& parser = parserChild;
+      t.cont();
+    }
+    EXPECT_LE(t.msecs(), 20ms);
   };
-  forAllParallelParsers(testWithParser,
-                        "<subject> <predicate> <object> . \n <veryLongSubject> "
-                        "<veryLongPredicate> <veryLongObject> .");
+  auto input = []() {
+    std::string singleBlock = "<subject> <predicate> <object> . \n ";
+    std::string longBlock;
+    longBlock.reserve(200 * singleBlock.size());
+    for (size_t i : ad_utility::integerRange(200ul)) {
+      longBlock.append(singleBlock);
+    }
+    return longBlock;
+  }();
+  FILE_BUFFER_SIZE() = 40;
+  forAllParallelParsers(testWithParser, input);
 }
