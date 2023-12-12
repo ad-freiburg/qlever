@@ -763,9 +763,11 @@ TEST(TurtleParserTest, multilineComments) {
   forAllParsers(testWithParser, input, expected);
 }
 
-// _______________________________________________________________________
+// Test that exceptions during the turtle parsing are properly propagated to the
+// calling code. This is especially important for the parallel parsers where the
+// actual parsing happens on background threads.
 TEST(TurtleParserTest, exceptionPropagation) {
-  std::string filename{"turtleParserEmptyInput.dat"};
+  std::string filename{"turtleParserExceptionPropagation.dat"};
   FILE_BUFFER_SIZE() = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              std::string_view input) {
@@ -781,7 +783,8 @@ TEST(TurtleParserTest, exceptionPropagation) {
   forAllParsers(testWithParser, "<missing> <object> .");
 }
 
-// Test that exceptions in the batched reading of the input file are properly propagated.
+// Test that exceptions in the batched reading of the input file are properly
+// propagated.
 TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
   std::string filename{"turtleParserEmptyInput.dat"};
   FILE_BUFFER_SIZE() = 40;
@@ -801,11 +804,13 @@ TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
                         "<veryLongPredicate> <veryLongObject> .");
 }
 
-// 
+// Test that the parallel parsers destructor can be run quickly, even when there
+// are still lots of blocks in the pipeline that are currently being parsed.
 TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
   std::string filename{"turtleParserStopParsingOnOutsideFailure.dat"};
-  auto testWithParser = [&]<typename Parser>([[maybe_unused]] bool useBatchInterface,
-                                             std::string_view input) {
+  auto testWithParser = [&]<typename Parser>(
+                            [[maybe_unused]] bool useBatchInterface,
+                            std::string_view input) {
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
