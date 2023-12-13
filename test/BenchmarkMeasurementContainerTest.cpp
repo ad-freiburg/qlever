@@ -10,6 +10,7 @@
 #include <string>
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
+#include "../test/util/BenchmarkMeasurementContainerHelpers.h"
 #include "util/Exception.h"
 
 using namespace std::chrono_literals;
@@ -81,47 +82,6 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
   ASSERT_EQ(table.numColumns(), 1);
   ASSERT_EQ(table.getEntry<std::string>(0, 0), rowNames.at(0));
   ASSERT_EQ(table.getEntry<std::string>(1, 0), rowNames.at(1));
-}
-
-/*
-@brief Call the function with each of the alternatives in
-`ad_benchmark::ResultTable::EntryType`, except `std::monostate`, as template
-parameter.
-
-@tparam Function The loop body should be a templated function, with one
-`typename` template argument and no more. It also shouldn't take any function
-arguments. Should be passed per deduction.
-*/
-template <typename Function>
-static void doForTypeInResultTableEntryType(Function function) {
-  ad_utility::forEachTypeInTemplateType<ResultTable::EntryType>(
-      [&function]<typename IndexType>() {
-        // `std::monostate` is not important for these kinds of tests.
-        if constexpr (!ad_utility::isSimilar<IndexType, std::monostate>) {
-          function.template operator()<IndexType>();
-        }
-      });
-}
-
-// Helper function for creating `ad_benchmark::ResultTable::EntryType` dummy
-// values.
-template <typename Type>
-requires ad_utility::isTypeContainedIn<Type, ResultTable::EntryType>
-static Type createDummyValueEntryType() {
-  if constexpr (ad_utility::isSimilar<Type, float>) {
-    return 4.2f;
-  } else if constexpr (ad_utility::isSimilar<Type, std::string>) {
-    return "test"s;
-  } else if constexpr (ad_utility::isSimilar<Type, bool>) {
-    return true;
-  } else if constexpr (ad_utility::isSimilar<Type, size_t>) {
-    return 17361644613946UL;
-  } else if constexpr (ad_utility::isSimilar<Type, int>) {
-    return -42;
-  } else {
-    // Not a supported type.
-    AD_FAIL();
-  }
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultTable) {

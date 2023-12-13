@@ -335,7 +335,9 @@ addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
 addLinkAndDiscoverTest(RandomTest)
 
-addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
+addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark testUtil)
+
+addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
 
 addLinkAndDiscoverTest(FindUndefRangesTest engine)
 
