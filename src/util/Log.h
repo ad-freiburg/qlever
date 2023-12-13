@@ -12,7 +12,7 @@
 #include <sstream>
 #include <string>
 
-#include "./StringUtils.h"
+#include "util/TypeTraits.h"
 
 #ifndef LOGLEVEL
 #define LOGLEVEL INFO
