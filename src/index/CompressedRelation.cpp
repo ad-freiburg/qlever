@@ -234,41 +234,42 @@ std::array<std::vector<CompressedBlockMetadata>, 2>
 CompressedRelationReader::getBlocksForJoin(
     const MetadataAndBlocks& metadataAndBlocks1,
     const MetadataAndBlocks& metadataAndBlocks2) {
-  auto relevantBlocks1 = getBlocksFromMetadata(metadataAndBlocks1);
-  auto relevantBlocks2 = getBlocksFromMetadata(metadataAndBlocks2);
-
   // Associate a block together with the relevant ID (col1 or col2) for this
   // join from the first and last triple.
-  struct BlockAndIds {
+  struct BlockWithFirstAndLastId {
     const CompressedBlockMetadata& block_;
     Id first_;
     Id last_;
   };
 
-  // Transform a single block into a `BlockAndIds` struct (see above).
-  auto getFirstAndLastId = [](const MetadataAndBlocks& metadata) {
-    return [&metadata](const CompressedBlockMetadata& block) -> BlockAndIds {
-      return {block, getRelevantIdFromTriple(block.firstTriple_, metadata),
-              getRelevantIdFromTriple(block.lastTriple_, metadata)};
-    };
-  };
-
-  // Associate all the blocks with their relevant IDs. We need this relevant Ids
-  // to join the blocks.
-  auto blocksWithIds1 = std::views::transform(
-      relevantBlocks1, getFirstAndLastId(metadataAndBlocks1));
-  auto blocksWithIds2 = std::views::transform(
-      relevantBlocks2, getFirstAndLastId(metadataAndBlocks2));
-
-  auto blockLessThanBlock = [&](const BlockAndIds& block1,
-                                const BlockAndIds& block2) {
+  auto blockLessThanBlock = [&](const BlockWithFirstAndLastId& block1,
+                                const BlockWithFirstAndLastId& block2) {
     return block1.last_ < block2.first_;
   };
 
-  std::array<std::vector<CompressedBlockMetadata>, 2> result;
+  // Transform all the relevant blocks from a `MetadataAndBlocks` a
+  // `BlockWithFirstAndLastId` struct (see above).
+  auto getBlocksWithFirstAndLastId =
+      [&blockLessThanBlock](const MetadataAndBlocks& metadataAndBlocks) {
+        auto getSingleBlock =
+            [&metadataAndBlocks](const CompressedBlockMetadata& block)
+            -> BlockWithFirstAndLastId {
+          return {
+              block,
+              getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
+              getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
+        };
+        auto result = std::views::transform(
+            getBlocksFromMetadata(metadataAndBlocks), getSingleBlock);
+        AD_CORRECTNESS_CHECK(
+            std::ranges::is_sorted(result, blockLessThanBlock));
+        return result;
+      };
 
-  AD_CONTRACT_CHECK(std::ranges::is_sorted(blocksWithIds1, blockLessThanBlock));
-  AD_CONTRACT_CHECK(std::ranges::is_sorted(blocksWithIds2, blockLessThanBlock));
+  auto blocksWithFirstAndLastId1 =
+      getBlocksWithFirstAndLastId(metadataAndBlocks1);
+  auto blocksWithFirstAndLastId2 =
+      getBlocksWithFirstAndLastId(metadataAndBlocks2);
 
   // Find the matching blocks on each side by performing binary search on the
   // other side. Note that it is tempting to reuse the `zipperJoinWithUndef`
@@ -287,8 +288,10 @@ CompressedRelationReader::getBlocksForJoin(
     AD_CORRECTNESS_CHECK(std::ranges::unique(result).begin() == result.end());
     return result;
   };
-  return {findMatchingBlocks(blocksWithIds1, blocksWithIds2),
-          findMatchingBlocks(blocksWithIds2, blocksWithIds1)};
+
+  return {
+      findMatchingBlocks(blocksWithFirstAndLastId1, blocksWithFirstAndLastId2),
+      findMatchingBlocks(blocksWithFirstAndLastId2, blocksWithFirstAndLastId1)};
 }
 
 // _____________________________________________________________________________
