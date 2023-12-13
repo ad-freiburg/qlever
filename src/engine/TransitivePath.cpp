@@ -18,7 +18,9 @@ TransitivePath::TransitivePath(QueryExecutionContext* qec,
                                TransitivePathSide rightSide, size_t minDist,
                                size_t maxDist)
     : Operation(qec),
-      subtree_(QueryExecutionTree::createSortedTree(std::move(child), {0})),
+      subtree_(child
+                   ? QueryExecutionTree::createSortedTree(std::move(child), {0})
+                   : child),
       lhs_(std::move(leftSide)),
       rhs_(std::move(rightSide)),
       minDist_(minDist),
