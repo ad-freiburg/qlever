@@ -46,24 +46,6 @@ TEST(TaskQueue, SimpleSumWithWait) {
   ASSERT_EQ(result, 500500);
 }
 
-TEST(TaskQueue, SimpleSumWithManualPop) {
-  std::atomic<int> result;
-  // 0 threads, so we have to pickUp the threads manually from another thread.
-  ad_utility::TaskQueue q{10, 0};
-  auto future = std::async(std::launch::async, [&] {
-    for (size_t i = 0; i <= 1000; ++i) {
-      q.push([&result, i] { result += i; });
-    }
-    q.finish();
-  });
-  while (true) {
-    auto taskAsOptional = q.popManually();
-    if (!taskAsOptional) {
-      break;
-    }
-    // execute the task;
-    (*taskAsOptional)();
-  }
-  future.get();
-  ASSERT_EQ(result, 500500);
+TEST(TaskQueue, ThrowOnMaxQueueSizeZero) {
+  EXPECT_ANY_THROW((ad_utility::TaskQueue{0, 5}));
 }
