@@ -780,7 +780,7 @@ net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
     handle->throwIfCancelled("After parsing");
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(enablePatternTrick);
-    auto qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq, *handle);
     handle->throwIfCancelled("After query planning");
     return PlannedQuery{std::move(pq), std::move(qet)};
   });

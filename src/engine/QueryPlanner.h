@@ -18,12 +18,15 @@
 using std::vector;
 
 class QueryPlanner {
+  using CancellationHandle = ad_utility::CancellationHandle<>&;
+
  public:
   explicit QueryPlanner(QueryExecutionContext* qec);
 
   // Create the best execution tree for the given query according to the
   // optimization algorithm and cost estimates of the QueryPlanner.
-  QueryExecutionTree createExecutionTree(ParsedQuery& pq);
+  QueryExecutionTree createExecutionTree(ParsedQuery& pq,
+                                         CancellationHandle handle);
 
   class TripleGraph {
    public:
@@ -228,7 +231,8 @@ class QueryPlanner {
   // result. This is relevant for subqueries, which are currently optimized
   // independently of the rest of the query, but where it depends on the rest
   // of the query, which ordering of the result is best.
-  [[nodiscard]] std::vector<SubtreePlan> createExecutionTrees(ParsedQuery& pq);
+  [[nodiscard]] std::vector<SubtreePlan> createExecutionTrees(
+      ParsedQuery& pq, CancellationHandle handle);
 
  private:
   QueryExecutionContext* _qec;
@@ -240,7 +244,7 @@ class QueryPlanner {
   bool _enablePatternTrick;
 
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
-      ParsedQuery::GraphPattern* rootPattern);
+      ParsedQuery::GraphPattern* rootPattern, CancellationHandle handle);
 
   /**
    * @brief Fills children with all operations that are associated with a single
@@ -248,7 +252,8 @@ class QueryPlanner {
    */
   [[nodiscard]] vector<SubtreePlan> seedWithScansAndText(
       const TripleGraph& tg,
-      const vector<vector<QueryPlanner::SubtreePlan>>& children);
+      const vector<vector<QueryPlanner::SubtreePlan>>& children,
+      CancellationHandle handle);
 
   /**
    * @brief Returns a subtree plan that will compute the values for the
@@ -256,7 +261,7 @@ class QueryPlanner {
    * this subtree can be arbitrarily large.
    */
   [[nodiscard]] vector<SubtreePlan> seedFromPropertyPathTriple(
-      const SparqlTriple& triple);
+      const SparqlTriple& triple, CancellationHandle handle);
 
   /**
    * @brief Returns a parsed query for the property path.
@@ -420,12 +425,12 @@ class QueryPlanner {
    */
   [[nodiscard]] vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
-      const vector<vector<SubtreePlan>>& children);
-  std::vector<QueryPlanner::SubtreePlan>
+      const vector<vector<SubtreePlan>>& children, CancellationHandle handle);
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
   // are not in fact connected (via their variables).
+  std::vector<QueryPlanner::SubtreePlan>
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
       const vector<SparqlFilter>& filters, const TripleGraph& tg) const;
