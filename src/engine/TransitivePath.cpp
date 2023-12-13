@@ -18,7 +18,7 @@ TransitivePath::TransitivePath(QueryExecutionContext* qec,
                                TransitivePathSide rightSide, size_t minDist,
                                size_t maxDist)
     : Operation(qec),
-      subtree_(std::move(child)),
+      subtree_(QueryExecutionTree::createSortedTree(std::move(child), {0})),
       lhs_(std::move(leftSide)),
       rhs_(std::move(rightSide)),
       minDist_(minDist),
@@ -111,6 +111,10 @@ vector<ColumnIndex> TransitivePath::resultSortedOn() const {
   }
   if (rhs_.isSortedOnInputCol()) {
     return {1};
+  }
+
+  if (!isBoundOrId()) {
+    return subtree_->resultSortedOn();
   }
   return {};
 }
