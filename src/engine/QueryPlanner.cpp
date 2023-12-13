@@ -1826,6 +1826,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   if (isTransitive) {
     for (const auto& plan : candidates) {
       plan._qet->readFromCache();
+      for (auto& child : plan._qet->getRootOperation()->getChildren()) {
+        child->readFromCache();
+      }
       plan._qet->getRootOperation()->createRuntimeInfoFromEstimates(plan._qet->getRootOperation()->getRuntimeInfoPointer());
       LOG(INFO) << plan._qet->getRootOperation()->getDescriptor() << " "
                 << plan._qet->getCostEstimate() << " "
