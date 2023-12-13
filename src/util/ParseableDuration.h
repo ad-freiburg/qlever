@@ -111,7 +111,7 @@ class ParseableDuration {
     } else if constexpr (std::is_same_v<period, hours::period>) {
       os << "h";
     } else {
-      static_assert(ad_utility::alwaysFalse<std::type_identity<period>::type>,
+      static_assert(ad_utility::alwaysFalse<period>,
                     "Unsupported std::chrono::duration period");
     }
 

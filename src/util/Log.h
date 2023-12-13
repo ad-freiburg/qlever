@@ -138,7 +138,7 @@ class Log {
     } else if constexpr (LEVEL == FATAL) {
       return "FATAL: ";
     } else {
-      static_assert(ad_utility::alwaysFalse<LEVEL>);
+      static_assert(ad_utility::alwaysFalse<decltype(LEVEL)>);
     }
   }
 };

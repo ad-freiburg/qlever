@@ -804,8 +804,7 @@ class TripleComponentComparator {
       _locManager.getSortKey(res, level, writeSortKey);
       return {first, sortKey, add(langtag), isExternal, add(a)};
     } else {
-      static_assert(
-          ad_utility::alwaysFalse<std::type_identity<SplitValType>::type>);
+      static_assert(ad_utility::alwaysFalse<SplitValType>);
     }
   }
 };

@@ -159,7 +159,7 @@ std::optional<MediaType> getMediaTypeFromAcceptHeader(
       auto it = std::ranges::find(detail::SUPPORTED_MEDIA_TYPES, part);
       return it != detail::SUPPORTED_MEDIA_TYPES.end() ? part : noValue;
     } else {
-      static_assert(ad_utility::alwaysFalse<std::type_identity<T>::type>);
+      static_assert(ad_utility::alwaysFalse<T>);
     }
   };
 

@@ -140,7 +140,7 @@ constexpr static bool isTypeContainedIn<T, std::pair<Ts...>> =
 
 /// A templated bool that is always false,
 /// independent of the template parameter.
-template <auto>
+template <typename>
 constexpr static bool alwaysFalse = false;
 
 /// From the type Tuple (std::tuple<A, B, C....>) creates the type
