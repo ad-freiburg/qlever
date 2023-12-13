@@ -274,25 +274,21 @@ CompressedRelationReader::getBlocksForJoin(
   // other side. Note that it is tempting to reuse the `zipperJoinWithUndef`
   // routine, but this doesn't work because the implicit equality defined by
   // `!lessThan(a,b) && !lessThan(b, a)` is not transitive.
-  for (const auto& block : blocksWithIds1) {
-    if (!std::ranges::equal_range(blocksWithIds2, block, blockLessThanBlock)
-             .empty()) {
-      result[0].push_back(block.block_);
+  auto findMatchingBlocks = [&blockLessThanBlock](const auto& blocks,
+                                                  const auto& otherBlocks) {
+    std::vector<CompressedBlockMetadata> result;
+    for (const auto& block : blocks) {
+      if (!std::ranges::equal_range(otherBlocks, block, blockLessThanBlock)
+               .empty()) {
+        result.push_back(block.block_);
+      }
     }
-  }
-  for (const auto& block : blocksWithIds2) {
-    if (!std::ranges::equal_range(blocksWithIds2, block, blockLessThanBlock)
-             .empty()) {
-      result[1].push_back(block.block_);
-    }
-  }
-
-  // The following check shouldn't be too expensive as there are only few
-  // blocks.
-  for (auto& vec : result) {
-    AD_CORRECTNESS_CHECK(std::ranges::unique(vec).begin() == vec.end());
-  }
-  return result;
+    // The following check isn't expensive as there are only few blocks.
+    AD_CORRECTNESS_CHECK(std::ranges::unique(result).begin() == result.end());
+    return result;
+  };
+  return {findMatchingBlocks(blocksWithIds1, blocksWithIds2),
+          findMatchingBlocks(blocksWithIds2, blocksWithIds1)};
 }
 
 // _____________________________________________________________________________
