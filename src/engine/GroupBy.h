@@ -331,7 +331,7 @@ class GroupBy : public Operation {
   // Check if an expression is a currently supported aggregate.
   // TODO<kcaliban> As soon as all aggregates are supported, implement and use a
   //                `isAggregate` function in SparqlExpressions instead.
-  static bool isSupportedAggregate(sparqlExpression::SparqlExpression* expr);
+  static bool isUnsupportedAggregate(sparqlExpression::SparqlExpression* expr);
 
   // Find all aggregates for expression `expr`. Return `std::nullopt`
   // if an unsupported aggregate is found.

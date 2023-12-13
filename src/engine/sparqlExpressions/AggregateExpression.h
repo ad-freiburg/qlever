@@ -54,8 +54,8 @@ class AggregateExpression : public SparqlExpression {
   // _________________________________________________________________________
   vector<Variable> getUnaggregatedVariables() override;
 
-  // An `AggregateExpression` (obviously) contains an aggregate.
-  bool containsAggregate() const override { return true; }
+  // _________________________________________________________________________
+  bool isAggregate() const override { return true; }
 
   // __________________________________________________________________________
   [[nodiscard]] string getCacheKey(

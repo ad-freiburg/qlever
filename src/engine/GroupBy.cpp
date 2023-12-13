@@ -772,14 +772,19 @@ std::optional<T*> GroupBy::hasType(sparqlExpression::SparqlExpression* expr) {
 }
 
 // _____________________________________________________________________________
-bool GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
+bool GroupBy::isUnsupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   using namespace sparqlExpression;
 
-  return !(hasType<SumExpression>(expr).has_value() ||
-           hasType<MinExpression>(expr).has_value() ||
-           hasType<MaxExpression>(expr).has_value() ||
-           hasType<CountExpression>(expr).has_value() ||
-           hasType<GroupConcatExpression>(expr).has_value());
+  // `expr` is not an aggregate, so it cannot be an unsupported aggregate
+  if (!expr->isAggregate()) return false;
+
+  // `expr` is an unsupported aggregate
+  if (hasType<SumExpression>(expr) || hasType<MinExpression>(expr) ||
+      hasType<MaxExpression>(expr) || hasType<CountExpression>(expr) ||
+      hasType<GroupConcatExpression>(expr))
+    return true;
+
+  return false;
 }
 
 // _____________________________________________________________________________
@@ -805,7 +810,7 @@ bool GroupBy::findAggregatesImpl(
   }
 
   // Unsupported aggregates
-  if (!isSupportedAggregate(expr)) return false;
+  if (isUnsupportedAggregate(expr)) return false;
 
   auto children = expr->children();
 
