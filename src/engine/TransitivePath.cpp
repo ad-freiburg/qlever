@@ -59,6 +59,9 @@ std::string TransitivePath::asStringImpl(size_t indent) const {
   os << "Right side:\n";
   os << rhs_.getCacheKey();
 
+  AD_CORRECTNESS_CHECK(subtree_);
+  os << "Subtree:\n" << subtree_->asString() << '\n';
+
   return std::move(os).str();
 }
 
