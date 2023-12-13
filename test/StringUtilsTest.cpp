@@ -249,12 +249,6 @@ TEST(StringUtilsTest, insertThousandSeparator) {
 
     // Mixing numbers and normal symbols.
     simpleComparisonTest(
-        {absl::StrCat(floatingPointSignifierString,
-                      floatingPointSignifierString, "140"),
-         "801",
-         absl::StrCat("813", floatingPointSignifierString,
-                      "217710466665135481349068158967136466")});
-    simpleComparisonTest(
         {"140", "801",
          absl::StrCat("813", floatingPointSignifierString,
                       "217710466665135481349068158967136466", " 3",

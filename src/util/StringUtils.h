@@ -294,62 +294,44 @@ std::string insertThousandSeparator(const std::string_view str,
     return stream.str();
   };
 
-  // The pattern finds any digit sequence, that is long enough for inserting
-  // thousand separators.
-  constexpr ctll::fixed_string regexPatDigitSequence{"\\d{4,}"};
-
   /*
   The pattern finds any digit sequence, that is long enough for inserting
-  thousand separators, is not the fractual part of a floating point and is not
-  at the beginning.
+  thousand separators and is not the fractual part of a floating point.
   */
-  constexpr ctll::fixed_string regexPatNumberNotFractional{
-      "(?<nonDigit>[^\\d" + floatingPointSignifierAsFixedString + "]|\\D" +
-      cls(floatingPointSignifierAsFixedString) + ")(?<digit>" +
-      regexPatDigitSequence + ")"};
+  constexpr ctll::fixed_string regexPatDigitSequence{
+      "(?:^|[^\\d" + floatingPointSignifierAsFixedString +
+      "])(?<digit>\\d{4,})"};
 
   /*
   Parsing with only regex is harder than picking out regex matches for
   transformation and reading the non regex matches via iterator.
   */
   auto parseIterator = std::begin(str);
-  const auto strEnd = std::end(str);
-
-  /*
-  Digit sequences, with a min. length of 4, at the beginning of the string needs
-  special handeling, because our pattern for identifying digit sequences, with a
-  min. length of 4, for separator insertion, needs a non digit prefix of at
-  least size 1.
-  */
-  if (auto match = ctre::starts_with<regexPatDigitSequence>(str); match) {
-    ostream << insertSeparator(match.to_view());
-    parseIterator += match.to_view().length();
-  }
 
   /*
   Parse the remaining digit sequences, with a min. length of 4, together
   with the spaces between them.
   */
   std::ranges::for_each(
-      ctre::range<regexPatNumberNotFractional>(parseIterator, strEnd),
-      [&parseIterator, &strEnd, &ostream, &insertSeparator](const auto& match) {
-        // A range for describing, where in the string the match was.
-        const auto& matchPositionRange{std::ranges::search(
-            std::ranges::subrange(parseIterator, strEnd), match.to_view())};
+      ctre::range<regexPatDigitSequence>(str),
+      [&parseIterator, &ostream, &insertSeparator](const auto& match) {
+        /*
+        The digit sequence, that must be transformed. Note: The string view
+        iterators point to entries in the `str` string.
+        */
+        const std::string_view& digitSequence{match.template get<"digit">()};
 
-        // Insert the match, and the string between it and the `parseIterator`,
-        // into the stream.
-        ostream << std::string_view(parseIterator,
-                                    std::begin(matchPositionRange))
-                << match.template get<"nonDigit">().to_view()
-                << insertSeparator(match.template get<"digit">().to_view());
+        // Insert the transformed digit sequence, and the string between it and
+        // the `parseIterator`, into the stream.
+        ostream << std::string_view(parseIterator, std::begin(digitSequence))
+                << insertSeparator(digitSequence);
 
         // We are done with this part of the string.
-        parseIterator = std::end(matchPositionRange);
+        parseIterator = std::end(digitSequence);
       });
 
   // Inser the remaining string.
-  ostream << std::string_view(parseIterator, strEnd);
+  ostream << std::string_view(parseIterator, std::end(str));
   return ostream.str();
 }
 }  // namespace ad_utility
