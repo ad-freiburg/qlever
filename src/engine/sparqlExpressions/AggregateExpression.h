@@ -62,7 +62,7 @@ class AggregateExpression : public SparqlExpression {
       const VariableToColumnMap& varColMap) const override;
 
   // __________________________________________________________________________
-  bool isDistinct() const { return _distinct; }
+  bool isDistinct() const override { return _distinct; }
 
   // __________________________________________________________________________
   [[nodiscard]] std::optional<SparqlExpressionPimpl::VariableAndDistinctness>

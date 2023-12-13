@@ -328,6 +328,10 @@ class GroupBy : public Operation {
   template <class T>
   static std::optional<T*> hasType(sparqlExpression::SparqlExpression* expr);
 
+  // Check if an expression is any of any type in `Exprs`
+  template <typename... Exprs>
+  static bool hasAnyType(const auto& expr);
+
   // Check if an expression is a currently supported aggregate.
   // TODO<kcaliban> As soon as all aggregates are supported, implement and use a
   //                `isAggregate` function in SparqlExpressions instead.

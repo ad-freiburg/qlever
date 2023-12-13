@@ -772,6 +772,12 @@ std::optional<T*> GroupBy::hasType(sparqlExpression::SparqlExpression* expr) {
 }
 
 // _____________________________________________________________________________
+template <typename... Exprs>
+bool GroupBy::hasAnyType(const auto& expr) {
+  return (... || hasType<Exprs>(expr));
+}
+
+// _____________________________________________________________________________
 bool GroupBy::isUnsupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   using namespace sparqlExpression;
 
@@ -779,12 +785,12 @@ bool GroupBy::isUnsupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   if (!expr->isAggregate()) return false;
 
   // `expr` is an unsupported aggregate
-  if (hasType<SumExpression>(expr) || hasType<MinExpression>(expr) ||
-      hasType<MaxExpression>(expr) || hasType<CountExpression>(expr) ||
-      hasType<GroupConcatExpression>(expr))
+  if (hasAnyType<SumExpression, MinExpression, MaxExpression, CountExpression,
+                 GroupConcatExpression>(expr))
     return true;
 
-  return false;
+  // `expr` is a distinct aggregate
+  return expr->isDistinct();
 }
 
 // _____________________________________________________________________________
@@ -792,11 +798,10 @@ bool GroupBy::findAggregatesImpl(
     sparqlExpression::SparqlExpression* parent,
     sparqlExpression::SparqlExpression* expr, std::optional<size_t> index,
     std::vector<GroupBy::HashMapAggregateInformation>& info) {
-  if (auto val = hasType<sparqlExpression::AvgExpression>(expr);
-      val.has_value()) {
-    // Do not support distinct aggregates
-    if (val.value()->isDistinct()) return false;
+  // Unsupported aggregates
+  if (isUnsupportedAggregate(expr)) return false;
 
+  if (expr->isAggregate()) {
     if (parent != nullptr && index.has_value()) {
       ParentAndChildIndex parentAndChildIndex{parent, index.value()};
       info.emplace_back(expr, 0, parentAndChildIndex);
@@ -808,9 +813,6 @@ bool GroupBy::findAggregatesImpl(
 
     return true;
   }
-
-  // Unsupported aggregates
-  if (isUnsupportedAggregate(expr)) return false;
 
   auto children = expr->children();
 

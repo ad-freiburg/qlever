@@ -87,6 +87,9 @@ class SparqlExpression {
   // Check if expression is aggregate
   virtual bool isAggregate() const { return false; }
 
+  // Check if an expression is distinct (only applies to aggregates)
+  virtual bool isDistinct() const { AD_CONTRACT_CHECK(this->isAggregate()); }
+
   // Replace child at index `childIndex` with `newExpression`
   virtual void replaceChild(size_t childIndex,
                             std::unique_ptr<SparqlExpression> newExpression) {
