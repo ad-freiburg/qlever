@@ -1825,9 +1825,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
 
   if (isTransitive) {
     for (const auto& plan : candidates) {
+      plan._qet->getRootOperation()->createRuntimeInfoFromEstimates(plan._qet->getRootOperation()->getRuntimeInfoPointer());
       LOG(INFO) << plan._qet->getRootOperation()->getDescriptor() << " "
                 << plan._qet->getCostEstimate() << " "
-                << plan._qet->getSizeEstimate() << std::endl;
+                << plan._qet->getSizeEstimate() << std::endl << std::endl
+      << nlohmann::ordered_json{*plan._qet->getRootOperation()->getRuntimeInfoPointer()} << std::endl;
     }
   }
 
