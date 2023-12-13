@@ -1829,7 +1829,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       LOG(INFO) << plan._qet->getRootOperation()->getDescriptor() << " "
                 << plan._qet->getCostEstimate() << " "
                 << plan._qet->getSizeEstimate() << std::endl << std::endl
-      << nlohmann::ordered_json{*plan._qet->getRootOperation()->getRuntimeInfoPointer()} << std::endl;
+      << nlohmann::ordered_json{*plan._qet->getRootOperation()->getRuntimeInfoPointer()}.dump(4) << std::endl;
     }
   }
 
