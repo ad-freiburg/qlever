@@ -1808,10 +1808,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     candidates.push_back(std::move(opt.value()));
   }
 
+  bool isTransitive = false;
   // Test if one of `a` or `b` is a transitive path to which we can bind the
   // other one.
   if (auto opt = createJoinWithTransitivePath(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
+    isTransitive = true;
   }
 
   // "NORMAL" CASE:
@@ -1820,6 +1822,15 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       makeSubtreePlan<Join>(_qec, a._qet, b._qet, jcs[0][0], jcs[0][1]);
   mergeSubtreePlanIds(plan, a, b);
   candidates.push_back(std::move(plan));
+
+  if (isTransitive) {
+    for (const auto& plan : candidates) {
+      LOG(INFO) << plan._qet->getRootOperation()->getDescriptor() << " "
+                << plan._qet->getCostEstimate() << " "
+                << plan._qet->getSizeEstimate() << std::endl;
+    }
+  }
+
 
   return candidates;
 }
