@@ -345,8 +345,8 @@ class GroupBy : public Operation {
 
   // The recursive implementation of `findAggregates` (see above).
   static bool findAggregatesImpl(
-      sparqlExpression::SparqlExpression* parent,
-      sparqlExpression::SparqlExpression* expr, std::optional<size_t> index,
+      sparqlExpression::SparqlExpression* expr,
+      std::optional<ParentAndChildIndex> parentAndChildIndex,
       std::vector<HashMapAggregateInformation>& info);
 
   // The check whether the optimization just described can be applied and its

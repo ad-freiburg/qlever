@@ -89,7 +89,7 @@ class SparqlExpression {
 
   // Check if an expression is distinct (only applies to aggregates)
   virtual bool isDistinct() const {
-    AD_CONTRACT_CHECK(this->isAggregate());
+    AD_CONTRACT_CHECK(isAggregate());
     return false;
   }
 

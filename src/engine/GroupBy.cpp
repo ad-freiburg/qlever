@@ -755,7 +755,7 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
 std::optional<std::vector<GroupBy::HashMapAggregateInformation>>
 GroupBy::findAggregates(sparqlExpression::SparqlExpression* expr) {
   std::vector<HashMapAggregateInformation> result;
-  if (!findAggregatesImpl(nullptr, expr, std::nullopt, result))
+  if (!findAggregatesImpl(expr, std::nullopt, result))
     return std::nullopt;
   else
     return result;
@@ -795,18 +795,14 @@ bool GroupBy::isUnsupportedAggregate(sparqlExpression::SparqlExpression* expr) {
 
 // _____________________________________________________________________________
 bool GroupBy::findAggregatesImpl(
-    sparqlExpression::SparqlExpression* parent,
-    sparqlExpression::SparqlExpression* expr, std::optional<size_t> index,
+    sparqlExpression::SparqlExpression* expr,
+    std::optional<ParentAndChildIndex> parentAndChildIndex,
     std::vector<GroupBy::HashMapAggregateInformation>& info) {
   // Unsupported aggregates
   if (isUnsupportedAggregate(expr)) return false;
 
   if (expr->isAggregate()) {
-    if (parent != nullptr && index.has_value()) {
-      ParentAndChildIndex parentAndChildIndex{parent, index.value()};
-      info.emplace_back(expr, 0, parentAndChildIndex);
-    } else
-      info.emplace_back(expr, 0, std::nullopt);
+    info.emplace_back(expr, 0, parentAndChildIndex);
 
     // Make sure this is not a nested aggregate.
     if (expr->children().front()->containsAggregate()) return false;
@@ -819,9 +815,10 @@ bool GroupBy::findAggregatesImpl(
   bool childrenContainOnlySupportedAggregates = true;
   size_t childIndex = 0;
   for (const auto& child : children) {
+    ParentAndChildIndex parentAndChildIndexForChild{expr, childIndex++};
     childrenContainOnlySupportedAggregates =
         childrenContainOnlySupportedAggregates &&
-        findAggregatesImpl(expr, child.get(), childIndex++, info);
+        findAggregatesImpl(child.get(), parentAndChildIndexForChild, info);
   }
 
   return childrenContainOnlySupportedAggregates;
