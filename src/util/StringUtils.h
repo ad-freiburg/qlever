@@ -19,7 +19,9 @@
 #include <string>
 #include <string_view>
 
+#include "ctre/ctre.h"
 #include "util/Concepts.h"
+#include "util/CtreHelpers.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
@@ -236,53 +238,119 @@ std::string insertThousandSeparator(const std::string_view str,
                     !isDigit(floatingPointSignifier));
 
   /*
-  Not all ranges support the option to insert new values between old values,
-  so we create a new string in the wanted format.
+  Create a `ctll::fixed_string` of `floatingPointSignifier`, that can be used
+  inside regex character classes, without being confused with one of the
+  reserved characters.
+  */
+  auto adjustSymbolForRegex = []<const char symbol>() {
+    constexpr ctll::fixed_string symbolAsFixedString({symbol, '\0'});
+
+    // Inside a regex character class are fewer reserved character.
+    if constexpr (symbol == '^' || symbol == '-' || symbol == ']' ||
+                  symbol == '\\') {
+      return "\\" + symbolAsFixedString;
+    } else {
+      return symbolAsFixedString;
+    }
+  };
+  constexpr ctll::fixed_string floatingPointSignifierAsFixedString{
+      adjustSymbolForRegex.template operator()<floatingPointSignifier>()};
+
+  /*
+  As string view doesn't support the option to insert new values between old
+  values, so we create a new string in the wanted format.
   */
   std::ostringstream ostream;
 
-  // Identifying groups of thousands is easier, when reversing the range.
-  auto reversedRange = std::views::reverse(str);
-  auto rSearchIterator = std::begin(reversedRange);
-  const auto rEnd = std::end(reversedRange);
+  /*
+  Insert separator into the given string. Ignores content of the given string,
+  just works based on length.
+  */
+  auto insertSeparator = [&separatorSymbol](const std::string_view s) {
+    std::ostringstream stream;
+    auto sInsertionIterator = std::begin(s);
+    auto sEnd = std::end(s);
 
-  // 'Parse' the string.
-  while (rSearchIterator != rEnd) {
-    auto nextNonDigitIterator =
-        std::ranges::find_if_not(rSearchIterator, rEnd, isDigit);
-
-    /*
-    If `rSearchIterator` is a digit and `nextNonDigitIterator` not  the
-    `floatingPointSignifier`, repeatedly add 3 digits, followed by the
-    delimiter, until there are less than 4 digits remaining between
-    `rSearchIterator` and `nextNonDigitIterator`.
-    Because there an no valid thousander delimiters anywhere between 3 digits.
-    */
-    if (rSearchIterator != nextNonDigitIterator &&
-        (nextNonDigitIterator == rEnd ||
-         *nextNonDigitIterator != floatingPointSignifier)) {
-      while (std::distance(rSearchIterator, nextNonDigitIterator) > 3) {
-        ostream << *(rSearchIterator++) << *(rSearchIterator++)
-                << *(rSearchIterator++) << separatorSymbol;
-      }
+    // Nothing to do, if the string is to short.
+    if (s.length() < 4) {
+      return std::string{s};
     }
 
     /*
-    Find the start of the next digit sequence and add the remaining
-    unprocessed symbols before it.
+    Get rid of enough of the leading digits, so that only the digits remain,
+    where we have to put the seperator in front every three chars.
     */
-    auto nextDigitSequenceStartIterator =
-        std::ranges::find_if(nextNonDigitIterator, rEnd, isDigit);
-    std::ranges::for_each(rSearchIterator, nextDigitSequenceStartIterator,
-                          [&ostream](const char c) { ostream << c; });
-    rSearchIterator = nextDigitSequenceStartIterator;
+    do {
+      stream << *(sInsertionIterator++);
+    } while (sInsertionIterator != sEnd &&
+             std::distance(sInsertionIterator, sEnd) % 3 != 0);
+
+    // The remaining string lenght is a multiple of 3.
+    while (sInsertionIterator != sEnd) {
+      stream << separatorSymbol << *(sInsertionIterator++)
+             << *(sInsertionIterator++) << *(sInsertionIterator++);
+    }
+
+    return stream.str();
+  };
+
+  // The pattern finds any digit sequence, that is long enough for inserting
+  // thousand separators.
+  constexpr ctll::fixed_string regexPatDigitSequence{"\\d{4,}"};
+
+  /*
+  The pattern finds any digit sequence, that is long enough for inserting
+  thousand separators, is not the fractual part of a floating point and is not
+  at the beginning.
+  */
+  constexpr ctll::fixed_string regexPatNumberNotFractional{
+      "(?<nonDigit>[^\\d" + floatingPointSignifierAsFixedString + "]|\\D" +
+      cls(floatingPointSignifierAsFixedString) + ")(?<digit>" +
+      regexPatDigitSequence + ")"};
+
+  /*
+  Parsing with only regex is harder than picking out regex matches for
+  transformation and reading the non regex matches via iterator.
+  */
+  auto parseIterator = std::begin(str);
+  const auto strEnd = std::end(str);
+
+  /*
+  Digit sequences, with a min. length of 4, at the beginning of the string needs
+  special handeling, because our pattern for identifying digit sequences, with a
+  min. length of 4, for separator insertion, needs a non digit prefix of at
+  least size 1.
+  */
+  if (auto match = ctre::starts_with<regexPatDigitSequence>(str); match) {
+    ostream << insertSeparator(match.to_view());
+    parseIterator += match.to_view().length();
   }
 
-  // Remember: We copied a reversed `r`.
-  // TODO Is it possible, to just reverse the `ostream`?
-  std::string toReturn{std::move(ostream).str()};
-  std::ranges::reverse(toReturn);
-  return toReturn;
+  /*
+  Parse the remaining digit sequences, with a min. length of 4, together
+  with the spaces between them.
+  */
+  std::ranges::for_each(
+      ctre::range<regexPatNumberNotFractional>(parseIterator, strEnd),
+      [&parseIterator, &strEnd, &ostream, &insertSeparator](const auto& match) {
+        // A range for describing, where in the string the match was.
+        const auto& matchPositionRange{std::ranges::search(
+            std::ranges::subrange(parseIterator, strEnd), match.to_view())};
+
+        // Insert the match, and the string between it and the `parseIterator`,
+        // into the stream.
+        ostream << std::string_view(parseIterator,
+                                    std::begin(matchPositionRange))
+                << match.template get<"nonDigit">().to_view()
+                << insertSeparator(match.template get<"digit">().to_view());
+
+        // We are done with this part of the string.
+        parseIterator = std::end(matchPositionRange);
+      });
+
+  // Inser the remaining string.
+  ostream << std::string_view(parseIterator, strEnd);
+  return ostream.str();
 }
 }  // namespace ad_utility
 
