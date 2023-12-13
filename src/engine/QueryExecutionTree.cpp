@@ -53,6 +53,7 @@ string QueryExecutionTree::asString(size_t indent) {
   if (indent == _indent && !_asString.empty()) {
     return _asString;
   }
+  /*
   string indentStr;
   for (size_t i = 0; i < indent; ++i) {
     indentStr += " ";
@@ -67,6 +68,8 @@ string QueryExecutionTree::asString(size_t indent) {
   } else {
     _asString = "<Empty QueryExecutionTree>";
   }
+   */
+  _asString = _rootOperation->asString(indent);
   _indent = indent;
   return _asString;
 }
