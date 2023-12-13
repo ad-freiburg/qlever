@@ -47,6 +47,7 @@ class NaryExpression : public SparqlExpression {
   template <SingleExpressionResult... Operands>
   static ExpressionResult evaluateOnChildrenOperands(
       NaryOperation naryOperation, EvaluationContext* context,
+      std::remove_reference_t<CancellationHandle>* handle,
       Operands&&... operands) {
     // Perform a more efficient calculation if a specialized function exists
     // that matches all operands.
@@ -67,8 +68,8 @@ class NaryExpression : public SparqlExpression {
         (... && isConstantResult<Operands>);
 
     // The generator for the result of the operation.
-    auto resultGenerator =
-        applyOperation(targetSize, naryOperation, context, AD_FWD(operands)...);
+    auto resultGenerator = applyOperation(targetSize, naryOperation, context,
+                                          handle, AD_FWD(operands)...);
 
     // Compute the result.
     using ResultType = typename decltype(resultGenerator)::value_type;
@@ -162,7 +163,7 @@ ExpressionResult NaryExpression<NaryOperation>::evaluate(
   // and evaluates the expression.
   auto evaluateOnChildrenResults = std::bind_front(
       ad_utility::visitWithVariantsAndParameters,
-      evaluateOnChildOperandsAsLambda, NaryOperation{}, context);
+      evaluateOnChildOperandsAsLambda, NaryOperation{}, context, &handle);
 
   return std::apply(evaluateOnChildrenResults, std::move(resultsOfChildren));
 }

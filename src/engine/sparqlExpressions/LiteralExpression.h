@@ -40,8 +40,8 @@ class LiteralExpression : public SparqlExpression {
   ExpressionResult evaluate([[maybe_unused]] EvaluationContext* context,
                             CancellationHandle handle) const override {
     // Common code for the `Literal` and `std::string` case.
-    auto getIdOrString = [&context,
-                          this](const std::string& s) -> ExpressionResult {
+    auto getIdOrString = [this, &context,
+                          &handle](const std::string& s) -> ExpressionResult {
       if (auto ptr = cachedResult_.load(std::memory_order_relaxed)) {
         return *ptr;
       }
@@ -51,6 +51,7 @@ class LiteralExpression : public SparqlExpression {
       auto ptrForCache = std::make_unique<IdOrString>(result);
       ptrForCache.reset(std::atomic_exchange_explicit(
           &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));
+      handle.throwIfCancelled("LiteralExpression");
       return result;
     };
     if constexpr (std::is_same_v<TripleComponent::Literal, T>) {

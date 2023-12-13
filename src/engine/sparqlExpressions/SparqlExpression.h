@@ -38,7 +38,7 @@ class SparqlExpression {
  public:
   /// ________________________________________________________________________
   using Ptr = std::unique_ptr<SparqlExpression>;
-  using CancellationHandle = const ad_utility::CancellationHandle<>&;
+  using CancellationHandle = ad_utility::CancellationHandle<>&;
 
   /// Evaluate a Sparql expression.
   virtual ExpressionResult evaluate(EvaluationContext*,

@@ -27,9 +27,9 @@ AggregateExpression<AggregateOperation, FinalOperation>::evaluate(
   auto childResult = _child->evaluate(context, handle);
 
   return std::visit(
-      [this, context](auto&& arg) {
+      [this, context, &handle](auto&& arg) {
         return evaluateOnChildOperand(_aggregateOp, FinalOperation{}, context,
-                                      _distinct, AD_FWD(arg));
+                                      _distinct, AD_FWD(arg), handle);
       },
       std::move(childResult));
 }

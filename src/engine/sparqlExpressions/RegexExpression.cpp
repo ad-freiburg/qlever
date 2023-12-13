@@ -168,8 +168,8 @@ std::span<SparqlExpression::Ptr> RegexExpression::childrenImpl() {
 
 // ___________________________________________________________________________
 ExpressionResult RegexExpression::evaluatePrefixRegex(
-    const Variable& variable,
-    sparqlExpression::EvaluationContext* context) const {
+    const Variable& variable, sparqlExpression::EvaluationContext* context,
+    CancellationHandle handle) const {
   std::string prefixRegex = std::get<std::string>(regex_);
   std::vector<std::string> actualPrefixes;
   actualPrefixes.push_back("\"" + prefixRegex);
@@ -187,6 +187,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
     lowerAndUpperIds.emplace_back(
         context->_qec.getIndex().prefix_range(prefix));
   }
+  handle.throwIfCancelled("RegexExpression");
   auto beg = context->_inputTable.begin() + context->_beginIndex;
   auto end = context->_inputTable.begin() + context->_endIndex;
   AD_CONTRACT_CHECK(end <= context->_inputTable.end());
@@ -210,6 +211,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
         resultSetOfIntervals.push_back(
             ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}});
       }
+      handle.throwIfCancelled("RegexExpression");
     }
     return std::reduce(resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
                        ad_utility::SetOfIntervals{},
@@ -224,6 +226,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
             return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
                    valueIdComparators::compareByBits(id, lowerUpper.second);
           })));
+      handle.throwIfCancelled("RegexExpression");
     }
     return result;
   }
@@ -231,8 +234,8 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
 
 // ___________________________________________________________________________
 ExpressionResult RegexExpression::evaluateNonPrefixRegex(
-    const Variable& variable,
-    sparqlExpression::EvaluationContext* context) const {
+    const Variable& variable, sparqlExpression::EvaluationContext* context,
+    CancellationHandle handle) const {
   AD_CONTRACT_CHECK(std::holds_alternative<RE2>(regex_));
   auto resultSize = context->size();
   VectorWithMemoryLimit<Id> result{context->_allocator};
@@ -247,6 +250,7 @@ ExpressionResult RegexExpression::evaluateNonPrefixRegex(
         result.push_back(Id::makeFromBool(
             RE2::PartialMatch(str.value(), std::get<RE2>(regex_))));
       }
+      handle.throwIfCancelled("RegexExpression");
     }
   };
   if (childIsStrExpression_) {
@@ -266,9 +270,9 @@ ExpressionResult RegexExpression::evaluate(
   AD_CONTRACT_CHECK(variablePtr);
 
   if (std::holds_alternative<std::string>(regex_)) {
-    return evaluatePrefixRegex(*variablePtr, context);
+    return evaluatePrefixRegex(*variablePtr, context, handle);
   } else {
-    return evaluateNonPrefixRegex(*variablePtr, context);
+    return evaluateNonPrefixRegex(*variablePtr, context, handle);
   }
 }
 

@@ -51,6 +51,8 @@ class CoalesceExpression : public VariadicExpression {
     std::fill_n(std::back_inserter(result), ctx->size(),
                 IdOrString{Id::makeUndefined()});
 
+    handle.throwIfCancelled("CoalesceExpression");
+
     auto isUnbound = [](const IdOrString& x) {
       return (std::holds_alternative<Id>(x) &&
               std::get<Id>(x) == Id::makeUndefined());
@@ -121,6 +123,7 @@ class CoalesceExpression : public VariadicExpression {
       std::visit(visitExpressionResult, child->evaluate(ctx, handle));
       unboundIndices = std::move(nextUnboundIndices);
       nextUnboundIndices.clear();
+      handle.throwIfCancelled("CoalesceExpression");
       // Early stopping if no more unbound result remain.
       if (unboundIndices.empty()) {
         break;

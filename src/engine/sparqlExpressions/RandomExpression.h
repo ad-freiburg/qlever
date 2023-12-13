@@ -31,6 +31,7 @@ class RandomExpression : public SparqlExpression {
 
     for (size_t i = 0; i < numElements; ++i) {
       result.push_back(Id::makeFromInt(randInt() >> Id::numDatatypeBits));
+      handle.throwIfCancelled("RandomExpression");
     }
     return result;
   }

@@ -128,7 +128,8 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
 // supported and not always false.
 template <Comparison Comp, SingleExpressionResult S1, SingleExpressionResult S2>
 requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
-    S1 value1, S2 value2, const EvaluationContext* context) {
+    S1 value1, S2 value2, const EvaluationContext* context,
+    SparqlExpression::CancellationHandle handle) {
   auto resultSize =
       sparqlExpression::detail::getResultSize(*context, value1, value2);
   constexpr static bool resultIsConstant =
@@ -155,6 +156,7 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
                                                 context);
         }
       }
+      handle.throwIfCancelled("RelationalExpression");
       return std::nullopt;
     };
     std::optional<ExpressionResult> resultFromBinarySearch;
@@ -195,6 +197,7 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
     ad_utility::visitWithVariantsAndParameters(impl, base(*itA), base(*itB));
     ++itA;
     ++itB;
+    handle.throwIfCancelled("RelationalExpression");
   }
 
   if constexpr (resultIsConstant) {
@@ -208,7 +211,8 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
 // The relational comparisons like `less than` are not useful for booleans and
 // thus currently throw an exception.
 template <Comparison, typename A, typename B>
-Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*)
+Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*,
+                                SparqlExpression::CancellationHandle)
     requires StoresBoolean<A> || StoresBoolean<B> {
   throw std::runtime_error(
       "Relational expressions like <, >, == are currently not supported for "
@@ -217,7 +221,8 @@ Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*)
 
 template <Comparison Comp, typename A, typename B>
 requires AreIncomparable<A, B>
-Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
+Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*,
+                                SparqlExpression::CancellationHandle) {
   // TODO<joka921> We should probably return `undefined` here.
   if constexpr (Comp == Comparison::NE) {
     return Id::makeFromBool(true);
@@ -231,9 +236,10 @@ Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
 template <Comparison Comp, SingleExpressionResult A, SingleExpressionResult B>
 requires(!AreComparable<A, B> && AreComparable<B, A>)
 ExpressionResult evaluateRelationalExpression(
-    A a, B b, const EvaluationContext* context) {
+    A a, B b, const EvaluationContext* context,
+    SparqlExpression::CancellationHandle handle) {
   return evaluateRelationalExpression<getComparisonForSwappedArguments(Comp)>(
-      std::move(b), std::move(a), context);
+      std::move(b), std::move(a), context, handle);
 }
 
 }  // namespace
@@ -249,9 +255,9 @@ ExpressionResult RelationalExpression<Comp>::evaluate(
   auto resB = children_[1]->evaluate(context, handle);
 
   // `resA` and `resB` are variants, so we need `std::visit`.
-  auto visitor = [context](auto a, auto b) -> ExpressionResult {
+  auto visitor = [context, &handle](auto a, auto b) -> ExpressionResult {
     return evaluateRelationalExpression<Comp>(std::move(a), std::move(b),
-                                              context);
+                                              context, handle);
   };
 
   return std::visit(visitor, std::move(resA), std::move(resB));

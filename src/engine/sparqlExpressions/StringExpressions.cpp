@@ -300,7 +300,7 @@ class ConcatExpression : public detail::VariadicExpression {
     // were constants (see above).
     std::variant<std::string, StringVec> result{std::string{""}};
     auto visitSingleExpressionResult =
-        [&ctx, &result]<SingleExpressionResult T>(T&& s)
+        [&ctx, &result, &handle]<SingleExpressionResult T>(T&& s)
             requires std::is_rvalue_reference_v<T&&>
     {
       if constexpr (isConstantResult<T>) {
@@ -344,6 +344,7 @@ class ConcatExpression : public detail::VariadicExpression {
               str.has_value()) {
             resultAsVec[i].append(str.value());
           }
+          handle.throwIfCancelled("ConcatExpression");
           ++i;
         }
       }

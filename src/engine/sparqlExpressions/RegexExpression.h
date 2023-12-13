@@ -49,11 +49,11 @@ class RegexExpression : public SparqlExpression {
   std::span<SparqlExpression::Ptr> childrenImpl() override;
   // Internal implementations that are called by `evaluate`.
   ExpressionResult evaluatePrefixRegex(
-      const Variable& variable,
-      sparqlExpression::EvaluationContext* context) const;
+      const Variable& variable, sparqlExpression::EvaluationContext* context,
+      CancellationHandle handle) const;
   ExpressionResult evaluateNonPrefixRegex(
-      const Variable& variable,
-      sparqlExpression::EvaluationContext* context) const;
+      const Variable& variable, sparqlExpression::EvaluationContext* context,
+      CancellationHandle handle) const;
 };
 namespace detail {
 // Check if `regex` is a prefix regex which means that it starts with `^` and

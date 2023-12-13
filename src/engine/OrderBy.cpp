@@ -130,6 +130,9 @@ ResultTable OrderBy::computeResult() {
   ad_utility::callFixedSize(width, [&idTable, &comparison]<size_t I>() {
     Engine::sort<I>(&idTable, comparison);
   });
+  // We can't check during sort, so reset status here
+  cancellationHandle_->resetWatchDogState();
+  checkCancellation();
   LOG(DEBUG) << "OrderBy result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
