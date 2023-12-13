@@ -2,14 +2,12 @@
 // Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "./QueryPlannerTestHelpers.h"
-#include "./util/TripleComponentTestHelpers.h"
+#include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
-#include "global/Constants.h"
 #include "parser/SparqlParser.h"
+#include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
 using Var = Variable;
@@ -575,7 +573,8 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
       "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
       "ORDER BY ?a");
   QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  QueryExecutionTree qet = qp.createExecutionTree(pq, cancellationHandle);
   ASSERT_EQ(27493u, qet.getCostEstimate());
   ASSERT_EQ(qet.getCacheKey(),
             "ORDER BY on columns:asc(0) \nJOIN\nSORT(internal) on "
@@ -606,7 +605,8 @@ TEST(QueryPlannerTest, testFilterAfterSeed) {
       "?x <r> ?y . ?y <r> ?z . "
       "FILTER(?x != ?y) }");
   QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  QueryExecutionTree qet = qp.createExecutionTree(pq, cancellationHandle);
   ASSERT_EQ(qet.getCacheKey(),
             "FILTER JOIN\nSCAN POS with P = \"<r>\" join-column: "
             "[0]\n|X|\nSCAN PSO with P = \"<r>\" join-column: [0] with "
@@ -620,7 +620,8 @@ TEST(QueryPlannerTest, testFilterAfterJoin) {
       "?x <r> ?y . ?y <r> ?z . "
       "FILTER(?x != ?z) }");
   QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  QueryExecutionTree qet = qp.createExecutionTree(pq, cancellationHandle);
   ASSERT_EQ(qet.getCacheKey(),
             "FILTER JOIN\nSCAN POS with P = \"<r>\" join-column: "
             "[0]\n|X|\nSCAN PSO with P = \"<r>\" join-column: [0] with "
@@ -709,7 +710,8 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
   QueryPlanner::TripleGraph tg =
       qp.createTripleGraph(&pq.children()[0].getBasic());
   ASSERT_EQ(1u, tg._nodeMap.find(0)->second->_variables.size());
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  QueryExecutionTree qet = qp.createExecutionTree(pq, cancellationHandle);
   ASSERT_EQ(
       "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
       "\"edible leaves\" and 1 variables with textLimit = 5 "
@@ -724,7 +726,8 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
       "SELECT ?c \n "
       "WHERE  {?c ql:contains-word \"search engine\"}");
   QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  QueryExecutionTree qet = qp.createExecutionTree(pq, cancellationHandle);
   ASSERT_EQ(absl::StrCat(
                 "{\n  TEXT OPERATION WITHOUT FILTER: co-occurrence with words:",
                 " \"search engine\" and 0 variables with textLimit = ",
@@ -743,7 +746,8 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
       "?c ql:contains-word \"cocaine\" ."
       "} TEXTLIMIT 1");
   QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  QueryExecutionTree qet = qp.createExecutionTree(pq, cancellationHandle);
   ASSERT_EQ(
       "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
       "\"cocaine\" and 1 variables with textLimit = 1 filtered by\n  "
@@ -769,7 +773,8 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
       "?c ql:contains-entity ?y ."
       "} TEXTLIMIT 1");
   QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  QueryExecutionTree qet = qp.createExecutionTree(pq, cancellationHandle);
   ASSERT_EQ(
       "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
       "\"friend*\" and 2 variables with textLimit = 1 filtered by\n"
@@ -797,7 +802,8 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
       "?c2 ql:contains-entity ?s ."
       "?c2 ql:contains-word \"manhattan project\"} TEXTLIMIT 1");
   QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  QueryExecutionTree qet = qp.createExecutionTree(pq, cancellationHandle);
   ASSERT_EQ(
       "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: \"manhattan "
       "project\" and 1 variables with textLimit = 1 filtered by\n  {\n    "
@@ -819,7 +825,8 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
       "SELECT ?x ?y ?m WHERE { ?x <Spouse_(or_domestic_partner)> ?y . "
       "?x <Film_performance> ?m . ?y <Film_performance> ?m }");
   QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  QueryExecutionTree qet = qp.createExecutionTree(pq, cancellationHandle);
 
   // There are four possible outcomes of this test with the same size
   // estimate. It is currently very hard to make the query planning
@@ -940,18 +947,20 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
       "FILTER (?1 != fb:m.018mts)"
       "} LIMIT 300");
   QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  QueryExecutionTree qet = qp.createExecutionTree(pq, cancellationHandle);
   ASSERT_TRUE(qet.isVariableCovered(Variable{"?1"}));
   ASSERT_TRUE(qet.isVariableCovered(Variable{"?0"}));
 }
 
 TEST(QueryPlannerTest, testSimpleOptional) {
   QueryPlanner qp(nullptr);
+  ad_utility::CancellationHandle<> cancellationHandle;
 
   ParsedQuery pq = SparqlParser::parseQuery(
       "SELECT ?a ?b \n "
       "WHERE  {?a <rel1> ?b . OPTIONAL { ?a <rel2> ?c }}");
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  QueryExecutionTree qet = qp.createExecutionTree(pq, cancellationHandle);
   ASSERT_EQ(qet.getCacheKey(),
             "OPTIONAL_JOIN\nSCAN PSO with P = \"<rel1>\" join-columns: "
             "[0]\n|X|\nSCAN PSO with P = \"<rel2>\" join-columns: [0]");
@@ -960,7 +969,7 @@ TEST(QueryPlannerTest, testSimpleOptional) {
       "SELECT ?a ?b \n "
       "WHERE  {?a <rel1> ?b . "
       "OPTIONAL { ?a <rel2> ?c }} ORDER BY ?b");
-  QueryExecutionTree qet2 = qp.createExecutionTree(pq2);
+  QueryExecutionTree qet2 = qp.createExecutionTree(pq2, cancellationHandle);
   ASSERT_EQ(qet2.getCacheKey(),
             "ORDER BY on columns:asc(1) \nOPTIONAL_JOIN\nSCAN PSO with P = "
             "\"<rel1>\" join-columns: [0]\n|X|\nSCAN PSO with P = \"<rel2>\" "
@@ -971,7 +980,7 @@ TEST(QueryPlannerTest, SimpleTripleOneVariable) {
   using enum Permutation::Enum;
 
   // With only one variable, there are always two permutations that will yield
-  // exactly the same result. The query planner consistently chosses one of
+  // exactly the same result. The query planner consistently chooses one of
   // them.
   h::expect("SELECT * WHERE { ?s <p> <o> }",
             h::IndexScan(Var{"?s"}, "<p>", "<o>", {POS}));

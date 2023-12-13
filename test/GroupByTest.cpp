@@ -1230,7 +1230,8 @@ TEST(GroupBy, AddedHavingRows) {
       "GROUP BY ?x HAVING (?count > 2)";
   auto pq = SparqlParser::parseQuery(query);
   QueryPlanner qp{ad_utility::testing::getQec()};
-  auto tree = qp.createExecutionTree(pq);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  auto tree = qp.createExecutionTree(pq, cancellationHandle);
 
   auto res = tree.getResult();
 

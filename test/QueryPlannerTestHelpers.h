@@ -184,9 +184,10 @@ inline auto TransitivePath =
 /// execution context, and return the resulting `QueryExecutionTree`
 QueryExecutionTree parseAndPlan(std::string query, QueryExecutionContext* qec) {
   ParsedQuery pq = SparqlParser::parseQuery(std::move(query));
+  ad_utility::CancellationHandle<> cancellationHandle;
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock a
   // queryExecutionContext.
-  return QueryPlanner{qec}.createExecutionTree(pq);
+  return QueryPlanner{qec}.createExecutionTree(pq, cancellationHandle);
 }
 
 // Check that the `QueryExecutionTree` that is obtained by parsing and planning

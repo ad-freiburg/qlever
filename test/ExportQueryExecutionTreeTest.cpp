@@ -25,7 +25,8 @@ std::string runQueryStreamableResult(const std::string& kg,
   qec->clearCacheUnpinnedOnly();
   QueryPlanner qp{qec};
   auto pq = SparqlParser::parseQuery(query);
-  auto qet = qp.createExecutionTree(pq);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  auto qet = qp.createExecutionTree(pq, cancellationHandle);
   auto tsvGenerator =
       ExportQueryExecutionTrees::computeResultAsStream(pq, qet, mediaType);
   std::string result;
@@ -45,7 +46,8 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   qec->clearCacheUnpinnedOnly();
   QueryPlanner qp{qec};
   auto pq = SparqlParser::parseQuery(query);
-  auto qet = qp.createExecutionTree(pq);
+  ad_utility::CancellationHandle<> cancellationHandle;
+  auto qet = qp.createExecutionTree(pq, cancellationHandle);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   return ExportQueryExecutionTrees::computeResultAsJSON(pq, qet, timer, 200,
                                                         mediaType);
