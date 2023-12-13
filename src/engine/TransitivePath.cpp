@@ -118,9 +118,11 @@ vector<ColumnIndex> TransitivePath::resultSortedOn() const {
     return {1};
   }
 
+  /*
   if (!isBoundOrId()) {
     return subtree_->resultSortedOn();
   }
+   */
   return {};
 }
 
