@@ -166,6 +166,7 @@ bool QueryExecutionTree::isVariableCovered(Variable variable) const {
 
 // _______________________________________________________________________
 void QueryExecutionTree::readFromCache() {
+  AD_CORRECTNESS_CHECK(_qec);
   if (!_qec) {
     return;
   }
