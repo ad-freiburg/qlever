@@ -221,9 +221,8 @@ if (ENABLE_EXPENSIVE_CHECKS)
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
 endif()
 
-set(QUERY_CANCELLATION_MODE ENABLED CACHE STRING "Option to allow disabling cancellation checks partially or completely
+set(QUERY_CANCELLATION_MODE "ENABLED" CACHE STRING "Option to allow disabling cancellation checks partially or completely
 to reduce the overhead of this mechanism during query computation.")
-set_property(CACHE QUERY_CANCELLATION_MODE PROPERTY STRINGS ENABLED NO_WATCH_DOG DISABLED)
 add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
 
 ################################
