@@ -234,57 +234,64 @@ std::array<std::vector<CompressedBlockMetadata>, 2>
 CompressedRelationReader::getBlocksForJoin(
     const MetadataAndBlocks& metadataAndBlocks1,
     const MetadataAndBlocks& metadataAndBlocks2) {
-  auto relevantBlocks1 = getBlocksFromMetadata(metadataAndBlocks1);
-  auto relevantBlocks2 = getBlocksFromMetadata(metadataAndBlocks2);
-
-  auto metadataForBlock =
-      [&](const CompressedBlockMetadata& block) -> decltype(auto) {
-    if (relevantBlocks1.data() <= &block &&
-        &block < relevantBlocks1.data() + relevantBlocks1.size()) {
-      return metadataAndBlocks1;
-    } else {
-      return metadataAndBlocks2;
-    }
+  // Associate a block together with the relevant ID (col1 or col2) for this
+  // join from the first and last triple.
+  struct BlockWithFirstAndLastId {
+    const CompressedBlockMetadata& block_;
+    Id first_;
+    Id last_;
   };
 
-  auto blockLessThanBlock = [&](const CompressedBlockMetadata& block1,
-                                const CompressedBlockMetadata& block2) {
-    return getRelevantIdFromTriple(block1.lastTriple_,
-                                   metadataForBlock(block1)) <
-           getRelevantIdFromTriple(block2.firstTriple_,
-                                   metadataForBlock(block2));
+  auto blockLessThanBlock = [&](const BlockWithFirstAndLastId& block1,
+                                const BlockWithFirstAndLastId& block2) {
+    return block1.last_ < block2.first_;
   };
 
-  std::array<std::vector<CompressedBlockMetadata>, 2> result;
+  // Transform all the relevant blocks from a `MetadataAndBlocks` a
+  // `BlockWithFirstAndLastId` struct (see above).
+  auto getBlocksWithFirstAndLastId =
+      [&blockLessThanBlock](const MetadataAndBlocks& metadataAndBlocks) {
+        auto getSingleBlock =
+            [&metadataAndBlocks](const CompressedBlockMetadata& block)
+            -> BlockWithFirstAndLastId {
+          return {
+              block,
+              getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
+              getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
+        };
+        auto result = std::views::transform(
+            getBlocksFromMetadata(metadataAndBlocks), getSingleBlock);
+        AD_CORRECTNESS_CHECK(
+            std::ranges::is_sorted(result, blockLessThanBlock));
+        return result;
+      };
 
-  AD_CONTRACT_CHECK(
-      std::ranges::is_sorted(relevantBlocks1, blockLessThanBlock));
-  AD_CONTRACT_CHECK(
-      std::ranges::is_sorted(relevantBlocks2, blockLessThanBlock));
+  auto blocksWithFirstAndLastId1 =
+      getBlocksWithFirstAndLastId(metadataAndBlocks1);
+  auto blocksWithFirstAndLastId2 =
+      getBlocksWithFirstAndLastId(metadataAndBlocks2);
 
   // Find the matching blocks on each side by performing binary search on the
   // other side. Note that it is tempting to reuse the `zipperJoinWithUndef`
   // routine, but this doesn't work because the implicit equality defined by
   // `!lessThan(a,b) && !lessThan(b, a)` is not transitive.
-  for (const auto& block : relevantBlocks1) {
-    if (!std::ranges::equal_range(relevantBlocks2, block, blockLessThanBlock)
-             .empty()) {
-      result[0].push_back(block);
+  auto findMatchingBlocks = [&blockLessThanBlock](const auto& blocks,
+                                                  const auto& otherBlocks) {
+    std::vector<CompressedBlockMetadata> result;
+    for (const auto& block : blocks) {
+      if (!std::ranges::equal_range(otherBlocks, block, blockLessThanBlock)
+               .empty()) {
+        result.push_back(block.block_);
+      }
     }
-  }
-  for (const auto& block : relevantBlocks2) {
-    if (!std::ranges::equal_range(relevantBlocks1, block, blockLessThanBlock)
-             .empty()) {
-      result[1].push_back(block);
-    }
-  }
+    // The following check isn't expensive as there are only few blocks.
+    AD_CORRECTNESS_CHECK(std::ranges::unique(result).begin() == result.end());
+    return result;
+  };
 
-  // The following check shouldn't be too expensive as there are only few
-  // blocks.
-  for (auto& vec : result) {
-    AD_CORRECTNESS_CHECK(std::ranges::unique(vec).begin() == vec.end());
-  }
-  return result;
+  return {
+      findMatchingBlocks(blocksWithFirstAndLastId1, blocksWithFirstAndLastId2),
+      findMatchingBlocks(blocksWithFirstAndLastId2, blocksWithFirstAndLastId1)};
 }
 
 // _____________________________________________________________________________
