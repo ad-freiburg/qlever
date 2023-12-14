@@ -247,11 +247,8 @@ std::string insertThousandSeparator(const std::string_view str,
         {floatingPointSignifier, '\0'});
 
     // Inside a regex character class are fewer reserved character.
-    if constexpr (floatingPointSignifier == '^' ||
-                  floatingPointSignifier == '-' ||
-                  floatingPointSignifier == '[' ||
-                  floatingPointSignifier == ']' ||
-                  floatingPointSignifier == '\\') {
+    if constexpr (std::string_view{R"--(^-[]\)--"}.find(
+                      floatingPointSignifier) != std::string_view::npos) {
       return "\\" + floatingPointSignifierAsFixedString;
     } else {
       return floatingPointSignifierAsFixedString;
