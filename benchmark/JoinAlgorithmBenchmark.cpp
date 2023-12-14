@@ -24,7 +24,7 @@
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
-#include "../benchmark/util/BenchmarkTableCommonCalculations.h"
+#include "../benchmark/util/ResultTableColumnOperations.h"
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/JoinHelpers.h"
 #include "../test/util/RandomTestHelpers.h"
@@ -475,15 +475,19 @@ static ResultTable& makeGrowingBenchmarkTable(
 
   // Adding together the time for sorting the `IdTables` and then joining
   // them using merge/galloping join.
-  sumUpColumns(&table, TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM,
-               TIME_FOR_SORTING_COLUMN_NUM,
-               TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM);
+  sumUpColumns(
+      &table,
+      ColumnNumWithType<float>{
+          TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM},
+      ColumnNumWithType<float>{TIME_FOR_SORTING_COLUMN_NUM},
+      ColumnNumWithType<float>{TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM});
 
   // Calculate, how much of a speedup the hash join algorithm has in comparison
   // to the merge/galloping join algrithm.
-  calculateSpeedupOfColumn(&table, TIME_FOR_HASH_JOIN_COLUMN_NUM,
-                           TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM,
-                           JOIN_ALGORITHM_SPEEDUP_COLUMN_NUM);
+  calculateSpeedupOfColumn(
+      &table, {JOIN_ALGORITHM_SPEEDUP_COLUMN_NUM},
+      {TIME_FOR_HASH_JOIN_COLUMN_NUM},
+      {TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM});
 
   // For more specific adjustments.
   return table;
