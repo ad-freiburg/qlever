@@ -11,7 +11,6 @@
 #include <exception>
 #include <sstream>
 
-
 #include "global/Constants.h"
 #include "util/CtreHelpers.h"
 #include "util/NBitInteger.h"
