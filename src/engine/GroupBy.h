@@ -46,7 +46,7 @@ class GroupBy : public Operation {
           std::shared_ptr<QueryExecutionTree> subtree);
 
  protected:
-  virtual string asStringImpl(size_t indent = 0) const override;
+  virtual string getCacheKeyImpl() const override;
 
  public:
   virtual string getDescriptor() const override;

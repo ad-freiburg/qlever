@@ -25,6 +25,7 @@
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/TextOperationWithoutFilter.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/Service.h"
@@ -45,45 +46,11 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
     : _qec(qec),
       _rootOperation(nullptr),
       _type(OperationType::UNDEFINED),
-      _asString(),
       _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
 // _____________________________________________________________________________
-string QueryExecutionTree::asString(size_t indent) {
-  if (indent == _indent && !_asString.empty()) {
-    return _asString;
-  }
-  /*
-  string indentStr;
-  for (size_t i = 0; i < indent; ++i) {
-    indentStr += " ";
-  }
-  if (_rootOperation) {
-    std::ostringstream os;
-    os << indentStr << "{\n"
-       << _rootOperation->asString(indent + 2) << "\n"
-       << indentStr << "  qet-width: " << getResultWidth() << " ";
-    os << '\n' << indentStr << '}';
-    _asString = std::move(os).str();
-  } else {
-    _asString = "<Empty QueryExecutionTree>";
-  }
-   */
-  _asString = _rootOperation->asString(indent);
-  _indent = indent;
-  return _asString;
-}
-
-// _____________________________________________________________________________
-void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
-                                      std::shared_ptr<Operation> op) {
-  _type = type;
-  _rootOperation = std::move(op);
-  _asString = "";
-  _sizeEstimate = std::numeric_limits<size_t>::max();
-  // with setting the operation the initialization is done and we can try to
-  // find our result in the cache.
-  readFromCache();
+string QueryExecutionTree::getCacheKey() {
+  return _rootOperation->getCacheKey();
 }
 
 // _____________________________________________________________________________
@@ -169,18 +136,15 @@ bool QueryExecutionTree::isVariableCovered(Variable variable) const {
 
 // _______________________________________________________________________
 void QueryExecutionTree::readFromCache() {
-  AD_CORRECTNESS_CHECK(_qec);
   if (!_qec) {
     return;
   }
   auto& cache = _qec->getQueryTreeCache();
-  auto res = cache.getIfContained(asString());
+  auto res = cache.getIfContained(getCacheKey());
   if (res.has_value()) {
     _cachedResult = res->_resultPointer->resultTable();
   }
 }
-
-bool QueryExecutionTree::isIndexScan() const { return _type == SCAN; }
 
 template <typename Op>
 void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
@@ -214,6 +178,8 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     _type = JOIN;
   } else if constexpr (std::is_same_v<Op, TextOperationWithFilter>) {
     _type = TEXT_WITH_FILTER;
+  } else if constexpr (std::is_same_v<Op, TextOperationWithoutFilter>) {
+    _type = TEXT_WITHOUT_FILTER;
   } else if constexpr (std::is_same_v<Op, CountAvailablePredicates>) {
     _type = COUNT_AVAILABLE_PREDICATES;
   } else if constexpr (std::is_same_v<Op, Minus>) {
@@ -253,6 +219,8 @@ template void QueryExecutionTree::setOperation(
 template void QueryExecutionTree::setOperation(std::shared_ptr<Join>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<TextOperationWithFilter>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<TextOperationWithoutFilter>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<CountAvailablePredicates>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Minus>);

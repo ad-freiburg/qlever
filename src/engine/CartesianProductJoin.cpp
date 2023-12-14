@@ -42,12 +42,12 @@ std::vector<QueryExecutionTree*> CartesianProductJoin::getChildren() {
 }
 
 // ____________________________________________________________________________
-string CartesianProductJoin::asStringImpl(size_t indent) const {
+string CartesianProductJoin::getCacheKeyImpl() const {
   return "CARTESIAN PRODUCT JOIN " +
          ad_utility::lazyStrJoin(
              std::views::transform(
                  childView(),
-                 [indent](auto& child) { return child.asString(indent); }),
+                 [](auto& child) { return child.getCacheKey(); }),
              " ");
 }
 

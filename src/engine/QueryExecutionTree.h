@@ -61,12 +61,10 @@ class QueryExecutionTree {
     CARTESIAN_PRODUCT_JOIN
   };
 
-  void setOperation(OperationType type, std::shared_ptr<Operation> op);
-
   template <typename Op>
   void setOperation(std::shared_ptr<Op>);
 
-  string asString(size_t indent = 0);
+  string getCacheKey();
 
   const QueryExecutionContext* getQec() const { return _qec; }
 
@@ -89,7 +87,6 @@ class QueryExecutionTree {
 
   // Is the root operation of this tree an `IndexScan` operation.
   // This is the only query for a concrete type that is frequently used.
-  bool isIndexScan() const;
 
   bool isEmpty() const {
     return _type == OperationType::UNDEFINED || !_rootOperation;
@@ -124,8 +121,6 @@ class QueryExecutionTree {
 
   void setTextLimit(size_t limit) {
     _rootOperation->setTextLimit(limit);
-    // Invalidate caches asString representation.
-    _asString = "";  // triggers recomputation.
     _sizeEstimate = std::numeric_limits<size_t>::max();
   }
 
@@ -237,8 +232,6 @@ class QueryExecutionTree {
   std::shared_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
-  string _asString;
-  size_t _indent = 0;  // the indent with which the _asString repr was formatted
   size_t _sizeEstimate = std::numeric_limits<size_t>::max();
   bool _isRoot = false;  // used to distinguish the root from child
                          // operations/subtrees when pinning only the result.

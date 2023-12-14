@@ -15,7 +15,7 @@ using namespace std::chrono_literals;
 
 class StallForeverOperation : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-  string asStringImpl([[maybe_unused]] size_t) const override {
+  string getCacheKeyImpl() const override {
     return "StallForEverOperation";
   }
   string getDescriptor() const override {
@@ -54,7 +54,7 @@ class ShallowParentOperation : public Operation {
 
   explicit ShallowParentOperation(std::shared_ptr<QueryExecutionTree> child)
       : child_{std::move(child)} {}
-  string asStringImpl([[maybe_unused]] size_t) const override {
+  string getCacheKeyImpl() const override {
     return "ParentOperation";
   }
   string getDescriptor() const override { return "ParentOperationDescriptor"; }

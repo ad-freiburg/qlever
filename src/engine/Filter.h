@@ -27,7 +27,7 @@ class Filter : public Operation {
          sparqlExpression::SparqlExpressionPimpl expression);
 
  private:
-  string asStringImpl(size_t indent = 0) const override;
+  string getCacheKeyImpl() const override;
 
  public:
   string getDescriptor() const override;

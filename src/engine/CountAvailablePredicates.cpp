@@ -29,16 +29,13 @@ CountAvailablePredicates::CountAvailablePredicates(
       _countVariable(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
-string CountAvailablePredicates::asStringImpl(size_t indent) const {
+string CountAvailablePredicates::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   if (_subtree == nullptr) {
     os << "COUNT_AVAILABLE_PREDICATES for all entities";
   } else {
     os << "COUNT_AVAILABLE_PREDICATES (col " << _subjectColumnIndex << ")\n"
-       << _subtree->asString(indent);
+       << _subtree->getCacheKey();
   }
   return std::move(os).str();
 }

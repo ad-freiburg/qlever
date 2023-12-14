@@ -75,5 +75,5 @@ class Sort : public Operation {
     return subtree_->getVariableColumns();
   }
 
-  virtual string asStringImpl(size_t indent = 0) const override;
+  string getCacheKeyImpl() const override;
 };

@@ -40,27 +40,18 @@ TransitivePath::TransitivePath(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::string TransitivePath::asStringImpl(size_t indent) const {
+std::string TransitivePath::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << " minDist " << minDist_ << " maxDist " << maxDist_ << "\n";
 
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << "Left side:\n";
   os << lhs_.getCacheKey();
 
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << "Right side:\n";
   os << rhs_.getCacheKey();
 
   AD_CORRECTNESS_CHECK(subtree_);
-  os << "Subtree:\n" << subtree_->asString() << '\n';
+  os << "Subtree:\n" << subtree_->getCacheKey() << '\n';
 
   return std::move(os).str();
 }
@@ -118,11 +109,6 @@ vector<ColumnIndex> TransitivePath::resultSortedOn() const {
     return {1};
   }
 
-  /*
-  if (!isBoundOrId()) {
-    return subtree_->resultSortedOn();
-  }
-   */
   return {};
 }
 

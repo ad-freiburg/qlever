@@ -124,6 +124,29 @@ inline auto IndexScanFromStrings =
 // For the following Join algorithms the order of the children is not important.
 inline auto MultiColumnJoin = MatchTypeAndUnorderedChildren<::MultiColumnJoin>;
 inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
+
+inline auto UnorderedJoins = [](auto&&... children) -> QetMatcher {
+  using Vec = std::vector<std::reference_wrapper<const QueryExecutionTree>>;
+  auto collectChildrenRecursive = [](const QueryExecutionTree& tree, Vec& children, const auto& self) -> void {
+    auto join = dynamic_cast<const ::Join*>(tree.getRootOperation().get());
+    if (!join) {
+      children.push_back(tree);
+    } else {
+      for (const auto& child : static_cast<const Operation*>(join)->getChildren()) {
+        self(*child, children, self);
+      }
+    }
+  };
+
+  auto collectChildren = [&collectChildrenRecursive]( const auto& tree) {
+      Vec children;
+      collectChildrenRecursive(tree, children, collectChildrenRecursive);
+      return children;
+  };
+
+  return ResultOf(collectChildren, UnorderedElementsAre(children...));
+};
+
 inline auto CartesianProductJoin =
     MatchTypeAndUnorderedChildren<::CartesianProductJoin>;
 

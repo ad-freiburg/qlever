@@ -975,12 +975,9 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
     const QueryPlanner::TripleGraph::Node& node) const {
   SubtreePlan plan(_qec);
   plan._idsOfIncludedNodes |= (size_t(1) << node._id);
-  auto& tree = *plan._qet;
   AD_CONTRACT_CHECK(node._wordPart.has_value());
-  auto textOp = std::make_shared<TextOperationWithoutFilter>(
+  plan._qet = makeExecutionTree<TextOperationWithoutFilter>(
       _qec, node._wordPart.value(), node._variables, node._cvar.value());
-  tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
-                    textOp);
   return plan;
 }
 
@@ -1001,8 +998,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
              << b.size() << " plans...\n";
   for (const auto& ai : a) {
     for (const auto& bj : b) {
-      LOG(TRACE) << "Creating join candidates for " << ai._qet->asString()
-                 << "\n and " << bj._qet->asString() << '\n';
+      LOG(TRACE) << "Creating join candidates for " << ai._qet->getCacheKey()
+                 << "\n and " << bj._qet->getCacheKey() << '\n';
       auto v = createJoinCandidates(ai, bj, tg);
       for (auto& plan : v) {
         candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
@@ -1705,7 +1702,7 @@ size_t QueryPlanner::findCheapestExecutionTree(
     auto aCost = a.getCostEstimate(), bCost = b.getCostEstimate();
     if (aCost == bCost && isInTestMode()) {
       // Make the tiebreaking deterministic for the unit tests.
-      return a._qet->asString() < b._qet->asString();
+      return a._qet->getCacheKey() < b._qet->getCacheKey();
     } else {
       return aCost < bCost;
     }
@@ -1719,7 +1716,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
     std::optional<TripleGraph> tg) const {
   bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
-                        ain._qet->asString() < bin._qet->asString();
+                        ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
   const auto& b = !swapForTesting ? bin : ain;
   std::vector<SubtreePlan> candidates;
@@ -1808,12 +1805,10 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     candidates.push_back(std::move(opt.value()));
   }
 
-  bool isTransitive = false;
   // Test if one of `a` or `b` is a transitive path to which we can bind the
   // other one.
   if (auto opt = createJoinWithTransitivePath(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
-    isTransitive = true;
   }
 
   // "NORMAL" CASE:
@@ -1822,21 +1817,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       makeSubtreePlan<Join>(_qec, a._qet, b._qet, jcs[0][0], jcs[0][1]);
   mergeSubtreePlanIds(plan, a, b);
   candidates.push_back(std::move(plan));
-
-  if (isTransitive) {
-    for (const auto& plan : candidates) {
-      plan._qet->readFromCache();
-      for (auto& child : plan._qet->getRootOperation()->getChildren()) {
-        child->readFromCache();
-      }
-      plan._qet->getRootOperation()->createRuntimeInfoFromEstimates(plan._qet->getRootOperation()->getRuntimeInfoPointer());
-      LOG(INFO) << plan._qet->getRootOperation()->getDescriptor() << " "
-                << plan._qet->getCostEstimate() << " "
-                << plan._qet->getSizeEstimate() << std::endl << std::endl
-      << nlohmann::ordered_json{*plan._qet->getRootOperation()->getRuntimeInfoPointer()}.dump(4) << std::endl;
-    }
-  }
-
 
   return candidates;
 }

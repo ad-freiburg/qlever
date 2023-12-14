@@ -48,7 +48,7 @@ class ValuesForTesting : public Operation {
 
  private:
   // ___________________________________________________________________________
-  string asStringImpl([[maybe_unused]] size_t indent) const override {
+  string getCacheKeyImpl() const override {
     std::stringstream str;
     str << "Values for testing with " << table_.numColumns()
         << " columns and contents ";
