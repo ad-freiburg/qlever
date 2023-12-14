@@ -223,7 +223,7 @@ endif()
 
 set(QUERY_CANCELLATION_MODE "ENABLED" CACHE STRING "Option to allow disabling cancellation checks partially or completely
 to reduce the overhead of this mechanism during query computation.")
-add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
+add_definitions(-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE})
 
 ################################
 # STXXL
