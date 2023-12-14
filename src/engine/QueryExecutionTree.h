@@ -227,6 +227,12 @@ class QueryExecutionTree {
     return getRootOperation()->getPrimarySortKeyVariable();
   }
 
+  // _____________________________________________________________
+  friend void PrintTo(const QueryExecutionTree& tree, std::ostream* os) {
+    auto& s = *os;
+    s << nlohmann::ordered_json{tree.getRootOperation()->runtimeInfo()}.dump(2);
+  }
+
  private:
   QueryExecutionContext* _qec;  // No ownership
   std::shared_ptr<Operation>

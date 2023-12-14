@@ -14,6 +14,7 @@
 #include "engine/NeutralElementOperation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
+#include "engine/Sort.h"
 #include "engine/TransitivePath.h"
 #include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
@@ -127,21 +128,28 @@ inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
 
 inline auto UnorderedJoins = [](auto&&... children) -> QetMatcher {
   using Vec = std::vector<std::reference_wrapper<const QueryExecutionTree>>;
-  auto collectChildrenRecursive = [](const QueryExecutionTree& tree, Vec& children, const auto& self) -> void {
-    auto join = dynamic_cast<const ::Join*>(tree.getRootOperation().get());
-    if (!join) {
+  auto collectChildrenRecursive = [](const QueryExecutionTree& tree,
+                                     Vec& children, const auto& self) -> void {
+    const Operation* operation = tree.getRootOperation().get();
+    auto join = dynamic_cast<const ::Join*>(operation);
+    // Also allow the INTERNAL SORT BY operations that are needed for the joins.
+    // TODO<joka921> is this the right place to also check that those have the
+    // correct columns?
+    auto sort = dynamic_cast<const ::Sort*>(operation);
+    if (!join && !sort) {
       children.push_back(tree);
     } else {
-      for (const auto& child : static_cast<const Operation*>(join)->getChildren()) {
+      for (const auto& child :
+           static_cast<const Operation*>(operation)->getChildren()) {
         self(*child, children, self);
       }
     }
   };
 
-  auto collectChildren = [&collectChildrenRecursive]( const auto& tree) {
-      Vec children;
-      collectChildrenRecursive(tree, children, collectChildrenRecursive);
-      return children;
+  auto collectChildren = [&collectChildrenRecursive](const auto& tree) {
+    Vec children;
+    collectChildrenRecursive(tree, children, collectChildrenRecursive);
+    return children;
   };
 
   return ResultOf(collectChildren, UnorderedElementsAre(children...));
@@ -187,6 +195,8 @@ void expect(std::string query, auto matcher,
   auto trace = generateLocationTrace(l, "expect");
   QueryExecutionContext* qec = optQec.value_or(ad_utility::testing::getQec());
   auto qet = parseAndPlan(std::move(query), qec);
+  qet.getRootOperation()->createRuntimeInfoFromEstimates(
+      qet.getRootOperation()->getRuntimeInfoPointer());
   EXPECT_THAT(qet, matcher);
 }
 }  // namespace queryPlannerTestHelpers

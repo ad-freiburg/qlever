@@ -46,8 +46,7 @@ string CartesianProductJoin::getCacheKeyImpl() const {
   return "CARTESIAN PRODUCT JOIN " +
          ad_utility::lazyStrJoin(
              std::views::transform(
-                 childView(),
-                 [](auto& child) { return child.getCacheKey(); }),
+                 childView(), [](auto& child) { return child.getCacheKey(); }),
              " ");
 }
 

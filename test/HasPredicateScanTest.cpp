@@ -32,9 +32,7 @@ class DummyOperation : public Operation {
   }
 
  private:
-  string getCacheKeyImpl() const override {
-    return "dummy";
-  }
+  string getCacheKeyImpl() const override { return "dummy"; }
 
  public:
   string getDescriptor() const override { return "dummy"; }

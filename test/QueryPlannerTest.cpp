@@ -516,92 +516,59 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
   }
 }
 
-TEST(QueryPlannerTest, testSPX) {
+TEST(QueryPlannerTest, indexScanOneVariable) {
   auto scan = h::IndexScanFromStrings;
+  using enum Permutation::Enum;
   h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
       "SELECT ?x \n "
-      "WHERE \t {?x :myrel :obj}",);
-  QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(
-      "{\n  SCAN POS with P = \"<http://rdf.myprefix.com/myrel>\","
-      " O = \"<http://rdf.myprefix.com/obj>\"\n  qet-width: 1 \n}",
-      qet.getCacheKey());
-}
+      "WHERE \t {?x :myrel :obj}",
+      scan("?x", "<http://rdf.myprefix.com/myrel>",
+           "<http://rdf.myprefix.com/obj>", {POS}));
 
-TEST(QueryPlannerTest, testXPO) {
-  ParsedQuery pq = SparqlParser::parseQuery(
+  h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
       "SELECT ?x \n "
-      "WHERE \t {:subj :myrel ?x}");
-  QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(
-      "{\n  SCAN PSO with P = \"<http://rdf.myprefix.com/myrel>\", "
-      "S = \"<http://rdf.myprefix.com/subj>\"\n  qet-width: 1 \n}",
-      qet.getCacheKey());
+      "WHERE \t {:subj :myrel ?x}",
+      scan("<http://rdf.myprefix.com/subj>", "<http://rdf.myprefix.com/myrel>",
+           "?x", {PSO}));
 }
 
-TEST(QueryPlannerTest, testSP_free_) {
-  ParsedQuery pq = SparqlParser::parseQuery(
+TEST(QueryPlannerTest, indexScanTwoVariables) {
+  auto scan = h::IndexScanFromStrings;
+  using enum Permutation::Enum;
+
+  h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
       "SELECT ?x \n "
-      "WHERE \t {?x :myrel ?y}");
-  QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(
-      "{\n  SCAN POS with P = \"<http://rdf.myprefix.com/myrel>\"\n  "
-      "qet-width: 2 \n}",
-      qet.getCacheKey());
+      "WHERE \t {?x :myrel ?y}",
+      scan("?x", "<http://rdf.myprefix.com/myrel>", "?y", {POS, PSO}));
+}
+
+TEST(QueryPlannerTest, joinOfTwoScans) {
+  auto scan = h::IndexScanFromStrings;
+  using enum Permutation::Enum;
+  h::expect(
+      "PREFIX : <pre/>\n"
+      "SELECT ?x \n "
+      "WHERE \t {:s1 :r ?x. :s2 :r ?x}",
+      h::Join(scan("<pre/s1>", "<pre/r>", "?x"),
+              scan("<pre/s2>", "<pre/r>", "?x")));
+
+  h::expect(
+      "PREFIX : <pre/>\n"
+      "SELECT ?x ?y \n "
+      "WHERE  {?y :r ?x . :s2 :r ?x}",
+      h::Join(scan("?y", "<pre/r>", "?x"), scan("<pre/s2>", "<pre/r>", "?x")));
+
+  h::expect(
+      "PREFIX : <pre/>\n"
+      "SELECT ?x ?y ?z \n "
+      "WHERE {?y :r ?x. ?z :r ?x}",
+      h::Join(scan("?y", "<pre/r>", "?x"), scan("?z", "<pre/r>", "?x")));
 }
 
 /*
-TEST(QueryPlannerTest, testSPX_SPX) {
-  ParsedQuery pq = SparqlParser::parseQuery(
-      "PREFIX : <pre/>\n"
-      "SELECT ?x \n "
-      "WHERE \t {:s1 :r ?x. :s2 :r ?x}");
-  QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(
-      "{\n  JOIN\n  {\n    SCAN PSO with P = \"<pre/r>\", S = \"<pre/s1>\"\n "
-      "   qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    S"
-      "CAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\"\n    qet-w"
-      "idth: 1 \n  } join-column: [0]\n  qet-width: 1 \n}",
-      qet.getCacheKey());
-}
-
-TEST(QueryPlannerTest, test_free_PX_SPX) {
-  ParsedQuery pq = SparqlParser::parseQuery(
-      "PREFIX : <pre/>\n"
-      "SELECT ?x ?y \n "
-      "WHERE  {?y :r ?x . :s2 :r ?x}");
-  QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(
-      "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/r>\"\n    "
-      "qet-width: 2 \n  } join-column: [0]\n  |X|\n  {\n   "
-      " SCAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\"\n  "
-      "  qet-width: 1 \n  } join-column: [0]\n  qet-width: 2 \n}",
-      qet.getCacheKey());
-}
-
-TEST(QueryPlannerTest, test_free_PX__free_PX) {
-  ParsedQuery pq = SparqlParser::parseQuery(
-      "PREFIX : <pre/>\n"
-      "SELECT ?x ?y ?z \n "
-      "WHERE {?y :r ?x. ?z :r ?x}");
-  QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(
-      "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/r>\"\n    "
-      "qet-width: 2 \n  } join-column: [0]\n  |X|\n  {\n    "
-      "SCAN POS with P = \"<pre/r>\"\n    qet-width: 2 \n"
-      "  } join-column: [0]\n  qet-width: 3 \n}",
-      qet.getCacheKey());
-}
-
 TEST(QueryPlannerTest, testActorsBornInEurope) {
   ParsedQuery pq = SparqlParser::parseQuery(
       "PREFIX : <pre/>\n"
@@ -623,31 +590,24 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
       "join-column: [0]\n    qet-width: 2 \n  }\n  qet-width: 2 \n}",
       qet.getCacheKey());
 }
+ */
 
 TEST(QueryPlannerTest, testStarTwoFree) {
-  {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "PREFIX : <http://rdf.myprefix.com/>\n"
-        "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
-        "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
-        "SELECT ?x ?z \n "
-        "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z. ?y xxx:rel2 "
-        "<http://abc.de>}");
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ(
-        "{\n  JOIN\n  {\n    JOIN\n    {\n      SCAN POS with P = "
-        "\"<http://rdf.myprefix.com/myrel>\"\n      qet-width: 2 \n    } "
-        "join-column: [0]\n    |X|\n    {\n      SCAN POS with P = "
-        "\"<http://rdf.myprefix.com/xxx/rel2>\", O = \"<http://abc.de>\"\n   "
-        "   qet-width: 1 \n    } join-column: [0]\n    qet-width: 2 \n  } "
-        "join-column: [0]\n  |X|\n  {\n    SCAN PSO with P = "
-        "\"<http://rdf.myprefix.com/ns/myrel>\"\n    qet-width: 2 \n  } "
-        "join-column: [0]\n  qet-width: 3 \n}",
-        qet.getCacheKey());
-  }
+  auto scan = h::IndexScanFromStrings;
+  h::expect(
+      "PREFIX : <http://rdf.myprefix.com/>\n"
+      "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
+      "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
+      "SELECT ?x ?z \n "
+      "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z. ?y xxx:rel2 "
+      "<http://abc.de>}",
+      h::UnorderedJoins(
+          scan("?x", "<http://rdf.myprefix.com/myrel>", "?y"),
+          scan("?y", "<http://rdf.myprefix.com/ns/myrel>", "?z"),
+          scan("?y", "<http://rdf.myprefix.com/xxx/rel2>", "<http://abc.de>")));
 }
 
+/*
 TEST(QueryPlannerTest, testFilterAfterSeed) {
   ParsedQuery pq = SparqlParser::parseQuery(
       "SELECT ?x ?y ?z WHERE {"
@@ -681,50 +641,29 @@ TEST(QueryPlannerTest, testFilterAfterJoin) {
       "rators10ComparisonE3EEE#column_1##column_2#\n  qet-width: 3 \n}",
       qet.getCacheKey());
 }
+ */
 
 TEST(QueryPlannerTest, threeVarTriples) {
-  {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?x ?p ?o WHERE {"
-        "<s> <p> ?x . ?x ?p ?o }");
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SORT(internal) on columns:asc(1) \n    {\n      "
-        "SCAN FOR FULL INDEX OSP (DUMMY OPERATION)\n      qet-width: 3 \n    "
-        "}\n    qet-width: 3 \n  } join-column: [1]\n  |X|\n  {\n    SCAN PSO "
-        "with P = \"<p>\", S = \"<s>\"\n    qet-width: 1 \n  } join-column: "
-        "[0]\n  qet-width: 3 \n}",
-        qet.getCacheKey());
-  }
-  {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?x ?p ?o WHERE {"
-        "<s> ?x <o> . ?x ?p ?o }");
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SORT(internal) on columns:asc(1) \n    {\n      "
-        "SCAN FOR FULL INDEX OSP (DUMMY OPERATION)\n      qet-width: 3 \n    "
-        "}\n    qet-width: 3 \n  } join-column: [1]\n  |X|\n  {\n    SCAN SOP "
-        "with S = \"<s>\", O = \"<o>\"\n    qet-width: 1 \n  } join-column: "
-        "[0]\n  qet-width: 3 \n}",
-        qet.getCacheKey());
-  }
-  {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?s ?p ?o WHERE {"
-        "<s> <p> ?p . ?s ?p ?o }");
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SORT(internal) on columns:asc(1) \n    {\n      "
-        "SCAN FOR FULL INDEX OPS (DUMMY OPERATION)\n      qet-width: 3 \n    "
-        "}\n    qet-width: 3 \n  } join-column: [1]\n  |X|\n  {\n    SCAN PSO "
-        "with P = \"<p>\", S = \"<s>\"\n    qet-width: 1 \n  } join-column: "
-        "[0]\n  qet-width: 3 \n}",
-        qet.getCacheKey());
-  }
+  auto scan = h::IndexScanFromStrings;
+  using enum Permutation::Enum;
+
+  h::expect(
+      "SELECT ?x ?p ?o WHERE {"
+      "<s> <p> ?x . ?x ?p ?o }",
+      h::Join(scan("<s>", "<p>", "?x", {SPO, PSO}),
+              scan("?x", "?p", "?o", {SPO, SOP})));
+
+  h::expect(
+      "SELECT ?x ?p ?o WHERE {"
+      "<s> ?x <o> . ?x ?p ?o }",
+      h::Join(scan("<s>", "?x", "<o>", {SOP, OSP}),
+              scan("?x", "?p", "?o", {SPO, SOP})));
+
+  h::expect(
+      "SELECT ?s ?p ?o WHERE {"
+      "<s> <p> ?p . ?s ?p ?o }",
+      h::Join(scan("<s>", "<p>", "?p", {SPO, PSO}),
+              scan("?s", "?p", "?o", {PSO, POS})));
 }
 
 TEST(QueryPlannerTest, threeVarTriplesTCJ) {
@@ -745,11 +684,6 @@ TEST(QueryPlannerTest, threeVarTriplesTCJ) {
 }
 
 TEST(QueryPlannerTest, threeVarXthreeVarException) {
-  ParsedQuery pq = SparqlParser::parseQuery(
-      "SELECT ?s ?s2 WHERE {"
-      "?s ?p ?o . ?s2 ?p ?o }");
-  QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
   h::expect(
       "SELECT ?s ?s2 WHERE {"
       "?s ?p ?o . ?s2 ?p ?o }",
@@ -758,32 +692,28 @@ TEST(QueryPlannerTest, threeVarXthreeVarException) {
 }
 
 TEST(QueryExecutionTreeTest, testBooksbyNewman) {
-  ParsedQuery pq = SparqlParser::parseQuery(
+  auto scan = h::IndexScanFromStrings;
+  h::expect(
       "SELECT ?x WHERE { ?x <is-a> <Book> . "
-      "?x <Author> <Anthony_Newman_(Author)> }");
-  QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(
-      "{\n  JOIN\n  {\n    SCAN POS with "
-      "P = \"<Author>\", O = \"<Anthony_Newman_(Author)>\"\n   "
-      " qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n  "
-      "  SCAN POS with P = \"<is-a>\", O = \"<Book>\"\n  "
-      "  qet-width: 1 \n  } join-column: [0]\n  qet-width: 1 \n}",
-      qet.getCacheKey());
+      "?x <Author> <Anthony_Newman_(Author)> }",
+      h::Join(scan("?x", "<is-a>", "<Book>"),
+              scan("?x", "<Author>", "<Anthony_Newman_(Author)>")));
 }
 
 TEST(QueryExecutionTreeTest, testBooksGermanAwardNomAuth) {
-  ParsedQuery pq = SparqlParser::parseQuery(
+  auto scan = h::IndexScanFromStrings;
+  h::expect(
       "SELECT ?x ?y WHERE { "
       "?x <is-a> <Person> . "
       "?x <Country_of_nationality> <Germany> . "
       "?x <Author> ?y . "
-      "?y <is-a> <Award-Nominated_Work> }");
-  QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_GT(qet.getCacheKey().size(), 0u);
-  // Just check that ther is no exception, here.
+      "?y <is-a> <Award-Nominated_Work> }",
+      h::UnorderedJoins(scan("?x", "<is-a>", "<Person>"),
+                        scan("?x", "<Country_of_nationality>", "<Germany>"),
+                        scan("?x", "<Author>", "?y"),
+                        scan("?y", "<is-a>", "<Award-Nominated_Work>")));
 }
+/*
 
 TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
   ParsedQuery pq = SparqlParser::parseQuery(
@@ -1030,6 +960,7 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
   ASSERT_TRUE(qet.isVariableCovered(Variable{"?0"}));
 }
 
+/*
 TEST(QueryPlannerTest, testSimpleOptional) {
   QueryPlanner qp(nullptr);
 
@@ -1058,6 +989,7 @@ TEST(QueryPlannerTest, testSimpleOptional) {
       "qet-width: 3 \n  }\n  qet-width: 3 \n}",
       qet2.getCacheKey());
 }
+ */
 
 TEST(QueryPlannerTest, SimpleTripleOneVariable) {
   using enum Permutation::Enum;
