@@ -228,7 +228,7 @@ template <const char floatingPointSignifier>
 std::string insertThousandSeparator(const std::string_view str,
                                     const char separatorSymbol) {
   // For identification of a digit.
-  auto isDigit = [](const char c) {
+  static const auto isDigit = [](const char c) {
     // `char` is ASCII. So the number symbols are the codes from 48 to 57.
     return '0' <= c && c <= '9';
   };
@@ -242,19 +242,21 @@ std::string insertThousandSeparator(const std::string_view str,
   inside regex character classes, without being confused with one of the
   reserved characters.
   */
-  auto adjustSymbolForRegex = []<const char symbol>() {
-    constexpr ctll::fixed_string symbolAsFixedString({symbol, '\0'});
+  static constexpr auto adjustFloatingPointSignifierForRegex = []() {
+    constexpr ctll::fixed_string floatingPointSignifierAsFixedString(
+        {floatingPointSignifier, '\0'});
 
     // Inside a regex character class are fewer reserved character.
-    if constexpr (symbol == '^' || symbol == '-' || symbol == '[' ||
-                  symbol == ']' || symbol == '\\') {
-      return "\\" + symbolAsFixedString;
+    if constexpr (floatingPointSignifier == '^' ||
+                  floatingPointSignifier == '-' ||
+                  floatingPointSignifier == '[' ||
+                  floatingPointSignifier == ']' ||
+                  floatingPointSignifier == '\\') {
+      return "\\" + floatingPointSignifierAsFixedString;
     } else {
-      return symbolAsFixedString;
+      return floatingPointSignifierAsFixedString;
     }
   };
-  constexpr ctll::fixed_string floatingPointSignifierAsFixedString{
-      adjustSymbolForRegex.template operator()<floatingPointSignifier>()};
 
   /*
   As string view doesn't support the option to insert new values between old
@@ -289,8 +291,8 @@ std::string insertThousandSeparator(const std::string_view str,
   The pattern finds any digit sequence, that is long enough for inserting
   thousand separators and is not the fractual part of a floating point.
   */
-  constexpr ctll::fixed_string regexPatDigitSequence{
-      "(?:^|[^\\d" + floatingPointSignifierAsFixedString +
+  static constexpr ctll::fixed_string regexPatDigitSequence{
+      "(?:^|[^\\d" + adjustFloatingPointSignifierForRegex() +
       "])(?<digit>\\d{4,})"};
 
   /*
