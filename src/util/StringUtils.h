@@ -227,13 +227,10 @@ std::string lazyStrJoin(Range&& r, std::string_view separator) {
 template <const char floatingPointSignifier>
 std::string insertThousandSeparator(const std::string_view str,
                                     const char separatorSymbol) {
-  // For identification of a digit.
   static const auto isDigit = [](const char c) {
     // `char` is ASCII. So the number symbols are the codes from 48 to 57.
     return '0' <= c && c <= '9';
   };
-
-  // Numbers as `delimiterSymbol`, or `floatingPointSignifier` are not allowed.
   AD_CONTRACT_CHECK(!isDigit(separatorSymbol) &&
                     !isDigit(floatingPointSignifier));
 
@@ -277,8 +274,6 @@ std::string insertThousandSeparator(const std::string_view str,
     */
     size_t currentIdx{s.length() % 3 == 0 ? 3 : s.length() % 3};
     ostream << s.substr(0, currentIdx);
-
-    // The remaining string lenght is a multiple of 3.
     for (; currentIdx < s.length(); currentIdx += 3) {
       ostream << separatorSymbol << s.substr(currentIdx, 3);
     }
@@ -291,17 +286,7 @@ std::string insertThousandSeparator(const std::string_view str,
   static constexpr ctll::fixed_string regexPatDigitSequence{
       "(?:^|[^\\d" + adjustFloatingPointSignifierForRegex() +
       "])(?<digit>\\d{4,})"};
-
-  /*
-  Parsing with only regex is harder than picking out regex matches for
-  transformation and reading the non regex matches via iterator.
-  */
   auto parseIterator = std::begin(str);
-
-  /*
-  Parse the remaining digit sequences, with a min. length of 4, together
-  with the spaces between them.
-  */
   std::ranges::for_each(
       ctre::range<regexPatDigitSequence>(str),
       [&parseIterator, &ostream, &insertSeparator](const auto& match) {
@@ -315,13 +300,9 @@ std::string insertThousandSeparator(const std::string_view str,
         // the `parseIterator`, into the stream.
         ostream << std::string_view(parseIterator, std::begin(digitSequence));
         insertSeparator(digitSequence);
-
-        // We are done with this part of the string.
         parseIterator = std::end(digitSequence);
       });
-
-  // Inser the remaining string.
-  ostream << std::string_view(parseIterator, std::end(str));
+  ostream << std::string_view(std::move(parseIterator), std::end(str));
   return ostream.str();
 }
 }  // namespace ad_utility
