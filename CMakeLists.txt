@@ -189,7 +189,7 @@ include_directories(third_party/json/)
 FetchContent_Declare(
     ctre
     GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
-    GIT_TAG 029f1f13646cf65ec09780013418cb8f1c5d3a59 # v3.8.1, but with fixed to_number() for float/double
+    GIT_TAG b3d7788b559e34d985c8530c3e0e7260b67505a6 # v3.8.1
 )
 
 ################################

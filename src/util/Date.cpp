@@ -188,7 +188,7 @@ DateOrLargeYear DateOrLargeYear::parseXsdDatetime(std::string_view dateString) {
   int day = match.template get<"day">().to_number();
   int hour = match.template get<"hour">().to_number();
   int minute = match.template get<"minute">().to_number();
-  double second = match.template get<"second">().to_number<double>();
+  double second = std::strtod(match.get<"second">().data(), nullptr);
   return makeDateOrLargeYear(dateString, year, month, day, hour, minute, second,
                              parseTimeZone(match));
 }
