@@ -647,20 +647,22 @@ std::vector<TurtleTriple> parseFromFile(const std::string& filename,
 // `useBatchInterface` argument) and possible additional args, and run this
 // function for all the different parsers that can read from a file (stream and
 // parallel parser, with all the combinations of the different tokenizers).
-auto forAllParsers(const auto& function, const auto&... args) {
-  function.template operator()<TurtleStreamParser<Tokenizer>>(true, args...);
-  function.template operator()<TurtleStreamParser<Tokenizer>>(false, args...);
+auto forAllParallelParsers(const auto& function, const auto&... args) {
   function.template operator()<TurtleParallelParser<Tokenizer>>(true, args...);
   function.template operator()<TurtleParallelParser<Tokenizer>>(false, args...);
-
-  function.template operator()<TurtleStreamParser<TokenizerCtre>>(true,
-                                                                  args...);
-  function.template operator()<TurtleStreamParser<TokenizerCtre>>(false,
-                                                                  args...);
   function.template operator()<TurtleParallelParser<TokenizerCtre>>(true,
                                                                     args...);
   function.template operator()<TurtleParallelParser<TokenizerCtre>>(false,
                                                                     args...);
+}
+auto forAllParsers(const auto& function, const auto&... args) {
+  function.template operator()<TurtleStreamParser<Tokenizer>>(true, args...);
+  function.template operator()<TurtleStreamParser<Tokenizer>>(false, args...);
+  function.template operator()<TurtleStreamParser<TokenizerCtre>>(true,
+                                                                  args...);
+  function.template operator()<TurtleStreamParser<TokenizerCtre>>(false,
+                                                                  args...);
+  forAllParallelParsers(function, args...);
 }
 
 TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
@@ -759,4 +761,82 @@ TEST(TurtleParserTest, multilineComments) {
                                      {"<s>", "<p>", "<o2>"}};
   sortTriples(expected);
   forAllParsers(testWithParser, input, expected);
+}
+
+// Test that exceptions during the turtle parsing are properly propagated to the
+// calling code. This is especially important for the parallel parsers where the
+// actual parsing happens on background threads.
+TEST(TurtleParserTest, exceptionPropagation) {
+  std::string filename{"turtleParserExceptionPropagation.dat"};
+  FILE_BUFFER_SIZE() = 1000;
+  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
+                                             std::string_view input) {
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (parseFromFile<Parser>(filename, useBatchInterface)),
+        ::testing::ContainsRegex("Parse error"));
+    ad_utility::deleteFile(filename);
+  };
+  forAllParsers(testWithParser, "<missing> <object> .");
+}
+
+// Test that exceptions in the batched reading of the input file are properly
+// propagated.
+TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
+  std::string filename{"turtleParserEmptyInput.dat"};
+  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
+                                             std::string_view input) {
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (parseFromFile<Parser>(filename, useBatchInterface)),
+        ::testing::ContainsRegex("Please increase the FILE_BUFFER_SIZE"));
+    ad_utility::deleteFile(filename);
+  };
+  // Deliberately chosen s.t. the first triple fits in a block, but the second
+  // one doesn't.
+  FILE_BUFFER_SIZE() = 40;
+  forAllParallelParsers(testWithParser,
+                        "<subject> <predicate> <object> . \n <veryLongSubject> "
+                        "<veryLongPredicate> <veryLongObject> .");
+}
+
+// Test that the parallel parser's destructor can be run quickly and without
+// blocking, even when there are still lots of blocks in the pipeline that are
+// currently being parsed.
+TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
+#ifdef __APPLE__
+  GTEST_SKIP_("sleep_for is unreliable for macos builds");
+#endif
+  std::string filename{"turtleParserStopParsingOnOutsideFailure.dat"};
+  auto testWithParser = [&]<typename Parser>(
+                            [[maybe_unused]] bool useBatchInterface,
+                            std::string_view input) {
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    ad_utility::Timer t{ad_utility::Timer::Stopped};
+    {
+      [[maybe_unused]] Parser parserChild{filename, 10ms};
+      t.cont();
+    }
+    EXPECT_LE(t.msecs(), 20ms);
+  };
+  const std::string input = []() {
+    std::string singleBlock = "<subject> <predicate> <object> . \n ";
+    std::string longBlock;
+    longBlock.reserve(200 * singleBlock.size());
+    for ([[maybe_unused]] size_t i : ad_utility::integerRange(200ul)) {
+      longBlock.append(singleBlock);
+    }
+    return longBlock;
+  }();
+  FILE_BUFFER_SIZE() = 40;
+  forAllParallelParsers(testWithParser, input);
 }

@@ -13,7 +13,7 @@ using ad_utility::Timer;
 using namespace std::chrono_literals;
 
 // On macOS the timer seems to work, but the `sleep_for` is too imprecise.
-#ifndef __APPLE__
+// That's why we have deactivated all the tests via `GTEST_SKIP` on macOS.
 
 void testTime(Timer::Duration duration, std::chrono::milliseconds msecs,
               std::chrono::milliseconds expected) {
@@ -32,6 +32,9 @@ void testTime(const ad_utility::Timer& timer,
 }
 
 TEST(Timer, BasicWorkflow) {
+#ifdef __APPLE__
+  GTEST_SKIP_("sleep_for is unreliable for macos builds");
+#endif
   Timer t{Timer::Started};
   ASSERT_TRUE(t.isRunning());
   std::this_thread::sleep_for(10ms);
@@ -82,6 +85,9 @@ TEST(Timer, BasicWorkflow) {
 }
 
 TEST(Timer, InitiallyStopped) {
+#ifdef __APPLE__
+  GTEST_SKIP_("sleep_for is unreliable for macos builds");
+#endif
   Timer t{Timer::Stopped};
   ASSERT_FALSE(t.isRunning());
   ASSERT_EQ(t.value(), Timer::Duration::zero());
@@ -96,6 +102,9 @@ TEST(Timer, InitiallyStopped) {
 }
 
 TEST(TimeBlockAndLog, TimeBlockAndLog) {
+#ifdef __APPLE__
+  GTEST_SKIP_("sleep_for is unreliable for macos builds");
+#endif
   std::string s;
   {
     auto callback = [&s](std::chrono::milliseconds msecs,
@@ -107,5 +116,3 @@ TEST(TimeBlockAndLog, TimeBlockAndLog) {
   }
   ASSERT_THAT(s, ::testing::MatchesRegex("message: 2[5-9]"));
 }
-
-#endif

@@ -188,10 +188,10 @@ class LocaleManager {
     std::vector<uint8_t> sortKeyBuffer;
     // The actual computation of the sort key is very expensive, so we first
     // allocate a buffer that is typically large enough to store the sort key.
-    sortKeyBuffer.resize(50 * s.size());
+    static constexpr size_t maxBufferSize = std::numeric_limits<int32_t>::max();
+    sortKeyBuffer.resize(std::min(50 * s.size(), maxBufferSize));
     static_assert(sizeof(uint8_t) == sizeof(std::string::value_type));
     static constexpr auto intMax = std::numeric_limits<int32_t>::max();
-    AD_CORRECTNESS_CHECK(sortKeyBuffer.size() <= static_cast<size_t>(intMax));
     auto sz = col.getSortKey(utf16, sortKeyBuffer.data(),
                              static_cast<int32_t>(sortKeyBuffer.size()));
     AD_CONTRACT_CHECK(sz >= 0);
