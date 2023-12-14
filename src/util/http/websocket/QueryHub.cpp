@@ -37,11 +37,10 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
       ioContext_, [&ioContext = ioContext_, globalStrand = globalStrand_,
                    socketDistributors = socketDistributors_, queryId]() {
         auto future = net::dispatch(net::bind_executor(
-            globalStrand,
-            std::packaged_task<void()>([socketDistributors, queryId]() {
+            globalStrand, std::packaged_task{[socketDistributors, queryId]() {
               bool wasErased = socketDistributors->erase(queryId);
               AD_CORRECTNESS_CHECK(wasErased);
-            })));
+            }}));
         // As long as the destructor would have to block anyway, perform work
         // on the `ioContext_`. This avoids blocking in case the destructor
         // already runs inside the `ioContext_`.
