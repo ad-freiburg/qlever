@@ -4,7 +4,7 @@
 
 #include "parser/data/Iri.h"
 
-#include "ctre/ctre.h"
+#include <ctre-unicode.hpp>
 // ____________________________________________________________________________
 Iri::Iri(std::string str) : _string{std::move(str)} {
   AD_CONTRACT_CHECK(ctre::match<"(?:@[a-zA-Z]+(?:-(?:[a-zA-Z]|\\d)+)*@)?"
