@@ -1088,11 +1088,6 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
    * locale setting.
    */
 
-  LOG(INFO) << "You specified \"locale = " << configVariables.localLang_ << "_"
-            << configVariables.localCountry_ << "\" "
-            << "and \"ignore-punctuation = "
-            << configVariables.localIgnorePunctuation_ << "\"" << std::endl;
-
   if (configVariables.localLang_ != LOCALE_DEFAULT_LANG ||
       configVariables.localCountry_ != LOCALE_DEFAULT_COUNTRY) {
     LOG(WARN) << "You are using Locale settings that differ from the default "
