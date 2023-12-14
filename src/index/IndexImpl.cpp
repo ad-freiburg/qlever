@@ -1049,7 +1049,7 @@ IndexImpl::generateConfigManagerForIndexBuilderSettings() {
       "overflowing-integers-throw"s);
 
   config.addValidator(
-      [](std::string_view input) -> bool {
+      [](std::string_view input) {
         return turtleParserIntegerOverflowBehaviorMap_.contains(input);
       },
       "value must be one of " +
