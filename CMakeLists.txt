@@ -221,12 +221,9 @@ if (ENABLE_EXPENSIVE_CHECKS)
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
 endif()
 
-if (NOT QUERY_CANCELLATION_MODE)
-    set(QUERY_CANCELLATION_MODE ENABLED CACHE STRING "The loglevel")
-endif()
+set(QUERY_CANCELLATION_MODE ENABLED CACHE STRING "Option to allow disabling cancellation checks partially or completely
+to reduce the overhead of this mechanism during query computation.")
 set_property(CACHE QUERY_CANCELLATION_MODE PROPERTY STRINGS ENABLED NO_WATCH_DOG DISABLED)
-message(STATUS "Disable periodic checks that the cancellation flag is checked frequently enough while the result of
-    a query is being computed with a small runtime overhead")
 add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
 
 ################################

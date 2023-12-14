@@ -110,8 +110,8 @@ class CancellationHandle {
   static constexpr bool CancellationEnabled =
       Mode != detail::CancellationMode::DISABLED;
 
-  std::conditional_t<CancellationEnabled, std::atomic<CancellationState>,
-                     detail::Empty>
+  [[no_unique_address]] std::conditional_t<
+      CancellationEnabled, std::atomic<CancellationState>, detail::Empty>
       cancellationState_{CancellationState::NOT_CANCELLED};
 
   template <typename T>
@@ -180,9 +180,9 @@ class CancellationHandle {
   /// this will log a warning if this check is not called frequently enough.
   template <typename... ArgTypes>
   AD_ALWAYS_INLINE void throwIfCancelled(
-      const InvocableWithConvertibleReturnType<
+      [[maybe_unused]] const InvocableWithConvertibleReturnType<
           std::string_view, ArgTypes...> auto& detailSupplier,
-      ArgTypes&&... argTypes) {
+      [[maybe_unused]] ArgTypes&&... argTypes) {
     if constexpr (CancellationEnabled) {
       auto state = cancellationState_.load(std::memory_order_relaxed);
       if (state == CancellationState::NOT_CANCELLED) [[likely]] {
