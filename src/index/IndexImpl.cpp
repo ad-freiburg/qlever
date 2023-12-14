@@ -4,6 +4,8 @@
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
+#include "./IndexImpl.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -12,7 +14,6 @@
 #include <optional>
 #include <unordered_map>
 
-#include "./IndexImpl.h"
 #include "CompilationInfo.h"
 #include "absl/strings/str_join.h"
 #include "index/ConstantsIndexBuilding.h"
