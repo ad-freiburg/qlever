@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 
+#include "util/ConstexprMap.h"
 #include "util/TypeTraits.h"
 
 #ifndef LOGLEVEL
@@ -37,8 +38,8 @@ enum class LogLevel {
 using enum LogLevel;
 
 namespace ad_utility {
-/* A singleton (According to Scott Meyer's pattern that holds
- * a pointer to a single std::ostream). This enables us to globally
+/* A singleton (According to Scott Meyer's pattern) that holds
+ * a pointer to a single std::ostream. This enables us to globally
  * redirect the LOG(LEVEL) macros to another location.
  */
 struct LogstreamChoice {
@@ -111,35 +112,28 @@ class Log {
 
   static string getTimeStamp() {
     using namespace std::chrono;
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
+    auto now = system_clock::now();
+    auto inTimeT = system_clock::to_time_t(now);
     auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
     std::stringstream ss;
 
-    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %X") << '.'
+    ss << std::put_time(std::localtime(&inTimeT), "%Y-%m-%d %X") << '.'
        << std::setw(3) << std::setfill('0') << ms.count();
     return std::move(ss).str();
   }
 
   template <LogLevel LEVEL>
-  static constexpr std::string_view getLevel() {
-    if constexpr (LEVEL == TRACE) {
-      return "TRACE: ";
-    } else if constexpr (LEVEL == TIMING) {
-      return "TIMING: ";
-    } else if constexpr (LEVEL == DEBUG) {
-      return "DEBUG: ";
-    } else if constexpr (LEVEL == INFO) {
-      return "INFO:  ";
-    } else if constexpr (LEVEL == WARN) {
-      return "WARN:  ";
-    } else if constexpr (LEVEL == ERROR) {
-      return "ERROR: ";
-    } else if constexpr (LEVEL == FATAL) {
-      return "FATAL: ";
-    } else {
-      static_assert(ad_utility::alwaysFalse<decltype(LEVEL)>);
-    }
+  static consteval std::string_view getLevel() {
+    constexpr ad_utility::ConstexprMap map{std::array{
+        std::make_pair(TRACE, "TRACE: "),
+        std::make_pair(TIMING, "TIMING: "),
+        std::make_pair(DEBUG, "DEBUG: "),
+        std::make_pair(INFO, "INFO: "),
+        std::make_pair(WARN, "WARN: "),
+        std::make_pair(ERROR, "ERROR: "),
+        std::make_pair(FATAL, "FATAL: "),
+    }};
+    return map.at(LEVEL);
   }
 };
 }  // namespace ad_utility
