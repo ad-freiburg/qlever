@@ -799,8 +799,9 @@ std::string ConfigManager::printConfigurationDoc(bool detailed) const {
 
   return absl::StrCat(
       configurationDocJsonString, "\n\n",
-      insertThousandSeparator(
-          generateConfigurationDocDetailedList("", getValidatorAssignment())));
+      insertThousandSeparator<'.'>(
+          generateConfigurationDocDetailedList("", getValidatorAssignment()),
+          ' '));
 }
 
 // ____________________________________________________________________________
