@@ -263,35 +263,26 @@ std::string insertThousandSeparator(const std::string_view str,
   std::ostringstream ostream;
 
   /*
-  Insert separator into the given string. Ignores content of the given string,
-  just works based on length.
+  Insert separator into the given string and add it into the `ostream`. Ignores
+  content of the given string, just works based on length.
   */
-  auto insertSeparator = [&separatorSymbol](const std::string_view s) {
-    std::ostringstream stream;
-    auto sInsertionIterator = std::begin(s);
-    auto sEnd = std::end(s);
-
+  auto insertSeparator = [&separatorSymbol,
+                          &ostream](const std::string_view s) {
     // Nothing to do, if the string is to short.
-    if (s.length() < 4) {
-      return std::string{s};
-    }
+    AD_CORRECTNESS_CHECK(s.length() > 3);
 
     /*
-    Get rid of enough of the leading digits, so that only the digits remain,
-    where we have to put the seperator in front every three chars.
+    For walking over the string view.
+    Our initialization value skips the leading digits, so that only the digits
+    remain, where we have to put the seperator in front of every three chars.
     */
-    do {
-      stream << *(sInsertionIterator++);
-    } while (sInsertionIterator != sEnd &&
-             std::distance(sInsertionIterator, sEnd) % 3 != 0);
+    size_t currentIdx{s.length() % 3 == 0 ? 3 : s.length() % 3};
+    ostream << s.substr(0, currentIdx);
 
     // The remaining string lenght is a multiple of 3.
-    while (sInsertionIterator != sEnd) {
-      stream << separatorSymbol << *(sInsertionIterator++)
-             << *(sInsertionIterator++) << *(sInsertionIterator++);
+    for (; currentIdx < s.length(); currentIdx += 3) {
+      ostream << separatorSymbol << s.substr(currentIdx, 3);
     }
-
-    return stream.str();
   };
 
   /*
@@ -323,8 +314,8 @@ std::string insertThousandSeparator(const std::string_view str,
 
         // Insert the transformed digit sequence, and the string between it and
         // the `parseIterator`, into the stream.
-        ostream << std::string_view(parseIterator, std::begin(digitSequence))
-                << insertSeparator(digitSequence);
+        ostream << std::string_view(parseIterator, std::begin(digitSequence));
+        insertSeparator(digitSequence);
 
         // We are done with this part of the string.
         parseIterator = std::end(digitSequence);
