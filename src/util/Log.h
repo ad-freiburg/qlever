@@ -124,14 +124,15 @@ class Log {
 
   template <LogLevel LEVEL>
   static consteval std::string_view getLevel() {
+    using std::pair;
     constexpr ad_utility::ConstexprMap map{std::array{
-        std::make_pair(TRACE, "TRACE: "),
-        std::make_pair(TIMING, "TIMING: "),
-        std::make_pair(DEBUG, "DEBUG: "),
-        std::make_pair(INFO, "INFO: "),
-        std::make_pair(WARN, "WARN: "),
-        std::make_pair(ERROR, "ERROR: "),
-        std::make_pair(FATAL, "FATAL: "),
+        pair(TRACE, "TRACE: "),
+        pair(TIMING, "TIMING: "),
+        pair(DEBUG, "DEBUG: "),
+        pair(INFO, "INFO: "),
+        pair(WARN, "WARN: "),
+        pair(ERROR, "ERROR: "),
+        pair(FATAL, "FATAL: "),
     }};
     return map.at(LEVEL);
   }
