@@ -296,21 +296,22 @@ TEST(CancellationHandle, expectDisabledHandleIsAlwaysFalse) {
   EXPECT_NO_THROW(handle.throwIfCancelled("Abc"));
 }
 
+consteval bool isMemberFunction([[maybe_unused]] auto funcPtr) {
+  return std::is_member_function_pointer_v<decltype(funcPtr)>;
+}
+
 // Make sure member functions still exist when no watch dog functionality
 // is available to make the code simpler. In this case the functions should
 // be no-op.
-static_assert(std::is_member_function_pointer_v<
-              decltype(&CancellationHandle<NO_WATCH_DOG>::startWatchDog)>);
-static_assert(std::is_member_function_pointer_v<
-              decltype(&CancellationHandle<NO_WATCH_DOG>::resetWatchDogState)>);
-static_assert(std::is_member_function_pointer_v<
-              decltype(&CancellationHandle<DISABLED>::startWatchDog)>);
-static_assert(std::is_member_function_pointer_v<
-              decltype(&CancellationHandle<DISABLED>::resetWatchDogState)>);
-static_assert(std::is_member_function_pointer_v<
-              decltype(&CancellationHandle<DISABLED>::cancel)>);
-static_assert(std::is_member_function_pointer_v<
-              decltype(&CancellationHandle<DISABLED>::isCancelled)>);
+static_assert(
+    isMemberFunction(&CancellationHandle<NO_WATCH_DOG>::startWatchDog));
+static_assert(
+    isMemberFunction(&CancellationHandle<NO_WATCH_DOG>::resetWatchDogState));
+static_assert(isMemberFunction(&CancellationHandle<DISABLED>::startWatchDog));
+static_assert(
+    isMemberFunction(&CancellationHandle<DISABLED>::resetWatchDogState));
+static_assert(isMemberFunction(&CancellationHandle<DISABLED>::cancel));
+static_assert(isMemberFunction(&CancellationHandle<DISABLED>::isCancelled));
 // Ideally we'd add a static assertion for throwIfCancelled here too, but
 // because the function is overloaded, we can't get a function pointer for it.
 
