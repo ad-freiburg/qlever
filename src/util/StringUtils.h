@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <ctre-unicode.hpp>
 #include <functional>
 #include <iterator>
 #include <ranges>
@@ -19,7 +20,6 @@
 #include <string>
 #include <string_view>
 
-#include "ctre/ctre.h"
 #include "util/Concepts.h"
 #include "util/CtreHelpers.h"
 #include "util/Exception.h"
