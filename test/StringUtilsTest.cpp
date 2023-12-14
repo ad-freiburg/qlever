@@ -277,37 +277,39 @@ TEST(StringUtilsTest, insertThousandSeparator) {
          "vero id quidem, inquam, arbitratu.Omnia contraria, quos etiam "
          "insanos esse vultis.Sed haec in pueris; "});
   };
-  doNotExceptionTest.template operator()<'.'>(' ');
   doNotExceptionTest.template operator()<','>(' ');
   doNotExceptionTest.template operator()<'+'>('t');
   doNotExceptionTest.template operator()<'t'>('+');
   doNotExceptionTest.template operator()<'?'>('\"');
   doNotExceptionTest.template operator()<'-'>('~');
 
+  // Set the `floatingPointSignifier` to characters, that are reserved regex
+  // characters.
+  auto reservedRegexCharTest = [&doNotExceptionTest]<const char... Cs>() {
+    (doNotExceptionTest.template operator()<Cs>(' '), ...);
+  };
+  reservedRegexCharTest
+      .template operator()<'.', '(', ')', '[', ']', '|', '{', '}', '*', '+',
+                           '?', '^', '$', '\\', '-', '/'>();
+
   // Numbers as `separatorSymbol`, or `floatingPointSignifier`, are not allowed.
   auto forbiddenSymbolTest =
-      [&doNotExceptionTest]<const char floatingPointSignifier>() {
+      [&doNotExceptionTest]<const char... floatingPointSignifiers>() {
         for (size_t separatorSymbolNum = 0; separatorSymbolNum < 10;
              separatorSymbolNum++) {
           const char separatorSymbol{absl::StrCat(separatorSymbolNum).front()};
-          ASSERT_ANY_THROW(
-              doNotExceptionTest.template operator()<floatingPointSignifier>(
-                  ' '));
-          ASSERT_ANY_THROW(
-              doNotExceptionTest.template operator()<'.'>(separatorSymbol));
-          ASSERT_ANY_THROW(
-              doNotExceptionTest.template operator()<floatingPointSignifier>(
-                  separatorSymbol));
+          (
+              [&doNotExceptionTest, &separatorSymbol]<const char c>() {
+                ASSERT_ANY_THROW(
+                    doNotExceptionTest.template operator()<c>(' '));
+                ASSERT_ANY_THROW(doNotExceptionTest.template operator()<'.'>(
+                    separatorSymbol));
+                ASSERT_ANY_THROW(
+                    doNotExceptionTest.template operator()<c>(separatorSymbol));
+              }.template operator()<floatingPointSignifiers>(),
+              ...);
         }
       };
-  forbiddenSymbolTest.template operator()<'0'>();
-  forbiddenSymbolTest.template operator()<'1'>();
-  forbiddenSymbolTest.template operator()<'2'>();
-  forbiddenSymbolTest.template operator()<'3'>();
-  forbiddenSymbolTest.template operator()<'4'>();
-  forbiddenSymbolTest.template operator()<'5'>();
-  forbiddenSymbolTest.template operator()<'6'>();
-  forbiddenSymbolTest.template operator()<'7'>();
-  forbiddenSymbolTest.template operator()<'8'>();
-  forbiddenSymbolTest.template operator()<'9'>();
+  forbiddenSymbolTest
+      .template operator()<'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'>();
 }

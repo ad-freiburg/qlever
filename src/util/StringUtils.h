@@ -246,8 +246,8 @@ std::string insertThousandSeparator(const std::string_view str,
     constexpr ctll::fixed_string symbolAsFixedString({symbol, '\0'});
 
     // Inside a regex character class are fewer reserved character.
-    if constexpr (symbol == '^' || symbol == '-' || symbol == ']' ||
-                  symbol == '\\') {
+    if constexpr (symbol == '^' || symbol == '-' || symbol == '[' ||
+                  symbol == ']' || symbol == '\\') {
       return "\\" + symbolAsFixedString;
     } else {
       return symbolAsFixedString;
