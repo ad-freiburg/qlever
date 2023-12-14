@@ -38,7 +38,7 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
                    socketDistributors = socketDistributors_, queryId]() {
         auto future = net::dispatch(net::bind_executor(
             globalStrand,
-            std::packaged_task<void()>([&socketDistributors, &queryId]() {
+            std::packaged_task<void()>([socketDistributors, queryId]() {
               bool wasErased = socketDistributors->erase(queryId);
               AD_CORRECTNESS_CHECK(wasErased);
             })));
