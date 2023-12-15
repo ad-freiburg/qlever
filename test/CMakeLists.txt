@@ -145,7 +145,7 @@ else()
     linkAndDiscoverTest(TokenTest parser re2 util)
 endif()
 
-addLinkAndDiscoverTest(TurtleParserTest parser re2)
+addLinkAndDiscoverTestSerial(TurtleParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
