@@ -149,136 +149,6 @@ constexpr size_t TIME_FOR_HASH_JOIN_COLUMN_NUM = 4;
 constexpr size_t NUM_ROWS_OF_JOIN_RESULT_COLUMN_NUM = 5;
 constexpr size_t JOIN_ALGORITHM_SPEEDUP_COLUMN_NUM = 6;
 
-/*
-@brief Adds the function time measurements to a row of the benchmark table
-in `makeGrowingBenchmarkTable`.
-For an explanation of the parameters, see `makeGrowingBenchmarkTable`.
-*/
-static void addMeasurementsToRowOfBenchmarkTable(
-    ResultTable* table, const size_t& row, const float overlap,
-    ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
-    const bool biggerTableSorted, const size_t& ratioRows,
-    const size_t& smallerTableAmountRows,
-    const size_t& smallerTableAmountColumns,
-    const size_t& biggerTableAmountColumns,
-    const float smallerTableJoinColumnSampleSizeRatio = 1.0,
-    const float biggerTableJoinColumnSampleSizeRatio = 1.0) {
-  // Checking, if smallerTableJoinColumnSampleSizeRatio and
-  // biggerTableJoinColumnSampleSizeRatio are floats bigger than 0. Otherwise
-  // , they don't make sense.
-  AD_CONTRACT_CHECK(smallerTableJoinColumnSampleSizeRatio > 0);
-  AD_CONTRACT_CHECK(biggerTableJoinColumnSampleSizeRatio > 0);
-
-  // The lambdas for the join algorithms.
-  auto hashJoinLambda = makeHashJoinLambda();
-  auto joinLambda = makeJoinLambda();
-
-  // Create new `IdTable`s.
-
-  /*
-  First we calculate the value boundaries for the join column entries. These
-  are needed for the creation of randomly filled tables.
-  Reminder: The $-1$ in the upper bounds is, because a range [a, b]
-  of natural numbers has $b - a + 1$ elements.
-  */
-  const size_t smallerTableJoinColumnLowerBound = 0;
-  const size_t smallerTableJoinColumnUpperBound =
-      static_cast<size_t>(
-          std::floor(static_cast<float>(smallerTableAmountRows) *
-                     smallerTableJoinColumnSampleSizeRatio)) -
-      1;
-  const size_t biggerTableJoinColumnLowerBound =
-      smallerTableJoinColumnUpperBound + 1;
-  const size_t biggerTableJoinColumnUpperBound =
-      biggerTableJoinColumnLowerBound +
-      static_cast<size_t>(
-          std::floor(static_cast<float>(smallerTableAmountRows) *
-                     static_cast<float>(ratioRows) *
-                     biggerTableJoinColumnSampleSizeRatio)) -
-      1;
-
-  // Seeds for the random generators, so that things are less similiar between
-  // the tables.
-  const std::array<ad_utility::RandomSeed, 5> seeds =
-      createArrayOfRandomSeeds<5>(std::move(randomSeed));
-
-  // Now we create two randomly filled `IdTable`, which have no overlap, and
-  // save them together with the information, where their join column is.
-  IdTableAndJoinColumn smallerTable{
-      createRandomlyFilledIdTable(
-          smallerTableAmountRows, smallerTableAmountColumns,
-          JoinColumnAndBounds{0, smallerTableJoinColumnLowerBound,
-                              smallerTableJoinColumnUpperBound, seeds.at(0)},
-          seeds.at(1)),
-      0};
-  IdTableAndJoinColumn biggerTable{
-      createRandomlyFilledIdTable(
-          smallerTableAmountRows * ratioRows, biggerTableAmountColumns,
-          JoinColumnAndBounds{0, biggerTableJoinColumnLowerBound,
-                              biggerTableJoinColumnUpperBound, seeds.at(2)},
-          seeds.at(3)),
-      0};
-
-  // The number of rows, that the joined `ItdTable`s end up having.
-  size_t numberRowsOfResult{0};
-
-  /*
-  Creating overlap, if wanted.
-  Note: The value for `numberRowsOfResult` is correct, because the content of
-  the `IdTable`s is disjunct.
-  */
-  if (overlap > 0) {
-    numberRowsOfResult =
-        createOverlapRandomly(&smallerTable, biggerTable, overlap, seeds.at(4));
-  }
-
-  // Sort the `IdTables`, if they should be.
-  if (smallerTableSorted) {
-    sortIdTableByJoinColumnInPlace(smallerTable);
-  }
-  if (biggerTableSorted) {
-    sortIdTableByJoinColumnInPlace(biggerTable);
-  }
-
-  // Adding the benchmark measurements to the current row.
-
-  // Hash join first, because merge/galloping join sorts all tables, if
-  // needed, before joining them.
-  table->addMeasurement(row, TIME_FOR_HASH_JOIN_COLUMN_NUM,
-                        [&smallerTable, &biggerTable, &hashJoinLambda]() {
-                          useJoinFunctionOnIdTables(smallerTable, biggerTable,
-                                                    hashJoinLambda)
-                              .numRows();
-                        });
-
-  /*
-  The sorting of the `IdTables`. That must be done before the
-  merge/galloping, otherwise their algorithm won't result in a correct
-  result.
-  */
-  table->addMeasurement(
-      row, TIME_FOR_SORTING_COLUMN_NUM,
-      [&smallerTable, &smallerTableSorted, &biggerTable, &biggerTableSorted]() {
-        if (!smallerTableSorted) {
-          sortIdTableByJoinColumnInPlace(smallerTable);
-        }
-        if (!biggerTableSorted) {
-          sortIdTableByJoinColumnInPlace(biggerTable);
-        }
-      });
-
-  // The merge/galloping join.
-  table->addMeasurement(row, TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM,
-                        [&smallerTable, &biggerTable, &joinLambda]() {
-                          useJoinFunctionOnIdTables(smallerTable, biggerTable,
-                                                    joinLambda)
-                              .numRows();
-                        });
-
-  // Adding the number of rows of the result.
-  table->setEntry(row, NUM_ROWS_OF_JOIN_RESULT_COLUMN_NUM, numberRowsOfResult);
-}
-
 // `T` must be an invocable object, which can be invoked with `const size_t&`
 // and returns an instance of `ReturnType`.
 template <typename T, typename ReturnType>
@@ -297,185 +167,6 @@ concept isTypeOrGrowthFunction =
 template <typename... Ts>
 concept exactlyOneGrowthFunction =
     ((growthFunction<Ts, size_t> || growthFunction<Ts, float>)+...) == 1;
-
-/*
-@brief Create a benchmark table for join algorithm, with the given
-parameters for the IdTables, which will keep getting more rows, until the given
-stop function decides, that there are enough rows. The rows will be the return
-values of the parameter, you gave a function for, and the columns will be:
-- Return values of the parameter, you gave a function for.
-- Time needed for sorting `IdTable`s.
-- Time needed for merge/galloping join.
-- Time needed for sorting and merge/galloping added togehter.
-- Time needed for the hash join.
-- How many rows the result of joining the tables has.
-- How much faster the hash join is. For example: Two times faster.
-
-@tparam StopFunction A function, that takes the current form of the
-`ResultTable` as `const ResultTable&` and returns a bool.
-@tparam T1, T6, T7 Must be a float, or a function, that takes the row number of
-the next to be generated row as `const size_t&`, and returns a float. Can only
-be a function, if all other template `T` parameter are vectors.
-@tparam T2, T3, T4, T5 Must be a size_t, or a function, that takes the row
-number of the next to be generated row as `const size_t&`, and returns a size_t.
-Can only be a function, if all other template `T` parameter are vectors.
-
-@param results The BenchmarkResults, in which you want to create a new
-benchmark table.
-@param tableDescriptor A identifier to the to be created benchmark table, so
-that it can be easier identified later.
-@param parameterName The names of the parameter, you gave a growth function for.
-Will be set as the name of the column, which will show the returned values of
-the growth function.
-@param stopFunction Returns true, if the table benchmark should get a new row.
-False, if there are enough rows and the created table should be returned.
-Decides the final size of the benchmark table.
-@param overlap The height of the probability for any join column entry of
-smallerTable to be overwritten by a random join column entry of biggerTable.
-@param randomSeed Seed for the random generators.
-@param smallerTableSorted, biggerTableSorted Should the bigger/smaller table
-be sorted by his join column before being joined? More specificly, some
-join algorithm require one, or both, of the IdTables to be sorted. If this
-argument is false, the time needed for sorting the required table will
-added to the time of the join algorithm.
-@param ratioRows How many more rows than the smaller table should the
-bigger table have? In more mathematical words: Number of rows of the
-bigger table divided by the number of rows of the smaller table is equal
-to ratioRows.
-@param smallerTableAmountRows How many rows should the smaller table have?
-@param smallerTableAmountColumns, biggerTableAmountColumns How many columns
-should the bigger/smaller tables have?
-@param smallerTableJoinColumnSampleSizeRatio,
-biggerTableJoinColumnSampleSizeRatio The join column of the tables normally
-get random entries out of a sample size with the same amount of possible
-numbers as there are rows in the table. (With every number having the same
-chance to be picked.) This adjusts the number of elements in the sample
-size to `Amount of rows * ratio`, which affects the possibility of
-duplicates. Important: `Amount of rows * ratio` must be a natural number.
- */
-template <
-    ad_utility::RegularInvocableWithExactReturnType<bool, const ResultTable&>
-        StopFunction,
-    isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<size_t> T2,
-    isTypeOrGrowthFunction<size_t> T3, isTypeOrGrowthFunction<size_t> T4,
-    isTypeOrGrowthFunction<size_t> T5, isTypeOrGrowthFunction<float> T6 = float,
-    isTypeOrGrowthFunction<float> T7 = float>
-requires exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>
-static ResultTable& makeGrowingBenchmarkTable(
-    BenchmarkResults* results, const std::string_view tableDescriptor,
-    std::string parameterName, StopFunction stopFunction, const T1& overlap,
-    ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
-    const bool biggerTableSorted, const T2& ratioRows,
-    const T3& smallerTableAmountRows, const T4& smallerTableAmountColumns,
-    const T5& biggerTableAmountColumns,
-    const T6& smallerTableJoinColumnSampleSizeRatio = 1.0,
-    const T7& biggerTableJoinColumnSampleSizeRatio = 1.0) {
-  // Is something a growth function?
-  constexpr auto isGrowthFunction = []<typename T>() {
-    /*
-    We have to cheat a bit, because being a function is not something, that
-    can easily be checked for to my knowledge. Instead, we simply check, if it's
-    one of the limited variation of growth function, that we allow.
-    */
-    if constexpr (growthFunction<T, size_t> || growthFunction<T, float>) {
-      return true;
-    } else {
-      return false;
-    }
-  };
-
-  // Returns the first argument, that is a growth function.
-  auto returnFirstGrowthFunction =
-      [&isGrowthFunction]<typename... Ts>(Ts&... args) -> auto& {
-    // Put them into a tuple, so that we can easly look them up.
-    auto tup = std::tuple<Ts&...>{AD_FWD(args)...};
-
-    // Get the index of the first growth function.
-    constexpr static size_t idx =
-        ad_utility::getIndexOfFirstTypeToPassCheck<isGrowthFunction, Ts...>();
-
-    // Do we have a valid index?
-    static_assert(idx < sizeof...(Ts),
-                  "There was no growth function in this parameter pack.");
-
-    return std::get<idx>(tup);
-  };
-
-  /*
-  @brief Calls the growth function with the number of the next row to be
-  created, if it's a function, and returns the result. Otherwise just returns
-  the given `possibleGrowthFunction`.
-  */
-  auto returnOrCall = [&isGrowthFunction]<typename T>(
-                          const T& possibleGrowthFunction,
-                          const size_t nextRowNumber) {
-    if constexpr (isGrowthFunction.template operator()<T>()) {
-      return possibleGrowthFunction(nextRowNumber);
-    } else {
-      return possibleGrowthFunction;
-    }
-  };
-
-  // For creating a new random seed for every new row.
-  RandomSeedGenerator seedGenerator{std::move(randomSeed)};
-
-  /*
-  Now on to creating the benchmark table. Because we don't know, how many row
-  names we will have, we just create a table without row names.
-  */
-  ResultTable& table = results->addTable(
-      std::string{tableDescriptor}, {},
-      {std::move(parameterName), "Time for sorting", "Merge/Galloping join",
-       "Sorting + merge/galloping join", "Hash join",
-       "Number of rows in resulting IdTable", "Speedup of hash join"});
-  /*
-  Adding measurements to the table, as long as the stop function doesn't say
-  anything else.
-  */
-  while (stopFunction(table)) {
-    // What's the row number of the next to be added row?
-    const size_t rowNumber = table.numRows();
-
-    // Add a new row without content.
-    table.addRow();
-    table.setEntry(rowNumber, CHANGING_PARAMTER_COLUMN_NUM,
-                   returnFirstGrowthFunction(
-                       overlap, ratioRows, smallerTableAmountRows,
-                       smallerTableAmountColumns, biggerTableAmountColumns,
-                       smallerTableJoinColumnSampleSizeRatio,
-                       biggerTableJoinColumnSampleSizeRatio)(rowNumber));
-
-    // Converting all our function parameters to non functions.
-    addMeasurementsToRowOfBenchmarkTable(
-        &table, rowNumber, returnOrCall(overlap, rowNumber),
-        std::invoke(seedGenerator), smallerTableSorted, biggerTableSorted,
-        returnOrCall(ratioRows, rowNumber),
-        returnOrCall(smallerTableAmountRows, rowNumber),
-        returnOrCall(smallerTableAmountColumns, rowNumber),
-        returnOrCall(biggerTableAmountColumns, rowNumber),
-        returnOrCall(smallerTableJoinColumnSampleSizeRatio, rowNumber),
-        returnOrCall(biggerTableJoinColumnSampleSizeRatio, rowNumber));
-  }
-
-  // Adding together the time for sorting the `IdTables` and then joining
-  // them using merge/galloping join.
-  sumUpColumns(
-      &table,
-      ColumnNumWithType<float>{
-          TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM},
-      ColumnNumWithType<float>{TIME_FOR_SORTING_COLUMN_NUM},
-      ColumnNumWithType<float>{TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM});
-
-  // Calculate, how much of a speedup the hash join algorithm has in comparison
-  // to the merge/galloping join algrithm.
-  calculateSpeedupOfColumn(
-      &table, {JOIN_ALGORITHM_SPEEDUP_COLUMN_NUM},
-      {TIME_FOR_HASH_JOIN_COLUMN_NUM},
-      {TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM});
-
-  // For more specific adjustments.
-  return table;
-}
 
 /*
 @brief Verifies, that all the function measurements in a benchmark table row are
@@ -663,6 +354,9 @@ using the `ConfigManager`.
 
 - A default `getMetadata`, that adds the date and time, where the benchmark
 measurements were taken.
+
+- A general function for generating a specific `ResultTable`, that measures the
+join algorithms.
 */
 class GeneralInterfaceImplementation : public BenchmarkInterface {
   // The variables, that our configuration option will write to.
@@ -939,6 +633,320 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     addInfiniteWhen0("maxMemory", ad_utility::MemorySize::parse(
                                       configVariables_.configVariableMaxMemory_)
                                       .getBytes());
+  }
+
+  /*
+  @brief Create a benchmark table for join algorithm, with the given
+  parameters for the IdTables, which will keep getting more rows, until the
+  given stop function decides, that there are enough rows. The rows will be the
+  return values of the parameter, you gave a function for, and the columns will
+  be:
+  - Return values of the parameter, you gave a function for.
+  - Time needed for sorting `IdTable`s.
+  - Time needed for merge/galloping join.
+  - Time needed for sorting and merge/galloping added togehter.
+  - Time needed for the hash join.
+  - How many rows the result of joining the tables has.
+  - How much faster the hash join is. For example: Two times faster.
+
+  @tparam StopFunction A function, that takes the current form of the
+  `ResultTable` as `const ResultTable&` and returns a bool.
+  @tparam T1, T6, T7 Must be a float, or a function, that takes the row number
+  of the next to be generated row as `const size_t&`, and returns a float. Can
+  only be a function, if all other template `T` parameter are vectors.
+  @tparam T2, T3, T4, T5 Must be a size_t, or a function, that takes the row
+  number of the next to be generated row as `const size_t&`, and returns a
+  size_t. Can only be a function, if all other template `T` parameter are
+  vectors.
+
+  @param results The BenchmarkResults, in which you want to create a new
+  benchmark table.
+  @param tableDescriptor A identifier to the to be created benchmark table, so
+  that it can be easier identified later.
+  @param parameterName The names of the parameter, you gave a growth function
+  for. Will be set as the name of the column, which will show the returned
+  values of the growth function.
+  @param stopFunction Returns true, if the table benchmark should get a new row.
+  False, if there are enough rows and the created table should be returned.
+  Decides the final size of the benchmark table.
+  @param overlap The height of the probability for any join column entry of
+  smallerTable to be overwritten by a random join column entry of biggerTable.
+  @param randomSeed Seed for the random generators.
+  @param smallerTableSorted, biggerTableSorted Should the bigger/smaller table
+  be sorted by his join column before being joined? More specificly, some
+  join algorithm require one, or both, of the IdTables to be sorted. If this
+  argument is false, the time needed for sorting the required table will
+  added to the time of the join algorithm.
+  @param ratioRows How many more rows than the smaller table should the
+  bigger table have? In more mathematical words: Number of rows of the
+  bigger table divided by the number of rows of the smaller table is equal
+  to ratioRows.
+  @param smallerTableAmountRows How many rows should the smaller table have?
+  @param smallerTableAmountColumns, biggerTableAmountColumns How many columns
+  should the bigger/smaller tables have?
+  @param smallerTableJoinColumnSampleSizeRatio,
+  biggerTableJoinColumnSampleSizeRatio The join column of the tables normally
+  get random entries out of a sample size with the same amount of possible
+  numbers as there are rows in the table. (With every number having the same
+  chance to be picked.) This adjusts the number of elements in the sample
+  size to `Amount of rows * ratio`, which affects the possibility of
+  duplicates. Important: `Amount of rows * ratio` must be a natural number.
+   */
+  template <
+      ad_utility::RegularInvocableWithExactReturnType<bool, const ResultTable&>
+          StopFunction,
+      isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<size_t> T2,
+      isTypeOrGrowthFunction<size_t> T3, isTypeOrGrowthFunction<size_t> T4,
+      isTypeOrGrowthFunction<size_t> T5,
+      isTypeOrGrowthFunction<float> T6 = float,
+      isTypeOrGrowthFunction<float> T7 = float>
+  requires exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>
+  static ResultTable& makeGrowingBenchmarkTable(
+      BenchmarkResults* results, const std::string_view tableDescriptor,
+      std::string parameterName, StopFunction stopFunction, const T1& overlap,
+      ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
+      const bool biggerTableSorted, const T2& ratioRows,
+      const T3& smallerTableAmountRows, const T4& smallerTableAmountColumns,
+      const T5& biggerTableAmountColumns,
+      const T6& smallerTableJoinColumnSampleSizeRatio = 1.0,
+      const T7& biggerTableJoinColumnSampleSizeRatio = 1.0) {
+    // Is something a growth function?
+    constexpr auto isGrowthFunction = []<typename T>() {
+      /*
+      We have to cheat a bit, because being a function is not something, that
+      can easily be checked for to my knowledge. Instead, we simply check, if
+      it's one of the limited variation of growth function, that we allow.
+      */
+      if constexpr (growthFunction<T, size_t> || growthFunction<T, float>) {
+        return true;
+      } else {
+        return false;
+      }
+    };
+
+    // Returns the first argument, that is a growth function.
+    auto returnFirstGrowthFunction =
+        [&isGrowthFunction]<typename... Ts>(Ts&... args) -> auto& {
+      // Put them into a tuple, so that we can easly look them up.
+      auto tup = std::tuple<Ts&...>{AD_FWD(args)...};
+
+      // Get the index of the first growth function.
+      constexpr static size_t idx =
+          ad_utility::getIndexOfFirstTypeToPassCheck<isGrowthFunction, Ts...>();
+
+      // Do we have a valid index?
+      static_assert(idx < sizeof...(Ts),
+                    "There was no growth function in this parameter pack.");
+
+      return std::get<idx>(tup);
+    };
+
+    /*
+    @brief Calls the growth function with the number of the next row to be
+    created, if it's a function, and returns the result. Otherwise just returns
+    the given `possibleGrowthFunction`.
+    */
+    auto returnOrCall = [&isGrowthFunction]<typename T>(
+                            const T& possibleGrowthFunction,
+                            const size_t nextRowNumber) {
+      if constexpr (isGrowthFunction.template operator()<T>()) {
+        return possibleGrowthFunction(nextRowNumber);
+      } else {
+        return possibleGrowthFunction;
+      }
+    };
+
+    // For creating a new random seed for every new row.
+    RandomSeedGenerator seedGenerator{std::move(randomSeed)};
+
+    /*
+    Now on to creating the benchmark table. Because we don't know, how many row
+    names we will have, we just create a table without row names.
+    */
+    ResultTable& table = results->addTable(
+        std::string{tableDescriptor}, {},
+        {std::move(parameterName), "Time for sorting", "Merge/Galloping join",
+         "Sorting + merge/galloping join", "Hash join",
+         "Number of rows in resulting IdTable", "Speedup of hash join"});
+    /*
+    Adding measurements to the table, as long as the stop function doesn't say
+    anything else.
+    */
+    while (stopFunction(table)) {
+      // What's the row number of the next to be added row?
+      const size_t rowNumber = table.numRows();
+
+      // Add a new row without content.
+      table.addRow();
+      table.setEntry(rowNumber, CHANGING_PARAMTER_COLUMN_NUM,
+                     returnFirstGrowthFunction(
+                         overlap, ratioRows, smallerTableAmountRows,
+                         smallerTableAmountColumns, biggerTableAmountColumns,
+                         smallerTableJoinColumnSampleSizeRatio,
+                         biggerTableJoinColumnSampleSizeRatio)(rowNumber));
+
+      // Converting all our function parameters to non functions.
+      addMeasurementsToRowOfBenchmarkTable(
+          &table, rowNumber, returnOrCall(overlap, rowNumber),
+          std::invoke(seedGenerator), smallerTableSorted, biggerTableSorted,
+          returnOrCall(ratioRows, rowNumber),
+          returnOrCall(smallerTableAmountRows, rowNumber),
+          returnOrCall(smallerTableAmountColumns, rowNumber),
+          returnOrCall(biggerTableAmountColumns, rowNumber),
+          returnOrCall(smallerTableJoinColumnSampleSizeRatio, rowNumber),
+          returnOrCall(biggerTableJoinColumnSampleSizeRatio, rowNumber));
+    }
+
+    // Adding together the time for sorting the `IdTables` and then joining
+    // them using merge/galloping join.
+    sumUpColumns(
+        &table,
+        ColumnNumWithType<float>{
+            TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM},
+        ColumnNumWithType<float>{TIME_FOR_SORTING_COLUMN_NUM},
+        ColumnNumWithType<float>{TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM});
+
+    // Calculate, how much of a speedup the hash join algorithm has in
+    // comparison to the merge/galloping join algrithm.
+    calculateSpeedupOfColumn(
+        &table, {JOIN_ALGORITHM_SPEEDUP_COLUMN_NUM},
+        {TIME_FOR_HASH_JOIN_COLUMN_NUM},
+        {TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM});
+
+    // For more specific adjustments.
+    return table;
+  }
+
+ private:
+  /*
+  @brief Adds the function time measurements to a row of the benchmark table
+  in `makeGrowingBenchmarkTable`.
+  For an explanation of the parameters, see `makeGrowingBenchmarkTable`.
+  */
+  static void addMeasurementsToRowOfBenchmarkTable(
+      ResultTable* table, const size_t& row, const float overlap,
+      ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
+      const bool biggerTableSorted, const size_t& ratioRows,
+      const size_t& smallerTableAmountRows,
+      const size_t& smallerTableAmountColumns,
+      const size_t& biggerTableAmountColumns,
+      const float smallerTableJoinColumnSampleSizeRatio = 1.0,
+      const float biggerTableJoinColumnSampleSizeRatio = 1.0) {
+    // Checking, if smallerTableJoinColumnSampleSizeRatio and
+    // biggerTableJoinColumnSampleSizeRatio are floats bigger than 0. Otherwise
+    // , they don't make sense.
+    AD_CONTRACT_CHECK(smallerTableJoinColumnSampleSizeRatio > 0);
+    AD_CONTRACT_CHECK(biggerTableJoinColumnSampleSizeRatio > 0);
+
+    // The lambdas for the join algorithms.
+    auto hashJoinLambda = makeHashJoinLambda();
+    auto joinLambda = makeJoinLambda();
+
+    // Create new `IdTable`s.
+
+    /*
+    First we calculate the value boundaries for the join column entries. These
+    are needed for the creation of randomly filled tables.
+    Reminder: The $-1$ in the upper bounds is, because a range [a, b]
+    of natural numbers has $b - a + 1$ elements.
+    */
+    const size_t smallerTableJoinColumnLowerBound = 0;
+    const size_t smallerTableJoinColumnUpperBound =
+        static_cast<size_t>(
+            std::floor(static_cast<float>(smallerTableAmountRows) *
+                       smallerTableJoinColumnSampleSizeRatio)) -
+        1;
+    const size_t biggerTableJoinColumnLowerBound =
+        smallerTableJoinColumnUpperBound + 1;
+    const size_t biggerTableJoinColumnUpperBound =
+        biggerTableJoinColumnLowerBound +
+        static_cast<size_t>(
+            std::floor(static_cast<float>(smallerTableAmountRows) *
+                       static_cast<float>(ratioRows) *
+                       biggerTableJoinColumnSampleSizeRatio)) -
+        1;
+
+    // Seeds for the random generators, so that things are less similiar between
+    // the tables.
+    const std::array<ad_utility::RandomSeed, 5> seeds =
+        createArrayOfRandomSeeds<5>(std::move(randomSeed));
+
+    // Now we create two randomly filled `IdTable`, which have no overlap, and
+    // save them together with the information, where their join column is.
+    IdTableAndJoinColumn smallerTable{
+        createRandomlyFilledIdTable(
+            smallerTableAmountRows, smallerTableAmountColumns,
+            JoinColumnAndBounds{0, smallerTableJoinColumnLowerBound,
+                                smallerTableJoinColumnUpperBound, seeds.at(0)},
+            seeds.at(1)),
+        0};
+    IdTableAndJoinColumn biggerTable{
+        createRandomlyFilledIdTable(
+            smallerTableAmountRows * ratioRows, biggerTableAmountColumns,
+            JoinColumnAndBounds{0, biggerTableJoinColumnLowerBound,
+                                biggerTableJoinColumnUpperBound, seeds.at(2)},
+            seeds.at(3)),
+        0};
+
+    // The number of rows, that the joined `ItdTable`s end up having.
+    size_t numberRowsOfResult{0};
+
+    /*
+    Creating overlap, if wanted.
+    Note: The value for `numberRowsOfResult` is correct, because the content of
+    the `IdTable`s is disjunct.
+    */
+    if (overlap > 0) {
+      numberRowsOfResult = createOverlapRandomly(&smallerTable, biggerTable,
+                                                 overlap, seeds.at(4));
+    }
+
+    // Sort the `IdTables`, if they should be.
+    if (smallerTableSorted) {
+      sortIdTableByJoinColumnInPlace(smallerTable);
+    }
+    if (biggerTableSorted) {
+      sortIdTableByJoinColumnInPlace(biggerTable);
+    }
+
+    // Adding the benchmark measurements to the current row.
+
+    // Hash join first, because merge/galloping join sorts all tables, if
+    // needed, before joining them.
+    table->addMeasurement(row, TIME_FOR_HASH_JOIN_COLUMN_NUM,
+                          [&smallerTable, &biggerTable, &hashJoinLambda]() {
+                            useJoinFunctionOnIdTables(smallerTable, biggerTable,
+                                                      hashJoinLambda)
+                                .numRows();
+                          });
+
+    /*
+    The sorting of the `IdTables`. That must be done before the
+    merge/galloping, otherwise their algorithm won't result in a correct
+    result.
+    */
+    table->addMeasurement(row, TIME_FOR_SORTING_COLUMN_NUM,
+                          [&smallerTable, &smallerTableSorted, &biggerTable,
+                           &biggerTableSorted]() {
+                            if (!smallerTableSorted) {
+                              sortIdTableByJoinColumnInPlace(smallerTable);
+                            }
+                            if (!biggerTableSorted) {
+                              sortIdTableByJoinColumnInPlace(biggerTable);
+                            }
+                          });
+
+    // The merge/galloping join.
+    table->addMeasurement(row, TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM,
+                          [&smallerTable, &biggerTable, &joinLambda]() {
+                            useJoinFunctionOnIdTables(smallerTable, biggerTable,
+                                                      joinLambda)
+                                .numRows();
+                          });
+
+    // Adding the number of rows of the result.
+    table->setEntry(row, NUM_ROWS_OF_JOIN_RESULT_COLUMN_NUM,
+                    numberRowsOfResult);
   }
 };
 
