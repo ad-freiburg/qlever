@@ -562,47 +562,21 @@ ad_utility::MemorySize approximateMemoryNeededByIdTable(
                                        memoryPerIdTableEntryInByte);
 }
 
-/*
-Partly implements the interface `BenchmarkInterface`, by:
-
-- Providing the member variables, that most of the benchmark classes here set
-using the `ConfigManager`.
-
-- A default `getMetadata`, that adds the date and time, where the benchmark
-measurements were taken.
-*/
-class GeneralInterfaceImplementation : public BenchmarkInterface {
+// A struct for holding the variables, that the configuration options will write
+// to.
+struct ConfigVariables {
   /*
-  The max time for a single measurement and the max memory, that a single
-  `IdTable` is allowed to take up.
-  Both are set via `ConfigManager` and the user at runtime, but because their
-  pure form contains coded information, mainly that `0` stands for `infinite`,
-  access is regulated via getter, which also transform them into easier to
-  understand forms.
-  */
-  float maxTimeSingleMeasurement_;
-  std::string configVariableMaxMemory_;
-
-  /*
-  The random seed, that we use to create random seeds for our random
-  generators.
-  */
-  size_t randomSeed_;
-
- protected:
-  /*
-  The benchmark classes after this point always make tables, where one
-  attribute of the `IdTables` gets bigger with every row, while the other
-  attributes stay the same.
+  The benchmark classes always make tables, where one attribute of the
+  `IdTables` gets bigger with every row, while the other attributes stay the
+  same.
   For the attributes, that don't stay the same, they create a list of
   exponents, with basis $2$, from $1$ up to an upper boundary for the
   exponents. The variables, that define such boundaries, always begin with
   `max`.
 
   For an explanation, what a member variables does, see the created
-  `ConfigOption`s.
+  `ConfigOption`s in `GeneralInterfaceImplementation`.
   */
-
   size_t smallerTableAmountRows_;
   size_t minBiggerTableRows_;
   size_t maxBiggerTableRows_;
@@ -613,7 +587,91 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   size_t minRatioRows_;
   size_t maxRatioRows_;
 
+  /*
+  The max time for a single measurement and the max memory, that a single
+  `IdTable` is allowed to take up.
+  Both are set via `ConfigManager` and the user at runtime, but because their
+  pure form contains coded information, mainly that `0` stands for `infinite`,
+  there are getter, which transform them into easier to understand forms.
+  */
+  float maxTimeSingleMeasurement_;
+  std::string configVariableMaxMemory_;
+
+  /*
+  The random seed, that we use to create random seeds for our random
+  generators. Transformed into the more fitting type via getter.
+  */
+  size_t randomSeed_;
+
+  /*
+  Get the value of the corresponding configuration option. Empty optional stands
+  for `infinite` time.
+  */
+  std::optional<float> maxTimeSingleMeasurement() const {
+    if (maxTimeSingleMeasurement_ != 0) {
+      return {maxTimeSingleMeasurement_};
+    } else {
+      return {std::nullopt};
+    }
+  }
+
+  /*
+  @brief The maximum amount of memory, the bigger table, and by simple logic
+  also the smaller table, is allowed to take up. Iff returns the same value as
+  `maxMemory()`, if the `maxMemory` configuration option, interpreted as a
+  `MemorySize`, wasn't set to `0`. (Which stand for infinite memory.)
+  */
+  ad_utility::MemorySize maxMemoryBiggerTable() const {
+    return maxMemory().value_or(approximateMemoryNeededByIdTable(
+        maxBiggerTableRows_, biggerTableAmountColumns_));
+  }
+
+  /*
+  The maximum amount of memory, any table is allowed to take up.
+  Returns the value of the `maxMemory` configuration option interpreted as a
+  `MemorySize`, if it wasn't set to `0`. (Which stand for infinite memory.) In
+  the case of `0`, returns an empty optional.
+  */
+  std::optional<ad_utility::MemorySize> maxMemory() const {
+    ad_utility::MemorySize maxMemory{
+        ad_utility::MemorySize::parse(configVariableMaxMemory_)};
+    if (maxMemory != 0_B) {
+      return {std::move(maxMemory)};
+    } else {
+      return {std::nullopt};
+    }
+  }
+
+  /*
+  Getter for the the random seed, that we use to create random seeds for our
+  random generators.
+  */
+  ad_utility::RandomSeed randomSeed() const {
+    /*
+    Note: The static cast is needed, because a random generator seed is always
+    `unsigned int`:
+    */
+    return ad_utility::RandomSeed::make(static_cast<unsigned int>(randomSeed_));
+  }
+};
+
+/*
+Partly implements the interface `BenchmarkInterface`, by:
+
+- Providing the member variables, that the benchmark classes here set
+using the `ConfigManager`.
+
+- A default `getMetadata`, that adds the date and time, where the benchmark
+measurements were taken.
+*/
+class GeneralInterfaceImplementation : public BenchmarkInterface {
+  // The variables, that our configuration option will write to.
+  ConfigVariables configVariables_;
+
  public:
+  // The variables, that the configuration option of this class will write to.
+  const ConfigVariables& getConfigVariables() const { return configVariables_; }
+
   // The default constructor, which sets up the `ConfigManager`.
   GeneralInterfaceImplementation() {
     ad_utility::ConfigManager& config = getConfigManager();
@@ -622,68 +680,69 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "smallerTableAmountRows",
         "Amount of rows for the smaller `IdTable`, if we always "
         "use the same amount.",
-        &smallerTableAmountRows_, 1000UL);
+        &configVariables_.smallerTableAmountRows_, 1000UL);
 
     constexpr size_t minBiggerTableRowsDefault = 100000;
     decltype(auto) minBiggerTableRows = config.addOption(
         "minBiggerTableRows",
         "The minimum amount of rows, that the bigger `IdTable` should have.",
-        &minBiggerTableRows_, minBiggerTableRowsDefault);
+        &configVariables_.minBiggerTableRows_, minBiggerTableRowsDefault);
     decltype(auto) maxBiggerTableRows = config.addOption(
         "maxBiggerTableRows",
         "The maximum amount of rows, that the bigger `IdTable` should have.",
-        &maxBiggerTableRows_, 10000000UL);
+        &configVariables_.maxBiggerTableRows_, 10000000UL);
 
     decltype(auto) smallerTableAmountColumns =
         config.addOption("smallerTableAmountColumns",
                          "The amount of columns in the smaller IdTable.",
-                         &smallerTableAmountColumns_, 20UL);
+                         &configVariables_.smallerTableAmountColumns_, 20UL);
     decltype(auto) biggerTableAmountColumns =
         config.addOption("biggerTableAmountColumns",
                          "The amount of columns in the bigger IdTable.",
-                         &biggerTableAmountColumns_, 20UL);
+                         &configVariables_.biggerTableAmountColumns_, 20UL);
 
     decltype(auto) overlapChance = config.addOption(
         "overlapChance",
         "Chance for an entry in the join column of the smaller `IdTable` to be "
         "the same value as an entry in the join column of the bigger "
         "`IdTable`. Must be in the range $(0,100]$.",
-        &overlapChance_, 42.f);
+        &configVariables_.overlapChance_, 42.f);
 
     decltype(auto) randomSeed = config.addOption(
         "randomSeed",
         "The seed used for random generators. Note: The default value is a "
         "non-deterministic random value, which changes with every execution.",
-        &randomSeed_, static_cast<size_t>(std::random_device{}()));
+        &configVariables_.randomSeed_,
+        static_cast<size_t>(std::random_device{}()));
 
     decltype(auto) ratioRows = config.addOption(
         "ratioRows",
         "The row ratio between the smaller and the bigger `IdTable`. That is "
         "the value of the amount of rows in the bigger `IdTable` divided "
         "through the amount of rows in the smaller `IdTable`.",
-        &ratioRows_, 10UL);
+        &configVariables_.ratioRows_, 10UL);
 
     decltype(auto) minRatioRows = config.addOption(
         "minRatioRows",
         "The minimum row ratio between the smaller and the bigger `IdTable`.",
-        &minRatioRows_, 10UL);
+        &configVariables_.minRatioRows_, 10UL);
     decltype(auto) maxRatioRows = config.addOption(
         "maxRatioRows",
         "The maximum row ratio between the smaller and the bigger `IdTable`.",
-        &maxRatioRows_, 1000UL);
+        &configVariables_.maxRatioRows_, 1000UL);
 
     decltype(auto) maxMemoryInStringFormat = config.addOption(
         "maxMemory",
         "Max amount of memory that a `IdTable` is allowed to take up. `0` for "
         "unlimited memory. Example: 4kB, 8MB, 24 B, etc. ...",
-        &configVariableMaxMemory_, "0 B"s);
+        &configVariables_.configVariableMaxMemory_, "0 B"s);
 
     decltype(auto) maxTimeSingleMeasurement = config.addOption(
         "maxTimeSingleMeasurement",
         "The maximal amount of time, in seconds, any function "
         "measurement is allowed to take. `0` for unlimited time. Note: This "
         "can only be checked, after a measurement was taken.",
-        &maxTimeSingleMeasurement_, 0.f);
+        &configVariables_.maxTimeSingleMeasurement_, 0.f);
 
     // Helper function for generating lambdas for validators.
 
@@ -875,61 +934,11 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       }
     };
 
-    addInfiniteWhen0("maxTimeSingleMeasurement", maxTimeSingleMeasurement_);
-    addInfiniteWhen0(
-        "maxMemory",
-        ad_utility::MemorySize::parse(configVariableMaxMemory_).getBytes());
-  }
-
-  /*
-  Get the value of the corresponding configuration option. Empty optional stands
-  for `infinite` time.
-  */
-  std::optional<float> maxTimeSingleMeasurement() const {
-    if (maxTimeSingleMeasurement_ != 0) {
-      return {maxTimeSingleMeasurement_};
-    } else {
-      return {std::nullopt};
-    }
-  }
-
-  /*
-  @brief The maximum amount of memory, the bigger table, and by simple logic
-  also the smaller table, is allowed to take up. Iff returns the same value as
-  `maxMemory()`, if the `maxMemory` configuration option, interpreted as a
-  `MemorySize`, wasn't set to `0`. (Which stand for infinite memory.)
-  */
-  ad_utility::MemorySize maxMemoryBiggerTable() const {
-    return maxMemory().value_or(approximateMemoryNeededByIdTable(
-        maxBiggerTableRows_, biggerTableAmountColumns_));
-  }
-
-  /*
-  The maximum amount of memory, any table is allowed to take up.
-  Returns the value of the `maxMemory` configuration option interpreted as a
-  `MemorySize`, if it wasn't set to `0`. (Which stand for infinite memory.) In
-  the case of `0`, returns an empty optional.
-  */
-  std::optional<ad_utility::MemorySize> maxMemory() const {
-    ad_utility::MemorySize maxMemory{
-        ad_utility::MemorySize::parse(configVariableMaxMemory_)};
-    if (maxMemory != 0_B) {
-      return {std::move(maxMemory)};
-    } else {
-      return {std::nullopt};
-    }
-  }
-
-  /*
-  Getter for the the random seed, that we use to create random seeds for our
-  random generators.
-  */
-  ad_utility::RandomSeed randomSeed() const {
-    /*
-    Note: The static cast is needed, because a random generator seed is always
-    `unsigned int`:
-    */
-    return ad_utility::RandomSeed::make(static_cast<unsigned int>(randomSeed_));
+    addInfiniteWhen0("maxTimeSingleMeasurement",
+                     configVariables_.maxTimeSingleMeasurement_);
+    addInfiniteWhen0("maxMemory", ad_utility::MemorySize::parse(
+                                      configVariables_.configVariableMaxMemory_)
+                                      .getBytes());
   }
 };
 
@@ -1058,36 +1067,45 @@ class BmOnlyBiggerTableSizeChanges final
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         const std::string& tableName =
-            absl::StrCat("Smaller table stays at ", smallerTableAmountRows_,
+            absl::StrCat("Smaller table stays at ",
+                         getConfigVariables().smallerTableAmountRows_,
                          " rows, ratio to rows of bigger table grows.");
 
         // Returns the ratio used for the measurements in a given row.
         auto growthFunction = createDefaultGrowthLambda(
-            10, minBiggerTableRows_ / smallerTableAmountRows_);
+            10, getConfigVariables().minBiggerTableRows_ /
+                    getConfigVariables().smallerTableAmountRows_);
 
         // The lambda for signalling the benchmark table creation function, that
         // the table is finished.
         const ad_utility::MemorySize maxMemorySizeBiggeTable =
-            maxMemoryBiggerTable();
+            getConfigVariables().maxMemoryBiggerTable();
         auto stoppingFunction = createDefaultStoppingLambda(
-            maxTimeSingleMeasurement(), maxMemorySizeBiggeTable,
-            maxMemorySizeBiggeTable, maxMemory(),
+            getConfigVariables().maxTimeSingleMeasurement(),
+            maxMemorySizeBiggeTable, maxMemorySizeBiggeTable,
+            getConfigVariables().maxMemory(),
             [this](const size_t&) {
               return approximateMemoryNeededByIdTable(
-                  smallerTableAmountRows_, smallerTableAmountColumns_);
+                  getConfigVariables().smallerTableAmountRows_,
+                  getConfigVariables().smallerTableAmountColumns_);
             },
             [this, &growthFunction](const size_t& row) {
               return approximateMemoryNeededByIdTable(
-                  smallerTableAmountRows_ * growthFunction(row),
-                  biggerTableAmountColumns_);
+                  getConfigVariables().smallerTableAmountRows_ *
+                      growthFunction(row),
+                  getConfigVariables().biggerTableAmountColumns_);
             },
-            smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1);
+            getConfigVariables().smallerTableAmountColumns_ +
+                getConfigVariables().biggerTableAmountColumns_ - 1);
 
         ResultTable& table = makeGrowingBenchmarkTable(
-            &results, tableName, "Row ratio", stoppingFunction, overlapChance_,
-            randomSeed(), smallerTableSorted, biggerTableSorted, growthFunction,
-            smallerTableAmountRows_, smallerTableAmountColumns_,
-            biggerTableAmountColumns_);
+            &results, tableName, "Row ratio", stoppingFunction,
+            getConfigVariables().overlapChance_,
+            getConfigVariables().randomSeed(), smallerTableSorted,
+            biggerTableSorted, growthFunction,
+            getConfigVariables().smallerTableAmountRows_,
+            getConfigVariables().smallerTableAmountColumns_,
+            getConfigVariables().biggerTableAmountColumns_);
 
         // Add the metadata, that changes with every call and can't be
         // generalized.
@@ -1104,12 +1122,14 @@ class BmOnlyBiggerTableSizeChanges final
     BenchmarkMetadata meta{};
 
     meta.addKeyValuePair("Value changing with every row", "ratioRows");
-    meta.addKeyValuePair("overlapChance", overlapChance_);
-    meta.addKeyValuePair("randomSeed", randomSeed().get());
-    meta.addKeyValuePair("smallerTableAmountRows", smallerTableAmountRows_);
+    meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
+    meta.addKeyValuePair("randomSeed", getConfigVariables().randomSeed().get());
+    meta.addKeyValuePair("smallerTableAmountRows",
+                         getConfigVariables().smallerTableAmountRows_);
     meta.addKeyValuePair("smallerTableAmountColumns",
-                         smallerTableAmountColumns_);
-    meta.addKeyValuePair("biggerTableAmountColumns", biggerTableAmountColumns_);
+                         getConfigVariables().smallerTableAmountColumns_);
+    meta.addKeyValuePair("biggerTableAmountColumns",
+                         getConfigVariables().biggerTableAmountColumns_);
 
     GeneralInterfaceImplementation::addExternallySetConfiguration(&meta);
 
@@ -1134,8 +1154,9 @@ class BmOnlySmallerTableSizeChanges final
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         // We also make multiple tables for different row ratios.
-        for (const size_t ratioRows :
-             createExponentVectorUntilSize(10, minRatioRows_, maxRatioRows_)) {
+        for (const size_t ratioRows : createExponentVectorUntilSize(
+                 10, getConfigVariables().minRatioRows_,
+                 getConfigVariables().maxRatioRows_)) {
           const std::string& tableName = absl::StrCat(
               "The amount of rows in the smaller table grows and the ratio, to "
               "the amount of rows in the bigger table, stays at ",
@@ -1143,31 +1164,37 @@ class BmOnlySmallerTableSizeChanges final
 
           // Returns the amount of rows in the smaller `IdTable`, used for the
           // measurements in a given row.
-          auto growthFunction =
-              createDefaultGrowthLambda(10, minBiggerTableRows_ / ratioRows);
+          auto growthFunction = createDefaultGrowthLambda(
+              10, getConfigVariables().minBiggerTableRows_ / ratioRows);
 
           // The lambda for signalling the benchmark table creation function,
           // that the table is finished.
           const ad_utility::MemorySize maxMemorySizeBiggeTable =
-              maxMemoryBiggerTable();
+              getConfigVariables().maxMemoryBiggerTable();
           auto stoppingFunction = createDefaultStoppingLambda(
-              maxTimeSingleMeasurement(), maxMemorySizeBiggeTable,
-              maxMemorySizeBiggeTable, maxMemory(),
+              getConfigVariables().maxTimeSingleMeasurement(),
+              maxMemorySizeBiggeTable, maxMemorySizeBiggeTable,
+              getConfigVariables().maxMemory(),
               [this, &growthFunction](const size_t& row) {
                 return approximateMemoryNeededByIdTable(
-                    growthFunction(row), smallerTableAmountColumns_);
+                    growthFunction(row),
+                    getConfigVariables().smallerTableAmountColumns_);
               },
               [this, &growthFunction, &ratioRows](const size_t& row) {
                 return approximateMemoryNeededByIdTable(
-                    growthFunction(row) * ratioRows, biggerTableAmountColumns_);
+                    growthFunction(row) * ratioRows,
+                    getConfigVariables().biggerTableAmountColumns_);
               },
-              smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1);
+              getConfigVariables().smallerTableAmountColumns_ +
+                  getConfigVariables().biggerTableAmountColumns_ - 1);
 
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Amount of rows in the smaller table",
-              stoppingFunction, overlapChance_, randomSeed(),
-              smallerTableSorted, biggerTableSorted, ratioRows, growthFunction,
-              smallerTableAmountColumns_, biggerTableAmountColumns_);
+              stoppingFunction, getConfigVariables().overlapChance_,
+              getConfigVariables().randomSeed(), smallerTableSorted,
+              biggerTableSorted, ratioRows, growthFunction,
+              getConfigVariables().smallerTableAmountColumns_,
+              getConfigVariables().biggerTableAmountColumns_);
 
           // Add the metadata, that changes with every call and can't be
           // generalized.
@@ -1185,11 +1212,12 @@ class BmOnlySmallerTableSizeChanges final
 
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableAmountRows");
-    meta.addKeyValuePair("overlapChance", overlapChance_);
-    meta.addKeyValuePair("randomSeed", randomSeed().get());
+    meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
+    meta.addKeyValuePair("randomSeed", getConfigVariables().randomSeed().get());
     meta.addKeyValuePair("smallerTableAmountColumns",
-                         smallerTableAmountColumns_);
-    meta.addKeyValuePair("biggerTableAmountColumns", biggerTableAmountColumns_);
+                         getConfigVariables().smallerTableAmountColumns_);
+    meta.addKeyValuePair("biggerTableAmountColumns",
+                         getConfigVariables().biggerTableAmountColumns_);
 
     GeneralInterfaceImplementation::addExternallySetConfiguration(&meta);
 
@@ -1218,31 +1246,37 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
         // Returns the amount of rows in the smaller `IdTable`, used for the
         // measurements in a given row.
-        auto growthFunction =
-            createDefaultGrowthLambda(10, minBiggerTableRows_);
+        auto growthFunction = createDefaultGrowthLambda(
+            10, getConfigVariables().minBiggerTableRows_);
 
         // The lambda for signalling the benchmark table creation function,
         // that the table is finished.
         const ad_utility::MemorySize maxMemorySizeBiggeTable =
-            maxMemoryBiggerTable();
+            getConfigVariables().maxMemoryBiggerTable();
         auto stoppingFunction = createDefaultStoppingLambda(
-            maxTimeSingleMeasurement(), maxMemorySizeBiggeTable,
-            maxMemorySizeBiggeTable, maxMemory(),
+            getConfigVariables().maxTimeSingleMeasurement(),
+            maxMemorySizeBiggeTable, maxMemorySizeBiggeTable,
+            getConfigVariables().maxMemory(),
             [this, &growthFunction](const size_t& row) {
               return approximateMemoryNeededByIdTable(
-                  growthFunction(row), smallerTableAmountColumns_);
+                  growthFunction(row),
+                  getConfigVariables().smallerTableAmountColumns_);
             },
             [this, &growthFunction](const size_t& row) {
               return approximateMemoryNeededByIdTable(
-                  growthFunction(row), biggerTableAmountColumns_);
+                  growthFunction(row),
+                  getConfigVariables().biggerTableAmountColumns_);
             },
-            smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1);
+            getConfigVariables().smallerTableAmountColumns_ +
+                getConfigVariables().biggerTableAmountColumns_ - 1);
 
         ResultTable& table = makeGrowingBenchmarkTable(
             &results, tableName, "Amount of rows", stoppingFunction,
-            overlapChance_, randomSeed(), smallerTableSorted, biggerTableSorted,
-            1UL, growthFunction, smallerTableAmountColumns_,
-            biggerTableAmountColumns_);
+            getConfigVariables().overlapChance_,
+            getConfigVariables().randomSeed(), smallerTableSorted,
+            biggerTableSorted, 1UL, growthFunction,
+            getConfigVariables().smallerTableAmountColumns_,
+            getConfigVariables().biggerTableAmountColumns_);
 
         // Add the metadata, that changes with every call and can't be
         // generalized.
@@ -1260,12 +1294,13 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableAmountRows");
-    meta.addKeyValuePair("overlapChance", overlapChance_);
-    meta.addKeyValuePair("randomSeed", randomSeed().get());
+    meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
+    meta.addKeyValuePair("randomSeed", getConfigVariables().randomSeed().get());
     meta.addKeyValuePair("ratioRows", 1);
     meta.addKeyValuePair("smallerTableAmountColumns",
-                         smallerTableAmountColumns_);
-    meta.addKeyValuePair("biggerTableAmountColumns", biggerTableAmountColumns_);
+                         getConfigVariables().smallerTableAmountColumns_);
+    meta.addKeyValuePair("biggerTableAmountColumns",
+                         getConfigVariables().biggerTableAmountColumns_);
 
     GeneralInterfaceImplementation::addExternallySetConfiguration(&meta);
 
