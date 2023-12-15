@@ -3,19 +3,14 @@
 //  Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
+#include <ctre-unicode.hpp>
 #include <regex>
 
-#include "./HttpTestHelpers.h"
-#include "./IndexTestHelpers.h"
-#include "./util/IdTableHelpers.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
-#include "absl/strings/str_split.h"
-#include "ctre/ctre.h"
+#include "IndexTestHelpers.h"
 #include "engine/Service.h"
 #include "parser/GraphPatternOperation.h"
+#include "util/IdTableHelpers.h"
 #include "util/http/HttpUtils.h"
 
 // Fixture that sets up a test index and a factory for producing mocks for the
@@ -57,7 +52,7 @@ class ServiceTest : public ::testing::Test {
       // NOTE: The first three are hard-coded in `Service::computeResult`, but
       // the host and port of the endpoint are derived from the IRI, so the last
       // two checks are non-trivial.
-      EXPECT_EQ(method, http::verb::post);
+      EXPECT_EQ(method, boost::beast::http::verb::post);
       EXPECT_EQ(contentTypeHeader, "application/sparql-query");
       EXPECT_EQ(acceptHeader, "text/tab-separated-values");
       EXPECT_EQ(url.asString(), expectedUrl);

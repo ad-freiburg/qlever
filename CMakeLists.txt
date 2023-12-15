@@ -47,6 +47,7 @@ endif ()
 ###############################################################################
 ##### Essential settings #####
 ###############################################################################
+include(FetchContent)
 
 ################################
 # GTEST AND GMOCK
@@ -185,8 +186,11 @@ include_directories(third_party/json/)
 ################################
 # CTRE, Compile-Time-Regular-Expressions
 ################################
-# Header only, nothing to include
-include_directories(third_party/ctre/include)
+FetchContent_Declare(
+    ctre
+    GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
+    GIT_TAG b3d7788b559e34d985c8530c3e0e7260b67505a6 # v3.8.1
+)
 
 ################################
 # ABSEIL
@@ -253,6 +257,13 @@ add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
 target_compile_options(re2 PRIVATE -Wno-unused-but-set-variable)
 include_directories(SYSTEM third_party/re2)
 
+
+################################
+# Apply FetchContent
+################################
+FetchContent_MakeAvailable(ctre)
+include_directories(${ctre_SOURCE_DIR}/single-header)
+
 # reinstate original flags including all warnings
 set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
 
@@ -307,7 +318,7 @@ add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 ##################################################
 # Precompiled headers
 set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
-set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h third_party/ctre/include/ctre/ctre.h third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h)
+set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h)
 
 add_subdirectory(src/parser)
 target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})

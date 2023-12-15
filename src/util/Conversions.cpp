@@ -5,13 +5,14 @@
 #include "util/Conversions.h"
 
 #include <assert.h>
-#include <ctre/ctre.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#include <ctre-unicode.hpp>
 
 #include "../global/Constants.h"
 #include "../parser/TokenizerCtre.h"

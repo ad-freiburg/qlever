@@ -4,9 +4,8 @@
 
 #include "WebSocketSession.h"
 
-#include <ctre/ctre.h>
-
 #include <boost/asio/experimental/awaitable_operators.hpp>
+#include <ctre-unicode.hpp>
 #include <optional>
 
 #include "util/Algorithm.h"
