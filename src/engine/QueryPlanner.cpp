@@ -678,7 +678,8 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
     if (t._p._iri == CONTAINS_WORD_PREDICATE) {
-      std::string_view sv{t._o.toString()};
+      std::string buffer = t._o.toString();
+      std::string_view sv{buffer};
       // Add one node for each word
       for (const auto& term :
            absl::StrSplit(sv.substr(1, sv.size() - 2), ' ')) {

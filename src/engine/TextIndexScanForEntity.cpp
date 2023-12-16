@@ -25,23 +25,11 @@ ResultTable TextIndexScanForEntity::computeResult() {
           " is not part of the underlying knowledge graph and can therefore "
           "not be used as the object of ql:contains-entity");
     }
-    size_t i = 0;
-    // Behaviour of IdTable::erase(iterator) is undefined, if the iterator
-    // points to the last element. So we have to check that case separatly.
-    if (idTable.getColumn(1)[idTable.numRows() - 1].getVocabIndex() == idx) {
-      i++;
-    }
-    idTable.erase(remove_if(idTable.begin(), idTable.end().operator--(),
-                            [&](const auto& row) {
-                              if (row[1].getVocabIndex() == idx) {
-                                i++;
-                                return false;
-                              }
-                              return true;
-                              ;
-                            }));
+    auto beginErase = remove_if(
+        idTable.begin(), idTable.end(),
+        [idx](const auto& row) { return row[1].getVocabIndex() != idx; });
+    idTable.erase(beginErase, idTable.end());
     idTable.setColumnSubset(std::vector<ColumnIndex>{0, 2});
-    idTable.resize(i);
   }
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
