@@ -28,7 +28,7 @@ namespace ad_utility {
  * @return bool
  */
 template <typename Container, typename T>
-inline constexpr bool contains(Container&& container, const T& element) {
+constexpr bool contains(Container&& container, const T& element) {
   // Overload for types like std::string that have a `find` member function
   if constexpr (ad_utility::isSimilar<Container, std::string> ||
                 ad_utility::isSimilar<Container, std::string_view>) {
