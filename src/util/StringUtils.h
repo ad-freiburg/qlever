@@ -20,6 +20,7 @@
 #include <string>
 #include <string_view>
 
+#include "util/Algorithm.h"
 #include "util/Concepts.h"
 #include "util/CtreHelpers.h"
 #include "util/Exception.h"
@@ -244,8 +245,7 @@ std::string insertThousandSeparator(const std::string_view str,
         {floatingPointSignifier, '\0'});
 
     // Inside a regex character class are fewer reserved character.
-    if constexpr (std::string_view{R"--(^-[]\)--"}.find(
-                      floatingPointSignifier) != std::string_view::npos) {
+    if constexpr (contains(R"--(^-[]\)--", floatingPointSignifier)) {
       return "\\" + floatingPointSignifierAsFixedString;
     } else {
       return floatingPointSignifierAsFixedString;
