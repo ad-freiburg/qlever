@@ -16,6 +16,7 @@
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/HashSet.h"
+#include "util/StringUtils.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {

@@ -36,11 +36,11 @@ jobs:
         ref: 'master'
 
     - name: Install dependencies
-      uses: ./.github/workflows/install-dependencies-ubuntu
+      uses: ./pr/.github/workflows/install-dependencies-ubuntu
     - name: Install compiler
-      uses: ./.github/workflows/install-compiler-ubuntu
+      uses: ./pr/.github/workflows/install-compiler-ubuntu
       with:
-        compiler: {{matrix.compiler}}
+        compiler: ${{matrix.compiler}}
         compiler-version: ${{matrix.compiler-version}}
     - name: Configure CMake Master
       working-directory: ${{github.workspace}}/master

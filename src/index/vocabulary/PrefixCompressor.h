@@ -9,9 +9,10 @@
 #include <string>
 #include <vector>
 
-#include "../../global/Constants.h"
-#include "../../util/Exception.h"
-#include "../../util/Log.h"
+#include "global/Constants.h"
+#include "util/Exception.h"
+#include "util/Log.h"
+#include "util/StringUtils.h"
 
 // TODO<joka921> Include the relevant constants directly here.
 
