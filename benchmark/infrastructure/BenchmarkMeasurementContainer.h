@@ -147,12 +147,12 @@ class ResultTable : public BenchmarkMetadataGetter {
   std::string descriptorForLog_;
   // The names of the columns.
   std::vector<std::string> columnNames_;
-  // The entries in the table. Access is [row, column]. Can be the time in
-  // seconds, a string, or empty.
+  // The entries in the table. Access is [row, column].
   std::vector<std::vector<EntryType>> entries_;
 
   // Needed for testing purposes.
   FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultTable);
+  FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultTableEraseRow);
   FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultGroup);
 
  public:
@@ -248,6 +248,13 @@ class ResultTable : public BenchmarkMetadataGetter {
   @brief Adds a new empty row at the bottom of the table.
   */
   void addRow();
+
+  /*
+  @brief Delete the given row.
+
+  @param row Uses matrix coordinates.
+  */
+  void deleteRow(const size_t row);
 
   /*
   The number of rows.
