@@ -786,7 +786,7 @@ TEST(TurtleParserTest, exceptionPropagation) {
 // Test that exceptions in the batched reading of the input file are properly
 // propagated.
 TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
-  std::string filename{"turtleParserEmptyInput.dat"};
+  std::string filename{"turtleParserExceptionPropagationFileBufferReading.dat"};
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              std::string_view input) {
     {
