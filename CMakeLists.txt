@@ -225,9 +225,14 @@ if (ENABLE_EXPENSIVE_CHECKS)
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
 endif()
 
-set(QUERY_CANCELLATION_MODE "ENABLED" CACHE STRING "Option to allow disabling cancellation checks partially or completely
-to reduce the overhead of this mechanism during query computation.")
-add_definitions(-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE})
+set(QUERY_CANCELLATION_MODE "ENABLED" CACHE STRING "Option to allow disabling cancellation checks partially or completely to reduce the overhead of this mechanism during query computation.")
+# Hint for cmake gui, but not actually enforced
+set_property(CACHE QUERY_CANCELLATION_MODE PROPERTY STRINGS "ENABLED" "NO_WATCH_DOG" "DISABLED")
+# So enforce this ourselves
+if(QUERY_CANCELLATION_MODE AND NOT QUERY_CANCELLATION_MODE MATCHES "ENABLED|NO_WATCH_DOG|DISABLED")
+    message(FATAL_ERROR "Invalid value for QUERY_CANCELLATION_MODE '${QUERY_CANCELLATION_MODE}'. Please remove the option entirely or change it to ENABLED, NO_WATCH_DOG or DISABLED.")
+endif()
+add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
 
 ################################
 # STXXL
