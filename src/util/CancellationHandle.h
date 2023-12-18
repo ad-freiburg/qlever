@@ -37,21 +37,14 @@ namespace detail {
 /// `CancellationHandle` class.
 enum class CancellationMode { ENABLED, NO_WATCH_DOG, DISABLED };
 
-#if !defined(QUERY_CANCELLATION_MODE) || QUERY_CANCELLATION_MODE == ENABLED
-constexpr CancellationMode QUERY_CANCELLATION_MODE = CancellationMode::ENABLED;
-#elif QUERY_CANCELLATION_MODE == DISABLED
-constexpr CancellationMode QUERY_CANCELLATION_MODE = CancellationMode::DISABLED;
-#elif QUERY_CANCELLATION_MODE == NO_WATCH_DOG
-constexpr CancellationMode QUERY_CANCELLATION_MODE =
-    CancellationMode::NO_WATCH_DOG;
-#if LOGLEVEL < WARN
-#warning \
-    "QLEVER_ENABLE_QUERY_CANCELLATION_WATCH_DOG is ignored if WARN logging \
-level is disabled"
-#endif
+constexpr CancellationMode QUERY_CANCELLATION_MODE = []() {
+  using enum CancellationMode;
+#ifndef QUERY_CANCELLATION_MODE
+  return ENABLED;
 #else
-#error "Invalid value for QUERY_CANCELLATION_MODE!"
+  return QUERY_CANCELLATION_MODE;
 #endif
+}();
 
 /// Helper function that safely checks if the passed `cancellationState`
 /// represents one of the cancelled states with a single comparison for
