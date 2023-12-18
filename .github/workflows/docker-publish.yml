@@ -13,8 +13,6 @@ jobs:
     # or if a tag was pushed
     if: ${{ github.event.workflow_run.conclusion == 'success' ||  github.ref_name != 'master' }}
     steps:
-      #- name: Fix permissions
-        #run: sudo chown runner:docker /var/run/docker.sock
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -49,43 +47,34 @@ jobs:
           # https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
           # https://www.docker.com/blog/multi-arch-build-and-images-the-simple-way/
           platforms: linux/amd64
-          #only  export to the local docker for testing.
+
+          # Only  export to the local docker for testing.
           load: true
-          # If this is a push on master, publish with short commit sha
-          # else use the ref name, which has to be the tag in this case.
-          # We have to explicitly add the "qlever:latest" tag for it to work correctly,
-          # see e.g. https://stackoverflow.com/questions/27643017/do-i-need-to-manually-tag-latest-when-pushing-to-docker-public-repository
           tags: adfreiburg/qlever:test
-          # adfreiburg/qlever:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }},
-          # adfreiburg/qlever:commit-${{ steps.sha.outputs.sha_short }},
+
+      - name: E2E in Docker
+        run:  sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh adfreiburg/qlever:test
 
       - name: Build ARM-64
         uses: docker/build-push-action@v5
         with:
           context: .
-          # Docker multiplatform images require an entry in their manifests. If this
-          # entry is missing, then the images for each platform are considered seperate.
-          # If this action runs on a single runner (i.e. the attribute `platforms`
-          # contains a list of all platforms) then the manifest is configured automatically.
-          # If the build and push is split over multiple runners, then the action requires an additional `merge`
-          # job, which merges the images for each platform into a single multiplatform image.
-          # References:
-          # https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
-          # https://www.docker.com/blog/multi-arch-build-and-images-the-simple-way/
           platforms: linux/arm64
-          #only  export to the local docker for testing.
+
+          # Only build, don't run.
           load: false
           push: false
-      - name: E2E in Docker
-        run:  sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh adfreiburg/qlever:test
+
       - name: Build and push
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v5
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          # push to dockerhub, reuse the cached steps from the previous build.
+
+          # Push to dockerhub, reuse the cached steps from the previous build.
           push: true
+
           # If this is a push on master, publish with short commit sha
           # else use the ref name, which has to be the tag in this case.
           # We have to explicitly add the "qlever:latest" tag for it to work correctly,
