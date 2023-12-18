@@ -9,6 +9,9 @@ on:
   push:
     tags:
       - "v*.*.*"
+  # this is currently only for testing WHY the tests fail.
+  pull_request:
+    branches: [ master ]
 
 jobs:
   docker:

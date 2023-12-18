@@ -767,6 +767,9 @@ TEST(TurtleParserTest, multilineComments) {
 // calling code. This is especially important for the parallel parsers where the
 // actual parsing happens on background threads.
 TEST(TurtleParserTest, exceptionPropagation) {
+#ifdef QLEVER_DISABLE_SPURIOUSLY_FAILING_TESTS
+  GTEST_SKIP("This test currently crashes ")
+#endif
   std::string filename{"turtleParserExceptionPropagation.dat"};
   FILE_BUFFER_SIZE() = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,

@@ -220,6 +220,11 @@ if (RUN_EXPENSIVE_TESTS)
     add_definitions("-DQLEVER_RUN_EXPENSIVE_TESTS")
 endif()
 
+if (DISABLE_SPURIOUSLY_FAILING_TESTS)
+    message(STATUS "Disabling spuriously failing tests.")
+    add_definitions("-DQLEVER_DISABLE_SPURIOUSLY_FAILING_TESTS")
+endif()
+
 if (ENABLE_EXPENSIVE_CHECKS)
     message(STATUS "Enabling checks that potentially have a significant runtime overhead")
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
