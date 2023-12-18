@@ -90,7 +90,11 @@ class TaskQueue {
       return;
     }
     queuedTasks_.finish();
-    threads_.clear();
+    std::ranges::for_each(threads_, [](auto& thread) {
+      if (thread.joinable()) {
+        thread.join();
+      }
+    });
   }
 
   void resetTimers() requires TrackTimes {
