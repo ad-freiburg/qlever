@@ -56,7 +56,10 @@ net::awaitable<void> QueryToSocketDistributor::signalEnd() {
   finished_ = true;
   wakeUpWaitingListeners();
   // Invoke cleanup pre-emptively
-  std::move(cleanupCall_).invokeManuallyAndCancel();
+  signalEndCall_();
+  // TODO<joka921> We could cancel the other cleanup here, but it doesn't do too
+  // much harm.
+  // std::move(cleanupCall_).invokeManuallyAndCancel();
 }
 
 // _____________________________________________________________________________

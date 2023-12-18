@@ -76,6 +76,8 @@ class QueryHub {
   /// be called arbitrarily often during the lifetime of a single query session.
   net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
       createOrAcquireDistributorForReceiving(QueryId);
+  // TODO<joka921> Comment and should this be private: friend?
+  net::awaitable<void> deleteQueryId(const QueryId& queryId);
 };
 }  // namespace ad_utility::websocket
 

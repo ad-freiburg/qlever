@@ -12,7 +12,7 @@ template <bool isSender>
 net::awaitable<std::shared_ptr<
     QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
 QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
-  while (socketDistributors_->contains(queryId)) {
+  if (socketDistributors_->contains(queryId)) {
     auto& reference = socketDistributors_->at(queryId);
     if (auto ptr = reference.pointer_.lock()) {
       if constexpr (isSender) {
@@ -21,39 +21,43 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
         reference.started_ = true;
       }
       co_return ptr;
+    } else {
+      socketDistributors_->erase(queryId);
     }
-    // There's the unlikely case where the reference counter reached zero and
-    // the weak pointer can no longer create a shared pointer, but the
-    // destructor is waiting for execution on `globalStrand_`. In this case
-    // re-schedule this coroutine to be executed after destruction. So it is
-    // crucial to use post over dispatch here.
-    co_await net::post(net::bind_executor(globalStrand_, net::use_awaitable));
   }
+
+  // TODO<joka921> Factor this out.
+  auto makeCleanupCall = [&](bool alwaysDelete) {
+    return [alwaysDelete, globalStrand = globalStrand_,
+            socketDistributors = socketDistributors_, queryId,
+            alreadyCalled = false]() mutable {
+      AD_CORRECTNESS_CHECK(!alreadyCalled);
+      alreadyCalled = true;
+      net::dispatch(
+          globalStrand,
+          [alwaysDelete, socketDistributors = std::move(socketDistributors),
+           queryId = std::move(queryId)]() {
+            auto it = socketDistributors->find(queryId);
+            // Always erase the `queryId` when the corresponding
+            // sender is destroyed. For listeners, we only delete it
+            // if it was the last reference.
+            if (it != socketDistributors->end() &&
+                (alwaysDelete || it->second.pointer_.expired())) {
+              socketDistributors->erase(it);
+            }
+          });
+      // We don't wait for the deletion to complete here, but only for its
+      // scheduling. We still get the expected behavior because all accesses
+      // to the `socketDistributor` are synchronized via a strand and
+      // BOOST::asio schedules ina FIFO manner.
+    };
+  };
 
   auto distributor = std::make_shared<QueryToSocketDistributor>(
       // We pass a copy of the `shared_pointer socketDistributors_` here,
       // because in unit tests the callback might be invoked after this
       // `QueryHub` was destroyed.
-      ioContext_, [&ioContext = ioContext_, globalStrand = globalStrand_,
-                   socketDistributors = socketDistributors_, queryId]() {
-        auto future = net::dispatch(net::bind_executor(
-            globalStrand,
-            std::packaged_task<void()>([&socketDistributors, &queryId]() {
-              bool wasErased = socketDistributors->erase(queryId);
-              AD_CORRECTNESS_CHECK(wasErased);
-            })));
-        // As long as the destructor would have to block anyway, perform work
-        // on the `ioContext_`. This avoids blocking in case the destructor
-        // already runs inside the `ioContext_`.
-        // Note: When called on a strand this may block the current strand.
-        // If the ioContext has been stopped for some reason don't wait
-        // for the result, or this will never terminate.
-        while (future.wait_for(std::chrono::seconds(0)) !=
-                   std::future_status::ready &&
-               !ioContext.stopped()) {
-          ioContext.poll_one();
-        }
-      });
+      ioContext_, makeCleanupCall(false), makeCleanupCall(true));
   socketDistributors_->emplace(queryId,
                                WeakReferenceHolder{distributor, isSender});
   co_return distributor;

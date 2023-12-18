@@ -37,6 +37,7 @@ class QueryToSocketDistributor {
   /// Function to remove this distributor from the `QueryHub` when it is
   /// destructed.
   unique_cleanup::UniqueCleanup<std::function<void()>> cleanupCall_;
+  std::function<void()> signalEndCall_;
 
   /// Wakes up all websockets that are currently "blocked" and waiting for an
   /// update of the given query. After being woken up they will check for
@@ -54,13 +55,14 @@ class QueryToSocketDistributor {
  public:
   /// Constructor that builds a new strand from the provided io context.
   explicit QueryToSocketDistributor(net::io_context& ioContext,
-                                    std::function<void()> cleanupCall)
+                                    std::function<void()> cleanupCall,
+                                    std::function<void()> signalEndCall)
       : strand_{net::make_strand(ioContext)},
         infiniteTimer_{strand_, static_cast<net::deadline_timer::time_type>(
                                     boost::posix_time::pos_infin)},
-        cleanupCall_{std::move(cleanupCall), [](const auto& cleanupCall) {
-                       std::invoke(cleanupCall);
-                     }} {}
+        cleanupCall_{std::move(cleanupCall),
+                     [](const auto& cleanupCall) { std::invoke(cleanupCall); }},
+        signalEndCall_{std::move(signalEndCall)} {}
 
   /// Appends specified data to the vector and signals all waiting websockets
   /// that new data is available

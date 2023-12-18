@@ -24,24 +24,32 @@ concept TestableCoroutine =
 
 template <TestableCoroutine Func>
 void runCoroutine(Func innerRun, size_t numThreads) {
-  net::io_context ioContext{};
-
-  auto future = net::co_spawn(ioContext, innerRun(ioContext), net::use_future);
+  auto ioContext = std::make_shared<net::io_context>();
+  auto future =
+      net::co_spawn(*ioContext, innerRun(*ioContext), net::use_future);
 
   std::vector<ad_utility::JThread> workers{};
 
   AD_CONTRACT_CHECK(numThreads > 0);
   workers.reserve(numThreads - 1);
 
-  for (size_t i = 0; i < numThreads - 1; i++) {
+  for (size_t i = 0; i < numThreads; i++) {
     workers.emplace_back(
-        [&ioContext]() { ioContext.run_for(std::chrono::seconds(10)); });
+        [ioContext]() { ioContext->run_for(std::chrono::seconds(10)); });
   }
 
-  ioContext.run_for(std::chrono::seconds(10));
-  auto status = future.wait_for(std::chrono::seconds(0));
-  AD_CORRECTNESS_CHECK(status != std::future_status::deferred);
+  for (size_t i = 0; i < 400; ++i) {
+    auto status = future.wait_for(std::chrono::milliseconds(50));
+    AD_CORRECTNESS_CHECK(status != std::future_status::deferred);
+    if (status == std::future_status::ready) {
+      break;
+    }
+  }
+  auto status = future.wait_for(std::chrono::milliseconds(0));
   if (status == std::future_status::timeout) {
+    for (auto& thread : workers) {
+      thread.detach();
+    }
     FAIL() << "Timeout for awaitable reached!";
   } else {
     // Propagate exceptions
