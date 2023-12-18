@@ -297,6 +297,9 @@ TEST(BenchmarkMeasurementContainerTest, ResultTableEraseRow) {
         }
         checkResultTableRow(table, numRows - 1, testTableColumnNames.at(0),
                             testTableColumnNames.at(1));
+
+        // Test, if trying to delete a non-existent row results in an error.
+        ASSERT_ANY_THROW(table.deleteRow(table.numRows()));
       };
   for (size_t rowToDelete = 0; rowToDelete < 50; rowToDelete++) {
     singleEraseOperationTest(50, rowToDelete);
@@ -355,6 +358,12 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroupDeleteMember) {
     ASSERT_TRUE(std::ranges::find(group.resultTables_, tableToDelete,
                                   getAddressOfObject) ==
                 std::end(group.resultTables_));
+
+    // Test, if trying to delete a non-existent member results in an error.
+    ResultEntry nonMemberEntry("d", []() { return 4; });
+    ASSERT_ANY_THROW(group.deleteMeasurement(nonMemberEntry));
+    ResultTable nonMemberTable("c", {"row1"}, {"column1"});
+    ASSERT_ANY_THROW(group.deleteTable(nonMemberTable));
   };
   for (size_t memberDeletionPoint = 0; memberDeletionPoint < 50;
        memberDeletionPoint++) {
