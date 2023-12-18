@@ -43,10 +43,7 @@ using parsedQuery::SelectClause;
 
 // _____________________________________________________________________________
 QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
-    : _qec(qec),
-      _rootOperation(nullptr),
-      _type(OperationType::UNDEFINED),
-      _sizeEstimate(std::numeric_limits<size_t>::max()) {}
+    : _qec(qec), _rootOperation(nullptr), _type(OperationType::UNDEFINED) {}
 
 // _____________________________________________________________________________
 string QueryExecutionTree::getCacheKey() {
@@ -107,7 +104,7 @@ size_t QueryExecutionTree::getCostEstimate() {
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getSizeEstimate() {
-  if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
+  if (!_sizeEstimate.has_value()) {
     if (_cachedResult) {
       _sizeEstimate = _cachedResult->size();
     } else {
@@ -117,7 +114,7 @@ size_t QueryExecutionTree::getSizeEstimate() {
       _sizeEstimate = _rootOperation->getSizeEstimate();
     }
   }
-  return _sizeEstimate;
+  return _sizeEstimate.value();
 }
 
 // _____________________________________________________________________________

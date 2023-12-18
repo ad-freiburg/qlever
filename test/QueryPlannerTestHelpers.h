@@ -126,6 +126,9 @@ inline auto IndexScanFromStrings =
 inline auto MultiColumnJoin = MatchTypeAndUnorderedChildren<::MultiColumnJoin>;
 inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
 
+// Return a matcher that matches a query execution tree that contains of
+// multiple JOIN operations that join the `children`. The `INTERNAL SORT BY`
+// operations required for the joins are also ignored by this matcher.
 inline auto UnorderedJoins = [](auto&&... children) -> QetMatcher {
   using Vec = std::vector<std::reference_wrapper<const QueryExecutionTree>>;
   auto collectChildrenRecursive = [](const QueryExecutionTree& tree,
@@ -139,8 +142,7 @@ inline auto UnorderedJoins = [](auto&&... children) -> QetMatcher {
     if (!join && !sort) {
       children.push_back(tree);
     } else {
-      for (const auto& child :
-           static_cast<const Operation*>(operation)->getChildren()) {
+      for (const auto& child : operation->getChildren()) {
         self(*child, children, self);
       }
     }

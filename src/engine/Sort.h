@@ -55,7 +55,7 @@ class Sort : public Operation {
     size_t nlogn = size * logSize;
     size_t subcost = subtree_->getCostEstimate();
     // Return  at least 1, s.t. the query planner will never emit an unnecessary
-    // sort on unnecessary index scans. This makes the testing of the query
+    // sort of an empty `IndexScan`. This makes the testing of the query
     // planner much easier.
     return std::max(1ul, nlogn + subcost);
   }

@@ -85,9 +85,6 @@ class QueryExecutionTree {
 
   const OperationType& getType() const { return _type; }
 
-  // Is the root operation of this tree an `IndexScan` operation.
-  // This is the only query for a concrete type that is frequently used.
-
   bool isEmpty() const {
     return _type == OperationType::UNDEFINED || !_rootOperation;
   }
@@ -121,7 +118,7 @@ class QueryExecutionTree {
 
   void setTextLimit(size_t limit) {
     _rootOperation->setTextLimit(limit);
-    _sizeEstimate = std::numeric_limits<size_t>::max();
+    _sizeEstimate = std::nullopt;
   }
 
   size_t getCostEstimate();
@@ -238,7 +235,7 @@ class QueryExecutionTree {
   std::shared_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
-  size_t _sizeEstimate = std::numeric_limits<size_t>::max();
+  std::optional<size_t> _sizeEstimate = std::nullopt;
   bool _isRoot = false;  // used to distinguish the root from child
                          // operations/subtrees when pinning only the result.
 
