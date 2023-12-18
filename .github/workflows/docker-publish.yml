@@ -35,7 +35,7 @@ jobs:
       - name: Get PR number
         id: pr
         run: echo "pr_num=$(git log --format=%s -n 1 | sed -nr 's/.*\(\#([0-9]+)\)/\1/p')" >> $GITHUB_OUTPUT
-      - name: Build and push
+      - name: Build X-86-64
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -48,7 +48,7 @@ jobs:
           # References:
           # https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
           # https://www.docker.com/blog/multi-arch-build-and-images-the-simple-way/
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           #only  export to the local docker for testing.
           load: true
           # If this is a push on master, publish with short commit sha
@@ -58,6 +58,24 @@ jobs:
           tags: adfreiburg/qlever:test
           # adfreiburg/qlever:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }},
           # adfreiburg/qlever:commit-${{ steps.sha.outputs.sha_short }},
+
+      - name: Build ARM-64
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          # Docker multiplatform images require an entry in their manifests. If this
+          # entry is missing, then the images for each platform are considered seperate.
+          # If this action runs on a single runner (i.e. the attribute `platforms`
+          # contains a list of all platforms) then the manifest is configured automatically.
+          # If the build and push is split over multiple runners, then the action requires an additional `merge`
+          # job, which merges the images for each platform into a single multiplatform image.
+          # References:
+          # https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
+          # https://www.docker.com/blog/multi-arch-build-and-images-the-simple-way/
+          platforms: linux/arm64
+          #only  export to the local docker for testing.
+          load: false
+          push: false
       - name: E2E in Docker
         run:  sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh adfreiburg/qlever:test
       - name: Build and push
