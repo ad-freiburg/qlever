@@ -37,7 +37,7 @@ namespace detail {
 /// `CancellationHandle` class.
 enum class CancellationMode { ENABLED, NO_WATCH_DOG, DISABLED };
 
-constexpr CancellationMode QUERY_CANCELLATION_MODE = []() {
+constexpr CancellationMode CANCELLATION_MODE = []() {
   using enum CancellationMode;
 #ifndef QUERY_CANCELLATION_MODE
   return ENABLED;
@@ -95,7 +95,7 @@ static_assert(std::atomic<CancellationState>::is_always_lock_free);
 
 /// Thread safe wrapper around an atomic variable, providing efficient
 /// checks for cancellation across threads.
-template <detail::CancellationMode Mode = detail::QUERY_CANCELLATION_MODE>
+template <detail::CancellationMode Mode = detail::CANCELLATION_MODE>
 class CancellationHandle {
   using steady_clock = std::chrono::steady_clock;
   static constexpr bool WatchDogEnabled =
