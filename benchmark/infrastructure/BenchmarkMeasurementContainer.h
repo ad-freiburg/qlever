@@ -307,6 +307,7 @@ class ResultGroup : public BenchmarkMetadataGetter {
 
   // Needed for testing purposes.
   FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultGroup);
+  FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultGroupDeleteMember);
 
  public:
   /*
@@ -337,6 +338,12 @@ class ResultGroup : public BenchmarkMetadataGetter {
   }
 
   /*
+  Delete the given `ResultEntry` from the group. Note: Because the group has
+  ownership of all contained entries, this will delete the `ResultEntry`.
+  */
+  void deleteMeasurement(ResultEntry& entry);
+
+  /*
   @brief Adds a new instance of `ResultTable` to the group.
 
   @param descriptor A string to identify this instance in json format later.
@@ -350,6 +357,12 @@ class ResultGroup : public BenchmarkMetadataGetter {
                         const std::vector<std::string>& rowNames,
                         const std::vector<std::string>& columnNames);
 
+  /*
+  Delete the given `ResultTable` from the group. Note: Because the group has
+  ownership of all contained entries, this will delete the `ResultTable`.
+  */
+  void deleteTable(ResultTable& table);
+
   // User defined conversion to `std::string`.
   explicit operator std::string() const;
   friend std::ostream& operator<<(std::ostream& os,
@@ -357,6 +370,11 @@ class ResultGroup : public BenchmarkMetadataGetter {
 
   // JSON serialization.
   friend void to_json(nlohmann::json& j, const ResultGroup& resultGroup);
+
+ private:
+  // The implementation for the general deletion of entries.
+  template <ad_utility::isTypeAnyOf<ResultEntry, ResultTable> T>
+  requires std::same_as<std::decay_t<T>, T> void deleteEntryImpl(T& entry);
 };
 
 }  // namespace ad_benchmark

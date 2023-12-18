@@ -6,6 +6,7 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <string>
 
@@ -13,6 +14,7 @@
 #include "../test/util/BenchmarkMeasurementContainerHelpers.h"
 #include "../test/util/GTestHelpers.h"
 #include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 using namespace std::chrono_literals;
 using namespace std::string_literals;
@@ -298,6 +300,65 @@ TEST(BenchmarkMeasurementContainerTest, ResultTableEraseRow) {
       };
   for (size_t rowToDelete = 0; rowToDelete < 50; rowToDelete++) {
     singleEraseOperationTest(50, rowToDelete);
+  }
+}
+
+TEST(BenchmarkMeasurementContainerTest, ResultGroupDeleteMember) {
+  /*
+  Add the given number of dummy `ResultEntry`s and dummy `ResultTable`s to the
+  given group.
+  */
+  auto addDummyMembers = [](ResultGroup* group, const size_t numOfEntries) {
+    for (size_t i = 0; i < numOfEntries; i++) {
+      group->addMeasurement("d", []() { return 4; });
+      group->addTable("c", {"row1"}, {"column1"});
+    }
+  };
+
+  /*
+  Test, if everything works as intended, when you delete a single member once.
+
+  @param numMembers How many dummy members of each possible type should be added
+  to the test group?
+  @param memberDeletionPoint The number of dummy members, that are added, before
+  we add the member, that will be later deleted.
+  */
+  auto singleDeleteTest = [&addDummyMembers](
+                              const size_t numMembers,
+                              const size_t memberDeletionPoint,
+                              ad_utility::source_location l =
+                                  ad_utility::source_location::current()) {
+    AD_CONTRACT_CHECK(memberDeletionPoint < numMembers);
+    // For generating better messages, when failing a test.
+    auto trace{generateLocationTrace(l, "singleDeleteTest")};
+    ResultGroup group("");
+
+    // Add the dummy members.
+    addDummyMembers(&group, memberDeletionPoint);
+    ResultEntry* const entryToDelete{
+        &group.addMeasurement("d", []() { return 4; })};
+    ResultTable* const tableToDelete{
+        &group.addTable("c", {"row1"}, {"column1"})};
+    addDummyMembers(&group, numMembers - (memberDeletionPoint + 1));
+
+    /*
+    Delete the entries and check, if there are no longer inside the group. Note,
+    that this will make the pointer invalid, but things should be alright, as
+    long as we never dereference them again.
+    */
+    group.deleteMeasurement(*entryToDelete);
+    group.deleteTable(*tableToDelete);
+    auto getAddressOfObject = [](const auto& obj) { return obj.get(); };
+    ASSERT_TRUE(std::ranges::find(group.resultEntries_, entryToDelete,
+                                  getAddressOfObject) ==
+                std::end(group.resultEntries_));
+    ASSERT_TRUE(std::ranges::find(group.resultTables_, tableToDelete,
+                                  getAddressOfObject) ==
+                std::end(group.resultTables_));
+  };
+  for (size_t memberDeletionPoint = 0; memberDeletionPoint < 50;
+       memberDeletionPoint++) {
+    singleDeleteTest(50, memberDeletionPoint);
   }
 }
 }  // namespace ad_benchmark
