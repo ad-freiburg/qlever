@@ -130,7 +130,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 /*
 The columns of the automaticly generated benchmark tables contain the following
 informations:
-- The parameter, that changes with every row..
+- The parameter, that changes with every row.
 - Time needed for sorting `IdTable`s.
 - Time needed for merge/galloping join.
 - Time needed for sorting and merge/galloping added togehter.
@@ -138,16 +138,27 @@ informations:
 - How many rows the result of joining the tables has.
 - How much faster the hash join is. For example: Two times faster.
 
-The following global variables exist, in order to make the information about the
-order of columns explicit.
+The following enum exists, in order to make the information about the order of
+columns explicit.
 */
-constexpr size_t CHANGING_PARAMTER_COLUMN_NUM = 0;
-constexpr size_t TIME_FOR_SORTING_COLUMN_NUM = 1;
-constexpr size_t TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM = 2;
-constexpr size_t TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM = 3;
-constexpr size_t TIME_FOR_HASH_JOIN_COLUMN_NUM = 4;
-constexpr size_t NUM_ROWS_OF_JOIN_RESULT_COLUMN_NUM = 5;
-constexpr size_t JOIN_ALGORITHM_SPEEDUP_COLUMN_NUM = 6;
+enum struct GeneratedTableColumn : unsigned long {
+  ChangingParamter = 0,
+  TimeForSorting,
+  TimeForMergeGallopingJoin,
+  TimeForSortingAndMergeGallopingJoin,
+  TimeForHashJoin,
+  NumRowsOfJoinResult,
+  JoinAlgorithmSpeedup
+};
+
+// TODO<c++23> Replace usage with `std::to_underlying`.
+/*
+Convert the given enum value into the underlying type.
+*/
+template <typename Enum>
+requires std::is_enum_v<Enum> auto toUnderlying(const Enum& e) {
+  return static_cast<std::underlying_type_t<Enum>>(e);
+}
 
 // `T` must be an invocable object, which can be invoked with `const size_t&`
 // and returns an instance of `ReturnType`.
@@ -179,9 +190,10 @@ static bool checkIfFunctionMeasurementOfRowUnderMaxtime(
     return table.getEntry<float>(row, column) <= maxTime;
   };
 
-  return checkTime(TIME_FOR_SORTING_COLUMN_NUM) &&
-         checkTime(TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM) &&
-         checkTime(TIME_FOR_HASH_JOIN_COLUMN_NUM);
+  return checkTime(toUnderlying(GeneratedTableColumn::TimeForSorting)) &&
+         checkTime(
+             toUnderlying(GeneratedTableColumn::TimeForMergeGallopingJoin)) &&
+         checkTime(toUnderlying(GeneratedTableColumn::TimeForHashJoin));
 }
 
 /*
@@ -778,7 +790,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
       // Add a new row without content.
       table.addRow();
-      table.setEntry(rowNumber, CHANGING_PARAMTER_COLUMN_NUM,
+      table.setEntry(rowNumber,
+                     toUnderlying(GeneratedTableColumn::ChangingParamter),
                      returnFirstGrowthFunction(
                          overlap, ratioRows, smallerTableAmountRows,
                          smallerTableAmountColumns, biggerTableAmountColumns,
@@ -801,17 +814,20 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // them using merge/galloping join.
     sumUpColumns(
         &table,
+        ColumnNumWithType<float>{toUnderlying(
+            GeneratedTableColumn::TimeForSortingAndMergeGallopingJoin)},
         ColumnNumWithType<float>{
-            TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM},
-        ColumnNumWithType<float>{TIME_FOR_SORTING_COLUMN_NUM},
-        ColumnNumWithType<float>{TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM});
+            toUnderlying(GeneratedTableColumn::TimeForSorting)},
+        ColumnNumWithType<float>{
+            toUnderlying(GeneratedTableColumn::TimeForMergeGallopingJoin)});
 
     // Calculate, how much of a speedup the hash join algorithm has in
     // comparison to the merge/galloping join algrithm.
     calculateSpeedupOfColumn(
-        &table, {JOIN_ALGORITHM_SPEEDUP_COLUMN_NUM},
-        {TIME_FOR_HASH_JOIN_COLUMN_NUM},
-        {TIME_FOR_SORTING_AND_MERGE_GALLOPING_JOIN_COLUMN_NUM});
+        &table, {toUnderlying(GeneratedTableColumn::JoinAlgorithmSpeedup)},
+        {toUnderlying(GeneratedTableColumn::TimeForHashJoin)},
+        {toUnderlying(
+            GeneratedTableColumn::TimeForSortingAndMergeGallopingJoin)});
 
     // For more specific adjustments.
     return table;
@@ -913,19 +929,20 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
     // Hash join first, because merge/galloping join sorts all tables, if
     // needed, before joining them.
-    table->addMeasurement(row, TIME_FOR_HASH_JOIN_COLUMN_NUM,
-                          [&smallerTable, &biggerTable, &hashJoinLambda]() {
-                            useJoinFunctionOnIdTables(smallerTable, biggerTable,
-                                                      hashJoinLambda)
-                                .numRows();
-                          });
+    table->addMeasurement(
+        row, toUnderlying(GeneratedTableColumn::TimeForHashJoin),
+        [&smallerTable, &biggerTable, &hashJoinLambda]() {
+          useJoinFunctionOnIdTables(smallerTable, biggerTable, hashJoinLambda)
+              .numRows();
+        });
 
     /*
     The sorting of the `IdTables`. That must be done before the
     merge/galloping, otherwise their algorithm won't result in a correct
     result.
     */
-    table->addMeasurement(row, TIME_FOR_SORTING_COLUMN_NUM,
+    table->addMeasurement(row,
+                          toUnderlying(GeneratedTableColumn::TimeForSorting),
                           [&smallerTable, &smallerTableSorted, &biggerTable,
                            &biggerTableSorted]() {
                             if (!smallerTableSorted) {
@@ -937,15 +954,16 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                           });
 
     // The merge/galloping join.
-    table->addMeasurement(row, TIME_FOR_MERGE_GALLOPING_JOIN_COLUMN_NUM,
-                          [&smallerTable, &biggerTable, &joinLambda]() {
-                            useJoinFunctionOnIdTables(smallerTable, biggerTable,
-                                                      joinLambda)
-                                .numRows();
-                          });
+    table->addMeasurement(
+        row, toUnderlying(GeneratedTableColumn::TimeForMergeGallopingJoin),
+        [&smallerTable, &biggerTable, &joinLambda]() {
+          useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
+              .numRows();
+        });
 
     // Adding the number of rows of the result.
-    table->setEntry(row, NUM_ROWS_OF_JOIN_RESULT_COLUMN_NUM,
+    table->setEntry(row,
+                    toUnderlying(GeneratedTableColumn::NumRowsOfJoinResult),
                     numberRowsOfResult);
   }
 };
@@ -1048,7 +1066,9 @@ auto createDefaultStoppingLambda(
                [&resultTableAmountColumns, &table](const size_t& rowNumber) {
                  return approximateMemoryNeededByIdTable(
                      std::stoull(table.getEntry<std::string>(
-                         rowNumber, NUM_ROWS_OF_JOIN_RESULT_COLUMN_NUM)),
+                         rowNumber,
+                         toUnderlying(
+                             GeneratedTableColumn::NumRowsOfJoinResult))),
                      resultTableAmountColumns);
                },
                maxMemoryJoinResultTable);
