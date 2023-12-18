@@ -126,7 +126,7 @@ inline auto IndexScanFromStrings =
 inline auto MultiColumnJoin = MatchTypeAndUnorderedChildren<::MultiColumnJoin>;
 inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
 
-// Return a matcher that matches a query execution tree that contains of
+// Return a matcher that matches a query execution tree that consists of
 // multiple JOIN operations that join the `children`. The `INTERNAL SORT BY`
 // operations required for the joins are also ignored by this matcher.
 inline auto UnorderedJoins = [](auto&&... children) -> QetMatcher {

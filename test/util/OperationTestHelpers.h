@@ -17,7 +17,7 @@ class StallForeverOperation : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
   string getCacheKeyImpl() const override { return "StallForeverOperation"; }
   string getDescriptor() const override {
-    return "StallForEverOperationDescriptor";
+    return "StallForeverOperationDescriptor";
   }
   size_t getResultWidth() const override { return 0; }
   size_t getCostEstimate() override { return 0; }
