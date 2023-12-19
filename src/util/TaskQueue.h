@@ -34,7 +34,8 @@ class TaskQueue {
   using AtomicMs = std::atomic<std::chrono::milliseconds::rep>;
   using Queue = ad_utility::data_structures::ThreadSafeQueue<Task>;
 
-  std::atomic<bool> isFinished_ = false;
+  std::atomic_flag startedFinishing_ = false;
+  std::atomic_flag finishedFinishing_ = false;
   size_t queueMaxSize_ = 1;
   Queue queuedTasks_{queueMaxSize_};
   std::vector<ad_utility::JThread> threads_;
@@ -83,18 +84,12 @@ class TaskQueue {
   // Blocks until all tasks have been computed. After a call to finish, no more
   // calls to push are allowed.
   void finish() {
-    if (isFinished_.exchange(true)) {
+    if (startedFinishing_.test_and_set()) {
       // There was a previous call to `finish()` , so we don't need to do
-      // anything. The atomic exchange is required to not have a data race on
-      // the `threads_` variable.
+      // anything.
       return;
     }
-    queuedTasks_.finish();
-    std::ranges::for_each(threads_, [](auto& thread) {
-      if (thread.joinable()) {
-        thread.join();
-      }
-    });
+    finishImpl();
   }
 
   void resetTimers() requires TrackTimes {
@@ -125,7 +120,17 @@ class TaskQueue {
            std::to_string(popTime_) + "ms (pop)";
   }
 
-  ~TaskQueue() { finish(); }
+  ~TaskQueue() {
+    if (startedFinishing_.test_and_set()) {
+      // Someone has already called `finish`, we have to wait for the finishing
+      // to complete, otherwise there is a data race on the `threads_`.
+      finishedFinishing_.wait(false);
+    } else {
+      // We are responsible for finishing, but we already have set the
+      // `startedFinishing_` to true, so we can run the `impl` directly.
+      finishImpl();
+    }
+  }
 
  private:
   // _________________________________________________________________________
@@ -133,6 +138,21 @@ class TaskQueue {
     while (auto task = queuedTasks_.pop()) {
       task.value()();
     }
+  }
+
+  // The implementation of `finish`. Must only be called if this is the thread
+  // that set `startedFinishing_` from false to true.
+  void finishImpl() {
+    queuedTasks_.finish();
+    std::ranges::for_each(threads_, [](auto& thread) {
+      // If `finish` was called from inside the queue, the calling thread cannot
+      // join itself.
+      if (thread.joinable() && thread.get_id() != std::this_thread::get_id()) {
+        thread.join();
+      }
+    });
+    finishedFinishing_.test_and_set();
+    finishedFinishing_.notify_all();
   }
 };
 }  // namespace ad_utility

@@ -49,3 +49,15 @@ TEST(TaskQueue, SimpleSumWithWait) {
 TEST(TaskQueue, ThrowOnMaxQueueSizeZero) {
   EXPECT_ANY_THROW((ad_utility::TaskQueue{0, 5}));
 }
+
+TEST(TaskQueue, finishFromWorkerThreadDoesntDeadlock) {
+  auto runTest = []<bool trackTimes>() {
+    ad_utility::TaskQueue q{10, 5};
+    for (size_t i = 0; i <= 100; ++i) {
+      q.push([&q] { q.finish(); });
+    }
+    q.finish();
+  };
+  EXPECT_NO_THROW(runTest.template operator()<true>());
+  EXPECT_NO_THROW(runTest.template operator()<false>());
+}

@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [ master ]
 
+concurrency:
+  # When this is not a pull request, then we want all the docker containers to be pushed, we therefore
+  # directly fall back to the commit hash which will be distinct for each push to master.
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.sha}}'
+  cancel-in-progress: true
+
 jobs:
   docker:
     runs-on: ubuntu-20.04
@@ -53,9 +59,16 @@ jobs:
           tags: adfreiburg/qlever:test
 
       - name: E2E in Docker
-        run:  sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh adfreiburg/qlever:test
+        run: | 
+          sudo chmod a+rwx ${{github.workspace}}/e2e_data
+          sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh adfreiburg/qlever:test
 
       - name: Build ARM-64
+        # The cross-compilation to ARM64 takes a long time, so we typically only perform it on the pushes to master
+        # when we actually need that container. Should the building of the container however fail  in the future, then
+        # setting this to `true` will build the container also on pull requests without pushing it, which allows to
+        # debug without polluting the merge history.
+        if: false
         uses: docker/build-push-action@v5
         with:
           context: .
