@@ -52,7 +52,7 @@ TEST(TaskQueue, ThrowOnMaxQueueSizeZero) {
 
 TEST(TaskQueue, finishFromWorkerThreadDoesntDeadlock) {
   auto runTest = []<bool trackTimes>() {
-    ad_utility::TaskQueue q{10, 5};
+    ad_utility::TaskQueue<trackTimes> q{10, 5};
     for (size_t i = 0; i <= 100; ++i) {
       q.push([&q] { q.finish(); });
     }

@@ -147,7 +147,8 @@ class TaskQueue {
     std::ranges::for_each(threads_, [](auto& thread) {
       // If `finish` was called from inside the queue, the calling thread cannot
       // join itself.
-      if (thread.joinable() && thread.get_id() != std::this_thread::get_id()) {
+      AD_CORRECTNESS_CHECK(thread.joinable());
+      if (thread.get_id() != std::this_thread::get_id()) {
         thread.join();
       }
     });
