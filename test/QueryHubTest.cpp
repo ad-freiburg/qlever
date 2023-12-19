@@ -82,7 +82,6 @@ ASYNC_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
             co_await queryHub.createOrAcquireDistributorForReceiving(queryId));
 }
 
-/*
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryHub, simulateLifecycleWithDifferentQueryIds) {
@@ -124,4 +123,3 @@ ASYNC_TEST(QueryHub, ensureOnlyOneSenderCanExist) {
   EXPECT_THROW(co_await queryHub.createOrAcquireDistributorForSending(queryId),
                ad_utility::Exception);
 }
- */
