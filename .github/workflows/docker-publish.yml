@@ -1,4 +1,4 @@
-name: Docker Publish
+name: Docker build and publish
 
 on:
   push:
@@ -60,6 +60,7 @@ jobs:
 
       - name: E2E in Docker
         run: | 
+          sudo mkdir ${{github.workspace}}/e2e_data
           sudo chmod a+rwx ${{github.workspace}}/e2e_data
           sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh adfreiburg/qlever:test
 
