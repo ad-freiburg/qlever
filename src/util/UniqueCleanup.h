@@ -31,7 +31,7 @@ class UniqueCleanup {
   ///                 Note: Make sure the function doesn't capture the this
   ///                 pointer as this may lead to segfaults because the pointer
   ///                 will point to the old object after moving.
-  UniqueCleanup(T&& value, Func function)
+  UniqueCleanup(T value, Func function)
       : value_{std::move(value)}, function_{std::move(function)} {}
 
   T& operator*() noexcept { return value_; }
@@ -55,6 +55,9 @@ class UniqueCleanup {
       active_ = false;
     }
   }
+
+  /// Disable the cleanup call without executing it.
+  void cancel() && { active_ = false; }
 
   ~UniqueCleanup() {
     if (active_) {
