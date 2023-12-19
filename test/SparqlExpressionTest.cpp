@@ -9,10 +9,9 @@
 
 #include "./SparqlExpressionTestHelpers.h"
 #include "./util/GTestHelpers.h"
-#include "./util/IdTestHelpers.h"
+#include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
-#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
@@ -893,4 +892,25 @@ TEST(SparqlExpression, replaceChildThrowsIfOutOfRange) {
 
   ASSERT_THROW(expr.replaceChild(1, std::move(exprToSubstitute)),
                ad_utility::Exception);
+}
+
+// ______________________________________________________________________________
+TEST(SparqlExpression, isAggregateAndIsDistinct) {
+  sparqlExpression::IdExpression idExpr(ValueId::makeFromInt(42));
+
+  ASSERT_FALSE(idExpr.isAggregate());
+  ASSERT_THROW(idExpr.isDistinct(), ad_utility::Exception);
+
+  Variable varX("?x");
+  sparqlExpression::detail::AvgExpression avgExpression(
+      false, std::make_unique<VariableExpression>(varX));
+
+  ASSERT_TRUE(avgExpression.isAggregate());
+  ASSERT_FALSE(avgExpression.isDistinct());
+
+  sparqlExpression::detail::AvgExpression avgDistinctExpression(
+      true, std::make_unique<VariableExpression>(varX));
+
+  ASSERT_TRUE(avgDistinctExpression.isAggregate());
+  ASSERT_TRUE(avgDistinctExpression.isDistinct());
 }
