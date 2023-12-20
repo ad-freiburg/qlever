@@ -22,9 +22,8 @@ auto V = VocabId;
 }  // namespace
 
 TEST(FTSAlgorithmsTest, filterByRangeTest) {
-  IdRange<WordVocabIndex> idRange;
-  idRange._first = WordVocabIndex::make(5);
-  idRange._last = WordVocabIndex::make(7);
+  IdRange<WordVocabIndex> idRange{WordVocabIndex::make(5),
+                                  WordVocabIndex::make(7)};
 
   Index::WordEntityPostings wep;
   Index::WordEntityPostings resultWep;
