@@ -375,14 +375,14 @@ template <ad_utility::isTypeAnyOf<ResultEntry, ResultTable> T>
 requires std::same_as<std::decay_t<T>, T>
 void ResultGroup::deleteEntryImpl(T& entry) {
   // The vector, that holds our entries.
-  auto& vec{std::invoke([this]() -> auto& {
+  auto& vec = [this]() -> auto& {
     if constexpr (std::same_as<T, ResultEntry>) {
       return resultEntries_;
     } else {
       static_assert(std::same_as<T, ResultTable>);
       return resultTables_;
     }
-  })};
+  }();
 
   // Delete `entry`.
   auto entryIterator{std::ranges::find(
