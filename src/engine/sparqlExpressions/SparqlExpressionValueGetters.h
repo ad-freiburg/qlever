@@ -10,6 +10,7 @@
 #include "../../global/Id.h"
 #include "../ResultTable.h"
 #include "./SparqlExpressionTypes.h"
+#include "util/TypeTraits.h"
 
 /// Several classes that can be used as the `ValueGetter` template
 /// argument in the SparqlExpression templates in `SparqlExpression.h`
@@ -28,7 +29,7 @@ using IntOrDouble = std::variant<double, int64_t>;
 // values will become `Id::makeUndefined()`.
 template <bool NanToUndef = false, typename T>
 requires std::integral<T> || std::floating_point<T> ||
-         ad_utility::isTypeAnyOf<T, Id, NotNumeric, NumericValue>
+         ad_utility::SimiliarToAny<T, Id, NotNumeric, NumericValue>
 Id makeNumericId(T t) {
   if constexpr (std::integral<T>) {
     return Id::makeFromInt(t);

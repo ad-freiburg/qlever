@@ -729,7 +729,7 @@ class ConfigManager {
     @brief Add a validator to the list of validators, that are assigned to a
     `ConfigOption`/`ConfigManager`.
     */
-    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+    template <SimiliarToAny<ConfigOption, ConfigManager> T>
     void addEntryUnderKey(const T& key,
                           const ConfigOptionValidatorManager& manager);
 
@@ -739,12 +739,12 @@ class ConfigManager {
 
     @returns If there is no entry for `Key`, return an empty `std::vector`.
     */
-    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+    template <SimiliarToAny<ConfigOption, ConfigManager> T>
     ValueGetterReturnType getEntriesUnderKey(const T& key) const;
 
    private:
     // Return either `configOption_` or `configManager_`, based on type.
-    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+    template <SimiliarToAny<ConfigOption, ConfigManager> T>
     constexpr const MemoryAdressHashMap<T>& getHashMapBasedOnType() const {
       if constexpr (std::same_as<T, ConfigOption>) {
         return configOption_;
@@ -752,7 +752,7 @@ class ConfigManager {
         return configManager_;
       }
     }
-    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+    template <SimiliarToAny<ConfigOption, ConfigManager> T>
     constexpr MemoryAdressHashMap<T>& getHashMapBasedOnType() {
       if constexpr (std::same_as<T, ConfigOption>) {
         return configOption_;

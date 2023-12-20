@@ -5,6 +5,7 @@
 // Type traits for template metaprogramming
 
 #pragma once
+#include <concepts>
 #include <tuple>
 #include <utility>
 #include <variant>
@@ -118,7 +119,11 @@ concept SimilarTo = isSimilar<T, U>;
 
 /// True iff `T` is similar (see above) to any of the `Ts...`.
 template <typename T, typename... Ts>
-concept isTypeAnyOf = (... || isSimilar<T, Ts>);
+concept SimiliarToAny = (... || isSimilar<T, Ts>);
+
+/// True iff `T` is the same as any of the `Ts...`.
+template <typename T, typename... Ts>
+concept SameAsAny = (... || std::same_as<T, Ts>);
 
 /// isTypeContainedIn<T, U> It is true iff type U is a pair, tuple or variant
 /// and T `isSimilar` (see above) to one of the types contained in the tuple,
@@ -128,15 +133,15 @@ constexpr static bool isTypeContainedIn = false;
 
 template <typename T, typename... Ts>
 constexpr static bool isTypeContainedIn<T, std::tuple<Ts...>> =
-    isTypeAnyOf<T, Ts...>;
+    SimiliarToAny<T, Ts...>;
 
 template <typename T, typename... Ts>
 constexpr static bool isTypeContainedIn<T, std::variant<Ts...>> =
-    isTypeAnyOf<T, Ts...>;
+    SimiliarToAny<T, Ts...>;
 
 template <typename T, typename... Ts>
 constexpr static bool isTypeContainedIn<T, std::pair<Ts...>> =
-    isTypeAnyOf<T, Ts...>;
+    SimiliarToAny<T, Ts...>;
 
 /// A templated bool that is always false,
 /// independent of the template parameter.

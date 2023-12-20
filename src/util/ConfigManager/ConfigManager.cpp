@@ -863,7 +863,7 @@ bool ConfigManager::containsOption(const ConfigOption& opt) const {
 }
 
 // ____________________________________________________________________________
-template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+template <SimiliarToAny<ConfigOption, ConfigManager> T>
 void ConfigManager::ConfigurationDocValidatorAssignment::addEntryUnderKey(
     const T& key, const ConfigOptionValidatorManager& manager) {
   getHashMapBasedOnType<T>()[&key].push_back(&manager);
@@ -877,7 +877,7 @@ template void ConfigManager::ConfigurationDocValidatorAssignment::
                                     const ConfigOptionValidatorManager&);
 
 // ____________________________________________________________________________
-template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+template <SimiliarToAny<ConfigOption, ConfigManager> T>
 auto ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
     const T& key) const -> ValueGetterReturnType {
   // The concerned hash map.
