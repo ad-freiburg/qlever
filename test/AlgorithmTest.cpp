@@ -23,37 +23,6 @@ TEST(Algorithm, Contains) {
           7,
       },
       [&v](const auto& el) { return contains(v, el); }));
-
-  auto testStringLike = []<typename StringLike>() {
-    StringLike s{"hal"};
-    {
-      std::vector<std::string> substrings{"h", "a", "l", "ha", "al", "hal"};
-      ASSERT_TRUE(std::ranges::all_of(
-          substrings, [&s](const auto& el) { return contains(s, el); }));
-      std::vector<std::string> noSubstrings{"x", "hl", "hel"};
-      ASSERT_TRUE(std::ranges::none_of(
-          noSubstrings, [&s](const auto& el) { return contains(s, el); }));
-    }
-    {
-      std::vector<std::string_view> substrings{"h",  "a",  "l",
-                                               "ha", "al", "hal"};
-      ASSERT_TRUE(std::ranges::all_of(
-          substrings, [&s](const auto& el) { return contains(s, el); }));
-      std::vector<std::string_view> noSubstrings{"x", "hl", "hel"};
-      ASSERT_TRUE(std::ranges::none_of(
-          noSubstrings, [&s](const auto& el) { return contains(s, el); }));
-    }
-
-    std::vector<char> subchars{'h', 'a', 'l'};
-    ASSERT_TRUE(std::ranges::all_of(
-        subchars, [&s](const auto& el) { return contains(s, el); }));
-
-    std::vector<char> noSubchars{'i', 'b', 'm'};
-    ASSERT_TRUE(std::ranges::none_of(
-        noSubchars, [&s](const auto& el) { return contains(s, el); }));
-  };
-  testStringLike.template operator()<std::string>();
-  testStringLike.template operator()<std::string_view>();
 }
 
 // _____________________________________________________________________________

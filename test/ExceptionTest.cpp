@@ -11,7 +11,7 @@
 using namespace ad_utility;
 
 void checkContains(const std::exception& e, std::string_view substring) {
-  ASSERT_TRUE(ad_utility::contains(std::string_view{e.what()}, substring));
+  ASSERT_TRUE(std::string_view{e.what()}.contains(substring));
 }
 
 TEST(Exception, AbortException) {
