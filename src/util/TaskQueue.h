@@ -128,7 +128,8 @@ class TaskQueue {
     } else {
       // We are responsible for finishing, but we already have set the
       // `startedFinishing_` to true, so we can run the `impl` directly.
-      finishImpl();
+      ad_utility::terminateIfThrows([this]() { finishImpl(); },
+                                    "In the destructor of TaskQueue.");
     }
   }
 
