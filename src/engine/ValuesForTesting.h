@@ -20,6 +20,11 @@ class ValuesForTesting : public Operation {
   bool supportsLimit_;
 
  public:
+  // Those can be manually overwritten for testing.
+  size_t sizeEstimate_;
+  size_t costEstimate_;
+
+ public:
   // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number
   // of columns in the table.
@@ -29,7 +34,9 @@ class ValuesForTesting : public Operation {
       : Operation{ctx},
         table_{std::move(table)},
         variables_{std::move(variables)},
-        supportsLimit_{supportsLimit} {
+        supportsLimit_{supportsLimit},
+        sizeEstimate_{table_.numRows()},
+        costEstimate_{table.numRows()} {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
 
@@ -74,10 +81,10 @@ class ValuesForTesting : public Operation {
 
   void setTextLimit(size_t limit) override { (void)limit; }
 
-  size_t getCostEstimate() override { return table_.numRows(); }
+  size_t getCostEstimate() override { return costEstimate_; }
 
  private:
-  uint64_t getSizeEstimateBeforeLimit() override { return table_.numRows(); }
+  uint64_t getSizeEstimateBeforeLimit() override { return sizeEstimate_; }
 
  public:
   // For unit testing purposes it is useful that the columns have different
