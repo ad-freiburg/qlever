@@ -89,8 +89,10 @@ class SparqlExpression {
 
   // Check if an expression is distinct (only applies to aggregates)
   virtual bool isDistinct() const {
-    AD_CONTRACT_CHECK(isAggregate());
-    return false;
+    AD_THROW(
+        "isDistinct() maybe only called for aggregate expressions. If this is "
+        "an aggregate expression, then the implementation of isDistinct() is "
+        "missing for this expression. Please report this to the developers.");
   }
 
   // Replace child at index `childIndex` with `newExpression`
