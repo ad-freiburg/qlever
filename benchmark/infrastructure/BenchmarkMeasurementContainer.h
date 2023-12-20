@@ -252,9 +252,9 @@ class ResultTable : public BenchmarkMetadataGetter {
   /*
   @brief Delete the given row.
 
-  @param row Uses matrix coordinates.
+  @param rowIdx Uses matrix coordinates.
   */
-  void deleteRow(const size_t row);
+  void deleteRow(const size_t rowIdx);
 
   /*
   The number of rows.

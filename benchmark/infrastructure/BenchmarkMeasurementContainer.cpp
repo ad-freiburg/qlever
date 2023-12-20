@@ -321,9 +321,9 @@ void ResultTable::addRow() {
 }
 
 // ____________________________________________________________________________
-void ResultTable::deleteRow(const size_t row) {
-  AD_CONTRACT_CHECK(row < numRows());
-  entries_.erase(std::begin(entries_) + row);
+void ResultTable::deleteRow(const size_t rowIdx) {
+  AD_CONTRACT_CHECK(rowIdx < numRows());
+  entries_.erase(std::begin(entries_) + rowIdx);
 }
 
 // ____________________________________________________________________________
