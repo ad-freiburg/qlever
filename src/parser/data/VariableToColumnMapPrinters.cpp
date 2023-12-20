@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "ctre/ctre.h"
+#include <ctre-unicode.hpp>
+
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "index/Index.h"

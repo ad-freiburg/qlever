@@ -4,16 +4,15 @@
 
 #include "./GeoSparqlHelpers.h"
 
+#include <absl/strings/charconv.h>
+
 #include <cmath>
+#include <ctre-unicode.hpp>
 #include <limits>
 #include <numbers>
-#include <optional>
-#include <string>
 #include <string_view>
 
-#include "./Exception.h"
-#include "absl/strings/charconv.h"
-#include "ctre/ctre.h"
+#include "util/Exception.h"
 
 namespace ad_utility {
 

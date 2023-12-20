@@ -59,40 +59,14 @@ jobs:
     steps:
     - uses: actions/checkout@v3
       with:
-        submodules: 'recursive'
-
+          submodules: 'recursive'
     - name: Install dependencies
-      run:  |
-        sudo gem install apt-spy2 && sudo apt-spy2 fix --commit --launchpad --country=US
-        sudo apt-get update
-        sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
-    - name: Install boost Ubuntu 22.04
-      run: sudo add-apt-repository -y ppa:mhier/libboost-latest && sudo apt update && sudo apt install -y libboost1.81-all-dev libboost-url1.81-dev
-    - name: Install gcc 11
-      run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-11 g++-11
-      if :  matrix.compiler == 'gcc' && matrix.compiler-version == 11
-    - name: Install gcc 12
-      run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-12 g++-12
-      if :  matrix.compiler == 'gcc' && matrix.compiler-version == 12
-
-    - name: Install gcc 13
-      run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-13 g++-13
-      if :  matrix.compiler == 'gcc' && matrix.compiler-version == 13
-      
-    - name: Install clang
-      # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
-      # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted
-      # immediately after.
-      run:  |
-        wget https://apt.llvm.org/llvm.sh
-        sudo chmod +x llvm.sh
-        sed   's/apt-key del/echo/' llvm.sh -iy
-        sudo ./llvm.sh ${{matrix.compiler-version}}
-        sudo apt install -y clang-${{matrix.compiler-version}}
-      if :  matrix.compiler == 'clang'
-
-    - name: Python dependencies
-      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
+      uses: ./.github/workflows/install-dependencies-ubuntu
+    - name: Install compiler
+      uses: ./.github/workflows/install-compiler-ubuntu
+      with:
+        compiler: ${{matrix.compiler}}
+        compiler-version: ${{matrix.compiler-version}}
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.

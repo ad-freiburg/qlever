@@ -1232,7 +1232,7 @@ void IndexImpl::dumpAsciiLists(const vector<string>& lists,
       IdRange idRange;
       textVocab_.getIdRangeForFullTextPrefix(lists[i], &idRange);
       TextBlockMetaData tbmd =
-          textMeta_.getBlockInfoByWordRange(idRange._first, idRange._last);
+          textMeta_.getBlockInfoByWordRange(idRange.first_, idRange.last_);
       if (decGapsFreq) {
         vector<Id> eids;
         vector<Id> cids;
@@ -1510,16 +1510,17 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
       return std::nullopt;
     }
   } else {
-    if (!textVocab_.getId(word, &idRange._first)) {
+    WordVocabIndex idx;
+    if (!textVocab_.getId(word, &idx)) {
       LOG(INFO) << "Term: " << word << " not in vocabulary\n";
       return std::nullopt;
     }
-    idRange._last = idRange._first;
+    idRange = IdRange{idx, idx};
   }
-  const auto& tbmd = textMeta_.getBlockInfoByWordRange(idRange._first.get(),
-                                                       idRange._last.get());
+  const auto& tbmd = textMeta_.getBlockInfoByWordRange(idRange.first().get(),
+                                                       idRange.last().get());
   bool hasToBeFiltered = tbmd._cl.hasMultipleWords() &&
-                         !(tbmd._firstWordId == idRange._first.get() &&
-                           tbmd._lastWordId == idRange._last.get());
+                         !(tbmd._firstWordId == idRange.first().get() &&
+                           tbmd._lastWordId == idRange.last().get());
   return TextBlockMetadataAndWordInfo{tbmd, hasToBeFiltered, idRange};
 }

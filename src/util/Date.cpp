@@ -4,6 +4,11 @@
 
 #include "util/Date.h"
 
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
+
+#include <ctre-unicode.hpp>
+
 #include "util/Log.h"
 
 // ____________________________________________________________________________________________________
@@ -86,25 +91,6 @@ std::pair<std::string, const char*> DateOrLargeYear::toStringAndType() const {
   AD_FAIL();
 }
 
-// Convert a CTRE `match` to an integer. The behavior is undefined if
-// the `match` cannot be completely converted to an integer.
-// We need this for `int64_t` as well as plain `int` because both these types
-// are used in the date representations.
-template <ctll::fixed_string Name>
-static int64_t toInt64(const auto& match) {
-  int64_t result = 0;
-  const auto& s = match.template get<Name>();
-  std::from_chars(s.data(), s.data() + s.size(), result);
-  return result;
-}
-template <ctll::fixed_string Name>
-static int toInt(const auto& match) {
-  int64_t result = toInt64<Name>(match);
-  AD_CORRECTNESS_CHECK(result >= std::numeric_limits<int>::min());
-  AD_CORRECTNESS_CHECK(result <= std::numeric_limits<int>::max());
-  return static_cast<int>(result);
-}
-
 // Regex objects with explicitly named groups to parse dates and times.
 constexpr static ctll::fixed_string dateRegex{
     R"((?<year>-?\d{4,})-(?<month>\d{2})-(?<day>\d{2}))"};
@@ -120,7 +106,7 @@ static Date::TimeZone parseTimeZone(const auto& match) {
   } else if (!match.template get<"tzHours">()) {
     return Date::NoTimeZone{};
   }
-  int tz = toInt<"tzHours">(match);
+  int tz = match.template get<"tzHours">().to_number();
   if (match.template get<"tzSign">() == "-") {
     tz *= -1;
   }
@@ -197,11 +183,11 @@ DateOrLargeYear DateOrLargeYear::parseXsdDatetime(std::string_view dateString) {
     throw DateParseException{absl::StrCat(
         "The value ", dateString, " cannot be parsed as an `xsd:dateTime`.")};
   }
-  int64_t year = toInt64<"year">(match);
-  int month = toInt<"month">(match);
-  int day = toInt<"day">(match);
-  int hour = toInt<"hour">(match);
-  int minute = toInt<"minute">(match);
+  int64_t year = match.template get<"year">().to_number<int64_t>();
+  int month = match.template get<"month">().to_number();
+  int day = match.template get<"day">().to_number();
+  int hour = match.template get<"hour">().to_number();
+  int minute = match.template get<"minute">().to_number();
   double second = std::strtod(match.get<"second">().data(), nullptr);
   return makeDateOrLargeYear(dateString, year, month, day, hour, minute, second,
                              parseTimeZone(match));
@@ -216,9 +202,9 @@ DateOrLargeYear DateOrLargeYear::parseXsdDate(std::string_view dateString) {
     throw DateParseException{absl::StrCat(
         "The value ", dateString, " cannot be parsed as an `xsd:date`.")};
   }
-  int64_t year = toInt64<"year">(match);
-  int month = toInt<"month">(match);
-  int day = toInt<"day">(match);
+  int64_t year = match.template get<"year">().to_number<int64_t>();
+  int month = match.template get<"month">().to_number();
+  int day = match.template get<"day">().to_number();
   return makeDateOrLargeYear(dateString, year, month, day, -1, 0, 0.0,
                              parseTimeZone(match));
 }
@@ -233,7 +219,7 @@ DateOrLargeYear DateOrLargeYear::parseGYear(std::string_view dateString) {
     throw DateParseException{absl::StrCat(
         "The value ", dateString, " cannot be parsed as an `xsd:gYear`.")};
   }
-  int64_t year = toInt64<"year">(match);
+  int64_t year = match.template get<"year">().to_number<int64_t>();
   return makeDateOrLargeYear(dateString, year, 0, 0, -1, 0, 0.0,
                              parseTimeZone(match));
 }
@@ -249,8 +235,8 @@ DateOrLargeYear DateOrLargeYear::parseGYearMonth(std::string_view dateString) {
     throw DateParseException{absl::StrCat(
         "The value ", dateString, " cannot be parsed as an `xsd:gYearMonth`.")};
   }
-  int64_t year = toInt64<"year">(match);
-  int month = toInt<"month">(match);
+  int64_t year = match.template get<"year">().to_number<int64_t>();
+  int month = match.template get<"month">().to_number();
   return makeDateOrLargeYear(dateString, year, month, 0, -1, 0, 0.0,
                              parseTimeZone(match));
 }

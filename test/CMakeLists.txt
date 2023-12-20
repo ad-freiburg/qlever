@@ -92,7 +92,7 @@ addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
 addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
-addLinkAndDiscoverTest(StringUtilsTest)
+addLinkAndDiscoverTest(StringUtilsTest util)
 
 addLinkAndDiscoverTest(CacheTest)
 
@@ -145,7 +145,7 @@ else()
     linkAndDiscoverTest(TokenTest parser re2 util)
 endif()
 
-addLinkAndDiscoverTest(TurtleParserTest parser re2)
+addLinkAndDiscoverTestSerial(TurtleParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
@@ -335,7 +335,9 @@ addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
 addLinkAndDiscoverTest(RandomTest)
 
-addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
+addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark testUtil)
+
+addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
 
 addLinkAndDiscoverTest(FindUndefRangesTest engine)
 

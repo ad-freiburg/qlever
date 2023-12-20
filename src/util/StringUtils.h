@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <ctre-unicode.hpp>
 #include <functional>
 #include <iterator>
 #include <ranges>
@@ -19,9 +20,12 @@
 #include <string>
 #include <string_view>
 
+#include "util/Algorithm.h"
 #include "util/Concepts.h"
+#include "util/CtreHelpers.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/TypeTraits.h"
 
 using std::string;
 using std::string_view;
@@ -32,28 +36,70 @@ namespace ad_utility {
 //! std::string. However, it is not required so far.
 
 //! Returns the longest prefix that the two arguments have in common
-inline string_view commonPrefix(string_view a, string_view b);
+string_view commonPrefix(string_view a, string_view b);
 
 //! Case transformations. Should be thread safe.
-inline string getLowercase(const string& orig);
+string getLowercase(const string& orig);
 
-inline string getUppercase(const string& orig);
+string getUppercase(const string& orig);
 
-inline string utf8ToLower(std::string_view s);
+/*
+ * @brief convert a UTF-8 String to lowercase according to the held locale
+ * @param s UTF-8 encoded string
+ * @return The lowercase version of s, also encoded as UTF-8
+ */
+string utf8ToLower(std::string_view s);
 
-inline std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view s,
-                                                         size_t prefixLength);
+// Get the uppercase value. For details see `utf8ToLower` above
+string utf8ToUpper(std::string_view s);
+
+/**
+ * Get the substring from the UTF8-encoded str that starts at the start-th
+ * codepoint as has a length of size codepoints. If start >= the number of
+ * codepoints in str, an empty string is returned. If start + size >= the number
+ * of codepoints in str then the substring will reach until the end of str. This
+ * behavior is consistent with std::string::substr, but working on UTF-8
+ * characters that might have multiple bytes.
+ */
+string_view getUTF8Substring(const std::string_view str, size_t start,
+                             size_t size);
+
+// Overload for the above function that creates the substring from the
+// `start`-th codepoint to the end of the string.
+string_view getUTF8Substring(const std::string_view str, size_t start);
+
+/**
+ * @brief get a prefix of a utf-8 string of a specified length
+ *
+ * Returns first min(prefixLength, numCodepointsInInput) codepoints in the UTF-8
+ string sv.
+
+ * CAVEAT: The result is often misleading when looking for an answer to the
+ * question "is X a prefix of Y" because collation might ignore aspects like
+ * punctuation or case.
+ * This is currently only used for the text index where all words that
+ * share a common prefix of a certain length are stored in the same block.
+ * @param sv a UTF-8 encoded string
+ * @param prefixLength The number of Unicode codepoints we want to extract.
+ * @return the first max(prefixLength, numCodepointsInArgSP) Unicode
+ * codepoints of sv, encoded as UTF-8
+ */
+std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view s,
+                                                  size_t prefixLength);
+
+// Overload for the above function that creates the substring from the
+// `start`-th codepoint to the end of the string.
+string_view getUTF8Substring(const std::string_view str, size_t start);
 
 //! Gets the last part of a string that is somehow split by the given separator.
-inline string getLastPartOfString(const string& text, const char separator);
+string getLastPartOfString(const string& text, const char separator);
 
 /**
  * @brief Return the last position where <literalEnd> was found in the <input>
  * without being escaped by backslashes. If it is not found at all, string::npos
  * is returned.
  */
-inline size_t findLiteralEnd(std::string_view input,
-                             std::string_view literalEnd);
+size_t findLiteralEnd(std::string_view input, std::string_view literalEnd);
 
 /*
 @brief Add elements of the range to a stream, with the `separator` between the
@@ -83,188 +129,28 @@ characters.
 
 @param indentationSymbol What the indentation should look like..
 */
-inline std::string addIndentation(std::string_view str,
-                                  std::string_view indentationSymbol);
+std::string addIndentation(std::string_view str,
+                           std::string_view indentationSymbol);
+
+/*
+@brief Insert the given separator symbol between groups of thousands. For
+example: `insertThousandDelimiter("The number 48900.", ',', '.')` returns `"The
+number 48,900."`.
+
+@tparam floatingPointSignifier The symbol that, if between two ranges of
+numbers, signifies, that the two ranges of numbers build one floating point
+number.
+
+@param str The input string.
+@param separatorSymbol What symbol to put between groups of thousands.
+*/
+template <const char floatingPointSignifier = '.'>
+std::string insertThousandSeparator(const std::string_view str,
+                                    const char separatorSymbol = ' ');
 
 // *****************************************************************************
 // Definitions:
 // *****************************************************************************
-
-// ____________________________________________________________________________
-string_view commonPrefix(string_view a, const string_view b) {
-  size_t maxIdx = std::min(a.size(), b.size());
-  size_t i = 0;
-  while (i < maxIdx) {
-    if (a[i] != b[i]) {
-      break;
-    }
-    ++i;
-  }
-  return a.substr(0, i);
-}
-
-// ____________________________________________________________________________
-string getLowercase(const string& orig) {
-  string retVal;
-  retVal.reserve(orig.size());
-  for (size_t i = 0; i < orig.size(); ++i) {
-    retVal += tolower(orig[i]);
-  }
-  return retVal;
-}
-
-// ____________________________________________________________________________
-string getUppercase(const string& orig) {
-  string retVal;
-  retVal.reserve(orig.size());
-  for (size_t i = 0; i < orig.size(); ++i) {
-    retVal += toupper(orig[i]);
-  }
-  return retVal;
-}
-
-namespace detail {
-// The common implementation of `utf8ToLower` and `utf8ToUpper` (for
-// details see below).
-std::string utf8StringTransform(std::string_view s, auto transformation) {
-  std::string result;
-  icu::StringByteSink<std::string> sink(&result);
-  UErrorCode err = U_ZERO_ERROR;
-  transformation("", 0,
-                 icu::StringPiece{s.data(), static_cast<int32_t>(s.size())},
-                 sink, nullptr, err);
-  if (U_FAILURE(err)) {
-    throw std::runtime_error(u_errorName(err));
-  }
-  return result;
-}
-}  // namespace detail
-
-// ____________________________________________________________________________
-/*
- * @brief convert a UTF-8 String to lowercase according to the held locale
- * @param s UTF-8 encoded string
- * @return The lowercase version of s, also encoded as UTF-8
- */
-std::string utf8ToLower(std::string_view s) {
-  return detail::utf8StringTransform(s, [](auto&&... args) {
-    return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
-  });
-}
-
-// Get the uppercase value. For details see `utf8ToLower` above
-inline std::string utf8ToUpper(std::string_view s) {
-  return detail::utf8StringTransform(s, [](auto&&... args) {
-    return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
-  });
-}
-
-/**
- * @brief get a prefix of a utf-8 string of a specified length
- *
- * Returns first min(prefixLength, numCodepointsInInput) codepoints in the UTF-8
- string sv.
-
- * CAVEAT: The result is often misleading when looking for an answer to the
- * question "is X a prefix of Y" because collation might ignore aspects like
- * punctuation or case.
- * This is currently only used for the text index where all words that
- * share a common prefix of a certain length are stored in the same block.
- * @param sv a UTF-8 encoded string
- * @param prefixLength The number of Unicode codepoints we want to extract.
- * @return the first max(prefixLength, numCodepointsInArgSP) Unicode
- * codepoints of sv, encoded as UTF-8
- */
-std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
-                                                  size_t prefixLength) {
-  const char* s = sv.data();
-  int32_t length = sv.length();
-  size_t numCodepoints = 0;
-  int32_t i = 0;
-  for (i = 0; i < length && numCodepoints < prefixLength;) {
-    UChar32 c;
-    U8_NEXT(s, i, length, c);
-    if (c >= 0) {
-      ++numCodepoints;
-    } else {
-      throw std::runtime_error(
-          "Illegal UTF sequence in ad_utility::getUTF8Prefix");
-    }
-  }
-  return {numCodepoints, sv.substr(0, i)};
-}
-
-/**
- * Get the substring from the UTF8-encoded str that starts at the start-th
- * codepoint as has a length of size codepoints. If start >= the number of
- * codepoints in str, an empty string is returned. If start + size >= the number
- * of codepoints in str then the substring will reach until the end of str. This
- * behavior is consistent with std::string::substr, but working on UTF-8
- * characters that might have multiple bytes.
- */
-inline string_view getUTF8Substring(const std::string_view str, size_t start,
-                                    size_t size) {
-  // To generate a substring we have to "cut off" part of the string at the
-  // start and end. The end can be removed with `getUTF8Prefix`.
-  auto strWithEndRemoved = getUTF8Prefix(str, start + size).second;
-  // Generate the prefix that should be removed from `str`. Actually remove it
-  // from `str` by using the size in UTF-8 of the prefix and `string.substr`.
-  auto prefixToRemove = getUTF8Prefix(strWithEndRemoved, start).second;
-  return strWithEndRemoved.substr(prefixToRemove.size());
-}
-// Overload for the above function that creates the substring from the
-// `start`-th codepoint to the end of the string.
-inline string_view getUTF8Substring(const std::string_view str, size_t start) {
-  // `str.size()` is >= the number of codepoints because each codepoint has at
-  // least one byte in UTF-8
-  return getUTF8Substring(str, start, str.size());
-}
-
-// ____________________________________________________________________________
-string getLastPartOfString(const string& text, const char separator) {
-  size_t pos = text.rfind(separator);
-  if (pos != text.npos) {
-    return text.substr(pos + 1);
-  } else {
-    return text;
-  }
-}
-
-// _________________________________________________________________________
-inline size_t findLiteralEnd(const std::string_view input,
-                             const std::string_view literalEnd) {
-  // keep track of the last position where the literalEnd was found unescaped
-  auto lastFoundPos = size_t(-1);
-  auto endPos = input.find(literalEnd, 0);
-  while (endPos != string::npos) {
-    if (endPos > 0 && input[endPos - 1] == '\\') {
-      size_t numBackslash = 1;
-      auto slashPos = endPos - 2;
-      // the first condition checks > 0 for unsigned numbers
-      while (slashPos < input.size() && input[slashPos] == '\\') {
-        slashPos--;
-        numBackslash++;
-      }
-      if (numBackslash % 2 == 0) {
-        // even number of backslashes means that the quote we found has not
-        // been escaped
-        break;
-      }
-      endPos = input.find(literalEnd, endPos + 1);
-    } else {
-      // no backslash before the literalEnd, mark this as a candidate position
-      lastFoundPos = endPos;
-      endPos = input.find(literalEnd, endPos + 1);
-    }
-  }
-
-  // if we have found any unescaped occurence of literalEnd, return the last
-  // of these positions
-  if (lastFoundPos != size_t(-1)) {
-    return lastFoundPos;
-  }
-  return endPos;
-}
 
 // A "constant-time" comparison for strings.
 // Implementation based on https://stackoverflow.com/a/25374036
@@ -339,23 +225,90 @@ std::string lazyStrJoin(Range&& r, std::string_view separator) {
 }
 
 // ___________________________________________________________________________
-std::string addIndentation(std::string_view str,
-                           std::string_view indentationSymbol) {
-  // An empty indentation makes no sense. Must be an error.
-  AD_CONTRACT_CHECK(!indentationSymbol.empty());
+template <const char floatingPointSignifier>
+std::string insertThousandSeparator(const std::string_view str,
+                                    const char separatorSymbol) {
+  static const auto isDigit = [](const char c) {
+    // `char` is ASCII. So the number symbols are the codes from 48 to 57.
+    return '0' <= c && c <= '9';
+  };
+  AD_CONTRACT_CHECK(!isDigit(separatorSymbol) &&
+                    !isDigit(floatingPointSignifier));
 
-  // Add an indentation to the beginning and replace a new line with a new line,
-  // directly followed by the indentation.
-  return absl::StrCat(
-      indentationSymbol,
-      absl::StrReplaceAll(str,
-                          {{"\n", absl::StrCat("\n", indentationSymbol)}}));
+  /*
+  Create a `ctll::fixed_string` of `floatingPointSignifier`, that can be used
+  inside regex character classes, without being confused with one of the
+  reserved characters.
+  */
+  static constexpr auto adjustFloatingPointSignifierForRegex = []() {
+    constexpr ctll::fixed_string floatingPointSignifierAsFixedString(
+        {floatingPointSignifier, '\0'});
+
+    // Inside a regex character class are fewer reserved character.
+    if constexpr (contains(R"--(^-[]\)--", floatingPointSignifier)) {
+      return "\\" + floatingPointSignifierAsFixedString;
+    } else {
+      return floatingPointSignifierAsFixedString;
+    }
+  };
+
+  /*
+  As string view doesn't support the option to insert new values between old
+  values, so we create a new string in the wanted format.
+  */
+  std::ostringstream ostream;
+
+  /*
+  Insert separator into the given string and add it into the `ostream`. Ignores
+  content of the given string, just works based on length.
+  */
+  auto insertSeparator = [&separatorSymbol,
+                          &ostream](const std::string_view s) {
+    // Nothing to do, if the string is to short.
+    AD_CORRECTNESS_CHECK(s.length() > 3);
+
+    /*
+    For walking over the string view.
+    Our initialization value skips the leading digits, so that only the digits
+    remain, where we have to put the seperator in front of every three chars.
+    */
+    size_t currentIdx{s.length() % 3 == 0 ? 3 : s.length() % 3};
+    ostream << s.substr(0, currentIdx);
+    for (; currentIdx < s.length(); currentIdx += 3) {
+      ostream << separatorSymbol << s.substr(currentIdx, 3);
+    }
+  };
+
+  /*
+  The pattern finds any digit sequence, that is long enough for inserting
+  thousand separators and is not the fractual part of a floating point.
+  */
+  static constexpr ctll::fixed_string regexPatDigitSequence{
+      "(?:^|[^\\d" + adjustFloatingPointSignifierForRegex() +
+      "])(?<digit>\\d{4,})"};
+  auto parseIterator = std::begin(str);
+  std::ranges::for_each(
+      ctre::range<regexPatDigitSequence>(str),
+      [&parseIterator, &ostream, &insertSeparator](const auto& match) {
+        /*
+        The digit sequence, that must be transformed. Note: The string view
+        iterators point to entries in the `str` string.
+        */
+        const std::string_view& digitSequence{match.template get<"digit">()};
+
+        // Insert the transformed digit sequence, and the string between it and
+        // the `parseIterator`, into the stream.
+        ostream << std::string_view(parseIterator, std::begin(digitSequence));
+        insertSeparator(digitSequence);
+        parseIterator = std::end(digitSequence);
+      });
+  ostream << std::string_view(std::move(parseIterator), std::end(str));
+  return ostream.str();
 }
-
 }  // namespace ad_utility
 
 // these overloads are missing in the STL
-// they can be constexpr once the compiler completely supports C++20
+// TODO they can be constexpr once the compiler completely supports C++20
 inline std::string operator+(const std::string& a, std::string_view b) {
   std::string res;
   res.reserve(a.size() + b.size());
