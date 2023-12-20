@@ -65,10 +65,12 @@ jobs:
           sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh adfreiburg/qlever:test
 
       - name: Build ARM-64
-        # The cross-compilation to ARM64 takes a long time, so we typically only perform it on the pushes to master
-        # when we actually need that container. Should the building of the container however fail  in the future, then
-        # setting this to `true` will build the container also on pull requests without pushing it, which allows to
-        # debug without polluting the merge history.
+        # The cross-compilation to ARM64 takes a long time, so we typically
+        # only perform it on the pushes to master when we actually need that
+        # container. Should the building of the container however fail  in the
+        # future, then we can set this to `true`. Then the ARM64 image will also
+        # be built on pull requests which allows for debugging without changing
+        # the master branch.
         if: false
         uses: docker/build-push-action@v5
         with:
