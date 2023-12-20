@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -19,6 +17,7 @@
 #include <variant>
 #include <vector>
 
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
@@ -378,10 +377,9 @@ void ResultGroup::deleteEntryImpl(T& entry) {
   auto& vec{std::invoke([this]() -> auto& {
     if constexpr (std::same_as<T, ResultEntry>) {
       return resultEntries_;
-    } else if constexpr (std::same_as<T, ResultTable>) {
-      return resultTables_;
     } else {
-      AD_FAIL();
+      static_assert(std::same_as<T, ResultTable>);
+      return resultTables_;
     }
   })};
 
