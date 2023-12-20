@@ -37,6 +37,7 @@ namespace detail {
 /// `CancellationHandle` class.
 enum class CancellationMode { ENABLED, NO_WATCH_DOG, DISABLED };
 
+/// Turn the `QUERY_CANCELLATION_MODE` macro into a constexpr variable.
 constexpr CancellationMode CANCELLATION_MODE = []() {
   using enum CancellationMode;
 #ifndef QUERY_CANCELLATION_MODE
@@ -195,7 +196,8 @@ class CancellationHandle {
   /// Return true if this cancellation handle has been cancelled, false
   /// otherwise. Note: Make sure to not use this value to set any other atomic
   /// value with relaxed memory ordering, as this may lead to out-of-thin-air
-  /// values.
+  /// values. It also does not interact with the watchdog at all, prefer
+  /// `throwIfCancelled` if possible.
   AD_ALWAYS_INLINE bool isCancelled() const {
     if constexpr (CancellationEnabled) {
       return detail::isCancelled(
