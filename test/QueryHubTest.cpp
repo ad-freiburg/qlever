@@ -62,10 +62,11 @@ ASYNC_TEST(QueryHub, simulateStandardLifecycle) {
   EXPECT_TRUE(observer.expired());
 }
 
+*/
 // _____________________________________________________________________________
 
- */
 ASYNC_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
+  using namespace std::chrono_literals;
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
   auto distributor1 =
@@ -76,9 +77,13 @@ ASYNC_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
     EXPECT_EQ(distributor1, distributor2);
     co_await distributor2->signalEnd();
   }
-  EXPECT_NE(distributor1,
-            co_await queryHub.createOrAcquireDistributorForSending(queryId));
-  EXPECT_NE(distributor1,
+  auto senderNewId =
+      co_await queryHub.createOrAcquireDistributorForSending(queryId);
+  EXPECT_NE(distributor1, senderNewId);
+  distributor1.reset();
+  // The `distributor1` is referring to an old query with the same ID, so
+  // resetting it should not impact the registry.
+  EXPECT_EQ(senderNewId,
             co_await queryHub.createOrAcquireDistributorForReceiving(queryId));
 }
 
@@ -108,7 +113,32 @@ ASYNC_TEST(QueryHub, simulateLifecycleWithDifferentQueryIds) {
 
 namespace ad_utility::websocket {
 
-// TODO:: Write a new test for the new behavior.
+ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
+  QueryHub queryHub{ioContext};
+  QueryId queryId = QueryId::idFromString("abc");
+  std::atomic_flag flag{};
+
+  auto distributor =
+      co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
+  std::weak_ptr<const QueryToSocketDistributor> comparison = distributor;
+
+  co_await net::dispatch(
+      net::bind_executor(queryHub.globalStrand_, net::use_awaitable));
+  net::post(ioContext, [distributor = std::move(distributor), &flag]() mutable {
+    // Invoke destructor while the strand of
+    // queryHub is still in use
+    distributor.reset();
+    flag.test_and_set();
+    flag.notify_all();
+  });
+
+  flag.wait(false);
+
+  distributor = co_await queryHub.createOrAcquireDistributorInternalUnsafe(
+      queryId, false);
+  EXPECT_FALSE(!comparison.owner_before(distributor) &&
+               !distributor.owner_before(comparison));
+}
 
 }  // namespace ad_utility::websocket
 
