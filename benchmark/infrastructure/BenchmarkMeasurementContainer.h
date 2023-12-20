@@ -339,7 +339,8 @@ class ResultGroup : public BenchmarkMetadataGetter {
 
   /*
   Delete the given `ResultEntry` from the group. Note: Because the group has
-  ownership of all contained entries, this will delete the `ResultEntry`.
+  ownership of all contained entries,  this will invalidate the argument
+  `ResultEntry`.
   */
   void deleteMeasurement(ResultEntry& entry);
 
@@ -359,7 +360,8 @@ class ResultGroup : public BenchmarkMetadataGetter {
 
   /*
   Delete the given `ResultTable` from the group. Note: Because the group has
-  ownership of all contained entries, this will delete the `ResultTable`.
+  ownership of all contained entries, this will invalidate the argument
+  `ResultTable`.
   */
   void deleteTable(ResultTable& table);
 
