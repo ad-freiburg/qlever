@@ -36,7 +36,7 @@ class ValuesForTesting : public Operation {
         variables_{std::move(variables)},
         supportsLimit_{supportsLimit},
         sizeEstimate_{table_.numRows()},
-        costEstimate_{table.numRows()} {
+        costEstimate_{table_.numRows()} {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
 
