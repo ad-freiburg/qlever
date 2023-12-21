@@ -57,21 +57,15 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string OptionalJoin::asStringImpl(size_t indent) const {
+string OptionalJoin::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "OPTIONAL_JOIN\n" << _left->asString(indent) << " ";
+  os << "OPTIONAL_JOIN\n" << _left->getCacheKey() << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][0] << (i < _joinColumns.size() - 1 ? " & " : "");
   };
   os << "]\n";
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "|X|\n" << _right->asString(indent) << " ";
+  os << "|X|\n" << _right->getCacheKey() << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][1] << (i < _joinColumns.size() - 1 ? " & " : "");

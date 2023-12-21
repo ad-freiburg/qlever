@@ -50,7 +50,7 @@ class Operation {
 
   /// get non-owning constant pointers to all the held subtrees to actually use
   /// the Execution Trees as trees
-  std::vector<const QueryExecutionTree*> getChildren() const {
+  virtual std::vector<const QueryExecutionTree*> getChildren() const final {
     vector<QueryExecutionTree*> interm{
         const_cast<Operation*>(this)->getChildren()};
     return {interm.begin(), interm.end()};
@@ -68,9 +68,9 @@ class Operation {
 
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
-  // Calls  `asStringImpl` and adds the information about the `LIMIT` clause.
-  virtual string asString(size_t indent = 0) const final {
-    auto result = asStringImpl(indent);
+  // Calls  `getCacheKeyImpl` and adds the information about the `LIMIT` clause.
+  virtual string getCacheKey() const final {
+    auto result = getCacheKeyImpl();
     if (_limit._limit.has_value()) {
       absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
     }
@@ -81,9 +81,9 @@ class Operation {
   }
 
  private:
-  // The individual implementation of `asString` (see above) that has to be
+  // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  virtual string asStringImpl(size_t indent = 0) const = 0;
+  virtual string getCacheKeyImpl() const = 0;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for

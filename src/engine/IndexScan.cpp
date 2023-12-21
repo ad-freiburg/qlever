@@ -48,12 +48,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
 }
 
 // _____________________________________________________________________________
-string IndexScan::asStringImpl(size_t indent) const {
+string IndexScan::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << ' ';
-  }
-
   auto permutationString = Permutation::toString(permutation_);
 
   if (numVariables_ == 3) {
@@ -158,7 +154,7 @@ size_t IndexScan::computeSizeEstimate() const {
       // Note: we cannot use `optional::value_or()` here, because the else
       // case is expensive to compute, and we need it lazily evaluated.
       if (auto size = getExecutionContext()->getQueryTreeCache().getPinnedSize(
-              asString());
+              getCacheKey());
           size.has_value()) {
         return size.value();
       } else {

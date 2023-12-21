@@ -42,7 +42,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
       QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }
 
-string GroupBy::asStringImpl(size_t indent) const {
+string GroupBy::getCacheKeyImpl() const {
   const auto& varMap = getInternallyVisibleVariableColumns();
   auto varMapInput = _subtree->getVariableColumns();
 
@@ -61,9 +61,6 @@ string GroupBy::asStringImpl(size_t indent) const {
   }
 
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << "GROUP_BY ";
   for (const auto& var : _groupByVariables) {
     os << varMap.at(var).columnIndex_ << ", ";
@@ -73,7 +70,7 @@ string GroupBy::asStringImpl(size_t indent) const {
        << varMap.at(alias._target).columnIndex_;
   }
   os << std::endl;
-  os << _subtree->asString(indent);
+  os << _subtree->getCacheKey();
   return std::move(os).str();
 }
 

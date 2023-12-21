@@ -127,7 +127,7 @@ class Join : public Operation {
   }
 
  protected:
-  virtual string asStringImpl(size_t indent = 0) const override;
+  virtual string getCacheKeyImpl() const override;
 
  private:
   ResultTable computeResult() override;
