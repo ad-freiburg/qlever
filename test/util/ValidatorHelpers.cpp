@@ -9,8 +9,8 @@
 
 // ____________________________________________________________________________
 template <typename Type>
-requires ad_utility::SimilarToAnyTypeIn<
-    Type, ad_utility::ConfigOption::AvailableTypes>
+requires ad_utility::SameAsAnyTypeIn<Type,
+                                     ad_utility::ConfigOption::AvailableTypes>
 Type createDummyValueForValidator(size_t variant) {
   if constexpr (std::is_same_v<Type, bool>) {
     return variant % 2;

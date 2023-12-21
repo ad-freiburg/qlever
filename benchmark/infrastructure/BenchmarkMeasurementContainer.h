@@ -228,7 +228,7 @@ class ResultTable : public BenchmarkMetadataGetter {
   @param row, column Which table entry to read. Starts with `(0,0)`.
   */
   template <typename T>
-  requires ad_utility::SimilarToAnyTypeIn<T, EntryType>
+  requires ad_utility::SameAsAnyTypeIn<T, EntryType>
   T getEntry(const size_t row, const size_t column) const {
     AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
     static_assert(!ad_utility::isSimilar<T, std::monostate>);
@@ -375,8 +375,8 @@ class ResultGroup : public BenchmarkMetadataGetter {
 
  private:
   // The implementation for the general deletion of entries.
-  template <ad_utility::isTypeAnyOf<ResultEntry, ResultTable> T>
-  requires std::same_as<std::decay_t<T>, T> void deleteEntryImpl(T& entry);
+  template <ad_utility::SameAsAny<ResultEntry, ResultTable> T>
+  void deleteEntryImpl(T& entry);
 };
 
 }  // namespace ad_benchmark

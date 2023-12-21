@@ -22,7 +22,7 @@ column. Note, that **all** entries in the column must have the same type,
 because of `ResultTable::getEntry`.
 */
 template <typename Type>
-requires ad_utility::SimilarToAnyTypeIn<Type, ResultTable::EntryType>
+requires ad_utility::SameAsAnyTypeIn<Type, ResultTable::EntryType>
 struct ColumnNumWithType {
   using ColumnType = Type;
   const size_t columnNum_;
