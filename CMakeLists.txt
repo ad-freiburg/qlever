@@ -139,7 +139,7 @@ find_package(OpenSSL REQUIRED)
 function (qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::flat_hash_map
         absl::flat_hash_set absl::strings absl::str_format ICU::uc
-        ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest)
+        ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -268,13 +268,14 @@ FetchContent_Declare(
 # RE2 has a lot of unused-parameter warnings, we will deactivate
 # these for the subproject
 set(LOCAL_CXX_BACKUP_FLAGS "${CMAKE_CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
 set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
 
 ################################
 # Apply FetchContent
 ################################
 FetchContent_MakeAvailable(ctre abseil re2)
+target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 include_directories(${ctre_SOURCE_DIR}/single-header)
 
 # reinstate original flags including all warnings
