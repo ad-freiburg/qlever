@@ -291,6 +291,7 @@ set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
 ################################
 FetchContent_MakeAvailable( googletest ctre abseil re2 stxxl)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
+target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
 include_directories(${ctre_SOURCE_DIR}/single-header)
 
 # reinstate original flags including all warnings
