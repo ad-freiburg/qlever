@@ -250,9 +250,7 @@ class GroupBy : public Operation {
    public:
     HashMapAggregationData(ad_utility::AllocatorWithLimit<Id> alloc,
                            size_t numAggregates)
-        : map_{ad_utility::HashMapWithMemoryLimit<KeyType, ValueType>(alloc)},
-          aggregationData_{
-              std::vector<std::vector<AverageAggregationData>>(numAggregates)} {
+        : map_{alloc}, aggregationData_{numAggregates} {
       AD_CONTRACT_CHECK(numAggregates > 0);
     }
 
@@ -328,12 +326,16 @@ class GroupBy : public Operation {
 
   // Check if an expression is of a certain type.
   template <class T>
-  static bool hasType(sparqlExpression::SparqlExpression* expr);
+  static std::optional<T*> hasType(sparqlExpression::SparqlExpression* expr);
+
+  // Check if an expression is any of any type in `Exprs`
+  template <typename... Exprs>
+  static bool hasAnyType(const auto& expr);
 
   // Check if an expression is a currently supported aggregate.
   // TODO<kcaliban> As soon as all aggregates are supported, implement and use a
   //                `isAggregate` function in SparqlExpressions instead.
-  static bool isSupportedAggregate(sparqlExpression::SparqlExpression* expr);
+  static bool isUnsupportedAggregate(sparqlExpression::SparqlExpression* expr);
 
   // Find all aggregates for expression `expr`. Return `std::nullopt`
   // if an unsupported aggregate is found.
@@ -343,8 +345,8 @@ class GroupBy : public Operation {
 
   // The recursive implementation of `findAggregates` (see above).
   static bool findAggregatesImpl(
-      sparqlExpression::SparqlExpression* parent,
-      sparqlExpression::SparqlExpression* expr, std::optional<size_t> index,
+      sparqlExpression::SparqlExpression* expr,
+      std::optional<ParentAndChildIndex> parentAndChildIndex,
       std::vector<HashMapAggregateInformation>& info);
 
   // The check whether the optimization just described can be applied and its

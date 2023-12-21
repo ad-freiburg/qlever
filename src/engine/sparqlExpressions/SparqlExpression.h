@@ -77,10 +77,22 @@ class SparqlExpression {
   // Return true iff this expression contains an aggregate like SUM, COUNT etc.
   // This information is needed to check if there is an implicit GROUP BY in a
   // query because any of the selected aliases contains an aggregate.
-  virtual bool containsAggregate() const {
+  virtual bool containsAggregate() const final {
+    if (isAggregate()) return true;
     return std::ranges::any_of(children(), [](const Ptr& child) {
       return child->containsAggregate();
     });
+  }
+
+  // Check if expression is aggregate
+  virtual bool isAggregate() const { return false; }
+
+  // Check if an expression is distinct (only applies to aggregates)
+  virtual bool isDistinct() const {
+    AD_THROW(
+        "isDistinct() maybe only called for aggregate expressions. If this is "
+        "an aggregate expression, then the implementation of isDistinct() is "
+        "missing for this expression. Please report this to the developers.");
   }
 
   // Replace child at index `childIndex` with `newExpression`
