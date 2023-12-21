@@ -3,9 +3,12 @@
 
 #include <gtest/gtest.h>
 
+#include <concepts>
 #include <functional>
+#include <type_traits>
 
 #include "../test/util/TypeTraitsTestHelpers.h"
+#include "util/ConstexprUtils.h"
 #include "util/TypeTraits.h"
 
 using namespace ad_utility;
@@ -17,14 +20,37 @@ TEST(TypeTraits, IsSimilar) {
   ASSERT_TRUE(true);
 }
 
+/*
+Call the given lambda with explicit types: `std::decay_t<T>`,`const
+std::decay_t<T>`,`std::decay_t<T>&`,`const std::decay_t<T>&`.
+*/
+template <typename T>
+constexpr void callLambdaWithAllVariationsOfType(const auto& lambda) {
+  using decayedT = std::decay_t<T>;
+  lambda.template operator()<decayedT>();
+  lambda.template operator()<const decayedT>();
+  lambda.template operator()<decayedT&>();
+  lambda.template operator()<const decayedT&>();
+}
+
 TEST(TypeTraits, SimiliarToAnyTypeIn) {
   using tup = std::tuple<int, char>;
   using nested = std::tuple<tup>;
-  static_assert(SimilarToAnyTypeIn<int, tup>);
-  static_assert(SimilarToAnyTypeIn<char, tup>);
+
+  // All the test, were the concept is supposed to return true.
+  forEachTypeInTemplateType<tup>([]<typename TupType>() {
+    callLambdaWithAllVariationsOfType<TupType>(
+        []<typename T>() { static_assert(SimilarToAnyTypeIn<T, tup>); });
+  });
   static_assert(SimilarToAnyTypeIn<tup, nested>);
+
+  // All the test, were the concept is supposed to return false.
+  forEachTypeInParameterPack<unsigned int, float, bool, size_t, unsigned char>(
+      []<typename WrongType>() {
+        callLambdaWithAllVariationsOfType<WrongType>(
+            []<typename T>() { static_assert(!SimilarToAnyTypeIn<T, tup>); });
+      });
   static_assert(!SimilarToAnyTypeIn<tup, char>);
-  static_assert(!SimilarToAnyTypeIn<unsigned int, tup>);
   static_assert(!SimilarToAnyTypeIn<int, int>);
   ASSERT_TRUE(true);
 }
@@ -34,31 +60,31 @@ TEST(TypeTraits, SameAsAnyTypeIn) {
   using nested = std::tuple<tup>;
 
   // Successful comparison.
-  static_assert(SameAsAnyTypeIn<int, tup>);
-  static_assert(SameAsAnyTypeIn<const char, tup>);
-  static_assert(SameAsAnyTypeIn<bool&, tup>);
-  static_assert(SameAsAnyTypeIn<const float&, tup>);
+  forEachTypeInTemplateType<tup>(
+      []<typename TupType>() { static_assert(SameAsAnyTypeIn<TupType, tup>); });
   static_assert(SameAsAnyTypeIn<tup, nested>);
 
   // Unsuccessful comparison, where the underlying type is wrong.
-  static_assert(!SameAsAnyTypeIn<tup, tup>);
-  static_assert(!SameAsAnyTypeIn<size_t, tup>);
-  static_assert(!SameAsAnyTypeIn<double, tup>);
-  static_assert(!SameAsAnyTypeIn<const unsigned char, tup>);
+  forEachTypeInParameterPack<tup, size_t, double, unsigned char>(
+      []<typename WrongType>() {
+        callLambdaWithAllVariationsOfType<WrongType>([]<typename T>() {
+          static_assert(!SameAsAnyTypeIn<WrongType, tup>);
+        });
+      });
 
   // Unsuccessful comparison, where the underlying type is contained, but not
   // with those qualifiers.
-  static_assert(!SameAsAnyTypeIn<const tup, nested>);
-  static_assert(!SameAsAnyTypeIn<const tup&, nested>);
-  static_assert(!SameAsAnyTypeIn<tup&, nested>);
-  static_assert(!SameAsAnyTypeIn<char, tup>);
-  static_assert(!SameAsAnyTypeIn<char&, tup>);
-  static_assert(!SameAsAnyTypeIn<bool, tup>);
-  static_assert(!SameAsAnyTypeIn<const bool, tup>);
-  static_assert(!SameAsAnyTypeIn<const bool&, tup>);
-  static_assert(!SameAsAnyTypeIn<float, tup>);
-  static_assert(!SameAsAnyTypeIn<float&, tup>);
-  static_assert(!SameAsAnyTypeIn<const float, tup>);
+  auto testNotIncludedWithThoseQualifiers = []<typename TemplatedType>() {
+    forEachTypeInTemplateType<TemplatedType>([]<typename CorrectType>() {
+      callLambdaWithAllVariationsOfType<CorrectType>([]<typename T>() {
+        if constexpr (!std::same_as<CorrectType, T>) {
+          static_assert(!SameAsAnyTypeIn<T, tup>);
+        }
+      });
+    });
+  };
+  testNotIncludedWithThoseQualifiers.template operator()<tup>();
+  testNotIncludedWithThoseQualifiers.template operator()<nested>();
 
   // Should only works with templated types.
   static_assert(!SameAsAnyTypeIn<int, int>);
