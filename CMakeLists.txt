@@ -268,19 +268,15 @@ FetchContent_Declare(
 )
 # RE2 has a lot of unused-parameter warnings, we will deactivate
 # these for the subproject
-#set(LOCAL_CXX_BACKUP_FLAGS "${CMAKE_CXX_FLAGS}")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
-
-#set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
-#add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
-#target_compile_options(re2 PRIVATE -Wno-unused-but-set-variable)
-#include_directories(SYSTEM third_party/re2)
-
+set(LOCAL_CXX_BACKUP_FLAGS "${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
+FetchContent_MakeAvailable(re2)
+set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
 
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(ctre re2 abseil)
+FetchContent_MakeAvailable(ctre abseil)
 include_directories(${ctre_SOURCE_DIR}/single-header)
 
 # reinstate original flags including all warnings
