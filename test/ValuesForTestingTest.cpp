@@ -26,7 +26,7 @@ TEST(ValuesForTesting, valuesForTesting) {
   ASSERT_EQ(v.getMultiplicity(0), 42.0);
   ASSERT_EQ(v.getMultiplicity(1), 84.0);
 
-  ASSERT_THAT(v.asString(),
+  ASSERT_THAT(v.getCacheKey(),
               ::testing::StartsWith("Values for testing with 2 columns and "
                                     "contents VocabIndex:3 VocabIndex:12"));
   ASSERT_EQ(v.getDescriptor(), "explicit values for testing");

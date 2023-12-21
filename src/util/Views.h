@@ -6,8 +6,9 @@
 #define QLEVER_VIEWS_H
 
 #include <future>
+#include <ranges>
 
-#include "./Generator.h"
+#include "util/Generator.h"
 #include "util/Log.h"
 
 namespace ad_utility {

@@ -88,18 +88,12 @@ VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
 }
 
 // _____________________________________________________________________________
-string TextOperationWithFilter::asStringImpl(size_t indent) const {
+string TextOperationWithFilter::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << "TEXT OPERATION WITH FILTER:"
      << " co-occurrence with words: \"" << _words << "\" and " << getNofVars()
      << " variables with textLimit = " << _textLimit << " filtered by\n"
-     << _filterResult->asString(indent) << "\n";
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
+     << _filterResult->getCacheKey() << "\n";
   os << " filtered on column " << _filterColumn;
   return std::move(os).str();
 }

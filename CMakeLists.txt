@@ -47,6 +47,7 @@ endif ()
 ###############################################################################
 ##### Essential settings #####
 ###############################################################################
+include(FetchContent)
 
 ################################
 # GTEST AND GMOCK
@@ -185,8 +186,11 @@ include_directories(third_party/json/)
 ################################
 # CTRE, Compile-Time-Regular-Expressions
 ################################
-# Header only, nothing to include
-include_directories(third_party/ctre/include)
+FetchContent_Declare(
+    ctre
+    GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
+    GIT_TAG b3d7788b559e34d985c8530c3e0e7260b67505a6 # v3.8.1
+)
 
 ################################
 # ABSEIL
@@ -221,11 +225,14 @@ if (ENABLE_EXPENSIVE_CHECKS)
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
 endif()
 
-if (DISABLE_QUERY_CANCELLATION_WATCH_DOG)
-    message(STATUS "Disable periodic checks that the cancellation flag is checked frequently enough while the result of
-    a query is being computed with a small runtime overhead")
-    add_definitions("-DQLEVER_DISABLE_QUERY_CANCELLATION_WATCH_DOG")
+set(QUERY_CANCELLATION_MODE "ENABLED" CACHE STRING "Option to allow disabling cancellation checks partially or completely to reduce the overhead of this mechanism during query computation.")
+# Hint for cmake gui, but not actually enforced
+set_property(CACHE QUERY_CANCELLATION_MODE PROPERTY STRINGS "ENABLED" "NO_WATCH_DOG" "DISABLED")
+# So enforce this ourselves
+if(QUERY_CANCELLATION_MODE AND NOT QUERY_CANCELLATION_MODE MATCHES "ENABLED|NO_WATCH_DOG|DISABLED")
+    message(FATAL_ERROR "Invalid value for QUERY_CANCELLATION_MODE '${QUERY_CANCELLATION_MODE}'. Please remove the option entirely or change it to ENABLED, NO_WATCH_DOG or DISABLED.")
 endif()
+add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
 
 ################################
 # STXXL
@@ -252,6 +259,13 @@ set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
 add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
 target_compile_options(re2 PRIVATE -Wno-unused-but-set-variable)
 include_directories(SYSTEM third_party/re2)
+
+
+################################
+# Apply FetchContent
+################################
+FetchContent_MakeAvailable(ctre)
+include_directories(${ctre_SOURCE_DIR}/single-header)
 
 # reinstate original flags including all warnings
 set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
@@ -287,13 +301,13 @@ else()
             COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 endif()
 
-set(LOG_LEVEL_FATAL 0)
-set(LOG_LEVEL_ERROR 1)
-set(LOG_LEVEL_WARN 2)
-set(LOG_LEVEL_INFO 3)
-set(LOG_LEVEL_DEBUG 4)
-set(LOG_LEVEL_TIMING 5)
-set(LOG_LEVEL_TRACE 6)
+set(LOG_LEVEL_FATAL FATAL)
+set(LOG_LEVEL_ERROR ERROR)
+set(LOG_LEVEL_WARN WARN)
+set(LOG_LEVEL_INFO INFO)
+set(LOG_LEVEL_DEBUG DEBUG)
+set(LOG_LEVEL_TIMING TIMING)
+set(LOG_LEVEL_TRACE TRACE)
 
 
 if(CMAKE_BUILD_TYPE MATCHES DEBUG)
@@ -304,10 +318,18 @@ endif()
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
 add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
+
+##################################################
+# Warnings about incorrect combination of CMake variables
+
+if(LOGLEVEL MATCHES "FATAL|ERROR" AND QUERY_CANCELLATION_MODE EQUAL "ENABLED")
+    message(WARNING "Log level is not printing logs with level WARN, which is necessary when QUERY_CANCELLATION_MODE=ENABLED for it to work properly")
+endif()
+
 ##################################################
 # Precompiled headers
 set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
-set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h third_party/ctre/include/ctre/ctre.h third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h)
+set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h)
 
 add_subdirectory(src/parser)
 target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})

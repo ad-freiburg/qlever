@@ -44,8 +44,8 @@ Index::WordEntityPostings FTSAlgorithms::filterByRange(
     // TODO<joka921> Can we make the returned `IndexType` a template parameter
     // of the vocabulary, s.t. we have a vocabulary that stores `WordIndex`es
     // directly?
-    if (wordIdsInput[i] >= idRange._first.get() &&
-        wordIdsInput[i] <= idRange._last.get()) {
+    if (wordIdsInput[i] >= idRange.first().get() &&
+        wordIdsInput[i] <= idRange.last().get()) {
       wepResult.cids_[nofResultElements] = wepPreFilter.cids_[i];
       wepResult.scores_[nofResultElements] = wepPreFilter.scores_[i];
       wordIdsResult[nofResultElements++] = wordIdsInput[i];

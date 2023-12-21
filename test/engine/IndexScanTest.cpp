@@ -334,7 +334,7 @@ TEST(IndexScan, additionalColumn) {
                                   {V("?blub"), col(3)}};
   ASSERT_THAT(scan.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expected));
-  ASSERT_THAT(scan.asString(),
+  ASSERT_THAT(scan.getCacheKey(),
               ::testing::ContainsRegex("Additional Columns: 1 0"));
   // Executing such a query that has the same column multiple times is currently
   // not supported and fails with an exception inside the `IdTable.h` module

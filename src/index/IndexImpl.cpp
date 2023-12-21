@@ -82,7 +82,8 @@ void IndexImpl::compressInternalVocabularyIfSpecified(
   if (vocabPrefixCompressed_) {
     auto prefixFile = ad_utility::makeOfstream(onDiskBase_ + PREFIX_FILE);
     for (const auto& prefix : prefixes) {
-      prefixFile << prefix << std::endl;
+      prefixFile << RdfEscaping::escapeNewlinesAndBackslashes(prefix)
+                 << std::endl;
     }
   }
   configurationJson_["prefixes"] = vocabPrefixCompressed_;
@@ -898,7 +899,8 @@ void IndexImpl::readConfiguration() {
       vector<string> prefixes;
       auto prefixFile = ad_utility::makeIfstream(onDiskBase_ + PREFIX_FILE);
       for (string prefix; std::getline(prefixFile, prefix);) {
-        prefixes.emplace_back(std::move(prefix));
+        prefixes.emplace_back(
+            RdfEscaping::unescapeNewlinesAndBackslashes(prefix));
       }
       vocab_.buildCodebookForPrefixCompression(prefixes);
     } else {

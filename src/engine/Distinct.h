@@ -60,7 +60,7 @@ class Distinct : public Operation {
   }
 
  protected:
-  [[nodiscard]] string asStringImpl(size_t indent = 0) const override;
+  [[nodiscard]] string getCacheKeyImpl() const override;
 
  private:
   virtual ResultTable computeResult() override;

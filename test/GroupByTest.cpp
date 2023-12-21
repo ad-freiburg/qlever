@@ -387,9 +387,10 @@ struct GroupByOptimizations : ::testing::Test {
                                  "COUNT(?someVariable)"};
   }
 
-  static SparqlExpressionPimpl makeAvgPimpl(const Variable& var) {
+  static SparqlExpressionPimpl makeAvgPimpl(const Variable& var,
+                                            bool distinct = false) {
     return SparqlExpressionPimpl{
-        std::make_unique<AvgExpression>(false, makeVariableExpression(var)),
+        std::make_unique<AvgExpression>(distinct, makeVariableExpression(var)),
         "AVG(?someVariable)"};
   }
 
@@ -511,16 +512,21 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
       makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
 
   SparqlExpressionPimpl avgXPimpl = makeAvgPimpl(varX);
+  SparqlExpressionPimpl avgDistinctXPimpl = makeAvgPimpl(varX, true);
   SparqlExpressionPimpl avgCountXPimpl = makeAvgCountPimpl(varX);
   SparqlExpressionPimpl minXPimpl = makeMinPimpl(varX);
 
   std::vector<Alias> aliasesAvgX{Alias{avgXPimpl, Variable{"?avg"}}};
+  std::vector<Alias> aliasesAvgDistinctX{
+      Alias{avgDistinctXPimpl, Variable{"?avgDistinct"}}};
   std::vector<Alias> aliasesAvgCountX{
       Alias{avgCountXPimpl, Variable("?avgcount")}};
   std::vector<Alias> aliasesMinX{Alias{minXPimpl, Variable{"?minX"}}};
 
   std::vector<GroupBy::Aggregate> countAggregate = {{countXPimpl, 1}};
   std::vector<GroupBy::Aggregate> avgAggregate = {{avgXPimpl, 1}};
+  std::vector<GroupBy::Aggregate> avgDistinctAggregate = {
+      {avgDistinctXPimpl, 1}};
   std::vector<GroupBy::Aggregate> avgCountAggregate = {{avgCountXPimpl, 1}};
   std::vector<GroupBy::Aggregate> minAggregate = {{minXPimpl, 1}};
 
@@ -538,6 +544,9 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   // Can not be a nested aggregate
   testFailure(variablesOnlyX, aliasesAvgCountX, subtreeWithSort,
               avgCountAggregate);
+  // Do not support distinct aggregates
+  testFailure(variablesOnlyX, aliasesAvgDistinctX, subtreeWithSort,
+              avgDistinctAggregate);
   // Optimization has to be enabled
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
   testFailure(variablesOnlyX, aliasesAvgX, subtreeWithSort, avgAggregate);
@@ -555,7 +564,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   ASSERT_EQ(aggregateAlias.expr_.getPimpl(), avgXPimpl.getPimpl());
   // Check aggregate info is correct
   auto aggregateInfo = aggregateAlias.aggregateInfo_[0];
-  ASSERT_EQ(aggregateInfo.hashMapIndex_, 0);
+  ASSERT_EQ(aggregateInfo.aggregateDataIndex, 0);
   ASSERT_FALSE(aggregateInfo.parentAndIndex_.has_value());
   ASSERT_EQ(aggregateInfo.expr_, avgXPimpl.getPimpl());
 }
@@ -603,7 +612,9 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationNonTrivial) {
   /* Setup query:
   SELECT ?x (AVG(?y) as ?avg)
             (?avg + ((2 * AVG(?y)) * AVG(4 * ?y)) as ?complexAvg)
-            (5.0 as ?const) WHERE {
+            (5.0 as ?const) (42.0 as ?const2) (13.37 as ?const3)
+            (?const + ?const2 + ?const3 + AVG(?y) + AVG(?y) + AVG(?y) as ?sth)
+            WHERE {
     ?z <is-a> ?x .
     ?z <is> ?y
   } GROUP BY ?x
@@ -619,10 +630,11 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationNonTrivial) {
   std::vector<ColumnIndex> sortedColumns = {1};
   Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
 
+  // (AVG(?y) as ?avg)
   Variable varAvg{"?avg"};
-
   SparqlExpressionPimpl avgYPimpl = makeAvgPimpl(varY);
 
+  // (?avg + ((2 * AVG(?y)) * AVG(4 * ?y)) as ?complexAvg)
   auto fourTimesYExpr = makeMultiplyExpression(makeLiteralDoubleExpr(4.0),
                                                makeVariableExpression(varY));
   auto avgFourTimesYExpr =
@@ -640,13 +652,43 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationNonTrivial) {
       std::move(avgY_plus_twoTimesAvgY_times_avgFourTimesYExpr),
       "(?avg + ((2 * AVG(?y)) * AVG(4 * ?y)) as ?complexAvg)");
 
+  // (5.0 as ?const) (42.0 as ?const2) (13.37 as ?const3)
+  Variable varConst = Variable{"?const"};
   SparqlExpressionPimpl constantFive = makeLiteralDoublePimpl(5.0);
+  Variable varConst2 = Variable{"?const2"};
+  SparqlExpressionPimpl constantFortyTwo = makeLiteralDoublePimpl(42.0);
+  Variable varConst3 = Variable{"?const3"};
+  SparqlExpressionPimpl constantLeet = makeLiteralDoublePimpl(13.37);
+
+  // (?const + ?const2 + ?const3 + AVG(?y) + AVG(?y) + AVG(?y) as ?sth)
+  auto constPlusConst2 = makeAddExpression(makeVariableExpression(varConst),
+                                           makeVariableExpression(varConst2));
+  auto constPlusConst2PlusConst3 = makeAddExpression(
+      std::move(constPlusConst2), makeVariableExpression(varConst3));
+  auto avgY1 =
+      std::make_unique<AvgExpression>(false, makeVariableExpression(varY));
+  auto constPusConst2PlusConst3PlusAvgY =
+      makeAddExpression(std::move(constPlusConst2PlusConst3), std::move(avgY1));
+  auto avgY2 =
+      std::make_unique<AvgExpression>(false, makeVariableExpression(varY));
+  auto constPlusConst2PlusConst3PlusAvgYPlusAvgY = makeAddExpression(
+      std::move(constPusConst2PlusConst3PlusAvgY), std::move(avgY2));
+  auto avgY3 =
+      std::make_unique<AvgExpression>(false, makeVariableExpression(varY));
+  auto constPlusEtc = makeAddExpression(
+      std::move(constPlusConst2PlusConst3PlusAvgYPlusAvgY), std::move(avgY3));
+  SparqlExpressionPimpl constPlusEtcPimpl(
+      std::move(constPlusEtc),
+      "?const + ?const2 + ?const3 + AVG(?y) + AVG(?y) + AVG(?y)");
 
   std::vector<Alias> aliasesAvgY{
       Alias{avgYPimpl, varAvg},
       Alias{avgY_plus_twoTimesAvgY_times_avgFourTimesYPimpl,
             Variable{"?complexAvg"}},
-      Alias{constantFive, Variable{"?const"}}};
+      Alias{constantFive, varConst},
+      Alias{constantFortyTwo, varConst2},
+      Alias{constantLeet, varConst3},
+      Alias{constPlusEtcPimpl, Variable{"?sth"}}};
 
   // Clear cache, calculate result without optimization
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
@@ -701,6 +743,7 @@ TEST_F(GroupByOptimizations, checkIfJoinWithFullScan) {
   ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
 }
 
+// _____________________________________________________________________________
 TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
   {
     // One of the invalid cases from the previous test.
@@ -728,8 +771,8 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
                                     source_location l =
                                         source_location::current()) {
     auto trace = generateLocationTrace(l);
-    // Set up a `VALUES` clause with three values for `?x`, two of which (`<x>`
-    // and `<y>`) actually appear in the test knowledge graph.
+    // Set up a `VALUES` clause with three values for `?x`, two of which
+    // (`<x>` and `<y>`) actually appear in the test knowledge graph.
     parsedQuery::SparqlValues sparqlValues;
     sparqlValues._variables.push_back(varX);
     sparqlValues._values.emplace_back(std::vector{TripleComponent{"<x>"}});
@@ -779,6 +822,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
   // Assert that a GROUP BY, that is constructed from the given arguments,
   // can not perform the `OptimizedAggregateOnIndexScanChild` optimization.
@@ -845,6 +889,7 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
   // Assert that a GROUP BY which is constructed from the given arguments
   // can not perform the `GroupByForSingleIndexScan2` optimization.
@@ -923,6 +968,7 @@ auto make = [](auto&&... args) -> SparqlExpression::Ptr {
   return std::make_unique<ExprT>(AD_FWD(args)...);
 };
 }  // namespace
+// _____________________________________________________________________________
 TEST(GroupBy, GroupedVariableInExpressions) {
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -934,8 +980,8 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   //
   // Note: The values are chosen such that the results are all integers.
   // Otherwise we would get into trouble with floating point comparisons. A
-  // check with a similar query but with non-integral inputs and results can be
-  // found in the E2E tests.
+  // check with a similar query but with non-integral inputs and results can
+  // be found in the E2E tests.
 
   Variable varA = Variable{"?a"};
   Variable varB = Variable{"?b"};
@@ -985,6 +1031,7 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   EXPECT_EQ(table, expected);
 }
 
+// _____________________________________________________________________________
 TEST(GroupBy, AliasResultReused) {
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -996,8 +1043,8 @@ TEST(GroupBy, AliasResultReused) {
   //
   // Note: The values are chosen such that the results are all integers.
   // Otherwise we would get into trouble with floating point comparisons. A
-  // check with a similar query but with non-integral inputs and results can be
-  // found in the E2E tests.
+  // check with a similar query but with non-integral inputs and results can
+  // be found in the E2E tests.
 
   Variable varA = Variable{"?a"};
   Variable varB = Variable{"?b"};
@@ -1049,9 +1096,10 @@ TEST(GroupBy, AliasResultReused) {
 
 }  // namespace
 
-// Expressions in HAVING clauses are converted to special internal aliases. Test
-// the combination of parsing and evaluating such queries.
+// _____________________________________________________________________________
 TEST(GroupBy, AddedHavingRows) {
+  // Expressions in HAVING clauses are converted to special internal aliases.
+  // Test the combination of parsing and evaluating such queries.
   auto query =
       "SELECT ?x (COUNT(?y) as ?count) WHERE {"
       " VALUES (?x ?y) {(0 1) (0 3) (0 5) (1 4) (1 3) } }"

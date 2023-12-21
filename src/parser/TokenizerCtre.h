@@ -4,10 +4,10 @@
 
 #pragma once
 
-#include <ctre/ctre.h>
 #include <gtest/gtest.h>
 
 #include <cstdlib>
+#include <ctre-unicode.hpp>
 #include <string>
 
 #include "parser/Tokenizer.h"

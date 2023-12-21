@@ -82,7 +82,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
     signalQueryUpdate();
   }
   auto& cache = _executionContext->getQueryTreeCache();
-  const string cacheKey = asString();
+  const string cacheKey = getCacheKey();
   const bool pinFinalResultButNotSubtrees =
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
@@ -102,7 +102,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
     forAllDescendants([&lock](QueryExecutionTree* child) {
       if (child->getType() == QueryExecutionTree::OperationType::SCAN &&
           child->getResultWidth() == 1) {
-        (*lock)[child->getRootOperation()->asString()] =
+        (*lock)[child->getRootOperation()->getCacheKey()] =
             child->getSizeEstimate();
       }
     });
@@ -188,19 +188,19 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
     // printed *and* included in an error response sent to the client.
     LOG(ERROR) << "Waited for a result from another thread which then failed"
                << endl;
-    LOG(DEBUG) << asString();
+    LOG(DEBUG) << getCacheKey();
     throw ad_utility::AbortException(e);
   } catch (const std::exception& e) {
     // We are in the innermost level of the exception, so print
     LOG(ERROR) << "Aborted Operation" << endl;
-    LOG(DEBUG) << asString() << endl;
+    LOG(DEBUG) << getCacheKey() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(e);
   } catch (...) {
     // We are in the innermost level of the exception, so print
     LOG(ERROR) << "Aborted Operation" << endl;
-    LOG(DEBUG) << asString() << endl;
+    LOG(DEBUG) << getCacheKey() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(
@@ -338,7 +338,7 @@ void Operation::createRuntimeInfoFromEstimates(
   _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
 
   auto cachedResult =
-      _executionContext->getQueryTreeCache().getIfContained(asString());
+      _executionContext->getQueryTreeCache().getIfContained(getCacheKey());
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
     _runtimeInfo->cacheStatus_ = cacheStatus;

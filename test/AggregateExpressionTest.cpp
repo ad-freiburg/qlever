@@ -43,6 +43,7 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
   EXPECT_EQ(res, expectedResult);
 };
 
+// ______________________________________________________________________________
 TEST(AggregateExpression, max) {
   auto testMaxId = testAggregate<MaxExpression, Id>;
   testMaxId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
@@ -54,6 +55,7 @@ TEST(AggregateExpression, max) {
   testMaxString({"alpha", "äpfel", "Beta", "unfug"}, "äpfel");
 }
 
+// ______________________________________________________________________________
 TEST(AggregateExpression, min) {
   auto testMinId = testAggregate<MinExpression, Id>;
   testMinId({I(3), I(0), I(4), (I(-1))}, I(-1));
@@ -66,6 +68,7 @@ TEST(AggregateExpression, min) {
   testMinString({"alpha", "äpfel", "Beta", "unfug"}, "Beta");
 }
 
+// ______________________________________________________________________________
 TEST(AggregateExpression, sum) {
   auto testSumId = testAggregate<SumExpression, Id>;
   testSumId({I(3), D(23.3), I(0), I(4), (I(-1))}, D(29.3));
@@ -79,6 +82,7 @@ TEST(AggregateExpression, sum) {
   testSumString({"alpha", "äpfel", "Beta", "unfug"}, U);
 }
 
+// ______________________________________________________________________________
 TEST(AggregateExpression, count) {
   auto testCountId = testAggregate<CountExpression, Id>;
   testCountId({I(3), D(23.3), I(0), I(4), (I(-1))}, I(5));
