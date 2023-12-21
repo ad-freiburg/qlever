@@ -62,10 +62,19 @@ FetchContent_MakeAvailable(googletest)
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
-set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
-add_subdirectory(third_party/antlr4/runtime/Cpp EXCLUDE_FROM_ALL )
-target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-unqualified-std-cast-call -Wno-error -Wno-deprecated-declarations)
-include_directories(SYSTEM third_party/antlr4/runtime/Cpp/runtime/src )
+FetchContent_Declare(
+        antlr
+        GIT_REPOSITORY https://github.com/antlr/antlr4.git
+        GIT_TAG        9239e6ff444420516b44b7621e8dc7691fcf0e16
+)
+FetchContent_GetProperties(antlr)
+if (NOT antlr_POPULATED)
+    FetchContent_Populate(antlr)
+    set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
+    add_subdirectory(${antlr_SOURCE_DIR}/runtime/Cpp EXCLUDE_FROM_ALL )
+    target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-unqualified-std-cast-call -Wno-error -Wno-deprecated-declarations)
+    include_directories(SYSTEM ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src )
+endif()
 
 ################################
 # Threading
@@ -139,7 +148,7 @@ find_package(OpenSSL REQUIRED)
 function (qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::flat_hash_map
         absl::flat_hash_set absl::strings absl::str_format ICU::uc
-        ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock)
+        ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -248,11 +257,17 @@ add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
 set(USE_GNU_PARALLEL OFF CACHE BOOL "Don't use gnu parallel" FORCE)
 set(USE_OPENMP OFF CACHE BOOL "Don't use OPENMP as default" FORCE)
 
-add_subdirectory(third_party/stxxl EXCLUDE_FROM_ALL)
+#add_subdirectory(third_party/stxxl EXCLUDE_FROM_ALL)
+
+set(STXXL_CXX_FLAGS "${STXXL_CXX_FLAGS} -Wno-deprecated-declarations")
+FetchContent_Declare(
+        stxxl
+        GIT_REPOSITORY https://github.com/ad-freiburg/stxxl.git
+        GIT_TAG 3a56499dbbd1ce124546626f18e61ca0520df0c3
+)
 
 # apply STXXL CXXFLAGS
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
-include_directories(SYSTEM ${STXXL_INCLUDE_DIRS})
+#include_directories(SYSTEM ${STXXL_INCLUDE_DIRS})
 
 ################################
 # RE2
@@ -274,7 +289,7 @@ set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(ctre abseil re2)
+FetchContent_MakeAvailable( googletest ctre abseil re2 stxxl)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 include_directories(${ctre_SOURCE_DIR}/single-header)
 
@@ -340,7 +355,7 @@ endif()
 ##################################################
 # Precompiled headers
 set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
-set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h)
+set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h)
 
 add_subdirectory(src/parser)
 target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})

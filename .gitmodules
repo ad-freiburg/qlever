@@ -1,6 +1,0 @@
-[submodule "third_party/stxxl"]
-	path = third_party/stxxl
-	url = https://github.com/ad-freiburg/stxxl
-[submodule "third_party/antlr4"]
-	path = third_party/antlr4
-	url = https://github.com/antlr/antlr4.git
