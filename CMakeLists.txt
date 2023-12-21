@@ -198,6 +198,10 @@ FetchContent_Declare(
 ################################
 # ABSEIL
 ################################
+
+set(ABSL_ENABLE_INSTALL ON)
+set(ABSL_USE_SYSTEM_INCLUDES ON)
+set(ABSL_PROPAGATE_CXX_STD ON)
 FetchContent_Declare(
         abseil
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
@@ -254,21 +258,29 @@ include_directories(SYSTEM ${STXXL_INCLUDE_DIRS})
 ################################
 # RE2
 ################################
+set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
+FetchContent_Declare(
+        re2
+        GIT_REPOSITORY https://github.com/google/re2.git
+        GIT_TAG bc0faab533e2b27b85b8ad312abf061e33ed6b5d # v.2023-11-01
+        GIT_SHALLOW TRUE
+        OVERRIDE_FIND_PACKAGE
+)
 # RE2 has a lot of unused-parameter warnings, we will deactivate
 # these for the subproject
-set(LOCAL_CXX_BACKUP_FLAGS "${CMAKE_CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
+#set(LOCAL_CXX_BACKUP_FLAGS "${CMAKE_CXX_FLAGS}")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
 
-set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
-add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
-target_compile_options(re2 PRIVATE -Wno-unused-but-set-variable)
-include_directories(SYSTEM third_party/re2)
+#set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
+#add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
+#target_compile_options(re2 PRIVATE -Wno-unused-but-set-variable)
+#include_directories(SYSTEM third_party/re2)
 
 
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(ctre)
+FetchContent_MakeAvailable(ctre re2 abseil)
 include_directories(${ctre_SOURCE_DIR}/single-header)
 
 # reinstate original flags including all warnings
