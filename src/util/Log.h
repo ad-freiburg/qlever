@@ -4,6 +4,10 @@
 
 #pragma once
 
+#include <absl/strings/str_format.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
+
 #include <chrono>
 #include <ctime>
 #include <iomanip>
@@ -111,15 +115,11 @@ class Log {
   static void imbue(const std::locale& locale) { std::cout.imbue(locale); }
 
   static string getTimeStamp() {
-    using namespace std::chrono;
-    auto now = system_clock::now();
-    auto inTimeT = system_clock::to_time_t(now);
-    auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
-    std::stringstream ss;
-
-    ss << std::put_time(std::localtime(&inTimeT), "%Y-%m-%d %X") << '.'
-       << std::setw(3) << std::setfill('0') << ms.count();
-    return std::move(ss).str();
+    auto now = absl::Now();
+    auto ms = absl::ToUnixMillis(now) % 1000;
+    auto timeString =
+        absl::FormatTime("%Y-%m-%d %X", now, absl::LocalTimeZone());
+    return absl::StrFormat("%s.%03d", timeString, ms);
   }
 
   template <LogLevel LEVEL>
