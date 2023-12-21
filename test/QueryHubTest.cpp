@@ -11,7 +11,6 @@ using ad_utility::websocket::QueryHub;
 using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryToSocketDistributor;
 
-/*
 ASYNC_TEST(QueryHub, simulateLifecycleWithoutListeners) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
@@ -62,11 +61,8 @@ ASYNC_TEST(QueryHub, simulateStandardLifecycle) {
   EXPECT_TRUE(observer.expired());
 }
 
-*/
 // _____________________________________________________________________________
-
 ASYNC_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
-  using namespace std::chrono_literals;
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
   auto distributor1 =

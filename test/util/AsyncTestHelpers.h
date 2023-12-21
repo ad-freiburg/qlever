@@ -38,6 +38,9 @@ void runCoroutine(Func innerRun, size_t numThreads) {
         [ioContext]() { ioContext->run_for(std::chrono::seconds(10)); });
   }
 
+  // Wait for at most 10 seconds (400 * 50 ms) for the test to finish and then
+  // stop it with a failure. Check every 50ms if it has already finished s.t. we
+  // don't waste time.
   for (size_t i = 0; i < 400; ++i) {
     auto status = future.wait_for(std::chrono::milliseconds(50));
     AD_CORRECTNESS_CHECK(status != std::future_status::deferred);
