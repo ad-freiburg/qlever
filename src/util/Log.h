@@ -108,18 +108,14 @@ class Log {
   static std::ostream& getLog() {
     // use the singleton logging stream as target.
     return LogstreamChoice::get().getStream()
-           << ad_utility::Log::getTimeStamp() << "\t- "
-           << ad_utility::Log::getLevel<LEVEL>();
+           << getTimeStamp() << " - " << getLevel<LEVEL>();
   }
 
   static void imbue(const std::locale& locale) { std::cout.imbue(locale); }
 
   static string getTimeStamp() {
-    auto now = absl::Now();
-    auto ms = absl::ToUnixMillis(now) % 1000;
-    auto timeString =
-        absl::FormatTime("%Y-%m-%d %X", now, absl::LocalTimeZone());
-    return absl::StrFormat("%s.%03d", timeString, ms);
+    return absl::FormatTime("%Y-%m-%d %H:%M:%E3S", absl::Now(),
+                            absl::LocalTimeZone());
   }
 
   template <LogLevel LEVEL>
