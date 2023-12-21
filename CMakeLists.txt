@@ -207,7 +207,6 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
         GIT_TAG 258e5a15759cc3d122d4a4826bc499af91d40aa9 # 2023-12-21
 )
-FetchContent_MakeAvailable(abseil)
 
 if (USE_PARALLEL)
     include(FindOpenMP)
@@ -270,13 +269,12 @@ FetchContent_Declare(
 # these for the subproject
 set(LOCAL_CXX_BACKUP_FLAGS "${CMAKE_CXX_FLAGS}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
-FetchContent_MakeAvailable(re2)
 set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
 
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(ctre abseil)
+FetchContent_MakeAvailable(ctre abseil re2)
 include_directories(${ctre_SOURCE_DIR}/single-header)
 
 # reinstate original flags including all warnings
