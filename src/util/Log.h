@@ -85,22 +85,6 @@ class CommaNumPunct : public std::numpunct<char> {
 
 const static std::locale commaLocale(std::locale(), new CommaNumPunct());
 
-//! String representation of a double with precision and thousandth separators
-inline string to_string(double in, size_t precision) {
-  std::ostringstream buffer;
-  buffer.imbue(commaLocale);
-  buffer << std::setprecision(precision) << std::fixed << in;
-  return std::move(buffer).str();
-}
-
-//! String representation of a long with thousandth separators
-inline string to_string(long in) {
-  std::ostringstream buffer;
-  buffer.imbue(commaLocale);
-  buffer << in;
-  return std::move(buffer).str();
-}
-
 //! Log
 class Log {
  public:

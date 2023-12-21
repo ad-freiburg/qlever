@@ -43,7 +43,7 @@ void RuntimeInformation::formatDetailValue(std::ostream& out,
                                            std::string_view key,
                                            const nlohmann::json& value) {
   using enum nlohmann::json::value_t;
-  // We want to print doubles with fixed precision and stream ints as their
+  // We want to print doubles th fixed precision and stream ints as their
   // native type so they get thousands separators. For everything else we
   // let nlohmann::json handle it.
   if (value.type() == number_float) {
