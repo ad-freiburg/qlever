@@ -20,16 +20,16 @@ using ad_utility::CancellationState;
 // ________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
   NeutralElementOperation n{getQec()};
-  EXPECT_THAT(n.asString(), testing::Not(testing::HasSubstr("LIMIT 20")));
+  EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("LIMIT 20")));
   LimitOffsetClause l;
   l._limit = 20;
   n.setLimit(l);
-  EXPECT_THAT(n.asString(), testing::HasSubstr("LIMIT 20"));
-  EXPECT_THAT(n.asString(), testing::Not(testing::HasSubstr("OFFSET 34")));
+  EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("LIMIT 20"));
+  EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("OFFSET 34")));
 
   l._offset = 34;
   n.setLimit(l);
-  EXPECT_THAT(n.asString(), testing::HasSubstr("OFFSET 34"));
+  EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("OFFSET 34"));
 }
 
 // ________________________________________________
@@ -176,4 +176,39 @@ TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
   // Verify time is up for parent and child
   EXPECT_EQ(operation.publicRemainingTime(), 0ms);
   EXPECT_EQ(childOperation->publicRemainingTime(), 0ms);
+}
+
+// ________________________________________________
+TEST(OperationTest, estimatesForCachedResults) {
+  // Create an operation with manually specified size and cost estimates which
+  // are deliberately wrong, so they can be "corrected" when the operation is
+  // read from the cache.
+  auto makeQet = []() {
+    auto idTable = makeIdTableFromVector({{3, 4}, {7, 8}, {9, 123}});
+    auto qet = ad_utility::makeExecutionTree<ValuesForTesting>(
+        getQec(), std::move(idTable),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}});
+    auto& op = dynamic_cast<ValuesForTesting&>(*qet->getRootOperation());
+    // Set those to some arbitrary values so we can test them.
+    op.sizeEstimate() = 24;
+    op.costEstimate() = 210;
+    return qet;
+  };
+  {
+    auto qet = makeQet();
+    EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
+    EXPECT_EQ(qet->getSizeEstimate(), 24u);
+    EXPECT_EQ(qet->getCostEstimate(), 210u);
+
+    [[maybe_unused]] auto res = qet->getResult();
+  }
+  // The result is now cached inside the static execution context, if we create
+  // the same operation again, the cost estimate is 0 and the size estimate is
+  // exact (3 rows).
+  {
+    auto qet = makeQet();
+    EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
+    EXPECT_EQ(qet->getSizeEstimate(), 3u);
+    EXPECT_EQ(qet->getCostEstimate(), 0u);
+  }
 }

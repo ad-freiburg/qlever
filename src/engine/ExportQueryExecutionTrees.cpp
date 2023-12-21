@@ -59,9 +59,9 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   auto generator = ExportQueryExecutionTrees::constructQueryResultToTriples(
       qet, constructTriples, limitAndOffset, resultTable);
   for (const auto& triple : generator) {
-    co_yield triple._subject;
+    co_yield triple.subject_;
     co_yield ' ';
-    co_yield triple._predicate;
+    co_yield triple.predicate_;
     co_yield ' ';
     // NOTE: It's tempting to co_yield an expression using a ternary operator:
     // co_yield triple._object.starts_with('"')
@@ -70,12 +70,12 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
     // but this leads to 1. segfaults in GCC (probably a compiler bug) and 2.
     // to unnecessary copies of `triple._object` in the `else` case because
     // the ternary always has to create a new prvalue.
-    if (triple._object.starts_with('"')) {
+    if (triple.object_.starts_with('"')) {
       std::string objectAsValidRdfLiteral =
-          RdfEscaping::validRDFLiteralFromNormalized(triple._object);
+          RdfEscaping::validRDFLiteralFromNormalized(triple.object_);
       co_yield objectAsValidRdfLiteral;
     } else {
-      co_yield triple._object;
+      co_yield triple.object_;
     }
     co_yield " .\n";
   }
@@ -92,9 +92,9 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
       qet, constructTriples, limitAndOffset, std::move(res));
   std::vector<std::array<std::string, 3>> jsonArray;
   for (auto& triple : generator) {
-    jsonArray.push_back({std::move(triple._subject),
-                         std::move(triple._predicate),
-                         std::move(triple._object)});
+    jsonArray.push_back({std::move(triple.subject_),
+                         std::move(triple.predicate_),
+                         std::move(triple.object_)});
   }
   return jsonArray;
 }
@@ -116,7 +116,7 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
         row.emplace_back(nullptr);
         continue;
       }
-      const auto& currentId = data(rowIndex, opt->_columnIndex);
+      const auto& currentId = data(rowIndex, opt->columnIndex_);
       const auto& optionalStringAndXsdType = idToStringAndType(
           qet.getQec()->getIndex(), currentId, resultTable->localVocab());
       if (!optionalStringAndXsdType.has_value()) {
@@ -346,7 +346,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
     // order would be preferable.
     nlohmann::ordered_json binding;
     for (const auto& column : columns) {
-      const auto& currentId = idTable(rowIndex, column->_columnIndex);
+      const auto& currentId = idTable(rowIndex, column->columnIndex_);
       const auto& optionalValue = idToStringAndType(
           qet.getQec()->getIndex(), currentId, resultTable->localVocab());
       if (!optionalValue.has_value()) {
@@ -363,7 +363,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
         b["type"] = "literal";
         b["datatype"] = xsdType;
       }
-      binding[column->_variable] = std::move(b);
+      binding[column->variable_] = std::move(b);
     }
     bindings.emplace_back(std::move(binding));
   }
@@ -429,7 +429,7 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
       for (const auto& columnIndex : selectedColumnIndices) {
         if (columnIndex.has_value()) {
           co_yield std::string_view{reinterpret_cast<const char*>(&idTable(
-                                        i, columnIndex.value()._columnIndex)),
+                                        i, columnIndex.value().columnIndex_)),
                                     sizeof(Id)};
         }
       }
@@ -456,7 +456,7 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
     for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
       if (selectedColumnIndices[j].has_value()) {
         const auto& val = selectedColumnIndices[j].value();
-        Id id = idTable(i, val._columnIndex);
+        Id id = idTable(i, val.columnIndex_);
         auto optionalStringAndType =
             idToStringAndType<format == MediaType::csv>(
                 qet.getQec()->getIndex(), id, resultTable->localVocab(),
@@ -579,8 +579,8 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
     for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
       if (selectedColumnIndices[j].has_value()) {
         const auto& val = selectedColumnIndices[j].value();
-        Id id = idTable(i, val._columnIndex);
-        co_yield idToXMLBinding(val._variable, id, qet.getQec()->getIndex(),
+        Id id = idTable(i, val.columnIndex_);
+        co_yield idToXMLBinding(val.variable_, id, qet.getQec()->getIndex(),
                                 resultTable->localVocab());
       }
     }
@@ -615,11 +615,11 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   auto generator = ExportQueryExecutionTrees::constructQueryResultToTriples(
       qet, constructTriples, limitAndOffset, resultTable);
   for (auto& triple : generator) {
-    co_yield escapeFunction(std::move(triple._subject));
+    co_yield escapeFunction(std::move(triple.subject_));
     co_yield sep;
-    co_yield escapeFunction(std::move(triple._predicate));
+    co_yield escapeFunction(std::move(triple.predicate_));
     co_yield sep;
-    co_yield escapeFunction(std::move(triple._object));
+    co_yield escapeFunction(std::move(triple.object_));
     co_yield "\n";
   }
 }

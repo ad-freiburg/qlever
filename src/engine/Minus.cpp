@@ -20,13 +20,10 @@ Minus::Minus(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string Minus::asStringImpl(size_t indent) const {
+string Minus::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "MINUS\n" << _left->asString(indent) << "\n";
-  os << _right->asString(indent) << " ";
+  os << "MINUS\n" << _left->getCacheKey() << "\n";
+  os << _right->getCacheKey() << " ";
   return std::move(os).str();
 }
 

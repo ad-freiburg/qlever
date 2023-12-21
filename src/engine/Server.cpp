@@ -650,7 +650,7 @@ boost::asio::awaitable<void> Server::processQuery(
     runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
     LOG(INFO) << "Query planning done in " << timeForQueryPlanning.count()
               << " ms" << std::endl;
-    LOG(TRACE) << qet.asString() << std::endl;
+    LOG(TRACE) << qet.getCacheKey() << std::endl;
 
     // Common code for sending responses for the streamable media types
     // (tsv, csv, octet-stream, turtle).
