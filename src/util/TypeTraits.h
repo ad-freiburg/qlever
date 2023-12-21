@@ -128,18 +128,27 @@ concept SameAsAny = (... || std::same_as<T, Ts>);
 
 namespace detail {
 /*
-The implementation for `SimilarToAnyTypeIn` (see below namespace detail).
-For a call `SimilarToAnyTypeIn<T, U>`, the object would be
+The implementation for `SimilarToAnyTypeIn` and `SameAsAnyTypeIn` (see below
+namespace detail). For a call `SimilarToAnyTypeIn<T, U>` , the object would be
 `TypeForSimilarToAnyTypeIn<T>::TemplateType<U>::value`.
 */
 template <typename T>
-struct TypeForSimilarToAnyTypeIn {
+struct TypeForAnyTypeIn {
+  // Structs for `SimilarToAnyTypeIn`.
   template <typename D>
-  struct TemplateType : std::false_type {};
+  struct SimilarToTemplateType : std::false_type {};
 
   template <template <typename...> typename Template, typename... Ts>
   requires SimilarToAny<T, Ts...>
-  struct TemplateType<Template<Ts...>> : std::true_type {};
+  struct SimilarToTemplateType<Template<Ts...>> : std::true_type {};
+
+  // Structs for `SameAsAnyTypeIn`.
+  template <typename D>
+  struct SameAsTemplateType : std::false_type {};
+
+  template <template <typename...> typename Template, typename... Ts>
+  requires SameAsAny<T, Ts...>
+  struct SameAsTemplateType<Template<Ts...>> : std::true_type {};
 };
 }  // namespace detail
 /*
@@ -148,8 +157,17 @@ and T `isSimilar` (see above) to one of the types contained in the tuple,
 pair or variant.
 */
 template <typename T, typename Template>
-concept SimilarToAnyTypeIn = detail::TypeForSimilarToAnyTypeIn<
-    T>::template TemplateType<Template>::value;
+concept SimilarToAnyTypeIn = detail::TypeForAnyTypeIn<
+    T>::template SimilarToTemplateType<Template>::value;
+
+/*
+SameAsAnyTypeIn<T, U> It is true iff type U is a pair, tuple or variant
+and T `std::same_as` to one of the types contained in the tuple,
+pair or variant.
+*/
+template <typename T, typename Template>
+concept SameAsAnyTypeIn =
+    detail::TypeForAnyTypeIn<T>::template SameAsTemplateType<Template>::value;
 
 /// A templated bool that is always false,
 /// independent of the template parameter.

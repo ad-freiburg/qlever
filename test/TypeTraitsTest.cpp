@@ -29,6 +29,42 @@ TEST(TypeTraits, SimiliarToAnyTypeIn) {
   ASSERT_TRUE(true);
 }
 
+TEST(TypeTraits, SameAsAnyTypeIn) {
+  using tup = std::tuple<int, const char, bool&, const float&>;
+  using nested = std::tuple<tup>;
+
+  // Successful comparison.
+  static_assert(SameAsAnyTypeIn<int, tup>);
+  static_assert(SameAsAnyTypeIn<const char, tup>);
+  static_assert(SameAsAnyTypeIn<bool&, tup>);
+  static_assert(SameAsAnyTypeIn<const float&, tup>);
+  static_assert(SameAsAnyTypeIn<tup, nested>);
+
+  // Unsuccessful comparison, where the underlying type is wrong.
+  static_assert(!SameAsAnyTypeIn<tup, tup>);
+  static_assert(!SameAsAnyTypeIn<size_t, tup>);
+  static_assert(!SameAsAnyTypeIn<double, tup>);
+  static_assert(!SameAsAnyTypeIn<const unsigned char, tup>);
+
+  // Unsuccessful comparison, where the underlying type is contained, but not
+  // with those qualifiers.
+  static_assert(!SameAsAnyTypeIn<const tup, nested>);
+  static_assert(!SameAsAnyTypeIn<const tup&, nested>);
+  static_assert(!SameAsAnyTypeIn<tup&, nested>);
+  static_assert(!SameAsAnyTypeIn<char, tup>);
+  static_assert(!SameAsAnyTypeIn<char&, tup>);
+  static_assert(!SameAsAnyTypeIn<bool, tup>);
+  static_assert(!SameAsAnyTypeIn<const bool, tup>);
+  static_assert(!SameAsAnyTypeIn<const bool&, tup>);
+  static_assert(!SameAsAnyTypeIn<float, tup>);
+  static_assert(!SameAsAnyTypeIn<float&, tup>);
+  static_assert(!SameAsAnyTypeIn<const float, tup>);
+
+  // Should only works with templated types.
+  static_assert(!SameAsAnyTypeIn<int, int>);
+  ASSERT_TRUE(true);
+}
+
 TEST(TypeTraits, IsInstantiation) {
   static_assert(isVector<std::vector<int>>);
   static_assert(!isVector<std::tuple<int>>);
