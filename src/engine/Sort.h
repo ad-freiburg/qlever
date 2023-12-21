@@ -57,7 +57,7 @@ class Sort : public Operation {
     // Return  at least 1, s.t. the query planner will never emit an unnecessary
     // sort of an empty `IndexScan`. This makes the testing of the query
     // planner much easier.
-    return std::max(1ul, nlogn + subcost);
+    return std::max(1UL, nlogn + subcost);
   }
 
   virtual bool knownEmptyResult() override {

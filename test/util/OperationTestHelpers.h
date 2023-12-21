@@ -88,7 +88,7 @@ class ShallowParentOperation : public Operation {
 template <>
 void QueryExecutionTree::setOperation<StallForeverOperation>(
     std::shared_ptr<StallForeverOperation> operation) {
-  _rootOperation = std::move(operation);
+  rootOperation_ = std::move(operation);
 }
 
 #endif  // QLEVER_OPERATIONTESTHELPERS_H

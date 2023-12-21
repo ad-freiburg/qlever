@@ -190,8 +190,8 @@ TEST(OperationTest, estimatesForCachedResults) {
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}});
     auto& op = dynamic_cast<ValuesForTesting&>(*qet->getRootOperation());
     // Set those to some arbitrary values so we can test them.
-    op.sizeEstimate_ = 24;
-    op.costEstimate_ = 210;
+    op.sizeEstimate() = 24;
+    op.costEstimate() = 210;
     return qet;
   };
   {

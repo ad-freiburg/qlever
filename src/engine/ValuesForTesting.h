@@ -18,9 +18,7 @@ class ValuesForTesting : public Operation {
   IdTable table_;
   std::vector<std::optional<Variable>> variables_;
   bool supportsLimit_;
-
- public:
-  // Those can be manually overwritten for testing.
+  // Those can be manually overwritten for testing using the respective getters.
   size_t sizeEstimate_;
   size_t costEstimate_;
 
@@ -39,6 +37,10 @@ class ValuesForTesting : public Operation {
         costEstimate_{table_.numRows()} {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
+
+  // Accessors for the estimates for manual testing.
+  size_t& sizeEstimate() { return sizeEstimate_; }
+  size_t& costEstimate() { return costEstimate_; }
 
   // ___________________________________________________________________________
   ResultTable computeResult() override {
