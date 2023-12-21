@@ -1,14 +1,16 @@
-name: Docker Publish
+name: Docker build and publish
 
 on:
-  workflow_run:
-    workflows : ["Docker build"]
-    branches: ["master"]
-    types:
-      - completed
   push:
-    tags:
-      - "v*.*.*"
+    branches: ["master"]
+  pull_request:
+    branches: [ master ]
+
+concurrency:
+  # When this is not a pull request, then we want all the docker containers to be pushed, we therefore
+  # directly fall back to the commit hash which will be distinct for each push to master.
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.sha}}'
+  cancel-in-progress: true
 
 jobs:
   docker:
@@ -16,8 +18,6 @@ jobs:
     # Run if this is a push on master and Docker Build succeeded
     # or if a tag was pushed
     if: ${{ github.event.workflow_run.conclusion == 'success' ||  github.ref_name != 'master' }}
-    strategy:
-      fail-fast: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,6 +28,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -38,7 +39,7 @@ jobs:
       - name: Get PR number
         id: pr
         run: echo "pr_num=$(git log --format=%s -n 1 | sed -nr 's/.*\(\#([0-9]+)\)/\1/p')" >> $GITHUB_OUTPUT
-      - name: Build and push
+      - name: Build X-86-64
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -51,14 +52,51 @@ jobs:
           # References:
           # https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
           # https://www.docker.com/blog/multi-arch-build-and-images-the-simple-way/
+          platforms: linux/amd64
+
+          # Only  export to the local docker for testing.
+          load: true
+          tags: adfreiburg/qlever:test
+
+      - name: E2E in Docker
+        run: | 
+          sudo mkdir ${{github.workspace}}/e2e_data
+          sudo chmod a+rwx ${{github.workspace}}/e2e_data
+          sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh adfreiburg/qlever:test
+
+      - name: Build ARM-64
+        # The cross-compilation to ARM64 takes a long time, so we typically
+        # only perform it on the pushes to master when we actually need that
+        # container. Should the building of the container however fail  in the
+        # future, then we can set this to `true`. Then the ARM64 image will also
+        # be built on pull requests which allows for debugging without changing
+        # the master branch.
+        if: false
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/arm64
+
+          # Only build, don't run.
+          load: false
+          push: false
+
+      - name: Build and push
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
           platforms: linux/amd64,linux/arm64
+
+          # Push to dockerhub, reuse the cached steps from the previous build.
           push: true
+
           # If this is a push on master, publish with short commit sha
           # else use the ref name, which has to be the tag in this case.
           # We have to explicitly add the "qlever:latest" tag for it to work correctly,
           # see e.g. https://stackoverflow.com/questions/27643017/do-i-need-to-manually-tag-latest-when-pushing-to-docker-public-repository
           tags: >
+            adfreiburg/qlever:latest
             adfreiburg/qlever:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }},
             adfreiburg/qlever:commit-${{ steps.sha.outputs.sha_short }},
-            adfreiburg/qlever:latest
 
