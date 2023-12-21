@@ -45,7 +45,7 @@ ConfigManager::HashMapEntry::HashMapEntry(Data&& data)
 
 // ____________________________________________________________________________
 template <typename T>
-requires isTypeContainedIn<T, ConfigManager::HashMapEntry::Data>
+requires SimilarToAnyTypeIn<T, ConfigManager::HashMapEntry::Data>
 bool ConfigManager::HashMapEntry::implHolds() const {
   // Make sure, that it is not a null pointer.
   AD_CORRECTNESS_CHECK(data_);
@@ -65,7 +65,7 @@ bool ConfigManager::HashMapEntry::holdsSubManager() const {
 
 // ____________________________________________________________________________
 template <typename ReturnType>
-requires isTypeContainedIn<ReturnType, ConfigManager::HashMapEntry::Data> &&
+requires SimilarToAnyTypeIn<ReturnType, ConfigManager::HashMapEntry::Data> &&
          std::is_object_v<ReturnType> std::optional<ReturnType*>
 ConfigManager::HashMapEntry::getConfigOptionOrSubManager(
     ad_utility::SimilarTo<ConfigManager::HashMapEntry> auto& instance) {
@@ -863,7 +863,7 @@ bool ConfigManager::containsOption(const ConfigOption& opt) const {
 }
 
 // ____________________________________________________________________________
-template <SimiliarToAny<ConfigOption, ConfigManager> T>
+template <SimilarToAny<ConfigOption, ConfigManager> T>
 void ConfigManager::ConfigurationDocValidatorAssignment::addEntryUnderKey(
     const T& key, const ConfigOptionValidatorManager& manager) {
   getHashMapBasedOnType<T>()[&key].push_back(&manager);
@@ -877,7 +877,7 @@ template void ConfigManager::ConfigurationDocValidatorAssignment::
                                     const ConfigOptionValidatorManager&);
 
 // ____________________________________________________________________________
-template <SimiliarToAny<ConfigOption, ConfigManager> T>
+template <SimilarToAny<ConfigOption, ConfigManager> T>
 auto ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
     const T& key) const -> ValueGetterReturnType {
   // The concerned hash map.

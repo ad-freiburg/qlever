@@ -228,7 +228,7 @@ class ResultTable : public BenchmarkMetadataGetter {
   @param row, column Which table entry to read. Starts with `(0,0)`.
   */
   template <typename T>
-  requires ad_utility::isTypeContainedIn<T, EntryType>
+  requires ad_utility::SimilarToAnyTypeIn<T, EntryType>
   T getEntry(const size_t row, const size_t column) const {
     AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
     static_assert(!ad_utility::isSimilar<T, std::monostate>);

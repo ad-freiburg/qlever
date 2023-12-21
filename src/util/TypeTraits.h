@@ -7,6 +7,7 @@
 #pragma once
 #include <concepts>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -119,29 +120,36 @@ concept SimilarTo = isSimilar<T, U>;
 
 /// True iff `T` is similar (see above) to any of the `Ts...`.
 template <typename T, typename... Ts>
-concept SimiliarToAny = (... || isSimilar<T, Ts>);
+concept SimilarToAny = (... || isSimilar<T, Ts>);
 
 /// True iff `T` is the same as any of the `Ts...`.
 template <typename T, typename... Ts>
 concept SameAsAny = (... || std::same_as<T, Ts>);
 
-/// isTypeContainedIn<T, U> It is true iff type U is a pair, tuple or variant
-/// and T `isSimilar` (see above) to one of the types contained in the tuple,
-/// pair or variant.
-template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn = false;
+namespace detail {
+/*
+The implementation for `SimilarToAnyTypeIn` (see below namespace detail).
+For a call `SimilarToAnyTypeIn<T, U>`, the object would be
+`TypeForSimilarToAnyTypeIn<T>::TemplateType<U>::value`.
+*/
+template <typename T>
+struct TypeForSimilarToAnyTypeIn {
+  template <typename D>
+  struct TemplateType : std::false_type {};
 
-template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn<T, std::tuple<Ts...>> =
-    SimiliarToAny<T, Ts...>;
-
-template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn<T, std::variant<Ts...>> =
-    SimiliarToAny<T, Ts...>;
-
-template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn<T, std::pair<Ts...>> =
-    SimiliarToAny<T, Ts...>;
+  template <template <typename...> typename Template, typename... Ts>
+  requires SimilarToAny<T, Ts...>
+  struct TemplateType<Template<Ts...>> : std::true_type {};
+};
+}  // namespace detail
+/*
+SimilarToAnyTypeIn<T, U> It is true iff type U is a pair, tuple or variant
+and T `isSimilar` (see above) to one of the types contained in the tuple,
+pair or variant.
+*/
+template <typename T, typename Template>
+concept SimilarToAnyTypeIn = detail::TypeForSimilarToAnyTypeIn<
+    T>::template TemplateType<Template>::value;
 
 /// A templated bool that is always false,
 /// independent of the template parameter.

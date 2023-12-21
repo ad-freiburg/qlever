@@ -18,8 +18,8 @@
 for `ad_benchmark::ResultTable`.
 */
 template <typename Type>
-requires ad_utility::isTypeContainedIn<Type,
-                                       ad_benchmark::ResultTable::EntryType>
+requires ad_utility::SimilarToAnyTypeIn<Type,
+                                        ad_benchmark::ResultTable::EntryType>
 Type createDummyValueEntryType();
 
 /*

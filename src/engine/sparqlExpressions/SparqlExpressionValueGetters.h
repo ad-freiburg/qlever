@@ -29,7 +29,7 @@ using IntOrDouble = std::variant<double, int64_t>;
 // values will become `Id::makeUndefined()`.
 template <bool NanToUndef = false, typename T>
 requires std::integral<T> || std::floating_point<T> ||
-         ad_utility::SimiliarToAny<T, Id, NotNumeric, NumericValue>
+         ad_utility::SimilarToAny<T, Id, NotNumeric, NumericValue>
 Id makeNumericId(T t) {
   if constexpr (std::integral<T>) {
     return Id::makeFromInt(t);

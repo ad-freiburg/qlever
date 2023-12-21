@@ -17,15 +17,15 @@ TEST(TypeTraits, IsSimilar) {
   ASSERT_TRUE(true);
 }
 
-TEST(TypeTraits, IsContained) {
+TEST(TypeTraits, SimiliarToAnyTypeIn) {
   using tup = std::tuple<int, char>;
   using nested = std::tuple<tup>;
-  static_assert(isTypeContainedIn<int, tup>);
-  static_assert(isTypeContainedIn<char, tup>);
-  static_assert(isTypeContainedIn<tup, nested>);
-  static_assert(!isTypeContainedIn<tup, char>);
-  static_assert(!isTypeContainedIn<unsigned int, tup>);
-  static_assert(!isTypeContainedIn<int, int>);
+  static_assert(SimilarToAnyTypeIn<int, tup>);
+  static_assert(SimilarToAnyTypeIn<char, tup>);
+  static_assert(SimilarToAnyTypeIn<tup, nested>);
+  static_assert(!SimilarToAnyTypeIn<tup, char>);
+  static_assert(!SimilarToAnyTypeIn<unsigned int, tup>);
+  static_assert(!SimilarToAnyTypeIn<int, int>);
   ASSERT_TRUE(true);
 }
 

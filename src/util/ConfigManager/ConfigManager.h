@@ -102,7 +102,7 @@ class ConfigManager {
    private:
     // Implementation for `holdsConfigOption` and `holdsSubManager`.
     template <typename T>
-    requires isTypeContainedIn<T, Data> bool implHolds() const;
+    requires SimilarToAnyTypeIn<T, Data> bool implHolds() const;
 
     /*
     @brief Implementation for `getConfigOption` and `getSubManager`. You can
@@ -114,7 +114,8 @@ class ConfigManager {
     @param instance The `HashMapEntry` you want this from.
     */
     template <typename ReturnType>
-    requires isTypeContainedIn<ReturnType, Data> && std::is_object_v<ReturnType>
+    requires SimilarToAnyTypeIn<ReturnType, Data> &&
+             std::is_object_v<ReturnType>
     static std::optional<ReturnType*> getConfigOptionOrSubManager(
         ad_utility::SimilarTo<HashMapEntry> auto& instance);
 
@@ -174,8 +175,8 @@ class ConfigManager {
   will stay valid, even after adding more options.
   */
   template <typename OptionType>
-  requires ad_utility::isTypeContainedIn<OptionType,
-                                         ConfigOption::AvailableTypes>
+  requires ad_utility::SimilarToAnyTypeIn<OptionType,
+                                          ConfigOption::AvailableTypes>
   ConstConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
@@ -205,8 +206,8 @@ class ConfigManager {
   */
   template <typename OptionType,
             std::same_as<OptionType> DefaultValueType = OptionType>
-  requires ad_utility::isTypeContainedIn<OptionType,
-                                         ConfigOption::AvailableTypes>
+  requires ad_utility::SimilarToAnyTypeIn<OptionType,
+                                          ConfigOption::AvailableTypes>
   ConstConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
@@ -226,8 +227,8 @@ class ConfigManager {
   will stay valid, even after adding more options.
   */
   template <typename OptionType>
-  requires ad_utility::isTypeContainedIn<OptionType,
-                                         ConfigOption::AvailableTypes>
+  requires ad_utility::SimilarToAnyTypeIn<OptionType,
+                                          ConfigOption::AvailableTypes>
   ConstConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn) {
@@ -246,8 +247,8 @@ class ConfigManager {
   */
   template <typename OptionType,
             std::same_as<OptionType> DefaultValueType = OptionType>
-  requires ad_utility::isTypeContainedIn<OptionType,
-                                         ConfigOption::AvailableTypes>
+  requires ad_utility::SimilarToAnyTypeIn<OptionType,
+                                          ConfigOption::AvailableTypes>
   ConstConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn,
@@ -550,8 +551,8 @@ class ConfigManager {
   valid, even after more options.
   */
   template <typename OptionType>
-  requires ad_utility::isTypeContainedIn<OptionType,
-                                         ConfigOption::AvailableTypes>
+  requires ad_utility::SimilarToAnyTypeIn<OptionType,
+                                          ConfigOption::AvailableTypes>
   ConstConfigOptionProxy<OptionType> addOptionImpl(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
@@ -729,7 +730,7 @@ class ConfigManager {
     @brief Add a validator to the list of validators, that are assigned to a
     `ConfigOption`/`ConfigManager`.
     */
-    template <SimiliarToAny<ConfigOption, ConfigManager> T>
+    template <SimilarToAny<ConfigOption, ConfigManager> T>
     void addEntryUnderKey(const T& key,
                           const ConfigOptionValidatorManager& manager);
 
@@ -739,12 +740,12 @@ class ConfigManager {
 
     @returns If there is no entry for `Key`, return an empty `std::vector`.
     */
-    template <SimiliarToAny<ConfigOption, ConfigManager> T>
+    template <SimilarToAny<ConfigOption, ConfigManager> T>
     ValueGetterReturnType getEntriesUnderKey(const T& key) const;
 
    private:
     // Return either `configOption_` or `configManager_`, based on type.
-    template <SimiliarToAny<ConfigOption, ConfigManager> T>
+    template <SimilarToAny<ConfigOption, ConfigManager> T>
     constexpr const MemoryAdressHashMap<T>& getHashMapBasedOnType() const {
       if constexpr (std::same_as<T, ConfigOption>) {
         return configOption_;
@@ -752,7 +753,7 @@ class ConfigManager {
         return configManager_;
       }
     }
-    template <SimiliarToAny<ConfigOption, ConfigManager> T>
+    template <SimilarToAny<ConfigOption, ConfigManager> T>
     constexpr MemoryAdressHashMap<T>& getHashMapBasedOnType() {
       if constexpr (std::same_as<T, ConfigOption>) {
         return configOption_;
