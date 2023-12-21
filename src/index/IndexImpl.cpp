@@ -1492,15 +1492,13 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-std::optional<PatternCreatorNew::TripleOutput>
-IndexImpl::createSPOAndSOP(size_t numColumns, auto& isInternalId,
-                           BlocksOfTriples sortedTriples,
-                           NextSorter&&... nextSorter) {
+std::optional<PatternCreatorNew::TripleOutput> IndexImpl::createSPOAndSOP(
+    size_t numColumns, auto& isInternalId, BlocksOfTriples sortedTriples,
+    NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
   auto numSubjectCounter =
       makeNumDistinctIdsCounter<0>(numSubjectsNormal, isInternalId);
-  std::optional<PatternCreatorNew::TripleOutput>
-      result;
+  std::optional<PatternCreatorNew::TripleOutput> result;
   if (usePatterns_) {
     // We will return the next sorter.
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 0);

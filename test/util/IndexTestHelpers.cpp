@@ -45,10 +45,9 @@ namespace {
 // files) have exactly the same contents as the patterns that are folded into
 // the PSO and POS permutation.
 void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
-
   auto checkSingleElement = [](const Index& index, size_t patternIdx, Id id) {
     const auto& hasPattern = index.getHasPattern();
-    auto expectedPattern = [&]{
+    auto expectedPattern = [&] {
       if (id.getDatatype() != Datatype::VocabIndex) {
         return NO_PATTERN;
       }
@@ -63,12 +62,13 @@ void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
   };
 
   auto checkConsistencyForCol0IdAndPermutation =
-      [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx, size_t objectColIdx) {
+      [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx,
+          size_t objectColIdx) {
         auto cancellationDummy =
             std::make_shared<ad_utility::CancellationHandle<>>();
-        auto scanResult =
-            index.scan(col0Id, std::nullopt, permutation,
-                       std::array{ColumnIndex{2}, ColumnIndex{3}}, cancellationDummy);
+        auto scanResult = index.scan(col0Id, std::nullopt, permutation,
+                                     std::array{ColumnIndex{2}, ColumnIndex{3}},
+                                     cancellationDummy);
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
           auto patternIdx = row[2].getInt();

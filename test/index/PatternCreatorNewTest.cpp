@@ -155,8 +155,7 @@ TEST(PatternCreatorNew, writeAndReadWithFinish) {
   auto hashPatternAsPSOPtr = createExamplePatterns(creator);
   creator.finish();
 
-  assertPatternContents(
-      filename, getVectorFromSorter(
-                    std::move(*hashPatternAsPSOPtr)));
+  assertPatternContents(filename,
+                        getVectorFromSorter(std::move(*hashPatternAsPSOPtr)));
   ad_utility::deleteFile(filename);
 }

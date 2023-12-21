@@ -702,10 +702,11 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
 
   // Fill the `targetBuffer` with blocks from the range `[it, end)` and advance
   // `it` for each read buffer until all elements <= `minEl` are added to the
-  // `targetBuffer` or at most three blocks have been added to the targetBuffer. Calling this function requires that all blocks that contain
-  // elements `< minEl` have already been consumed.
-  // Returns `true` if all blocks have been added, and `false` if the function returned
-  // because 3 blocks were added without fulfilling the condition.
+  // `targetBuffer` or at most three blocks have been added to the targetBuffer.
+  // Calling this function requires that all blocks that contain elements `<
+  // minEl` have already been consumed. Returns `true` if all blocks have been
+  // added, and `false` if the function returned because 3 blocks were added
+  // without fulfilling the condition.
   auto fillEqualToMinimum = [&lessThan, &eq](auto& targetBuffer, auto& it,
                                              const auto& end,
                                              const auto& minEl) -> bool {
@@ -735,7 +736,7 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   enum struct BlockStatus { leftMissing, rightMissing, allFilled };
 
   // TODO<joka921> Comment.
-  auto fillEqualToMinimumBothSides = [&](const auto& minEl) ->BlockStatus {
+  auto fillEqualToMinimumBothSides = [&](const auto& minEl) -> BlockStatus {
     bool allBlocksFromLeft = false;
     bool allBlocksFromRight = false;
     while (!(allBlocksFromLeft || allBlocksFromRight)) {
