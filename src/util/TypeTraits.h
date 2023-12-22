@@ -126,30 +126,25 @@ concept SimilarToAny = (... || isSimilar<T, Ts>);
 template <typename T, typename... Ts>
 concept SameAsAny = (... || std::same_as<T, Ts>);
 
-namespace detail {
 /*
 The implementation for `SimilarToAnyTypeIn` and `SameAsAnyTypeIn` (see below
-namespace detail). For a call `SimilarToAnyTypeIn<T, U>` , the object would be
-`TypeForSimilarToAnyTypeIn<T>::TemplateType<U>::value`.
+namespace detail).
 */
-template <typename T>
-struct TypeForAnyTypeIn {
-  // Structs for `SimilarToAnyTypeIn`.
-  template <typename D>
-  struct SimilarToTemplateType : std::false_type {};
+namespace detail {
+template <typename T, typename Template>
+struct SimilarToAnyTypeInImpl;
 
-  template <template <typename...> typename Template, typename... Ts>
-  requires SimilarToAny<T, Ts...>
-  struct SimilarToTemplateType<Template<Ts...>> : std::true_type {};
+template <typename T, template <typename...> typename Template, typename... Ts>
+struct SimilarToAnyTypeInImpl<T, Template<Ts...>>
+    : std::integral_constant<bool, SimilarToAny<T, Ts...>> {};
 
-  // Structs for `SameAsAnyTypeIn`.
-  template <typename D>
-  struct SameAsTemplateType : std::false_type {};
+template <typename T, typename Template>
+struct SameAsAnyTypeInImpl;
 
-  template <template <typename...> typename Template, typename... Ts>
-  requires SameAsAny<T, Ts...>
-  struct SameAsTemplateType<Template<Ts...>> : std::true_type {};
-};
+template <typename T, template <typename...> typename Template, typename... Ts>
+struct SameAsAnyTypeInImpl<T, Template<Ts...>>
+    : std::integral_constant<bool, SameAsAny<T, Ts...>> {};
+
 }  // namespace detail
 /*
 SimilarToAnyTypeIn<T, U> It is true iff type U is a pair, tuple or variant
@@ -157,8 +152,7 @@ and T `isSimilar` (see above) to one of the types contained in the tuple,
 pair or variant.
 */
 template <typename T, typename Template>
-concept SimilarToAnyTypeIn = detail::TypeForAnyTypeIn<
-    T>::template SimilarToTemplateType<Template>::value;
+concept SimilarToAnyTypeIn = detail::SimilarToAnyTypeInImpl<T, Template>::value;
 
 /*
 SameAsAnyTypeIn<T, U> It is true iff type U is a pair, tuple or variant
@@ -166,8 +160,7 @@ and T `std::same_as` to one of the types contained in the tuple,
 pair or variant.
 */
 template <typename T, typename Template>
-concept SameAsAnyTypeIn =
-    detail::TypeForAnyTypeIn<T>::template SameAsTemplateType<Template>::value;
+concept SameAsAnyTypeIn = detail::SameAsAnyTypeInImpl<T, Template>::value;
 
 /// A templated bool that is always false,
 /// independent of the template parameter.
