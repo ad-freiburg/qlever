@@ -22,9 +22,26 @@ namespace detail {
 template <typename T, template <typename...> typename TemplatedType>
 struct isInstantiationImpl;
 
-template <template <typename...> typename TemplatedType, typename... Ts>
-struct isInstantiationImpl<TemplatedType<Ts...>, TemplatedType>
-    : std::true_type {};
+template <template <typename...> typename DeducedTemplatedType,
+          template <typename...> typename WantedTemplatedType, typename... Ts>
+/*
+The `std::same_as` comparison is not malformed, as long as
+`WantedTemplatedType<Ts...>` is not a malformed type.
+*/
+requires requires { std::declval<WantedTemplatedType<Ts...>>(); }
+/*
+Note that just `WantedTemplatedType<Ts...>, WantedTemplatedType` does not work
+with any type wrappers, because of type deduction.
+For example: If you had a wrapper `Vec` for `std::vector` and called
+`isInstantiationImpl<std::vector<int>, Vec>::value`, or
+`isInstantiationImpl<Vec<int>, Vec>::value` then the result would always be
+false. Because type deduction would always deduce, based on the first template
+argument, that `WantedTemplatedType = std::vector` and `std::vector !=
+WantedTemplatedType`, so this specialization would not be chosen.
+*/
+struct isInstantiationImpl<DeducedTemplatedType<Ts...>, WantedTemplatedType>
+    : std::integral_constant<bool, std::same_as<DeducedTemplatedType<Ts...>,
+                                                WantedTemplatedType<Ts...>>> {};
 
 // Given a templated type (e.g. std::variant<A, B, C>), provide a type where the
 // inner types are "lifted" by a given outer type.
