@@ -56,7 +56,7 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
     // We don't wait for the deletion to complete here, but only for its
     // scheduling. We still get the expected behavior because all accesses
     // to the `socketDistributor` are synchronized via a strand and
-    // BOOST::asio schedules ina FIFO manner.
+    // BOOST::asio schedules in a FIFO manner.
   };
 
   auto distributor = std::make_shared<QueryToSocketDistributor>(
