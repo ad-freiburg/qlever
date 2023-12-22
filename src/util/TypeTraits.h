@@ -19,18 +19,12 @@ namespace ad_utility {
 namespace detail {
 // Check (via the compiler's template matching mechanism) whether a given type
 // is an instantiation of a given template.
-// Example 1: IsInstantiationOf<std::vector>::Instantiation<std::vector<int>>
-// is true.
-// Example 2: IsInstantiationOf<std::vector>::Instantiation<std:map<int, int>>
-// is false
-template <template <typename...> typename Template>
-struct IsInstantiationOf {
-  template <typename T>
-  struct Instantiation : std::false_type {};
+template <typename T, template <typename...> typename TemplatedType>
+struct isInstantiationImpl;
 
-  template <typename... Ts>
-  struct Instantiation<Template<Ts...>> : std::true_type {};
-};
+template <template <typename...> typename TemplatedType, typename... Ts>
+struct isInstantiationImpl<TemplatedType<Ts...>, TemplatedType>
+    : std::true_type {};
 
 // Given a templated type (e.g. std::variant<A, B, C>), provide a type where the
 // inner types are "lifted" by a given outer type.
@@ -77,8 +71,7 @@ struct FirstWrapper : public std::type_identity<T> {};
 /// isInstantiation<std::vector, std::vector<int>> == true;
 /// isInstantiation<std::vector, const std::vector<int>&> == false;
 template <typename T, template <typename...> typename TemplatedType>
-concept isInstantiation =
-    detail::IsInstantiationOf<TemplatedType>::template Instantiation<T>::value;
+concept isInstantiation = detail::isInstantiationImpl<T, TemplatedType>::value;
 
 /// The concept is fulfilled iff `T` is `ad_utility::SimilarTo` an
 /// instantiation of `TemplatedType`. Examples:
