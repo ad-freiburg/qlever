@@ -25,38 +25,42 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
     }
   }
 
-  auto makeCleanupCall = [&]() {
-    // We pass a copy of the `shared_pointer socketDistributors_` here,
-    // because in unit tests the callback might be invoked after this
-    // `QueryHub` was destroyed.
-    return [globalStrand = globalStrand_,
-            socketDistributors = socketDistributors_, queryId,
-            alreadyCalled = false](bool alwaysDelete) mutable {
-      AD_CORRECTNESS_CHECK(!alreadyCalled);
-      alreadyCalled = true;
-      net::dispatch(globalStrand, [alwaysDelete,
-                                   socketDistributors =
-                                       std::move(socketDistributors),
-                                   queryId = std::move(queryId)]() {
-        auto it = socketDistributors->find(queryId);
-        if (it != socketDistributors->end()) {
-          // Either this is the call to `signalEnd` (pointer still valid), or it
-          // is really the last reference. Other cases cannot happen because the
-          // call to `signalEnd` also cancels the cleanup for all the involved
-          // receivers.
-          AD_CORRECTNESS_CHECK(alwaysDelete ^ it->second.pointer_.expired());
-          socketDistributors->erase(it);
-        }
-      });
-      // We don't wait for the deletion to complete here, but only for its
-      // scheduling. We still get the expected behavior because all accesses
-      // to the `socketDistributor` are synchronized via a strand and
-      // BOOST::asio schedules ina FIFO manner.
-    };
+  // A coroutine that deletes the `queryId` from the distributors, but only if
+  // it is either expired or `alwaysDelete` was specified.
+  auto deleteFromDistributors = [](auto socketDistributors, QueryId queryId,
+                                   bool alwaysDelete) -> net::awaitable<void> {
+    auto it = socketDistributors->find(queryId);
+    if (it == socketDistributors->end()) {
+      co_return;
+    }
+    bool expired = it->second.pointer_.expired();
+    if (alwaysDelete || expired) {
+      socketDistributors->erase(it);
+    }
+    co_return;
   };
 
-  auto distributor =
-      std::make_shared<QueryToSocketDistributor>(ioContext_, makeCleanupCall());
+  // The cleanup call for the distributor.
+  // We pass a copy of the `shared_pointer socketDistributors_` here,
+  // because in unit tests the callback might be invoked after this
+  // `QueryHub` was destroyed.
+  auto cleanupCall = [globalStrand = globalStrand_, &deleteFromDistributors,
+                      socketDistributors = socketDistributors_, queryId,
+                      alreadyCalled = false](bool alwaysDelete) mutable {
+    AD_CORRECTNESS_CHECK(!alreadyCalled);
+    alreadyCalled = true;
+    net::co_spawn(globalStrand,
+                  deleteFromDistributors(std::move(socketDistributors),
+                                         std::move(queryId), alwaysDelete),
+                  net::detached);
+    // We don't wait for the deletion to complete here, but only for its
+    // scheduling. We still get the expected behavior because all accesses
+    // to the `socketDistributor` are synchronized via a strand and
+    // BOOST::asio schedules ina FIFO manner.
+  };
+
+  auto distributor = std::make_shared<QueryToSocketDistributor>(
+      ioContext_, std::move(cleanupCall));
   socketDistributors_->emplace(queryId,
                                WeakReferenceHolder{distributor, isSender});
   co_return distributor;

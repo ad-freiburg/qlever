@@ -10,6 +10,7 @@
 using ad_utility::websocket::QueryHub;
 using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryToSocketDistributor;
+using namespace std::chrono_literals;
 
 ASYNC_TEST(QueryHub, simulateLifecycleWithoutListeners) {
   QueryHub queryHub{ioContext};
@@ -112,7 +113,6 @@ namespace ad_utility::websocket {
 ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
-  std::atomic_flag flag{};
 
   auto distributor =
       co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
@@ -120,20 +120,27 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
 
   co_await net::dispatch(
       net::bind_executor(queryHub.globalStrand_, net::use_awaitable));
-  net::post(ioContext, [distributor = std::move(distributor), &flag]() mutable {
-    // Invoke destructor while the strand of
-    // queryHub is still in use
-    distributor.reset();
-    flag.test_and_set();
-    flag.notify_all();
-  });
-
-  flag.wait(false);
+  net::post(
+      ioContext,
+      std::packaged_task{[distributor = std::move(distributor)]() mutable {
+        // Invoke destructor while the strand of
+        // queryHub is still in use
+        distributor.reset();
+      }})
+      .get();
 
   distributor = co_await queryHub.createOrAcquireDistributorInternalUnsafe(
       queryId, false);
   EXPECT_FALSE(!comparison.owner_before(distributor) &&
                !distributor.owner_before(comparison));
+
+  // First run the cleanupCall of the initial distributor which now sees a
+  // non-expired pointer, which is therefore not to be erased.
+  co_await net::post(ioContext, net::use_awaitable);
+  // This sleep is required to deterministically reproduce the case that the
+  // cleanup in QueryHub.cpp sees an expired `weak_ptr` with `alwaysDelete ==
+  // false`.
+  std::this_thread::sleep_for(1ms);
 }
 
 }  // namespace ad_utility::websocket

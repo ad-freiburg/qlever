@@ -31,7 +31,7 @@ void runCoroutine(Func innerRun, size_t numThreads) {
   std::vector<ad_utility::JThread> workers{};
 
   AD_CONTRACT_CHECK(numThreads > 0);
-  workers.reserve(numThreads - 1);
+  workers.reserve(numThreads);
 
   for (size_t i = 0; i < numThreads; i++) {
     workers.emplace_back(
