@@ -629,208 +629,327 @@ struct JoinSide {
 template <typename SameBlocks, typename It, typename End, typename Projection>
 JoinSide(SameBlocks&, It&, const End&, Projection&)
     -> JoinSide<SameBlocks, It, End, Projection>;
-
-// Fill the `targetBuffer` with blocks from the range `[it, end)` and advance
-// `it` for each read buffer until all elements <= `minEl` are added to the
-// `targetBuffer` or at most three blocks have been added to the targetBuffer.
-// Calling this function requires that all blocks that contain elements `<
-// minEl` have already been consumed. Returns `true` if all blocks have been
-// added, and `false` if the function returned because 3 blocks were added
-// without fulfilling the condition.
-template <typename SameBlocks, typename It, typename End, typename Projection>
-bool fillEqualToMinimumImpl(JoinSide<SameBlocks, It, End, Projection>& side,
-                            const auto& minEl, const auto& lessThan,
-                            const auto& eq) {
-  auto& it = side.it_;
-  auto& end = side.end_;
-  for (size_t numBlocksRead = 0; it != end && numBlocksRead < 3;
-       ++it, ++numBlocksRead) {
-    if (std::ranges::empty(*it)) {
-      continue;
-    }
-    if (!eq((*it)[0], minEl)) {
-      AD_CORRECTNESS_CHECK(lessThan(minEl, (*it)[0]));
-      return true;
-    }
-    AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it, lessThan));
-    side.sameBlocks_.emplace_back(std::move(*it));
-  }
-  return it == end;
-}
-
 enum struct BlockStatus { leftMissing, rightMissing, allFilled };
-// TODO<joka921> Comment.
-constexpr auto fillEqualToMinimumBothSidesImpl =
-    [](auto& leftSide, auto& rightSide, const auto& minEl, const auto& lessThan,
-       const auto& eq) -> BlockStatus {
-  bool allBlocksFromLeft = false;
-  bool allBlocksFromRight = false;
-  while (!(allBlocksFromLeft || allBlocksFromRight)) {
-    allBlocksFromLeft = fillEqualToMinimumImpl(leftSide, minEl, lessThan, eq);
-    allBlocksFromRight = fillEqualToMinimumImpl(rightSide, minEl, lessThan, eq);
-  }
-  if (!allBlocksFromRight) {
-    return BlockStatus::rightMissing;
-  } else if (!allBlocksFromLeft) {
-    return BlockStatus::leftMissing;
-  } else {
-    return BlockStatus::allFilled;
-  }
-};
 
-// Remove all elements from `blocks` (either `sameBlocksLeft` or
-// `sameBlocksRight`) s.t. only elements `> lastProcessedElement` remain. This
-// effectively removes all blocks completely, except maybe the last one.
-constexpr auto removeAllButUnjoinedImpl =
-    []<typename Blocks, typename ProjectedEl>(Blocks& blocks,
-                                              ProjectedEl lastProcessedElement,
-                                              const auto& lessThan) {
-      // Erase all but the last block.
-      AD_CORRECTNESS_CHECK(!blocks.empty());
-      blocks.erase(blocks.begin(), blocks.end() - 1);
+template <typename LeftSide, typename RightSide, typename LessThan, typename Eq,
+          typename CompatibleRowAction>
+struct BlockZipperJoinImpl {
+  LeftSide& leftSide_;
+  RightSide& rightSide_;
+  const LessThan& lessThan_;
+  const Eq& eq_;
+  CompatibleRowAction& compatibleRowAction_;
 
-      // Delete the part from the last block that is `<= lastProcessedElement`.
-      decltype(auto) remainingBlock = blocks.at(0).subrange();
-      auto beginningOfUnjoined = std::ranges::upper_bound(
-          remainingBlock, lastProcessedElement, lessThan);
-      remainingBlock =
-          std::ranges::subrange{beginningOfUnjoined, remainingBlock.end()};
-      // If the last block also was already handled completely, delete it (this
-      // might happen at the very end).
-      if (!remainingBlock.empty()) {
-        blocks.at(0).setSubrange(remainingBlock.begin(), remainingBlock.end());
-      } else {
-        blocks.clear();
+  // Fill the `targetBuffer` with blocks from the range `[it, end)` and advance
+  // `it` for each read buffer until all elements <= `minEl` are added to the
+  // `targetBuffer` or at most three blocks have been added to the targetBuffer.
+  // Calling this function requires that all blocks that contain elements `<
+  // minEl` have already been consumed. Returns `true` if all blocks have been
+  // added, and `false` if the function returned because 3 blocks were added
+  // without fulfilling the condition.
+  template <typename SameBlocks, typename It, typename End, typename Projection>
+  bool fillEqualToMinimum(JoinSide<SameBlocks, It, End, Projection>& side,
+                          const auto& minEl) {
+    auto& it = side.it_;
+    auto& end = side.end_;
+    for (size_t numBlocksRead = 0; it != end && numBlocksRead < 3;
+         ++it, ++numBlocksRead) {
+      if (std::ranges::empty(*it)) {
+        continue;
       }
-    };
+      if (!eq_((*it)[0], minEl)) {
+        AD_CORRECTNESS_CHECK(lessThan_(minEl, (*it)[0]));
+        return true;
+      }
+      AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it, lessThan_));
+      side.sameBlocks_.emplace_back(std::move(*it));
+    }
+    return it == end;
+  }
 
-// For one of the inputs (`sameBlocksLeft` or `sameBlocksRight`) obtain a
-// tuple of the following elements:
-// * A reference to the first full block
-// * The currently active subrange of that block
-// * An iterator pointing to the position of the `minEl` in the block.
-constexpr auto getFirstBlockImpl = [](auto& sameBlocks, const auto& minEl,
-                                      const auto& lessThan) {
-  AD_CORRECTNESS_CHECK(!sameBlocks.empty());
-  const auto& first = sameBlocks.at(0);
-  auto it = std::ranges::lower_bound(first.subrange(), minEl, lessThan);
-  return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
-};
+  // TODO<joka921> Comment.
+  BlockStatus fillEqualToMinimumBothSidesImpl(const auto& minEl) {
+    bool allBlocksFromLeft = false;
+    bool allBlocksFromRight = false;
+    while (!(allBlocksFromLeft || allBlocksFromRight)) {
+      allBlocksFromLeft = fillEqualToMinimum(leftSide_, minEl);
+      allBlocksFromRight = fillEqualToMinimum(rightSide_, minEl);
+    }
+    if (!allBlocksFromRight) {
+      return BlockStatus::rightMissing;
+    } else if (!allBlocksFromLeft) {
+      return BlockStatus::leftMissing;
+    } else {
+      return BlockStatus::allFilled;
+    }
+  };
 
-// Call `compatibleRowAction` for all pairs of elements in the cartesian
-// product of the blocks in `blocksLeft` and `blocksRight`.
-template <bool DoOptionalJoin>
-auto addAllImpl = [](const auto& blocksLeft, const auto& blocksRight,
-                     auto& compatibleRowAction) {
-  if constexpr (DoOptionalJoin) {
-    if (std::ranges::all_of(
-            blocksRight | std::views::transform(
-                              [](const auto& inp) { return inp.subrange(); }),
-            std::ranges::empty)) {
-      for (const auto& lBlock : blocksLeft) {
-        compatibleRowAction.setLeftInput(lBlock.fullBlock());
+  // Remove all elements from `blocks` (either `sameBlocksLeft` or
+  // `sameBlocksRight`) s.t. only elements `> lastProcessedElement` remain. This
+  // effectively removes all blocks completely, except maybe the last one.
+  template <typename Blocks, typename ProjectedEl>
+  void removeAllButUnjoinedImpl(Blocks& blocks,
+                                ProjectedEl lastProcessedElement) {
+    // Erase all but the last block.
+    AD_CORRECTNESS_CHECK(!blocks.empty());
+    blocks.erase(blocks.begin(), blocks.end() - 1);
+
+    // Delete the part from the last block that is `<= lastProcessedElement`.
+    decltype(auto) remainingBlock = blocks.at(0).subrange();
+    auto beginningOfUnjoined = std::ranges::upper_bound(
+        remainingBlock, lastProcessedElement, lessThan_);
+    remainingBlock =
+        std::ranges::subrange{beginningOfUnjoined, remainingBlock.end()};
+    // If the last block also was already handled completely, delete it (this
+    // might happen at the very end).
+    if (!remainingBlock.empty()) {
+      blocks.at(0).setSubrange(remainingBlock.begin(), remainingBlock.end());
+    } else {
+      blocks.clear();
+    }
+  };
+
+  // For one of the inputs (`sameBlocksLeft` or `sameBlocksRight`) obtain a
+  // tuple of the following elements:
+  // * A reference to the first full block
+  // * The currently active subrange of that block
+  // * An iterator pointing to the position of the `minEl` in the block.
+  auto getFirstBlockImpl(auto& sameBlocks, const auto& minEl) {
+    AD_CORRECTNESS_CHECK(!sameBlocks.empty());
+    const auto& first = sameBlocks.at(0);
+    auto it = std::ranges::lower_bound(first.subrange(), minEl, lessThan_);
+    return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
+  };
+
+  // Call `compatibleRowAction` for all pairs of elements in the cartesian
+  // product of the blocks in `blocksLeft` and `blocksRight`.
+  template <bool DoOptionalJoin>
+  void addAllImpl(const auto& blocksLeft, const auto& blocksRight) {
+    if constexpr (DoOptionalJoin) {
+      if (std::ranges::all_of(
+              blocksRight | std::views::transform(
+                                [](const auto& inp) { return inp.subrange(); }),
+              std::ranges::empty)) {
+        for (const auto& lBlock : blocksLeft) {
+          compatibleRowAction_.setLeftInput(lBlock.fullBlock());
+          for (size_t i : std::views::iota(lBlock.getIndices().first,
+                                           lBlock.getIndices().second)) {
+            compatibleRowAction_.addOptionalRow(i);
+          }
+        }
+      }
+    }
+    // TODO<C++23> use `std::views::cartesian_product`.
+    for (const auto& lBlock : blocksLeft) {
+      for (const auto& rBlock : blocksRight) {
+        compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
+
         for (size_t i : std::views::iota(lBlock.getIndices().first,
                                          lBlock.getIndices().second)) {
-          compatibleRowAction.addOptionalRow(i);
+          for (size_t j : std::views::iota(rBlock.getIndices().first,
+                                           rBlock.getIndices().second)) {
+            compatibleRowAction_.addRow(i, j);
+          }
         }
       }
     }
-  }
-  // TODO<C++23> use `std::views::cartesian_product`.
-  for (const auto& lBlock : blocksLeft) {
-    for (const auto& rBlock : blocksRight) {
-      compatibleRowAction.setInput(lBlock.fullBlock(), rBlock.fullBlock());
+    compatibleRowAction_.flush();
+  };
 
-      for (size_t i : std::views::iota(lBlock.getIndices().first,
-                                       lBlock.getIndices().second)) {
-        for (size_t j : std::views::iota(rBlock.getIndices().first,
-                                         rBlock.getIndices().second)) {
-          compatibleRowAction.addRow(i, j);
+  // Return a vector of subranges of all elements in `input` that are equal to
+  // the last element that we can safely join (this is the `minEl`).
+  // Effectively, these subranges cover all the blocks completely except maybe
+  // the last one, which might contain elements `> minEl` at the end.
+  auto pushRelevantSubrangesImpl(const auto& input, const auto& minEl) {
+    auto result = input;
+    // If one of the inputs is empty, this function shouldn't have been called
+    // in the first place.
+    AD_CORRECTNESS_CHECK(!result.empty());
+    auto& last = result.back();
+    auto range = std::ranges::equal_range(last.subrange(), minEl, lessThan_);
+    last.setSubrange(range.begin(), range.end());
+    return result;
+  };
+
+  // Join the first block in `sameBlocksLeft` with the first block in
+  // `sameBlocksRight`, but ignore all elements that >= min(lastL, lastR) where
+  // `lastL` is the last element of `sameBlocksLeft[0]`, and `lastR`
+  // analogously. The fully joined parts of the block are then removed from
+  // `sameBlocksLeft/Right`, as they are not needed anymore.
+  template <bool DoOptionalJoin>
+  void joinAndRemoveBeginningImpl(auto& sameBlocksLeft, auto& sameBlocksRight,
+                                  const auto& minEl) {
+    // Get the first blocks.
+    auto [fullBlockLeft, subrangeLeft, minElItL] =
+        getFirstBlockImpl(sameBlocksLeft, minEl);
+    auto [fullBlockRight, subrangeRight, minElItR] =
+        getFirstBlockImpl(sameBlocksRight, minEl);
+
+    compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
+    auto addRowIndex = [begL = fullBlockLeft.get().begin(),
+                        begR = fullBlockRight.get().begin(),
+                        this](auto itFromL, auto itFromR) {
+      compatibleRowAction_.addRow(itFromL - begL, itFromR - begR);
+    };
+
+    auto addNotFoundRowIndex = [&]() {
+      if constexpr (DoOptionalJoin) {
+        return [begL = fullBlockLeft.get().begin(), this](auto itFromL) {
+          compatibleRowAction_.addOptionalRow(itFromL - begL);
+        };
+
+      } else {
+        return ad_utility::noop;
+      }
+    }();
+    [[maybe_unused]] auto res = zipperJoinWithUndef(
+        std::ranges::subrange{subrangeLeft.begin(), minElItL},
+        std::ranges::subrange{subrangeRight.begin(), minElItR}, lessThan_,
+        addRowIndex, noop, noop, addNotFoundRowIndex);
+    compatibleRowAction_.flush();
+
+    // Remove the joined elements.
+    sameBlocksLeft.at(0).setSubrange(minElItL, subrangeLeft.end());
+    sameBlocksRight.at(0).setSubrange(minElItR, subrangeRight.end());
+  };
+
+  // If the `targetBuffer` is empty, read the next nonempty block from `[it,
+  // end)` if there is one.
+  void fillWithAtLeastOneImpl(auto& side) {
+    // `lessThan` is only needed when compiling with expensive checks enabled,
+    // so we suppress the warning about `lessThan` being unused.
+    auto& targetBuffer = side.sameBlocks_;
+    auto& it = side.it_;
+    const auto& end = side.end_;
+    while (targetBuffer.empty() && it != end) {
+      auto&& el = *it;
+      if (!el.empty()) {
+        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(el, lessThan_));
+        targetBuffer.emplace_back(std::move(el));
+      }
+      ++it;
+    }
+  };
+
+  // Read the minimal number of unread blocks from `leftBlocks` into
+  // `sameBlocksLeft` and from `rightBlocks` into `sameBlocksRight` s.t. at
+  // least one of these blocks can be fully processed. For example consider the
+  // inputs:
+  //   leftBlocks:  [0-3], [3-3], [3-5], ...
+  //   rightBlocks: [0-3], [3-7], ...
+  // All of these five blocks have to be processed at once in order to be able
+  // to fully process at least one block. Afterwards we have fully processed all
+  // blocks except for the [3-7] block, which has to stay in `sameBlocksRight`
+  // before the next call to `fillBuffer`. To ensure this, all the following
+  // conditions must hold.
+  // 1. All blocks that were previously read into `sameBlocksLeft/Right` but
+  // have not yet been fully processed are still stored in those buffers. This
+  // precondition is enforced by the `joinBuffers` lambda below.
+  // 2. At least one block is contained in `sameBlocksLeft` and
+  // `sameBlocksRight` each.
+  // 3. Consider the minimum of the last element in `sameBlocksLeft[0]` and the
+  // last element of `sameBlocksRight[0]` after condition 2 is fulfilled. All
+  // blocks that contain elements equal to this minimum are read into the
+  // respective buffers. Only blocks that fulfill this condition are read.
+  //
+  // The only exception to these conditions can happen if we are at the end of
+  // one of the inputs. In that case either of `sameBlocksLeft` or
+  // `sameBlocksRight` is empty after calling this function. Then we have
+  // finished processing all blocks and can finish the overall algorithm.
+  void fillBufferImpl(auto& getMinEl, auto& currentMinEl, auto& blockStatus) {
+    AD_CORRECTNESS_CHECK(leftSide_.sameBlocks_.size() <= 1);
+    AD_CORRECTNESS_CHECK(rightSide_.sameBlocks_.size() <= 1);
+
+    fillWithAtLeastOneImpl(leftSide_);
+    fillWithAtLeastOneImpl(rightSide_);
+
+    if (leftSide_.sameBlocks_.empty() || rightSide_.sameBlocks_.empty()) {
+      // One of the inputs was exhausted, we are done.
+      return;
+    }
+
+    // Add the remaining blocks such that condition 3 from above is fulfilled.
+    blockStatus = fillEqualToMinimumBothSidesImpl(getMinEl());
+    currentMinEl = getMinEl();
+  }
+
+  // Combine the above functionality and perform one round of joining.
+  template <bool DoOptionalJoin, typename ProjectedEl>
+  void joinBuffersImpl(auto& getMinEl, auto& blockStatus) {
+    auto& sameBlocksLeft = leftSide_.sameBlocks_;
+    auto& sameBlocksRight = rightSide_.sameBlocks_;
+    joinAndRemoveBeginningImpl<DoOptionalJoin>(sameBlocksLeft, sameBlocksRight,
+                                               getMinEl());
+
+    ProjectedEl minEl = getMinEl();
+    auto l = pushRelevantSubrangesImpl(sameBlocksLeft, minEl);
+    auto r = pushRelevantSubrangesImpl(sameBlocksRight, minEl);
+
+    auto getNextBlocks = [&minEl, self = this](auto& target, auto& side) {
+      self->removeAllButUnjoinedImpl(side.sameBlocks_, minEl);
+      bool allBlocksWereFilled = self->fillEqualToMinimum(side, minEl);
+      if (side.sameBlocks_.empty()) {
+        AD_CORRECTNESS_CHECK(allBlocksWereFilled);
+      }
+      target = self->pushRelevantSubrangesImpl(side.sameBlocks_, minEl);
+      return allBlocksWereFilled;
+    };
+    while (!l.empty() && !r.empty()) {
+      addAllImpl<DoOptionalJoin>(l, r);
+      switch (blockStatus.value()) {
+        case BlockStatus::allFilled: {
+          removeAllButUnjoinedImpl(sameBlocksLeft, minEl);
+          removeAllButUnjoinedImpl(sameBlocksRight, minEl);
+          return;
         }
+        case BlockStatus::rightMissing: {
+          bool finished = getNextBlocks(r, rightSide_);
+          if (finished) {
+            blockStatus = BlockStatus::allFilled;
+          }
+          continue;
+        }
+        case BlockStatus::leftMissing: {
+          bool finished = getNextBlocks(l, leftSide_);
+          if (finished) {
+            blockStatus = BlockStatus::allFilled;
+          }
+          continue;
+        }
+          AD_FAIL();
       }
     }
-  }
-  compatibleRowAction.flush();
-};
+  };
 
-// Return a vector of subranges of all elements in `input` that are equal to
-// the last element that we can safely join (this is the `minEl`).
-// Effectively, these subranges cover all the blocks completely except maybe
-// the last one, which might contain elements `> minEl` at the end.
-constexpr auto pushRelevantSubrangesImpl =
-    [](const auto& input, const auto& minEl, const auto& lessThan) {
-      auto result = input;
-      // If one of the inputs is empty, this function shouldn't have been called
-      // in the first place.
-      AD_CORRECTNESS_CHECK(!result.empty());
-      auto& last = result.back();
-      auto range = std::ranges::equal_range(last.subrange(), minEl, lessThan);
-      last.setSubrange(range.begin(), range.end());
-      return result;
-    };
+  auto fillWithAllFromLeft() {
+    auto& sameBlocksLeft = leftSide_.sameBlocks_;
+    auto& it1 = leftSide_.it_;
+    const auto& end1 = leftSide_.end_;
+    for (auto& block : sameBlocksLeft) {
+      compatibleRowAction_.setLeftInput(block.fullBlock());
 
-// Join the first block in `sameBlocksLeft` with the first block in
-// `sameBlocksRight`, but ignore all elements that >= min(lastL, lastR) where
-// `lastL` is the last element of `sameBlocksLeft[0]`, and `lastR`
-// analogously. The fully joined parts of the block are then removed from
-// `sameBlocksLeft/Right`, as they are not needed anymore.
-template <bool DoOptionalJoin>
-auto joinAndRemoveBeginningImpl =
-    [](auto& sameBlocksLeft, auto& sameBlocksRight, const auto& minEl,
-       auto& compatibleRowAction, const auto& lessThan) {
-      // Get the first blocks.
-      auto [fullBlockLeft, subrangeLeft, minElItL] =
-          getFirstBlockImpl(sameBlocksLeft, minEl, lessThan);
-      auto [fullBlockRight, subrangeRight, minElItR] =
-          getFirstBlockImpl(sameBlocksRight, minEl, lessThan);
-
-      compatibleRowAction.setInput(fullBlockLeft.get(), fullBlockRight.get());
-      auto addRowIndex = [begL = fullBlockLeft.get().begin(),
-                          begR = fullBlockRight.get().begin(),
-                          &compatibleRowAction](auto itFromL, auto itFromR) {
-        compatibleRowAction.addRow(itFromL - begL, itFromR - begR);
-      };
-
-      auto addNotFoundRowIndex = [&]() {
-        if constexpr (DoOptionalJoin) {
-          return [begL = fullBlockLeft.get().begin(),
-                  &compatibleRowAction](auto itFromL) {
-            compatibleRowAction.addOptionalRow(itFromL - begL);
-          };
-
-        } else {
-          return ad_utility::noop;
-        }
-      }();
-      [[maybe_unused]] auto res = zipperJoinWithUndef(
-          std::ranges::subrange{subrangeLeft.begin(), minElItL},
-          std::ranges::subrange{subrangeRight.begin(), minElItR}, lessThan,
-          addRowIndex, noop, noop, addNotFoundRowIndex);
-      compatibleRowAction.flush();
-
-      // Remove the joined elements.
-      sameBlocksLeft.at(0).setSubrange(minElItL, subrangeLeft.end());
-      sameBlocksRight.at(0).setSubrange(minElItR, subrangeRight.end());
-    };
-
-    // If the `targetBuffer` is empty, read the next nonempty block from `[it,
-    // end)` if there is one.
-    constexpr auto fillWithAtLeastOneImpl = [](auto& side, auto& lessThan) {
-      // `lessThan` is only needed when compiling with expensive checks enabled,
-      // so we suppress the warning about `lessThan` being unused.
-      auto& targetBuffer = side.sameBlocks_;
-      auto& it = side.it_;
-      const auto& end = side.end_;
-      (void)lessThan;
-      while (targetBuffer.empty() && it != end) {
-        auto&& el = *it;
-        if (!el.empty()) {
-          AD_CORRECTNESS_CHECK(std::ranges::is_sorted(el, lessThan));
-      targetBuffer.emplace_back(std::move(el));
+      for (size_t idx : std::views::iota(block.getIndices().first,
+                                         block.getIndices().second)) {
+        compatibleRowAction_.addOptionalRow(idx);
+      }
     }
-    ++it;
+    while (it1 != end1) {
+      auto& block = *it1;
+      compatibleRowAction_.setLeftInput(block);
+      for (size_t idx : ad_utility::integerRange(block.size())) {
+        compatibleRowAction_.addOptionalRow(idx);
+      }
+      ++it1;
+    }
+    compatibleRowAction_.flush();
   }
 };
+
+template <typename LHS, typename RHS, typename LessThan, typename Eq,
+          typename CompatibleRowAction>
+BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, const Eq&,
+                    CompatibleRowAction&)
+    -> BlockZipperJoinImpl<LHS, RHS, LessThan, Eq, CompatibleRowAction>;
 
 /**
  * @brief Perform a zipper/merge join between two sorted inputs that are given
@@ -912,141 +1031,32 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   auto leftSide = JoinSide{sameBlocksLeft, it1, end1, leftProjection};
   auto rightSide = JoinSide{sameBlocksRight, it2, end2, rightProjection};
 
-  auto getMinEl = [&leftProjection, &rightProjection, &sameBlocksLeft,
-                   &sameBlocksRight, &lessThan]() -> ProjectedEl {
-    return std::min(leftProjection(sameBlocksLeft.front().back()),
-                    rightProjection(sameBlocksRight.front().back()), lessThan);
+  auto getFirst = [](const auto& side) {
+    return side.projection_(side.sameBlocks_.front().back());
+  };
+
+  auto getMinEl = [&leftSide, &rightSide, &lessThan,
+                   &getFirst]() -> ProjectedEl {
+    return std::min(getFirst(leftSide), getFirst(rightSide), lessThan);
   };
 
   std::optional<BlockStatus> blockStatus;
   std::optional<ProjectedEl> currentMinEl;
 
-  // Read the minimal number of unread blocks from `leftBlocks` into
-  // `sameBlocksLeft` and from `rightBlocks` into `sameBlocksRight` s.t. at
-  // least one of these blocks can be fully processed. For example consider the
-  // inputs:
-  //   leftBlocks:  [0-3], [3-3], [3-5], ...
-  //   rightBlocks: [0-3], [3-7], ...
-  // All of these five blocks have to be processed at once in order to be able
-  // to fully process at least one block. Afterwards we have fully processed all
-  // blocks except for the [3-7] block, which has to stay in `sameBlocksRight`
-  // before the next call to `fillBuffer`. To ensure this, all the following
-  // conditions must hold.
-  // 1. All blocks that were previously read into `sameBlocksLeft/Right` but
-  // have not yet been fully processed are still stored in those buffers. This
-  // precondition is enforced by the `joinBuffers` lambda below.
-  // 2. At least one block is contained in `sameBlocksLeft` and
-  // `sameBlocksRight` each.
-  // 3. Consider the minimum of the last element in `sameBlocksLeft[0]` and the
-  // last element of `sameBlocksRight[0]` after condition 2 is fulfilled. All
-  // blocks that contain elements equal to this minimum are read into the
-  // respective buffers. Only blocks that fulfill this condition are read.
-  //
-  // The only exception to these conditions can happen if we are at the end of
-  // one of the inputs. In that case either of `sameBlocksLeft` or
-  // `sameBlocksRight` is empty after calling this function. Then we have
-  // finished processing all blocks and can finish the overall algorithm.
-  auto fillBuffer = [&]() {
-    AD_CORRECTNESS_CHECK(sameBlocksLeft.size() <= 1);
-    AD_CORRECTNESS_CHECK(sameBlocksRight.size() <= 1);
-
-    fillWithAtLeastOneImpl(leftSide, lessThan);
-    fillWithAtLeastOneImpl(rightSide, lessThan);
-
-    if (sameBlocksLeft.empty() || sameBlocksRight.empty()) {
-      // One of the inputs was exhausted, we are done.
-      return;
-    }
-
-    // Add the remaining blocks such that condition 3 from above is fulfilled.
-    blockStatus = fillEqualToMinimumBothSidesImpl(leftSide, rightSide,
-                                                  getMinEl(), lessThan, eq);
-    currentMinEl = getMinEl();
-  };
-
-  // Remove all elements from `blocks` (either `sameBlocksLeft` or
-  // `sameBlocksRight`) s.t. only elements `> lastProcessedElement` remain. This
-  // effectively removes all blocks completely, except maybe the last one.
-  auto removeAllButUnjoined = [lessThan]<typename Blocks>(
-                                  Blocks& blocks,
-                                  ProjectedEl lastProcessedElement) {
-    return removeAllButUnjoinedImpl(blocks, lastProcessedElement, lessThan);
-  };
-
-  // Combine the above functionality and perform one round of joining.
-  auto joinBuffers = [&]() {
-    // Join the beginning of the first blocks and remove it from the input.
-    joinAndRemoveBeginningImpl<DoOptionalJoin>(sameBlocksLeft, sameBlocksRight,
-                                               getMinEl(), compatibleRowAction,
-                                               lessThan);
-
-    ProjectedEl minEl = getMinEl();
-    auto l = pushRelevantSubrangesImpl(sameBlocksLeft, minEl, lessThan);
-    auto r = pushRelevantSubrangesImpl(sameBlocksRight, minEl, lessThan);
-
-    auto getNextBlocks = [&minEl, &removeAllButUnjoined, &lessThan, &eq](
-                             auto& target, auto& side) {
-      removeAllButUnjoined(side.sameBlocks_, minEl);
-      bool allBlocksWereFilled =
-          fillEqualToMinimumImpl(side, minEl, lessThan, eq);
-      if (side.sameBlocks_.empty()) {
-        AD_CORRECTNESS_CHECK(allBlocksWereFilled);
-      }
-      target = pushRelevantSubrangesImpl(side.sameBlocks_, minEl, lessThan);
-      return allBlocksWereFilled;
-    };
-    while (!l.empty() && !r.empty()) {
-      addAllImpl<DoOptionalJoin>(l, r, compatibleRowAction);
-      switch (blockStatus.value()) {
-        case BlockStatus::allFilled: {
-          removeAllButUnjoined(sameBlocksLeft, minEl);
-          removeAllButUnjoined(sameBlocksRight, minEl);
-          return;
-        }
-        case BlockStatus::rightMissing: {
-          bool finished = getNextBlocks(r, rightSide);
-          if (finished) {
-            blockStatus = BlockStatus::allFilled;
-          }
-          continue;
-        }
-        case BlockStatus::leftMissing: {
-          bool finished = getNextBlocks(l, leftSide);
-          if (finished) {
-            blockStatus = BlockStatus::allFilled;
-          }
-          continue;
-        }
-          AD_FAIL();
-      }
-    }
-  };
+  BlockZipperJoinImpl impl{leftSide, rightSide, lessThan, eq,
+                           compatibleRowAction};
 
   while (true) {
-    fillBuffer();
+    impl.fillBufferImpl(getMinEl, currentMinEl, blockStatus);
     if (sameBlocksLeft.empty() || sameBlocksRight.empty()) {
       if constexpr (DoOptionalJoin) {
-        for (auto& block : sameBlocksLeft) {
-          compatibleRowAction.setLeftInput(block.fullBlock());
-
-          for (size_t idx : std::views::iota(block.getIndices().first,
-                                             block.getIndices().second)) {
-            compatibleRowAction.addOptionalRow(idx);
-          }
-        }
-        while (it1 != end1) {
-          auto& block = *it1;
-          compatibleRowAction.setLeftInput(block);
-          for (size_t idx : ad_utility::integerRange(block.size())) {
-            compatibleRowAction.addOptionalRow(idx);
-          }
-          ++it1;
-        }
-        compatibleRowAction.flush();
+        impl.fillWithAllFromLeft();
       }
       return;
     }
-    joinBuffers();
+    impl.template joinBuffersImpl<DoOptionalJoin, ProjectedEl>(getMinEl,
+                                                               blockStatus);
   }
 }
+
 }  // namespace ad_utility
