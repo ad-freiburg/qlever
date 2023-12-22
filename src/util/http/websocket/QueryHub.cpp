@@ -19,6 +19,9 @@ inline auto makeDeleteFromDistributors =
           return;
         }
         bool expired = it->second.pointer_.expired();
+        // The branch `both of them are true` is currently not covered by tests
+        // and also not coverable, because the manual `signalEnd` call always
+        // comes before the destructor.
         if (alwaysDelete || expired) {
           socketDistributors->erase(it);
         }
