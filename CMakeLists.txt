@@ -257,17 +257,12 @@ add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
 set(USE_GNU_PARALLEL OFF CACHE BOOL "Don't use gnu parallel" FORCE)
 set(USE_OPENMP OFF CACHE BOOL "Don't use OPENMP as default" FORCE)
 
-#add_subdirectory(third_party/stxxl EXCLUDE_FROM_ALL)
-
 set(STXXL_CXX_FLAGS "${STXXL_CXX_FLAGS} -Wno-deprecated-declarations")
 FetchContent_Declare(
         stxxl
         GIT_REPOSITORY https://github.com/ad-freiburg/stxxl.git
-        GIT_TAG 67289d79a43c415d4ac7eaa2edde93d8b75f3100
+        GIT_TAG 4d39edb272f10239c4302f89e448331cb8a57edb
 )
-
-# apply STXXL CXXFLAGS
-#include_directories(SYSTEM ${STXXL_INCLUDE_DIRS})
 
 ################################
 # RE2
@@ -280,22 +275,15 @@ FetchContent_Declare(
         GIT_SHALLOW TRUE
         OVERRIDE_FIND_PACKAGE
 )
-# RE2 has a lot of unused-parameter warnings, we will deactivate
-# these for the subproject
-set(LOCAL_CXX_BACKUP_FLAGS "${CMAKE_CXX_FLAGS}")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
-set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
 
 ################################
 # Apply FetchContent
 ################################
 FetchContent_MakeAvailable( googletest ctre abseil re2 stxxl)
+# Disable some warnings in RE2 and STXXL
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
 include_directories(${ctre_SOURCE_DIR}/single-header)
-
-# reinstate original flags including all warnings
-set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
