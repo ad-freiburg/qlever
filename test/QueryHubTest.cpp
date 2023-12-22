@@ -10,7 +10,6 @@
 using ad_utility::websocket::QueryHub;
 using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryToSocketDistributor;
-using namespace std::chrono_literals;
 
 ASYNC_TEST(QueryHub, simulateLifecycleWithoutListeners) {
   QueryHub queryHub{ioContext};
@@ -137,10 +136,6 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
   // First run the cleanupCall of the initial distributor which now sees a
   // non-expired pointer, which is therefore not to be erased.
   co_await net::post(ioContext, net::use_awaitable);
-  // This sleep is required to deterministically reproduce the case that the
-  // cleanup in QueryHub.cpp sees an expired `weak_ptr` with `alwaysDelete ==
-  // false`.
-  std::this_thread::sleep_for(1ms);
 }
 
 }  // namespace ad_utility::websocket

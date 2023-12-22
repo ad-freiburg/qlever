@@ -25,8 +25,7 @@ MessageSender::MessageSender(
                                        // part of the struct but never actually
                                        // accessed.
                                        co_await distributorAndOwningQueryId
-                                           .distributorAndOwningQueryId_
-                                           ->signalEnd();
+                                           .distributor_->signalEnd();
                                      };
                                      net::co_spawn(
                                          executor,

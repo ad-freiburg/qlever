@@ -8,6 +8,24 @@
 
 namespace ad_utility::websocket {
 
+// Return a lambda that deletes the `queryId` from the `socketDistributors`, but
+// only if it is either expired or `alwaysDelete` was specified.
+inline auto makeDeleteFromDistributors =
+    [](auto socketDistributors, QueryId queryId, bool alwaysDelete) {
+      return [socketDistributors = std::move(socketDistributors),
+              queryId = std::move(queryId), alwaysDelete]() {
+        auto it = socketDistributors->find(queryId);
+        if (it == socketDistributors->end()) {
+          return;
+        }
+        bool expired = it->second.pointer_.expired();
+        if (alwaysDelete || expired) {
+          socketDistributors->erase(it);
+        }
+      };
+    };
+
+// _____________________________________________________________________________
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
                                                    bool isSender) {
@@ -25,34 +43,18 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
     }
   }
 
-  // A coroutine that deletes the `queryId` from the distributors, but only if
-  // it is either expired or `alwaysDelete` was specified.
-  auto deleteFromDistributors = [](auto socketDistributors, QueryId queryId,
-                                   bool alwaysDelete) -> net::awaitable<void> {
-    auto it = socketDistributors->find(queryId);
-    if (it == socketDistributors->end()) {
-      co_return;
-    }
-    bool expired = it->second.pointer_.expired();
-    if (alwaysDelete || expired) {
-      socketDistributors->erase(it);
-    }
-    co_return;
-  };
-
   // The cleanup call for the distributor.
   // We pass a copy of the `shared_pointer socketDistributors_` here,
   // because in unit tests the callback might be invoked after this
   // `QueryHub` was destroyed.
-  auto cleanupCall = [globalStrand = globalStrand_, &deleteFromDistributors,
+  auto cleanupCall = [globalStrand = globalStrand_,
                       socketDistributors = socketDistributors_, queryId,
                       alreadyCalled = false](bool alwaysDelete) mutable {
     AD_CORRECTNESS_CHECK(!alreadyCalled);
     alreadyCalled = true;
-    net::co_spawn(globalStrand,
-                  deleteFromDistributors(std::move(socketDistributors),
-                                         std::move(queryId), alwaysDelete),
-                  net::detached);
+    net::dispatch(globalStrand,
+                  makeDeleteFromDistributors(std::move(socketDistributors),
+                                             std::move(queryId), alwaysDelete));
     // We don't wait for the deletion to complete here, but only for its
     // scheduling. We still get the expected behavior because all accesses
     // to the `socketDistributor` are synchronized via a strand and
@@ -67,7 +69,6 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
 }
 
 // _____________________________________________________________________________
-
 template <bool isSender>
 net::awaitable<std::shared_ptr<
     QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
@@ -78,7 +79,6 @@ QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
 }
 
 // _____________________________________________________________________________
-
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForSending(QueryId queryId) {
   return resumeOnOriginalExecutor(
