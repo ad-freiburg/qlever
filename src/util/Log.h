@@ -4,9 +4,10 @@
 
 #pragma once
 
-#include <chrono>
-#include <ctime>
-#include <iomanip>
+#include <absl/strings/str_format.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
+
 #include <iostream>
 #include <locale>
 #include <sstream>
@@ -81,22 +82,6 @@ class CommaNumPunct : public std::numpunct<char> {
 
 const static std::locale commaLocale(std::locale(), new CommaNumPunct());
 
-//! String representation of a double with precision and thousandth separators
-inline string to_string(double in, size_t precision) {
-  std::ostringstream buffer;
-  buffer.imbue(commaLocale);
-  buffer << std::setprecision(precision) << std::fixed << in;
-  return std::move(buffer).str();
-}
-
-//! String representation of a long with thousandth separators
-inline string to_string(long in) {
-  std::ostringstream buffer;
-  buffer.imbue(commaLocale);
-  buffer << in;
-  return std::move(buffer).str();
-}
-
 //! Log
 class Log {
  public:
@@ -104,22 +89,14 @@ class Log {
   static std::ostream& getLog() {
     // use the singleton logging stream as target.
     return LogstreamChoice::get().getStream()
-           << ad_utility::Log::getTimeStamp() << "\t- "
-           << ad_utility::Log::getLevel<LEVEL>();
+           << getTimeStamp() << " - " << getLevel<LEVEL>();
   }
 
   static void imbue(const std::locale& locale) { std::cout.imbue(locale); }
 
   static string getTimeStamp() {
-    using namespace std::chrono;
-    auto now = system_clock::now();
-    auto inTimeT = system_clock::to_time_t(now);
-    auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
-    std::stringstream ss;
-
-    ss << std::put_time(std::localtime(&inTimeT), "%Y-%m-%d %X") << '.'
-       << std::setw(3) << std::setfill('0') << ms.count();
-    return std::move(ss).str();
+    return absl::FormatTime("%Y-%m-%d %H:%M:%E3S", absl::Now(),
+                            absl::LocalTimeZone());
   }
 
   template <LogLevel LEVEL>
