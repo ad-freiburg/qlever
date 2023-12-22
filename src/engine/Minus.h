@@ -28,7 +28,7 @@ class Minus : public Operation {
   explicit Minus(OnlyForTestingTag){};
 
  protected:
-  string asStringImpl(size_t indent = 0) const override;
+  string getCacheKeyImpl() const override;
 
  public:
   string getDescriptor() const override;

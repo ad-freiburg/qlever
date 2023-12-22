@@ -78,7 +78,7 @@ class Service : public Operation {
 
  private:
   // The string returned by this function is used as cache key.
-  std::string asStringImpl(size_t indent = 0) const override;
+  std::string getCacheKeyImpl() const override;
 
   // Compute the result using `getTsvFunction_`.
   ResultTable computeResult() override;

@@ -23,7 +23,7 @@ class Values : public Operation {
   Values(QueryExecutionContext* qec, SparqlValues parsedValues);
 
  protected:
-  virtual string asStringImpl(size_t indent) const override;
+  string getCacheKeyImpl() const override;
 
  public:
   virtual string getDescriptor() const override;

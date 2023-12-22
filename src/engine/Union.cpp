@@ -46,14 +46,11 @@ Union::Union(QueryExecutionContext* qec,
   }));
 }
 
-string Union::asStringImpl(size_t indent) const {
+string Union::getCacheKeyImpl() const {
   std::ostringstream os;
-  os << _subtrees[0]->asString(indent) << "\n";
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
+  os << _subtrees[0]->getCacheKey() << "\n";
   os << "UNION\n";
-  os << _subtrees[1]->asString(indent) << "\n";
+  os << _subtrees[1]->getCacheKey() << "\n";
   return std::move(os).str();
 }
 

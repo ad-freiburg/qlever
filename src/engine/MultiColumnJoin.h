@@ -26,7 +26,7 @@ class MultiColumnJoin : public Operation {
                   std::shared_ptr<QueryExecutionTree> t2);
 
  protected:
-  string asStringImpl(size_t indent = 0) const override;
+  string getCacheKeyImpl() const override;
 
  public:
   string getDescriptor() const override;

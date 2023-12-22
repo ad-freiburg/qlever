@@ -45,7 +45,7 @@ class HasPredicateScan : public Operation {
   HasPredicateScan(QueryExecutionContext* qec, SparqlTriple triple);
 
  private:
-  [[nodiscard]] string asStringImpl(size_t indent) const override;
+  [[nodiscard]] string getCacheKeyImpl() const override;
 
   void setSubject(const TripleComponent& subject);
 

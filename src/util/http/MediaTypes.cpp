@@ -4,6 +4,7 @@
 
 #include "MediaTypes.h"
 
+#include "util/StringUtils.h"
 #include "util/antlr/ANTLRErrorHandling.h"
 #include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
 #include "util/http/HttpParser/generated/AcceptHeaderLexer.h"

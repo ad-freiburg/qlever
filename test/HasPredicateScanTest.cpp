@@ -6,12 +6,14 @@
 
 #include <algorithm>
 
+#include "./IndexTestHelpers.h"
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/HasPredicateScan.h"
 #include "engine/SortPerformanceEstimator.h"
+#include "engine/ValuesForTesting.h"
 
 using ad_utility::testing::makeAllocator;
 namespace {
@@ -19,60 +21,16 @@ auto V = ad_utility::testing::VocabId;
 auto Int = ad_utility::testing::IntId;
 
 // used to test HasRelationScan with a subtree
-class DummyOperation : public Operation {
- public:
-  DummyOperation(QueryExecutionContext* ctx) : Operation(ctx) {}
-  virtual ResultTable computeResult() override {
-    IdTable result{getExecutionContext()->getAllocator()};
-    result.setNumColumns(2);
-    for (size_t i = 0; i < 10; i++) {
-      result.push_back({V(10 - i), V(2 * i)});
-    }
-    return {std::move(result), resultSortedOn(), LocalVocab{}};
+auto makeDummyOperation() {
+  IdTable result{makeAllocator()};
+  result.setNumColumns(2);
+  for (size_t i = 0; i < 10; i++) {
+    result.push_back({V(10 - i), V(2 * i)});
   }
-
- private:
-  string asStringImpl(size_t indent = 0) const override {
-    (void)indent;
-    return "dummy";
-  }
-
- public:
-  string getDescriptor() const override { return "dummy"; }
-
-  virtual size_t getResultWidth() const override { return 2; }
-
-  virtual vector<ColumnIndex> resultSortedOn() const override { return {1}; }
-
-  virtual void setTextLimit(size_t limit) override { (void)limit; }
-
-  virtual size_t getCostEstimate() override { return 10; }
-
- private:
-  virtual uint64_t getSizeEstimateBeforeLimit() override { return 10; }
-
- public:
-  virtual float getMultiplicity(size_t col) override {
-    (void)col;
-    return 1;
-  }
-
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
-
-  virtual bool knownEmptyResult() override { return false; }
-
- private:
-  virtual VariableToColumnMap computeVariableToColumnMap() const override {
-    return {{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
-            {Variable{"?b"}, makeAlwaysDefinedColumn(1)}};
-    /*
-    VariableToColumnMap m;
-    m[Variable{"?a"}] = makeAlwaysDefinedColumn(0);
-    m[Variable{"?b"}] = makeAlwaysDefinedColumn(1);
-    return m;
-     */
-  }
-};
+  std::vector<std::optional<Variable>> vars{Variable{"?a"}, Variable{"?b"}};
+  return ad_utility::makeExecutionTree<ValuesForTesting>(
+      ad_utility::testing::getQec(), std::move(result), std::move(vars));
+}
 }  // namespace
 
 TEST(HasPredicateScan, freeS) {
@@ -250,12 +208,7 @@ TEST(HasPredicateScan, subtreeS) {
                             SortPerformanceEstimator{});
 
   // create the subtree operation
-  std::shared_ptr<QueryExecutionTree> subtree =
-      std::make_shared<QueryExecutionTree>(&ctx);
-  std::shared_ptr<Operation> operation = std::make_shared<DummyOperation>(&ctx);
-
-  subtree->setOperation(QueryExecutionTree::OperationType::HAS_PREDICATE_SCAN,
-                        operation);
+  std::shared_ptr<QueryExecutionTree> subtree = makeDummyOperation();
 
   std::shared_ptr<const ResultTable> subresult = subtree->getResult();
   int in_width = 2;

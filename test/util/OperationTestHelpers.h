@@ -15,11 +15,9 @@ using namespace std::chrono_literals;
 
 class StallForeverOperation : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-  string asStringImpl([[maybe_unused]] size_t) const override {
-    return "StallForEverOperation";
-  }
+  string getCacheKeyImpl() const override { return "StallForeverOperation"; }
   string getDescriptor() const override {
-    return "StallForEverOperationDescriptor";
+    return "StallForeverOperationDescriptor";
   }
   size_t getResultWidth() const override { return 0; }
   size_t getCostEstimate() override { return 0; }
@@ -54,9 +52,7 @@ class ShallowParentOperation : public Operation {
 
   explicit ShallowParentOperation(std::shared_ptr<QueryExecutionTree> child)
       : child_{std::move(child)} {}
-  string asStringImpl([[maybe_unused]] size_t) const override {
-    return "ParentOperation";
-  }
+  string getCacheKeyImpl() const override { return "ParentOperation"; }
   string getDescriptor() const override { return "ParentOperationDescriptor"; }
   size_t getResultWidth() const override { return 0; }
   size_t getCostEstimate() override { return 0; }
@@ -92,7 +88,7 @@ class ShallowParentOperation : public Operation {
 template <>
 void QueryExecutionTree::setOperation<StallForeverOperation>(
     std::shared_ptr<StallForeverOperation> operation) {
-  _rootOperation = std::move(operation);
+  rootOperation_ = std::move(operation);
 }
 
 #endif  // QLEVER_OPERATIONTESTHELPERS_H

@@ -38,7 +38,7 @@ struct TransitivePathSide {
     if (treeAndCol_.has_value()) {
       const auto& [tree, col] = treeAndCol_.value();
       os << ", Subtree:\n";
-      os << tree->asString() << "with join column " << col << "\n";
+      os << tree->getCacheKey() << "with join column " << col << "\n";
     }
     return std::move(os).str();
   }
@@ -113,7 +113,7 @@ class TransitivePath : public Operation {
   const TransitivePathSide& getRight() const { return rhs_; }
 
  protected:
-  virtual std::string asStringImpl(size_t indent = 0) const override;
+  virtual std::string getCacheKeyImpl() const override;
 
  public:
   virtual std::string getDescriptor() const override;

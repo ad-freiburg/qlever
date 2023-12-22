@@ -8,7 +8,7 @@
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
-#include "util/Log.h"
+#include "util/Exception.h"
 
 namespace ad_utility::websocket {
 
