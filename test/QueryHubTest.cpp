@@ -62,7 +62,6 @@ ASYNC_TEST(QueryHub, simulateStandardLifecycle) {
 }
 
 // _____________________________________________________________________________
-
 ASYNC_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
@@ -74,9 +73,13 @@ ASYNC_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
     EXPECT_EQ(distributor1, distributor2);
     co_await distributor2->signalEnd();
   }
-  EXPECT_NE(distributor1,
-            co_await queryHub.createOrAcquireDistributorForSending(queryId));
-  EXPECT_NE(distributor1,
+  auto senderNewId =
+      co_await queryHub.createOrAcquireDistributorForSending(queryId);
+  EXPECT_NE(distributor1, senderNewId);
+  distributor1.reset();
+  // The `distributor1` is referring to an old query with the same ID, so
+  // resetting it should not impact the registry.
+  EXPECT_EQ(senderNewId,
             co_await queryHub.createOrAcquireDistributorForReceiving(queryId));
 }
 
@@ -109,7 +112,6 @@ namespace ad_utility::websocket {
 ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
-  std::atomic_flag flag{};
 
   auto distributor =
       co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
@@ -117,32 +119,23 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
 
   co_await net::dispatch(
       net::bind_executor(queryHub.globalStrand_, net::use_awaitable));
-  auto future = net::post(
-      ioContext, std::packaged_task<void()>(
-                     [distributor = std::move(distributor), &flag]() mutable {
-                       // Invoke destructor while the strand of
-                       // queryHub is still in use
-                       flag.test_and_set();
-                       flag.notify_all();
-                       distributor.reset();
-                     }));
+  net::post(
+      ioContext,
+      std::packaged_task{[distributor = std::move(distributor)]() mutable {
+        // Invoke destructor while the strand of
+        // queryHub is still in use
+        distributor.reset();
+      }})
+      .get();
 
-  // Conceptually we'd have to wait until the destructor of the distributor
-  // schedules a task on the strand of the query hub. However, because the boost
-  // asio API does not provide this flexibility, we instead have to rely on
-  // a small sleep to give the destructor enough time to do the scheduling.
-  // Increase the amount of milliseconds if this test starts to sporadically
-  // fail.
-  flag.wait(false);
-  std::this_thread::sleep_for(std::chrono::milliseconds{1});
-
-  distributor =
-      co_await queryHub.createOrAcquireDistributorInternalUnsafe<false>(
-          queryId);
+  distributor = co_await queryHub.createOrAcquireDistributorInternalUnsafe(
+      queryId, false);
   EXPECT_FALSE(!comparison.owner_before(distributor) &&
                !distributor.owner_before(comparison));
-  co_await net::post(net::use_awaitable);
-  future.wait();
+
+  // First run the cleanupCall of the initial distributor which now sees a
+  // non-expired pointer, which is therefore not to be erased.
+  co_await net::post(ioContext, net::use_awaitable);
 }
 
 }  // namespace ad_utility::websocket

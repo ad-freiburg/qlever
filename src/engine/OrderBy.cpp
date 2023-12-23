@@ -32,11 +32,8 @@ OrderBy::OrderBy(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string OrderBy::asStringImpl(size_t indent) const {
+string OrderBy::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << "ORDER BY on columns:";
 
   // TODO<joka921> This produces exactly the same format as SORT operations
@@ -45,7 +42,7 @@ string OrderBy::asStringImpl(size_t indent) const {
   for (auto ind : sortIndices_) {
     os << (ind.second ? "desc(" : "asc(") << ind.first << ") ";
   }
-  os << "\n" << subtree_->asString(indent);
+  os << "\n" << subtree_->getCacheKey();
   return std::move(os).str();
 }
 

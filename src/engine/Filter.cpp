@@ -30,12 +30,9 @@ Filter::Filter(QueryExecutionContext* qec,
       _expression{std::move(expression)} {}
 
 // _____________________________________________________________________________
-string Filter::asStringImpl(size_t indent) const {
+string Filter::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "FILTER " << _subtree->asString(indent);
+  os << "FILTER " << _subtree->getCacheKey();
   os << " with " << _expression.getCacheKey(_subtree->getVariableColumns());
   return std::move(os).str();
 }

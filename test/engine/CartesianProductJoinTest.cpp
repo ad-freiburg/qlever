@@ -148,11 +148,11 @@ TEST(CartesianProductJoin, basicMemberFunctions) {
   EXPECT_EQ(join.getMultiplicity(0), 1.0f);
 
   auto children = join.getChildren();
-  EXPECT_THAT(join.asString(),
+  EXPECT_THAT(join.getCacheKey(),
               ::testing::ContainsRegex("CARTESIAN PRODUCT JOIN"));
-  EXPECT_THAT(join.asString(),
+  EXPECT_THAT(join.getCacheKey(),
               ::testing::ContainsRegex("Values for testing with 2 columns"));
-  EXPECT_THAT(join.asString(),
+  EXPECT_THAT(join.getCacheKey(),
               ::testing::ContainsRegex("Values for testing with 1 col"));
   EXPECT_EQ(children.size(), 2u);
   EXPECT_NE(children.at(0), join.getChildren().at(1));

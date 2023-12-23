@@ -24,18 +24,14 @@ Sort::Sort(QueryExecutionContext* qec,
       sortColumnIndices_{std::move(sortColumnIndices)} {}
 
 // _____________________________________________________________________________
-string Sort::asStringImpl(size_t indent) const {
+string Sort::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-
   os << "SORT(internal) on columns:";
 
   for (const auto& sortCol : sortColumnIndices_) {
     os << "asc(" << sortCol << ") ";
   }
-  os << "\n" << subtree_->asString(indent);
+  os << "\n" << subtree_->getCacheKey();
   return std::move(os).str();
 }
 

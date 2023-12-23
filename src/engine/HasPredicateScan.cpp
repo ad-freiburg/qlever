@@ -42,11 +42,8 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
   setObject(triple._o);
 }
 
-string HasPredicateScan::asStringImpl(size_t indent) const {
+string HasPredicateScan::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   switch (_type) {
     case ScanType::FREE_S:
       os << "HAS_PREDICATE_SCAN with O = " << _object;
@@ -58,7 +55,7 @@ string HasPredicateScan::asStringImpl(size_t indent) const {
       os << "HAS_PREDICATE_SCAN for the full relation";
       break;
     case ScanType::SUBQUERY_S:
-      os << "HAS_PREDICATE_SCAN with S = " << _subtree->asString(indent);
+      os << "HAS_PREDICATE_SCAN with S = " << _subtree->getCacheKey();
       break;
   }
   return std::move(os).str();

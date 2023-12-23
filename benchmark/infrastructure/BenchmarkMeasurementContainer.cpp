@@ -322,6 +322,12 @@ void ResultTable::addRow() {
 }
 
 // ____________________________________________________________________________
+void ResultTable::deleteRow(const size_t rowIdx) {
+  AD_CONTRACT_CHECK(rowIdx < numRows());
+  entries_.erase(std::begin(entries_) + rowIdx);
+}
+
+// ____________________________________________________________________________
 size_t ResultTable::numRows() const { return entries_.size(); }
 
 // ____________________________________________________________________________
@@ -363,5 +369,36 @@ std::ostream& operator<<(std::ostream& os, const ResultTable& resultTable) {
 std::ostream& operator<<(std::ostream& os, const ResultGroup& resultGroup) {
   return streamInserterOperatorImplementation(os, resultGroup);
 }
+
+// ____________________________________________________________________________
+template <ad_utility::isTypeAnyOf<ResultEntry, ResultTable> T>
+requires std::same_as<std::decay_t<T>, T>
+void ResultGroup::deleteEntryImpl(T& entry) {
+  // The vector, that holds our entries.
+  auto& vec = [this]() -> auto& {
+    if constexpr (std::same_as<T, ResultEntry>) {
+      return resultEntries_;
+    } else {
+      static_assert(std::same_as<T, ResultTable>);
+      return resultTables_;
+    }
+  }();
+
+  // Delete `entry`.
+  auto entryIterator{std::ranges::find(
+      vec, &entry, [](const ad_utility::CopyableUniquePtr<T>& pointer) {
+        return pointer.get();
+      })};
+  AD_CONTRACT_CHECK(entryIterator != std::end(vec));
+  vec.erase(entryIterator);
+}
+
+// ____________________________________________________________________________
+void ResultGroup::deleteMeasurement(ResultEntry& entry) {
+  deleteEntryImpl(entry);
+}
+
+// ____________________________________________________________________________
+void ResultGroup::deleteTable(ResultTable& table) { deleteEntryImpl(table); }
 
 }  // namespace ad_benchmark

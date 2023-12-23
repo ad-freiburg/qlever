@@ -197,7 +197,7 @@ generalAsStringTestCases() {
 TEST(MemorySize, AsString) {
   // Checks the expected string representation.
   auto doTest = [](const MemorySizeAndStringRepresentation& testCase) {
-    // Normal `asString`.
+    // Normal `getCacheKey`.
     ASSERT_STREQ(testCase.memorySize_.asString().c_str(),
                  testCase.stringRepresentation_.data());
 

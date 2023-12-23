@@ -225,11 +225,14 @@ if (ENABLE_EXPENSIVE_CHECKS)
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
 endif()
 
-if (DISABLE_QUERY_CANCELLATION_WATCH_DOG)
-    message(STATUS "Disable periodic checks that the cancellation flag is checked frequently enough while the result of
-    a query is being computed with a small runtime overhead")
-    add_definitions("-DQLEVER_DISABLE_QUERY_CANCELLATION_WATCH_DOG")
+set(QUERY_CANCELLATION_MODE "ENABLED" CACHE STRING "Option to allow disabling cancellation checks partially or completely to reduce the overhead of this mechanism during query computation.")
+# Hint for cmake gui, but not actually enforced
+set_property(CACHE QUERY_CANCELLATION_MODE PROPERTY STRINGS "ENABLED" "NO_WATCH_DOG" "DISABLED")
+# So enforce this ourselves
+if(QUERY_CANCELLATION_MODE AND NOT QUERY_CANCELLATION_MODE MATCHES "ENABLED|NO_WATCH_DOG|DISABLED")
+    message(FATAL_ERROR "Invalid value for QUERY_CANCELLATION_MODE '${QUERY_CANCELLATION_MODE}'. Please remove the option entirely or change it to ENABLED, NO_WATCH_DOG or DISABLED.")
 endif()
+add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
 
 ################################
 # STXXL
@@ -314,6 +317,14 @@ else()
 endif()
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
 add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
+
+
+##################################################
+# Warnings about incorrect combination of CMake variables
+
+if(LOGLEVEL MATCHES "FATAL|ERROR" AND QUERY_CANCELLATION_MODE EQUAL "ENABLED")
+    message(WARNING "Log level is not printing logs with level WARN, which is necessary when QUERY_CANCELLATION_MODE=ENABLED for it to work properly")
+endif()
 
 ##################################################
 # Precompiled headers

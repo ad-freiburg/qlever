@@ -104,7 +104,7 @@ class IndexScan : public Operation {
 
   size_t computeSizeEstimate() const;
 
-  string asStringImpl(size_t indent) const override;
+  string getCacheKeyImpl() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
