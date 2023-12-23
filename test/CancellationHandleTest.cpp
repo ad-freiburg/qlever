@@ -12,6 +12,7 @@
 using ad_utility::CancellationException;
 using ad_utility::CancellationHandle;
 using enum ad_utility::CancellationState;
+using enum ad_utility::detail::CancellationMode;
 using ::testing::AllOf;
 using ::testing::ContainsRegex;
 using ::testing::HasSubstr;
@@ -23,7 +24,8 @@ struct CancellationHandleFixture : public ::testing::Test {
   CancellationHandle handle_;
 };
 using WithAndWithoutWatchDog =
-    ::testing::Types<CancellationHandle<true>, CancellationHandle<false>>;
+    ::testing::Types<CancellationHandle<ENABLED>,
+                     CancellationHandle<NO_WATCH_DOG>>;
 TYPED_TEST_SUITE(CancellationHandleFixture, WithAndWithoutWatchDog);
 
 // _____________________________________________________________________________
@@ -120,7 +122,7 @@ TYPED_TEST(CancellationHandleFixture,
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, ensureObjectLifetimeIsValidWithoutWatchDogStarted) {
-  EXPECT_NO_THROW(CancellationHandle<true>{});
+  EXPECT_NO_THROW(CancellationHandle<ENABLED>{});
 }
 
 // _____________________________________________________________________________
@@ -131,7 +133,7 @@ TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
 #ifdef __APPLE__
   GTEST_SKIP_("sleep_for is unreliable for macos builds");
 #endif
-  CancellationHandle<true> handle;
+  CancellationHandle<ENABLED> handle;
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   handle.startWatchDog();
@@ -150,7 +152,7 @@ TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
 #ifdef __APPLE__
   GTEST_SKIP_("sleep_for is unreliable for macos builds");
 #endif
-  CancellationHandle<true> handle;
+  CancellationHandle<ENABLED> handle;
   handle.startWatchDog();
 
   // Give thread some time to start
@@ -170,7 +172,7 @@ TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
 TEST(CancellationHandle, ensureDestructorReturnsFastWithActiveWatchDog) {
   std::chrono::steady_clock::time_point start;
   {
-    CancellationHandle<true> handle;
+    CancellationHandle<ENABLED> handle;
     handle.startWatchDog();
     start = std::chrono::steady_clock::now();
   }
@@ -182,7 +184,7 @@ TEST(CancellationHandle, ensureDestructorReturnsFastWithActiveWatchDog) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyResetWatchDogStateDoesProperlyResetState) {
-  CancellationHandle<true> handle;
+  CancellationHandle<ENABLED> handle;
 
   handle.cancellationState_ = NOT_CANCELLED;
   handle.resetWatchDogState();
@@ -208,7 +210,7 @@ TEST(CancellationHandle, verifyResetWatchDogStateDoesProperlyResetState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyResetWatchDogStateIsNoOpWithoutWatchDog) {
-  CancellationHandle<false> handle;
+  CancellationHandle<NO_WATCH_DOG> handle;
 
   handle.cancellationState_ = NOT_CANCELLED;
   handle.resetWatchDogState();
@@ -234,7 +236,7 @@ TEST(CancellationHandle, verifyResetWatchDogStateIsNoOpWithoutWatchDog) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckDoesPleaseWatchDog) {
-  CancellationHandle<true> handle;
+  CancellationHandle<ENABLED> handle;
 
   handle.cancellationState_ = WAITING_FOR_CHECK;
   EXPECT_NO_THROW(handle.throwIfCancelled(""));
@@ -248,7 +250,7 @@ TEST(CancellationHandle, verifyCheckDoesPleaseWatchDog) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
-  CancellationHandle<true> handle;
+  CancellationHandle<ENABLED> handle;
 
   handle.cancellationState_ = MANUAL;
   EXPECT_THROW(handle.throwIfCancelled(""), CancellationException);
@@ -263,7 +265,7 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
   auto& choice = ad_utility::LogstreamChoice::get();
-  CancellationHandle<true> handle;
+  CancellationHandle<ENABLED> handle;
 
   auto& originalOStream = choice.getStream();
   absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
@@ -285,10 +287,32 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
             ContainsRegex("by [0-9]ms")));
 }
 
+// _____________________________________________________________________________
+
+TEST(CancellationHandle, expectDisabledHandleIsAlwaysFalse) {
+  CancellationHandle<DISABLED> handle;
+
+  EXPECT_FALSE(handle.isCancelled());
+  EXPECT_NO_THROW(handle.throwIfCancelled("Abc"));
+}
+
+consteval bool isMemberFunction([[maybe_unused]] auto funcPtr) {
+  return std::is_member_function_pointer_v<decltype(funcPtr)>;
+}
+
 // Make sure member functions still exist when no watch dog functionality
 // is available to make the code simpler. In this case the functions should
 // be no-op.
-static_assert(std::is_member_function_pointer_v<
-              decltype(&CancellationHandle<false>::startWatchDog)>);
+static_assert(
+    isMemberFunction(&CancellationHandle<NO_WATCH_DOG>::startWatchDog));
+static_assert(
+    isMemberFunction(&CancellationHandle<NO_WATCH_DOG>::resetWatchDogState));
+static_assert(isMemberFunction(&CancellationHandle<DISABLED>::startWatchDog));
+static_assert(
+    isMemberFunction(&CancellationHandle<DISABLED>::resetWatchDogState));
+static_assert(isMemberFunction(&CancellationHandle<DISABLED>::cancel));
+static_assert(isMemberFunction(&CancellationHandle<DISABLED>::isCancelled));
+// Ideally we'd add a static assertion for throwIfCancelled here too, but
+// because the function is overloaded, we can't get a function pointer for it.
 
 }  // namespace ad_utility

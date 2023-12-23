@@ -33,16 +33,19 @@ enum class CancellationState {
 
 namespace detail {
 
-#if !defined(QLEVER_DISABLE_QUERY_CANCELLATION_WATCH_DO) && LOGLEVEL >= WARN
-constexpr bool ENABLE_QUERY_CANCELLATION_WATCH_DOG = true;
+/// Helper enum that selects which features to compile inside the
+/// `CancellationHandle` class.
+enum class CancellationMode { ENABLED, NO_WATCH_DOG, DISABLED };
+
+/// Turn the `QUERY_CANCELLATION_MODE` macro into a constexpr variable.
+constexpr CancellationMode CANCELLATION_MODE = []() {
+  using enum CancellationMode;
+#ifndef QUERY_CANCELLATION_MODE
+  return ENABLED;
 #else
-#if LOGLEVEL < WARN
-#warning \
-    "QLEVER_ENABLE_QUERY_CANCELLATION_WATCH_DOG is ignored if WARN logging \
-level is disabled"
+  return QUERY_CANCELLATION_MODE;
 #endif
-constexpr bool ENABLE_QUERY_CANCELLATION_WATCH_DOG = false;
-#endif
+}();
 
 /// Helper function that safely checks if the passed `cancellationState`
 /// represents one of the cancelled states with a single comparison for
@@ -93,11 +96,17 @@ static_assert(std::atomic<CancellationState>::is_always_lock_free);
 
 /// Thread safe wrapper around an atomic variable, providing efficient
 /// checks for cancellation across threads.
-template <bool WatchDogEnabled = detail::ENABLE_QUERY_CANCELLATION_WATCH_DOG>
+template <detail::CancellationMode Mode = detail::CANCELLATION_MODE>
 class CancellationHandle {
   using steady_clock = std::chrono::steady_clock;
-  std::atomic<CancellationState> cancellationState_ =
-      CancellationState::NOT_CANCELLED;
+  static constexpr bool WatchDogEnabled =
+      Mode == detail::CancellationMode::ENABLED;
+  static constexpr bool CancellationEnabled =
+      Mode != detail::CancellationMode::DISABLED;
+
+  [[no_unique_address]] std::conditional_t<
+      CancellationEnabled, std::atomic<CancellationState>, detail::Empty>
+      cancellationState_{CancellationState::NOT_CANCELLED};
 
   template <typename T>
   using WatchDogOnly = std::conditional_t<WatchDogEnabled, T, detail::Empty>;
@@ -142,7 +151,8 @@ class CancellationHandle {
 
   /// Helper function that sets the internal state atomically given that it has
   /// not been cancelled yet. Otherwise no-op.
-  void setStatePreservingCancel(CancellationState newState);
+  void setStatePreservingCancel(CancellationState newState)
+      requires CancellationEnabled;
 
  public:
   /// Sets the cancellation flag so the next call to throwIfCancelled will
@@ -164,30 +174,37 @@ class CancellationHandle {
   /// this will log a warning if this check is not called frequently enough.
   template <typename... ArgTypes>
   AD_ALWAYS_INLINE void throwIfCancelled(
-      const InvocableWithConvertibleReturnType<
+      [[maybe_unused]] const InvocableWithConvertibleReturnType<
           std::string_view, ArgTypes...> auto& detailSupplier,
-      ArgTypes&&... argTypes) {
-    auto state = cancellationState_.load(std::memory_order_relaxed);
-    if (state == CancellationState::NOT_CANCELLED) [[likely]] {
-      return;
-    }
-    if constexpr (WatchDogEnabled) {
-      if (!detail::isCancelled(state)) {
-        pleaseWatchDog(state, detailSupplier, AD_FWD(argTypes)...);
+      [[maybe_unused]] ArgTypes&&... argTypes) {
+    if constexpr (CancellationEnabled) {
+      auto state = cancellationState_.load(std::memory_order_relaxed);
+      if (state == CancellationState::NOT_CANCELLED) [[likely]] {
         return;
       }
+      if constexpr (WatchDogEnabled) {
+        if (!detail::isCancelled(state)) {
+          pleaseWatchDog(state, detailSupplier, AD_FWD(argTypes)...);
+          return;
+        }
+      }
+      throw CancellationException{
+          state, std::invoke(detailSupplier, AD_FWD(argTypes)...)};
     }
-    throw CancellationException{
-        state, std::invoke(detailSupplier, AD_FWD(argTypes)...)};
   }
 
   /// Return true if this cancellation handle has been cancelled, false
   /// otherwise. Note: Make sure to not use this value to set any other atomic
   /// value with relaxed memory ordering, as this may lead to out-of-thin-air
-  /// values.
+  /// values. It also does not interact with the watchdog at all, prefer
+  /// `throwIfCancelled` if possible.
   AD_ALWAYS_INLINE bool isCancelled() const {
-    return detail::isCancelled(
-        cancellationState_.load(std::memory_order_relaxed));
+    if constexpr (CancellationEnabled) {
+      return detail::isCancelled(
+          cancellationState_.load(std::memory_order_relaxed));
+    } else {
+      return false;
+    }
   }
 
   /// Start the watch dog. Must only be called once per `CancellationHandle`

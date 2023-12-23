@@ -42,7 +42,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
       QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }
 
-string GroupBy::asStringImpl(size_t indent) const {
+string GroupBy::getCacheKeyImpl() const {
   const auto& varMap = getInternallyVisibleVariableColumns();
   auto varMapInput = _subtree->getVariableColumns();
 
@@ -61,9 +61,6 @@ string GroupBy::asStringImpl(size_t indent) const {
   }
 
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << "GROUP_BY ";
   for (const auto& var : _groupByVariables) {
     os << varMap.at(var).columnIndex_ << ", ";
@@ -73,7 +70,7 @@ string GroupBy::asStringImpl(size_t indent) const {
        << varMap.at(alias._target).columnIndex_;
   }
   os << std::endl;
-  os << _subtree->asString(indent);
+  os << _subtree->getCacheKey();
   return std::move(os).str();
 }
 
@@ -755,7 +752,7 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
 std::optional<std::vector<GroupBy::HashMapAggregateInformation>>
 GroupBy::findAggregates(sparqlExpression::SparqlExpression* expr) {
   std::vector<HashMapAggregateInformation> result;
-  if (!findAggregatesImpl(nullptr, expr, std::nullopt, result))
+  if (!findAggregatesImpl(expr, std::nullopt, result))
     return std::nullopt;
   else
     return result;
@@ -763,30 +760,46 @@ GroupBy::findAggregates(sparqlExpression::SparqlExpression* expr) {
 
 // _____________________________________________________________________________
 template <class T>
-bool GroupBy::hasType(sparqlExpression::SparqlExpression* expr) {
-  return dynamic_cast<T*>(expr) != nullptr;
+std::optional<T*> GroupBy::hasType(sparqlExpression::SparqlExpression* expr) {
+  auto value = dynamic_cast<T*>(expr);
+  if (value == nullptr)
+    return std::nullopt;
+  else
+    return value;
 }
 
 // _____________________________________________________________________________
-bool GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
+template <typename... Exprs>
+bool GroupBy::hasAnyType(const auto& expr) {
+  return (... || hasType<Exprs>(expr));
+}
+
+// _____________________________________________________________________________
+bool GroupBy::isUnsupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   using namespace sparqlExpression;
 
-  return !(hasType<SumExpression>(expr) || hasType<MinExpression>(expr) ||
-           hasType<MaxExpression>(expr) || hasType<CountExpression>(expr) ||
-           hasType<GroupConcatExpression>(expr));
+  // `expr` is not an aggregate, so it cannot be an unsupported aggregate
+  if (!expr->isAggregate()) return false;
+
+  // `expr` is an unsupported aggregate
+  if (hasAnyType<SumExpression, MinExpression, MaxExpression, CountExpression,
+                 GroupConcatExpression>(expr))
+    return true;
+
+  // `expr` is a distinct aggregate
+  return expr->isDistinct();
 }
 
 // _____________________________________________________________________________
 bool GroupBy::findAggregatesImpl(
-    sparqlExpression::SparqlExpression* parent,
-    sparqlExpression::SparqlExpression* expr, std::optional<size_t> index,
+    sparqlExpression::SparqlExpression* expr,
+    std::optional<ParentAndChildIndex> parentAndChildIndex,
     std::vector<GroupBy::HashMapAggregateInformation>& info) {
-  if (hasType<sparqlExpression::AvgExpression>(expr)) {
-    if (parent != nullptr && index.has_value()) {
-      ParentAndChildIndex parentAndChildIndex{parent, index.value()};
-      info.emplace_back(expr, 0, parentAndChildIndex);
-    } else
-      info.emplace_back(expr, 0, std::nullopt);
+  // Unsupported aggregates
+  if (isUnsupportedAggregate(expr)) return false;
+
+  if (expr->isAggregate()) {
+    info.emplace_back(expr, 0, parentAndChildIndex);
 
     // Make sure this is not a nested aggregate.
     if (expr->children().front()->containsAggregate()) return false;
@@ -794,17 +807,15 @@ bool GroupBy::findAggregatesImpl(
     return true;
   }
 
-  // Unsupported aggregates
-  if (!isSupportedAggregate(expr)) return false;
-
   auto children = expr->children();
 
   bool childrenContainOnlySupportedAggregates = true;
   size_t childIndex = 0;
   for (const auto& child : children) {
+    ParentAndChildIndex parentAndChildIndexForChild{expr, childIndex++};
     childrenContainOnlySupportedAggregates =
         childrenContainOnlySupportedAggregates &&
-        findAggregatesImpl(expr, child.get(), childIndex++, info);
+        findAggregatesImpl(child.get(), parentAndChildIndexForChild, info);
   }
 
   return childrenContainOnlySupportedAggregates;

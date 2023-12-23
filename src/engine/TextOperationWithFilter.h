@@ -41,7 +41,7 @@ class TextOperationWithFilter : public Operation {
                           size_t filterColumn, size_t textLimit = 1);
 
  protected:
-  virtual string asStringImpl(size_t indent) const override;
+  virtual string getCacheKeyImpl() const override;
 
  public:
   virtual string getDescriptor() const override;

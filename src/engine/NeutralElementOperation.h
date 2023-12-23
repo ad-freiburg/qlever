@@ -14,9 +14,9 @@ class NeutralElementOperation : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
  private:
-  // The individual implementation of `asString` (see above) that has to be
+  // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  [[nodiscard]] string asStringImpl(size_t) const override {
+  [[nodiscard]] string getCacheKeyImpl() const override {
     return "Neutral Element";
   };
 
