@@ -40,30 +40,35 @@ using AccessReturnType_t =
                        std::string, std::string_view>;
 
 template <typename IndexT = WordVocabIndex>
-struct IdRange {
-  IdRange() : _first(), _last() {}
+class IdRange {
+ public:
+  IdRange() = default;
+  IdRange(IndexT first, IndexT last) : first_(first), last_(last) {
+    AD_CORRECTNESS_CHECK(first <= last);
+  }
+  IndexT first() const { return first_; }
+  IndexT last() const { return last_; }
 
-  IdRange(IndexT first, IndexT last) : _first(first), _last(last) {}
-
-  IndexT _first;
-  IndexT _last;
+ private:
+  IndexT first_{};
+  IndexT last_{};
 };
 
 //! Stream operator for convenience.
 template <typename IndexType>
 inline std::ostream& operator<<(std::ostream& stream,
                                 const IdRange<IndexType>& idRange) {
-  return stream << '[' << idRange._first << ", " << idRange._last << ']';
+  return stream << '[' << idRange.first_ << ", " << idRange.last_ << ']';
 }
 
 // simple class for members of a prefix compression codebook
 struct Prefix {
   Prefix() = default;
   Prefix(char prefix, const string& fulltext)
-      : _prefix(prefix), _fulltext(fulltext) {}
+      : prefix_(prefix), fulltext_(fulltext) {}
 
-  char _prefix;
-  string _fulltext;
+  char prefix_;
+  string fulltext_;
 };
 
 //! A vocabulary. Wraps a vector of strings
@@ -96,15 +101,15 @@ class Vocabulary {
   Vocabulary(Vocabulary&&) noexcept = default;
 
   // variable for dispatching
-  static constexpr bool _isCompressed =
+  static constexpr bool isCompressed_ =
       std::is_same_v<StringType, CompressedString>;
 
   virtual ~Vocabulary() = default;
 
   //! clear all the contents, but not the settings for prefixes etc
   void clear() {
-    _internalVocabulary.close();
-    _externalVocabulary.close();
+    internalVocabulary_.close();
+    externalVocabulary_.close();
   }
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName, const string& extLitsFileName = "");
@@ -136,7 +141,7 @@ class Vocabulary {
   // operator[](id); }
 
   //! Get the number of words in the vocabulary.
-  [[nodiscard]] size_t size() const { return _internalVocabulary.size(); }
+  [[nodiscard]] size_t size() const { return internalVocabulary_.size(); }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -171,7 +176,7 @@ class Vocabulary {
   // only still needed for text vocabulary
   void externalizeLiteralsFromTextFile(const string& textFileName,
                                        const string& outFileName) {
-    _externalVocabulary.getUnderlyingVocabulary().buildFromTextFile(
+    externalVocabulary_.getUnderlyingVocabulary().buildFromTextFile(
         textFileName, outFileName);
   }
 
@@ -211,7 +216,7 @@ class Vocabulary {
 
   // _____________________________________________________________________
   const ComparatorType& getCaseComparator() const {
-    return _internalVocabulary.getComparator();
+    return internalVocabulary_.getComparator();
   }
 
   /// returns the range of IDs where strings of the vocabulary start with the
@@ -233,11 +238,11 @@ class Vocabulary {
 
  private:
   // If a word starts with one of those prefixes it will be externalized
-  vector<std::string> _externalizedPrefixes;
+  vector<std::string> externalizedPrefixes_;
 
   // If a word uses one of these language tags it will be internalized,
   // defaults to English
-  vector<std::string> _internalizedLangs{"en"};
+  vector<std::string> internalizedLangs_{"en"};
 
   using PrefixCompressedVocabulary =
       CompressedVocabulary<VocabularyInMemory, PrefixCompressor>;
@@ -246,25 +251,30 @@ class Vocabulary {
   using InternalUncompressedVocabulary =
       UnicodeVocabulary<VocabularyInMemory, ComparatorType>;
   using InternalVocabulary =
-      std::conditional_t<_isCompressed, InternalCompressedVocabulary,
+      std::conditional_t<isCompressed_, InternalCompressedVocabulary,
                          InternalUncompressedVocabulary>;
-  InternalVocabulary _internalVocabulary;
+  InternalVocabulary internalVocabulary_;
 
   using ExternalVocabulary =
       UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
-  ExternalVocabulary _externalVocabulary;
+  ExternalVocabulary externalVocabulary_;
 
  public:
   const ExternalVocabulary& getExternalVocab() const {
-    return _externalVocabulary;
+    return externalVocabulary_;
   }
+
+  const InternalVocabulary& getInternalVocab() const {
+    return internalVocabulary_;
+  }
+
   auto makeUncompressingWordWriter(const std::string& filename) {
     return VocabularyInMemory::WordWriter{filename};
   }
 
   template <typename U = StringType, typename = enable_if_compressed<U>>
   auto makeCompressedWordWriter(const std::string& filename) {
-    return _internalVocabulary.getUnderlyingVocabulary().makeDiskWriter(
+    return internalVocabulary_.getUnderlyingVocabulary().makeDiskWriter(
         filename);
   }
 
@@ -283,12 +293,12 @@ template <typename S, typename C, typename I>
 template <typename>
 std::optional<string> Vocabulary<S, C, I>::indexToOptionalString(
     IndexType idx) const {
-  if (idx.get() < _internalVocabulary.size()) {
-    return std::optional<string>(_internalVocabulary[idx.get()]);
+  if (idx.get() < internalVocabulary_.size()) {
+    return std::optional<string>(internalVocabulary_[idx.get()]);
   } else {
     // this word must be externalized
-    idx.get() -= _internalVocabulary.size();
-    AD_CONTRACT_CHECK(idx.get() < _externalVocabulary.size());
-    return _externalVocabulary[idx.get()];
+    idx.get() -= internalVocabulary_.size();
+    AD_CONTRACT_CHECK(idx.get() < externalVocabulary_.size());
+    return externalVocabulary_[idx.get()];
   }
 }

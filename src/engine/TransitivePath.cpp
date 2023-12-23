@@ -18,7 +18,9 @@ TransitivePath::TransitivePath(QueryExecutionContext* qec,
                                TransitivePathSide rightSide, size_t minDist,
                                size_t maxDist)
     : Operation(qec),
-      subtree_(std::move(child)),
+      subtree_(child
+                   ? QueryExecutionTree::createSortedTree(std::move(child), {0})
+                   : nullptr),
       lhs_(std::move(leftSide)),
       rhs_(std::move(rightSide)),
       minDist_(minDist),
@@ -38,24 +40,18 @@ TransitivePath::TransitivePath(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::string TransitivePath::asStringImpl(size_t indent) const {
+std::string TransitivePath::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << " minDist " << minDist_ << " maxDist " << maxDist_ << "\n";
 
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << "Left side:\n";
   os << lhs_.getCacheKey();
 
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << "Right side:\n";
   os << rhs_.getCacheKey();
+
+  AD_CORRECTNESS_CHECK(subtree_);
+  os << "Subtree:\n" << subtree_->getCacheKey() << '\n';
 
   return std::move(os).str();
 }
@@ -112,6 +108,7 @@ vector<ColumnIndex> TransitivePath::resultSortedOn() const {
   if (rhs_.isSortedOnInputCol()) {
     return {1};
   }
+
   return {};
 }
 

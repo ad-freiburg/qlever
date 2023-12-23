@@ -33,7 +33,7 @@ class OrderBy : public Operation {
           std::shared_ptr<QueryExecutionTree> subtree, SortIndices sortIndices);
 
  protected:
-  string asStringImpl(size_t indent = 0) const override;
+  string getCacheKeyImpl() const override;
 
  public:
   string getDescriptor() const override;

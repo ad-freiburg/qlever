@@ -46,6 +46,32 @@ TEST(TaskQueue, SimpleSumWithWait) {
   ASSERT_EQ(result, 500500);
 }
 
+// ___________________________________________________________________
 TEST(TaskQueue, ThrowOnMaxQueueSizeZero) {
   EXPECT_ANY_THROW((ad_utility::TaskQueue{0, 5}));
+}
+
+// ___________________________________________________________________
+TEST(TaskQueue, finishFromWorkerThreadDoesntDeadlock) {
+  auto runTest = []<bool trackTimes, bool destructorRunsFinish>() {
+    // We need the size of the queue to be larger than the number of pushes,
+    // otherwise we cannot test the case where the destructor runs before
+    // any of the threads have reached the call to `finish()`.
+    ad_utility::TaskQueue<trackTimes> q{200, 5};
+    for (size_t i = 0; i <= 100; ++i) {
+      q.push([&q] {
+        if (destructorRunsFinish) {
+          std::this_thread::sleep_for(10ms);
+        }
+        q.finish();
+      });
+    }
+    if (!destructorRunsFinish) {
+      std::this_thread::sleep_for(10ms);
+    }
+  };
+  EXPECT_NO_THROW((runTest.template operator()<true, true>()));
+  EXPECT_NO_THROW((runTest.template operator()<true, false>()));
+  EXPECT_NO_THROW((runTest.template operator()<false, true>()));
+  EXPECT_NO_THROW((runTest.template operator()<false, false>()));
 }

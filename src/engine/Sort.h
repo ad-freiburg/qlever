@@ -54,7 +54,10 @@ class Sort : public Operation {
         size < 4 ? 2 : static_cast<size_t>(logb(static_cast<double>(size)));
     size_t nlogn = size * logSize;
     size_t subcost = subtree_->getCostEstimate();
-    return nlogn + subcost;
+    // Return  at least 1, s.t. the query planner will never emit an unnecessary
+    // sort of an empty `IndexScan`. This makes the testing of the query
+    // planner much easier.
+    return std::max(1UL, nlogn + subcost);
   }
 
   virtual bool knownEmptyResult() override {
@@ -75,5 +78,5 @@ class Sort : public Operation {
     return subtree_->getVariableColumns();
   }
 
-  virtual string asStringImpl(size_t indent = 0) const override;
+  string getCacheKeyImpl() const override;
 };

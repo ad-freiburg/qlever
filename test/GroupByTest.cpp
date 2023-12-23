@@ -387,9 +387,10 @@ struct GroupByOptimizations : ::testing::Test {
                                  "COUNT(?someVariable)"};
   }
 
-  static SparqlExpressionPimpl makeAvgPimpl(const Variable& var) {
+  static SparqlExpressionPimpl makeAvgPimpl(const Variable& var,
+                                            bool distinct = false) {
     return SparqlExpressionPimpl{
-        std::make_unique<AvgExpression>(false, makeVariableExpression(var)),
+        std::make_unique<AvgExpression>(distinct, makeVariableExpression(var)),
         "AVG(?someVariable)"};
   }
 
@@ -511,16 +512,21 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
       makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
 
   SparqlExpressionPimpl avgXPimpl = makeAvgPimpl(varX);
+  SparqlExpressionPimpl avgDistinctXPimpl = makeAvgPimpl(varX, true);
   SparqlExpressionPimpl avgCountXPimpl = makeAvgCountPimpl(varX);
   SparqlExpressionPimpl minXPimpl = makeMinPimpl(varX);
 
   std::vector<Alias> aliasesAvgX{Alias{avgXPimpl, Variable{"?avg"}}};
+  std::vector<Alias> aliasesAvgDistinctX{
+      Alias{avgDistinctXPimpl, Variable{"?avgDistinct"}}};
   std::vector<Alias> aliasesAvgCountX{
       Alias{avgCountXPimpl, Variable("?avgcount")}};
   std::vector<Alias> aliasesMinX{Alias{minXPimpl, Variable{"?minX"}}};
 
   std::vector<GroupBy::Aggregate> countAggregate = {{countXPimpl, 1}};
   std::vector<GroupBy::Aggregate> avgAggregate = {{avgXPimpl, 1}};
+  std::vector<GroupBy::Aggregate> avgDistinctAggregate = {
+      {avgDistinctXPimpl, 1}};
   std::vector<GroupBy::Aggregate> avgCountAggregate = {{avgCountXPimpl, 1}};
   std::vector<GroupBy::Aggregate> minAggregate = {{minXPimpl, 1}};
 
@@ -538,6 +544,9 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   // Can not be a nested aggregate
   testFailure(variablesOnlyX, aliasesAvgCountX, subtreeWithSort,
               avgCountAggregate);
+  // Do not support distinct aggregates
+  testFailure(variablesOnlyX, aliasesAvgDistinctX, subtreeWithSort,
+              avgDistinctAggregate);
   // Optimization has to be enabled
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
   testFailure(variablesOnlyX, aliasesAvgX, subtreeWithSort, avgAggregate);
