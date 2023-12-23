@@ -30,7 +30,7 @@ class Union : public Operation {
         const std::shared_ptr<QueryExecutionTree>& t2);
 
  protected:
-  virtual string asStringImpl(size_t indent = 0) const override;
+  virtual string getCacheKeyImpl() const override;
 
  public:
   virtual string getDescriptor() const override;

@@ -61,11 +61,8 @@ string TextIndexScanForWord::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-string TextIndexScanForWord::asStringImpl(size_t indent) const {
+string TextIndexScanForWord::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << "WORD INDEX SCAN: "
      << " with word: \"" << word_ << "\"";
   return std::move(os).str();

@@ -71,11 +71,8 @@ VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
   return vcmap;
 }
 // _____________________________________________________________________________
-string TextOperationWithoutFilter::asStringImpl(size_t indent) const {
+string TextOperationWithoutFilter::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << "TEXT OPERATION WITHOUT FILTER:"
      << " co-occurrence with words: \"" << _words << "\" and " << getNofVars()
      << " variables";

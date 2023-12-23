@@ -88,8 +88,8 @@ TEST_F(ServiceTest, basicMethods) {
   ASSERT_EQ(serviceOp.getDescriptor(),
             "Service with IRI <http://localhorst/api>");
   ASSERT_TRUE(
-      serviceOp.asString(2).starts_with("  SERVICE <http://localhorst/api>"))
-      << serviceOp.asString(2);
+      serviceOp.getCacheKey().starts_with("SERVICE <http://localhorst/api>"))
+      << serviceOp.getCacheKey();
   ASSERT_EQ(serviceOp.getResultWidth(), 2);
   ASSERT_EQ(serviceOp.getMultiplicity(0), 1);
   ASSERT_EQ(serviceOp.getMultiplicity(1), 1);

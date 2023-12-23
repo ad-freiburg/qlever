@@ -53,15 +53,11 @@ string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
-string Bind::asStringImpl(size_t indent) const {
+string Bind::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-
   os << "BIND ";
   os << _bind._expression.getCacheKey(_subtree->getVariableColumns());
-  os << "\n" << _subtree->asString(indent);
+  os << "\n" << _subtree->getCacheKey();
   return std::move(os).str();
 }
 

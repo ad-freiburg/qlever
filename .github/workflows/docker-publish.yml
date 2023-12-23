@@ -2,7 +2,7 @@ name: Docker build and publish
 
 on:
   push:
-    branches: ["master"]
+    branches: [ master ]
   pull_request:
     branches: [ master ]
 
@@ -15,9 +15,6 @@ concurrency:
 jobs:
   docker:
     runs-on: ubuntu-20.04
-    # Run if this is a push on master and Docker Build succeeded
-    # or if a tag was pushed
-    if: ${{ github.event.workflow_run.conclusion == 'success' ||  github.ref_name != 'master' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -96,7 +93,7 @@ jobs:
           # We have to explicitly add the "qlever:latest" tag for it to work correctly,
           # see e.g. https://stackoverflow.com/questions/27643017/do-i-need-to-manually-tag-latest-when-pushing-to-docker-public-repository
           tags: >
-            adfreiburg/qlever:latest
+            adfreiburg/qlever:latest,
             adfreiburg/qlever:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }},
             adfreiburg/qlever:commit-${{ steps.sha.outputs.sha_short }},
 

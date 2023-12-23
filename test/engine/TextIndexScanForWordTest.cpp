@@ -48,7 +48,7 @@ TEST(TextIndexScanForWord, WordScanBasic) {
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test*"};
   TextIndexScanForWord s2{qec, Variable{"?text2"}, "test*"};
 
-  ASSERT_EQ(s1.asStringImpl(0), s2.asStringImpl(0));
+  ASSERT_EQ(s1.getCacheKeyImpl(), s2.getCacheKeyImpl());
   ASSERT_EQ(s1.getResultWidth(), 2);
 
   auto result = s1.computeResultOnlyForTesting();
@@ -75,7 +75,7 @@ TEST(TextIndexScanForWord, WordScanBasic) {
 
   TextIndexScanForWord s3{qec, Variable{"?text1"}, "test"};
 
-  ASSERT_TRUE(s1.asStringImpl(0) != s3.asStringImpl(0));
+  ASSERT_TRUE(s1.getCacheKeyImpl() != s3.getCacheKeyImpl());
   ASSERT_EQ(s3.getResultWidth(), 1);
 
   result = s3.computeResultOnlyForTesting();

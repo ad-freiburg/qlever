@@ -63,7 +63,9 @@ class GroupConcatExpression : public SparqlExpression {
   vector<Variable> getUnaggregatedVariables() override { return {}; }
 
   // A `GroupConcatExpression` is an aggregate.
-  bool containsAggregate() const override { return true; }
+  bool isAggregate() const override { return true; }
+
+  bool isDistinct() const override { return distinct_; }
 
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override {

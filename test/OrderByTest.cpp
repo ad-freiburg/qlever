@@ -208,7 +208,7 @@ TEST(OrderBy, simpleMemberFunctions) {
     EXPECT_EQ(8u, s.getSizeEstimate());
     EXPECT_EQ("OrderBy on ASC(?0)", s.getDescriptor());
 
-    EXPECT_THAT(s.asString(),
+    EXPECT_THAT(s.getCacheKey(),
                 ::testing::StartsWith("ORDER BY on columns:asc(0) \n"));
 
     const auto& varColMap = s.getExternallyVisibleVariableColumns();
@@ -225,7 +225,7 @@ TEST(OrderBy, simpleMemberFunctions) {
     EXPECT_FALSE(s.knownEmptyResult());
     EXPECT_EQ("OrderBy on ASC(?1) DESC(?0)", s.getDescriptor());
 
-    EXPECT_THAT(s.asString(),
+    EXPECT_THAT(s.getCacheKey(),
                 ::testing::StartsWith("ORDER BY on columns:asc(1) desc(0) \n"));
     auto varColMap = s.getExternallyVisibleVariableColumns();
     ASSERT_EQ(2u, varColMap.size());

@@ -7,18 +7,22 @@
 #include "util/Exception.h"
 
 namespace ad_utility {
+using detail::CancellationMode;
 
-template <bool WatchDogEnabled>
-void CancellationHandle<WatchDogEnabled>::cancel(CancellationState reason) {
-  AD_CONTRACT_CHECK(detail::isCancelled(reason));
+template <CancellationMode Mode>
+void CancellationHandle<Mode>::cancel(
+    [[maybe_unused]] CancellationState reason) {
+  if constexpr (CancellationEnabled) {
+    AD_CONTRACT_CHECK(detail::isCancelled(reason));
 
-  setStatePreservingCancel(reason);
+    setStatePreservingCancel(reason);
+  }
 }
 
 // _____________________________________________________________________________
-template <bool WatchDogEnabled>
-void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
-    requires WatchDogEnabled {
+template <CancellationMode Mode>
+void CancellationHandle<Mode>::startWatchDogInternal() requires WatchDogEnabled
+{
   using enum CancellationState;
   std::unique_lock lock{watchDogState_.mutex_};
   // This function is only supposed to be run once.
@@ -44,17 +48,17 @@ void CancellationHandle<WatchDogEnabled>::startWatchDogInternal()
 }
 
 // _____________________________________________________________________________
-template <bool WatchDogEnabled>
-void CancellationHandle<WatchDogEnabled>::startWatchDog() {
+template <CancellationMode Mode>
+void CancellationHandle<Mode>::startWatchDog() {
   if constexpr (WatchDogEnabled) {
     startWatchDogInternal();
   }
 }
 
 // _____________________________________________________________________________
-template <bool WatchDogEnabled>
-void CancellationHandle<WatchDogEnabled>::setStatePreservingCancel(
-    CancellationState newState) {
+template <CancellationMode Mode>
+void CancellationHandle<Mode>::setStatePreservingCancel(
+    CancellationState newState) requires CancellationEnabled {
   CancellationState state = cancellationState_.load(std::memory_order_relaxed);
   while (!detail::isCancelled(state)) {
     if (cancellationState_.compare_exchange_weak(state, newState,
@@ -65,16 +69,16 @@ void CancellationHandle<WatchDogEnabled>::setStatePreservingCancel(
 }
 
 // _____________________________________________________________________________
-template <bool WatchDogEnabled>
-void CancellationHandle<WatchDogEnabled>::resetWatchDogState() {
+template <CancellationMode Mode>
+void CancellationHandle<Mode>::resetWatchDogState() {
   if constexpr (WatchDogEnabled) {
     setStatePreservingCancel(CancellationState::NOT_CANCELLED);
   }
 }
 
 // _____________________________________________________________________________
-template <bool WatchDogEnabled>
-CancellationHandle<WatchDogEnabled>::~CancellationHandle() {
+template <CancellationMode Mode>
+CancellationHandle<Mode>::~CancellationHandle() {
   if constexpr (WatchDogEnabled) {
     {
       std::unique_lock lock{watchDogState_.mutex_};
@@ -85,6 +89,7 @@ CancellationHandle<WatchDogEnabled>::~CancellationHandle() {
 }
 
 // Make sure to compile correctly.
-template class CancellationHandle<true>;
-template class CancellationHandle<false>;
+template class CancellationHandle<CancellationMode::ENABLED>;
+template class CancellationHandle<CancellationMode::NO_WATCH_DOG>;
+template class CancellationHandle<CancellationMode::DISABLED>;
 }  // namespace ad_utility

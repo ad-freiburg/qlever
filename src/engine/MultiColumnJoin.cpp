@@ -16,7 +16,7 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
                                  std::shared_ptr<QueryExecutionTree> t2)
     : Operation{qec} {
   // Make sure subtrees are ordered so that identical queries can be identified.
-  if (t1->asString() > t2->asString()) {
+  if (t1->getCacheKey() > t2->getCacheKey()) {
     std::swap(t1, t2);
   }
   std::tie(_left, _right, _joinColumns) =
@@ -25,21 +25,15 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string MultiColumnJoin::asStringImpl(size_t indent) const {
+string MultiColumnJoin::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "MULTI_COLUMN_JOIN\n" << _left->asString(indent) << " ";
+  os << "MULTI_COLUMN_JOIN\n" << _left->getCacheKey() << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][0] << (i < _joinColumns.size() - 1 ? " & " : "");
   };
   os << "]\n";
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "|X|\n" << _right->asString(indent) << " ";
+  os << "|X|\n" << _right->getCacheKey() << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][1] << (i < _joinColumns.size() - 1 ? " & " : "");

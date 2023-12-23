@@ -39,7 +39,7 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
                             "test*"};
   TextIndexScanForEntity s2{qec, Variable{"?text2"}, Variable{"?entityVar2"},
                             "test*"};
-  ASSERT_EQ(s1.asStringImpl(0), s2.asStringImpl(0));
+  ASSERT_EQ(s1.getCacheKeyImpl(), s2.getCacheKeyImpl());
   ASSERT_EQ(s1.getResultWidth(), 3);
 
   auto result = s1.computeResultOnlyForTesting();
@@ -70,7 +70,7 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
   ASSERT_EQ(result.width(), 2);
   ASSERT_EQ(result.size(), 1);
 
-  ASSERT_TRUE(s1.asStringImpl(0) != s3.asStringImpl(0));
+  ASSERT_TRUE(s1.getCacheKeyImpl() != s3.getCacheKeyImpl());
 
   expectedVariables = {
       {Variable{"?text3"}, {0, AlwaysDefined}},
@@ -82,7 +82,7 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
 
   fixedEntity = "\"new entity\"";
   TextIndexScanForEntity s4{qec, Variable{"?text4"}, fixedEntity, "sentence"};
-  ASSERT_TRUE(s3.asStringImpl(0) != s4.asStringImpl(0));
+  ASSERT_TRUE(s3.getCacheKeyImpl() != s4.getCacheKeyImpl());
 
   fixedEntity = "\"he failed the test\"";
   TextIndexScanForEntity s5{qec, Variable{"?text5"}, fixedEntity, "test*"};

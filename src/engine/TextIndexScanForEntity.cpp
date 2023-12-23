@@ -102,11 +102,8 @@ string TextIndexScanForEntity::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-string TextIndexScanForEntity::asStringImpl(size_t indent) const {
+string TextIndexScanForEntity::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << "ENTITY INDEX SCAN FOR WORD: "
      << " with word: \"" << word_ << "\" and fixed-entity: \""
      << (hasFixedEntity_ ? std::get<std::string>(entity_) : "no fixed-entity")

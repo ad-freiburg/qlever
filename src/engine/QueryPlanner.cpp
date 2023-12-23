@@ -1061,8 +1061,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
              << b.size() << " plans...\n";
   for (const auto& ai : a) {
     for (const auto& bj : b) {
-      LOG(TRACE) << "Creating join candidates for " << ai._qet->asString()
-                 << "\n and " << bj._qet->asString() << '\n';
+      LOG(TRACE) << "Creating join candidates for " << ai._qet->getCacheKey()
+                 << "\n and " << bj._qet->getCacheKey() << '\n';
       auto v = createJoinCandidates(ai, bj, tg);
       for (auto& plan : v) {
         candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
@@ -1647,7 +1647,7 @@ size_t QueryPlanner::findCheapestExecutionTree(
     auto aCost = a.getCostEstimate(), bCost = b.getCostEstimate();
     if (aCost == bCost && isInTestMode()) {
       // Make the tiebreaking deterministic for the unit tests.
-      return a._qet->asString() < b._qet->asString();
+      return a._qet->getCacheKey() < b._qet->getCacheKey();
     } else {
       return aCost < bCost;
     }
@@ -1661,7 +1661,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
     std::optional<TripleGraph> tg) const {
   bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
-                        ain._qet->asString() < bin._qet->asString();
+                        ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
   const auto& b = !swapForTesting ? bin : ain;
   std::vector<SubtreePlan> candidates;

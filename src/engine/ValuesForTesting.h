@@ -18,6 +18,9 @@ class ValuesForTesting : public Operation {
   IdTable table_;
   std::vector<std::optional<Variable>> variables_;
   bool supportsLimit_;
+  // Those can be manually overwritten for testing using the respective getters.
+  size_t sizeEstimate_;
+  size_t costEstimate_;
 
  public:
   // Create an operation that has as its result the given `table` and the given
@@ -29,9 +32,15 @@ class ValuesForTesting : public Operation {
       : Operation{ctx},
         table_{std::move(table)},
         variables_{std::move(variables)},
-        supportsLimit_{supportsLimit} {
+        supportsLimit_{supportsLimit},
+        sizeEstimate_{table_.numRows()},
+        costEstimate_{table_.numRows()} {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
+
+  // Accessors for the estimates for manual testing.
+  size_t& sizeEstimate() { return sizeEstimate_; }
+  size_t& costEstimate() { return costEstimate_; }
 
   // ___________________________________________________________________________
   ResultTable computeResult() override {
@@ -48,7 +57,7 @@ class ValuesForTesting : public Operation {
 
  private:
   // ___________________________________________________________________________
-  string asStringImpl([[maybe_unused]] size_t indent) const override {
+  string getCacheKeyImpl() const override {
     std::stringstream str;
     str << "Values for testing with " << table_.numColumns()
         << " columns and contents ";
@@ -74,10 +83,10 @@ class ValuesForTesting : public Operation {
 
   void setTextLimit(size_t limit) override { (void)limit; }
 
-  size_t getCostEstimate() override { return table_.numRows(); }
+  size_t getCostEstimate() override { return costEstimate_; }
 
  private:
-  uint64_t getSizeEstimateBeforeLimit() override { return table_.numRows(); }
+  uint64_t getSizeEstimateBeforeLimit() override { return sizeEstimate_; }
 
  public:
   // For unit testing purposes it is useful that the columns have different
