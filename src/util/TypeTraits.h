@@ -25,10 +25,16 @@ struct isInstantiationImpl;
 template <template <typename...> typename DeducedTemplatedType,
           template <typename...> typename WantedTemplatedType, typename... Ts>
 /*
-The `std::same_as` comparison is not malformed, as long as
-`WantedTemplatedType<Ts...>` is not a malformed type.
+This checks, if `WantedTemplatedType<Ts...>` is not a malformed type. Without
+it, the second type in the comparision in `std::integral_constant` could be
+malformed.
+Note: In theory `requires requires { std::declval<WantedTemplatedType<Ts...>>();
+}` would also work, but not in practice with `gcc`. Because, as it turns out,
+even though the content of concepts should be unevaluated, `gcc` evaluates them
+and always tries to create an instance of `WantedTemplatedType<Ts...>`, even if
+the type is malformed.
 */
-requires requires { std::declval<WantedTemplatedType<Ts...>>(); }
+requires std::same_as<std::void_t<WantedTemplatedType<Ts...>>, void>
 /*
 Note that just `WantedTemplatedType<Ts...>, WantedTemplatedType` does not work
 with any type wrappers, because of type deduction.
