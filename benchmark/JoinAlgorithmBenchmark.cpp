@@ -1065,10 +1065,10 @@ auto createDefaultStoppingLambda(
                row,
                [&resultTableAmountColumns, &table](const size_t& rowNumber) {
                  return approximateMemoryNeededByIdTable(
-                     std::stoull(table.getEntry<std::string>(
+                     table.getEntry<size_t>(
                          rowNumber,
                          toUnderlying(
-                             GeneratedTableColumn::NumRowsOfJoinResult))),
+                             GeneratedTableColumn::NumRowsOfJoinResult)),
                      resultTableAmountColumns);
                },
                maxMemoryJoinResultTable);
