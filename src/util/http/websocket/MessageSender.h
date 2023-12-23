@@ -21,8 +21,9 @@ using unique_cleanup::UniqueCleanup;
 /// from the non-asio world.
 class MessageSender {
  private:
-  /// Keep the OwningQueryId alive until distributor_->signalEnd() is called
-  /// (see the constructor of `MessageSender` for details).
+  /// Keep the OwningQueryId alive until
+  /// distributorAndOwningQueryId_->signalEnd() is called (see the constructor
+  /// of `MessageSender` for details).
   struct DistributorAndOwningQueryId {
     std::shared_ptr<QueryToSocketDistributor> distributor_;
     OwningQueryId owningQueryId_;
@@ -35,7 +36,7 @@ class MessageSender {
         : distributor_{std::move(distributor)},
           owningQueryId_{std::move(owningQueryId)} {}
   };
-  UniqueCleanup<DistributorAndOwningQueryId> distributor_;
+  UniqueCleanup<DistributorAndOwningQueryId> distributorAndOwningQueryId_;
   net::any_io_executor executor_;
 
   // This constructor is private because this instance should only ever be
@@ -57,7 +58,7 @@ class MessageSender {
 
   /// Get read only view of underlying `QueryId`.
   const QueryId& getQueryId() const noexcept {
-    return distributor_->owningQueryId_.toQueryId();
+    return distributorAndOwningQueryId_->owningQueryId_.toQueryId();
   }
 };
 
