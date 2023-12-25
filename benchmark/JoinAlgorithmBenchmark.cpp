@@ -382,20 +382,22 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   GeneralInterfaceImplementation() {
     ad_utility::ConfigManager& config = getConfigManager();
 
-    decltype(auto) smallerTableAmountRows = config.addOption(
-        "smallerTableAmountRows",
-        "Amount of rows for the smaller `IdTable`, if we always "
-        "use the same amount.",
-        &configVariables_.smallerTableAmountRows_, 1000UL);
+    decltype(auto) smallerTableAmountRows =
+        config.addOption("smallerTableAmountRows",
+                         "Amount of rows for the smaller `IdTable` in "
+                         "benchmarking tables, where the value is constant.",
+                         &configVariables_.smallerTableAmountRows_, 1000UL);
 
     constexpr size_t minBiggerTableRowsDefault = 100000;
     decltype(auto) minBiggerTableRows = config.addOption(
         "minBiggerTableRows",
-        "The minimum amount of rows, that the bigger `IdTable` should have.",
+        "The minimum amount of rows for the bigger `IdTable` in benchmarking "
+        "tables, where the value is not constant.",
         &configVariables_.minBiggerTableRows_, minBiggerTableRowsDefault);
     decltype(auto) maxBiggerTableRows = config.addOption(
         "maxBiggerTableRows",
-        "The maximum amount of rows, that the bigger `IdTable` should have.",
+        "The maximum amount of rows for the bigger `IdTable` in benchmarking "
+        "tables, where the value is not constant.",
         &configVariables_.maxBiggerTableRows_, 10000000UL);
 
     decltype(auto) smallerTableAmountColumns =
@@ -430,11 +432,17 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
     decltype(auto) minRatioRows = config.addOption(
         "minRatioRows",
-        "The minimum row ratio between the smaller and the bigger `IdTable`.",
+        "The minimum row ratio between the smaller and the "
+        "bigger `IdTable` for a benchmark table of the benchmark class "
+        "`Benchmarktables, where the smaller table grows and the ratio between "
+        "tables stays the same.`",
         &configVariables_.minRatioRows_, 10UL);
     decltype(auto) maxRatioRows = config.addOption(
         "maxRatioRows",
-        "The maximum row ratio between the smaller and the bigger `IdTable`.",
+        "The maximum row ratio between the smaller and the "
+        "bigger `IdTable` for a benchmark table of the benchmark class "
+        "`Benchmarktables, where the smaller table grows and the ratio between "
+        "tables stays the same.`",
         &configVariables_.maxRatioRows_, 1000UL);
 
     decltype(auto) maxMemoryInStringFormat = config.addOption(
