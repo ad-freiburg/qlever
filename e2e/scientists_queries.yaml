@@ -5,16 +5,16 @@ queries:
   - query: relativ-star-scientists
     type: text
     sparql: |
-      SELECT ?x ?t ?_score_x WHERE {
+      SELECT ?x ?t ?ql_score_t_var_x WHERE {
           ?x <is-a> <Scientist> .
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "relati*"
       }
-      ORDER BY DESC(?ql_score_x)
+      ORDER BY DESC(?ql_score_t_var_x)
     checks:
       - num_cols: 3
       - num_rows: 4285
-      - selected: [ "?x", "?t", "?_score_x"]
+      - selected: [ "?x", "?t", "?ql_score_t_var_x"]
       - contains_row:
           - "<Albert_Einstein>"
           - "He realized, however, that the principle of relativity could also be extended
@@ -23,7 +23,7 @@ queries:
           - null
       - contains_row: [ "<Albert_Einstein>", null, null ] # null cells are ignored
       - contains_row: [ "<Luís_Lindley_Cintra>", null, null ] # Test Unicode
-      - order_numeric: {"dir" : "DESC", "var": "?_score_x"}
+      - order_numeric: {"dir" : "DESC", "var": "?ql_score_t_var_x"}
 
 
   - query: relativ-star-scientists-from-ulm
@@ -86,19 +86,19 @@ queries:
   - query: algo-star-female-scientists
     type: text
     sparql: |
-      SELECT ?x ?ql_score_x WHERE {
+      SELECT ?x ?ql_score_t_var_x WHERE {
           ?x <is-a> <Scientist> .
           ?x <Gender> <Female> .
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "algo*"
       }
-      ORDER BY DESC(?ql_score_x)
+      ORDER BY DESC(?ql_score_t_var_x)
     checks:
       - num_cols: 2
       - num_rows: 27
-      - selected: [ "?x", "?ql_score_x" ]
+      - selected: [ "?x", "?ql_score_t_var_x" ]
       - contains_row: [ "<Grete_Hermann>", null ]
-      - order_numeric: {"dir": "DESC", "var" : "?ql_score_x"}
+      - order_numeric: {"dir": "DESC", "var" : "?ql_score_t_var_x"}
 
 
   - query: algor-start-female-born-before-1940

@@ -45,14 +45,11 @@ VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
   };
   addDefinedVar(textRecordVar_);
   if (hasFixedEntity_) {
-    string s = std::get<std::string>(entity_);
-    s.erase(remove_if(s.begin(), s.end(), std::not_fn(std::function(isalpha))),
-            s.end());
-    Variable fixedEntityVar{"?" + s};
-    addDefinedVar(fixedEntityVar.getScoreVariable());
+    addDefinedVar(
+        textRecordVar_.getScoreVariable(std::get<std::string>(entity_)));
   } else {
     addDefinedVar(std::get<Variable>(entity_));
-    addDefinedVar(std::get<Variable>(entity_).getScoreVariable());
+    addDefinedVar(textRecordVar_.getScoreVariable(std::get<Variable>(entity_)));
   }
   return vcmap;
 }

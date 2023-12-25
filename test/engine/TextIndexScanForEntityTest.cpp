@@ -57,7 +57,7 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
   VariableToColumnMap expectedVariables{
       {Variable{"?text2"}, {0, AlwaysDefined}},
       {Variable{"?entityVar2"}, {1, AlwaysDefined}},
-      {Variable{"?ql_score_entityVar2"}, {2, AlwaysDefined}}};
+      {Variable{"?ql_score_text2_var_entityVar2"}, {2, AlwaysDefined}}};
   EXPECT_THAT(s2.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 
@@ -74,7 +74,9 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
 
   expectedVariables = {
       {Variable{"?text3"}, {0, AlwaysDefined}},
-      {Variable{"?ql_score_someothersentence"}, {1, AlwaysDefined}}};
+      {Variable{
+           "?ql_score_text3_fixedEntity__34_some_32_other_32_sentence_34_"},
+       {1, AlwaysDefined}}};
   EXPECT_THAT(s3.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 

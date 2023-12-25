@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 
 // Forward declaration because of cyclic dependencies
 // TODO<joka921> The coupling of the `Variable` with its `evaluate` methods
@@ -40,7 +41,8 @@ class Variable {
   Variable getTextScoreVariable() const;
 
   // Convert `?someVariable` into `?ql_score_someVariable`
-  Variable getScoreVariable() const;
+  Variable getScoreVariable(
+      const std::variant<Variable, std::string>& varOrEntity) const;
 
   // Convert `?someVariable` into `?ql_matchingword_someVariable_someTerm`
   Variable getMatchingWordVariable(std::string_view term) const;

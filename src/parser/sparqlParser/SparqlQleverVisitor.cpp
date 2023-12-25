@@ -1057,6 +1057,13 @@ vector<TripleWithPropertyPath> Visitor::visit(
                 var->getMatchingWordVariable(s.substr(0, s.size() - 1)));
           }
         }
+        if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
+          if (auto* entVar = std::get_if<Variable>(&object)) {
+            addVisibleVariable(var->getScoreVariable(*entVar));
+          } else if (auto* fixedEntity = std::get_if<GraphTerm>(&object)) {
+            addVisibleVariable(var->getScoreVariable(fixedEntity->toSparql()));
+          }
+        }
       }
     }
   };
