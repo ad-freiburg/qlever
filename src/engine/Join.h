@@ -103,7 +103,7 @@ class Join : public Operation {
    * a proper switch.
    **/
   void join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
-            ColumnIndex jc2, IdTable* result) const;
+            ColumnIndex jc2, IdTable* result);
 
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning
