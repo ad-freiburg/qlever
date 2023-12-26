@@ -286,7 +286,6 @@ struct ConfigVariables {
   size_t smallerTableAmountColumns_;
   size_t biggerTableAmountColumns_;
   float overlapChance_;
-  size_t ratioRows_;
   size_t minRatioRows_;
   size_t maxRatioRows_;
 
@@ -385,19 +384,21 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     decltype(auto) smallerTableAmountRows =
         config.addOption("smallerTableAmountRows",
                          "Amount of rows for the smaller `IdTable` in "
-                         "benchmarking tables, where the value is constant.",
+                         "the benchmarking class `Benchmarktables, where the "
+                         "smaller table stays at the same amount  of rows and "
+                         "the bigger tables keeps getting bigger.`.",
                          &configVariables_.smallerTableAmountRows_, 1000UL);
 
     constexpr size_t minBiggerTableRowsDefault = 100000;
     decltype(auto) minBiggerTableRows = config.addOption(
         "minBiggerTableRows",
         "The minimum amount of rows for the bigger `IdTable` in benchmarking "
-        "tables, where the value is not constant.",
+        "tables.",
         &configVariables_.minBiggerTableRows_, minBiggerTableRowsDefault);
     decltype(auto) maxBiggerTableRows = config.addOption(
         "maxBiggerTableRows",
         "The maximum amount of rows for the bigger `IdTable` in benchmarking "
-        "tables, where the value is not constant.",
+        "tables.",
         &configVariables_.maxBiggerTableRows_, 10000000UL);
 
     decltype(auto) smallerTableAmountColumns =
@@ -423,33 +424,27 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         &configVariables_.randomSeed_,
         static_cast<size_t>(std::random_device{}()));
 
-    decltype(auto) ratioRows = config.addOption(
-        "ratioRows",
-        "The row ratio between the smaller and the bigger `IdTable`. That is "
-        "the value of the amount of rows in the bigger `IdTable` divided "
-        "through the amount of rows in the smaller `IdTable`.",
-        &configVariables_.ratioRows_, 10UL);
-
     decltype(auto) minRatioRows = config.addOption(
         "minRatioRows",
         "The minimum row ratio between the smaller and the "
-        "bigger `IdTable` for a benchmark table of the benchmark class "
+        "bigger `IdTable` for a benchmark table in the benchmark class "
         "`Benchmarktables, where the smaller table grows and the ratio between "
         "tables stays the same.`",
         &configVariables_.minRatioRows_, 10UL);
     decltype(auto) maxRatioRows = config.addOption(
         "maxRatioRows",
         "The maximum row ratio between the smaller and the "
-        "bigger `IdTable` for a benchmark table of the benchmark class "
+        "bigger `IdTable` for a benchmark table in the benchmark class "
         "`Benchmarktables, where the smaller table grows and the ratio between "
         "tables stays the same.`",
         &configVariables_.maxRatioRows_, 1000UL);
 
-    decltype(auto) maxMemoryInStringFormat = config.addOption(
-        "maxMemory",
-        "Max amount of memory that a `IdTable` is allowed to take up. `0` for "
-        "unlimited memory. Example: 4kB, 8MB, 24 B, etc. ...",
-        &configVariables_.configVariableMaxMemory_, "0 B"s);
+    decltype(auto) maxMemoryInStringFormat =
+        config.addOption("maxMemory",
+                         "Max amount of memory that any `IdTable` is allowed "
+                         "to take up. `0` for "
+                         "unlimited memory. Example: 4kB, 8MB, 24 B, etc. ...",
+                         &configVariables_.configVariableMaxMemory_, "0 B"s);
 
     decltype(auto) maxTimeSingleMeasurement = config.addOption(
         "maxTimeSingleMeasurement",
@@ -560,11 +555,11 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             true),
         absl::StrCat(
             "'minBiggerTableRows' is to small. Interessting measurement values "
-            "only start to turn up at ",
+            "start at ",
             minBiggerTableRows.getConfigOption().getDefaultValueAsString(),
             " rows, or more."),
         absl::StrCat(
-            "Interessting measurement values show up at ",
+            "Interessting measurement values start at ",
             minBiggerTableRows.getConfigOption().getDefaultValueAsString(),
             ", or more, for 'minBiggerTableRows'"),
         minBiggerTableRows);
@@ -611,14 +606,11 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // Is `maxTimeSingleMeasurement` a positive number?
     config.addValidator(
         generateBiggerEqualLambda(0UL, true),
-        "'maxTimeSingleMeasurement' must be bigger to, or equal to, 0.",
-        "'maxTimeSingleMeasurement' must be bigger to, or equal to, 0.",
+        "'maxTimeSingleMeasurement' must be bigger than, or equal to, 0.",
+        "'maxTimeSingleMeasurement' must be bigger than, or equal to, 0.",
         maxTimeSingleMeasurement);
 
     // Is the ratio of rows at least 10?
-    config.addValidator(generateBiggerEqualLambda(10UL, true),
-                        "'ratioRows' must be at least 10.",
-                        "'ratioRows' must be at least 10.", ratioRows);
     config.addValidator(generateBiggerEqualLambda(10UL, true),
                         "'minRatioRows' must be at least 10.",
                         "'minRatioRows' must be at least 10.", minRatioRows);
