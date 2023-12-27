@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <ctime>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -178,23 +179,6 @@ concept isTypeOrGrowthFunction =
 template <typename... Ts>
 concept exactlyOneGrowthFunction =
     ((growthFunction<Ts, size_t> || growthFunction<Ts, float>)+...) == 1;
-
-/*
-@brief Verifies, that all the function measurements in a benchmark table row are
-lower than a maximal time value.
-*/
-static bool checkIfFunctionMeasurementOfRowUnderMaxtime(
-    const ResultTable& table, const size_t& row, const float& maxTime) {
-  // Check if the time limit was followed, for a single column.
-  auto checkTime = [&maxTime, &row, &table](const size_t& column) {
-    return table.getEntry<float>(row, column) <= maxTime;
-  };
-
-  return checkTime(toUnderlying(GeneratedTableColumn::TimeForSorting)) &&
-         checkTime(
-             toUnderlying(GeneratedTableColumn::TimeForMergeGallopingJoin)) &&
-         checkTime(toUnderlying(GeneratedTableColumn::TimeForHashJoin));
-}
 
 /*
 @brief Calculates the smalles whole exponent, so that $base^n$ is equal, or
@@ -650,9 +634,11 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   /*
   @brief Create a benchmark table for join algorithm, with the given
   parameters for the IdTables, which will keep getting more rows, until the
-  given stop function decides, that there are enough rows. The rows will be the
-  return values of the parameter, you gave a function for, and the columns will
-  be:
+  `maxTimeSingleMeasurement` getter value, the `maxMemoryBiggerTable()` getter
+  value, or the `maxMemory()` getter value of the configuration options was
+  reached/surpassed.
+  The rows will be the return values of the parameter, you gave a function for,
+  and the columns will be:
   - Return values of the parameter, you gave a function for.
   - Time needed for sorting `IdTable`s.
   - Time needed for merge/galloping join.
@@ -661,8 +647,6 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   - How many rows the result of joining the tables has.
   - How much faster the hash join is. For example: Two times faster.
 
-  @tparam StopFunction A function, that takes the current form of the
-  `ResultTable` as `const ResultTable&` and returns a bool.
   @tparam T1, T6, T7 Must be a float, or a function, that takes the row number
   of the next to be generated row as `const size_t&`, and returns a float. Can
   only be a function, if all other template `T` parameter are vectors.
@@ -678,9 +662,6 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   @param parameterName The names of the parameter, you gave a growth function
   for. Will be set as the name of the column, which will show the returned
   values of the growth function.
-  @param stopFunction Returns true, if the table benchmark should get a new row.
-  False, if there are enough rows and the created table should be returned.
-  Decides the final size of the benchmark table.
   @param overlap The height of the probability for any join column entry of
   smallerTable to be overwritten by a random join column entry of biggerTable.
   @param randomSeed Seed for the random generators.
@@ -704,18 +685,16 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   size to `Amount of rows * ratio`, which affects the possibility of
   duplicates. Important: `Amount of rows * ratio` must be a natural number.
    */
-  template <
-      ad_utility::RegularInvocableWithExactReturnType<bool, const ResultTable&>
-          StopFunction,
-      isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<size_t> T2,
-      isTypeOrGrowthFunction<size_t> T3, isTypeOrGrowthFunction<size_t> T4,
-      isTypeOrGrowthFunction<size_t> T5,
-      isTypeOrGrowthFunction<float> T6 = float,
-      isTypeOrGrowthFunction<float> T7 = float>
+  template <isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<size_t> T2,
+            isTypeOrGrowthFunction<size_t> T3,
+            isTypeOrGrowthFunction<size_t> T4,
+            isTypeOrGrowthFunction<size_t> T5,
+            isTypeOrGrowthFunction<float> T6 = float,
+            isTypeOrGrowthFunction<float> T7 = float>
   requires exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>
-  static ResultTable& makeGrowingBenchmarkTable(
+  ResultTable& makeGrowingBenchmarkTable(
       BenchmarkResults* results, const std::string_view tableDescriptor,
-      std::string parameterName, StopFunction stopFunction, const T1& overlap,
+      std::string parameterName, const T1& overlap,
       ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
       const bool biggerTableSorted, const T2& ratioRows,
       const T3& smallerTableAmountRows, const T4& smallerTableAmountColumns,
@@ -781,10 +760,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
          "Sorting + merge/galloping join", "Hash join",
          "Number of rows in resulting IdTable", "Speedup of hash join"});
     /*
-    Adding measurements to the table, as long as the stop function doesn't say
-    anything else.
+    Adding measurements to the table, as long as possible.
     */
-    while (stopFunction(table)) {
+    while (true) {
       // What's the row number of the next to be added row?
       const size_t rowNumber = table.numRows();
 
@@ -798,16 +776,23 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                          smallerTableJoinColumnSampleSizeRatio,
                          biggerTableJoinColumnSampleSizeRatio)(rowNumber));
 
-      // Converting all our function parameters to non functions.
-      addMeasurementsToRowOfBenchmarkTable(
-          &table, rowNumber, returnOrCall(overlap, rowNumber),
-          std::invoke(seedGenerator), smallerTableSorted, biggerTableSorted,
-          returnOrCall(ratioRows, rowNumber),
-          returnOrCall(smallerTableAmountRows, rowNumber),
-          returnOrCall(smallerTableAmountColumns, rowNumber),
-          returnOrCall(biggerTableAmountColumns, rowNumber),
-          returnOrCall(smallerTableJoinColumnSampleSizeRatio, rowNumber),
-          returnOrCall(biggerTableJoinColumnSampleSizeRatio, rowNumber));
+      /*
+      Stop and delete the newest row, if the addition of measurements wasn't
+      successfull.
+      A partly filled row is of no use to anyone.
+      */
+      if (!addMeasurementsToRowOfBenchmarkTable(
+              &table, rowNumber, returnOrCall(overlap, rowNumber),
+              std::invoke(seedGenerator), smallerTableSorted, biggerTableSorted,
+              returnOrCall(ratioRows, rowNumber),
+              returnOrCall(smallerTableAmountRows, rowNumber),
+              returnOrCall(smallerTableAmountColumns, rowNumber),
+              returnOrCall(biggerTableAmountColumns, rowNumber),
+              returnOrCall(smallerTableJoinColumnSampleSizeRatio, rowNumber),
+              returnOrCall(biggerTableJoinColumnSampleSizeRatio, rowNumber))) {
+        table.deleteRow(rowNumber);
+        break;
+      }
     }
 
     // Adding together the time for sorting the `IdTables` and then joining
@@ -838,8 +823,14 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   @brief Adds the function time measurements to a row of the benchmark table
   in `makeGrowingBenchmarkTable`.
   For an explanation of the parameters, see `makeGrowingBenchmarkTable`.
+
+  @return True, if all measurements were added. False, if the addition of
+  measurements was stopped, because either a `IdTable` required more memory
+  than was allowed via configuration options, or if a single measurement took
+  longer than was allowed via configuration options. Note: In the case of
+  `false`, some measurements may have been added, but never all.
   */
-  static void addMeasurementsToRowOfBenchmarkTable(
+  bool addMeasurementsToRowOfBenchmarkTable(
       ResultTable* table, const size_t& row, const float overlap,
       ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
       const bool biggerTableSorted, const size_t& ratioRows,
@@ -853,6 +844,21 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // , they don't make sense.
     AD_CONTRACT_CHECK(smallerTableJoinColumnSampleSizeRatio > 0);
     AD_CONTRACT_CHECK(biggerTableJoinColumnSampleSizeRatio > 0);
+
+    /*
+    Check if the smaller and bigger `IdTable` are not to big. Size of the result
+    table is only checked, if the configuration option for it was set.
+    */
+    if (const auto& maxSizeInputTable{
+            getConfigVariables().maxMemoryBiggerTable()};
+        approximateMemoryNeededByIdTable(smallerTableAmountRows,
+                                         smallerTableAmountColumns) >
+            maxSizeInputTable ||
+        approximateMemoryNeededByIdTable(smallerTableAmountRows * ratioRows,
+                                         biggerTableAmountColumns) >
+            maxSizeInputTable) {
+      return false;
+    }
 
     // The lambdas for the join algorithms.
     auto hashJoinLambda = makeHashJoinLambda();
@@ -917,6 +923,18 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                                  overlap, seeds.at(4));
     }
 
+    /*
+    Check, if the size of the result table isn't to big, if the `maxMemory`
+    configuration option was set.
+    */
+    if (const auto& maxMemory{getConfigVariables().maxMemory()};
+        maxMemory.value_or(ad_utility::MemorySize::max()) <
+        approximateMemoryNeededByIdTable(
+            numberRowsOfResult,
+            smallerTableAmountColumns + biggerTableAmountColumns - 1)) {
+      return false;
+    }
+
     // Sort the `IdTables`, if they should be.
     if (smallerTableSorted) {
       sortIdTableByJoinColumnInPlace(smallerTable);
@@ -926,6 +944,16 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     }
 
     // Adding the benchmark measurements to the current row.
+    const auto isOverMaxTime =
+        [maxTime = getConfigVariables().maxTimeSingleMeasurement(), &table,
+         &row](const GeneratedTableColumn& columnIdx) {
+          /*
+          Simply make the comparison trivial, if there was no maximum time
+          set.
+          */
+          return table->getEntry<float>(row, toUnderlying(columnIdx)) >
+                 maxTime.value_or(std::numeric_limits<float>::max());
+        };
 
     // Hash join first, because merge/galloping join sorts all tables, if
     // needed, before joining them.
@@ -935,6 +963,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           useJoinFunctionOnIdTables(smallerTable, biggerTable, hashJoinLambda)
               .numRows();
         });
+    if (isOverMaxTime(GeneratedTableColumn::TimeForHashJoin)) {
+      return false;
+    }
 
     /*
     The sorting of the `IdTables`. That must be done before the
@@ -952,6 +983,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                               sortIdTableByJoinColumnInPlace(biggerTable);
                             }
                           });
+    if (isOverMaxTime(GeneratedTableColumn::TimeForSorting)) {
+      return false;
+    }
 
     // The merge/galloping join.
     table->addMeasurement(
@@ -960,11 +994,15 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
               .numRows();
         });
+    if (isOverMaxTime(GeneratedTableColumn::TimeForMergeGallopingJoin)) {
+      return false;
+    }
 
     // Adding the number of rows of the result.
     table->setEntry(row,
                     toUnderlying(GeneratedTableColumn::NumRowsOfJoinResult),
                     numberRowsOfResult);
+    return true;
   }
 };
 
@@ -978,100 +1016,6 @@ auto createDefaultGrowthLambda(const size_t& base,
   return [base, startingExponent{calculateNextWholeExponent(
                     base, startingPoint)}](const size_t& row) {
     return static_cast<size_t>(std::pow(base, startingExponent + row));
-  };
-}
-
-/*
-@brief Create and return a lambda, that returns true, iff:
-- (Can be turned off) None of the benchmark measurements took to long.
-- None of the generated `IdTable`s are to big.
-
-@tparam SmallerTableMemorySizeFunction, BiggerTableMemorySizeFunction A lambda
-function, that takes a `const size_t&` and return a `MemorySize`.
-
-@param maxTime The maximum amount of time, a single function measurements is
-allowed to take. If no value is given, it will not be tested.
-@param maxMemorySmallerTable, maxMemoryBiggerTable, maxMemoryJoinResultTable How
-much memory space the `IdTable` is allowed to have at maximum. If no value is
-given, it will  not be tested.
-@param smallerTableMemorySizeFunction, biggerTableMemorySizeFunction These
-functions should calculate/approximate the amount of memory, the bigger and
-smaller `IdTable` take. The only parameter given is the row number in
-the benchmark table.
-@param resultTableAmountColumns How many columns the result of joining the
-smaller and bigger `IdTable` has. Used for calculating/approximating the memory
-space, that this result table takes up.
-*/
-template <ad_utility::RegularInvocableWithExactReturnType<
-              ad_utility::MemorySize, const size_t&>
-              SmallerTableMemorySizeFunction,
-          ad_utility::RegularInvocableWithExactReturnType<
-              ad_utility::MemorySize, const size_t&>
-              BiggerTableMemorySizeFunction>
-auto createDefaultStoppingLambda(
-    const std::optional<float>& maxTime,
-    const std::optional<ad_utility::MemorySize>& maxMemorySmallerTable,
-    const std::optional<ad_utility::MemorySize>& maxMemoryBiggerTable,
-    const std::optional<ad_utility::MemorySize>& maxMemoryJoinResultTable,
-    const SmallerTableMemorySizeFunction& smallerTableMemorySizeFunction,
-    const BiggerTableMemorySizeFunction& biggerTableMemorySizeFunction,
-    const size_t& resultTableAmountColumns) {
-  return [maxTime, maxMemorySmallerTable, maxMemoryBiggerTable,
-          maxMemoryJoinResultTable, smallerTableMemorySizeFunction,
-          biggerTableMemorySizeFunction,
-          resultTableAmountColumns](const ResultTable& table) -> bool {
-    // If the tables has no rows, that's an automatic pass.
-    if (table.numRows() == 0) {
-      return true;
-    }
-
-    // The row, that we are looking at.
-    const size_t row = table.numRows() - 1;
-
-    // Checks, if the table, described by the `memorySizeFunction`, doesn't take
-    // up to much memory space.
-    auto checkMemorySizeOfTable =
-        [](const size_t& benchmarkTableRowNumber,
-           ad_utility::RegularInvocableWithExactReturnType<
-               ad_utility::MemorySize, const size_t&> auto memorySizeFunction,
-           const std::optional<ad_utility::MemorySize> maxMemory) {
-          return maxMemory.has_value()
-                     ? memorySizeFunction(benchmarkTableRowNumber) <=
-                           maxMemory.value()
-                     : true;
-        };
-
-    /*
-    Remember: We are currently deciding, if the current `ResultTable`
-    should get a new row and we don't want to create `IdTable`s, that are
-    to big.
-    However, unlike the function measurement times, we CAN calculate the
-    memory space taken up by a `IdTable`, without creating it.
-    So, we check, if the smaller and bigger table of the NEXT row would be
-    to big, instead of the smaller and bigger table of this row.
-
-    Unfortunaly, that can't be done with the result of joining the two
-    tables. For that, we would need the amount of rows in it, which we
-    can't have, without having already created it.
-    */
-    return (maxTime.has_value() ? checkIfFunctionMeasurementOfRowUnderMaxtime(
-                                      table, row, maxTime.value())
-                                : true) &&
-           checkMemorySizeOfTable(row + 1, smallerTableMemorySizeFunction,
-                                  maxMemorySmallerTable) &&
-           checkMemorySizeOfTable(row + 1, biggerTableMemorySizeFunction,
-                                  maxMemoryBiggerTable) &&
-           checkMemorySizeOfTable(
-               row,
-               [&resultTableAmountColumns, &table](const size_t& rowNumber) {
-                 return approximateMemoryNeededByIdTable(
-                     table.getEntry<size_t>(
-                         rowNumber,
-                         toUnderlying(
-                             GeneratedTableColumn::NumRowsOfJoinResult)),
-                     resultTableAmountColumns);
-               },
-               maxMemoryJoinResultTable);
   };
 }
 
@@ -1104,30 +1048,8 @@ class BmOnlyBiggerTableSizeChanges final
             10, getConfigVariables().minBiggerTableRows_ /
                     getConfigVariables().smallerTableAmountRows_);
 
-        // The lambda for signalling the benchmark table creation function, that
-        // the table is finished.
-        const ad_utility::MemorySize maxMemorySizeBiggeTable =
-            getConfigVariables().maxMemoryBiggerTable();
-        auto stoppingFunction = createDefaultStoppingLambda(
-            getConfigVariables().maxTimeSingleMeasurement(),
-            maxMemorySizeBiggeTable, maxMemorySizeBiggeTable,
-            getConfigVariables().maxMemory(),
-            [this](const size_t&) {
-              return approximateMemoryNeededByIdTable(
-                  getConfigVariables().smallerTableAmountRows_,
-                  getConfigVariables().smallerTableAmountColumns_);
-            },
-            [this, &growthFunction](const size_t& row) {
-              return approximateMemoryNeededByIdTable(
-                  getConfigVariables().smallerTableAmountRows_ *
-                      growthFunction(row),
-                  getConfigVariables().biggerTableAmountColumns_);
-            },
-            getConfigVariables().smallerTableAmountColumns_ +
-                getConfigVariables().biggerTableAmountColumns_ - 1);
-
         ResultTable& table = makeGrowingBenchmarkTable(
-            &results, tableName, "Row ratio", stoppingFunction,
+            &results, tableName, "Row ratio",
             getConfigVariables().overlapChance_,
             getConfigVariables().randomSeed(), smallerTableSorted,
             biggerTableSorted, growthFunction,
@@ -1195,30 +1117,9 @@ class BmOnlySmallerTableSizeChanges final
           auto growthFunction = createDefaultGrowthLambda(
               10, getConfigVariables().minBiggerTableRows_ / ratioRows);
 
-          // The lambda for signalling the benchmark table creation function,
-          // that the table is finished.
-          const ad_utility::MemorySize maxMemorySizeBiggeTable =
-              getConfigVariables().maxMemoryBiggerTable();
-          auto stoppingFunction = createDefaultStoppingLambda(
-              getConfigVariables().maxTimeSingleMeasurement(),
-              maxMemorySizeBiggeTable, maxMemorySizeBiggeTable,
-              getConfigVariables().maxMemory(),
-              [this, &growthFunction](const size_t& row) {
-                return approximateMemoryNeededByIdTable(
-                    growthFunction(row),
-                    getConfigVariables().smallerTableAmountColumns_);
-              },
-              [this, &growthFunction, &ratioRows](const size_t& row) {
-                return approximateMemoryNeededByIdTable(
-                    growthFunction(row) * ratioRows,
-                    getConfigVariables().biggerTableAmountColumns_);
-              },
-              getConfigVariables().smallerTableAmountColumns_ +
-                  getConfigVariables().biggerTableAmountColumns_ - 1);
-
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Amount of rows in the smaller table",
-              stoppingFunction, getConfigVariables().overlapChance_,
+              getConfigVariables().overlapChance_,
               getConfigVariables().randomSeed(), smallerTableSorted,
               biggerTableSorted, ratioRows, growthFunction,
               getConfigVariables().smallerTableAmountColumns_,
@@ -1277,29 +1178,8 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
         auto growthFunction = createDefaultGrowthLambda(
             10, getConfigVariables().minBiggerTableRows_);
 
-        // The lambda for signalling the benchmark table creation function,
-        // that the table is finished.
-        const ad_utility::MemorySize maxMemorySizeBiggeTable =
-            getConfigVariables().maxMemoryBiggerTable();
-        auto stoppingFunction = createDefaultStoppingLambda(
-            getConfigVariables().maxTimeSingleMeasurement(),
-            maxMemorySizeBiggeTable, maxMemorySizeBiggeTable,
-            getConfigVariables().maxMemory(),
-            [this, &growthFunction](const size_t& row) {
-              return approximateMemoryNeededByIdTable(
-                  growthFunction(row),
-                  getConfigVariables().smallerTableAmountColumns_);
-            },
-            [this, &growthFunction](const size_t& row) {
-              return approximateMemoryNeededByIdTable(
-                  growthFunction(row),
-                  getConfigVariables().biggerTableAmountColumns_);
-            },
-            getConfigVariables().smallerTableAmountColumns_ +
-                getConfigVariables().biggerTableAmountColumns_ - 1);
-
         ResultTable& table = makeGrowingBenchmarkTable(
-            &results, tableName, "Amount of rows", stoppingFunction,
+            &results, tableName, "Amount of rows",
             getConfigVariables().overlapChance_,
             getConfigVariables().randomSeed(), smallerTableSorted,
             biggerTableSorted, 1UL, growthFunction,
