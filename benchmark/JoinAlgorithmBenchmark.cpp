@@ -442,18 +442,19 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "tables stays the same.`",
         &configVariables_.maxRatioRows_, 1000UL);
 
-    decltype(auto) maxMemoryInStringFormat =
-        config.addOption("maxMemory",
-                         "Max amount of memory that any `IdTable` is allowed "
-                         "to take up. `0` for "
-                         "unlimited memory. Example: 4kB, 8MB, 24B, etc. ...",
-                         &configVariables_.configVariableMaxMemory_, "0B"s);
+    decltype(auto) maxMemoryInStringFormat = config.addOption(
+        "maxMemory",
+        "Max amount of memory that any `IdTable` is allowed to take up. `0` "
+        "for unlimited memory. When set to anything else than `0`, "
+        "configuration option 'maxBiggerTableRows' is ignored. Example: 4kB, "
+        "8MB, 24B, etc. ...",
+        &configVariables_.configVariableMaxMemory_, "0B"s);
 
     decltype(auto) maxTimeSingleMeasurement = config.addOption(
         "maxTimeSingleMeasurement",
-        "The maximal amount of time, in seconds, any function "
-        "measurement is allowed to take. `0` for unlimited time. Note: This "
-        "can only be checked, after a measurement was taken.",
+        "The maximal amount of time, in seconds, any function measurement is "
+        "allowed to take. `0` for unlimited time. Note: This can only be "
+        "checked, after a measurement was taken.",
         &configVariables_.maxTimeSingleMeasurement_, 0.f);
 
     // Helper function for generating lambdas for validators.
