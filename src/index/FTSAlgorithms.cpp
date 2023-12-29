@@ -73,11 +73,13 @@ IdTable FTSAlgorithms::filterByRange(const IdRange<WordVocabIndex>& idRange,
   IdTable idTableResult{idTablePreFilter.getAllocator()};
   idTableResult.setNumColumns(2);
   idTableResult.resize(idTablePreFilter.getColumn(0).size());
-  decltype(auto) wordIdsInput = idTablePreFilter.getColumn(1);
 
+  decltype(auto) resultCidColumn = idTableResult.getColumn(0);
+  decltype(auto) resultWidColumn = idTableResult.getColumn(1);
   size_t nofResultElements = 0;
-
-  for (size_t i = 0; i < wordIdsInput.size(); ++i) {
+  decltype(auto) preFilterCidColumn = idTablePreFilter.getColumn(0);
+  decltype(auto) preFilterWidColumn = idTablePreFilter.getColumn(1);
+  for (size_t i = 0; i < preFilterWidColumn.size(); ++i) {
     // TODO<joka921> proper Ids for the text stuff.
     // The mapping from words that appear in text records to `WordIndex`es is
     // stored in a `Vocabulary` that stores `VocabIndex`es, so we have to
@@ -85,12 +87,10 @@ IdTable FTSAlgorithms::filterByRange(const IdRange<WordVocabIndex>& idRange,
     // TODO<joka921> Can we make the returned `IndexType` a template parameter
     // of the vocabulary, s.t. we have a vocabulary that stores `WordIndex`es
     // directly?
-    if (wordIdsInput[i].getWordVocabIndex() >= idRange.first() &&
-        wordIdsInput[i].getWordVocabIndex() <= idRange.last()) {
-      idTableResult.getColumn(0)[nofResultElements] =
-          idTablePreFilter.getColumn(0)[i];
-      idTableResult.getColumn(1)[nofResultElements] =
-          idTablePreFilter.getColumn(1)[i];
+    if (preFilterWidColumn[i].getWordVocabIndex() >= idRange.first() &&
+        preFilterWidColumn[i].getWordVocabIndex() <= idRange.last()) {
+      resultCidColumn[nofResultElements] = preFilterCidColumn[i];
+      resultWidColumn[nofResultElements] = preFilterWidColumn[i];
       nofResultElements++;
     }
   }

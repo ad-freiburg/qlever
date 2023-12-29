@@ -6,9 +6,9 @@ TextIndexScanForEntity::TextIndexScanForEntity(
     std::variant<Variable, std::string> entity, string word)
     : Operation(qec),
       textRecordVar_(std::move(textRecordVar)),
-      entity_(std::move(entity)),
+      entity_(VarOrFixedEntity(qec, entity)),
       word_(std::move(word)),
-      hasFixedEntity_(std::holds_alternative<std::string>(entity_)) {}
+      hasFixedEntity_(std::holds_alternative<std::string>(entity)) {}
 
 // _____________________________________________________________________________
 ResultTable TextIndexScanForEntity::computeResult() {
@@ -16,18 +16,10 @@ ResultTable TextIndexScanForEntity::computeResult() {
       word_, getExecutionContext()->getAllocator());
 
   if (hasFixedEntity_) {
-    VocabIndex idx;
-    bool success = getExecutionContext()->getIndex().getVocab().getId(
-        std::get<std::string>(entity_), &idx);
-    if (!success) {
-      throw std::runtime_error(
-          "The entity " + std::get<string>(entity_) +
-          " is not part of the underlying knowledge graph and can therefore "
-          "not be used as the object of ql:contains-entity");
-    }
-    auto beginErase = remove_if(
-        idTable.begin(), idTable.end(),
-        [idx](const auto& row) { return row[1].getVocabIndex() != idx; });
+    auto beginErase =
+        remove_if(idTable.begin(), idTable.end(), [this](const auto& row) {
+          return row[1].getVocabIndex() != entity_.fixedEntity_.second;
+        });
     idTable.erase(beginErase, idTable.end());
     idTable.setColumnSubset(std::vector<ColumnIndex>{0, 2});
   }
@@ -45,11 +37,11 @@ VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
   };
   addDefinedVar(textRecordVar_);
   if (hasFixedEntity_) {
-    addDefinedVar(
-        textRecordVar_.getScoreVariable(std::get<std::string>(entity_)));
+    addDefinedVar(textRecordVar_.getScoreVariable(
+        entity_.fixedEntity_.first));
   } else {
-    addDefinedVar(std::get<Variable>(entity_));
-    addDefinedVar(textRecordVar_.getScoreVariable(std::get<Variable>(entity_)));
+    addDefinedVar(entity_.entityVar_);
+    addDefinedVar(textRecordVar_.getScoreVariable(entity_.entityVar_));
   }
   return vcmap;
 }
@@ -60,26 +52,26 @@ size_t TextIndexScanForEntity::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
+size_t TextIndexScanForEntity::getCostEstimate() {
+  if (hasFixedEntity_) {
+    return 2 * getExecutionContext()->getIndex().getEntitySizeEstimate(word_);
+  } else {
+    return getExecutionContext()->getIndex().getEntitySizeEstimate(word_);
+  }
+}
+
+// _____________________________________________________________________________
 size_t TextIndexScanForEntity::getSizeEstimateBeforeLimit() {
   if (hasFixedEntity_) {
     return getExecutionContext()->getIndex().getAverageNofEntityContexts();
   } else {
-    return getExecutionContext()->getIndex().getTextRecordSizeEstimate(word_);
+    return getExecutionContext()->getIndex().getEntitySizeEstimate(word_);
   }
 }
 
 // _____________________________________________________________________________
 bool TextIndexScanForEntity::knownEmptyResult() {
-  if (getExecutionContext()->getIndex().getSizeEstimate(word_) == 0) {
-    return true;
-  } else if (hasFixedEntity_) {
-    VocabIndex dummy;
-    if (!getExecutionContext()->getIndex().getVocab().getId(
-            std::get<std::string>(entity_), &dummy)) {
-      return true;
-    }
-  }
-  return false;
+  return getExecutionContext()->getIndex().getSizeEstimate(word_) == 0;
 }
 
 // _____________________________________________________________________________
@@ -89,13 +81,7 @@ vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
 
 // _____________________________________________________________________________
 string TextIndexScanForEntity::getDescriptor() const {
-  return absl::StrCat(
-      "TextIndexScanForEntity on text-variable ", textRecordVar_.name(),
-      " and ",
-      (hasFixedEntity_
-           ? ("fixed-entity " + std::get<std::string>(entity_))
-           : ("entity-variable " + std::get<Variable>(entity_).name())),
-      " with word ", word_);
+  return absl::StrCat("TextIndexScanForEntity on ", textRecordVar_.name());
 }
 
 // _____________________________________________________________________________
@@ -103,7 +89,8 @@ string TextIndexScanForEntity::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "ENTITY INDEX SCAN FOR WORD: "
      << " with word: \"" << word_ << "\" and fixed-entity: \""
-     << (hasFixedEntity_ ? std::get<std::string>(entity_) : "no fixed-entity")
+     << (hasFixedEntity_ ? entity_.fixedEntity_.first
+                          : "no fixed-entity")
      << " \"";
   ;
   return std::move(os).str();

@@ -16,6 +16,14 @@ class TextIndexScanForWord : public Operation {
   TextIndexScanForWord(QueryExecutionContext* qec, Variable textRecordVar,
                        string word);
 
+  Variable textRecordVar() const {
+    return textRecordVar_;
+  }
+
+  std::string word() const {
+    return word_;
+  }
+
   virtual ~TextIndexScanForWord() = default;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
@@ -28,7 +36,7 @@ class TextIndexScanForWord : public Operation {
 
   void setTextLimit(size_t) override {}
 
-  size_t getCostEstimate() override { return getSizeEstimateBeforeLimit(); }
+  size_t getCostEstimate() override;
 
   uint64_t getSizeEstimateBeforeLimit() override;
 
@@ -38,14 +46,13 @@ class TextIndexScanForWord : public Operation {
   }
 
   bool knownEmptyResult() override {
-    return getExecutionContext()->getIndex().getTextRecordSizeEstimate(word_) ==
-           0;
+    return getExecutionContext()->getIndex().getWordSizeEstimate(word_) == 0;
   }
 
   vector<ColumnIndex> resultSortedOn() const override;
 
   // Returns a ResultTable containing an IdTable with the columns being
-  // the text-varibale and the completed word (if it was prefixed)
+  // the text-variable and the completed word (if it was prefixed)
   ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;

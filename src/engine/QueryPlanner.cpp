@@ -697,10 +697,9 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
       numNodesInTripleGraph++;
     }
   }
-  for (auto itt = potentialTermsForCvar.begin();
-       itt != potentialTermsForCvar.end(); itt++) {
-    optTermForCvar[itt->first] =
-        itt->second[_qec->getIndex().getIndexOfBestSuitedElTerm(itt->second)];
+  for (const auto& [cvar, terms] : potentialTermsForCvar) {
+    optTermForCvar[cvar] =
+        terms[_qec->getIndex().getIndexOfBestSuitedElTerm(terms)];
   }
   for (const SparqlTriple* t : entityTriples) {
     Variable currentVar = t->_s.getVariable();
@@ -710,9 +709,9 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
           "statement always also needs corresponding ql:contains-word "
           "statement.");
     }
-    string term = optTermForCvar[currentVar];
-    addNodeToTripleGraph(
-        TripleGraph::Node(tg._nodeStorage.size(), currentVar, term, *t), tg);
+    addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(), currentVar,
+                                           optTermForCvar[currentVar], *t),
+                         tg);
     numNodesInTripleGraph++;
   }
   if (numNodesInTripleGraph > 64) {

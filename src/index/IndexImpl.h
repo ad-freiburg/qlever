@@ -304,7 +304,9 @@ class IndexImpl {
   // --------------------------------------------------------------------------
   std::string_view wordIdToString(WordIndex wordIndex) const;
 
-  size_t getTextRecordSizeEstimate(const string& words) const;
+  size_t getEntitySizeEstimate(const string& words) const;
+
+  size_t getWordSizeEstimate(const string& words) const;
 
   size_t getSizeEstimate(const string& words) const;
 
@@ -336,26 +338,28 @@ class IndexImpl {
   Index::WordEntityPostings getContextEntityScoreListsForWords(
       const string& words) const;
 
-  // Returns a subset of textRecords and their corresponding words
-  // and scores. Words can be the term itself or words that have the term as a
-  // prefix. Each textRecord contains its corresponding word. Returns a
+  // Does the same as getWordPostingsForTerm but returns a
   // WordEntityPosting. Sorted by textRecord.
-  Index::WordEntityPostings getWordPostingsForTermWep(const string& term) const;
+  Index::WordEntityPostings getWordPostingsForTermWep(
+      const string& wordOrPrefix) const;
 
-  // Returns a subset of textRecords and their corresponding words. Words can be
-  // the term itself or words that have the term as a prefix. Each textRecord
-  // contains its corresponding word. Returned IdTable has columns: textRecord,
-  // word. Sorted by textRecord.
+  // Returns a set of [textRecord, term] pairs where the term is contained in
+  // the textRecord. The term can be either the wordOrPrefix itself or a word
+  // that has wordOrPrefix as a prefix. Returned IdTable has columns:
+  // textRecord, word. Sorted by textRecord.
   IdTable getWordPostingsForTerm(
-      const string& term,
+      const string& wordOrPrefix,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   Index::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
 
-  // Returns a subset of textRecords and their corresponding entities and
+  // Returns a set of textRecords and their corresponding entities and
   // scores. Each textRecord contains its corresponding entity and the term.
   // Returned IdTable has columns: textRecord, entity, score. Sorted by
   // textRecord.
+  // NOTE: This returns a superset because it contains the whole block and
+  // unfitting words are filtered out later by the join with the
+  // TextIndexScanForWords operation.
   IdTable getEntityMentionsForWord(
       const string& term,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;

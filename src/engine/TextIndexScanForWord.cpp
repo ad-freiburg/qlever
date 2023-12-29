@@ -45,8 +45,13 @@ VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
 size_t TextIndexScanForWord::getResultWidth() const { return 1 + isPrefix_; }
 
 // _____________________________________________________________________________
+size_t TextIndexScanForWord::getCostEstimate() {
+  return getExecutionContext()->getIndex().getWordSizeEstimate(word_);
+}
+
+// _____________________________________________________________________________
 size_t TextIndexScanForWord::getSizeEstimateBeforeLimit() {
-  return getExecutionContext()->getIndex().getTextRecordSizeEstimate(word_);
+  return getExecutionContext()->getIndex().getWordSizeEstimate(word_);
 }
 
 // _____________________________________________________________________________
@@ -56,8 +61,7 @@ vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
 
 // _____________________________________________________________________________
 string TextIndexScanForWord::getDescriptor() const {
-  return absl::StrCat("TextIndexScanForWord on ", textRecordVar_.name(),
-                      " with word ", word_);
+  return absl::StrCat("TextIndexScanForWord on ", textRecordVar_.name());
 }
 
 // _____________________________________________________________________________

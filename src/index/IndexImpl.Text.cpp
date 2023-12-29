@@ -1466,7 +1466,7 @@ size_t IndexImpl::getIndexOfBestSuitedElTerm(
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::getTextRecordSizeEstimate(const string& word) const {
+size_t IndexImpl::getEntitySizeEstimate(const string& word) const {
   if (word.empty()) {
     return 0;
   }
@@ -1475,6 +1475,25 @@ size_t IndexImpl::getTextRecordSizeEstimate(const string& word) const {
     return 0;
   }
   return optTbmd.value().tbmd_._entityCl._nofElements;
+}
+
+// _____________________________________________________________________________
+size_t IndexImpl::getWordSizeEstimate(const string& word) const {
+  // Returns the size of the whole textblock. If the word is very long or not
+  // prefixed then only a small number of words actually match. So the final
+  // result is much smaller.
+  // Note that as a cost estimate the estimation is correct. Because we always
+  // have to read the complete block and then filter by the actually needed
+  // words.
+  // TODO: improve size estimate by adding a correction factor.
+  if (word.empty()) {
+    return 0;
+  }
+  auto optTbmd = getTextBlockMetadataForWordOrPrefix(word);
+  if (!optTbmd.has_value()) {
+    return 0;
+  }
+  return optTbmd.value().tbmd_._cl._nofElements;
 }
 
 // _____________________________________________________________________________

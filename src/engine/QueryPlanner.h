@@ -50,23 +50,9 @@ class QueryPlanner {
 
       Node(size_t id, const Variable cvar, const std::string word,
            SparqlTriple t)
-          : id_(id),
-            // TODO<joka921> What is this triple used for? If it is just a
-            // dummy, then we can replace it by a `variant<Triple,
-            // TextNodeData>`.
-            triple_(std::move(t)),
-            cvar_(std::move(cvar)),
-            wordPart_(std::move(word)) {
-        _variables.insert(cvar_.value());
-        if (isVariable(triple_._s)) {
-          _variables.insert(triple_._s.getVariable());
-        }
-        if (isVariable(triple_._p)) {
-          _variables.insert(Variable{triple_._p._iri});
-        }
-        if (isVariable(triple_._o)) {
-          _variables.insert(triple_._o.getVariable());
-        }
+          : Node(id, std::move(t)) {
+        cvar_ = std::move(cvar);
+        wordPart_ = std::move(word);
       }
 
       Node(const Node& other) = default;
