@@ -377,7 +377,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                          "the bigger tables keeps getting bigger.`.",
                          &configVariables_.smallerTableAmountRows_, 1000UL);
 
-    constexpr size_t minBiggerTableRowsDefault = 100000;
+    constexpr size_t minBiggerTableRowsDefault = 100000UL;
     decltype(auto) minBiggerTableRows = config.addOption(
         "minBiggerTableRows",
         "The minimum amount of rows for the bigger `IdTable` in benchmarking "
@@ -446,8 +446,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         config.addOption("maxMemory",
                          "Max amount of memory that any `IdTable` is allowed "
                          "to take up. `0` for "
-                         "unlimited memory. Example: 4kB, 8MB, 24 B, etc. ...",
-                         &configVariables_.configVariableMaxMemory_, "0 B"s);
+                         "unlimited memory. Example: 4kB, 8MB, 24B, etc. ...",
+                         &configVariables_.configVariableMaxMemory_, "0B"s);
 
     decltype(auto) maxTimeSingleMeasurement = config.addOption(
         "maxTimeSingleMeasurement",
@@ -922,17 +922,17 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     We negate the second clause, transform it into an overflow safe expression
     and get our if clause.
     */
-    auto throwFloatCastOverflowError = [](std::string reason) {
+    auto throwDoubleCastOverflowError = [](std::string reason) {
       throw std::runtime_error(absl::StrCat(
           "Float overflow error: The ", reason,
-          " is bigger than the float type maximum ",
-          std::numeric_limits<float>::max(),
+          " is bigger than the double type maximum ",
+          std::numeric_limits<double>::max(),
           ". Try reducing the values for the configuration options."));
     };
-    if (static_cast<float>(smallerTableAmountRows) >
-        std::floor(std::numeric_limits<float>::max()) /
+    if (static_cast<double>(smallerTableAmountRows) >
+        std::floor(std::numeric_limits<double>::max()) /
             smallerTableJoinColumnSampleSizeRatio) {
-      throwFloatCastOverflowError(
+      throwDoubleCastOverflowError(
           absl::StrCat("multiplication of the number of smaller table rows (",
                        smallerTableAmountRows,
                        ") with 'smallerTableJoinColumnSampleSizeRatio' (",
@@ -940,14 +940,14 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     }
     const size_t smallerTableJoinColumnUpperBound =
         static_cast<size_t>(
-            std::ceil(static_cast<float>(smallerTableAmountRows) *
+            std::ceil(static_cast<double>(smallerTableAmountRows) *
                       smallerTableJoinColumnSampleSizeRatio)) -
         1;
 
     // Check for overflow.
     if (smallerTableJoinColumnUpperBound >
         std::numeric_limits<size_t>::max() - 1) {
-      throwFloatCastOverflowError(
+      throwDoubleCastOverflowError(
           absl::StrCat("multiplication of the number of smaller table rows (",
                        smallerTableAmountRows,
                        ") with 'smallerTableJoinColumnSampleSizeRatio' (",
@@ -962,16 +962,16 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     and also use the same trick as with `smallerTableJoinColumnUpperBound` to
     check, that `std::ceil(...)` is neither overflow, nor underflow.
     */
-    if (static_cast<float>(smallerTableAmountRows) >
-        std::numeric_limits<float>::max() / static_cast<float>(ratioRows)) {
-      throwFloatCastOverflowError(
+    if (static_cast<double>(smallerTableAmountRows) >
+        std::numeric_limits<double>::max() / static_cast<double>(ratioRows)) {
+      throwDoubleCastOverflowError(
           absl::StrCat(" the number of bigger table rows (",
                        smallerTableAmountRows * ratioRows, ")"));
-    } else if (static_cast<float>(smallerTableAmountRows) *
-                   static_cast<float>(ratioRows) >
-               std::floor(std::numeric_limits<float>::max()) /
+    } else if (static_cast<double>(smallerTableAmountRows) *
+                   static_cast<double>(ratioRows) >
+               std::floor(std::numeric_limits<double>::max()) /
                    biggerTableJoinColumnSampleSizeRatio) {
-      throwFloatCastOverflowError(
+      throwDoubleCastOverflowError(
           absl::StrCat("multiplication of the number of bigger table rows (",
                        smallerTableAmountRows * ratioRows,
                        ") with 'biggerTableJoinColumnSampleSizeRatio' (",
@@ -979,25 +979,29 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     } else if (biggerTableJoinColumnLowerBound - 1 >
                std::numeric_limits<size_t>::max() -
                    static_cast<size_t>(
-                       std::ceil(static_cast<float>(smallerTableAmountRows) *
-                                 static_cast<float>(ratioRows) *
+                       std::ceil(static_cast<double>(smallerTableAmountRows) *
+                                 static_cast<double>(ratioRows) *
                                  biggerTableJoinColumnSampleSizeRatio))) {
-      throwFloatCastOverflowError(
-          absl::StrCat("multiplication of the number of smaller table rows (",
-                       smallerTableAmountRows,
-                       ") with 'smallerTableJoinColumnSampleSizeRatio' (",
-                       smallerTableJoinColumnSampleSizeRatio,
-                       "), minus 1, plus multiplication of the number of "
-                       "bigger table rows (",
-                       smallerTableAmountRows * ratioRows,
-                       ") with 'biggerTableJoinColumnSampleSizeRatio' (",
-                       biggerTableJoinColumnSampleSizeRatio, ")"));
+      throw std::runtime_error(absl::StrCat(
+          "size_t overflow error: The multiplication (rounded up) of the "
+          "number of smaller table rows (",
+          smallerTableAmountRows,
+          ") with 'smallerTableJoinColumnSampleSizeRatio' (",
+          smallerTableJoinColumnSampleSizeRatio,
+          "), minus 1, added to the multiplication (rounded up) of the number "
+          "of bigger table rows (",
+          smallerTableAmountRows * ratioRows,
+          ") with 'biggerTableJoinColumnSampleSizeRatio' (",
+          biggerTableJoinColumnSampleSizeRatio,
+          ") is bigger than the size_t type maximum ",
+          std::numeric_limits<size_t>::max(),
+          ". Try reducing the values for the configuration options."));
     }
     const size_t biggerTableJoinColumnUpperBound =
         biggerTableJoinColumnLowerBound +
         static_cast<size_t>(
-            std::ceil(static_cast<float>(smallerTableAmountRows) *
-                      static_cast<float>(ratioRows) *
+            std::ceil(static_cast<double>(smallerTableAmountRows) *
+                      static_cast<double>(ratioRows) *
                       biggerTableJoinColumnSampleSizeRatio)) -
         1;
 
