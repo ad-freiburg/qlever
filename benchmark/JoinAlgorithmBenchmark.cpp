@@ -16,6 +16,7 @@
 #include <functional>
 #include <limits>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -43,6 +44,7 @@
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
+#include "util/StringUtils.h"
 #include "util/TypeTraits.h"
 
 using namespace std::string_literals;
@@ -270,6 +272,8 @@ struct ConfigVariables {
   size_t smallerTableAmountColumns_;
   size_t biggerTableAmountColumns_;
   float overlapChance_;
+  float smallerTableJoinColumnSampleSizeRatio_;
+  float biggerTableJoinColumnSampleSizeRatio_;
   size_t minRatioRows_;
   size_t maxRatioRows_;
 
@@ -400,6 +404,21 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "the same value as an entry in the join column of the bigger "
         "`IdTable`. Must be in the range $(0,100]$.",
         &configVariables_.overlapChance_, 42.f);
+
+    decltype(auto) smallerTableSampleSizeRatio = config.addOption(
+        "smallerTableJoinColumnSampleSizeRatio",
+        "Join column entries of the smaller tables are picked from a sample "
+        "space with size `Amount of smaller table rows` via discrete uniform "
+        "distribution. This option adjusts the size to `Amount of rows * "
+        "ratio` (rounded up), which affects the possibility of duplicates.",
+        &configVariables_.smallerTableJoinColumnSampleSizeRatio_, 1.f);
+    decltype(auto) biggerTableSampleSizeRatio = config.addOption(
+        "biggerTableJoinColumnSampleSizeRatio",
+        "Join column entries of the bigger tables are picked from a sample "
+        "space with size `Amount of bigger table rows` via discrete uniform "
+        "distribution. This option adjusts the size to `Amount of rows * "
+        "ratio` (rounded up), which affects the possibility of duplicates.",
+        &configVariables_.biggerTableJoinColumnSampleSizeRatio_, 1.f);
 
     decltype(auto) randomSeed = config.addOption(
         "randomSeed",
@@ -568,10 +587,20 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                         biggerTableAmountColumns);
 
     // Is `overlapChance_` bigger than 0?
-    config.addValidator(generateBiggerEqualLambda(0UL, false),
+    config.addValidator(generateBiggerEqualLambda(0.f, false),
                         "'overlapChance' must be bigger than 0.",
                         "'overlapChance' must be bigger than 0.",
                         overlapChance);
+
+    // Are the sample size ratios bigger than 0?
+    config.addValidator(generateBiggerEqualLambda(0.f, false),
+                        "'smallerTableSampleSizeRatio' must be bigger than 0.",
+                        "'smallerTableSampleSizeRatio' must be bigger than 0.",
+                        smallerTableSampleSizeRatio);
+    config.addValidator(generateBiggerEqualLambda(0.f, false),
+                        "'biggerTableSampleSizeRatio' must be bigger than 0.",
+                        "'biggerTableSampleSizeRatio' must be bigger than 0.",
+                        biggerTableSampleSizeRatio);
 
     /*
     Is `randomSeed_` smaller/equal than the max value for seeds?
@@ -589,7 +618,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
     // Is `maxTimeSingleMeasurement` a positive number?
     config.addValidator(
-        generateBiggerEqualLambda(0UL, true),
+        generateBiggerEqualLambda(0.f, true),
         "'maxTimeSingleMeasurement' must be bigger than, or equal to, 0.",
         "'maxTimeSingleMeasurement' must be bigger than, or equal to, 0.",
         maxTimeSingleMeasurement);
@@ -679,11 +708,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   should the bigger/smaller tables have?
   @param smallerTableJoinColumnSampleSizeRatio,
   biggerTableJoinColumnSampleSizeRatio The join column of the tables normally
-  get random entries out of a sample size with the same amount of possible
+  get random entries out of a sample space with the same amount of possible
   numbers as there are rows in the table. (With every number having the same
-  chance to be picked.) This adjusts the number of elements in the sample
-  size to `Amount of rows * ratio`, which affects the possibility of
-  duplicates. Important: `Amount of rows * ratio` must be a natural number.
+  chance to be picked.) This adjusts the number of elements in the sample size
+  to `Amount of rows * ratio`, which affects the possibility of duplicates.
    */
   template <isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<size_t> T2,
             isTypeOrGrowthFunction<size_t> T3,
@@ -699,8 +727,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       const bool biggerTableSorted, const T2& ratioRows,
       const T3& smallerTableAmountRows, const T4& smallerTableAmountColumns,
       const T5& biggerTableAmountColumns,
-      const T6& smallerTableJoinColumnSampleSizeRatio = 1.0,
-      const T7& biggerTableJoinColumnSampleSizeRatio = 1.0) {
+      const T6& smallerTableJoinColumnSampleSizeRatio,
+      const T7& biggerTableJoinColumnSampleSizeRatio) {
     // Is something a growth function?
     constexpr auto isGrowthFunction = []<typename T>() {
       /*
@@ -837,8 +865,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       const size_t& smallerTableAmountRows,
       const size_t& smallerTableAmountColumns,
       const size_t& biggerTableAmountColumns,
-      const float smallerTableJoinColumnSampleSizeRatio = 1.0,
-      const float biggerTableJoinColumnSampleSizeRatio = 1.0) {
+      const float smallerTableJoinColumnSampleSizeRatio,
+      const float biggerTableJoinColumnSampleSizeRatio) {
     // Checking, if smallerTableJoinColumnSampleSizeRatio and
     // biggerTableJoinColumnSampleSizeRatio are floats bigger than 0. Otherwise
     // , they don't make sense.
@@ -873,19 +901,104 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     of natural numbers has $b - a + 1$ elements.
     */
     const size_t smallerTableJoinColumnLowerBound = 0;
+    /*
+    Check for overflow, before calculating `smallerTableJoinColumnUpperBound`.
+
+    Short math explanation: Because `size_t` is bigger than `float`,
+    `static_cast<size_t>(...) - 1` can never be cause for an overflow. Because
+    `smallerTableJoinColumnSampleSizeRatio` is always bigger than `0`,
+    `static_cast<size_t>(std::ceil(...))` is also always `>=1` and can never
+    cause an underflow. So, `static_cast<size_t>(...) - 1` can be safely
+    ignored.
+
+    `std::ceil(...)` however, can have a overflow.
+    If there is no overflow
+    `std::ceil(static_cast<float>(smallerTableAmountRows) *
+    smallerTableJoinColumnSampleSizeRatio) <=
+    std::floor(std::numeric_limits<float>::max())` must be true. Which is true,
+    iff, `static_cast<float>(smallerTableAmountRows) *
+    smallerTableJoinColumnSampleSizeRatio <=
+    std::floor(std::numeric_limits<float>::max())` is true.
+    We negate the second clause, transform it into an overflow safe expression
+    and get our if clause.
+    */
+    auto throwFloatCastOverflowError = [](std::string reason) {
+      throw std::runtime_error(absl::StrCat(
+          "Float overflow error: The ", reason,
+          " is bigger than the float type maximum ",
+          std::numeric_limits<float>::max(),
+          ". Try reducing the values for the configuration options."));
+    };
+    if (static_cast<float>(smallerTableAmountRows) >
+        std::floor(std::numeric_limits<float>::max()) /
+            smallerTableJoinColumnSampleSizeRatio) {
+      throwFloatCastOverflowError(
+          absl::StrCat("multiplication of the number of smaller table rows (",
+                       smallerTableAmountRows,
+                       ") with 'smallerTableJoinColumnSampleSizeRatio' (",
+                       smallerTableJoinColumnSampleSizeRatio, ")"));
+    }
     const size_t smallerTableJoinColumnUpperBound =
         static_cast<size_t>(
-            std::floor(static_cast<float>(smallerTableAmountRows) *
-                       smallerTableJoinColumnSampleSizeRatio)) -
+            std::ceil(static_cast<float>(smallerTableAmountRows) *
+                      smallerTableJoinColumnSampleSizeRatio)) -
         1;
+
+    // Check for overflow.
+    if (smallerTableJoinColumnUpperBound >
+        std::numeric_limits<size_t>::max() - 1) {
+      throwFloatCastOverflowError(
+          absl::StrCat("multiplication of the number of smaller table rows (",
+                       smallerTableAmountRows,
+                       ") with 'smallerTableJoinColumnSampleSizeRatio' (",
+                       smallerTableJoinColumnSampleSizeRatio, "), plus 1,"));
+    }
     const size_t biggerTableJoinColumnLowerBound =
         smallerTableJoinColumnUpperBound + 1;
+
+    /*
+    Check for overflow, before calculating `biggerTableJoinColumnUpperBound`.
+    Short math explanation: I check the Intermediate results, before using them,
+    and also use the same trick as with `smallerTableJoinColumnUpperBound` to
+    check, that `std::ceil(...)` is neither overflow, nor underflow.
+    */
+    if (static_cast<float>(smallerTableAmountRows) >
+        std::numeric_limits<float>::max() / static_cast<float>(ratioRows)) {
+      throwFloatCastOverflowError(
+          absl::StrCat(" the number of bigger table rows (",
+                       smallerTableAmountRows * ratioRows, ")"));
+    } else if (static_cast<float>(smallerTableAmountRows) *
+                   static_cast<float>(ratioRows) >
+               std::floor(std::numeric_limits<float>::max()) /
+                   biggerTableJoinColumnSampleSizeRatio) {
+      throwFloatCastOverflowError(
+          absl::StrCat("multiplication of the number of bigger table rows (",
+                       smallerTableAmountRows * ratioRows,
+                       ") with 'biggerTableJoinColumnSampleSizeRatio' (",
+                       biggerTableJoinColumnSampleSizeRatio, ")"));
+    } else if (biggerTableJoinColumnLowerBound - 1 >
+               std::numeric_limits<size_t>::max() -
+                   static_cast<size_t>(
+                       std::ceil(static_cast<float>(smallerTableAmountRows) *
+                                 static_cast<float>(ratioRows) *
+                                 biggerTableJoinColumnSampleSizeRatio))) {
+      throwFloatCastOverflowError(
+          absl::StrCat("multiplication of the number of smaller table rows (",
+                       smallerTableAmountRows,
+                       ") with 'smallerTableJoinColumnSampleSizeRatio' (",
+                       smallerTableJoinColumnSampleSizeRatio,
+                       "), minus 1, plus multiplication of the number of "
+                       "bigger table rows (",
+                       smallerTableAmountRows * ratioRows,
+                       ") with 'biggerTableJoinColumnSampleSizeRatio' (",
+                       biggerTableJoinColumnSampleSizeRatio, ")"));
+    }
     const size_t biggerTableJoinColumnUpperBound =
         biggerTableJoinColumnLowerBound +
         static_cast<size_t>(
-            std::floor(static_cast<float>(smallerTableAmountRows) *
-                       static_cast<float>(ratioRows) *
-                       biggerTableJoinColumnSampleSizeRatio)) -
+            std::ceil(static_cast<float>(smallerTableAmountRows) *
+                      static_cast<float>(ratioRows) *
+                      biggerTableJoinColumnSampleSizeRatio)) -
         1;
 
     // Seeds for the random generators, so that things are less similiar between
@@ -1055,7 +1168,9 @@ class BmOnlyBiggerTableSizeChanges final
             biggerTableSorted, growthFunction,
             getConfigVariables().smallerTableAmountRows_,
             getConfigVariables().smallerTableAmountColumns_,
-            getConfigVariables().biggerTableAmountColumns_);
+            getConfigVariables().biggerTableAmountColumns_,
+            getConfigVariables().smallerTableJoinColumnSampleSizeRatio_,
+            getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
 
         // Add the metadata, that changes with every call and can't be
         // generalized.
@@ -1072,6 +1187,12 @@ class BmOnlyBiggerTableSizeChanges final
     BenchmarkMetadata meta{};
 
     meta.addKeyValuePair("Value changing with every row", "ratioRows");
+    meta.addKeyValuePair(
+        "smallerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
+    meta.addKeyValuePair(
+        "biggerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
     meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
     meta.addKeyValuePair("randomSeed", getConfigVariables().randomSeed().get());
     meta.addKeyValuePair("smallerTableAmountRows",
@@ -1123,7 +1244,9 @@ class BmOnlySmallerTableSizeChanges final
               getConfigVariables().randomSeed(), smallerTableSorted,
               biggerTableSorted, ratioRows, growthFunction,
               getConfigVariables().smallerTableAmountColumns_,
-              getConfigVariables().biggerTableAmountColumns_);
+              getConfigVariables().biggerTableAmountColumns_,
+              getConfigVariables().smallerTableJoinColumnSampleSizeRatio_,
+              getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
 
           // Add the metadata, that changes with every call and can't be
           // generalized.
@@ -1141,6 +1264,12 @@ class BmOnlySmallerTableSizeChanges final
 
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableAmountRows");
+    meta.addKeyValuePair(
+        "smallerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
+    meta.addKeyValuePair(
+        "biggerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
     meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
     meta.addKeyValuePair("randomSeed", getConfigVariables().randomSeed().get());
     meta.addKeyValuePair("smallerTableAmountColumns",
@@ -1184,7 +1313,9 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
             getConfigVariables().randomSeed(), smallerTableSorted,
             biggerTableSorted, 1UL, growthFunction,
             getConfigVariables().smallerTableAmountColumns_,
-            getConfigVariables().biggerTableAmountColumns_);
+            getConfigVariables().biggerTableAmountColumns_,
+            getConfigVariables().smallerTableJoinColumnSampleSizeRatio_,
+            getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
 
         // Add the metadata, that changes with every call and can't be
         // generalized.
@@ -1202,6 +1333,12 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableAmountRows");
+    meta.addKeyValuePair(
+        "smallerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
+    meta.addKeyValuePair(
+        "biggerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
     meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
     meta.addKeyValuePair("randomSeed", getConfigVariables().randomSeed().get());
     meta.addKeyValuePair("ratioRows", 1);
