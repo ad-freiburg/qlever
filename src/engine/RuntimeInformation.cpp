@@ -43,13 +43,12 @@ void RuntimeInformation::formatDetailValue(std::ostream& out,
                                            std::string_view key,
                                            const nlohmann::json& value) {
   using enum nlohmann::json::value_t;
-  // We want to print doubles with fixed precision and stream ints as their
-  // native type so they get thousands separators. For everything else we
-  // let nlohmann::json handle it.
+  // We want to print doubles and ints as their native type so they get
+  // thousands separators. For everything else we let nlohmann::json handle it.
   if (value.type() == number_float) {
-    out << ad_utility::to_string(value.get<double>(), 2);
+    out << value.get<double>();
   } else if (value.type() == number_unsigned) {
-    out << value.template get<uint64_t>();
+    out << value.get<uint64_t>();
   } else if (value.type() == number_integer) {
     out << value.get<int64_t>();
   } else {
