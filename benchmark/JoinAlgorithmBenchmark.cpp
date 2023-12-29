@@ -1071,8 +1071,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     table->addMeasurement(
         rowIdx, toUnderlying(GeneratedTableColumn::TimeForHashJoin),
         [&smallerTable, &biggerTable, &hashJoinLambda]() {
-          useJoinFunctionOnIdTables(smallerTable, biggerTable, hashJoinLambda)
-              .numRows();
+          useJoinFunctionOnIdTables(smallerTable, biggerTable, hashJoinLambda);
         });
     if (isOverMaxTime(GeneratedTableColumn::TimeForHashJoin)) {
       return false;
@@ -1102,8 +1101,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     table->addMeasurement(
         rowIdx, toUnderlying(GeneratedTableColumn::TimeForMergeGallopingJoin),
         [&smallerTable, &biggerTable, &joinLambda]() {
-          useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
-              .numRows();
+          useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda);
         });
     if (isOverMaxTime(GeneratedTableColumn::TimeForMergeGallopingJoin)) {
       return false;
