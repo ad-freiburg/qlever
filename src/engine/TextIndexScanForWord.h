@@ -16,13 +16,9 @@ class TextIndexScanForWord : public Operation {
   TextIndexScanForWord(QueryExecutionContext* qec, Variable textRecordVar,
                        string word);
 
-  Variable textRecordVar() const {
-    return textRecordVar_;
-  }
+  Variable textRecordVar() const { return textRecordVar_; }
 
-  std::string word() const {
-    return word_;
-  }
+  std::string word() const { return word_; }
 
   virtual ~TextIndexScanForWord() = default;
 

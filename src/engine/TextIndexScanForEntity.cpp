@@ -7,18 +7,17 @@ TextIndexScanForEntity::TextIndexScanForEntity(
     : Operation(qec),
       textRecordVar_(std::move(textRecordVar)),
       entity_(VarOrFixedEntity(qec, entity)),
-      word_(std::move(word)),
-      hasFixedEntity_(std::holds_alternative<std::string>(entity)) {}
+      word_(std::move(word)) {}
 
 // _____________________________________________________________________________
 ResultTable TextIndexScanForEntity::computeResult() {
   IdTable idTable = getExecutionContext()->getIndex().getEntityMentionsForWord(
       word_, getExecutionContext()->getAllocator());
 
-  if (hasFixedEntity_) {
+  if (hasFixedEntity()) {
     auto beginErase =
-        remove_if(idTable.begin(), idTable.end(), [this](const auto& row) {
-          return row[1].getVocabIndex() != entity_.fixedEntity_.second;
+        std::remove_if(idTable.begin(), idTable.end(), [this](const auto& row) {
+          return row[1].getVocabIndex() != entity_.index_;
         });
     idTable.erase(beginErase, idTable.end());
     idTable.setColumnSubset(std::vector<ColumnIndex>{0, 2});
@@ -36,24 +35,24 @@ VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
     ++index;
   };
   addDefinedVar(textRecordVar_);
-  if (hasFixedEntity_) {
-    addDefinedVar(textRecordVar_.getScoreVariable(
-        entity_.fixedEntity_.first));
+  if (hasFixedEntity()) {
+    addDefinedVar(
+        textRecordVar_.getScoreVariable(entity_.fixedEntity_.value()));
   } else {
-    addDefinedVar(entity_.entityVar_);
-    addDefinedVar(textRecordVar_.getScoreVariable(entity_.entityVar_));
+    addDefinedVar(entity_.entityVar_.value());
+    addDefinedVar(textRecordVar_.getScoreVariable(entity_.entityVar_.value()));
   }
   return vcmap;
 }
 
 // _____________________________________________________________________________
 size_t TextIndexScanForEntity::getResultWidth() const {
-  return 2 + !hasFixedEntity_;
+  return 2 + !hasFixedEntity();
 }
 
 // _____________________________________________________________________________
 size_t TextIndexScanForEntity::getCostEstimate() {
-  if (hasFixedEntity_) {
+  if (hasFixedEntity()) {
     return 2 * getExecutionContext()->getIndex().getEntitySizeEstimate(word_);
   } else {
     return getExecutionContext()->getIndex().getEntitySizeEstimate(word_);
@@ -62,7 +61,7 @@ size_t TextIndexScanForEntity::getCostEstimate() {
 
 // _____________________________________________________________________________
 size_t TextIndexScanForEntity::getSizeEstimateBeforeLimit() {
-  if (hasFixedEntity_) {
+  if (hasFixedEntity()) {
     return getExecutionContext()->getIndex().getAverageNofEntityContexts();
   } else {
     return getExecutionContext()->getIndex().getEntitySizeEstimate(word_);
@@ -89,8 +88,7 @@ string TextIndexScanForEntity::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "ENTITY INDEX SCAN FOR WORD: "
      << " with word: \"" << word_ << "\" and fixed-entity: \""
-     << (hasFixedEntity_ ? entity_.fixedEntity_.first
-                          : "no fixed-entity")
+     << (hasFixedEntity() ? entity_.fixedEntity_.value() : "no fixed-entity")
      << " \"";
   ;
   return std::move(os).str();

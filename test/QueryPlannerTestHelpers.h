@@ -90,28 +90,22 @@ inline auto IndexScan =
 
 inline auto TextIndexScanForWord = [](Variable textRecordVar,
                                       string word) -> QetMatcher {
-  std::string wordAndTextVar = absl::StrCat(
-      "TextIndexScanForWord on ", textRecordVar.name(), " with word ", word);
   return RootOperation<::TextIndexScanForWord>(AllOf(
       AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
                   Eq(1 + word.ends_with('*'))),
-      AD_PROPERTY(::TextIndexScanForWord, getDescriptor, Eq(wordAndTextVar))));
+      AD_PROPERTY(::TextIndexScanForWord, textRecordVar, Eq(textRecordVar)),
+      AD_PROPERTY(::TextIndexScanForWord, word, word)));
 };
 
 inline auto TextIndexScanForEntity =
     [](Variable textRecordVar, std::variant<Variable, std::string> entity,
        string word) -> QetMatcher {
-  std::string wordAndEntityAndTextVar = absl::StrCat(
-      "TextIndexScanForEntity on text-variable ", textRecordVar.name(), " and ",
-      (std::holds_alternative<std::string>(entity)
-           ? ("fixed-entity " + std::get<std::string>(entity))
-           : ("entity-variable " + std::get<Variable>(entity).name())),
-      " with word ", word);
-  return RootOperation<::TextIndexScanForEntity>(
-      AllOf(AD_PROPERTY(::TextIndexScanForEntity, getResultWidth,
-                        Eq(2 + std::holds_alternative<Variable>(entity))),
-            AD_PROPERTY(::TextIndexScanForEntity, getDescriptor,
-                        Eq(wordAndEntityAndTextVar))));
+  return RootOperation<::TextIndexScanForEntity>(AllOf(
+      AD_PROPERTY(::TextIndexScanForEntity, getResultWidth,
+                  Eq(2 + std::holds_alternative<Variable>(entity))),
+      AD_PROPERTY(::TextIndexScanForEntity, textRecordVar, Eq(textRecordVar)),
+      AD_PROPERTY(::TextIndexScanForEntity, entity, Eq(entity)),
+      AD_PROPERTY(::TextIndexScanForEntity, word, word)));
 };
 
 inline auto Bind = [](const QetMatcher& childMatcher,

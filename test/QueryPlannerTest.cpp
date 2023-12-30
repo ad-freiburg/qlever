@@ -383,96 +383,40 @@ TEST(QueryExecutionTreeTest, testBooksGermanAwardNomAuth) {
                         scan("?x", "<Author>", "?y"),
                         scan("?y", "<is-a>", "<Award-Nominated_Work>")));
 }
-/*
 
 TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
-  ParsedQuery pq = SparqlParser::parseQuery(
-      "SELECT ?a \n "
-      "WHERE  {?a <is-a> <Plant> . ?c ql:contains-entity ?a. "
-      "?c ql:contains-word \"edible leaves\"} TEXTLIMIT 5");
-  QueryPlanner qp(nullptr);
-  QueryPlanner::TripleGraph tg =
-      qp.createTripleGraph(&pq.children()[0].getBasic());
-  ASSERT_EQ(1u, tg._nodeMap.find(0)->second->_variables.size());
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(
-      "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
-      "\"edible leaves\" and 1 variables with textLimit = 5 "
-      "filtered by\n  {\n    SCAN POS with P = \"<is-a>\", "
-      "O = \"<Plant>\"\n    qet-width: 1 \n  }\n   filtered on "
-      "column 0\n  qet-width: 3 \n}",
-      qet.getCacheKey());
-}
-
-TEST(QueryExecutionTreeTest, testTextQuerySE) {
-  ParsedQuery pq = SparqlParser::parseQuery(
-      "SELECT ?c \n "
-      "WHERE  {?c ql:contains-word \"search engine\"}");
-  QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(absl::StrCat(
-                "{\n  TEXT OPERATION WITHOUT FILTER: co-occurrence with words:",
-                " \"search engine\" and 0 variables with textLimit = ",
-                TEXT_LIMIT_DEFAULT, "\n", "  qet-width: 2 \n}"),
-            qet.getCacheKey());
-}
-
-TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
-  ParsedQuery pq = SparqlParser::parseQuery(
-      "PREFIX : <>\n"
-      "SELECT ?x ?y ?c\n "
-      "WHERE \t {"
-      "?x :Place_of_birth ?y ."
-      "?y :Contained_by :Europe ."
-      "?c ql:contains-entity ?x ."
-      "?c ql:contains-word \"cocaine\" ."
-      "} TEXTLIMIT 1");
-  QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(
-      "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
-      "\"cocaine\" and 1 variables with textLimit = 1 filtered by\n  "
-      "{\n    JOIN\n    {\n      SCAN POS with P = \"<Contained_by>\", "
-      "O = \"<Europe>\"\n      qet-width: 1 \n    } join-column: [0]\n"
-      "    |X|\n    {\n      SCAN POS with P = \"<Place_of_birth>\"\n"
-      "      qet-width: 2 \n    } join-column: [0]\n    qet-width: 2 \n"
-      "  }\n   filtered on column 1\n  qet-width: 4 \n}",
-      qet.getCacheKey());
-  auto c = Variable{"?c"};
-  ASSERT_EQ(0u, qet.getVariableColumn(c));
-  ASSERT_EQ(1u, qet.getVariableColumn(c.getTextScoreVariable()));
-  ASSERT_EQ(2u, qet.getVariableColumn(Variable{"?y"}));
+  auto scan = h::IndexScanFromStrings;
+  auto wordScan = h::TextIndexScanForWord;
+  auto entityScan = h::TextIndexScanForEntity;
+  h::expect(
+      "SELECT ?a WHERE  {?a <is-a> <Plant> . ?c ql:contains-entity ?a. ?c "
+      "ql:contains-word \"edible leaves\"}",
+      h::UnorderedJoins(scan("?a", "<is-a>", "<Plant>"),
+                        wordScan(Var{"?c"}, "edible"),
+                        wordScan(Var{"?c"}, "leaves"),
+                        entityScan(Var{"?c"}, Var{"?a"}, "edible")));
 }
 
 TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
-  ParsedQuery pq = SparqlParser::parseQuery(
-      "PREFIX : <>"
-      "SELECT ?x ?y WHERE {"
-      "?x :is-a :Politician ."
-      "?c ql:contains-entity ?x ."
-      "?c ql:contains-word \"friend*\" ."
-      "?c ql:contains-entity ?y ."
-      "} TEXTLIMIT 1");
-  QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(
-      "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
-      "\"friend*\" and 2 variables with textLimit = 1 filtered by\n"
-      "  {\n    SCAN POS with P = \"<is-a>\", O = \"<Politician>"
-      "\"\n    qet-width: 1 \n  }\n   filtered on column 0\n "
-      " qet-width: 5 \n}",
-      qet.getCacheKey());
-  auto c = Variable{"?c"};
-  ASSERT_EQ(0u, qet.getVariableColumn(c));
-  ASSERT_EQ(1u, qet.getVariableColumn(c.getTextScoreVariable()));
-  ASSERT_EQ(2u, qet.getVariableColumn(Variable{"?y"}));
-  ASSERT_EQ(3u, qet.getVariableColumn(Variable{"?x"}));
-  ASSERT_EQ(4u, qet.getVariableColumn(c.getMatchingWordVariable("friend")));
+  auto scan = h::IndexScanFromStrings;
+  auto wordScan = h::TextIndexScanForWord;
+  auto entityScan = h::TextIndexScanForEntity;
+  h::expect(
+      "PREFIX : <> SELECT ?x ?y WHERE { ?x :is-a :Politician . ?c "
+      "ql:contains-entity ?x . ?c ql:contains-word \"friend*\" . ?c "
+      "ql:contains-entity ?y }",
+      h::UnorderedJoins(scan("?x", "<is-a>", "<Politician>"),
+                        entityScan(Var{"?c"}, Var{"?x"}, "friend*"),
+                        wordScan(Var{"?c"}, "friend*"),
+                        entityScan(Var{"?c"}, Var{"?y"}, "friend*")));
 }
 
 TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
-  ParsedQuery pq = SparqlParser::parseQuery(
-      "SELECT ?p ?s \n "
+  auto scan = h::IndexScanFromStrings;
+  auto wordScan = h::TextIndexScanForWord;
+  auto entityScan = h::TextIndexScanForEntity;
+  h::expect(
+      "SELECT ?p ?s"
       "WHERE {"
       "?a <is-a> <Politician> . "
       "?c ql:contains-entity ?a ."
@@ -480,24 +424,16 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
       "?c ql:contains-entity ?s ."
       "?s <is-a> <Scientist> ."
       "?c2 ql:contains-entity ?s ."
-      "?c2 ql:contains-word \"manhattan project\"} TEXTLIMIT 1");
-  QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(
-      "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: \"manhattan "
-      "project\" and 1 variables with textLimit = 1 filtered by\n  {\n    "
-      "JOIN\n    {\n      SORT(internal) on columns:asc(2) \n      {\n        "
-      "TEXT OPERATION WITH FILTER: co-occurrence with words: \"friend*\" and 2 "
-      "variables with textLimit = 1 filtered by\n        {\n          SCAN POS "
-      "with P = \"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n    "
-      "    }\n         filtered on column 0\n        qet-width: 5 \n      }\n  "
-      "    qet-width: 5 \n    } join-column: [2]\n    |X|\n    {\n      SCAN "
-      "POS with P = \"<is-a>\", O = \"<Scientist>\"\n      qet-width: 1 \n    "
-      "} join-column: [0]\n    qet-width: 5 \n  }\n   filtered on column 2\n  "
-      "qet-width: 7 \n}",
-      qet.getCacheKey());
+      "?c2 ql:contains-word \"manhattan project\"}",
+      h::UnorderedJoins(scan("?a", "<is-a>", "<Politician>"),
+                        entityScan(Var{"?c"}, Var{"?a"}, "friend*"),
+                        wordScan(Var{"?c"}, "friend*"),
+                        entityScan(Var{"?c"}, Var{"?s"}, "friend*"),
+                        scan("?s", "<is-a>", "<Scientist>"),
+                        entityScan(Var{"?c2"}, Var{"?s"}, "manhattan"),
+                        wordScan(Var{"?c2"}, "manhattan"),
+                        wordScan(Var{"?c2"}, "project")));
 }
- */
 
 TEST(QueryExecutionTreeTest, testCyclicQuery) {
   ParsedQuery pq = SparqlParser::parseQuery(
@@ -852,18 +788,19 @@ TEST(QueryPlannerTest, TextIndexScanForWord) {
       "test\" . <a> <p> \"sentence for multiple words tests\" . "
       "<a> <p> \"testing and picking\"",
       true, true, true, 16_B, true);
+  auto wordScan = h::TextIndexScanForWord;
 
   h::expect("SELECT * WHERE { ?text ql:contains-word \"test*\" }",
-            h::TextIndexScanForWord(Var{"?text"}, "test*"), qec);
+            wordScan(Var{"?text"}, "test*"), qec);
 
   h::expect("SELECT * WHERE { ?text2 ql:contains-word \"test\" }",
-            h::TextIndexScanForWord(Var{"?text2"}, "test"), qec);
+            wordScan(Var{"?text2"}, "test"), qec);
 
   h::expect(
       "SELECT * WHERE { ?text2 ql:contains-word \"multiple words* test\" }",
-      h::Join(h::Join(h::TextIndexScanForWord(Var{"?text2"}, "test"),
-                      h::TextIndexScanForWord(Var{"?text2"}, "words*")),
-              h::TextIndexScanForWord(Var{"?text2"}, "multiple")),
+      h::UnorderedJoins(wordScan(Var{"?text2"}, "test"),
+                        wordScan(Var{"?text2"}, "words*"),
+                        wordScan(Var{"?text2"}, "multiple")),
       qec);
 }
 
@@ -871,24 +808,25 @@ TEST(QueryPlannerTest, TextIndexScanForWord) {
 TEST(QueryPlannerTest, TextIndexScanForEntity) {
   auto qec = ad_utility::testing::getQec(
       "<a> <p> \"this text contains some words and is part of the test\" . <a> "
-      "<p> \"testEntity\" . <a> <p> \"picking the right text can be a hard "
+      "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
       "test\" . <a> <p> \"only this text contains the word opti \" . "
       "<a> <p> \"testing and picking\"",
       true, true, true, 16_B, true);
 
+  auto wordScan = h::TextIndexScanForWord;
+  auto entityScan = h::TextIndexScanForEntity;
   h::expect(
       "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
       "ql:contains-word \"test*\" }",
-      h::Join(
-          h::TextIndexScanForWord(Var{"?text"}, "test*"),
-          h::TextIndexScanForEntity(Var{"?text"}, Var{"?scientist"}, "test*")),
+      h::Join(wordScan(Var{"?text"}, "test*"),
+              entityScan(Var{"?text"}, Var{"?scientist"}, "test*")),
       qec);
 
   h::expect(
       "SELECT * WHERE { ?text ql:contains-entity <testEntity> . ?text "
       "ql:contains-word \"test\" }",
-      h::Join(h::TextIndexScanForWord(Var{"?text"}, "test"),
-              h::TextIndexScanForEntity(Var{"?text"}, "<testEntity>", "test")),
+      h::Join(wordScan(Var{"?text"}, "test"),
+              entityScan(Var{"?text"}, "<testEntity>", "test")),
       qec);
 
   // NOTE: It is important that the TextIndexScanForEntity uses "opti", because
@@ -898,10 +836,9 @@ TEST(QueryPlannerTest, TextIndexScanForEntity) {
       "SELECT * WHERE { ?text ql:contains-word \"picking*\" . ?text "
       "ql:contains-entity <testEntity> . ?text ql:contains-word "
       "\"opti\" . ?text ql:contains-word \"testi*\"}",
-      h::Join(h::Join(h::Join(h::TextIndexScanForEntity(Var{"?text"},
-                                                        "<testEntity>", "opti"),
-                              h::TextIndexScanForWord(Var{"?text"}, "testi*")),
-                      h::TextIndexScanForWord(Var{"?text"}, "opti")),
-              h::TextIndexScanForWord(Var{"?text"}, "picking*")),
+      h::UnorderedJoins(entityScan(Var{"?text"}, "<testEntity>", "opti"),
+                        wordScan(Var{"?text"}, "testi*"),
+                        wordScan(Var{"?text"}, "opti"),
+                        wordScan(Var{"?text"}, "picking*")),
       qec);
 }

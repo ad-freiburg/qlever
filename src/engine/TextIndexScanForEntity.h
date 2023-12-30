@@ -10,35 +10,35 @@
 // fixed entity instead, it only returns entries that contain this entity.
 class TextIndexScanForEntity : public Operation {
  public:
-  union VarOrFixedEntity {
+  struct VarOrFixedEntity {
     VarOrFixedEntity(const QueryExecutionContext* qec,
-                     std::variant<Variable, std::string> entity) {
+                     const std::variant<Variable, std::string>& entity) {
       if (std::holds_alternative<std::string>(entity)) {
-        fixedEntity_.first = std::get<std::string>(entity);
-        bool success = qec->getIndex().getVocab().getId(fixedEntity_.first,
-                                                        &fixedEntity_.second);
+        fixedEntity_.emplace(std::get<std::string>(entity));
+        bool success =
+            qec->getIndex().getVocab().getId(fixedEntity_.value(), &index_);
         if (!success) {
           throw std::runtime_error(
-              "The entity " + fixedEntity_.first +
+              "The entity " + fixedEntity_.value() +
               " is not part of the underlying knowledge graph and can "
               "therefore "
               "not be used as the object of ql:contains-entity");
         }
       } else {
-        entityVar_ = std::get<Variable>(entity);
+        entityVar_.emplace(std::get<Variable>(entity));
       }
     }
     ~VarOrFixedEntity() {}
 
-    std::pair<std::string, VocabIndex> fixedEntity_;
-    Variable entityVar_;
+    std::optional<std::string> fixedEntity_ = std::nullopt;
+    VocabIndex index_;
+    std::optional<Variable> entityVar_ = std::nullopt;
   };
 
  private:
   const Variable textRecordVar_;
   const VarOrFixedEntity entity_;
   const string word_;
-  const bool hasFixedEntity_;
 
  public:
   TextIndexScanForEntity(QueryExecutionContext* qec, Variable textRecordVar,
@@ -46,15 +46,17 @@ class TextIndexScanForEntity : public Operation {
                          string word);
   virtual ~TextIndexScanForEntity() = default;
 
+  bool hasFixedEntity() const { return entity_.fixedEntity_.has_value(); };
+
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   Variable textRecordVar() const { return textRecordVar_; }
 
   std::variant<Variable, std::string> entity() const {
-    if (hasFixedEntity_) {
-      return entity_.fixedEntity_.first;
+    if (hasFixedEntity()) {
+      return entity_.fixedEntity_.value();
     } else {
-      return entity_.entityVar_;
+      return entity_.entityVar_.value();
     }
   }
 
