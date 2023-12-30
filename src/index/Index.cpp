@@ -123,13 +123,13 @@ std::string_view Index::wordIdToString(WordIndex wordIndex) const {
 }
 
 // ____________________________________________________________________________
-size_t Index::getWordSizeEstimate(const std::string& words) const {
-  return pimpl_->getWordSizeEstimate(words);
+size_t Index::getWordSizeEstimate(const std::string& word) const {
+  return pimpl_->getWordSizeEstimate(word);
 }
 
 // ____________________________________________________________________________
-size_t Index::getEntitySizeEstimate(const std::string& words) const {
-  return pimpl_->getEntitySizeEstimate(words);
+size_t Index::getEntitySizeEstimate(const std::string& word) const {
+  return pimpl_->getEntitySizeEstimate(word);
 }
 
 // ____________________________________________________________________________

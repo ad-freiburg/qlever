@@ -14,10 +14,6 @@
 namespace h = queryPlannerTestHelpers;
 using Var = Variable;
 
-namespace {
-auto lit = ad_utility::testing::tripleComponentLiteral;
-}
-
 TEST(QueryPlannerTest, createTripleGraph) {
   using TripleGraph = QueryPlanner::TripleGraph;
   using Node = QueryPlanner::TripleGraph::Node;

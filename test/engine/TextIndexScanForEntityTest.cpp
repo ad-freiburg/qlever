@@ -3,43 +3,28 @@
 #include "../IndexTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
+#include "./TextIndexScanTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "parser/ParsedQuery.h"
 
 using namespace ad_utility::testing;
 using ad_utility::source_location;
+namespace h = textIndexScanTestHelpers;
 
-string getTextFromResultTable(const QueryExecutionContext* qec,
-                              const ResultTable& result,
-                              const size_t& rowIndex) {
-  return qec->getIndex()
-      .idToOptionalString(
-          result.idTable().getColumn(0)[rowIndex].getVocabIndex())
-      .value();
-}
-
-string getEntityFromResultTable(const QueryExecutionContext* qec,
-                                const ResultTable& result,
-                                const size_t& rowIndex) {
-  return qec->getIndex()
-      .idToOptionalString(
-          result.idTable().getColumn(1)[rowIndex].getVocabIndex())
-      .value();
-}
+namespace {
+std::string kg =
+    "<a> <p> \"he failed the test\" . <a> <p> \"testing can help\" . <a> <p> "
+    "\"some other sentence\" . <b> <p> \"the test on friday was really hard\" "
+    ". <b> <x2> <x> . <b> <x2> <xb2> .";
 
 TEST(TextIndexScanForEntity, EntityScanBasic) {
-  auto qec = getQec(
-      "<a> <p> \"he failed the test\" . <b> <p> \"some other "
-      "sentence\" . <a> <p> \"testing can help\" . <b> <p> \"the test on "
-      "friday was really hard\" . <b> <x2> <x> . <b> <x2> <xb2> .",
-      true, true, true, 16_B, true);
+  auto qec = getQec(kg, true, true, true, 16_B, true);
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
   TextIndexScanForEntity s2{qec, Variable{"?text2"}, Variable{"?entityVar2"},
                             "test*"};
-  ASSERT_EQ(s1.getCacheKeyImpl(), s2.getCacheKeyImpl());
   ASSERT_EQ(s1.getResultWidth(), 3);
 
   auto result = s1.computeResultOnlyForTesting();
@@ -48,10 +33,12 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
 
   // NOTE: because of the way the graph above is constructed, the entities are
   // texts
-  ASSERT_EQ("\"he failed the test\"", getEntityFromResultTable(qec, result, 0));
-  ASSERT_EQ("\"testing can help\"", getEntityFromResultTable(qec, result, 1));
+  ASSERT_EQ("\"he failed the test\"",
+            h::getEntityFromResultTable(qec, result, 0));
+  ASSERT_EQ("\"testing can help\"",
+            h::getEntityFromResultTable(qec, result, 1));
   ASSERT_EQ("\"the test on friday was really hard\"",
-            getEntityFromResultTable(qec, result, 2));
+            h::getEntityFromResultTable(qec, result, 2));
 
   using enum ColumnIndexAndTypeInfo::UndefStatus;
   VariableToColumnMap expectedVariables{
@@ -60,19 +47,21 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
       {Variable{"?ql_score_text2_var_entityVar2"}, {2, AlwaysDefined}}};
   EXPECT_THAT(s2.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
+}
 
-  // fixed entity case
+TEST(TextIndexScanForEntity, FixedEntityScan) {
+  auto qec = getQec(kg, true, true, true, 16_B, true);
+
   string fixedEntity = "\"some other sentence\"";
   TextIndexScanForEntity s3{qec, Variable{"?text3"}, fixedEntity, "sentence"};
 
-  result = s3.computeResultOnlyForTesting();
+  auto result = s3.computeResultOnlyForTesting();
   ASSERT_EQ(s3.getResultWidth(), 2);
   ASSERT_EQ(result.width(), 2);
   ASSERT_EQ(result.size(), 1);
 
-  ASSERT_TRUE(s1.getCacheKeyImpl() != s3.getCacheKeyImpl());
-
-  expectedVariables = {
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  VariableToColumnMap expectedVariables = {
       {Variable{"?text3"}, {0, AlwaysDefined}},
       {Variable{
            "?ql_score_text3_fixedEntity__34_some_32_other_32_sentence_34_"},
@@ -80,17 +69,67 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
   EXPECT_THAT(s3.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 
-  ASSERT_EQ(fixedEntity, getTextFromResultTable(qec, result, 0));
-
-  fixedEntity = "\"new entity\"";
-  TextIndexScanForEntity s4{qec, Variable{"?text4"}, fixedEntity, "sentence"};
-  ASSERT_TRUE(s3.getCacheKeyImpl() != s4.getCacheKeyImpl());
+  ASSERT_EQ(fixedEntity, h::getTextRecordFromResultTable(qec, result, 0));
 
   fixedEntity = "\"he failed the test\"";
-  TextIndexScanForEntity s5{qec, Variable{"?text5"}, fixedEntity, "test*"};
-  result = s5.computeResultOnlyForTesting();
+  TextIndexScanForEntity s4{qec, Variable{"?text4"}, fixedEntity, "test*"};
+  result = s4.computeResultOnlyForTesting();
   ASSERT_EQ(result.width(), 2);
   ASSERT_EQ(result.size(), 1);
 
-  ASSERT_EQ(fixedEntity, getTextFromResultTable(qec, result, 0));
+  ASSERT_EQ(fixedEntity, h::getTextRecordFromResultTable(qec, result, 0));
 }
+
+TEST(TextIndexScanForEntity, CacheKeys) {
+  auto qec = getQec(kg, true, true, true, 16_B, true);
+
+  TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
+                            "test*"};
+  TextIndexScanForEntity s2{qec, Variable{"?text2"}, Variable{"?entityVar2"},
+                            "test*"};
+  ASSERT_EQ(s1.getCacheKeyImpl(), s2.getCacheKeyImpl());
+
+  TextIndexScanForEntity s3{qec, Variable{"?text3"}, Variable{"?entityVar"},
+                            "test"};
+  ASSERT_TRUE(s1.getCacheKeyImpl() != s3.getCacheKeyImpl());
+
+  TextIndexScanForEntity s4{qec, Variable{"?text4"}, Variable{"?entityVar"},
+                            "sentence*"};
+  ASSERT_TRUE(s1.getCacheKeyImpl() != s4.getCacheKeyImpl());
+
+  // fixed entity case
+  string fixedEntity = "\"some other sentence\"";
+  TextIndexScanForEntity s5{qec, Variable{"?text5"}, fixedEntity, "sentence"};
+  ASSERT_TRUE(s3.getCacheKeyImpl() != s5.getCacheKeyImpl());
+
+  TextIndexScanForEntity s6{qec, Variable{"?text6"}, fixedEntity, "sentence"};
+  ASSERT_EQ(s5.getCacheKeyImpl(), s6.getCacheKeyImpl());
+
+  string newFixedEntity = "\"he failed the test\"";
+  TextIndexScanForEntity s7{qec, Variable{"?text7"}, newFixedEntity,
+                            "sentence"};
+  ASSERT_TRUE(s5.getCacheKeyImpl() != s7.getCacheKeyImpl());
+}
+
+TEST(TextIndexScanForEntity, KnownEmpty) {
+  auto qec = getQec(kg, true, true, true, 16_B, true);
+
+  TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
+                            "nonExistentWord*"};
+  ASSERT_TRUE(s1.knownEmptyResult());
+
+  string fixedEntity = "\"non existent entity\"";
+  ASSERT_THROW(
+      TextIndexScanForEntity(qec, Variable{"?text"}, fixedEntity, "test*"),
+      std::runtime_error);
+
+  TextIndexScanForEntity s2{qec, Variable{"?text"}, Variable{"?entityVar"},
+                            "test*"};
+  ASSERT_TRUE(!s2.knownEmptyResult());
+
+  TextIndexScanForEntity s3{qec, Variable{"?text"}, Variable{"?entityVar"},
+                            "test"};
+  ASSERT_TRUE(!s3.knownEmptyResult());
+}
+
+}  // namespace

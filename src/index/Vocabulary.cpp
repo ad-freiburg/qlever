@@ -188,9 +188,9 @@ bool Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
   AD_CONTRACT_CHECK(word[word.size() - 1] == PREFIX_CHAR);
   auto prefixRange = prefix_range(word.substr(0, word.size() - 1));
   bool success = prefixRange.second > prefixRange.first;
-  *range = IdRange{prefixRange.first, prefixRange.second.decremented()};
 
   if (success) {
+    *range = IdRange{prefixRange.first, prefixRange.second.decremented()};
     AD_CONTRACT_CHECK(range->first().get() < internalVocabulary_.size());
     AD_CONTRACT_CHECK(range->last().get() < internalVocabulary_.size());
   }
