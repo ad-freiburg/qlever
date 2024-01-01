@@ -38,6 +38,7 @@
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
+#include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -50,6 +51,16 @@
 using namespace std::string_literals;
 
 namespace ad_benchmark {
+
+/*
+@brief Return true, iff, the given value is unchanged, when casting to type
+`Target`
+*/
+template <typename Target, typename Source>
+static constexpr bool isValuePreservingCast(const Source& source) {
+  return static_cast<Source>(static_cast<Target>(source)) == source;
+}
+
 /*
 @brief Creates an overlap between the join columns of the IdTables, by
 randomly overiding entries of the smaller table with entries of the bigger
@@ -377,12 +388,11 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                          "the bigger tables keeps getting bigger.`.",
                          &configVariables_.smallerTableNumRows_, 1000UL);
 
-    constexpr size_t minBiggerTableRowsDefault = 100000UL;
     decltype(auto) minBiggerTableRows = config.addOption(
         "minBiggerTableRows",
         "The minimum amount of rows for the bigger `IdTable` in benchmarking "
         "tables.",
-        &configVariables_.minBiggerTableRows_, minBiggerTableRowsDefault);
+        &configVariables_.minBiggerTableRows_, 100000UL);
     decltype(auto) maxBiggerTableRows = config.addOption(
         "maxBiggerTableRows",
         "The maximum amount of rows for the bigger `IdTable` in benchmarking "
@@ -634,6 +644,28 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                         "'minRatioRows' must be smaller than, or equal to, "
                         "'maxRatioRows'.",
                         minRatioRows, maxRatioRows);
+
+    // Can the options be cast to double, while keeping their values? (Needed
+    // for calculations later.)
+    const auto addCastableValidator =
+        [&config](ad_utility::ConstConfigOptionProxy<size_t> option) {
+          /*
+          As far as I know, it's compiler dependent, which type is bigger:
+          `size_t` or `double`.
+          */
+          const std::string descriptor{absl::StrCat(
+              "'", option.getConfigOption().getIdentifier(),
+              "' must preserve its value when casting to `double`.")};
+          config.addValidator(
+              [](const auto& val) {
+                return isValuePreservingCast<double>(val);
+              },
+              descriptor, descriptor, option);
+        };
+    std::ranges::for_each(
+        std::vector{smallerTableNumRows, minBiggerTableRows, maxBiggerTableRows,
+                    minRatioRows, maxRatioRows},
+        addCastableValidator);
   }
 
   /*
@@ -870,6 +902,11 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     AD_CONTRACT_CHECK(smallerTableJoinColumnSampleSizeRatio > 0);
     AD_CONTRACT_CHECK(biggerTableJoinColumnSampleSizeRatio > 0);
 
+    // Make sure, that things can be casted (in later calculations) without
+    // changing values.
+    AD_CORRECTNESS_CHECK(isValuePreservingCast<double>(smallerTableNumRows));
+    AD_CORRECTNESS_CHECK(isValuePreservingCast<double>(ratioRows));
+
     /*
     Check if the smaller and bigger `IdTable` are not to big. Size of the result
     table is only checked, if the configuration option for it was set.
@@ -1022,7 +1059,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         0};
 
     // The number of rows, that the joined `ItdTable`s end up having.
-    size_t numrRowsOfResult{0};
+    size_t numRowsOfResult{0};
 
     /*
     Creating overlap, if wanted.
@@ -1030,8 +1067,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     the `IdTable`s is disjunct.
     */
     if (overlap > 0) {
-      numrRowsOfResult = createOverlapRandomly(&smallerTable, biggerTable,
-                                               overlap, seeds.at(4));
+      numRowsOfResult = createOverlapRandomly(&smallerTable, biggerTable,
+                                              overlap, seeds.at(4));
     }
 
     /*
@@ -1041,7 +1078,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     if (const auto& maxMemory{getConfigVariables().maxMemory()};
         maxMemory.value_or(ad_utility::MemorySize::max()) <
         approximateMemoryNeededByIdTable(
-            numrRowsOfResult,
+            numRowsOfResult,
             smallerTableNumColumns + biggerTableNumColumns - 1)) {
       return false;
     }
@@ -1110,7 +1147,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // Adding the number of rows of the result.
     table->setEntry(rowIdx,
                     toUnderlying(GeneratedTableColumn::NumRowsOfJoinResult),
-                    numrRowsOfResult);
+                    numRowsOfResult);
     return true;
   }
 };
