@@ -12,6 +12,7 @@
 
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
 namespace detail {
@@ -28,8 +29,8 @@ to. Must be `ConfigOption`, or `const ConfigOption`.
 */
 template <typename T, typename ConfigOptionType>
 requires ad_utility::SameAsAnyTypeIn<T, ConfigOption::AvailableTypes> &&
-         (std::same_as<ConfigOptionType, ConfigOption> ||
-          std::same_as<ConfigOptionType, const ConfigOption>)
+         ad_utility::SameAsAny<ConfigOptionType, ConfigOption,
+                               const ConfigOption>
 class ConfigOptionProxyImplementation {
   ConfigOptionType* option_;
 
