@@ -495,21 +495,23 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     If not, return an `ErrorMessage`.
     */
     auto checkIfMaxMemoryBigEnoughForOneRow =
-        [](const ad_utility::MemorySize maxMemory,
-           const std::string_view tableName,
-           const size_t numColumns) -> std::optional<ad_utility::ErrorMessage> {
+        [&maxMemoryInStringFormat](const ad_utility::MemorySize maxMemory,
+                                   const std::string_view tableName,
+                                   const size_t numColumns)
+        -> std::optional<ad_utility::ErrorMessage> {
       const ad_utility::MemorySize memoryNeededForOneRow =
           approximateMemoryNeededByIdTable(1, numColumns);
       // Remember: `0` is for unlimited memory.
       if (maxMemory == 0_B || memoryNeededForOneRow <= maxMemory) {
         return std::nullopt;
       } else {
-        return std::make_optional<ad_utility::ErrorMessage>(
-            absl::StrCat("'maxMemory' (", maxMemory.asString(),
-                         ") must be big enough, for at least one row "
-                         "in the ",
-                         tableName, ", which requires at least ",
-                         memoryNeededForOneRow.asString(), "."));
+        return std::make_optional<ad_utility::ErrorMessage>(absl::StrCat(
+            "'", maxMemoryInStringFormat.getConfigOption().getIdentifier(),
+            "' (", maxMemory.asString(),
+            ") must be big enough, for at least one row "
+            "in the ",
+            tableName, ", which requires at least ",
+            memoryNeededForOneRow.asString(), "."));
       }
     };
     config.addValidator(
@@ -519,8 +521,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
               ad_utility::MemorySize::parse(maxMemory), "smaller table",
               smallerTableNumColumns);
         },
-        "'maxMemory' must be big enough for at least one row in the smaller "
-        "table.",
+        absl::StrCat(
+            "'", maxMemoryInStringFormat.getConfigOption().getIdentifier(),
+            "' must be big enough, for at least one row in the smaller table."),
         maxMemoryInStringFormat, smallerTableNumColumns);
     config.addValidator(
         [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
@@ -529,8 +532,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
               ad_utility::MemorySize::parse(maxMemory), "bigger table",
               biggerTableNumColumns);
         },
-        "'maxMemory' must be big enough for at least one row in the bigger "
-        "table.",
+        absl::StrCat(
+            "'", maxMemoryInStringFormat.getConfigOption().getIdentifier(),
+            "' must be big enough, for at least one row in the bigger table."),
         maxMemoryInStringFormat, biggerTableNumColumns);
     config.addValidator(
         [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
@@ -541,23 +545,32 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
               "result of joining the smaller and bigger table",
               smallerTableNumColumns + biggerTableNumColumns - 1);
         },
-        "'maxMemory' must be big enough for at least one row in the result of "
-        "joining the smaller and bigger table.",
+        absl::StrCat("'",
+                     maxMemoryInStringFormat.getConfigOption().getIdentifier(),
+                     "' must be big enough, for at least one row in the result "
+                     "of joining the smaller and bigger table."),
         maxMemoryInStringFormat, smallerTableNumColumns, biggerTableNumColumns);
 
     // Is `smallerTableNumRows` a valid value?
-    config.addValidator(generateBiggerEqualLambda(1UL, true),
-                        "'smallerTableNumRows' must be at least 1.",
-                        "'smallerTableNumRows' must be at least 1.",
-                        smallerTableNumRows);
+    config.addValidator(
+        generateBiggerEqualLambda(1UL, true),
+        absl::StrCat("'", smallerTableNumRows.getConfigOption().getIdentifier(),
+                     "' must be at least 1."),
+        absl::StrCat("'", smallerTableNumRows.getConfigOption().getIdentifier(),
+                     "' must be at least 1."),
+        smallerTableNumRows);
 
     // Is `smallerTableNumRows` smaller than `minBiggerTableRows`?
     config.addValidator(
         lessEqualLambda,
-        "'smallerTableNumRows' must be smaller than, or equal to, "
-        "'minBiggerTableRows'.",
-        "'smallerTableNumRows' must be smaller than, or equal to, "
-        "'minBiggerTableRows'.",
+        absl::StrCat("'", smallerTableNumRows.getConfigOption().getIdentifier(),
+                     "' must be smaller than, or equal to, '",
+                     minBiggerTableRows.getConfigOption().getIdentifier(),
+                     "'."),
+        absl::StrCat("'", smallerTableNumRows.getConfigOption().getIdentifier(),
+                     "' must be smaller than, or equal to, '",
+                     minBiggerTableRows.getConfigOption().getIdentifier(),
+                     "'."),
         smallerTableNumRows, minBiggerTableRows);
 
     // Is `minBiggerTableRows` big enough, to deliver interesting measurements?
@@ -566,50 +579,82 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             minBiggerTableRows.getConfigOption().getDefaultValue<size_t>(),
             true),
         absl::StrCat(
-            "'minBiggerTableRows' is to small. Interessting measurement values "
+            "'", minBiggerTableRows.getConfigOption().getIdentifier(),
+            "' is to small. Interessting measurement values "
             "start at ",
             minBiggerTableRows.getConfigOption().getDefaultValueAsString(),
             " rows, or more."),
         absl::StrCat(
-            "Interessting measurement values start at ",
+            "'", minBiggerTableRows.getConfigOption().getIdentifier(),
+            "' is to small. Interessting measurement values "
+            "start at ",
             minBiggerTableRows.getConfigOption().getDefaultValueAsString(),
-            ", or more, for 'minBiggerTableRows'"),
+            " rows, or more."),
         minBiggerTableRows);
 
     // Is `minBiggerTableRows` smaller, or equal, to `maxBiggerTableRows`?
     config.addValidator(
         lessEqualLambda,
-        "'minBiggerTableRows' must be smaller than, or equal to, "
-        "'maxBiggerTableRows'.",
-        "'minBiggerTableRows' must be smaller than, or equal to, "
-        "'maxBiggerTableRows'.",
+        absl::StrCat("'", minBiggerTableRows.getConfigOption().getIdentifier(),
+                     "' must be smaller than, or equal to, "
+                     "'",
+                     maxBiggerTableRows.getConfigOption().getIdentifier(),
+                     "'."),
+        absl::StrCat("'", minBiggerTableRows.getConfigOption().getIdentifier(),
+                     "' must be smaller than, or equal to, "
+                     "'",
+                     maxBiggerTableRows.getConfigOption().getIdentifier(),
+                     "'."),
         minBiggerTableRows, maxBiggerTableRows);
 
     // Do we have at least 1 column?
-    config.addValidator(generateBiggerEqualLambda(1UL, true),
-                        "'smallerTableNumColumns' must be at least 1.",
-                        "'smallerTableNumColumns' must be at least 1.",
-                        smallerTableNumColumns);
-    config.addValidator(generateBiggerEqualLambda(1UL, true),
-                        "'biggerTableNumColumns' must be at least 1.",
-                        "'biggerTableNumColumns' must be at least 1.",
-                        biggerTableNumColumns);
+    config.addValidator(
+        generateBiggerEqualLambda(1UL, true),
+        absl::StrCat("'",
+                     smallerTableNumColumns.getConfigOption().getIdentifier(),
+                     "' must be at least 1."),
+        absl::StrCat("'",
+                     smallerTableNumColumns.getConfigOption().getIdentifier(),
+                     "' must be at least 1."),
+        smallerTableNumColumns);
+    config.addValidator(
+        generateBiggerEqualLambda(1UL, true),
+        absl::StrCat("'",
+                     biggerTableNumColumns.getConfigOption().getIdentifier(),
+                     "' must be at least 1."),
+        absl::StrCat("'",
+                     biggerTableNumColumns.getConfigOption().getIdentifier(),
+                     "' must be at least 1."),
+        biggerTableNumColumns);
 
     // Is `overlapChance_` bigger than 0?
-    config.addValidator(generateBiggerEqualLambda(0.f, false),
-                        "'overlapChance' must be bigger than 0.",
-                        "'overlapChance' must be bigger than 0.",
-                        overlapChance);
+    config.addValidator(
+        generateBiggerEqualLambda(0.f, false),
+        absl::StrCat("'", overlapChance.getConfigOption().getIdentifier(),
+                     "' must be bigger than 0."),
+        absl::StrCat("'", overlapChance.getConfigOption().getIdentifier(),
+                     "' must be bigger than 0."),
+        overlapChance);
 
     // Are the sample size ratios bigger than 0?
-    config.addValidator(generateBiggerEqualLambda(0.f, false),
-                        "'smallerTableSampleSizeRatio' must be bigger than 0.",
-                        "'smallerTableSampleSizeRatio' must be bigger than 0.",
-                        smallerTableSampleSizeRatio);
-    config.addValidator(generateBiggerEqualLambda(0.f, false),
-                        "'biggerTableSampleSizeRatio' must be bigger than 0.",
-                        "'biggerTableSampleSizeRatio' must be bigger than 0.",
-                        biggerTableSampleSizeRatio);
+    config.addValidator(
+        generateBiggerEqualLambda(0.f, false),
+        absl::StrCat(
+            "'", smallerTableSampleSizeRatio.getConfigOption().getIdentifier(),
+            "' must be bigger than 0."),
+        absl::StrCat(
+            "'", smallerTableSampleSizeRatio.getConfigOption().getIdentifier(),
+            "' must be bigger than 0."),
+        smallerTableSampleSizeRatio);
+    config.addValidator(
+        generateBiggerEqualLambda(0.f, false),
+        absl::StrCat(
+            "'", biggerTableSampleSizeRatio.getConfigOption().getIdentifier(),
+            "' must be bigger than 0."),
+        absl::StrCat(
+            "'", biggerTableSampleSizeRatio.getConfigOption().getIdentifier(),
+            "' must be bigger than 0."),
+        biggerTableSampleSizeRatio);
 
     /*
     Is `randomSeed_` smaller/equal than the max value for seeds?
@@ -619,31 +664,46 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     config.addValidator(
         [maxSeed = static_cast<size_t>(ad_utility::RandomSeed::max().get())](
             const size_t seed) { return seed <= maxSeed; },
-        absl::StrCat("'randomSeed' must be smaller than, or equal to, ",
+        absl::StrCat("'", randomSeed.getConfigOption().getIdentifier(),
+                     "' must be smaller than, or equal to, ",
                      ad_utility::RandomSeed::max().get(), "."),
-        absl::StrCat("'randomSeed' must be smaller than, or equal to, ",
+        absl::StrCat("'", randomSeed.getConfigOption().getIdentifier(),
+                     "' must be smaller than, or equal to, ",
                      ad_utility::RandomSeed::max().get(), "."),
         randomSeed);
 
     // Is `maxTimeSingleMeasurement` a positive number?
     config.addValidator(
         generateBiggerEqualLambda(0.f, true),
-        "'maxTimeSingleMeasurement' must be bigger than, or equal to, 0.",
-        "'maxTimeSingleMeasurement' must be bigger than, or equal to, 0.",
+        absl::StrCat("'",
+                     maxTimeSingleMeasurement.getConfigOption().getIdentifier(),
+                     "' must be bigger than, or equal to, 0."),
+        absl::StrCat("'",
+                     maxTimeSingleMeasurement.getConfigOption().getIdentifier(),
+                     "' must be bigger than, or equal to, 0."),
         maxTimeSingleMeasurement);
 
     // Is the ratio of rows at least 10?
-    config.addValidator(generateBiggerEqualLambda(10UL, true),
-                        "'minRatioRows' must be at least 10.",
-                        "'minRatioRows' must be at least 10.", minRatioRows);
+    config.addValidator(
+        generateBiggerEqualLambda(10UL, true),
+        absl::StrCat("'", minRatioRows.getConfigOption().getIdentifier(),
+                     "' must be at least 10."),
+        absl::StrCat("'", minRatioRows.getConfigOption().getIdentifier(),
+                     "' must be at least 10."),
+        minRatioRows);
 
     // Is `minRatioRows` smaller than `maxRatioRows`?
-    config.addValidator(lessEqualLambda,
-                        "'minRatioRows' must be smaller than, or equal to, "
-                        "'maxRatioRows'.",
-                        "'minRatioRows' must be smaller than, or equal to, "
-                        "'maxRatioRows'.",
-                        minRatioRows, maxRatioRows);
+    config.addValidator(
+        lessEqualLambda,
+        absl::StrCat("'", minRatioRows.getConfigOption().getIdentifier(),
+                     "' must be smaller than, or equal to, "
+                     "'",
+                     maxRatioRows.getConfigOption().getIdentifier(), "'."),
+        absl::StrCat("'", minRatioRows.getConfigOption().getIdentifier(),
+                     "' must be smaller than, or equal to, "
+                     "'",
+                     maxRatioRows.getConfigOption().getIdentifier(), "'."),
+        minRatioRows, maxRatioRows);
 
     // Can the options be cast to double, while keeping their values? (Needed
     // for calculations later.)
@@ -655,7 +715,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           */
           const std::string descriptor{absl::StrCat(
               "'", option.getConfigOption().getIdentifier(),
-              "' must preserve its value when casting to `double`.")};
+              "' must preserve its value when being cast to `double`.")};
           config.addValidator(
               [](const auto& val) {
                 return isValuePreservingCast<double>(val);
