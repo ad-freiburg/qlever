@@ -819,7 +819,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       const T3& smallerTableNumRows, const T4& smallerTableNumColumns,
       const T5& biggerTableNumColumns,
       const T6& smallerTableJoinColumnSampleSizeRatio,
-      const T7& biggerTableJoinColumnSampleSizeRatio) {
+      const T7& biggerTableJoinColumnSampleSizeRatio) const {
     // Is something a growth function?
     constexpr auto isGrowthFunction = []<typename T>() {
       /*
@@ -955,7 +955,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       const size_t& smallerTableNumRows, const size_t& smallerTableNumColumns,
       const size_t& biggerTableNumColumns,
       const float smallerTableJoinColumnSampleSizeRatio,
-      const float biggerTableJoinColumnSampleSizeRatio) {
+      const float biggerTableJoinColumnSampleSizeRatio) const {
     // Checking, if smallerTableJoinColumnSampleSizeRatio and
     // biggerTableJoinColumnSampleSizeRatio are floats bigger than 0. Otherwise
     // , they don't make sense.
@@ -1015,7 +1015,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     We negate the second clause, transform it into an overflow safe expression
     and get our if clause.
     */
-    auto throwDoubleCastOverflowError = [](std::string reason) {
+    auto throwDoubleCastOverflowError = [](const std::string_view reason) {
       throw std::runtime_error(absl::StrCat(
           "Float overflow error: The ", reason,
           " is bigger than the double type maximum ",
