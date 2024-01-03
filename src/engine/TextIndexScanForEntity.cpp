@@ -60,7 +60,7 @@ size_t TextIndexScanForEntity::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-size_t TextIndexScanForEntity::getSizeEstimateBeforeLimit() {
+uint64_t TextIndexScanForEntity::getSizeEstimateBeforeLimit() {
   if (hasFixedEntity()) {
     return getExecutionContext()->getIndex().getAverageNofEntityContexts();
   } else {

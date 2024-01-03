@@ -50,7 +50,7 @@ size_t TextIndexScanForWord::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-size_t TextIndexScanForWord::getSizeEstimateBeforeLimit() {
+uint64_t TextIndexScanForWord::getSizeEstimateBeforeLimit() {
   return getExecutionContext()->getIndex().getWordSizeEstimate(word_);
 }
 

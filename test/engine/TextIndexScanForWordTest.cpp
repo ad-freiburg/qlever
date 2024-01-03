@@ -66,6 +66,17 @@ TEST(TextIndexScanForWord, WordScanBasic) {
             h::getTextRecordFromResultTable(qec, result, 0));
   ASSERT_EQ("\"the test on friday was really hard\"",
             h::getTextRecordFromResultTable(qec, result, 1));
+
+  TextIndexScanForWord s2{qec, Variable{"?text1"}, "testing"};
+
+  ASSERT_EQ(s2.getResultWidth(), 1);
+
+  result = s2.computeResultOnlyForTesting();
+  ASSERT_EQ(result.width(), 1);
+  ASSERT_EQ(result.size(), 1);
+
+  ASSERT_EQ("\"testing can help\"",
+            h::getTextRecordFromResultTable(qec, result, 0));
 }
 
 TEST(TextIndexScanForWord, CacheKey) {
@@ -93,5 +104,8 @@ TEST(TextIndexScanForWord, KnownEmpty) {
 
   TextIndexScanForWord s4{qec, Variable{"?text1"}, "test*"};
   ASSERT_TRUE(!s4.knownEmptyResult());
+
+  TextIndexScanForWord s5{qec, Variable{"?text1"}, "testing"};
+  ASSERT_TRUE(!s5.knownEmptyResult());
 }
 }  // namespace
