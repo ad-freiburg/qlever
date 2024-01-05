@@ -43,6 +43,7 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
+#include "util/Log.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
 #include "util/StringUtils.h"
@@ -371,6 +372,9 @@ join algorithms.
 class GeneralInterfaceImplementation : public BenchmarkInterface {
   // The variables, that our configuration option will write to.
   ConfigVariables configVariables_;
+
+  // The date of this objects instantiation.
+  const std::string dateOfCreation_{ad_utility::Log::getTimeStamp()};
 
  public:
   // The variables, that the configuration option of this class will write to.
@@ -729,12 +733,31 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   }
 
   /*
-  @brief Add metadata information, that is always interessting, if it has been
-  set from outside:
-  - "maxTimeSingleMeasurement"
-  - "maxMemory"
+  @brief Add metadata information about the class, that is always interesting
+  and not dependent on the created `ResultTable`.
   */
-  void addExternallySetConfiguration(BenchmarkMetadata* meta) const {
+  void addDefaultMetadata(BenchmarkMetadata* meta) const {
+    // Information, that is interesting for all the benchmarking classes.
+    meta->addKeyValuePair("dateOfCreation", dateOfCreation_);
+    meta->addKeyValuePair(
+        "smallerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
+    meta->addKeyValuePair(
+        "biggerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
+    meta->addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
+    meta->addKeyValuePair("randomSeed",
+                          getConfigVariables().randomSeed().get());
+    meta->addKeyValuePair("smallerTableNumColumns",
+                          getConfigVariables().smallerTableNumColumns_);
+    meta->addKeyValuePair("biggerTableNumColumns",
+                          getConfigVariables().biggerTableNumColumns_);
+
+    /*
+    Add metadata information over:
+    - "maxTimeSingleMeasurement"
+    - "maxMemory"
+    */
     auto addInfiniteWhen0 = [&meta](const std::string& name,
                                     const auto& value) {
       if (value != 0) {
@@ -743,7 +766,6 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         meta->addKeyValuePair(name, "infinite");
       }
     };
-
     addInfiniteWhen0("maxTimeSingleMeasurement",
                      configVariables_.maxTimeSingleMeasurement_);
     addInfiniteWhen0("maxMemory", ad_utility::MemorySize::parse(
@@ -757,8 +779,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   `maxTimeSingleMeasurement` getter value, the `maxMemoryBiggerTable()` getter
   value, or the `maxMemory()` getter value of the configuration options was
   reached/surpassed.
-  The rows will be the return values of the parameter, you gave a function for,
-  and the columns will be:
+  The rows will be the return values of the parameter, you gave a function
+  for, and the columns will be:
   - Return values of the parameter, you gave a function for.
   - Time needed for sorting `IdTable`s.
   - Time needed for merge/galloping join.
@@ -853,8 +875,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
     /*
     @brief Calls the growth function with the number of the next row to be
-    created, if it's a function, and returns the result. Otherwise just returns
-    the given `possibleGrowthFunction`.
+    created, if it's a function, and returns the result. Otherwise just
+    returns the given `possibleGrowthFunction`.
     */
     auto returnOrCall = [&isGrowthFunction]<typename T>(
                             const T& possibleGrowthFunction,
@@ -869,15 +891,22 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // For creating a new random seed for every new row.
     RandomSeedGenerator seedGenerator{std::move(randomSeed)};
 
+    // Save the date of creation for the metadata.
+    const std::string dateOfCreation{ad_utility::Log::getTimeStamp()};
+
     /*
-    Now on to creating the benchmark table. Because we don't know, how many row
-    names we will have, we just create a table without row names.
+    Now on to creating the benchmark table. Because we don't know, how many
+    row names we will have, we just create a table without row names.
     */
     ResultTable& table = results->addTable(
         std::string{tableDescriptor}, {},
         {std::move(parameterName), "Time for sorting", "Merge/Galloping join",
          "Sorting + merge/galloping join", "Hash join",
          "Number of rows in resulting IdTable", "Speedup of hash join"});
+
+    // Save the date of creation.
+    table.metadata().addKeyValuePair("dateOfCreation", dateOfCreation);
+
     /*
     Adding measurements to the table, as long as possible.
     */
@@ -957,8 +986,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       const float smallerTableJoinColumnSampleSizeRatio,
       const float biggerTableJoinColumnSampleSizeRatio) const {
     // Checking, if smallerTableJoinColumnSampleSizeRatio and
-    // biggerTableJoinColumnSampleSizeRatio are floats bigger than 0. Otherwise
-    // , they don't make sense.
+    // biggerTableJoinColumnSampleSizeRatio are floats bigger than 0.
+    // Otherwise , they don't make sense.
     AD_CONTRACT_CHECK(smallerTableJoinColumnSampleSizeRatio > 0);
     AD_CONTRACT_CHECK(biggerTableJoinColumnSampleSizeRatio > 0);
 
@@ -968,8 +997,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     AD_CORRECTNESS_CHECK(isValuePreservingCast<double>(ratioRows));
 
     /*
-    Check if the smaller and bigger `IdTable` are not to big. Size of the result
-    table is only checked, if the configuration option for it was set.
+    Check if the smaller and bigger `IdTable` are not to big. Size of the
+    result table is only checked, if the configuration option for it was set.
     */
     if (const auto& maxSizeInputTable{
             getConfigVariables().maxMemoryBiggerTable()};
@@ -1008,8 +1037,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     If there is no overflow
     `std::ceil(static_cast<float>(smallerTableNumRows) *
     smallerTableJoinColumnSampleSizeRatio) <=
-    std::floor(std::numeric_limits<float>::max())` must be true. Which is true,
-    iff, `static_cast<float>(smallerTableNumRows) *
+    std::floor(std::numeric_limits<float>::max())` must be true. Which is
+    true, iff, `static_cast<float>(smallerTableNumRows) *
     smallerTableJoinColumnSampleSizeRatio <=
     std::floor(std::numeric_limits<float>::max())` is true.
     We negate the second clause, transform it into an overflow safe expression
@@ -1050,9 +1079,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
     /*
     Check for overflow, before calculating `biggerTableJoinColumnUpperBound`.
-    Short math explanation: I check the Intermediate results, before using them,
-    and also use the same trick as with `smallerTableJoinColumnUpperBound` to
-    check, that `std::ceil(...)` is neither overflow, nor underflow.
+    Short math explanation: I check the Intermediate results, before using
+    them, and also use the same trick as with
+    `smallerTableJoinColumnUpperBound` to check, that `std::ceil(...)` is
+    neither overflow, nor underflow.
     */
     if (static_cast<double>(smallerTableNumRows) >
         std::numeric_limits<double>::max() / static_cast<double>(ratioRows)) {
@@ -1080,7 +1110,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           smallerTableNumRows,
           ") with 'smallerTableJoinColumnSampleSizeRatio' (",
           smallerTableJoinColumnSampleSizeRatio,
-          "), minus 1, added to the multiplication (rounded up) of the number "
+          "), minus 1, added to the multiplication (rounded up) of the "
+          "number "
           "of bigger table rows (",
           smallerTableNumRows * ratioRows,
           ") with 'biggerTableJoinColumnSampleSizeRatio' (",
@@ -1096,8 +1127,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                       biggerTableJoinColumnSampleSizeRatio)) -
         1;
 
-    // Seeds for the random generators, so that things are less similiar between
-    // the tables.
+    // Seeds for the random generators, so that things are less similiar
+    // between the tables.
     const std::array<ad_utility::RandomSeed, 5> seeds =
         createArrayOfRandomSeeds<5>(std::move(randomSeed));
 
@@ -1234,7 +1265,8 @@ class BmOnlyBiggerTableSizeChanges final
     : public GeneralInterfaceImplementation {
  public:
   std::string name() const override {
-    return "Benchmarktables, where the smaller table stays at the same amount "
+    return "Benchmarktables, where the smaller table stays at the same "
+           "amount "
            "of rows and the bigger tables keeps getting bigger.";
   }
 
@@ -1278,25 +1310,10 @@ class BmOnlyBiggerTableSizeChanges final
 
   BenchmarkMetadata getMetadata() const override {
     BenchmarkMetadata meta{};
-
     meta.addKeyValuePair("Value changing with every row", "ratioRows");
-    meta.addKeyValuePair(
-        "smallerTableJoinColumnSampleSizeRatio",
-        getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
-    meta.addKeyValuePair(
-        "biggerTableJoinColumnSampleSizeRatio",
-        getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
-    meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
-    meta.addKeyValuePair("randomSeed", getConfigVariables().randomSeed().get());
     meta.addKeyValuePair("smallerTableNumRows",
                          getConfigVariables().smallerTableNumRows_);
-    meta.addKeyValuePair("smallerTableNumColumns",
-                         getConfigVariables().smallerTableNumColumns_);
-    meta.addKeyValuePair("biggerTableNumColumns",
-                         getConfigVariables().biggerTableNumColumns_);
-
-    GeneralInterfaceImplementation::addExternallySetConfiguration(&meta);
-
+    GeneralInterfaceImplementation::addDefaultMetadata(&meta);
     return meta;
   }
 };
@@ -1322,7 +1339,8 @@ class BmOnlySmallerTableSizeChanges final
                  10, getConfigVariables().minRatioRows_,
                  getConfigVariables().maxRatioRows_)) {
           const std::string& tableName = absl::StrCat(
-              "The amount of rows in the smaller table grows and the ratio, to "
+              "The amount of rows in the smaller table grows and the ratio, "
+              "to "
               "the amount of rows in the bigger table, stays at ",
               ratioRows, ".");
 
@@ -1346,6 +1364,7 @@ class BmOnlySmallerTableSizeChanges final
           BenchmarkMetadata& meta = table.metadata();
           meta.addKeyValuePair("smallerTableSorted", smallerTableSorted);
           meta.addKeyValuePair("biggerTableSorted", biggerTableSorted);
+          meta.addKeyValuePair("ratioRows", ratioRows);
         }
       }
     }
@@ -1354,24 +1373,9 @@ class BmOnlySmallerTableSizeChanges final
 
   BenchmarkMetadata getMetadata() const override {
     BenchmarkMetadata meta{};
-
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableNumRows");
-    meta.addKeyValuePair(
-        "smallerTableJoinColumnSampleSizeRatio",
-        getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
-    meta.addKeyValuePair(
-        "biggerTableJoinColumnSampleSizeRatio",
-        getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
-    meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
-    meta.addKeyValuePair("randomSeed", getConfigVariables().randomSeed().get());
-    meta.addKeyValuePair("smallerTableNumColumns",
-                         getConfigVariables().smallerTableNumColumns_);
-    meta.addKeyValuePair("biggerTableNumColumns",
-                         getConfigVariables().biggerTableNumColumns_);
-
-    GeneralInterfaceImplementation::addExternallySetConfiguration(&meta);
-
+    GeneralInterfaceImplementation::addDefaultMetadata(&meta);
     return meta;
   }
 };
@@ -1381,7 +1385,8 @@ class BmOnlySmallerTableSizeChanges final
 class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
  public:
   std::string name() const override {
-    return "Benchmarktables, where the tables are the same size and both just "
+    return "Benchmarktables, where the tables are the same size and both "
+           "just "
            "get more rows.";
   }
 
@@ -1423,25 +1428,10 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
   BenchmarkMetadata getMetadata() const override {
     BenchmarkMetadata meta{};
-
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableNumRows");
-    meta.addKeyValuePair(
-        "smallerTableJoinColumnSampleSizeRatio",
-        getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
-    meta.addKeyValuePair(
-        "biggerTableJoinColumnSampleSizeRatio",
-        getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
-    meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
-    meta.addKeyValuePair("randomSeed", getConfigVariables().randomSeed().get());
     meta.addKeyValuePair("ratioRows", 1);
-    meta.addKeyValuePair("smallerTableNumColumns",
-                         getConfigVariables().smallerTableNumColumns_);
-    meta.addKeyValuePair("biggerTableNumColumns",
-                         getConfigVariables().biggerTableNumColumns_);
-
-    GeneralInterfaceImplementation::addExternallySetConfiguration(&meta);
-
+    GeneralInterfaceImplementation::addDefaultMetadata(&meta);
     return meta;
   }
 };
