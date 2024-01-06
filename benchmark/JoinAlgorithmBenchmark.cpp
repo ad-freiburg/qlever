@@ -663,7 +663,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     /*
     Is `randomSeed_` smaller/equal than the max value for seeds?
     Note: The static cast is needed, because a random generator seed is always
-    `unsigned int`:
+    `unsigned int`.
     */
     config.addValidator(
         [maxSeed = static_cast<size_t>(ad_utility::RandomSeed::max().get())](
@@ -768,9 +768,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     };
     addInfiniteWhen0("maxTimeSingleMeasurement",
                      configVariables_.maxTimeSingleMeasurement_);
-    addInfiniteWhen0("maxMemory", ad_utility::MemorySize::parse(
-                                      configVariables_.configVariableMaxMemory_)
-                                      .getBytes());
+    addInfiniteWhen0("maxMemory",
+                     getConfigVariables().maxMemory().value_or(0_B).getBytes());
   }
 
   /*
@@ -1265,8 +1264,7 @@ class BmOnlyBiggerTableSizeChanges final
     : public GeneralInterfaceImplementation {
  public:
   std::string name() const override {
-    return "Benchmarktables, where the smaller table stays at the same "
-           "amount "
+    return "Benchmarktables, where the smaller table stays at the same amount "
            "of rows and the bigger tables keeps getting bigger.";
   }
 
@@ -1339,8 +1337,7 @@ class BmOnlySmallerTableSizeChanges final
                  10, getConfigVariables().minRatioRows_,
                  getConfigVariables().maxRatioRows_)) {
           const std::string& tableName = absl::StrCat(
-              "The amount of rows in the smaller table grows and the ratio, "
-              "to "
+              "The amount of rows in the smaller table grows and the ratio, to "
               "the amount of rows in the bigger table, stays at ",
               ratioRows, ".");
 
@@ -1385,8 +1382,7 @@ class BmOnlySmallerTableSizeChanges final
 class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
  public:
   std::string name() const override {
-    return "Benchmarktables, where the tables are the same size and both "
-           "just "
+    return "Benchmarktables, where the tables are the same size and both just "
            "get more rows.";
   }
 
