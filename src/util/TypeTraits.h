@@ -17,37 +17,28 @@
 namespace ad_utility {
 
 namespace detail {
-// Check (via the compiler's template matching mechanism) whether a given type
-// is an instantiation of a given template.
-template <typename T, template <typename...> typename TemplatedType>
-struct isInstantiationImpl;
+/*
+Check (via the compiler's template matching mechanism) whether a given type
+is an instantiation of a given template.
+This also works with aliases, that were created using `using`. We are not sure
+why.
+For example:
+For
+```
+template <typenanme... Ts>
+using A = B<Ts...>;
+```
+the 'call' `IsInstantiationOf<A>::Instantiation<B<int>>::value` and
+`IsInstantiationOf<B>::Instantiation<B<int>>::value` would both return true.
+*/
+template <template <typename...> typename Template>
+struct IsInstantiationOf {
+  template <typename T>
+  struct Instantiation;
 
-template <template <typename...> typename DeducedTemplatedType,
-          template <typename...> typename WantedTemplatedType, typename... Ts>
-/*
-This checks, if `WantedTemplatedType<Ts...>` is not a malformed type. Without
-it, the second type in the comparision in `std::integral_constant` could be
-malformed.
-Note: In theory `requires requires { std::declval<WantedTemplatedType<Ts...>>();
-}` would also work, but not in practice with `gcc`. Because, as it turns out,
-even though the content of concepts should be unevaluated, `gcc` evaluates them
-and always tries to create an instance of `WantedTemplatedType<Ts...>`, even if
-the type is malformed.
-*/
-requires std::same_as<std::void_t<WantedTemplatedType<Ts...>>, void>
-/*
-Note that just `WantedTemplatedType<Ts...>, WantedTemplatedType` does not work
-with any type wrappers, because of type deduction.
-For example: If you had a wrapper `Vec` for `std::vector` and called
-`isInstantiationImpl<std::vector<int>, Vec>::value`, or
-`isInstantiationImpl<Vec<int>, Vec>::value` then the result would always be
-false. Because type deduction would always deduce, based on the first template
-argument, that `WantedTemplatedType = std::vector` and `std::vector !=
-WantedTemplatedType`, so this specialization would not be chosen.
-*/
-struct isInstantiationImpl<DeducedTemplatedType<Ts...>, WantedTemplatedType>
-    : std::integral_constant<bool, std::same_as<DeducedTemplatedType<Ts...>,
-                                                WantedTemplatedType<Ts...>>> {};
+  template <typename... Ts>
+  struct Instantiation<Template<Ts...>> : std::true_type {};
+};
 
 // Given a templated type (e.g. std::variant<A, B, C>), provide a type where the
 // inner types are "lifted" by a given outer type.
@@ -94,7 +85,8 @@ struct FirstWrapper : public std::type_identity<T> {};
 /// isInstantiation<std::vector, std::vector<int>> == true;
 /// isInstantiation<std::vector, const std::vector<int>&> == false;
 template <typename T, template <typename...> typename TemplatedType>
-concept isInstantiation = detail::isInstantiationImpl<T, TemplatedType>::value;
+concept isInstantiation =
+    detail::IsInstantiationOf<TemplatedType>::template Instantiation<T>::value;
 
 /// The concept is fulfilled iff `T` is `ad_utility::SimilarTo` an
 /// instantiation of `TemplatedType`. Examples:
