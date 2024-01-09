@@ -19,6 +19,7 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
+#include "util/Log.h"
 #include "util/SourceLocation.h"
 #include "util/Timer.h"
 #include "util/json.h"
@@ -170,7 +171,7 @@ class BenchmarkInterface {
   };
 
   /*
-  Run all your benchmarks. The `BenchmarkResults` class is a management
+  @brief Run all your benchmarks. The `BenchmarkResults` class is a management
   class for measuering the execution time of functions and organizing the
   results.
   */
@@ -182,6 +183,20 @@ class BenchmarkInterface {
   // Needed for manipulation by the infrastructure.
   ad_utility::ConfigManager& getConfigManager() { return manager_; }
   const ad_utility::ConfigManager& getConfigManager() const { return manager_; }
+
+  /*
+  @brief Only used for manipulaton via the infrastructure. Is called directly
+  before `runAllBenchmarks`.
+
+  Add/update the default metadata of the benchmark class. Currently
+  adds/updates:
+  - A time stamp containing the time and date of this call. Can be used to
+  identify the time and date, `runAllBenchmarks` was run.
+  */
+  void updateDefaultGeneralMetadata() {
+    BenchmarkMetadata& meta{getGeneralMetadata()};
+    meta.addKeyValuePair("dateOfMeasurement", ad_utility::Log::getTimeStamp());
+  }
 };
 
 /*
@@ -216,13 +231,13 @@ class BenchmarkRegister {
   static void parseConfigWithAllRegisteredBenchmarks(const nlohmann::json& j);
 
   /*
-   * @brief Measures all the registered benchmarks and returns the resulting
-   *  `BenchmarkResuls` objects.
-   *
-   * @return Every benchmark class get's measured with their own
-   *  `BenchmarkResults`. They should be in the same order as the
-   *  registrations.
-   */
+  @brief For each registered benchmark:
+  - Update the default class metadata.
+  - Run the measurments.
+
+  @return Every benchmark class get's measured with their own
+  `BenchmarkResults`. They should be in the same order as the registrations.
+  */
   static std::vector<BenchmarkResults> runAllRegisteredBenchmarks();
 
   /*

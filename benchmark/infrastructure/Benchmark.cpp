@@ -32,11 +32,16 @@ void BenchmarkRegister::parseConfigWithAllRegisteredBenchmarks(
 
 // ____________________________________________________________________________
 std::vector<BenchmarkResults> BenchmarkRegister::runAllRegisteredBenchmarks() {
-  // Go through every registered instance of a benchmark class, measure their
-  // benchmarks and return the resulting `BenchmarkResults` in a new vector.
-  return ad_utility::transform(
-      registeredBenchmarks,
-      [](BenchmarkPointer& instance) { return instance->runAllBenchmarks(); });
+  /*
+  Go through every registered instance of a benchmark class, update the default
+  metadata oftheir general metadata, measure their benchmarks and return the
+  resulting `BenchmarkResults` in a new vector.
+  */
+  return ad_utility::transform(registeredBenchmarks,
+                               [](BenchmarkPointer& instance) {
+                                 instance->updateDefaultGeneralMetadata();
+                                 return instance->runAllBenchmarks();
+                               });
 }
 
 // ____________________________________________________________________________
