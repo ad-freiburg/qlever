@@ -147,10 +147,6 @@ class BenchmarkInterface {
   */
   ad_utility::ConfigManager manager_;
 
- public:
-  // A human-readable name that will be printed as part of the output.
-  virtual std::string name() const = 0;
-
   /*
   For the general metadata of a class. Mostly information, that is the same
   for every benchmark, so that every entry of the `BenchmarkResults` doesn't
@@ -158,14 +154,20 @@ class BenchmarkInterface {
   For example: Let's say, you are measuring the same benchmarks for different
   versions of an algorithm. You could add the metadata information, which
   version it is, to every `resultGroup`, `resultTable`, etc., but that is a bit
-  clunky. Instead, you make one `BenchmarkInterface` instance for every
-  version and simply return which version you are using as metadata through
-  `getMetadata`.
+  clunky. Instead, you make one `BenchmarkInterface` instance for every version
+  and simply return which version you are using as metadata through .
   */
-  virtual BenchmarkMetadata getMetadata() const {
-    // Default behaviour.
-    return BenchmarkMetadata{};
-  }
+  BenchmarkMetadata generalClassMetadata_;
+
+ public:
+  // A human-readable name that will be printed as part of the output.
+  virtual std::string name() const = 0;
+
+  // Getter for the general metadata of the class.
+  BenchmarkMetadata& getGeneralMetadata() { return generalClassMetadata_; };
+  const BenchmarkMetadata& getGeneralMetadata() const {
+    return generalClassMetadata_;
+  };
 
   /*
   Run all your benchmarks. The `BenchmarkResults` class is a management
