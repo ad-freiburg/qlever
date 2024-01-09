@@ -3,7 +3,7 @@
 // _____________________________________________________________________________
 TextIndexScanForEntity::TextIndexScanForEntity(
     QueryExecutionContext* qec, Variable textRecordVar,
-    std::variant<Variable, std::string> entity, string word)
+    const std::variant<Variable, std::string>& entity, string word)
     : Operation(qec),
       textRecordVar_(std::move(textRecordVar)),
       entity_(VarOrFixedEntity(qec, entity)),
@@ -15,11 +15,11 @@ ResultTable TextIndexScanForEntity::computeResult() {
       word_, getExecutionContext()->getAllocator());
 
   if (hasFixedEntity()) {
-    auto beginErase =
-        std::remove_if(idTable.begin(), idTable.end(), [this](const auto& row) {
+    auto beginErase = std::ranges::remove_if(
+        idTable.begin(), idTable.end(), [this](const auto& row) {
           return row[1].getVocabIndex() != entity_.index_;
         });
-    idTable.erase(beginErase, idTable.end());
+    idTable.erase(beginErase.begin(), idTable.end());
     idTable.setColumnSubset(std::vector<ColumnIndex>{0, 2});
   }
 
@@ -47,7 +47,7 @@ VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 size_t TextIndexScanForEntity::getResultWidth() const {
-  return 2 + !hasFixedEntity();
+  return 2 + (hasFixedEntity() ? 0 : 1);
 }
 
 // _____________________________________________________________________________
@@ -62,7 +62,8 @@ size_t TextIndexScanForEntity::getCostEstimate() {
 // _____________________________________________________________________________
 uint64_t TextIndexScanForEntity::getSizeEstimateBeforeLimit() {
   if (hasFixedEntity()) {
-    return getExecutionContext()->getIndex().getAverageNofEntityContexts();
+    return uint64_t(
+        getExecutionContext()->getIndex().getAverageNofEntityContexts());
   } else {
     return getExecutionContext()->getIndex().getEntitySizeEstimate(word_);
   }
@@ -90,6 +91,5 @@ string TextIndexScanForEntity::getCacheKeyImpl() const {
      << " with word: \"" << word_ << "\" and fixed-entity: \""
      << (hasFixedEntity() ? entity_.fixedEntity_.value() : "no fixed-entity")
      << " \"";
-  ;
   return std::move(os).str();
 }

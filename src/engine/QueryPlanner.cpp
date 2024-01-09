@@ -720,6 +720,83 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   return tg;
 }
 
+void QueryPlanner::handleSingleVariableCase(
+    const TripleGraph::Node& node, std::function<void(SubtreePlan)> pushPlan,
+    std::function<void(Permutation::Enum)> addIndexScan) {
+  using enum Permutation::Enum;
+
+  if (isVariable(node.triple_._s) && isVariable(node.triple_._o) &&
+      node.triple_._s == node.triple_._o) {
+    if (isVariable(node.triple_._p._iri)) {
+      AD_THROW("Triple with one variable repeated three times");
+    }
+    LOG(DEBUG) << "Subject variable same as object variable" << std::endl;
+    // Need to handle this as IndexScan with a new unique
+    // variable + Filter. Works in both directions
+    Variable filterVar = generateUniqueVarName();
+    auto scanTriple = node.triple_;
+    scanTriple._o = filterVar;
+    auto scanTree = makeExecutionTree<IndexScan>(_qec, PSO, scanTriple);
+    // The simplest way to set up the filtering expression is to use the
+    // parser.
+    std::string filterString =
+        absl::StrCat("FILTER (", scanTriple._s.getVariable().name(), "=",
+                     filterVar.name(), ")");
+    auto filter = sparqlParserHelpers::ParserAndVisitor{filterString}
+                      .parseTypesafe(&SparqlAutomaticParser::filterR)
+                      .resultOfParse_;
+    auto plan =
+        makeSubtreePlan<Filter>(_qec, scanTree, std::move(filter.expression_));
+    pushPlan(std::move(plan));
+  } else if (isVariable(node.triple_._s)) {
+    addIndexScan(POS);
+  } else if (isVariable(node.triple_._o)) {
+    addIndexScan(PSO);
+  } else {
+    AD_CONTRACT_CHECK(isVariable(node.triple_._p));
+    addIndexScan(SOP);
+  }
+}
+
+void QueryPlanner::handleTwoVariablesCase(
+    const TripleGraph::Node& node,
+    std::function<void(Permutation::Enum)> addIndexScan) {
+  using enum Permutation::Enum;
+
+  if (!isVariable(node.triple_._p._iri)) {
+    addIndexScan(PSO);
+    addIndexScan(POS);
+  } else if (!isVariable(node.triple_._s)) {
+    addIndexScan(SPO);
+    addIndexScan(SOP);
+  } else if (!isVariable(node.triple_._o)) {
+    addIndexScan(OSP);
+    addIndexScan(OPS);
+  }
+}
+
+void QueryPlanner::handleThreeVariablesCase(
+    const TripleGraph::Node& node,
+    std::function<void(Permutation::Enum)> addIndexScan) {
+  using enum Permutation::Enum;
+
+  if (!_qec || _qec->getIndex().hasAllPermutations()) {
+    // Add plans for all six permutations.
+    addIndexScan(OPS);
+    addIndexScan(OSP);
+    addIndexScan(PSO);
+    addIndexScan(POS);
+    addIndexScan(SPO);
+    addIndexScan(SOP);
+  } else {
+    AD_THROW(
+        "With only 2 permutations registered (no -a option), "
+        "triples should have at most two variables. "
+        "Not the case in: " +
+        node.triple_.asString());
+  }
+}
+
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
@@ -786,67 +863,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     }
 
     if (node._variables.size() == 1) {
-      // There is exactly one variable in the triple (may occur twice).
-      if (isVariable(node.triple_._s) && isVariable(node.triple_._o) &&
-          node.triple_._s == node.triple_._o) {
-        if (isVariable(node.triple_._p._iri)) {
-          AD_THROW("Triple with one variable repeated three times");
-        }
-        LOG(DEBUG) << "Subject variable same as object variable" << std::endl;
-        // Need to handle this as IndexScan with a new unique
-        // variable + Filter. Works in both directions
-        Variable filterVar = generateUniqueVarName();
-        auto scanTriple = node.triple_;
-        scanTriple._o = filterVar;
-        auto scanTree = makeExecutionTree<IndexScan>(_qec, PSO, scanTriple);
-        // The simplest way to set up the filtering expression is to use the
-        // parser.
-        std::string filterString =
-            absl::StrCat("FILTER (", scanTriple._s.getVariable().name(), "=",
-                         filterVar.name(), ")");
-        auto filter = sparqlParserHelpers::ParserAndVisitor{filterString}
-                          .parseTypesafe(&SparqlAutomaticParser::filterR)
-                          .resultOfParse_;
-        auto plan = makeSubtreePlan<Filter>(_qec, scanTree,
-                                            std::move(filter.expression_));
-        pushPlan(std::move(plan));
-      } else if (isVariable(node.triple_._s)) {
-        addIndexScan(POS);
-      } else if (isVariable(node.triple_._o)) {
-        addIndexScan(PSO);
-      } else {
-        AD_CONTRACT_CHECK(isVariable(node.triple_._p));
-        addIndexScan(SOP);
-      }
+      handleSingleVariableCase(node, pushPlan, addIndexScan);
     } else if (node._variables.size() == 2) {
-      // Add plans for both possible scan directions.
-      if (!isVariable(node.triple_._p._iri)) {
-        addIndexScan(PSO);
-        addIndexScan(POS);
-      } else if (!isVariable(node.triple_._s)) {
-        addIndexScan(SPO);
-        addIndexScan(SOP);
-      } else if (!isVariable(node.triple_._o)) {
-        addIndexScan(OSP);
-        addIndexScan(OPS);
-      }
+      handleTwoVariablesCase(node, addIndexScan);
     } else {
-      // The current triple contains three distinct variables.
-      if (!_qec || _qec->getIndex().hasAllPermutations()) {
-        // Add plans for all six permutations.
-        addIndexScan(OPS);
-        addIndexScan(OSP);
-        addIndexScan(PSO);
-        addIndexScan(POS);
-        addIndexScan(SPO);
-        addIndexScan(SOP);
-      } else {
-        AD_THROW(
-            "With only 2 permutations registered (no -a option), "
-            "triples should have at most two variables. "
-            "Not the case in: " +
-            node.triple_.asString());
-      }
+      handleThreeVariablesCase(node, addIndexScan);
     }
   }
   return seeds;

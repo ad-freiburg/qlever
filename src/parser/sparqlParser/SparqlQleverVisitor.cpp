@@ -1038,31 +1038,30 @@ vector<TripleWithPropertyPath> Visitor::visit(
                                                          VarOrTerm& subject,
                                                          VarOrPath& predicate,
                                                          VarOrTerm& object) {
-    if (auto* var = std::get_if<Variable>(&subject)) {
-      if (auto* propertyPath = std::get_if<PropertyPath>(&predicate)) {
-        if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
-          string name = object.toSparql();
-          if (!((name.starts_with('"') && name.ends_with('"')) ||
-                (name.starts_with('\'') && name.ends_with('\'')))) {
-            reportError(
-                ctx,
-                "ql:contains-word has to be followed by a string in quotes");
-          }
-          for (std::string_view s : std::vector<std::string>(
-                   absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
-            if (!s.ends_with('*')) {
-              continue;
-            }
-            addVisibleVariable(
-                var->getMatchingWordVariable(s.substr(0, s.size() - 1)));
-          }
+    auto* var = std::get_if<Variable>(&subject);
+    auto* propertyPath = std::get_if<PropertyPath>(&predicate);
+
+    if (var && propertyPath) {
+      if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+        string name = object.toSparql();
+        if (!((name.starts_with('"') && name.ends_with('"')) ||
+              (name.starts_with('\'') && name.ends_with('\'')))) {
+          reportError(
+              ctx, "ql:contains-word has to be followed by a string in quotes");
         }
-        if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
-          if (auto* entVar = std::get_if<Variable>(&object)) {
-            addVisibleVariable(var->getScoreVariable(*entVar));
-          } else if (auto* fixedEntity = std::get_if<GraphTerm>(&object)) {
-            addVisibleVariable(var->getScoreVariable(fixedEntity->toSparql()));
+        for (std::string_view s : std::vector<std::string>(
+                 absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
+          if (!s.ends_with('*')) {
+            continue;
           }
+          addVisibleVariable(
+              var->getMatchingWordVariable(s.substr(0, s.size() - 1)));
+        }
+      } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
+        if (const auto* entVar = std::get_if<Variable>(&object)) {
+          addVisibleVariable(var->getScoreVariable(*entVar));
+        } else if (const auto* fixedEntity = std::get_if<GraphTerm>(&object)) {
+          addVisibleVariable(var->getScoreVariable(fixedEntity->toSparql()));
         }
       }
     }

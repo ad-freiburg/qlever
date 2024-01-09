@@ -48,8 +48,7 @@ class QueryPlanner {
         }
       }
 
-      Node(size_t id, const Variable cvar, const std::string word,
-           SparqlTriple t)
+      Node(size_t id, Variable cvar, std::string word, SparqlTriple t)
           : Node(id, std::move(t)) {
         cvar_ = std::move(cvar);
         wordPart_ = std::move(word);
@@ -226,6 +225,18 @@ class QueryPlanner {
 
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
+
+  void handleSingleVariableCase(
+      const TripleGraph::Node& node, std::function<void(SubtreePlan)> pushPlan,
+      std::function<void(Permutation::Enum)> addIndexScan);
+
+  void handleTwoVariablesCase(
+      const TripleGraph::Node& node,
+      std::function<void(Permutation::Enum)> addIndexScan);
+
+  void handleThreeVariablesCase(
+      const TripleGraph::Node& node,
+      std::function<void(Permutation::Enum)> addIndexScan);
 
   /**
    * @brief Fills children with all operations that are associated with a single

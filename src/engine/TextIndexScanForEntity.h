@@ -28,7 +28,7 @@ class TextIndexScanForEntity : public Operation {
         entityVar_.emplace(std::get<Variable>(entity));
       }
     }
-    ~VarOrFixedEntity() {}
+    ~VarOrFixedEntity() = default;
 
     std::optional<std::string> fixedEntity_ = std::nullopt;
     VocabIndex index_;
@@ -42,13 +42,11 @@ class TextIndexScanForEntity : public Operation {
 
  public:
   TextIndexScanForEntity(QueryExecutionContext* qec, Variable textRecordVar,
-                         std::variant<Variable, std::string> entity_,
+                         const std::variant<Variable, std::string>& entity_,
                          string word);
-  virtual ~TextIndexScanForEntity() = default;
+  ~TextIndexScanForEntity() override = default;
 
   bool hasFixedEntity() const { return entity_.fixedEntity_.has_value(); };
-
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   Variable textRecordVar() const { return textRecordVar_; }
 
@@ -68,7 +66,9 @@ class TextIndexScanForEntity : public Operation {
 
   size_t getResultWidth() const override;
 
-  void setTextLimit(size_t) override {}
+  void setTextLimit(size_t) override {
+    // TODO: implement textLimit
+  }
 
   size_t getCostEstimate() override;
 
@@ -83,7 +83,10 @@ class TextIndexScanForEntity : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
+  VariableToColumnMap computeVariableToColumnMap() const override;
+
+ private:
   ResultTable computeResult() override;
 
-  VariableToColumnMap computeVariableToColumnMap() const override;
+  vector<QueryExecutionTree*> getChildren() override { return {}; }
 };

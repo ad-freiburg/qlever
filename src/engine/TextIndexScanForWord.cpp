@@ -36,13 +36,15 @@ VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
   addDefinedVar(textRecordVar_);
   if (isPrefix_) {
     addDefinedVar(textRecordVar_.getMatchingWordVariable(
-        word_.substr(0, word_.size() - 1)));
+        std::string_view(word_).substr(0, word_.size() - 1)));
   }
   return vcmap;
 }
 
 // _____________________________________________________________________________
-size_t TextIndexScanForWord::getResultWidth() const { return 1 + isPrefix_; }
+size_t TextIndexScanForWord::getResultWidth() const {
+  return 1 + (isPrefix_ ? 1 : 0);
+}
 
 // _____________________________________________________________________________
 size_t TextIndexScanForWord::getCostEstimate() {

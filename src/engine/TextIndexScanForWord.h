@@ -20,9 +20,7 @@ class TextIndexScanForWord : public Operation {
 
   std::string word() const { return word_; }
 
-  virtual ~TextIndexScanForWord() = default;
-
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  virtual ~TextIndexScanForWord() override = default;
 
   string getCacheKeyImpl() const override;
 
@@ -30,7 +28,9 @@ class TextIndexScanForWord : public Operation {
 
   size_t getResultWidth() const override;
 
-  void setTextLimit(size_t) override {}
+  void setTextLimit(size_t) override {
+    // TODO: implement textLimit
+  }
 
   size_t getCostEstimate() override;
 
@@ -47,9 +47,12 @@ class TextIndexScanForWord : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
+  VariableToColumnMap computeVariableToColumnMap() const override;
+
+ private:
   // Returns a ResultTable containing an IdTable with the columns being
   // the text-variable and the completed word (if it was prefixed)
   ResultTable computeResult() override;
 
-  VariableToColumnMap computeVariableToColumnMap() const override;
+  vector<QueryExecutionTree*> getChildren() override { return {}; }
 };

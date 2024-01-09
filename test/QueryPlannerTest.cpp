@@ -837,4 +837,21 @@ TEST(QueryPlannerTest, TextIndexScanForEntity) {
                         wordScan(Var{"?text"}, "opti"),
                         wordScan(Var{"?text"}, "picking*")),
       qec);
+
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "SELECT * WHERE { ?text ql:contains-entity ?scientist . }");
+  QueryPlanner qp(nullptr);
+  ASSERT_THROW(qp.createExecutionTree(pq), ad_utility::Exception);
+}
+
+// __________________________________________________________________________
+TEST(QueryPlannerTest, TooManyTriples) {
+  std::string query = "SELECT * WHERE {";
+  for (size_t i = 0; i < 65; i++) {
+    query = absl::StrCat(query, " ?x <p> ?y .");
+  }
+  query = absl::StrCat(query, "}");
+  ParsedQuery pq = SparqlParser::parseQuery(query);
+  QueryPlanner qp(nullptr);
+  ASSERT_THROW(qp.createExecutionTree(pq), ad_utility::Exception);
 }
