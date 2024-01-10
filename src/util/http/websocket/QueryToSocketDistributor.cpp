@@ -12,12 +12,22 @@
 
 namespace ad_utility::websocket {
 
+// _____________________________________________________________________________
+QueryToSocketDistributor::QueryToSocketDistributor(
+    net::io_context& ioContext, const std::function<void(bool)>& cleanupCall)
+    : strand_{net::make_strand(ioContext)},
+      infiniteTimer_{strand_, static_cast<net::deadline_timer::time_type>(
+                                  boost::posix_time::pos_infin)},
+      cleanupCall_{
+          cleanupCall,
+          [](const auto& cleanupCall) { std::invoke(cleanupCall, false); }},
+      signalEndCall_{[cleanupCall] { std::invoke(cleanupCall, true); }} {}
+
 net::awaitable<void> QueryToSocketDistributor::postToStrand() const {
   return net::post(net::bind_executor(strand_, net::use_awaitable));
 }
 
 // _____________________________________________________________________________
-
 net::awaitable<void> QueryToSocketDistributor::waitForUpdate() const {
   auto [error] = co_await infiniteTimer_.async_wait(
       net::bind_executor(strand_, net::as_tuple(net::use_awaitable)));
@@ -56,7 +66,8 @@ net::awaitable<void> QueryToSocketDistributor::signalEnd() {
   finished_ = true;
   wakeUpWaitingListeners();
   // Invoke cleanup pre-emptively
-  std::move(cleanupCall_).invokeManuallyAndCancel();
+  signalEndCall_();
+  std::move(cleanupCall_).cancel();
 }
 
 // _____________________________________________________________________________

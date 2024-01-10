@@ -8,70 +8,80 @@
 
 namespace ad_utility::websocket {
 
-template <bool isSender>
-net::awaitable<std::shared_ptr<
-    QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
-QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
-  while (socketDistributors_->contains(queryId)) {
+// Return a lambda that deletes the `queryId` from the `socketDistributors`, but
+// only if it is either expired or `alwaysDelete` was specified.
+inline auto makeDeleteFromDistributors =
+    [](auto socketDistributors, QueryId queryId, bool alwaysDelete) {
+      return [socketDistributors = std::move(socketDistributors),
+              queryId = std::move(queryId), alwaysDelete]() {
+        auto it = socketDistributors->find(queryId);
+        if (it == socketDistributors->end()) {
+          return;
+        }
+        bool expired = it->second.pointer_.expired();
+        // The branch `both of them are true` is currently not covered by tests
+        // and also not coverable, because the manual `signalEnd` call always
+        // comes before the destructor.
+        if (alwaysDelete || expired) {
+          socketDistributors->erase(it);
+        }
+      };
+    };
+
+// _____________________________________________________________________________
+net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
+                                                   bool isSender) {
+  if (socketDistributors_->contains(queryId)) {
     auto& reference = socketDistributors_->at(queryId);
     if (auto ptr = reference.pointer_.lock()) {
-      if constexpr (isSender) {
+      if (isSender) {
         // Ensure only single sender reference is acquired for a single session
         AD_CONTRACT_CHECK(!reference.started_);
         reference.started_ = true;
       }
       co_return ptr;
+    } else {
+      socketDistributors_->erase(queryId);
     }
-    // There's the unlikely case where the reference counter reached zero and
-    // the weak pointer can no longer create a shared pointer, but the
-    // destructor is waiting for execution on `globalStrand_`. In this case
-    // re-schedule this coroutine to be executed after destruction. So it is
-    // crucial to use post over dispatch here.
-    co_await net::post(net::bind_executor(globalStrand_, net::use_awaitable));
   }
 
+  // The cleanup call for the distributor.
+  // We pass a copy of the `shared_pointer socketDistributors_` here,
+  // because in unit tests the callback might be invoked after this
+  // `QueryHub` was destroyed.
+  auto cleanupCall = [globalStrand = globalStrand_,
+                      socketDistributors = socketDistributors_, queryId,
+                      alreadyCalled = false](bool alwaysDelete) mutable {
+    AD_CORRECTNESS_CHECK(!alreadyCalled);
+    alreadyCalled = true;
+    net::dispatch(globalStrand,
+                  makeDeleteFromDistributors(std::move(socketDistributors),
+                                             std::move(queryId), alwaysDelete));
+    // We don't wait for the deletion to complete here, but only for its
+    // scheduling. We still get the expected behavior because all accesses
+    // to the `socketDistributor` are synchronized via a strand and
+    // BOOST::asio schedules in a FIFO manner.
+  };
+
   auto distributor = std::make_shared<QueryToSocketDistributor>(
-      // We pass a copy of the `shared_pointer socketDistributors_` here,
-      // because in unit tests the callback might be invoked after this
-      // `QueryHub` was destroyed.
-      ioContext_, [&ioContext = ioContext_, globalStrand = globalStrand_,
-                   socketDistributors = socketDistributors_, queryId]() {
-        auto future = net::dispatch(net::bind_executor(
-            globalStrand,
-            std::packaged_task<void()>([&socketDistributors, &queryId]() {
-              bool wasErased = socketDistributors->erase(queryId);
-              AD_CORRECTNESS_CHECK(wasErased);
-            })));
-        // As long as the destructor would have to block anyway, perform work
-        // on the `ioContext_`. This avoids blocking in case the destructor
-        // already runs inside the `ioContext_`.
-        // Note: When called on a strand this may block the current strand.
-        // If the ioContext has been stopped for some reason don't wait
-        // for the result, or this will never terminate.
-        while (future.wait_for(std::chrono::seconds(0)) !=
-                   std::future_status::ready &&
-               !ioContext.stopped()) {
-          ioContext.poll_one();
-        }
-      });
+      ioContext_, std::move(cleanupCall));
   socketDistributors_->emplace(queryId,
                                WeakReferenceHolder{distributor, isSender});
   co_return distributor;
 }
 
 // _____________________________________________________________________________
-
 template <bool isSender>
 net::awaitable<std::shared_ptr<
     QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
 QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
   co_await net::post(net::bind_executor(globalStrand_, net::use_awaitable));
-  co_return co_await createOrAcquireDistributorInternalUnsafe<isSender>(
-      std::move(queryId));
+  co_return co_await createOrAcquireDistributorInternalUnsafe(
+      std::move(queryId), isSender);
 }
 
 // _____________________________________________________________________________
-
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForSending(QueryId queryId) {
   return resumeOnOriginalExecutor(
@@ -86,12 +96,4 @@ QueryHub::createOrAcquireDistributorForReceiving(QueryId queryId) {
       createOrAcquireDistributorInternal<false>(std::move(queryId)));
 }
 
-// _____________________________________________________________________________
-
-// Clang does not seem to keep this instantiation around when called directly,
-// so we need to explicitly instantiate it here for the
-// QueryHub_testCorrectReschedulingForEmptyPointerOnDestruct test to compile
-// properly
-template net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
-    QueryHub::createOrAcquireDistributorInternalUnsafe<false>(QueryId);
 }  // namespace ad_utility::websocket
