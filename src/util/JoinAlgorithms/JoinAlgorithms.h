@@ -970,9 +970,11 @@ struct BlockZipperJoinImpl {
         }
         case BlockStatus::rightMissing: {
           getNextBlocks(r, rightSide_);
+          continue;
         }
         case BlockStatus::leftMissing: {
           getNextBlocks(l, leftSide_);
+          continue;
         }
         default:
           AD_FAIL();
