@@ -242,10 +242,6 @@ class GroupBy : public Operation {
     }
   };
 
-  // Gets the aggregate kind of given supported aggregate expression.
-  static HashMapAggregateKind getAggregateKind(
-      sparqlExpression::SparqlExpression* expr);
-
   // Stores alias information, especially all aggregates contained
   // in an alias.
   struct HashMapAliasInformation {
@@ -380,9 +376,8 @@ class GroupBy : public Operation {
   static bool hasAnyType(const auto& expr);
 
   // Check if an expression is a currently supported aggregate.
-  // TODO<kcaliban> As soon as all aggregates are supported, implement and use a
-  //                `isAggregate` function in SparqlExpressions instead.
-  static bool isUnsupportedAggregate(sparqlExpression::SparqlExpression* expr);
+  static std::optional<GroupBy::HashMapAggregateKind> isSupportedAggregate(
+      sparqlExpression::SparqlExpression* expr);
 
   // Find all occurrences of grouped by variable for expression `expr`.
   GroupBy::GroupedByVariableSubstitutions findGroupedVariable(

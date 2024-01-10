@@ -812,33 +812,21 @@ bool GroupBy::hasAnyType(const auto& expr) {
 }
 
 // _____________________________________________________________________________
-GroupBy::HashMapAggregateKind GroupBy::getAggregateKind(
+std::optional<GroupBy::HashMapAggregateKind> GroupBy::isSupportedAggregate(
     sparqlExpression::SparqlExpression* expr) {
   using namespace sparqlExpression;
 
-  // TODO: Combine this with isUnsupportedAggregate into one function,
-  //       so that we do not check the type multiple times
+  // `expr` is not a distinct aggregate
+  if (expr->isDistinct()) return std::nullopt;
+
+  // `expr` is not a nested aggregated
+  if (expr->children().front()->containsAggregate()) return std::nullopt;
+
   if (hasType<AvgExpression>(expr)) return HashMapAggregateKind::AVG;
   if (hasType<CountExpression>(expr)) return HashMapAggregateKind::COUNT;
 
-  AD_THROW(
-      "Unsupported aggregate provided in Hash Map optimization of Group By.");
-}
-
-// _____________________________________________________________________________
-bool GroupBy::isUnsupportedAggregate(sparqlExpression::SparqlExpression* expr) {
-  using namespace sparqlExpression;
-
-  // `expr` is not an aggregate, so it cannot be an unsupported aggregate
-  if (!expr->isAggregate()) return false;
-
   // `expr` is an unsupported aggregate
-  if (hasAnyType<SumExpression, MinExpression, MaxExpression,
-                 GroupConcatExpression>(expr))
-    return true;
-
-  // `expr` is a distinct aggregate
-  return expr->isDistinct();
+  return std::nullopt;
 }
 
 // _____________________________________________________________________________
@@ -846,18 +834,13 @@ bool GroupBy::findAggregatesImpl(
     sparqlExpression::SparqlExpression* expr,
     std::optional<ParentAndChildIndex> parentAndChildIndex,
     std::vector<GroupBy::HashMapAggregateInformation>& info) {
-  // Unsupported aggregates
-  if (isUnsupportedAggregate(expr)) return false;
-
   if (expr->isAggregate()) {
-    auto aggregateKind = getAggregateKind(expr);
-
-    info.emplace_back(expr, 0, aggregateKind, parentAndChildIndex);
-
-    // Make sure this is not a nested aggregate.
-    if (expr->children().front()->containsAggregate()) return false;
-
-    return true;
+    if (auto aggregateKind = isSupportedAggregate(expr)) {
+      info.emplace_back(expr, 0, aggregateKind.value(), parentAndChildIndex);
+      return true;
+    } else {
+      return false;
+    }
   }
 
   auto children = expr->children();
