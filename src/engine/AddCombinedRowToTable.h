@@ -60,7 +60,7 @@ class AddCombinedRowToIdTable {
   size_t bufferSize_ = 100'000;
 
   // TODO<joka921> Comment
-  BlockwiseCallback blockwiseCallback_{};
+  [[no_unique_address]] BlockwiseCallback blockwiseCallback_{};
 
  public:
   // Construct from the number of join columns, the two inputs, and the output.
