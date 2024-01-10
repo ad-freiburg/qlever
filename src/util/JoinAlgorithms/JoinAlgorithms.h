@@ -576,6 +576,8 @@ class BlockAndSubrange {
     return std::as_const(*block_)[subrange_.second - 1];
   }
 
+  bool empty() const { return subrange_.second == subrange_.first; }
+
   // Return the currently specified subrange as a `std::ranges::subrange`
   // object.
   auto subrange() {
@@ -587,6 +589,10 @@ class BlockAndSubrange {
   auto subrange() const {
     return std::ranges::subrange{fullBlock().begin() + subrange_.first,
                                  fullBlock().begin() + subrange_.second};
+  }
+
+  auto getIndexRange() const {
+    return std::views::iota(subrange_.first, subrange_.second);
   }
 
   Range getIndices() const { return subrange_; }
@@ -620,41 +626,61 @@ class BlockAndSubrange {
       impl(std::as_const(block).begin(), std::as_const(block).end());
     }
   }
-};
-}  // namespace detail
 
-// ___________________________________________________________________________
-template <typename SameBlocks, typename It, typename End, typename Projection>
+  // Overload of `setSubrange` for an actual subrange object.
+  template <typename Subrange>
+  void setSubrange(const Subrange& subrange) {
+    setSubrange(subrange.begin(), subrange.end());
+  }
+};
+
+// A helper struct for the zipper join on blocks algorithm (see below). It
+// combines the current iterator, then end iterator, the relevant projection to
+// obtain the input to the comparsion, and a buffer for blocks that are
+// currently required by the join algorithm for one side of the join.
+template <typename Iterator, typename End, typename Projection>
 struct JoinSide {
-  SameBlocks sameBlocks_;
-  It it_;
+  using SameBlocks =
+      std::vector<detail::BlockAndSubrange<typename Iterator::value_type>>;
+  Iterator it_;
   const End end_;
   const Projection& projection_;
+  SameBlocks sameBlocks_{};
 
   // Type aliases for a single element from a block from the left/right input.
-  // using value_type = std::ranges::range_value_t<typename
-  // std::iterator_traits<It>::value_type>;
-  using value_type = std::ranges::range_value_t<typename It::value_type>;
+  using value_type = std::ranges::range_value_t<typename Iterator::value_type>;
   // Type alias for the result of the projection.
   using ProjectedEl =
       std::decay_t<std::invoke_result_t<const Projection&, value_type>>;
 };
 
-template <typename SameBlocks, typename It, typename End, typename Projection>
-JoinSide(SameBlocks, It, const End, Projection&)
-    -> JoinSide<SameBlocks, It, End, Projection>;
-enum struct BlockStatus { leftMissing, rightMissing, allFilled };
+// Deduction guide required by the `makeJoinSide` function.
+template <typename It, typename End, typename Projection>
+JoinSide(It, End, const Projection&) -> JoinSide<It, End, Projection>;
 
+// Create a `JoinSide` object from a range of `blocks` and a projection. Note
+// that the `blocks` are stored as a reference, so the caller is responsible for
+// keeping them valid until the
+template <typename Blocks>
+auto makeJoinSide(Blocks& blocks, const auto& projection) {
+  return JoinSide{blocks.begin(), blocks.end(), projection};
+};
+
+// A concept to identify instantiations of the `JoinSide` template.
 template <typename T>
 concept IsJoinSide = ad_utility::isInstantiation<T, JoinSide>;
 
-template <typename LeftSide, typename RightSide, typename LessThan, typename Eq,
+// The class that actually performs the zipper join for blocks without undef.
+// See the public `zipperJoinForBlocksWithoutUndef` function below for details.
+template <IsJoinSide LeftSide, IsJoinSide RightSide, typename LessThan,
           typename CompatibleRowAction>
 struct BlockZipperJoinImpl {
+  // The left and right inputs of the join.
   LeftSide leftSide_;
   RightSide rightSide_;
+  // The used comparison.
   const LessThan& lessThan_;
-  const Eq& eq_;
+  // The callback that is called for the matching rows.
   CompatibleRowAction& compatibleRowAction_;
 
   // Type alias for the result of the projection. Elements from the left and
@@ -662,8 +688,17 @@ struct BlockZipperJoinImpl {
   using ProjectedEl = LeftSide::ProjectedEl;
   static_assert(std::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
 
+  // The largest element for which all blocks are currently stored in the buffer
+  // and processed.
   std::optional<ProjectedEl> currentMinEl_ = std::nullopt;
 
+  // Create an equality comparison from the `lessThan` predicate.
+  bool eq(const auto& el1, const auto& el2) {
+    return !lessThan_(el1, el2) && !lessThan_(el2, el1);
+  };
+
+  // Recompute the `minEl`. It is the minimum of the last element in the first
+  // block of either of the join sides.
   ProjectedEl getMinEl() {
     auto getFirst = [](const auto& side) {
       return side.projection_(side.sameBlocks_.front().back());
@@ -671,13 +706,13 @@ struct BlockZipperJoinImpl {
     return std::min(getFirst(leftSide_), getFirst(rightSide_), lessThan_);
   };
 
-  // Fill the `targetBuffer` with blocks from the range `[it, end)` and advance
-  // `it` for each read buffer until all elements <= `minEl` are added to the
-  // `targetBuffer` or at most three blocks have been added to the targetBuffer.
+  // Fill `side.sameBlocks_` with blocks from the range `[side.it_, sidde.end_)`
+  // and advance `side.it_` for each read buffer until all elements <= `minEl`
+  // are added or until three blocks have been added to the targetBuffer.
   // Calling this function requires that all blocks that contain elements `<
-  // minEl` have already been consumed. Returns `true` if all blocks have been
-  // added, and `false` if the function returned because 3 blocks were added
-  // without fulfilling the condition.
+  // minEl` have already been consumed. Returns `true` if all blocks that
+  // contain elements <= `minEl` have been added, and `false` if the function
+  // returned because 3 blocks were added without fulfilling the condition.
   bool fillEqualToMinimum(IsJoinSide auto& side, const auto& minEl) {
     auto& it = side.it_;
     auto& end = side.end_;
@@ -686,7 +721,7 @@ struct BlockZipperJoinImpl {
       if (std::ranges::empty(*it)) {
         continue;
       }
-      if (!eq_((*it)[0], minEl)) {
+      if (!eq((*it)[0], minEl)) {
         AD_CORRECTNESS_CHECK(lessThan_(minEl, (*it)[0]));
         return true;
       }
@@ -696,8 +731,12 @@ struct BlockZipperJoinImpl {
     return it == end;
   }
 
-  // TODO<joka921> Comment.
-  BlockStatus fillEqualToMinimumBothSidesImpl(const auto& minEl) {
+  // Fill the buffers in `leftSide_` and rightSide_` until they both contain at
+  // least one block and at least one of them contains all the blocks with
+  // elements `<= minEl`. The returned `BlockStatus` reports which of the sides
+  // contain all the relevant blocks.
+  enum struct BlockStatus { leftMissing, rightMissing, allFilled };
+  BlockStatus fillEqualToMinimumBothSides(const auto& minEl) {
     bool allBlocksFromLeft = false;
     bool allBlocksFromRight = false;
     while (!(allBlocksFromLeft || allBlocksFromRight)) {
@@ -713,32 +752,32 @@ struct BlockZipperJoinImpl {
     }
   };
 
-  // Remove all elements from `blocks` (either `sameBlocksLeft` or
-  // `sameBlocksRight`) s.t. only elements `> lastProcessedElement` remain. This
-  // effectively removes all blocks completely, except maybe the last one.
+  // Remove all elements from `blocks` (either `leftSide_.sameBlocks_` or
+  // `rightSide_.sameBlocks`) s.t. only elements `> lastProcessedElement`
+  // remain. This effectively removes all blocks completely, except maybe the
+  // last one.
   template <typename Blocks, typename ProjectedEl>
   void removeAllButUnjoined(Blocks& blocks, ProjectedEl lastProcessedElement) {
     // Erase all but the last block.
     AD_CORRECTNESS_CHECK(!blocks.empty());
+    if (blocks.size() > 1 && !blocks.front().empty()) {
+      AD_CORRECTNESS_CHECK(!lessThan_(lastProcessedElement,
+                                      std::as_const(blocks.front()).back()));
+    }
     blocks.erase(blocks.begin(), blocks.end() - 1);
 
     // Delete the part from the last block that is `<= lastProcessedElement`.
     decltype(auto) remainingBlock = blocks.at(0).subrange();
     auto beginningOfUnjoined = std::ranges::upper_bound(
         remainingBlock, lastProcessedElement, lessThan_);
-    remainingBlock =
-        std::ranges::subrange{beginningOfUnjoined, remainingBlock.end()};
-    // If the last block also was already handled completely, delete it (this
-    // might happen at the very end).
-    if (!remainingBlock.empty()) {
-      blocks.at(0).setSubrange(remainingBlock.begin(), remainingBlock.end());
-    } else {
+    blocks.at(0).setSubrange(beginningOfUnjoined, remainingBlock.end());
+    if (blocks.at(0).empty()) {
       blocks.clear();
     }
   };
 
-  // For one of the inputs (`sameBlocksLeft` or `sameBlocksRight`) obtain a
-  // tuple of the following elements:
+  // For one of the inputs (`leftSide_.sameBlocks_` or `rightSide_.sameBlocks_`)
+  // obtain a tuple of the following elements:
   // * A reference to the first full block
   // * The currently active subrange of that block
   // * An iterator pointing to the position of the `minEl` in the block.
@@ -760,8 +799,7 @@ struct BlockZipperJoinImpl {
               std::ranges::empty)) {
         for (const auto& lBlock : blocksLeft) {
           compatibleRowAction_.setLeftInput(lBlock.fullBlock());
-          for (size_t i : std::views::iota(lBlock.getIndices().first,
-                                           lBlock.getIndices().second)) {
+          for (size_t i : lBlock.getIndexRange()) {
             compatibleRowAction_.addOptionalRow(i);
           }
         }
@@ -771,11 +809,8 @@ struct BlockZipperJoinImpl {
     for (const auto& lBlock : blocksLeft) {
       for (const auto& rBlock : blocksRight) {
         compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
-
-        for (size_t i : std::views::iota(lBlock.getIndices().first,
-                                         lBlock.getIndices().second)) {
-          for (size_t j : std::views::iota(rBlock.getIndices().first,
-                                           rBlock.getIndices().second)) {
+        for (size_t i : lBlock.getIndexRange()) {
+          for (size_t j : rBlock.getIndexRange()) {
             compatibleRowAction_.addRow(i, j);
           }
         }
@@ -794,8 +829,8 @@ struct BlockZipperJoinImpl {
     // in the first place.
     AD_CORRECTNESS_CHECK(!result.empty());
     auto& last = result.back();
-    auto range = std::ranges::equal_range(last.subrange(), minEl, lessThan_);
-    last.setSubrange(range.begin(), range.end());
+    last.setSubrange(
+        std::ranges::equal_range(last.subrange(), minEl, lessThan_));
     return result;
   };
 
@@ -895,7 +930,7 @@ struct BlockZipperJoinImpl {
     }
 
     // Add the remaining blocks such that condition 3 from above is fulfilled.
-    blockStatus = fillEqualToMinimumBothSidesImpl(getMinEl());
+    blockStatus = fillEqualToMinimumBothSides(getMinEl());
     currentMinEl_ = getMinEl();
   }
 
@@ -911,15 +946,20 @@ struct BlockZipperJoinImpl {
     auto l = pushRelevantSubranges(sameBlocksLeft, minEl);
     auto r = pushRelevantSubranges(sameBlocksRight, minEl);
 
-    auto getNextBlocks = [&minEl, self = this](auto& target, auto& side) {
+    auto getNextBlocks = [&minEl, self = this, &blockStatus](auto& target,
+                                                             auto& side) {
       self->removeAllButUnjoined(side.sameBlocks_, minEl);
       bool allBlocksWereFilled = self->fillEqualToMinimum(side, minEl);
       if (side.sameBlocks_.empty()) {
         AD_CORRECTNESS_CHECK(allBlocksWereFilled);
       }
       target = self->pushRelevantSubranges(side.sameBlocks_, minEl);
-      return allBlocksWereFilled;
+      if (allBlocksWereFilled) {
+        blockStatus = BlockStatus::allFilled;
+      }
     };
+    // We are only guaranteed to have all relevant blocks from one side, so we
+    // also need to pass through the remaining blocks from the other side.
     while (!l.empty() && !r.empty()) {
       addAll<DoOptionalJoin>(l, r);
       switch (blockStatus.value()) {
@@ -929,24 +969,20 @@ struct BlockZipperJoinImpl {
           return;
         }
         case BlockStatus::rightMissing: {
-          bool finished = getNextBlocks(r, rightSide_);
-          if (finished) {
-            blockStatus = BlockStatus::allFilled;
-          }
-          continue;
+          getNextBlocks(r, rightSide_);
         }
         case BlockStatus::leftMissing: {
-          bool finished = getNextBlocks(l, leftSide_);
-          if (finished) {
-            blockStatus = BlockStatus::allFilled;
-          }
-          continue;
+          getNextBlocks(l, leftSide_);
         }
+        default:
           AD_FAIL();
       }
     }
-  };
+  }
 
+  // Needed for the optional join: Call `addOptionalRow` for all remaining
+  // elements from the left input after the right input has been completely
+  // processed.
   auto fillWithAllFromLeft() {
     auto& sameBlocksLeft = leftSide_.sameBlocks_;
     auto& it1 = leftSide_.it_;
@@ -970,6 +1006,7 @@ struct BlockZipperJoinImpl {
     compatibleRowAction_.flush();
   }
 
+  // The actual join routine that combines all the previous functions.
   template <bool DoOptionalJoin>
   void runJoin() {
     std::optional<BlockStatus> blockStatus;
@@ -986,11 +1023,13 @@ struct BlockZipperJoinImpl {
   }
 };
 
-template <typename LHS, typename RHS, typename LessThan, typename Eq,
+// Deduction guide for the above struct.
+template <typename LHS, typename RHS, typename LessThan,
           typename CompatibleRowAction>
-BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, const Eq&,
-                    CompatibleRowAction&)
-    -> BlockZipperJoinImpl<LHS, RHS, LessThan, Eq, CompatibleRowAction>;
+BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, CompatibleRowAction&)
+    -> BlockZipperJoinImpl<LHS, RHS, LessThan, CompatibleRowAction>;
+
+}  // namespace detail
 
 /**
  * @brief Perform a zipper/merge join between two sorted inputs that are given
@@ -1032,23 +1071,12 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
                                      RightProjection rightProjection = {},
                                      DoOptionalJoinTag = {}) {
   static constexpr bool DoOptionalJoin = DoOptionalJoinTag::value;
-  auto makeJoinSide = []<typename Blocks>(Blocks& blocks, auto& projection) {
-    using Block = typename std::ranges::range_value_t<std::decay_t<Blocks>>;
-    using SameBlockBuffer = std::vector<detail::BlockAndSubrange<Block>>;
-    return JoinSide{SameBlockBuffer{}, blocks.begin(), blocks.end(),
-                    projection};
-  };
 
-  // Create an equality comparison from the `lessThan` predicate.
-  auto eq = [&lessThan](const auto& el1, const auto& el2) {
-    return !lessThan(el1, el2) && !lessThan(el2, el1);
-  };
+  auto leftSide = detail::makeJoinSide(leftBlocks, leftProjection);
+  auto rightSide = detail::makeJoinSide(rightBlocks, rightProjection);
 
-  auto leftSide = makeJoinSide(leftBlocks, leftProjection);
-  auto rightSide = makeJoinSide(rightBlocks, rightProjection);
-
-  BlockZipperJoinImpl impl{leftSide, rightSide, lessThan, eq,
-                           compatibleRowAction};
+  detail::BlockZipperJoinImpl impl{leftSide, rightSide, lessThan,
+                                   compatibleRowAction};
   impl.template runJoin<DoOptionalJoin>();
 }
 
