@@ -2,14 +2,12 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H
-#define QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H
-
+#pragma once
 #include <re2/re2.h>
 
-#include "../../global/Id.h"
-#include "../ResultTable.h"
-#include "./SparqlExpressionTypes.h"
+#include "engine/ResultTable.h"
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
+#include "global/Id.h"
 #include "util/TypeTraits.h"
 
 /// Several classes that can be used as the `ValueGetter` template
@@ -187,5 +185,3 @@ struct RegexValueGetter {
 };
 
 }  // namespace sparqlExpression::detail
-
-#endif  // QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H
