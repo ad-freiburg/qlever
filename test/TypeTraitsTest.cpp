@@ -31,6 +31,8 @@ constexpr void callLambdaWithAllVariationsOfType(const auto& lambda) {
   lambda.template operator()<const decayedT>();
   lambda.template operator()<decayedT&>();
   lambda.template operator()<const decayedT&>();
+  lambda.template operator()<decayedT&&>();
+  lambda.template operator()<const decayedT&&>();
 }
 
 TEST(TypeTraits, SimiliarToAnyTypeIn) {
