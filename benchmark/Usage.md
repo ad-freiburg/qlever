@@ -37,7 +37,7 @@ Now, the interface for benchmark classes has 5 functions:
 
 `name` should just return the name of your benchmark class, so that you can easily identify it later.
 
-`getGeneralMetadata` and `getConfigManager`are getter for member variables, that are used for advanced features. So they can be safely ignored for the time being.
+`getGeneralMetadata` and `getConfigManager`are getters for member variables, that are used for advanced features. So they can be safely ignored for the time being.
 
 `updateDefaultGeneralMetadata` exists solely for the infrastructure and should be ignored.
 
