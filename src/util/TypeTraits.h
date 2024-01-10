@@ -20,8 +20,7 @@ namespace detail {
 /*
 Check (via the compiler's template matching mechanism) whether a given type
 is an instantiation of a given template.
-This also works with aliases, that were created using `using`. We are not sure
-why.
+This also works with aliases, that were created using `using`.
 For example:
 For
 ```
@@ -155,17 +154,17 @@ struct SameAsAnyTypeInImpl<T, Template<Ts...>>
 
 }  // namespace detail
 /*
-SimilarToAnyTypeIn<T, U> It is true iff type U is a pair, tuple or variant
-and T `isSimilar` (see above) to one of the types contained in the tuple,
-pair or variant.
+`SimilarToAnyTypeIn<T, U>` is true, iff type `U` is an instantiation of a
+template that only has template type parameters (e.g. `std::pair`, `std::tuple`
+or `std::variant`). and `T` is `isSimilar` (see above) to any of the type
+parameters.
 */
 template <typename T, typename Template>
 concept SimilarToAnyTypeIn = detail::SimilarToAnyTypeInImpl<T, Template>::value;
 
 /*
-SameAsAnyTypeIn<T, U> It is true iff type U is a pair, tuple or variant
-and T `std::same_as` to one of the types contained in the tuple,
-pair or variant.
+Equivalent to `SimilarToAnyTypeIn` (see above), but checks for exactly matching
+types via `std::same_as`.
 */
 template <typename T, typename Template>
 concept SameAsAnyTypeIn = detail::SameAsAnyTypeInImpl<T, Template>::value;
