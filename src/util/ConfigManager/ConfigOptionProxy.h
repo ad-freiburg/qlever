@@ -27,10 +27,9 @@ access to the referenced config option.
 @tparam ConfigOptionType The kind of config option, this proxy will reference
 to. Must be `ConfigOption`, or `const ConfigOption`.
 */
-template <typename T, typename ConfigOptionType>
-requires ad_utility::SameAsAnyTypeIn<T, ConfigOption::AvailableTypes> &&
-         ad_utility::SameAsAny<ConfigOptionType, ConfigOption,
-                               const ConfigOption>
+template <
+    ad_utility::SameAsAnyTypeIn<ConfigOption::AvailableTypes> T,
+    ad_utility::SameAsAny<ConfigOption, const ConfigOption> ConfigOptionType>
 class ConfigOptionProxyImplementation {
   ConfigOptionType* option_;
 

@@ -18,9 +18,8 @@ cooperation with `generateSingleParameterValidatorFunction`, while keeping the
 invariant of `generateValidatorFunction` true.
 `variant` slightly changes the returned value.
 */
-template <typename Type>
-requires ad_utility::SameAsAnyTypeIn<Type,
-                                     ad_utility::ConfigOption::AvailableTypes>
+template <
+    ad_utility::SameAsAnyTypeIn<ad_utility::ConfigOption::AvailableTypes> Type>
 Type createDummyValueForValidator(size_t variant);
 
 /*

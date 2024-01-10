@@ -44,8 +44,7 @@ ConfigManager::HashMapEntry::HashMapEntry(Data&& data)
     : data_{std::make_unique<Data>(std::move(data))} {}
 
 // ____________________________________________________________________________
-template <typename T>
-requires SameAsAnyTypeIn<T, ConfigManager::HashMapEntry::Data>
+template <SameAsAnyTypeIn<ConfigManager::HashMapEntry::Data> T>
 bool ConfigManager::HashMapEntry::implHolds() const {
   // Make sure, that it is not a null pointer.
   AD_CORRECTNESS_CHECK(data_);
@@ -64,9 +63,8 @@ bool ConfigManager::HashMapEntry::holdsSubManager() const {
 }
 
 // ____________________________________________________________________________
-template <typename ReturnType>
-requires SimilarToAnyTypeIn<ReturnType, ConfigManager::HashMapEntry::Data> &&
-         std::is_object_v<ReturnType> std::optional<ReturnType*>
+template <SimilarToAnyTypeIn<ConfigManager::HashMapEntry::Data> ReturnType>
+requires std::is_object_v<ReturnType> std::optional<ReturnType*>
 ConfigManager::HashMapEntry::getConfigOptionOrSubManager(
     ad_utility::SimilarTo<ConfigManager::HashMapEntry> auto& instance) {
   using DecayReturnType = std::decay_t<ReturnType>;

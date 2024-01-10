@@ -89,8 +89,7 @@ class ConfigOption {
   bool wasSet() const;
 
   // Returns, if this configuration option holds values of the given type.
-  template <typename Type>
-  requires ad_utility::SameAsAnyTypeIn<Type, ConfigOption::AvailableTypes>
+  template <ad_utility::SameAsAnyTypeIn<ConfigOption::AvailableTypes> Type>
   constexpr bool holdsType() const {
     return std::holds_alternative<Data<Type>>(data_);
   }
@@ -100,8 +99,7 @@ class ConfigOption {
   exception, should the given value have a different type, than what the
   configuration option was set to.
   */
-  template <typename T>
-  requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>
+  template <ad_utility::SameAsAnyTypeIn<AvailableTypes> T>
   void setValue(const T& value) {
     // Only set the variable, that our internal pointer points to, if the given
     // value is of the right type.
@@ -127,8 +125,7 @@ class ConfigOption {
   there is no default value, or `T` is the wrong type, then it will throw an
   exception.
   */
-  template <typename T>
-  requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>
+  template <ad_utility::SameAsAnyTypeIn<AvailableTypes> T>
   T getDefaultValue() const {
     if (hasDefaultValue() && std::holds_alternative<Data<T>>(data_)) {
       return std::get<Data<T>>(data_).defaultValue_.value();
@@ -157,8 +154,8 @@ class ConfigOption {
   @brief Return the content of the variable, that the internal pointer points
   to. If `T` is the wrong type, then it will throw an exception.
   */
-  template <typename T>
-  requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes> T getValue() const {
+  template <ad_utility::SameAsAnyTypeIn<AvailableTypes> T>
+  T getValue() const {
     if (wasSet() && std::holds_alternative<Data<T>>(data_)) {
       return *(std::get<Data<T>>(data_).variablePointer_);
     } else if (!wasSet()) {
@@ -213,8 +210,7 @@ class ConfigOption {
   @param defaultValue The optional default value. An empty `std::optional` is
   for no default value and a non empty for a default value.
   */
-  template <typename T>
-  requires ad_utility::SameAsAnyTypeIn<T, ConfigOption::AvailableTypes>
+  template <ad_utility::SameAsAnyTypeIn<ConfigOption::AvailableTypes> T>
   ConfigOption(std::string_view identifier, std::string_view description,
                T* variablePointer, std::optional<T> defaultValue = std::nullopt)
       : data_{Data<T>{std::move(defaultValue), variablePointer}},
@@ -254,8 +250,7 @@ class ConfigOption {
   /*
   @brief Return the string representation/name of the type.
   */
-  template <typename T>
-  requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>
+  template <ad_utility::SameAsAnyTypeIn<AvailableTypes> T>
   static std::string availableTypesToString() {
     return availableTypesToString(T{});
   }

@@ -101,8 +101,8 @@ class ConfigManager {
 
    private:
     // Implementation for `holdsConfigOption` and `holdsSubManager`.
-    template <typename T>
-    requires SameAsAnyTypeIn<T, Data> bool implHolds() const;
+    template <SameAsAnyTypeIn<Data> T>
+    bool implHolds() const;
 
     /*
     @brief Implementation for `getConfigOption` and `getSubManager`. You can
@@ -113,9 +113,8 @@ class ConfigManager {
 
     @param instance The `HashMapEntry` you want this from.
     */
-    template <typename ReturnType>
-    requires SimilarToAnyTypeIn<ReturnType, Data> &&
-             std::is_object_v<ReturnType>
+    template <SimilarToAnyTypeIn<Data> ReturnType>
+    requires std::is_object_v<ReturnType>
     static std::optional<ReturnType*> getConfigOptionOrSubManager(
         ad_utility::SimilarTo<HashMapEntry> auto& instance);
 
@@ -174,8 +173,8 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <typename OptionType>
-  requires ad_utility::SameAsAnyTypeIn<OptionType, ConfigOption::AvailableTypes>
+  template <
+      ad_utility::SameAsAnyTypeIn<ConfigOption::AvailableTypes> OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
@@ -203,9 +202,9 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <typename OptionType,
-            std::same_as<OptionType> DefaultValueType = OptionType>
-  requires ad_utility::SameAsAnyTypeIn<OptionType, ConfigOption::AvailableTypes>
+  template <
+      ad_utility::SameAsAnyTypeIn<ConfigOption::AvailableTypes> OptionType,
+      std::same_as<OptionType> DefaultValueType = OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
@@ -224,8 +223,8 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <typename OptionType>
-  requires ad_utility::SameAsAnyTypeIn<OptionType, ConfigOption::AvailableTypes>
+  template <
+      ad_utility::SameAsAnyTypeIn<ConfigOption::AvailableTypes> OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn) {
@@ -242,9 +241,9 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <typename OptionType,
-            std::same_as<OptionType> DefaultValueType = OptionType>
-  requires ad_utility::SameAsAnyTypeIn<OptionType, ConfigOption::AvailableTypes>
+  template <
+      ad_utility::SameAsAnyTypeIn<ConfigOption::AvailableTypes> OptionType,
+      std::same_as<OptionType> DefaultValueType = OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn,
@@ -546,8 +545,8 @@ class ConfigManager {
   @return A reference to the newly created configuration option. Will stay
   valid, even after more options.
   */
-  template <typename OptionType>
-  requires ad_utility::SameAsAnyTypeIn<OptionType, ConfigOption::AvailableTypes>
+  template <
+      ad_utility::SameAsAnyTypeIn<ConfigOption::AvailableTypes> OptionType>
   ConstConfigOptionProxy<OptionType> addOptionImpl(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
