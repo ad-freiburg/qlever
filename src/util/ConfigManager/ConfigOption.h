@@ -26,6 +26,7 @@
 #include "util/json.h"
 
 namespace ad_utility {
+namespace innerNamespace {
 /*
 Describes a configuration option. A configuration option can only hold/parse/set
 values of a specific type, decided when creating the object.
@@ -267,5 +268,6 @@ class ConfigOption {
 template <typename T>
 concept SameAsAnyTypeInAvailableConfigOptionTypes =
     ad_utility::SameAsAnyTypeIn<T, ConfigOption::AvailableTypes>;
-
+}  // namespace innerNamespace
+using innerNamespace::ConfigOption;
 }  // namespace ad_utility

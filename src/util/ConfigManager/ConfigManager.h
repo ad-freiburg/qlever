@@ -37,6 +37,7 @@
 #include "util/json.h"
 
 namespace ad_utility {
+namespace innerNamespace {
 
 // Shorthand concepts, to reduce code duplication.
 class ConfigManager;
@@ -789,5 +790,6 @@ class ConfigManager {
       std::string_view pathPrefix,
       const ConfigurationDocValidatorAssignment& assignment) const;
 };
-
+}  // namespace innerNamespace
+using innerNamespace::ConfigManager;
 }  // namespace ad_utility
