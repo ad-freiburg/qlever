@@ -210,7 +210,7 @@ class ConfigOption {
   @param defaultValue The optional default value. An empty `std::optional` is
   for no default value and a non empty for a default value.
   */
-  template <ad_utility::SameAsAnyTypeIn<ConfigOption::AvailableTypes> T>
+  template <ad_utility::SameAsAnyTypeIn<AvailableTypes> T>
   ConfigOption(std::string_view identifier, std::string_view description,
                T* variablePointer, std::optional<T> defaultValue = std::nullopt)
       : data_{Data<T>{std::move(defaultValue), variablePointer}},
@@ -262,5 +262,10 @@ class ConfigOption {
   static std::string contentOfAvailableTypesToString(
       const std::optional<AvailableTypes>& v);
 };
+
+// Shorthand for checking, if `T` is part of the available options.
+template <typename T>
+concept SameAsAnyTypeInAvailableConfigOptionTypes =
+    ad_utility::SameAsAnyTypeIn<T, ConfigOption::AvailableTypes>;
 
 }  // namespace ad_utility
