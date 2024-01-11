@@ -180,8 +180,7 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <
-      ConfigOptionImpl::SameAsAnyTypeInAvailableConfigOptionTypes OptionType>
+  template <ConfigOptionImpl::SupportedConfigOptionType OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
@@ -209,9 +208,8 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <
-      ConfigOptionImpl::SameAsAnyTypeInAvailableConfigOptionTypes OptionType,
-      std::same_as<OptionType> DefaultValueType = OptionType>
+  template <ConfigOptionImpl::SupportedConfigOptionType OptionType,
+            std::same_as<OptionType> DefaultValueType = OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
@@ -230,8 +228,7 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <
-      ConfigOptionImpl::SameAsAnyTypeInAvailableConfigOptionTypes OptionType>
+  template <ConfigOptionImpl::SupportedConfigOptionType OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn) {
@@ -248,9 +245,8 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <
-      ConfigOptionImpl::SameAsAnyTypeInAvailableConfigOptionTypes OptionType,
-      std::same_as<OptionType> DefaultValueType = OptionType>
+  template <ConfigOptionImpl::SupportedConfigOptionType OptionType,
+            std::same_as<OptionType> DefaultValueType = OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn,

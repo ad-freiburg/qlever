@@ -278,7 +278,7 @@ class ConfigOption {
 
 // Shorthand for checking, if `T` is part of the available options.
 template <typename T>
-concept SameAsAnyTypeInAvailableConfigOptionTypes =
+concept SupportedConfigOptionType =
     ad_utility::SameAsAnyTypeIn<T, ConfigOption::AvailableTypes>;
 }  // namespace ConfigOptionImpl
 using ConfigOptionImpl::ConfigOption;

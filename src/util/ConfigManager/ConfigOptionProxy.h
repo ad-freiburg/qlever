@@ -28,7 +28,7 @@ access to the referenced config option.
 to. Must be `ConfigOption`, or `const ConfigOption`.
 */
 template <
-    ConfigOptionImpl::SameAsAnyTypeInAvailableConfigOptionTypes T,
+    ConfigOptionImpl::SupportedConfigOptionType T,
     ad_utility::SameAsAny<ConfigOption, const ConfigOption> ConfigOptionType>
 class ConfigOptionProxyImplementation {
   ConfigOptionType* option_;
