@@ -174,7 +174,7 @@ class IdTable {
   // dynamic number of columns) must be equal, else a runtime check fails.
   // Note: this also allows to create an empty view.
   explicit IdTable(size_t numColumns, Allocator allocator = {})
-      requires(columnsAreAllocatable)
+      requires columnsAreAllocatable
       : numColumns_{numColumns}, allocator_{std::move(allocator)} {
     if constexpr (!isDynamic) {
       AD_CONTRACT_CHECK(NumColumns == numColumns);

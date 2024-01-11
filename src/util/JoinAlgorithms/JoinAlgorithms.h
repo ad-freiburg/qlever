@@ -757,7 +757,8 @@ struct BlockZipperJoinImpl {
   // remain. This effectively removes all blocks completely, except maybe the
   // last one.
   template <typename Blocks, typename ProjectedEl>
-  void removeAllButUnjoined(Blocks& blocks, ProjectedEl lastProcessedElement) {
+  void removeEqualToCurrentEl(Blocks& blocks,
+                              ProjectedEl lastProcessedElement) {
     // Erase all but the last block.
     AD_CORRECTNESS_CHECK(!blocks.empty());
     if (blocks.size() > 1 && !blocks.front().empty()) {
@@ -823,7 +824,7 @@ struct BlockZipperJoinImpl {
   // the last element that we can safely join (this is the `currentEl`).
   // Effectively, these subranges cover all the blocks completely except maybe
   // the last one, which might contain elements `> currentEl` at the end.
-  auto pushRelevantSubranges(const auto& blocks, const auto& currentEl) {
+  auto getEqualToCurrentEl(const auto& blocks, const auto& currentEl) {
     auto result = blocks;
     // If one of the inputs is empty, this function shouldn't have been called
     // in the first place.
@@ -840,8 +841,9 @@ struct BlockZipperJoinImpl {
   // analogously. The fully joined parts of the block are then removed from
   // `sameBlocksLeft/Right`, as they are not needed anymore.
   template <bool DoOptionalJoin>
-  void joinAndRemoveBeginning(auto& sameBlocksLeft, auto& sameBlocksRight,
-                              const auto& currentEl) {
+  void joinAndRemoveLessThanCurrentEl(auto& sameBlocksLeft,
+                                      auto& sameBlocksRight,
+                                      const auto& currentEl) {
     // Get the first blocks.
     auto [fullBlockLeft, subrangeLeft, currentElItL] =
         getFirstBlock(sameBlocksLeft, currentEl);
@@ -942,41 +944,46 @@ struct BlockZipperJoinImpl {
   void joinBuffers(auto& blockStatus) {
     auto& sameBlocksLeft = leftSide_.currentBlocks_;
     auto& sameBlocksRight = rightSide_.currentBlocks_;
-    joinAndRemoveBeginning<DoOptionalJoin>(sameBlocksLeft, sameBlocksRight,
-                                           getCurrentEl());
+    joinAndRemoveLessThanCurrentEl<DoOptionalJoin>(
+        sameBlocksLeft, sameBlocksRight, getCurrentEl());
 
+    // TODO<joka921> This should still be the same.
     ProjectedEl currentEl = getCurrentEl();
-    auto l = pushRelevantSubranges(sameBlocksLeft, currentEl);
-    auto r = pushRelevantSubranges(sameBlocksRight, currentEl);
+    // In the last block, there might be elements `> currentEl` which will be
+    // processed later, but for the next step (the cartesian product) we only
+    // need the elements `== currentEl`
+    auto equalToCurrentElLeft = getEqualToCurrentEl(sameBlocksLeft, currentEl);
+    auto equalToCurrentElRight =
+        getEqualToCurrentEl(sameBlocksRight, currentEl);
 
     auto getNextBlocks = [&currentEl, self = this, &blockStatus](auto& target,
                                                                  auto& side) {
-      self->removeAllButUnjoined(side.currentBlocks_, currentEl);
+      self->removeEqualToCurrentEl(side.currentBlocks_, currentEl);
       bool allBlocksWereFilled = self->fillEqualToMinimum(side, currentEl);
       if (side.currentBlocks_.empty()) {
         AD_CORRECTNESS_CHECK(allBlocksWereFilled);
       }
-      target = self->pushRelevantSubranges(side.currentBlocks_, currentEl);
+      target = self->getEqualToCurrentEl(side.currentBlocks_, currentEl);
       if (allBlocksWereFilled) {
         blockStatus = BlockStatus::allFilled;
       }
     };
     // We are only guaranteed to have all relevant blocks from one side, so we
     // also need to pass through the remaining blocks from the other side.
-    while (!l.empty() && !r.empty()) {
-      addAll<DoOptionalJoin>(l, r);
+    while (!equalToCurrentElLeft.empty() && !equalToCurrentElRight.empty()) {
+      addAll<DoOptionalJoin>(equalToCurrentElLeft, equalToCurrentElRight);
       switch (blockStatus.value()) {
         case BlockStatus::allFilled: {
-          removeAllButUnjoined(sameBlocksLeft, currentEl);
-          removeAllButUnjoined(sameBlocksRight, currentEl);
+          removeEqualToCurrentEl(sameBlocksLeft, currentEl);
+          removeEqualToCurrentEl(sameBlocksRight, currentEl);
           return;
         }
         case BlockStatus::rightMissing: {
-          getNextBlocks(r, rightSide_);
+          getNextBlocks(equalToCurrentElRight, rightSide_);
           continue;
         }
         case BlockStatus::leftMissing: {
-          getNextBlocks(l, leftSide_);
+          getNextBlocks(equalToCurrentElLeft, leftSide_);
           continue;
         }
         default:
@@ -989,15 +996,14 @@ struct BlockZipperJoinImpl {
   // elements from the left input after the right input has been completely
   // processed.
   auto fillWithAllFromLeft() {
-    auto& sameBlocksLeft = leftSide_.currentBlocks_;
-    for (auto& block : sameBlocksLeft) {
+    auto& currentBlocksLeft = leftSide_.currentBlocks_;
+    for (auto& block : currentBlocksLeft) {
       compatibleRowAction_.setLeftInput(block.fullBlock());
-
-      for (size_t idx : std::views::iota(block.getIndices().first,
-                                         block.getIndices().second)) {
+      for (size_t idx : block.getIndexRange()) {
         compatibleRowAction_.addOptionalRow(idx);
       }
     }
+
     auto& it1 = leftSide_.it_;
     const auto& end1 = leftSide_.end_;
     while (it1 != end1) {
