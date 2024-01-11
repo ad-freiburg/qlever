@@ -734,7 +734,7 @@ class IndexImpl {
   // metadata. Also builds the patterns if specified.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  std::optional<PatternCreatorNew::TripleOutput> createSPOAndSOP(
+  std::optional<PatternCreatorNew::TripleSorter> createSPOAndSOP(
       size_t numColumns, auto& isInternalId, BlocksOfTriples sortedTriples,
       NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
@@ -777,7 +777,7 @@ class IndexImpl {
   // of only two permutations (where we have to build the Pxx permutations). In
   // all other cases the Sxx permutations are built first because we need the
   // patterns.
-  std::optional<PatternCreatorNew::TripleOutput> createFirstPermutationPair(
+  std::optional<PatternCreatorNew::TripleSorter> createFirstPermutationPair(
       auto&&... args) {
     static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
     static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
@@ -800,5 +800,5 @@ class IndexImpl {
   }
 
   std::unique_ptr<ExternalSorter<SortByPSO, 5>> buildOspWithPatterns(
-      PatternCreatorNew::TripleOutput patternOutput, auto isQLeverInternalId);
+      PatternCreatorNew::TripleSorter patternOutput, auto isQLeverInternalId);
 };

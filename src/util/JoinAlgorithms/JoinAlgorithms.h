@@ -701,15 +701,15 @@ struct BlockZipperJoinImpl {
     return std::min(getFirst(leftSide_), getFirst(rightSide_), lessThan_);
   };
 
-  // Fill `side.sameBlocks_` with blocks from the range `[side.it_, side.end_)`
-  // and advance `side.it_` for each read buffer until all elements <=
-  // `currentEl` are added or until three blocks have been added to the
+  // Fill `side.currentBlocks_` with blocks from the range `[side.it_,
+  // side.end_)` and advance `side.it_` for each read buffer until all elements
+  // <= `currentEl` are added or until three blocks have been added to the
   // targetBuffer. Calling this function requires that all blocks that contain
   // elements `< currentEl` have already been consumed. Returns `true` if all
   // blocks that contain elements <= `currentEl` have been added, and `false` if
   // the function returned because 3 blocks were added without fulfilling the
   // condition.
-  bool fillEqualToMinimum(IsJoinSide auto& side, const auto& currentEl) {
+  bool fillEqualToCurrentEl(auto& side, const auto& currentEl) {
     auto& it = side.it_;
     auto& end = side.end_;
     for (size_t numBlocksRead = 0; it != end && numBlocksRead < 3;
@@ -732,12 +732,12 @@ struct BlockZipperJoinImpl {
   // elements `<= currentEl`. The returned `BlockStatus` reports which of the
   // sides contain all the relevant blocks.
   enum struct BlockStatus { leftMissing, rightMissing, allFilled };
-  BlockStatus fillEqualToMinimumBothSides(const auto& currentEl) {
+  BlockStatus fillEqualToCurrentElBothSides(const auto& currentEl) {
     bool allBlocksFromLeft = false;
     bool allBlocksFromRight = false;
     while (!(allBlocksFromLeft || allBlocksFromRight)) {
-      allBlocksFromLeft = fillEqualToMinimum(leftSide_, currentEl);
-      allBlocksFromRight = fillEqualToMinimum(rightSide_, currentEl);
+      allBlocksFromLeft = fillEqualToCurrentEl(leftSide_, currentEl);
+      allBlocksFromRight = fillEqualToCurrentEl(rightSide_, currentEl);
     }
     if (!allBlocksFromRight) {
       return BlockStatus::rightMissing;
@@ -748,8 +748,8 @@ struct BlockZipperJoinImpl {
     }
   };
 
-  // Remove all elements from `blocks` (either `leftSide_.sameBlocks_` or
-  // `rightSide_.sameBlocks`) s.t. only elements `> lastProcessedElement`
+  // Remove all elements from `blocks` (either `leftSide_.currentBlocks_` or
+  // `rightSide_.currentBlocks`) s.t. only elements `> lastProcessedElement`
   // remain. This effectively removes all blocks completely, except maybe the
   // last one.
   template <typename Blocks, typename ProjectedEl>
@@ -773,14 +773,14 @@ struct BlockZipperJoinImpl {
     }
   };
 
-  // For one of the inputs (`leftSide_.sameBlocks_` or `rightSide_.sameBlocks_`)
-  // obtain a tuple of the following elements:
+  // For one of the inputs (`leftSide_.currentBlocks_` or
+  // `rightSide_.currentBlocks_`) obtain a tuple of the following elements:
   // * A reference to the first full block
   // * The currently active subrange of that block
   // * An iterator pointing to the first element ` >= currentEl` in the block.
-  auto getFirstBlock(auto& sameBlocks, const auto& currentEl) {
-    AD_CORRECTNESS_CHECK(!sameBlocks.empty());
-    const auto& first = sameBlocks.at(0);
+  auto getFirstBlock(auto& currentBlocks, const auto& currentEl) {
+    AD_CORRECTNESS_CHECK(!currentBlocks.empty());
+    const auto& first = currentBlocks.at(0);
     auto it = std::ranges::lower_bound(first.subrange(), currentEl, lessThan_);
     return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
   };
@@ -795,7 +795,8 @@ struct BlockZipperJoinImpl {
                                 [](const auto& inp) { return inp.subrange(); }),
               std::ranges::empty)) {
         for (const auto& lBlock : blocksLeft) {
-          compatibleRowAction_.setLeftInput(lBlock.fullBlock());
+          compatibleRowAction_.setOnlyLeftInputForOptionalJoin(
+              lBlock.fullBlock());
           for (size_t i : lBlock.getIndexRange()) {
             compatibleRowAction_.addOptionalRow(i);
           }
@@ -831,11 +832,11 @@ struct BlockZipperJoinImpl {
     return result;
   };
 
-  // Join the first block in `sameBlocksLeft` with the first block in
-  // `sameBlocksRight`, but ignore all elements that >= min(lastL, lastR) where
-  // `lastL` is the last element of `sameBlocksLeft[0]`, and `lastR`
+  // Join the first block in `currentBlocksLeft` with the first block in
+  // `currentBlocksRight`, but ignore all elements that >= min(lastL, lastR)
+  // where `lastL` is the last element of `currentBlocksLeft[0]`, and `lastR`
   // analogously. The fully joined parts of the block are then removed from
-  // `sameBlocksLeft/Right`, as they are not needed anymore.
+  // `currentBlocksLeft/Right`, as they are not needed anymore.
   template <bool DoOptionalJoin>
   void joinAndRemoveLessThanCurrentEl(auto& sameBlocksLeft,
                                       auto& sameBlocksRight,
@@ -931,31 +932,33 @@ struct BlockZipperJoinImpl {
     }
 
     // Add the remaining blocks such that condition 3 from above is fulfilled.
-    blockStatus = fillEqualToMinimumBothSides(getCurrentEl());
+    blockStatus = fillEqualToCurrentElBothSides(getCurrentEl());
     currentMinEl_ = getCurrentEl();
   }
 
   // Combine the above functionality and perform one round of joining.
   template <bool DoOptionalJoin, typename ProjectedEl>
   void joinBuffers(auto& blockStatus) {
-    auto& sameBlocksLeft = leftSide_.currentBlocks_;
-    auto& sameBlocksRight = rightSide_.currentBlocks_;
+    auto& currentBlocksLeft = leftSide_.currentBlocks_;
+    auto& currentBlocksRight = rightSide_.currentBlocks_;
     joinAndRemoveLessThanCurrentEl<DoOptionalJoin>(
-        sameBlocksLeft, sameBlocksRight, getCurrentEl());
+        currentBlocksLeft, currentBlocksRight, getCurrentEl());
 
     // TODO<joka921> This should still be the same.
     ProjectedEl currentEl = getCurrentEl();
-    // In the last block, there might be elements `> currentEl` which will be
-    // processed later, but for the next step (the cartesian product) we only
-    // need the elements `== currentEl`
-    auto equalToCurrentElLeft = getEqualToCurrentEl(sameBlocksLeft, currentEl);
+    // At this point the `currentBlocksLeft/Right` only consist of elements `>=
+    // currentEl`. We now obtain a view on the elements `== currentEl` which are
+    // needed for the next step (the cartesian product). In the last block,
+    // there might be elements `> currentEl` which will be processed later.
+    auto equalToCurrentElLeft =
+        getEqualToCurrentEl(currentBlocksLeft, currentEl);
     auto equalToCurrentElRight =
-        getEqualToCurrentEl(sameBlocksRight, currentEl);
+        getEqualToCurrentEl(currentBlocksRight, currentEl);
 
     auto getNextBlocks = [&currentEl, self = this, &blockStatus](auto& target,
                                                                  auto& side) {
       self->removeEqualToCurrentEl(side.currentBlocks_, currentEl);
-      bool allBlocksWereFilled = self->fillEqualToMinimum(side, currentEl);
+      bool allBlocksWereFilled = self->fillEqualToCurrentEl(side, currentEl);
       if (side.currentBlocks_.empty()) {
         AD_CORRECTNESS_CHECK(allBlocksWereFilled);
       }
@@ -970,8 +973,8 @@ struct BlockZipperJoinImpl {
       addAll<DoOptionalJoin>(equalToCurrentElLeft, equalToCurrentElRight);
       switch (blockStatus.value()) {
         case BlockStatus::allFilled:
-          removeEqualToCurrentEl(sameBlocksLeft, currentEl);
-          removeEqualToCurrentEl(sameBlocksRight, currentEl);
+          removeEqualToCurrentEl(currentBlocksLeft, currentEl);
+          removeEqualToCurrentEl(currentBlocksRight, currentEl);
           return;
         case BlockStatus::rightMissing:
           getNextBlocks(equalToCurrentElRight, rightSide_);
@@ -991,7 +994,7 @@ struct BlockZipperJoinImpl {
   auto fillWithAllFromLeft() {
     auto& currentBlocksLeft = leftSide_.currentBlocks_;
     for (auto& block : currentBlocksLeft) {
-      compatibleRowAction_.setLeftInput(block.fullBlock());
+      compatibleRowAction_.setOnlyLeftInputForOptionalJoin(block.fullBlock());
       for (size_t idx : block.getIndexRange()) {
         compatibleRowAction_.addOptionalRow(idx);
       }
@@ -1001,12 +1004,12 @@ struct BlockZipperJoinImpl {
     const auto& end1 = leftSide_.end_;
     while (it1 != end1) {
       auto& block = *it1;
-      compatibleRowAction_.setLeftInput(block);
+      compatibleRowAction_.setOnlyLeftInputForOptionalJoin(block);
       for (size_t idx : ad_utility::integerRange(block.size())) {
         compatibleRowAction_.addOptionalRow(idx);
       }
       // We need to manually flush, because the `block` is captured by reference
-      // and not valid anymore after increasing the iterator.
+      // and might not be valid anymore after increasing the iterator.
       compatibleRowAction_.flush();
       ++it1;
     }

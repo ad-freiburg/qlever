@@ -94,7 +94,7 @@ auto createExamplePatterns(PatternCreatorNew& creator) {
 
   std::ranges::sort(expected, SortByOSP{});
   auto tripleOutputs = std::move(creator).getTripleOutput();
-  auto& triples = *tripleOutputs.ospSorterWithSubjectPatterns_;
+  auto& triples = *tripleOutputs.triplesWithSubjectPatternsSortedByOsp_;
   std::vector<std::array<Id, 4>> actual;
   for (auto& block : triples.getSortedBlocks<4>()) {
     for (const auto& row : block) {
@@ -102,7 +102,7 @@ auto createExamplePatterns(PatternCreatorNew& creator) {
     }
   }
   EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));
-  return std::move(tripleOutputs.hasPatternAsPSO_);
+  return std::move(tripleOutputs.hasPatternPredicateSortedByPSO_);
 }
 
 // Assert that the contents of patterns read from `filename` match the triples

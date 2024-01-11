@@ -75,9 +75,9 @@ class PatternCreatorNew {
       ad_utility::CompressedExternalIdTableSorter<SortByOSP, 4>;
 
   // Combine all the triples that this pattern creator creates.
-  struct TripleOutput {
-    std::unique_ptr<PSOSorter> hasPatternAsPSO_;
-    std::unique_ptr<OSPSorter4Cols> ospSorterWithSubjectPatterns_;
+  struct TripleSorter {
+    std::unique_ptr<PSOSorter> hasPatternPredicateSortedByPSO_;
+    std::unique_ptr<OSPSorter4Cols> triplesWithSubjectPatternsSortedByOsp_;
   };
 
  private:
@@ -110,7 +110,7 @@ class PatternCreatorNew {
     bool isInternal_;
   };
   ad_utility::BufferedVector<TripleAndIsInternal> tripleBuffer_;
-  TripleOutput tripleOutput_;
+  TripleSorter tripleOutput_;
 
   // The predicates which have already occured in one of the patterns. Needed to
   // count the number of distinct predicates.
@@ -169,7 +169,7 @@ class PatternCreatorNew {
                                    CompactVectorOfStrings<Id>& patterns);
 
   // Move out the sorted triples after finishing creating the patterns.
-  TripleOutput&& getTripleOutput() && {
+  TripleSorter&& getTripleOutput() && {
     finish();
     return std::move(tripleOutput_);
   }
@@ -180,7 +180,7 @@ class PatternCreatorNew {
   void printStatistics(PatternStatistics patternStatistics) const;
 
   auto& ospSorterTriplesWithPattern() {
-    return *tripleOutput_.ospSorterWithSubjectPatterns_;
+    return *tripleOutput_.triplesWithSubjectPatternsSortedByOsp_;
   }
 };
 

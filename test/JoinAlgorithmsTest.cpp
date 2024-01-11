@@ -30,7 +30,7 @@ struct RowAdder {
     right_ = &right;
   }
 
-  void setLeftInput(const Block& left) { left_ = &left; }
+  void setOnlyLeftInputForOptionalJoin(const Block& left) { left_ = &left; }
 
   void addRow(size_t leftIndex, size_t rightIndex) {
     auto [x1, x2] = (*left_)[leftIndex];
