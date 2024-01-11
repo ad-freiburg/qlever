@@ -501,12 +501,11 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
       addRow(rowB, rowA);
     };
     ad_utility::gallopingJoin(joinColumnR, joinColumnL,
-                              std::move(lessWithCancellationCheck),
-                              inverseAddRow);
+                              lessWithCancellationCheck, inverseAddRow);
   } else if (b.size() / a.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
              numUndefB == 0) {
     ad_utility::gallopingJoin(joinColumnL, joinColumnR,
-                              std::move(lessWithCancellationCheck), addRow);
+                              lessWithCancellationCheck, addRow);
   } else {
     auto findSmallerUndefRangeLeft =
         [undefRangeA](
@@ -526,13 +525,13 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
     auto numOutOfOrder = [&]() {
       if (numUndefB == 0 && numUndefA == 0) {
         return ad_utility::zipperJoinWithUndef(
-            joinColumnL, joinColumnR, std::move(lessWithCancellationCheck),
-            addRow, ad_utility::noop, ad_utility::noop);
+            joinColumnL, joinColumnR, lessWithCancellationCheck, addRow,
+            ad_utility::noop, ad_utility::noop);
 
       } else {
         return ad_utility::zipperJoinWithUndef(
-            joinColumnL, joinColumnR, std::move(lessWithCancellationCheck),
-            addRow, findSmallerUndefRangeLeft, findSmallerUndefRangeRight);
+            joinColumnL, joinColumnR, lessWithCancellationCheck, addRow,
+            findSmallerUndefRangeLeft, findSmallerUndefRangeRight);
       }
     }();
     AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
