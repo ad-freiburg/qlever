@@ -132,7 +132,8 @@ class BenchmarkResults {
 
   // Json serialization. The implementation can be found in
   // `BenchmarkToJson`.
-  friend void to_json(nlohmann::json& j, const BenchmarkResults& results);
+  friend void to_json(nlohmann::ordered_json& j,
+                      const BenchmarkResults& results);
 };
 
 /*

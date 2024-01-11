@@ -50,10 +50,10 @@ ResultEntry::operator std::string() const {
 }
 
 // ____________________________________________________________________________
-void to_json(nlohmann::json& j, const ResultEntry& resultEntry) {
-  j = nlohmann::json{{"descriptor", resultEntry.descriptor_},
-                     {"measuredTime", resultEntry.measuredTime_},
-                     {"metadata", resultEntry.metadata()}};
+void to_json(nlohmann::ordered_json& j, const ResultEntry& resultEntry) {
+  j = nlohmann::ordered_json{{"descriptor", resultEntry.descriptor_},
+                             {"measuredTime", resultEntry.measuredTime_},
+                             {"metadata", resultEntry.metadata()}};
 }
 
 // ____________________________________________________________________________
@@ -104,11 +104,11 @@ ResultGroup::operator std::string() const {
 }
 
 // ____________________________________________________________________________
-void to_json(nlohmann::json& j, const ResultGroup& resultGroup) {
-  j = nlohmann::json{{"descriptor", resultGroup.descriptor_},
-                     {"resultEntries", resultGroup.resultEntries_},
-                     {"resultTables", resultGroup.resultTables_},
-                     {"metadata", resultGroup.metadata()}};
+void to_json(nlohmann::ordered_json& j, const ResultGroup& resultGroup) {
+  j = nlohmann::ordered_json{{"descriptor", resultGroup.descriptor_},
+                             {"resultEntries", resultGroup.resultEntries_},
+                             {"resultTables", resultGroup.resultTables_},
+                             {"metadata", resultGroup.metadata()}};
 }
 
 // ____________________________________________________________________________
@@ -340,11 +340,11 @@ size_t ResultTable::numColumns() const {
 }
 
 // ____________________________________________________________________________
-void to_json(nlohmann::json& j, const ResultTable& resultTable) {
-  j = nlohmann::json{{"descriptor", resultTable.descriptor_},
-                     {"columnNames", resultTable.columnNames_},
-                     {"entries", resultTable.entries_},
-                     {"metadata", resultTable.metadata()}};
+void to_json(nlohmann::ordered_json& j, const ResultTable& resultTable) {
+  j = nlohmann::ordered_json{{"descriptor", resultTable.descriptor_},
+                             {"columnNames", resultTable.columnNames_},
+                             {"entries", resultTable.entries_},
+                             {"metadata", resultTable.metadata()}};
 }
 
 // The code for the string insertion operator of a class, that can be casted to
