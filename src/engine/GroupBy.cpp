@@ -762,14 +762,15 @@ void GroupBy::findGroupedVariableImpl(
     std::optional<ParentAndChildIndex> parentAndChildIndex,
     GroupBy::GroupedByVariableSubstitutions& substitutions) {
   if (auto value = hasType<sparqlExpression::VariableExpression>(expr)) {
-    for (auto& groupedVariable : _groupByVariables) {
-      if (value.value()->value() == groupedVariable) {
-        if (parentAndChildIndex.has_value()) {
-          substitutions.occurrences.emplace_back(parentAndChildIndex.value());
-        } else {
-          substitutions.topLevel = true;
-          return;
-        }
+    auto variable = value.value()->value();
+    for (const auto& groupedVariable : _groupByVariables) {
+      if (variable != groupedVariable) continue;
+
+      if (parentAndChildIndex.has_value()) {
+        substitutions.occurrences_.emplace_back(parentAndChildIndex.value());
+      } else {
+        substitutions.topLevel_ = true;
+        return;
       }
     }
   }
@@ -812,7 +813,7 @@ bool GroupBy::hasAnyType(const auto& expr) {
 }
 
 // _____________________________________________________________________________
-std::optional<GroupBy::HashMapAggregateKind> GroupBy::isSupportedAggregate(
+std::optional<GroupBy::HashMapAggregateType> GroupBy::isSupportedAggregate(
     sparqlExpression::SparqlExpression* expr) {
   using namespace sparqlExpression;
 
@@ -822,8 +823,8 @@ std::optional<GroupBy::HashMapAggregateKind> GroupBy::isSupportedAggregate(
   // `expr` is not a nested aggregated
   if (expr->children().front()->containsAggregate()) return std::nullopt;
 
-  if (hasType<AvgExpression>(expr)) return HashMapAggregateKind::AVG;
-  if (hasType<CountExpression>(expr)) return HashMapAggregateKind::COUNT;
+  if (hasType<AvgExpression>(expr)) return HashMapAggregateType::AVG;
+  if (hasType<CountExpression>(expr)) return HashMapAggregateType::COUNT;
 
   // `expr` is an unsupported aggregate
   return std::nullopt;
@@ -835,8 +836,8 @@ bool GroupBy::findAggregatesImpl(
     std::optional<ParentAndChildIndex> parentAndChildIndex,
     std::vector<GroupBy::HashMapAggregateInformation>& info) {
   if (expr->isAggregate()) {
-    if (auto aggregateKind = isSupportedAggregate(expr)) {
-      info.emplace_back(expr, 0, aggregateKind.value(), parentAndChildIndex);
+    if (auto aggregateType = isSupportedAggregate(expr)) {
+      info.emplace_back(expr, 0, aggregateType.value(), parentAndChildIndex);
       return true;
     } else {
       return false;
@@ -916,14 +917,14 @@ GroupBy::getHashMapAggregationResults(
 // _____________________________________________________________________________
 void GroupBy::substituteGroupVariable(
     const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
-    IdTable* resultTable) {
+    IdTable* resultTable) const {
   decltype(auto) groupValues = resultTable->getColumn(0);
 
   for (const auto& occurrence : occurrences) {
     sparqlExpression::VectorWithMemoryLimit<ValueId> values(
         getExecutionContext()->getAllocator());
     values.resize(groupValues.size());
-    std::copy(groupValues.begin(), groupValues.end(), values.begin());
+    std::ranges::copy(groupValues.begin(), groupValues.end(), values.begin());
 
     auto newExpression = std::make_unique<sparqlExpression::VectorIdExpression>(
         std::move(values));
@@ -1021,8 +1022,32 @@ void GroupBy::createResultFromHashMap(
     for (auto& alias : aggregateAliases) {
       auto& info = alias.aggregateInfo_;
 
-      // Only one aggregate, and it is at the top of the alias.
-      if (info.size() == 1 && !info.at(0).parentAndIndex_.has_value()) {
+      // Check if the grouped variable occurs in this expression
+      auto groupByVariableSubstitutions =
+          findGroupedVariable(alias.expr_.getPimpl());
+
+      if (groupByVariableSubstitutions.topLevel_) {
+        // If the aggregate is at the top of the alias, e.g. `SELECT (?a as ?x)
+        // WHERE {...} GROUP BY ?a`, we can copy values directly from the column
+        // of the grouped variable
+        decltype(auto) groupValues = result->getColumn(0);
+        decltype(auto) outValues = result->getColumn(alias.outCol_);
+        std::ranges::copy(groupValues, outValues.begin());
+
+        // We also need to store it for possible future use
+        sparqlExpression::VectorWithMemoryLimit<ValueId> values(
+            getExecutionContext()->getAllocator());
+        values.resize(groupValues.size());
+        std::ranges::copy(groupValues.begin(), groupValues.end(),
+                          values.begin());
+
+        evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
+            sparqlExpression::copyExpressionResult(
+                sparqlExpression::ExpressionResult{std::move(values)});
+      } else if (info.size() == 1 && !info.at(0).parentAndIndex_.has_value()) {
+        // Only one aggregate, and it is at the top of the alias, e.g.
+        // `(AVG(?x) as ?y)`. The grouped by variable cannot occur inside
+        // an aggregate, hence we don't need to substitute anything here
         auto& aggregate = info.at(0);
 
         // Get aggregate results
@@ -1041,49 +1066,27 @@ void GroupBy::createResultFromHashMap(
                 sparqlExpression::ExpressionResult{
                     std::move(aggregateResults)});
       } else {
-        // Check if the grouped variable occurs in this expression
-        auto groupByVariableSubstitutions =
-            findGroupedVariable(alias.expr_.getPimpl());
+        // Substitute in the values of the grouped variable
+        substituteGroupVariable(groupByVariableSubstitutions.occurrences_,
+                                result);
 
-        if (groupByVariableSubstitutions.topLevel) {
-          // If it is at the top, we can directly copy the values of the grouped
-          // by column
-          decltype(auto) groupValues = result->getColumn(0);
-          decltype(auto) outValues = result->getColumn(alias.outCol_);
-          std::ranges::copy(groupValues, outValues.begin());
+        // Substitute in the results of all aggregates contained in the
+        // expression of the current alias, if `info` is non-empty.
+        substituteAllAggregates(info, evaluationContext._beginIndex,
+                                evaluationContext._endIndex, aggregationData,
+                                result);
 
-          // We also need to store it for possible future use
-          sparqlExpression::VectorWithMemoryLimit<ValueId> values(
-              getExecutionContext()->getAllocator());
-          values.resize(groupValues.size());
-          std::copy(groupValues.begin(), groupValues.end(), values.begin());
+        // Evaluate top-level alias expression
+        sparqlExpression::ExpressionResult expressionResult =
+            alias.expr_.getPimpl()->evaluate(&evaluationContext);
 
-          evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
-              sparqlExpression::copyExpressionResult(
-                  sparqlExpression::ExpressionResult{std::move(values)});
-        } else {
-          // Substitute in the values of the grouped variable
-          substituteGroupVariable(groupByVariableSubstitutions.occurrences,
-                                  result);
+        // Copy the result so that future aliases may reuse it
+        evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
+            sparqlExpression::copyExpressionResult(expressionResult);
 
-          // Substitute in the results of all aggregates contained in the
-          // expression of the current alias, if `info` is non-empty.
-          substituteAllAggregates(info, evaluationContext._beginIndex,
-                                  evaluationContext._endIndex, aggregationData,
-                                  result);
-
-          // Evaluate top-level alias expression
-          sparqlExpression::ExpressionResult expressionResult =
-              alias.expr_.getPimpl()->evaluate(&evaluationContext);
-
-          // Copy the result so that future aliases may reuse it
-          evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
-              sparqlExpression::copyExpressionResult(expressionResult);
-
-          // Extract values
-          extractValues(std::move(expressionResult), evaluationContext, result,
-                        localVocab, alias.outCol_);
-        }
+        // Extract values
+        extractValues(std::move(expressionResult), evaluationContext, result,
+                      localVocab, alias.outCol_);
       }
     }
   }
@@ -1093,6 +1096,33 @@ void GroupBy::createResultFromHashMap(
 template <typename A>
 concept SupportedAggregates =
     ad_utility::isTypeContainedIn<A, GroupBy::Aggregations>;
+
+// _____________________________________________________________________________
+// Visitor function to extract values from the result of an evaluation of
+// the child expression of an aggregate, and subsequently processing the values
+// by calling the `increment` function of the corresponding aggregate.
+auto makeProcessGroupsVisitor =
+    [](size_t blockSize, sparqlExpression::EvaluationContext* evaluationContext,
+       const std::vector<size_t>& hashEntries) {
+      return [blockSize, evaluationContext,
+              &hashEntries]<sparqlExpression::SingleExpressionResult T,
+                            SupportedAggregates A>(T&& singleResult,
+                                                   A& aggregationDataVector) {
+        auto generator = sparqlExpression::detail::makeGenerator(
+            std::forward<T>(singleResult), blockSize, evaluationContext);
+
+        auto hashEntryIndex = 0;
+
+        for (const auto& val : generator) {
+          auto vectorOffset = hashEntries[hashEntryIndex];
+          auto& aggregateData = aggregationDataVector.at(vectorOffset);
+
+          aggregateData.increment(val, evaluationContext);
+
+          ++hashEntryIndex;
+        }
+      };
+    };
 
 // _____________________________________________________________________________
 void GroupBy::computeGroupByForHashMapOptimization(
@@ -1137,34 +1167,9 @@ void GroupBy::computeGroupByForHashMapOptimization(
             aggregationData.getAggregationDataVariant(
                 aggregate.aggregateDataIndex_);
 
-        auto visitor =
-            [&currentBlockSize, &evaluationContext,
-             &hashEntries]<sparqlExpression::SingleExpressionResult T,
-                           SupportedAggregates A>(
-                T&& singleResult, A& aggregationDataVector) mutable {
-              auto generator = sparqlExpression::detail::makeGenerator(
-                  std::forward<T>(singleResult), currentBlockSize,
-                  &evaluationContext);
-
-              using NVG = sparqlExpression::detail::NumericValueGetter;
-
-              auto hashEntryIndex = 0;
-
-              for (const auto& val : generator) {
-                sparqlExpression::detail::NumericValue numVal =
-                    NVG()(val, &evaluationContext);
-
-                auto vectorOffset = hashEntries[hashEntryIndex];
-                auto& aggregateData = aggregationDataVector.at(vectorOffset);
-
-                aggregateData.increment(numVal);
-
-                ++hashEntryIndex;
-              }
-            };
-
-        std::visit(visitor, std::move(expressionResult),
-                   aggregationDataVariant);
+        std::visit(makeProcessGroupsVisitor(currentBlockSize,
+                                            &evaluationContext, hashEntries),
+                   std::move(expressionResult), aggregationDataVariant);
       }
     }
   }

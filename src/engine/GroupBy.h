@@ -158,13 +158,18 @@ class GroupBy : public Operation {
 
   // Data to perform the AVG aggregation using the HashMap optimization.
   struct AverageAggregationData {
+    using ValueGetter = sparqlExpression::detail::NumericValueGetter;
     bool error_ = false;
     double sum_ = 0;
     int64_t count_ = 0;
-    void increment(sparqlExpression::detail::NumericValue intermediate) {
-      if (const int64_t* intval = std::get_if<int64_t>(&intermediate))
+    void increment(auto&& value,
+                   const sparqlExpression::EvaluationContext* ctx) {
+      auto valueGetter = ValueGetter{};
+      auto val = valueGetter(AD_FWD(value), ctx);
+
+      if (const int64_t* intval = std::get_if<int64_t>(&val))
         sum_ += (double)*intval;
-      else if (const double* dval = std::get_if<double>(&intermediate))
+      else if (const double* dval = std::get_if<double>(&val))
         sum_ += *dval;
       else
         error_ = true;
@@ -180,10 +185,12 @@ class GroupBy : public Operation {
 
   // Data to perform the COUNT aggregation using the HashMap optimization.
   struct CountAggregationData {
+    using ValueGetter = sparqlExpression::detail::IsValidValueGetter;
     int64_t count_ = 0;
-    void increment(sparqlExpression::detail::NumericValue intermediate) {
-      (void)intermediate;
-      count_++;
+    void increment(auto&& value,
+                   const sparqlExpression::EvaluationContext* ctx) {
+      auto valueGetter = ValueGetter{};
+      if (valueGetter(AD_FWD(value), ctx)) count_++;
     }
     [[nodiscard]] ValueId calculateResult() const {
       return ValueId::makeFromInt(count_);
@@ -209,12 +216,14 @@ class GroupBy : public Operation {
   // Stores information required for substitution of grouped by variable in
   // an expression tree.
   struct GroupedByVariableSubstitutions {
-    std::vector<ParentAndChildIndex> occurrences;
-    bool topLevel;
+    std::vector<ParentAndChildIndex> occurrences_;
+    // Determines whether the grouped by variable appears at the top of an
+    // alias, e.g. `SELECT (?a as ?x) WHERE {...} GROUP BY ?a`.
+    bool topLevel_;
   };
 
   // Used to store the kind of aggregate.
-  enum class HashMapAggregateKind { AVG, COUNT };
+  enum class HashMapAggregateType { AVG, COUNT };
 
   // Stores information required for evaluation of an aggregate as well
   // as the alias containing it.
@@ -228,16 +237,16 @@ class GroupBy : public Operation {
     // appears in the parents' children, so that it may be substituted away.
     std::optional<ParentAndChildIndex> parentAndIndex_ = std::nullopt;
     // Which kind of aggregate expression.
-    HashMapAggregateKind aggregateKind_;
+    HashMapAggregateType aggregateType_;
 
     HashMapAggregateInformation(
         sparqlExpression::SparqlExpression* expr, size_t aggregateDataIndex,
-        HashMapAggregateKind aggregateKind,
+        HashMapAggregateType aggregateType,
         std::optional<ParentAndChildIndex> parentAndIndex = std::nullopt)
         : expr_{expr},
           aggregateDataIndex_{aggregateDataIndex},
           parentAndIndex_{parentAndIndex},
-          aggregateKind_{aggregateKind} {
+          aggregateType_{aggregateType} {
       AD_CONTRACT_CHECK(expr != nullptr);
     }
   };
@@ -275,18 +284,18 @@ class GroupBy : public Operation {
   class HashMapAggregationData {
    public:
     HashMapAggregationData(
-        ad_utility::AllocatorWithLimit<Id> alloc,
-        std::vector<HashMapAliasInformation>& aggregateAliases)
+        const ad_utility::AllocatorWithLimit<Id>& alloc,
+        const std::vector<HashMapAliasInformation>& aggregateAliases)
         : map_{alloc} {
       size_t numAggregates = 0;
-      for (auto& alias : aggregateAliases) {
-        for (auto& aggregate : alias.aggregateInfo_) {
+      for (const auto& alias : aggregateAliases) {
+        for (const auto& aggregate : alias.aggregateInfo_) {
           ++numAggregates;
 
-          if (aggregate.aggregateKind_ == HashMapAggregateKind::AVG)
+          if (aggregate.aggregateType_ == HashMapAggregateType::AVG)
             aggregationData_.emplace_back(
                 std::vector<AverageAggregationData>{});
-          if (aggregate.aggregateKind_ == HashMapAggregateKind::COUNT)
+          if (aggregate.aggregateType_ == HashMapAggregateType::COUNT)
             aggregationData_.emplace_back(std::vector<CountAggregationData>{});
         }
       }
@@ -358,7 +367,7 @@ class GroupBy : public Operation {
   // Substitute the group values for all occurrences of a group variable.
   void substituteGroupVariable(
       const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
-      IdTable* resultTable);
+      IdTable* resultTable) const;
 
   // Substitute the results for all aggregates in `info`. The values of the
   // grouped variable should be at column 0 in `groupValues`.
@@ -376,7 +385,7 @@ class GroupBy : public Operation {
   static bool hasAnyType(const auto& expr);
 
   // Check if an expression is a currently supported aggregate.
-  static std::optional<GroupBy::HashMapAggregateKind> isSupportedAggregate(
+  static std::optional<GroupBy::HashMapAggregateType> isSupportedAggregate(
       sparqlExpression::SparqlExpression* expr);
 
   // Find all occurrences of grouped by variable for expression `expr`.
