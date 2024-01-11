@@ -37,6 +37,11 @@ inline std::atomic<size_t>& FILE_BUFFER_SIZE() {
   return fileBufferSize;
 }
 
+inline std::atomic<size_t>& BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP() {
+  static std::atomic<size_t> value = 50'000;
+  return value;
+}
+
 // When the BZIP2 parser encouters a parsing exception it will increase its
 // buffer and try again (we have no other way currently to determine if the
 // exception was "real" or only because we cut a statement in the middle. Once

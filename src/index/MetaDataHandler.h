@@ -89,10 +89,6 @@ class MetaDataWrapperDense {
   // ____________________________________________________________
   void set(Id id, const value_type& value) {
     // Assert that the ids are ascending.
-    if (_vec.size() != 0 && _vec.back().col0Id_ >= id) {
-      LOG(ERROR) << "out of bounds " << id << " " << _vec.back().col0Id_
-                 << std::endl;
-    }
     AD_CONTRACT_CHECK(_vec.size() == 0 || _vec.back().col0Id_ < id);
     _vec.push_back(value);
   }
