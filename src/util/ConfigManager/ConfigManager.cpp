@@ -38,7 +38,7 @@
 #include "util/antlr/ANTLRErrorHandling.h"
 #include "util/json.h"
 
-namespace ad_utility::innerNamespace {
+namespace ad_utility::ConfigManagerImpl {
 // ____________________________________________________________________________
 ConfigManager::HashMapEntry::HashMapEntry(Data&& data)
     : data_{std::make_unique<Data>(std::move(data))} {}
@@ -898,4 +898,4 @@ template ConfigManager::ConfigurationDocValidatorAssignment::
     ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
         const ConfigManager&) const;
 
-}  // namespace ad_utility::innerNamespace
+}  // namespace ad_utility::ConfigManagerImpl

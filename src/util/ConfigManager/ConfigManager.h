@@ -37,7 +37,7 @@
 #include "util/json.h"
 
 namespace ad_utility {
-namespace innerNamespace {
+namespace ConfigManagerImpl {
 
 // Shorthand concepts, to reduce code duplication.
 class ConfigManager;
@@ -180,7 +180,8 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <SameAsAnyTypeInAvailableConfigOptionTypes OptionType>
+  template <
+      ConfigOptionImpl::SameAsAnyTypeInAvailableConfigOptionTypes OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
@@ -208,8 +209,9 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <SameAsAnyTypeInAvailableConfigOptionTypes OptionType,
-            std::same_as<OptionType> DefaultValueType = OptionType>
+  template <
+      ConfigOptionImpl::SameAsAnyTypeInAvailableConfigOptionTypes OptionType,
+      std::same_as<OptionType> DefaultValueType = OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
@@ -228,7 +230,8 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <SameAsAnyTypeInAvailableConfigOptionTypes OptionType>
+  template <
+      ConfigOptionImpl::SameAsAnyTypeInAvailableConfigOptionTypes OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn) {
@@ -245,8 +248,9 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <SameAsAnyTypeInAvailableConfigOptionTypes OptionType,
-            std::same_as<OptionType> DefaultValueType = OptionType>
+  template <
+      ConfigOptionImpl::SameAsAnyTypeInAvailableConfigOptionTypes OptionType,
+      std::same_as<OptionType> DefaultValueType = OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn,
@@ -790,6 +794,6 @@ class ConfigManager {
       std::string_view pathPrefix,
       const ConfigurationDocValidatorAssignment& assignment) const;
 };
-}  // namespace innerNamespace
-using innerNamespace::ConfigManager;
+}  // namespace ConfigManagerImpl
+using ConfigManagerImpl::ConfigManager;
 }  // namespace ad_utility
