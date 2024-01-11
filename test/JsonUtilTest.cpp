@@ -21,7 +21,9 @@ static void doFileToJsonTest(
   auto trace{generateLocationTrace(l, "doFileToJsonTest")};
 
   // The `fileToJson` function with the wanted json class type.
-  const auto& fileToJsonWithWantedType{fileToJson<WantedJsonClassType>};
+  const auto& fileToJsonWithWantedType = [](std::string_view jsonFileName) {
+    return fileToJson<WantedJsonClassType>(jsonFileName);
+  };
 
   // Creates a file with the given name and content. Can be deleted with
   // `ad_utility::deleteFile(fileName)`.
@@ -56,16 +58,17 @@ static void doFileToJsonTest(
 
   // Creates a temporare file, containing the given json object, and checks, if
   // `fileToJson` recreates it correctly.
-  auto makeTempFileAndCompare = [&createFile](const WantedJsonClassType& j) {
-    // Creating the file.
-    constexpr std::string_view fileName{"TempTestFile.json"};
-    createFile(fileName, j);
+  auto makeTempFileAndCompare =
+      [&createFile, &fileToJsonWithWantedType](const WantedJsonClassType& j) {
+        // Creating the file.
+        constexpr std::string_view fileName{"TempTestFile.json"};
+        createFile(fileName, j);
 
-    EXPECT_EQ(j, fileToJsonWithWantedType(fileName));
+        EXPECT_EQ(j, fileToJsonWithWantedType(fileName));
 
-    // Deleting the file.
-    ad_utility::deleteFile(fileName);
-  };
+        // Deleting the file.
+        ad_utility::deleteFile(fileName);
+      };
 
   makeTempFileAndCompare(
       WantedJsonClassType::parse(R"({ "name"   : "John Smith",
