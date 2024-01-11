@@ -57,7 +57,7 @@ JsonObjectType fileToJson(std::string_view jsonFileName) {
 
   try {
     return JsonObjectType::parse(ad_utility::makeIfstream(jsonFileName));
-  } catch (const JsonObjectType::exception& e) {
+  } catch (const typename JsonObjectType::exception& e) {
     throw std::runtime_error(absl::StrCat(
         "The contents of the file ", jsonFileName,
         " could not be parsed as JSON. The error was: ", e.what()));
