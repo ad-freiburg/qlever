@@ -172,6 +172,16 @@ TEST(JoinAlgorithms, JoinWithBlocksMoreThanThreeBlocksPerElement) {
   testJoin(a, b, expectedResult);
 }
 
+// Test the coverage of a corner case.
+TEST(JoinAlgorithms, JoinWithBlocksExactlyFourBlocksPerElement) {
+  NestedBlock a{{{42, 0}}, {{42, 1}},          {{42, 2}},  {{42, 3}},
+                {},        {{48, 5}, {67, 0}}, {{96, 32}}, {{96, 33}}};
+  NestedBlock b{{{42, 12}, {67, 13}}};
+  JoinResult expectedResult{
+      {42, 0, 12}, {42, 1, 12}, {42, 2, 12}, {42, 3, 12}, {67, 0, 13}};
+  testJoin(a, b, expectedResult);
+}
+
 // ________________________________________________________________________________________
 TEST(JoinAlgorithms, JoinWithBlocksMultipleBlocksPerElementBothSides) {
   NestedBlock a{{{42, 0}}, {{42, 1}, {42, 2}}, {{42, 3}, {67, 0}}};

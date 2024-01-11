@@ -565,10 +565,6 @@ class BlockAndSubrange {
         subrange_{0, block_->size()} {}
 
   // Return a reference to the last element of the currently specified subrange.
-  reference back() {
-    AD_CORRECTNESS_CHECK(!empty() && subrange_.second <= block_->size());
-    return (*block_)[subrange_.second - 1];
-  }
   const_reference back() const {
     AD_CORRECTNESS_CHECK(!empty() && subrange_.second <= block_->size());
     return std::as_const(*block_)[subrange_.second - 1];
@@ -826,9 +822,9 @@ struct BlockZipperJoinImpl {
   // the last one, which might contain elements `> currentEl` at the end.
   auto getEqualToCurrentEl(const auto& blocks, const auto& currentEl) {
     auto result = blocks;
-    // If one of the inputs is empty, this function shouldn't have been called
-    // in the first place.
-    AD_CORRECTNESS_CHECK(!result.empty());
+    if (result.empty()) {
+      return result;
+    }
     auto& last = result.back();
     last.setSubrange(
         std::ranges::equal_range(last.subrange(), currentEl, lessThan_));
@@ -973,19 +969,16 @@ struct BlockZipperJoinImpl {
     while (!equalToCurrentElLeft.empty() && !equalToCurrentElRight.empty()) {
       addAll<DoOptionalJoin>(equalToCurrentElLeft, equalToCurrentElRight);
       switch (blockStatus.value()) {
-        case BlockStatus::allFilled: {
+        case BlockStatus::allFilled:
           removeEqualToCurrentEl(sameBlocksLeft, currentEl);
           removeEqualToCurrentEl(sameBlocksRight, currentEl);
           return;
-        }
-        case BlockStatus::rightMissing: {
+        case BlockStatus::rightMissing:
           getNextBlocks(equalToCurrentElRight, rightSide_);
           continue;
-        }
-        case BlockStatus::leftMissing: {
+        case BlockStatus::leftMissing:
           getNextBlocks(equalToCurrentElLeft, leftSide_);
           continue;
-        }
         default:
           AD_FAIL();
       }
