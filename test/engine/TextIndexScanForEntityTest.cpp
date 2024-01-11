@@ -1,3 +1,7 @@
+//  Copyright 2023, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
+
 #include <gtest/gtest.h>
 
 #include "../IndexTestHelpers.h"
@@ -87,28 +91,41 @@ TEST(TextIndexScanForEntity, CacheKeys) {
                             "test*"};
   TextIndexScanForEntity s2{qec, Variable{"?text2"}, Variable{"?entityVar2"},
                             "test*"};
+  // Different text vars, different entity vars, same word (both with prefix)
   ASSERT_EQ(s1.getCacheKeyImpl(), s2.getCacheKeyImpl());
 
   TextIndexScanForEntity s3{qec, Variable{"?text3"}, Variable{"?entityVar"},
                             "test"};
-  ASSERT_TRUE(s1.getCacheKeyImpl() != s3.getCacheKeyImpl());
+  // Different text vars, same entity var, different words (one with, one
+  // without prefix)
+  ASSERT_NE(s1.getCacheKeyImpl(), s3.getCacheKeyImpl());
 
   TextIndexScanForEntity s4{qec, Variable{"?text4"}, Variable{"?entityVar"},
                             "sentence*"};
-  ASSERT_TRUE(s1.getCacheKeyImpl() != s4.getCacheKeyImpl());
+  // Different text vars, same entity var, different words (both with prefix)
+  ASSERT_NE(s1.getCacheKeyImpl(), s4.getCacheKeyImpl());
 
   // fixed entity case
   string fixedEntity = "\"some other sentence\"";
-  TextIndexScanForEntity s5{qec, Variable{"?text5"}, fixedEntity, "sentence"};
-  ASSERT_TRUE(s3.getCacheKeyImpl() != s5.getCacheKeyImpl());
+  TextIndexScanForEntity s5{qec, Variable{"?text3"}, fixedEntity, "sentence"};
+  // Same text var, different entities (one entity var, one fixed entity), same
+  // word
+  ASSERT_NE(s3.getCacheKeyImpl(), s5.getCacheKeyImpl());
 
   TextIndexScanForEntity s6{qec, Variable{"?text6"}, fixedEntity, "sentence"};
+  // Different text vars, same fixed entity, same word
   ASSERT_EQ(s5.getCacheKeyImpl(), s6.getCacheKeyImpl());
 
   string newFixedEntity = "\"he failed the test\"";
   TextIndexScanForEntity s7{qec, Variable{"?text7"}, newFixedEntity,
                             "sentence"};
-  ASSERT_TRUE(s5.getCacheKeyImpl() != s7.getCacheKeyImpl());
+  // Different text vars, different fixed entities, same word
+  ASSERT_NE(s5.getCacheKeyImpl(), s7.getCacheKeyImpl());
+
+  TextIndexScanForEntity s8{qec, Variable{"?text7"}, newFixedEntity,
+                            "sentences"};
+  // Same text var, same fixed entitiy, different words
+  ASSERT_NE(s7.getCacheKeyImpl(), s8.getCacheKeyImpl());
 }
 
 TEST(TextIndexScanForEntity, KnownEmpty) {
@@ -119,9 +136,12 @@ TEST(TextIndexScanForEntity, KnownEmpty) {
   ASSERT_TRUE(s1.knownEmptyResult());
 
   string fixedEntity = "\"non existent entity\"";
-  ASSERT_THROW(
+  AD_EXPECT_THROW_WITH_MESSAGE(
       TextIndexScanForEntity(qec, Variable{"?text"}, fixedEntity, "test*"),
-      std::runtime_error);
+      ::testing::ContainsRegex(absl::StrCat(
+          "The entity ", fixedEntity,
+          " is not part of the underlying knowledge graph and can therefore "
+          "not be used as the object of ql:contains-entity")));
 
   TextIndexScanForEntity s2{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};

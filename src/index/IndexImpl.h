@@ -304,9 +304,16 @@ class IndexImpl {
   // --------------------------------------------------------------------------
   std::string_view wordIdToString(WordIndex wordIndex) const;
 
-  size_t getEntitySizeEstimate(const string& words) const;
+  size_t getSizeOfTextBlockForEntities(const string& words) const;
 
-  size_t getWordSizeEstimate(const string& words) const;
+  // Returns the size of the whole textblock. If the word is very long or not
+  // prefixed then only a small number of words actually match. So the final
+  // result is much smaller.
+  // Note that as a cost estimate the estimation is correct. Because we always
+  // have to read the complete block and then filter by the actually needed
+  // words.
+  // TODO: improve size estimate by adding a correction factor.
+  size_t getSizeOfTextBlockForWord(const string& words) const;
 
   size_t getSizeEstimate(const string& words) const;
 

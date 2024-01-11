@@ -183,18 +183,21 @@ void Vocabulary<S, C, I>::initializeInternalizedLangs(const StringRange& s) {
 
 // ___________________________________________________________________________
 template <typename S, typename C, typename I>
-bool Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
-    const string& word, IdRange<IndexType>* range) const {
+std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
+    const string& word) const {
   AD_CONTRACT_CHECK(word[word.size() - 1] == PREFIX_CHAR);
+  IdRange<I> range;
   auto prefixRange = prefix_range(word.substr(0, word.size() - 1));
   bool success = prefixRange.second > prefixRange.first;
 
   if (success) {
-    *range = IdRange{prefixRange.first, prefixRange.second.decremented()};
-    AD_CONTRACT_CHECK(range->first().get() < internalVocabulary_.size());
-    AD_CONTRACT_CHECK(range->last().get() < internalVocabulary_.size());
+    range = IdRange{prefixRange.first, prefixRange.second.decremented()};
+    AD_CONTRACT_CHECK(range.first().get() < internalVocabulary_.size());
+    AD_CONTRACT_CHECK(range.last().get() < internalVocabulary_.size());
+
+    return range;
   }
-  return success;
+  return std::nullopt;
 }
 
 // _______________________________________________________________

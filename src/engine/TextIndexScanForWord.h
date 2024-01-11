@@ -1,3 +1,7 @@
+//  Copyright 2023, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
+
 #pragma once
 
 #include <string>
@@ -16,11 +20,11 @@ class TextIndexScanForWord : public Operation {
   TextIndexScanForWord(QueryExecutionContext* qec, Variable textRecordVar,
                        string word);
 
-  Variable textRecordVar() const { return textRecordVar_; }
+  ~TextIndexScanForWord() override = default;
 
-  std::string word() const { return word_; }
+  const Variable& getTextRecordVar() const { return textRecordVar_; }
 
-  virtual ~TextIndexScanForWord() override = default;
+  const std::string& getWord() const { return word_; }
 
   string getCacheKeyImpl() const override;
 
@@ -42,7 +46,8 @@ class TextIndexScanForWord : public Operation {
   }
 
   bool knownEmptyResult() override {
-    return getExecutionContext()->getIndex().getWordSizeEstimate(word_) == 0;
+    return getExecutionContext()->getIndex().getSizeOfTextBlockForWord(word_) ==
+           0;
   }
 
   vector<ColumnIndex> resultSortedOn() const override;
@@ -51,7 +56,7 @@ class TextIndexScanForWord : public Operation {
 
  private:
   // Returns a ResultTable containing an IdTable with the columns being
-  // the text-variable and the completed word (if it was prefixed)
+  // the text variable and the completed word (if it was prefixed)
   ResultTable computeResult() override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }

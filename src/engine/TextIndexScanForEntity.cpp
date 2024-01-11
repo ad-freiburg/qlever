@@ -1,12 +1,16 @@
+//  Copyright 2023, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
+
 #include "engine/TextIndexScanForEntity.h"
 
 // _____________________________________________________________________________
 TextIndexScanForEntity::TextIndexScanForEntity(
     QueryExecutionContext* qec, Variable textRecordVar,
-    const std::variant<Variable, std::string>& entity, string word)
+    std::variant<Variable, std::string> entity, string word)
     : Operation(qec),
       textRecordVar_(std::move(textRecordVar)),
-      entity_(VarOrFixedEntity(qec, entity)),
+      varOrFixed_(VarOrFixedEntity(qec, std::move(entity))),
       word_(std::move(word)) {}
 
 // _____________________________________________________________________________
@@ -15,13 +19,20 @@ ResultTable TextIndexScanForEntity::computeResult() {
       word_, getExecutionContext()->getAllocator());
 
   if (hasFixedEntity()) {
-    auto beginErase = std::ranges::remove_if(
-        idTable.begin(), idTable.end(), [this](const auto& row) {
-          return row[1].getVocabIndex() != entity_.index_;
-        });
+    auto beginErase = std::ranges::remove_if(idTable, [this](const auto& row) {
+      return row[1].getVocabIndex() != getVocabIndexOfFixedEntity();
+    });
     idTable.erase(beginErase.begin(), idTable.end());
     idTable.setColumnSubset(std::vector<ColumnIndex>{0, 2});
   }
+
+  // Add details to the runtimeInfo. This is has no effect on the result.
+  if (hasFixedEntity()) {
+    runtimeInfo().addDetail("fixed entity: ", getFixedEntity());
+  } else {
+    runtimeInfo().addDetail("entity var: ", getEntityVariable().name());
+  }
+  runtimeInfo().addDetail("word: ", word_);
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
@@ -36,11 +47,10 @@ VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
   };
   addDefinedVar(textRecordVar_);
   if (hasFixedEntity()) {
-    addDefinedVar(
-        textRecordVar_.getScoreVariable(entity_.fixedEntity_.value()));
+    addDefinedVar(textRecordVar_.getScoreVariable(getFixedEntity()));
   } else {
-    addDefinedVar(entity_.entityVar_.value());
-    addDefinedVar(textRecordVar_.getScoreVariable(entity_.entityVar_.value()));
+    addDefinedVar(getEntityVariable());
+    addDefinedVar(textRecordVar_.getScoreVariable(getEntityVariable()));
   }
   return vcmap;
 }
@@ -53,19 +63,24 @@ size_t TextIndexScanForEntity::getResultWidth() const {
 // _____________________________________________________________________________
 size_t TextIndexScanForEntity::getCostEstimate() {
   if (hasFixedEntity()) {
-    return 2 * getExecutionContext()->getIndex().getEntitySizeEstimate(word_);
+    // We currently have to first materialize and then filter the complete list
+    // for the fixed entity
+    return 2 * getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
+                   word_);
   } else {
-    return getExecutionContext()->getIndex().getEntitySizeEstimate(word_);
+    return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
+        word_);
   }
 }
 
 // _____________________________________________________________________________
 uint64_t TextIndexScanForEntity::getSizeEstimateBeforeLimit() {
   if (hasFixedEntity()) {
-    return uint64_t(
+    return static_cast<uint64_t>(
         getExecutionContext()->getIndex().getAverageNofEntityContexts());
   } else {
-    return getExecutionContext()->getIndex().getEntitySizeEstimate(word_);
+    return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
+        word_);
   }
 }
 
@@ -89,7 +104,6 @@ string TextIndexScanForEntity::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "ENTITY INDEX SCAN FOR WORD: "
      << " with word: \"" << word_ << "\" and fixed-entity: \""
-     << (hasFixedEntity() ? entity_.fixedEntity_.value() : "no fixed-entity")
-     << " \"";
+     << (hasFixedEntity() ? getFixedEntity() : "no fixed-entity") << " \"";
   return std::move(os).str();
 }

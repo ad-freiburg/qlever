@@ -1,3 +1,7 @@
+//  Copyright 2023, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -84,10 +88,22 @@ TEST(TextIndexScanForWord, CacheKey) {
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test*"};
   TextIndexScanForWord s2{qec, Variable{"?text2"}, "test*"};
+  // Different text variables, same word (both with prefix)
   ASSERT_EQ(s1.getCacheKeyImpl(), s2.getCacheKeyImpl());
 
   TextIndexScanForWord s3{qec, Variable{"?text1"}, "test"};
-  ASSERT_TRUE(s1.getCacheKeyImpl() != s3.getCacheKeyImpl());
+  // Same text variable, different words (one with, one without prefix)
+  ASSERT_NE(s1.getCacheKeyImpl(), s3.getCacheKeyImpl());
+
+  TextIndexScanForWord s4{qec, Variable{"?text1"}, "tests"};
+  // Same text variable, different words (both without prefix)
+  ASSERT_NE(s3.getCacheKeyImpl(), s4.getCacheKeyImpl());
+
+  TextIndexScanForWord s5{qec, Variable{"?text2"}, "tests"};
+  // Different text variables, different words (both without prefix)
+  ASSERT_NE(s3.getCacheKeyImpl(), s5.getCacheKeyImpl());
+  // Different text variables, same words (both without prefix)
+  ASSERT_EQ(s4.getCacheKeyImpl(), s5.getCacheKeyImpl());
 }
 
 TEST(TextIndexScanForWord, KnownEmpty) {

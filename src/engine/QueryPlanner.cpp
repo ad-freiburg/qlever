@@ -683,6 +683,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
       // Add one node for each word
       for (const auto& term :
            absl::StrSplit(sv.substr(1, sv.size() - 2), ' ')) {
+        // TODO: lower case... utf to lower
         std::string s{term};
         potentialTermsForCvar[t._s.getVariable()].push_back(s);
         addNodeToTripleGraph(
@@ -720,11 +721,14 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   return tg;
 }
 
-void QueryPlanner::handleSingleVariableCase(
+// _____________________________________________________________________________
+void QueryPlanner::indexScanSingleVarCase(
     const TripleGraph::Node& node, std::function<void(SubtreePlan)> pushPlan,
     std::function<void(Permutation::Enum)> addIndexScan) {
   using enum Permutation::Enum;
 
+  // TODO: The case where the same variable appears in subject + predicate or
+  // object + predicate is missing here and leads to an assertion failure.
   if (isVariable(node.triple_._s) && isVariable(node.triple_._o) &&
       node.triple_._s == node.triple_._o) {
     if (isVariable(node.triple_._p._iri)) {
@@ -758,11 +762,14 @@ void QueryPlanner::handleSingleVariableCase(
   }
 }
 
-void QueryPlanner::handleTwoVariablesCase(
+// _____________________________________________________________________________
+void QueryPlanner::indexScanTwoVarsCase(
     const TripleGraph::Node& node,
     std::function<void(Permutation::Enum)> addIndexScan) {
   using enum Permutation::Enum;
 
+  // TODO: The case that the same variable appears in more than one position
+  // leads (as in indexScanSingleVarCase) to an assertion.
   if (!isVariable(node.triple_._p._iri)) {
     addIndexScan(PSO);
     addIndexScan(POS);
@@ -775,7 +782,8 @@ void QueryPlanner::handleTwoVariablesCase(
   }
 }
 
-void QueryPlanner::handleThreeVariablesCase(
+// _____________________________________________________________________________
+void QueryPlanner::indexScanThreeVarsCase(
     const TripleGraph::Node& node,
     std::function<void(Permutation::Enum)> addIndexScan) {
   using enum Permutation::Enum;
@@ -794,6 +802,19 @@ void QueryPlanner::handleThreeVariablesCase(
         "triples should have at most two variables. "
         "Not the case in: " +
         node.triple_.asString());
+  }
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::seedFromOrdinaryTriple(
+    const TripleGraph::Node& node, std::function<void(SubtreePlan)> pushPlan,
+    std::function<void(Permutation::Enum)> addIndexScan) {
+  if (node._variables.size() == 1) {
+    indexScanSingleVarCase(node, pushPlan, addIndexScan);
+  } else if (node._variables.size() == 2) {
+    indexScanTwoVarsCase(node, addIndexScan);
+  } else {
+    indexScanThreeVarsCase(node, addIndexScan);
   }
 }
 
@@ -862,13 +883,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    if (node._variables.size() == 1) {
-      handleSingleVariableCase(node, pushPlan, addIndexScan);
-    } else if (node._variables.size() == 2) {
-      handleTwoVariablesCase(node, addIndexScan);
-    } else {
-      handleThreeVariablesCase(node, addIndexScan);
-    }
+    seedFromOrdinaryTriple(node, pushPlan, addIndexScan);
   }
   return seeds;
 }

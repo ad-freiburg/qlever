@@ -79,6 +79,7 @@ IdTable FTSAlgorithms::filterByRange(const IdRange<WordVocabIndex>& idRange,
   size_t nofResultElements = 0;
   decltype(auto) preFilterCidColumn = idTablePreFilter.getColumn(0);
   decltype(auto) preFilterWidColumn = idTablePreFilter.getColumn(1);
+  // TODO<C++23> Use views::zip.
   for (size_t i = 0; i < preFilterWidColumn.size(); ++i) {
     // TODO<joka921> proper Ids for the text stuff.
     // The mapping from words that appear in text records to `WordIndex`es is

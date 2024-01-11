@@ -15,7 +15,7 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
   // verify variable name starts with ? or $ and continues without any
   // special characters. This is weaker than the SPARQL grammar,
   // but it is close enough so that it will likely never cause issues.
-  AD_CONTRACT_CHECK(ctre::match<"[$?][~\\w]+">(_name));
+  AD_CONTRACT_CHECK(ctre::match<"[$?][\\w]+">(_name));
   // normalize notation for consistency
   _name[0] = '?';
 }
@@ -70,13 +70,11 @@ Variable Variable::getScoreVariable(
     type = "_fixedEntity_";
     // Converts input string to unambiguous result string not containing any
     // special characters. "_" is used as an escaping character.
-    for (char8_t c : std::get<std::string>(varOrEntity)) {
+    for (char c : std::get<std::string>(varOrEntity)) {
       if (isalpha(c)) {
-        entity += static_cast<char>(c);
+        entity += c;
       } else {
-        entity += "_";
-        entity += std::to_string(c);
-        entity += "_";
+        absl::StrAppend(&entity, "_", std::to_string(c), "_");
       }
     }
   }

@@ -1,3 +1,7 @@
+//  Copyright 2023, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
+
 #include "engine/TextIndexScanForWord.h"
 
 // _____________________________________________________________________________
@@ -21,6 +25,9 @@ ResultTable TextIndexScanForWord::computeResult() {
 
     return {std::move(smallIdTable), resultSortedOn(), LocalVocab{}};
   }
+
+  // Add details to the runtimeInfo. This is has no effect on the result.
+  runtimeInfo().addDetail("word: ", word_);
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
@@ -48,12 +55,12 @@ size_t TextIndexScanForWord::getResultWidth() const {
 
 // _____________________________________________________________________________
 size_t TextIndexScanForWord::getCostEstimate() {
-  return getExecutionContext()->getIndex().getWordSizeEstimate(word_);
+  return getExecutionContext()->getIndex().getSizeOfTextBlockForWord(word_);
 }
 
 // _____________________________________________________________________________
 uint64_t TextIndexScanForWord::getSizeEstimateBeforeLimit() {
-  return getExecutionContext()->getIndex().getWordSizeEstimate(word_);
+  return getExecutionContext()->getIndex().getSizeOfTextBlockForWord(word_);
 }
 
 // _____________________________________________________________________________

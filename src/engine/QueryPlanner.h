@@ -226,16 +226,24 @@ class QueryPlanner {
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
 
-  void handleSingleVariableCase(
+  // Helper function used by the seedFromOrdinaryTriple function
+  void indexScanSingleVarCase(
       const TripleGraph::Node& node, std::function<void(SubtreePlan)> pushPlan,
       std::function<void(Permutation::Enum)> addIndexScan);
 
-  void handleTwoVariablesCase(
+  // Helper function used by the seedFromOrdinaryTriple function
+  void indexScanTwoVarsCase(
       const TripleGraph::Node& node,
       std::function<void(Permutation::Enum)> addIndexScan);
 
-  void handleThreeVariablesCase(
+  // Helper function used by the seedFromOrdinaryTriple function
+  void indexScanThreeVarsCase(
       const TripleGraph::Node& node,
+      std::function<void(Permutation::Enum)> addIndexScan);
+
+  // Helper function used by the seedFromScansAndText function
+  void seedFromOrdinaryTriple(
+      const TripleGraph::Node& node, std::function<void(SubtreePlan)> pushPlan,
       std::function<void(Permutation::Enum)> addIndexScan);
 
   /**

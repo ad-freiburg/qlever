@@ -1,3 +1,7 @@
+//  Copyright 2023, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
+
 #pragma once
 
 #include <string>
@@ -9,56 +13,71 @@
 // The entities are saved to the entityVar_. If the operation is called on a
 // fixed entity instead, it only returns entries that contain this entity.
 class TextIndexScanForEntity : public Operation {
- public:
+ private:
   struct VarOrFixedEntity {
     VarOrFixedEntity(const QueryExecutionContext* qec,
-                     const std::variant<Variable, std::string>& entity) {
+                     std::variant<Variable, std::string> entity) {
       if (std::holds_alternative<std::string>(entity)) {
-        fixedEntity_.emplace(std::get<std::string>(entity));
-        bool success =
-            qec->getIndex().getVocab().getId(fixedEntity_.value(), &index_);
+        VocabIndex index;
+        std::string fixedEntity = std::move(*std::get_if<std::string>(&entity));
+        bool success = qec->getIndex().getVocab().getId(fixedEntity, &index);
         if (!success) {
           throw std::runtime_error(
-              "The entity " + fixedEntity_.value() +
+              "The entity " + fixedEntity +
               " is not part of the underlying knowledge graph and can "
-              "therefore "
-              "not be used as the object of ql:contains-entity");
+              "therefore not be used as the object of ql:contains-entity");
         }
+        entity_ = std::pair<std::string, VocabIndex>(std::move(fixedEntity),
+                                                     std::move(index));
       } else {
-        entityVar_.emplace(std::get<Variable>(entity));
+        entity_ = std::move(*std::get_if<Variable>(&entity));
       }
     }
     ~VarOrFixedEntity() = default;
 
-    std::optional<std::string> fixedEntity_ = std::nullopt;
-    VocabIndex index_;
-    std::optional<Variable> entityVar_ = std::nullopt;
+    bool hasFixedEntity() const {
+      return std::holds_alternative<std::pair<std::string, VocabIndex>>(
+          entity_);
+    }
+
+    std::variant<Variable, std::pair<std::string, VocabIndex>> entity_ =
+        std::pair<std::string, VocabIndex>{std::string{}, VocabIndex{}};
   };
 
- private:
   const Variable textRecordVar_;
-  const VarOrFixedEntity entity_;
+  const VarOrFixedEntity varOrFixed_;
   const string word_;
 
  public:
   TextIndexScanForEntity(QueryExecutionContext* qec, Variable textRecordVar,
-                         const std::variant<Variable, std::string>& entity_,
+                         std::variant<Variable, std::string> entity,
                          string word);
   ~TextIndexScanForEntity() override = default;
 
-  bool hasFixedEntity() const { return entity_.fixedEntity_.has_value(); };
+  bool hasFixedEntity() const { return varOrFixed_.hasFixedEntity(); }
 
-  Variable textRecordVar() const { return textRecordVar_; }
-
-  std::variant<Variable, std::string> entity() const {
-    if (hasFixedEntity()) {
-      return entity_.fixedEntity_.value();
-    } else {
-      return entity_.entityVar_.value();
+  const std::string& getFixedEntity() const {
+    if (!hasFixedEntity()) {
+      AD_CONTRACT_CHECK(
+          "getFixedEntity called on an instance that does not have a fixed "
+          "entity.");
     }
+    return std::get<std::pair<std::string, VocabIndex>>(varOrFixed_.entity_)
+        .first;
   }
 
-  std::string word() const { return word_; }
+  const Variable& getEntityVariable() const {
+    if (hasFixedEntity()) {
+      AD_CONTRACT_CHECK(
+          "getEntityVariable called on an instance that does not have a entity "
+          "variable.");
+    }
+    return std::get<Variable>(varOrFixed_.entity_);
+  }
+
+  const Variable& getTextRecordVar() const { return textRecordVar_; }
+
+  const std::string& getWord() const { return word_; }
 
   string getCacheKeyImpl() const override;
 
@@ -86,6 +105,16 @@ class TextIndexScanForEntity : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  const VocabIndex& getVocabIndexOfFixedEntity() const {
+    if (!hasFixedEntity()) {
+      AD_CONTRACT_CHECK(
+          "getVocabIndexOfFixedEntity called on an instance that does not have "
+          "a fixed entity and therefore also no VocabIndex.");
+    }
+    return std::get<std::pair<std::string, VocabIndex>>(varOrFixed_.entity_)
+        .second;
+  }
+
   ResultTable computeResult() override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }

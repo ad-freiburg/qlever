@@ -841,7 +841,11 @@ TEST(QueryPlannerTest, TextIndexScanForEntity) {
   ParsedQuery pq = SparqlParser::parseQuery(
       "SELECT * WHERE { ?text ql:contains-entity ?scientist . }");
   QueryPlanner qp(nullptr);
-  ASSERT_THROW(qp.createExecutionTree(pq), ad_utility::Exception);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qp.createExecutionTree(pq),
+      ::testing::ContainsRegex(
+          "Missing ql:contains-word statement. A ql:contains-entity statement "
+          "always also needs corresponding ql:contains-word statement."));
 }
 
 // __________________________________________________________________________
@@ -853,5 +857,7 @@ TEST(QueryPlannerTest, TooManyTriples) {
   query = absl::StrCat(query, "}");
   ParsedQuery pq = SparqlParser::parseQuery(query);
   QueryPlanner qp(nullptr);
-  ASSERT_THROW(qp.createExecutionTree(pq), ad_utility::Exception);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qp.createExecutionTree(pq),
+      ::testing::ContainsRegex("At most 64 triples allowed at the moment."));
 }

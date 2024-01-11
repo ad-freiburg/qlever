@@ -1,3 +1,7 @@
+//  Copyright 2024, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
+
 #pragma once
 
 namespace textIndexScanTestHelpers {
