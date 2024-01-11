@@ -800,5 +800,6 @@ class IndexImpl {
   }
 
   std::unique_ptr<ExternalSorter<SortByPSO, 5>> buildOspWithPatterns(
-      PatternCreatorNew::TripleSorter patternOutput, auto isQLeverInternalId);
+      PatternCreatorNew::TripleSorter sortersFromPatternCreator,
+      auto isQLeverInternalId);
 };

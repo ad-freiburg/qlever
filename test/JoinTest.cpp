@@ -235,9 +235,8 @@ void testJoinOperation(Join& join, const ExpectedColumns& expected) {
   for (const auto& [var, columnAndStatus] : expected) {
     const auto& [colIndex, undefStatus] = varToCols.at(var);
     decltype(auto) column = table.getColumn(colIndex);
-    auto colAsVector = std::vector<Id>{column.begin(), column.end()};
     EXPECT_EQ(undefStatus, columnAndStatus.second);
-    EXPECT_THAT(colAsVector, ::testing::ElementsAreArray(columnAndStatus.first))
+    EXPECT_THAT(column, ::testing::ElementsAreArray(columnAndStatus.first))
         << "Columns for variable " << var.name() << " did not match";
   }
 }

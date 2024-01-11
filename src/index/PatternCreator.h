@@ -110,7 +110,7 @@ class PatternCreatorNew {
     bool isInternal_;
   };
   ad_utility::BufferedVector<TripleAndIsInternal> tripleBuffer_;
-  TripleSorter tripleOutput_;
+  TripleSorter tripleSorter_;
 
   // The predicates which have already occured in one of the patterns. Needed to
   // count the number of distinct predicates.
@@ -130,7 +130,7 @@ class PatternCreatorNew {
       : filename_{basename},
         patternSerializer_{{basename}},
         tripleBuffer_(100'000, basename + ".tripleBufferForPatterns.dat"),
-        tripleOutput_{
+        tripleSorter_{
             std::make_unique<PSOSorter>(
                 basename + ".additionalTriples.pso.dat", memoryLimit / 2,
                 ad_utility::makeUnlimitedAllocator<Id>()),
@@ -169,9 +169,9 @@ class PatternCreatorNew {
                                    CompactVectorOfStrings<Id>& patterns);
 
   // Move out the sorted triples after finishing creating the patterns.
-  TripleSorter&& getTripleOutput() && {
+  TripleSorter&& getTripleSorter() && {
     finish();
-    return std::move(tripleOutput_);
+    return std::move(tripleSorter_);
   }
 
  private:
@@ -180,7 +180,7 @@ class PatternCreatorNew {
   void printStatistics(PatternStatistics patternStatistics) const;
 
   auto& ospSorterTriplesWithPattern() {
-    return *tripleOutput_.triplesWithSubjectPatternsSortedByOsp_;
+    return *tripleSorter_.triplesWithSubjectPatternsSortedByOsp_;
   }
 };
 

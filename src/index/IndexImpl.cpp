@@ -125,9 +125,9 @@ std::unique_ptr<TurtleParserBase> IndexImpl::makeTurtleParser(
   }
 }
 
-// Several helper functions for joining the OSP with the patterns.
+// Several helper functions for joining the OSP permutation with the patterns.
 namespace {
-static auto lazyScanWithPermutedPatterns(auto& sorterPtr, auto columnIndices) {
+static auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
   auto setSubset = [columnIndices](auto& idTable) {
     idTable.setColumnSubset(columnIndices);
   };
@@ -138,20 +138,24 @@ static auto lazyScanWithPermutedPatterns(auto& sorterPtr, auto columnIndices) {
 static auto lazyOptionalJoinOnFirstColumn(auto&& leftInput, auto&& rightInput,
                                           auto resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
-  auto compareProjection = []<typename T>(const T& row) {
+  auto projectionForComparator = []<typename T>(const T& rowOrId) {
     if constexpr (ad_utility::SimilarTo<T, Id>) {
-      return row;
+      return rowOrId;
     } else {
-      return row[0];
+      return rowOrId[0];
     }
   };
-  auto comparator = [&compareProjection](const auto& l, const auto& r) {
-    return compareProjection(l) < compareProjection(r);
+  auto comparator = [&projectionForComparator](const auto& l, const auto& r) {
+    return projectionForComparator(l) < projectionForComparator(r);
   };
 
+  // There are 5 columns in the result (3 from the triple, as well as subject
+  // patterns of the subject and object.
   IdTable outputTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
+  // The first argument is the number of join columns.
   auto rowAdder = ad_utility::AddCombinedRowToIdTable<decltype(resultCallback)>{
-      1, std::move(outputTable), 100'000, resultCallback};
+      1, std::move(outputTable), BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP(),
+      resultCallback};
 
   ad_utility::zipperJoinForBlocksWithoutUndef(leftInput, rightInput, comparator,
                                               rowAdder, projection, projection,
@@ -159,7 +163,13 @@ static auto lazyOptionalJoinOnFirstColumn(auto&& leftInput, auto&& rightInput,
   rowAdder.flush();
 }
 
+// In the pattern column replace UNDEF (which is created by the optional join)
+// by the special `NO_PATTERN` ID and undo the permutation of the columns that
+// was only needed for the join algorithm.
 auto fixBlockAfterPatternJoin(auto block) {
+  // The permutation must be the inverse of the original permutation, which just
+  // switches the third column (the object) into the first column (where the
+  // join column is expected by the algorithms).
   block.value().setColumnSubset(std::array<ColumnIndex, 5>{2, 1, 0, 3, 4});
   std::ranges::for_each(block.value().getColumn(4), [](Id& id) {
     id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id;
@@ -170,15 +180,24 @@ auto fixBlockAfterPatternJoin(auto block) {
 
 // ____________________________________________________________________________
 std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
-    PatternCreatorNew::TripleSorter patternOutput, auto isQleverInternalId) {
-  auto&& [patternsPSO, secondSorter] = patternOutput;
-  auto lazyPatternScan = lazyScanWithPermutedPatterns(
-      patternsPSO, std::array<ColumnIndex, 2>{0, 2});
+    PatternCreatorNew::TripleSorter sortersFromPatternCreator,
+    auto isQleverInternalId) {
+  auto&& [hasPatternPredicateSortedByPSO, secondSorter] =
+      sortersFromPatternCreator;
+  // The column with index 1 always is `has-predicate` and is not needed here.
+  // Note that the order of the columns during index building  is alwasy `SPO`,
+  // but the sorting might be different (e.g. PSO in this case).
+  auto lazyPatternScan = lazyScanWithPermutedColumns(
+      hasPatternPredicateSortedByPSO, std::array<ColumnIndex, 2>{0, 2});
   ad_utility::data_structures::ThreadSafeQueue<IdTable> queue{4};
   ad_utility::JThread joinWithPatternThread{[&] {
     IdTable outputBufferTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
 
-    auto ospAsBlocksTransformed = lazyScanWithPermutedPatterns(
+    // The permutation (2, 1, 0, 3) switches the third column (the object) into
+    // the first column (where the join column is expected by the algorithms).
+    // This permutation is reverted as part of the `fixBlockAfterPatternJoin`
+    // function.
+    auto ospAsBlocksTransformed = lazyScanWithPermutedColumns(
         secondSorter, std::array<ColumnIndex, 4>{2, 1, 0, 3});
     auto pushToQueue =
         [&, bufferSize =
@@ -1538,7 +1557,7 @@ std::optional<PatternCreatorNew::TripleSorter> IndexImpl::createSPOAndSOP(
     patternCreator.finish();
     configurationJson_["num-subjects-normal"] = numSubjectsNormal;
     writeConfiguration();
-    result = std::move(patternCreator).getTripleOutput();
+    result = std::move(patternCreator).getTripleSorter();
   } else {
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     createPermutationPair(numColumns, AD_FWD(sortedTriples), spo_, sop_,

@@ -45,6 +45,7 @@ namespace {
 // files) have exactly the same contents as the patterns that are folded into
 // the PSO and POS permutation.
 void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
+  static constexpr size_t col0IdTag = 43;
   auto checkSingleElement = [](const Index& index, size_t patternIdx, Id id) {
     const auto& hasPattern = index.getHasPattern();
     auto expectedPattern = [&] {
@@ -74,7 +75,7 @@ void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
           auto patternIdx = row[2].getInt();
           Id subjectId = row[subjectColIdx];
           checkSingleElement(index, patternIdx, subjectId);
-          Id objectId = objectColIdx == 42 ? col0Id : row[objectColIdx];
+          Id objectId = objectColIdx == col0IdTag ? col0Id : row[objectColIdx];
           auto patternIdxObject = row[3].getInt();
           checkSingleElement(index, patternIdxObject, objectId);
         }
@@ -87,8 +88,8 @@ void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
   };
   auto checkConsistencyForObject = [&](Id objectId) {
     using enum Permutation::Enum;
-    checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1, 42);
-    checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, 42);
+    checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1, col0IdTag);
+    checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, col0IdTag);
   };
   const auto& predicates = index.getImpl().PSO().metaData().data();
   for (const auto& predicate : predicates) {

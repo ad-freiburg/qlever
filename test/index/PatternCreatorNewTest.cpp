@@ -93,7 +93,7 @@ auto createExamplePatterns(PatternCreatorNew& creator) {
   push({V(3), V(11), V(45)}, false, 0);
 
   std::ranges::sort(expected, SortByOSP{});
-  auto tripleOutputs = std::move(creator).getTripleOutput();
+  auto tripleOutputs = std::move(creator).getTripleSorter();
   auto& triples = *tripleOutputs.triplesWithSubjectPatternsSortedByOsp_;
   std::vector<std::array<Id, 4>> actual;
   for (auto& block : triples.getSortedBlocks<4>()) {
