@@ -799,6 +799,12 @@ class IndexImpl {
     return createPSOAndPOS(AD_FWD(args)...);
   }
 
+  // Build the OSP and OPS permutations from the output of the `PatternCreator`.
+  // The permutations will have two additional columns: The subject pattern of
+  // the subject (which is already created by the `PatternCreator`) and the
+  // subject pattern of the object (which is created by this function). Return
+  // these five columns sorted by PSO, to be used as an input for building the
+  // PSO and POS permutations.
   std::unique_ptr<ExternalSorter<SortByPSO, 5>> buildOspWithPatterns(
       PatternCreatorNew::TripleSorter sortersFromPatternCreator,
       auto isQLeverInternalId);

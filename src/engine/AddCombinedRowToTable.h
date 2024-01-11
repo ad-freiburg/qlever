@@ -20,7 +20,6 @@ namespace ad_utility {
 // store the indices of the matching rows. When a certain buffer size
 // (configurable, default value 100'000) is reached, the results are actually
 // written to the table.
-template <std::invocable<IdTable&> BlockwiseCallback = ad_utility::Noop>
 class AddCombinedRowToIdTable {
   std::vector<size_t> numUndefinedPerColumn_;
   size_t numJoinColumns_;
@@ -62,15 +61,16 @@ class AddCombinedRowToIdTable {
   // This callback is called with the result as an argument each time `flush()`
   // is called. It can be used to consume parts of the result early, before the
   // complete operation has finished.
-  [[no_unique_address]] BlockwiseCallback blockwiseCallback_{};
+  using BlockwiseCallback = std::function<void(IdTable&)>;
+  [[no_unique_address]] BlockwiseCallback blockwiseCallback_{ad_utility::noop};
 
  public:
   // Construct from the number of join columns, the two inputs, and the output.
   // The `bufferSize` can be configured for testing.
-  explicit AddCombinedRowToIdTable(size_t numJoinColumns, IdTableView<0> input1,
-                                   IdTableView<0> input2, IdTable output,
-                                   size_t bufferSize = 100'000,
-                                   BlockwiseCallback blockwiseCallback = {})
+  explicit AddCombinedRowToIdTable(
+      size_t numJoinColumns, IdTableView<0> input1, IdTableView<0> input2,
+      IdTable output, size_t bufferSize = 100'000,
+      BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
         inputLeftAndRight_{std::array{std::move(input1), std::move(input2)}},
@@ -84,9 +84,9 @@ class AddCombinedRowToIdTable {
   // This means that the inputs have to be set to an explicit
   // call to `setInput` before adding rows. This is used for the lazy join
   // operations (see Join.cpp) where the input changes over time.
-  explicit AddCombinedRowToIdTable(size_t numJoinColumns, IdTable output,
-                                   size_t bufferSize = 100'000,
-                                   BlockwiseCallback blockwiseCallback = {})
+  explicit AddCombinedRowToIdTable(
+      size_t numJoinColumns, IdTable output, size_t bufferSize = 100'000,
+      BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
         inputLeftAndRight_{std::nullopt},

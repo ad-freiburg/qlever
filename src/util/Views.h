@@ -138,8 +138,19 @@ auto integerRange(Int upperBound) {
   return std::views::iota(Int{0}, upperBound);
 }
 
-// TODO<joka921> Comments, tests, concepts.
-auto repeatedTransformView(auto view, auto transformation) {
+// TODO<joka921> tests
+// Similar to `std::views::transform` but for transformation functions that
+// transform a value in place. The result always only is an input range,
+// independent of the actual range category of the input.
+template <std::ranges::view View,
+          ad_utility::InvocableWithExactReturnType<
+              void, std::ranges::range_reference_t<View>>
+              Transformation>
+auto inPlaceTransformView(View view, Transformation transformation) {
+  // Take a range and yield pairs of [pointerToElementOfRange,
+  // boolThatIsInitiallyFalse]. The bool is yielded as a reference and if its
+  // value is changed, that change will be stored until the next element is
+  // yielded. This is made use of further below.
   auto makePtrAndBool = [](auto range)
       -> cppcoro::generator<
           std::pair<decltype(std::addressof(*range.begin())), bool>> {
@@ -148,15 +159,20 @@ auto repeatedTransformView(auto view, auto transformation) {
       co_yield pair;
     }
   };
+
+  // Lift the transformation to work on the result of `makePtrAndBool` and to
+  // only apply the transformation once for each element.
   auto actualTransformation =
       [transformation](auto& ptrAndBool) -> decltype(auto) {
     auto& [ptr, alreadyTransformed] = ptrAndBool;
     if (!alreadyTransformed) {
       alreadyTransformed = true;
-      transformation(*ptr);
+      std::invoke(transformation, *ptr);
     }
     return *ptr;
   };
+
+  // Combine everything to the actual result view.
   return std::views::transform(
       ad_utility::OwningView{makePtrAndBool(std::move(view))},
       actualTransformation);

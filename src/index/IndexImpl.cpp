@@ -127,16 +127,23 @@ std::unique_ptr<TurtleParserBase> IndexImpl::makeTurtleParser(
 
 // Several helper functions for joining the OSP permutation with the patterns.
 namespace {
-static auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
+// Return an input range of the blocks that are returned by the external sorter
+// to which `sorterPtr` points. Only the subset/permutation specified by the
+// `columnIndices` will be returned for each block.
+auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
   auto setSubset = [columnIndices](auto& idTable) {
     idTable.setColumnSubset(columnIndices);
   };
-  return ad_utility::repeatedTransformView(
+  return ad_utility::inPlaceTransformView(
       sorterPtr->template getSortedBlocks<0>(), setSubset);
 }
 
-static auto lazyOptionalJoinOnFirstColumn(auto&& leftInput, auto&& rightInput,
-                                          auto resultCallback) {
+// Perform a lazy optional block join on the first column of `leftInput` and
+// `rightInput`. The `resultCallback` will be called for each block of resulting
+// rows. Assumes that `leftInput` and `rightInput` have 6 columns in total, so
+// the result will have 5 columns.
+auto lazyOptionalJoinOnFirstColumn(auto&& leftInput, auto&& rightInput,
+                                   auto resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
   auto projectionForComparator = []<typename T>(const T& rowOrId) {
     if constexpr (ad_utility::SimilarTo<T, Id>) {
@@ -153,7 +160,7 @@ static auto lazyOptionalJoinOnFirstColumn(auto&& leftInput, auto&& rightInput,
   // patterns of the subject and object.
   IdTable outputTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
   // The first argument is the number of join columns.
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable<decltype(resultCallback)>{
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable{
       1, std::move(outputTable), BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP(),
       resultCallback};
 
@@ -190,15 +197,21 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   auto lazyPatternScan = lazyScanWithPermutedColumns(
       hasPatternPredicateSortedByPSO, std::array<ColumnIndex, 2>{0, 2});
   ad_utility::data_structures::ThreadSafeQueue<IdTable> queue{4};
-  ad_utility::JThread joinWithPatternThread{[&] {
-    IdTable outputBufferTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
 
-    // The permutation (2, 1, 0, 3) switches the third column (the object) into
-    // the first column (where the join column is expected by the algorithms).
-    // This permutation is reverted as part of the `fixBlockAfterPatternJoin`
-    // function.
-    auto ospAsBlocksTransformed = lazyScanWithPermutedColumns(
-        secondSorter, std::array<ColumnIndex, 4>{2, 1, 0, 3});
+  // The permutation (2, 1, 0, 3) switches the third column (the object) into
+  // the first column (where the join column is expected by the algorithms).
+  // This permutation is reverted as part of the `fixBlockAfterPatternJoin`
+  // function.
+  auto ospAsBlocksTransformed = lazyScanWithPermutedColumns(
+      secondSorter, std::array<ColumnIndex, 4>{2, 1, 0, 3});
+
+  // Run the actual joining between the OSP permutation and the `has-pattern`
+  // predicate on a background thread. The result will be pushed to the `queue`
+  // so that we can consume it asynchronously.
+  ad_utility::JThread joinWithPatternThread{[&] {
+    // Setup the callback for the join that will buffer the results and push
+    // them to the queue.
+    IdTable outputBufferTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
     auto pushToQueue =
         [&, bufferSize =
                 BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP().load()](IdTable& table) {
@@ -220,6 +233,9 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
 
     lazyOptionalJoinOnFirstColumn(ospAsBlocksTransformed, lazyPatternScan,
                                   pushToQueue);
+
+    // We still might have some buffered results left, push them to the queue
+    // and then finish the queue.
     if (!outputBufferTable.empty()) {
       queue.push(std::move(outputBufferTable));
       outputBufferTable.clear();
@@ -227,6 +243,8 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
     queue.finish();
   }};
 
+  // Set up a generator that yields blocks with the following columns:
+  // S P O PatternOfS PatternOfO, sorter by OPS.
   auto blockGenerator =
       [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
     while (auto block = queue.pop()) {
@@ -234,6 +252,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
     }
   }(queue);
 
+  // Actually create the permutations.
   auto thirdSorter =
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
   createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
