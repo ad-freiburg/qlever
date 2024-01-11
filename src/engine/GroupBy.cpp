@@ -1102,7 +1102,8 @@ concept SupportedAggregates =
 // the child expression of an aggregate, and subsequently processing the values
 // by calling the `increment` function of the corresponding aggregate.
 auto makeProcessGroupsVisitor =
-    [](size_t blockSize, sparqlExpression::EvaluationContext* evaluationContext,
+    [](size_t blockSize,
+       const sparqlExpression::EvaluationContext* evaluationContext,
        const std::vector<size_t>& hashEntries) {
       return [blockSize, evaluationContext,
               &hashEntries]<sparqlExpression::SingleExpressionResult T,
