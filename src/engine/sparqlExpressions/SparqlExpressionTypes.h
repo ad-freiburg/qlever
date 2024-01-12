@@ -106,7 +106,7 @@ using ExpressionResult = ad_utility::TupleToVariant<detail::AllTypesAsTuple>;
 /// match this concept.
 template <typename T>
 concept SingleExpressionResult =
-    ad_utility::isTypeContainedIn<T, ExpressionResult>;
+    ad_utility::SimilarToAnyTypeIn<T, ExpressionResult>;
 
 // Copy an expression result.
 inline ExpressionResult copyExpressionResult(
@@ -125,12 +125,12 @@ inline ExpressionResult copyExpressionResult(
 /// True iff T represents a constant.
 template <typename T>
 constexpr static bool isConstantResult =
-    ad_utility::isTypeContainedIn<T, detail::ConstantTypes>;
+    ad_utility::SimilarToAnyTypeIn<T, detail::ConstantTypes>;
 
 /// True iff T is one of the ConstantTypesAsVector
 template <typename T>
 constexpr static bool isVectorResult =
-    ad_utility::isTypeContainedIn<T, detail::ConstantTypesAsVector> ||
+    ad_utility::SimilarToAnyTypeIn<T, detail::ConstantTypesAsVector> ||
     ad_utility::isSimilar<T, std::span<const ValueId>>;
 
 /// All the additional information which is needed to evaluate a SPARQL

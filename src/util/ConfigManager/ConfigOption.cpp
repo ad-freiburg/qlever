@@ -25,7 +25,7 @@
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
-namespace ad_utility {
+namespace ad_utility::ConfigManagerImpl {
 // ____________________________________________________________________________
 std::string ConfigOption::availableTypesToString(const AvailableTypes& value) {
   auto toStringVisitor = []<typename T>(const T&) -> std::string {
@@ -261,4 +261,4 @@ std::string ConfigOption::getActualValueTypeAsString() const {
       []<typename T>(const Data<T>&) { return availableTypesToString<T>(); },
       data_);
 }
-}  // namespace ad_utility
+}  // namespace ad_utility::ConfigManagerImpl
