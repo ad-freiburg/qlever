@@ -961,7 +961,7 @@ struct BlockZipperJoinImpl {
   // Combine the above functionality and perform one round of joining.
   // Has to be called alternately with `fillBuffer`.
   template <bool DoOptionalJoin, typename ProjectedEl>
-  void joinBuffers(auto& blockStatus) {
+  void joinBuffers(BlockStatus& blockStatus) {
     auto& currentBlocksLeft = leftSide_.currentBlocks_;
     auto& currentBlocksRight = rightSide_.currentBlocks_;
     joinAndRemoveLessThanCurrentEl<DoOptionalJoin>(
@@ -994,7 +994,7 @@ struct BlockZipperJoinImpl {
     // also need to pass through the remaining blocks from the other side.
     while (!equalToCurrentElLeft.empty() && !equalToCurrentElRight.empty()) {
       addAll<DoOptionalJoin>(equalToCurrentElLeft, equalToCurrentElRight);
-      switch (blockStatus.value()) {
+      switch (blockStatus) {
         case BlockStatus::allFilled:
           removeEqualToCurrentEl(currentBlocksLeft, currentEl);
           removeEqualToCurrentEl(currentBlocksRight, currentEl);
