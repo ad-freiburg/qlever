@@ -37,7 +37,7 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
     std::swap(t1, t2);
     std::swap(t1JoinCol, t2JoinCol);
   };
-  if (t1->asString() > t2->asString()) {
+  if (t1->getCacheKey() > t2->getCacheKey()) {
     swapChildren();
   }
   if (isFullScanDummy(t1)) {
@@ -73,18 +73,12 @@ Join::Join(InvalidOnlyForTestingJoinTag, QueryExecutionContext* qec)
 }
 
 // _____________________________________________________________________________
-string Join::asStringImpl(size_t indent) const {
+string Join::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << "JOIN\n"
-     << _left->asString(indent) << " join-column: [" << _leftJoinCol << "]\n";
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
+     << _left->getCacheKey() << " join-column: [" << _leftJoinCol << "]\n";
   os << "|X|\n"
-     << _right->asString(indent) << " join-column: [" << _rightJoinCol << "]";
+     << _right->getCacheKey() << " join-column: [" << _rightJoinCol << "]";
   return std::move(os).str();
 }
 
@@ -292,9 +286,8 @@ Join::ScanMethodType Join::getScanMethod(
   // during its lifetime
   const auto& idx = _executionContext->getIndex();
   const auto scanLambda =
-      [&idx, &scan](
-          const Permutation::Enum perm,
-          std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) {
+      [&idx, &scan](const Permutation::Enum perm,
+                    ad_utility::SharedCancellationHandle cancellationHandle) {
         return [&idx, perm, &scan,
                 cancellationHandle = std::move(cancellationHandle)](Id id) {
           return idx.scan(id, std::nullopt, perm, scan.additionalColumns(),

@@ -37,8 +37,8 @@ class Permutation {
 
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
+  using ColumnIndicesRef = CompressedRelationReader::ColumnIndicesRef;
   using ColumnIndices = CompressedRelationReader::ColumnIndices;
-  using OwningColumnIndices = CompressedRelationReader::OwningColumnIndices;
 
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
@@ -64,9 +64,9 @@ class Permutation {
   // If `col1Id` is specified, only the col2 is returned for triples that
   // additionally have the specified col1. .This is just a thin wrapper around
   // `CompressedRelationMetaData::scan`.
-  IdTable scan(
-      Id col0Id, std::optional<Id> col1Id, ColumnIndices additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+  IdTable scan(Id col0Id, std::optional<Id> col1Id,
+               ColumnIndicesRef additionalColumns,
+               ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;
@@ -88,8 +88,8 @@ class Permutation {
   IdTableGenerator lazyScan(
       Id col0Id, std::optional<Id> col1Id,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
-      ColumnIndices additionalColumns,
-      std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const;
+      ColumnIndicesRef additionalColumns,
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Return the metadata for the relation specified by the `col0Id`
   // along with the metadata for all the blocks that contain this relation (also

@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 
+#include "absl/strings/str_join.h"
 #include "index/IndexImpl.h"
 #include "index/TriplesView.h"
 #include "parser/ParsedQuery.h"
@@ -47,12 +48,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
 }
 
 // _____________________________________________________________________________
-string IndexScan::asStringImpl(size_t indent) const {
+string IndexScan::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << ' ';
-  }
-
   auto permutationString = Permutation::toString(permutation_);
 
   if (numVariables_ == 3) {
@@ -73,7 +70,7 @@ string IndexScan::asStringImpl(size_t indent) const {
   }
   if (!additionalColumns_.empty()) {
     os << " Additional Columns: ";
-    ad_utility::lazyStrJoin(&os, additionalColumns(), " ");
+    os << absl::StrJoin(additionalColumns(), " ");
   }
   return std::move(os).str();
 }
@@ -147,7 +144,7 @@ ResultTable IndexScan::computeResult() {
 }
 
 // _____________________________________________________________________________
-size_t IndexScan::computeSizeEstimate() {
+size_t IndexScan::computeSizeEstimate() const {
   if (_executionContext) {
     // Should always be in this branch. Else is only for test cases.
 
@@ -157,7 +154,7 @@ size_t IndexScan::computeSizeEstimate() {
       // Note: we cannot use `optional::value_or()` here, because the else
       // case is expensive to compute, and we need it lazily evaluated.
       if (auto size = getExecutionContext()->getQueryTreeCache().getPinnedSize(
-              asString());
+              getCacheKey());
           size.has_value()) {
         return size.value();
       } else {
@@ -222,6 +219,7 @@ void IndexScan::determineMultiplicities() {
   if (_executionContext) {
     const auto& idx = getIndex();
     if (numVariables_ == 1) {
+      // There are no duplicate triples in RDF and two elements are fixed.
       multiplicity_.emplace_back(1);
     } else if (numVariables_ == 2) {
       const auto permutedTriple = getPermutedTriple();
@@ -231,6 +229,7 @@ void IndexScan::determineMultiplicities() {
       multiplicity_ = idx.getMultiplicities(permutation_);
     }
   } else {
+    // This branch is only used in certain unit tests.
     multiplicity_.emplace_back(1);
     if (numVariables_ == 2) {
       multiplicity_.emplace_back(1);

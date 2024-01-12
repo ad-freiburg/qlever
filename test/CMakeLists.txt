@@ -7,7 +7,7 @@ add_subdirectory(util)
 # general test utilities and all libraries that are specified as additional
 # arguments.
 function (linkTest basename)
-    qlever_target_link_libraries(${basename} ${ARGN} gtest gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(${basename} ${ARGN} gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
 
 # Add the exectutable ${basename} that is compiled from the source file
@@ -86,12 +86,13 @@ endfunction()
 
 add_subdirectory(engine)
 add_subdirectory(parser)
+add_subdirectory(index)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
 addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
-addLinkAndDiscoverTest(StringUtilsTest)
+addLinkAndDiscoverTest(StringUtilsTest util)
 
 addLinkAndDiscoverTest(CacheTest)
 
@@ -115,7 +116,7 @@ addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
 addLinkAndDiscoverTest(EngineTest engine)
 
-addLinkAndDiscoverTest(JoinTest engine testUtil)
+addLinkAndDiscoverTest(JoinTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
@@ -144,7 +145,7 @@ else()
     linkAndDiscoverTest(TokenTest parser re2 util)
 endif()
 
-addLinkAndDiscoverTest(TurtleParserTest parser re2)
+addLinkAndDiscoverTestSerial(TurtleParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
@@ -322,19 +323,21 @@ addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
 addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
 
-addLinkAndDiscoverTest(ConfigManagerTest configManager testUtil)
+addLinkAndDiscoverTest(ConfigManagerTest configManager)
 
 addLinkAndDiscoverTest(ConfigOptionTest configManager)
 
-addLinkAndDiscoverTest(ValidatorTest configManager testUtil)
+addLinkAndDiscoverTest(ValidatorTest configManager)
 
 addLinkAndDiscoverTest(ConfigOptionProxyTest configManager)
 
 addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
-addLinkAndDiscoverTest(RandomTest testUtil)
+addLinkAndDiscoverTest(RandomTest)
 
-addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
+addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark testUtil)
+
+addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
 
 addLinkAndDiscoverTest(FindUndefRangesTest engine)
 
@@ -346,7 +349,7 @@ addLinkAndDiscoverTest(ComparisonWithNanTest)
 
 addLinkAndDiscoverTest(ThreadSafeQueueTest)
 
-addLinkAndDiscoverTest(IdTableHelpersTest testUtil)
+addLinkAndDiscoverTest(IdTableHelpersTest)
 
 addLinkAndDiscoverTest(GeneratorTest)
 
@@ -377,3 +380,9 @@ addLinkAndDiscoverTest(CancellationHandleTest util)
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
 addLinkAndDiscoverTest(ParallelMultiwayMergeTest)
+
+addLinkAndDiscoverTest(ParseableDurationTest)
+
+addLinkAndDiscoverTest(ConstantsTest)
+
+addLinkAndDiscoverTest(JThreadTest)

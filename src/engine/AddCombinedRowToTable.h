@@ -20,11 +20,10 @@ namespace ad_utility {
 // store the indices of the matching rows. When a certain buffer size
 // (configurable, default value 100'000) is reached, the results are actually
 // written to the table.
-template <std::invocable<IdTable&> BlockwiseCallback = ad_utility::Noop>
 class AddCombinedRowToIdTable {
   std::vector<size_t> numUndefinedPerColumn_;
   size_t numJoinColumns_;
-  std::optional<std::array<IdTableView<0>, 2>> inputs_;
+  std::optional<std::array<IdTableView<0>, 2>> inputLeftAndRight_;
   IdTable resultTable_;
 
   // This struct stores the information, which row indices from the input are
@@ -38,9 +37,9 @@ class AddCombinedRowToIdTable {
   // Store the indices that have not yet been written.
   std::vector<TargetIndexAndRowIndices> indexBuffer_;
 
-  // Store the information, which row index from the first input is written to a
+  // Store the information, which row index from the left input is written to a
   // given index in the output. This is used for OPTIONAL joins where there are
-  // rows that have no counterpart in the second input.
+  // rows that have no counterpart in the right input.
   struct TargetIndexAndRowIndex {
     size_t targetIndex_;
     size_t rowIndex_;
@@ -59,19 +58,22 @@ class AddCombinedRowToIdTable {
   // materialized and written to the result in one go.
   size_t bufferSize_ = 100'000;
 
-  // TODO<joka921> Comment
-  BlockwiseCallback blockwiseCallback_{};
+  // This callback is called with the result as an argument each time `flush()`
+  // is called. It can be used to consume parts of the result early, before the
+  // complete operation has finished.
+  using BlockwiseCallback = std::function<void(IdTable&)>;
+  [[no_unique_address]] BlockwiseCallback blockwiseCallback_{ad_utility::noop};
 
  public:
   // Construct from the number of join columns, the two inputs, and the output.
   // The `bufferSize` can be configured for testing.
-  explicit AddCombinedRowToIdTable(size_t numJoinColumns, IdTableView<0> input1,
-                                   IdTableView<0> input2, IdTable output,
-                                   size_t bufferSize = 100'000,
-                                   BlockwiseCallback blockwiseCallback = {})
+  explicit AddCombinedRowToIdTable(
+      size_t numJoinColumns, IdTableView<0> input1, IdTableView<0> input2,
+      IdTable output, size_t bufferSize = 100'000,
+      BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
-        inputs_{std::array{std::move(input1), std::move(input2)}},
+        inputLeftAndRight_{std::array{input1, input2}},
         resultTable_{std::move(output)},
         bufferSize_{bufferSize},
         blockwiseCallback_{std::move(blockwiseCallback)} {
@@ -82,12 +84,12 @@ class AddCombinedRowToIdTable {
   // This means that the inputs have to be set to an explicit
   // call to `setInput` before adding rows. This is used for the lazy join
   // operations (see Join.cpp) where the input changes over time.
-  explicit AddCombinedRowToIdTable(size_t numJoinColumns, IdTable output,
-                                   size_t bufferSize = 100'000,
-                                   BlockwiseCallback blockwiseCallback = {})
+  explicit AddCombinedRowToIdTable(
+      size_t numJoinColumns, IdTable output, size_t bufferSize = 100'000,
+      BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
-        inputs_{std::nullopt},
+        inputLeftAndRight_{std::nullopt},
         resultTable_{std::move(output)},
         bufferSize_{bufferSize},
         blockwiseCallback_{std::move(blockwiseCallback)} {
@@ -103,7 +105,7 @@ class AddCombinedRowToIdTable {
   // The next free row in the output will be created from
   // `inputLeft_[rowIndexA]` and `inputRight_[rowIndexB]`.
   void addRow(size_t rowIndexA, size_t rowIndexB) {
-    AD_EXPENSIVE_CHECK(inputs_.has_value());
+    AD_EXPENSIVE_CHECK(inputLeftAndRight_.has_value());
     indexBuffer_.push_back(
         TargetIndexAndRowIndices{nextIndex_, {rowIndexA, rowIndexB}});
     ++nextIndex_;
@@ -127,14 +129,16 @@ class AddCombinedRowToIdTable {
       }
     };
     if (nextIndex_ != 0) {
-      AD_CORRECTNESS_CHECK(inputs_.has_value());
+      AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
       flush();
     }
-    inputs_ = std::array{toView(inputLeft), toView(inputRight)};
+    inputLeftAndRight_ = std::array{toView(inputLeft), toView(inputRight)};
     checkNumColumns();
   }
 
-  void setLeftInput(const auto& inputLeft) {
+  // Only set the left input. After this it is only allowed to call
+  // `addOptionalRow` and not `addRow` until `setInput` has been called again.
+  void setOnlyLeftInputForOptionalJoin(const auto& inputLeft) {
     auto toView = []<typename T>(const T& table) {
       if constexpr (requires { table.template asStaticView<0>(); }) {
         return table.template asStaticView<0>();
@@ -143,11 +147,11 @@ class AddCombinedRowToIdTable {
       }
     };
     if (nextIndex_ != 0) {
-      AD_CORRECTNESS_CHECK(inputs_.has_value());
+      AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
       flush();
     }
-    // TODO<joka921> This is rather unsafe, we should think of something better.
-    inputs_ = std::array{
+    // The right input will be empty, but with the correct number of columns.
+    inputLeftAndRight_ = std::array{
         toView(inputLeft),
         IdTableView<0>{resultTable_.numColumns() -
                            toView(inputLeft).numColumns() + numJoinColumns_,
@@ -158,7 +162,7 @@ class AddCombinedRowToIdTable {
   // `inputLeft_[rowIndexA]`. The columns from `inputRight_` will all be set to
   // UNDEF
   void addOptionalRow(size_t rowIndexA) {
-    AD_EXPENSIVE_CHECK(inputs_.has_value());
+    AD_EXPENSIVE_CHECK(inputLeftAndRight_.has_value());
     optionalIndexBuffer_.push_back(
         TargetIndexAndRowIndex{nextIndex_, rowIndexA});
     ++nextIndex_;
@@ -200,7 +204,7 @@ class AddCombinedRowToIdTable {
     if (nextIndex_ == 0) {
       return;
     }
-    AD_CORRECTNESS_CHECK(inputs_.has_value());
+    AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
     result.resize(oldSize + nextIndex_);
 
     // Sometimes columns are combined where one value is UNDEF and the other one
@@ -233,7 +237,7 @@ class AddCombinedRowToIdTable {
         resultCol[oldSize + targetIndex] = resultId;
       }
 
-      // Write the optional rows. For the second input those are always
+      // Write the optional rows. For the right input those are always
       // undefined.
       for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
         Id id = colLeft[sourceIndex];
@@ -264,7 +268,7 @@ class AddCombinedRowToIdTable {
         resultCol[oldSize + targetIndex] = resultId;
       }
 
-      // Write the optional rows. For the second input those are always
+      // Write the optional rows. For the right input those are always
       // undefined.
       for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
         Id id = [&col, sourceIndex = sourceIndex]() {
@@ -288,13 +292,13 @@ class AddCombinedRowToIdTable {
       ++nextResultColIdx;
     }
 
-    // Then the remaining columns from the first input.
+    // Then the remaining columns from the left input.
     for (size_t col = numJoinColumns_; col < inputLeft().numColumns(); ++col) {
       writeNonJoinColumn.template operator()<true>(col, nextResultColIdx);
       ++nextResultColIdx;
     }
 
-    // Then the remaining columns from the second input.
+    // Then the remaining columns from the right input.
     for (size_t col = numJoinColumns_; col < inputRight().numColumns(); col++) {
       writeNonJoinColumn.template operator()<false>(col, nextResultColIdx);
       ++nextResultColIdx;
@@ -305,9 +309,13 @@ class AddCombinedRowToIdTable {
     nextIndex_ = 0;
     std::invoke(blockwiseCallback_, result);
   }
-  const IdTableView<0>& inputLeft() const { return inputs_.value()[0]; }
+  const IdTableView<0>& inputLeft() const {
+    return inputLeftAndRight_.value()[0];
+  }
 
-  const IdTableView<0>& inputRight() const { return inputs_.value()[1]; }
+  const IdTableView<0>& inputRight() const {
+    return inputLeftAndRight_.value()[1];
+  }
 
   void checkNumColumns() const {
     AD_CONTRACT_CHECK(inputLeft().numColumns() >= numJoinColumns_);

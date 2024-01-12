@@ -1,4 +1,4 @@
-//  Copyright 2022, University of Freiburg,
+//  Copyright 2023, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
@@ -11,13 +11,13 @@
 
 namespace qlever {
 
-// A mapping from special builtin predicates that are not managed via the normal
+// A mapping from special builtin IRIs that are not managed via the normal
 // vocabulary to the IDs that are used to represent them. These IDs all have the
 // `Undefined` datatype s.t. they do not accidentally interfere with other IDs.
 static const inline ad_utility::HashMap<std::string, Id> specialIds = []() {
   ad_utility::HashMap<std::string, Id> result{
-      {HAS_PREDICATE_PREDICATE, Id::fromBits(21)},
-      {HAS_PATTERN_PREDICATE, Id::fromBits(22)}};
+      {HAS_PREDICATE_PREDICATE, Id::fromBits(1)},
+      {HAS_PATTERN_PREDICATE, Id::fromBits(2)}};
 
   // Perform the following checks: All the special IDs are unique, all of them
   // have the `Undefined` datatype, but none of them is equal to the "actual"

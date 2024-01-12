@@ -149,7 +149,8 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
 
   ASSERT_EQ(metaData.size(), inputs.size());
 
-  auto cancellationHandle = std::make_shared<ad_utility::CancellationHandle>();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
   // Check the contents of the metadata.
 
   auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
@@ -191,14 +192,16 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     auto scanAndCheck = [&]() {
       auto size =
           reader.getResultSizeOfScan(metaData[i], V(lastCol1Id), blocks);
-      IdTable tableWidthOne = reader.scan(metaData[i], V(lastCol1Id), blocks,
-                                          {}, cancellationHandle);
+      IdTable tableWidthOne =
+          reader.scan(metaData[i], V(lastCol1Id), blocks,
+                      Permutation::ColumnIndicesRef{}, cancellationHandle);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
-      for (const auto& block : reader.lazyScan(
-               metaData[i], V(lastCol1Id), blocks, {}, cancellationHandle)) {
+      for (const auto& block :
+           reader.lazyScan(metaData[i], V(lastCol1Id), blocks,
+                           Permutation::ColumnIndices{}, cancellationHandle)) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
@@ -333,7 +336,7 @@ TEST(CompressedRelationWriter, AdditionalColumns) {
     }
   }
 
-  // add two separate columns
+  // Add two separate columns.
   for (auto& relation : inputs) {
     for (auto& row : relation.col1And2_) {
       row.push_back(row.at(0) + 42);

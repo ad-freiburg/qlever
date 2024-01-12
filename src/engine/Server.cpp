@@ -16,6 +16,8 @@
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/ParseableDuration.h"
+#include "util/http/HttpUtils.h"
 #include "util/http/websocket/MessageSender.h"
 
 template <typename T>
@@ -42,14 +44,11 @@ Server::Server(unsigned short port, size_t numThreads,
   // values of the parameters to the cache.
   RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
-  RuntimeParameters().setOnUpdateAction<"cache-max-size-gb">(
-      [this](size_t newValue) {
-        cache_.setMaxSize(ad_utility::MemorySize::gigabytes(newValue));
-      });
-  RuntimeParameters().setOnUpdateAction<"cache-max-size-gb-single-entry">(
-      [this](size_t newValue) {
-        cache_.setMaxSizeSingleEntry(
-            ad_utility::MemorySize::gigabytes(newValue));
+  RuntimeParameters().setOnUpdateAction<"cache-max-size">(
+      [this](ad_utility::MemorySize newValue) { cache_.setMaxSize(newValue); });
+  RuntimeParameters().setOnUpdateAction<"cache-max-size-single-entry">(
+      [this](ad_utility::MemorySize newValue) {
+        cache_.setMaxSizeSingleEntry(newValue);
       });
 }
 
@@ -58,8 +57,8 @@ void Server::initialize(const string& indexBaseName, bool useText,
                         bool usePatterns, bool loadAllPermutations) {
   LOG(INFO) << "Initializing server ..." << std::endl;
 
-  index_.setUsePatterns(usePatterns);
-  index_.setLoadAllPermutations(loadAllPermutations);
+  index_.usePatterns() = usePatterns;
+  index_.loadAllPermutations() = loadAllPermutations;
 
   // Init the index.
   index_.createFromOnDiskIndex(indexBaseName);
@@ -216,6 +215,34 @@ ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
 };
 
 // _____________________________________________________________________________
+
+net::awaitable<std::optional<Server::TimeLimit>>
+Server::verifyUserSubmittedQueryTimeout(
+    std::optional<std::string_view> userTimeout, bool accessTokenOk,
+    const ad_utility::httpUtils::HttpRequest auto& request, auto& send) const {
+  TimeLimit timeLimit = RuntimeParameters().get<"default-query-timeout">();
+  // TODO<GCC12> Use the monadic operations for std::optional
+  if (userTimeout.has_value()) {
+    auto timeoutCandidate =
+        ad_utility::ParseableDuration<TimeLimit>::fromString(
+            userTimeout.value());
+    if (timeoutCandidate > timeLimit && !accessTokenOk) {
+      co_await send(ad_utility::httpUtils::createForbiddenResponse(
+          absl::StrCat("User submitted timeout was higher than what is "
+                       "currently allowed by "
+                       "this instance (",
+                       timeLimit.count(),
+                       "s). Please use a valid-access token to override this "
+                       "server configuration."),
+          request));
+      co_return std::nullopt;
+    }
+    co_return timeoutCandidate;
+  }
+  co_return timeLimit;
+}
+
+// _____________________________________________________________________________
 Awaitable<void> Server::process(
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
   using namespace ad_utility::httpUtils;
@@ -337,8 +364,19 @@ Awaitable<void> Server::process(
       throw std::runtime_error(
           "Parameter \"query\" must not have an empty value");
     }
-    co_return co_await processQuery(parameters, requestTimer,
-                                    std::move(request), send);
+
+    if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
+            checkParameter("timeout", std::nullopt), accessTokenOk, request,
+            send)) {
+      co_return co_await processQuery(parameters, requestTimer,
+                                      std::move(request), send,
+                                      timeLimit.value());
+
+    } else {
+      // If the optional is empty, this indicates an error response has been
+      // sent to the client already. We can stop here.
+      co_return;
+    }
   }
 
   // If there was no "query", but any of the URL parameters processed before
@@ -462,13 +500,14 @@ ad_utility::websocket::OwningQueryId Server::getQueryId(
 
 auto Server::cancelAfterDeadline(
     const net::any_io_executor& executor,
-    std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
-    std::chrono::seconds timeLimit) {
+    std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
+    TimeLimit timeLimit)
+    -> ad_utility::InvocableWithExactReturnType<void> auto {
   auto strand = net::make_strand(executor);
   auto timer = std::make_shared<net::steady_timer>(strand, timeLimit);
 
   auto cancelAfterTimeout =
-      [](std::weak_ptr<ad_utility::CancellationHandle> cancellationHandle,
+      [](std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
          std::shared_ptr<net::steady_timer> timer) -> net::awaitable<void> {
     // Ignore cancellation exceptions, they are normal
     co_await timer->async_wait(net::as_tuple(net::use_awaitable));
@@ -485,26 +524,25 @@ auto Server::cancelAfterDeadline(
 }
 
 // ____________________________________________________________________________
-std::function<void()> Server::setupCancellationHandle(
+auto Server::setupCancellationHandle(
     const net::any_io_executor& executor,
     const ad_utility::websocket::QueryId& queryId,
-    const std::shared_ptr<Operation>& rootOperation,
-    std::optional<std::chrono::seconds> timeLimit) const {
+    const std::shared_ptr<Operation>& rootOperation, TimeLimit timeLimit) const
+    -> ad_utility::InvocableWithExactReturnType<void> auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
+  cancellationHandle->startWatchDog();
   AD_CORRECTNESS_CHECK(cancellationHandle);
   rootOperation->recursivelySetCancellationHandle(
       std::move(cancellationHandle));
-  if (timeLimit.has_value()) {
-    rootOperation->recursivelySetTimeConstraint(timeLimit.value());
-    return cancelAfterDeadline(executor, cancellationHandle, timeLimit.value());
-  }
-  return []() { /* Do nothing when no timeout is given */ };
+  rootOperation->recursivelySetTimeConstraint(timeLimit);
+  return cancelAfterDeadline(executor, cancellationHandle, timeLimit);
 }
 
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+    TimeLimit timeLimit) {
   using namespace ad_utility::httpUtils;
   AD_CONTRACT_CHECK(params.contains("query"));
   const auto& query = params.at("query");
@@ -530,11 +568,6 @@ boost::asio::awaitable<void> Server::processQuery(
   // access to the runtimeInformation in the case of an error.
   std::optional<PlannedQuery> plannedQuery;
   try {
-    std::optional<std::chrono::seconds> timeLimit =
-        params.contains("timeout") ? std::optional{std::chrono::seconds(
-                                         std::stoi(params.at("timeout")))}
-                                   : std::nullopt;
-
     auto containsParam = [&params](const std::string& param,
                                    const std::string& expected) {
       return params.contains(param) && params.at(param) == expected;
@@ -617,12 +650,14 @@ boost::asio::awaitable<void> Server::processQuery(
     runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
     LOG(INFO) << "Query planning done in " << timeForQueryPlanning.count()
               << " ms" << std::endl;
-    LOG(TRACE) << qet.asString() << std::endl;
+    LOG(TRACE) << qet.getCacheKey() << std::endl;
 
     // Common code for sending responses for the streamable media types
     // (tsv, csv, octet-stream, turtle).
     auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
       auto responseGenerator = co_await computeInNewThread([&] {
+        queryRegistry_.getCancellationHandle(messageSender.getQueryId())
+            ->resetWatchDogState();
         return ExportQueryExecutionTrees::computeResultAsStream(
             plannedQuery.value().parsedQuery_, qet, mediaType);
       });

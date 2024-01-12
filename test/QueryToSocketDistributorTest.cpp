@@ -9,6 +9,7 @@
 
 #include "util/AsyncTestHelpers.h"
 #include "util/Exception.h"
+#include "util/TransparentFunctors.h"
 #include "util/http/websocket/QueryToSocketDistributor.h"
 
 namespace net = boost::asio;
@@ -18,12 +19,13 @@ using namespace boost::asio::experimental::awaitable_operators;
 using namespace std::string_literals;
 
 using ::testing::Pointee;
+static constexpr auto noop = ad_utility::noop;
 
 // Hack to allow ASSERT_*() macros to work with ASYNC_TEST
 #define return co_return
 
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateThrowsWhenFinished) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
+  QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
   co_await queryToSocketDistributor.signalEnd();
   EXPECT_THROW(co_await queryToSocketDistributor.addQueryStatusUpdate("Abc"),
                ad_utility::Exception);
@@ -33,8 +35,8 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateThrowsWhenFinished) {
 
 ASYNC_TEST(QueryToSocketDistributor, signalEndRunsCleanup) {
   bool executed = false;
-  QueryToSocketDistributor queryToSocketDistributor{ioContext,
-                                                    [&]() { executed = true; }};
+  QueryToSocketDistributor queryToSocketDistributor{
+      ioContext, [&](bool signalEndCalled) { executed = signalEndCalled; }};
   EXPECT_FALSE(executed);
   co_await queryToSocketDistributor.signalEnd();
   EXPECT_TRUE(executed);
@@ -46,7 +48,7 @@ ASYNC_TEST(QueryToSocketDistributor, destructorRunsCleanup) {
   uint32_t counter = 0;
   {
     QueryToSocketDistributor queryToSocketDistributor{ioContext,
-                                                      [&]() { counter++; }};
+                                                      [&](bool) { counter++; }};
     EXPECT_EQ(counter, 0);
   }
   EXPECT_EQ(counter, 1);
@@ -57,7 +59,7 @@ ASYNC_TEST(QueryToSocketDistributor, destructorRunsCleanup) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, doubleSignalEndThrowsError) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
+  QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
   co_await queryToSocketDistributor.signalEnd();
   EXPECT_THROW(co_await queryToSocketDistributor.signalEnd(),
                ad_utility::Exception);
@@ -66,7 +68,7 @@ ASYNC_TEST(QueryToSocketDistributor, doubleSignalEndThrowsError) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, signalEndWakesUpListeners) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
+  QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
   bool waiting = false;
   auto listener = [&]() -> net::awaitable<void> {
     waiting = true;
@@ -85,7 +87,7 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndWakesUpListeners) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateWakesUpListeners) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
+  QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
   bool waiting = false;
   auto listener = [&]() -> net::awaitable<void> {
     waiting = true;
@@ -104,7 +106,7 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateWakesUpListeners) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, listeningBeforeStartWorks) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
+  QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
   bool waiting = false;
   auto listener = [&]() -> net::awaitable<void> {
     waiting = true;
@@ -123,7 +125,7 @@ ASYNC_TEST(QueryToSocketDistributor, listeningBeforeStartWorks) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateBeforeListenersWorks) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
+  QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
 
   co_await queryToSocketDistributor.addQueryStatusUpdate("Abc");
   co_await queryToSocketDistributor.addQueryStatusUpdate("Def");
@@ -136,7 +138,7 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateBeforeListenersWorks) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, signalEndDoesNotPreventConsumptionOfRest) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
+  QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
   co_await queryToSocketDistributor.addQueryStatusUpdate("Abc");
   co_await queryToSocketDistributor.addQueryStatusUpdate("Def");
   co_await queryToSocketDistributor.signalEnd();
@@ -152,7 +154,7 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndDoesNotPreventConsumptionOfRest) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, fullConsumptionAfterSignalEndWorks) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, []() {}};
+  QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
 
   co_await queryToSocketDistributor.addQueryStatusUpdate("Abc");
   co_await queryToSocketDistributor.addQueryStatusUpdate("Def");

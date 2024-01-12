@@ -140,7 +140,7 @@ TEST(Sort, SimpleMemberFunctions) {
     EXPECT_EQ(8u, s.getSizeEstimate());
     EXPECT_EQ("Sort (internal order) on ?0", s.getDescriptor());
 
-    EXPECT_THAT(s.asString(),
+    EXPECT_THAT(s.getCacheKey(),
                 ::testing::StartsWith("SORT(internal) on columns:asc(0) \n"));
     auto varColMap = s.getExternallyVisibleVariableColumns();
     ASSERT_EQ(1u, varColMap.size());
@@ -148,7 +148,7 @@ TEST(Sort, SimpleMemberFunctions) {
     EXPECT_FALSE(s.knownEmptyResult());
     EXPECT_EQ(42.0, s.getMultiplicity(0));
 
-    EXPECT_THAT(s.getSubtree()->getRootOperation()->asString(),
+    EXPECT_THAT(s.getSubtree()->getRootOperation()->getCacheKey(),
                 ::testing::StartsWith("Values for testing with"));
   }
 
@@ -162,7 +162,7 @@ TEST(Sort, SimpleMemberFunctions) {
     EXPECT_EQ("Sort (internal order) on ?1 ?0", s.getDescriptor());
 
     EXPECT_THAT(
-        s.asString(),
+        s.getCacheKey(),
         ::testing::StartsWith("SORT(internal) on columns:asc(1) asc(0) \n"));
     const auto& varColMap = s.getExternallyVisibleVariableColumns();
     ASSERT_EQ(2u, varColMap.size());

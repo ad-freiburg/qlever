@@ -9,6 +9,7 @@
 #include <fstream>
 
 #include "./IndexTestHelpers.h"
+#include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
@@ -19,6 +20,7 @@
 using namespace ad_utility::testing;
 
 namespace {
+using ad_utility::source_location;
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
 // Return a lambda that runs a scan for two fixed elements `c0` and `c1`
@@ -32,9 +34,9 @@ auto makeTestScanWidthOne = [](const IndexImpl& index) {
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
     TripleComponent c1Tc{c1};
-    IdTable result =
-        index.scan(c0, std::cref(c1Tc), permutation, {},
-                   std::make_shared<ad_utility::CancellationHandle>());
+    IdTable result = index.scan(
+        c0, std::cref(c1Tc), permutation, Permutation::ColumnIndicesRef{},
+        std::make_shared<ad_utility::CancellationHandle<>>());
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
 };
@@ -49,163 +51,171 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index) {
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
-    IdTable wol =
-        index.scan(c0, std::nullopt, permutation, {},
-                   std::make_shared<ad_utility::CancellationHandle>());
+    IdTable wol = index.scan(
+        c0, std::nullopt, permutation, Permutation::ColumnIndicesRef{},
+        std::make_shared<ad_utility::CancellationHandle<>>());
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
 }  // namespace
 
 TEST(IndexTest, createFromTurtleTest) {
-  {
-    std::string kb =
-        "<a>  <b>  <c> . \n"
-        "<a>  <b>  <c2> .\n"
-        "<a>  <b2> <c> .\n"
-        "<a2> <b2> <c2> .";
-    const IndexImpl& index = getQec(kb)->getIndex().getImpl();
-
-    auto getId = makeGetId(getQec(kb)->getIndex());
-    Id a = getId("<a>");
-    Id b = getId("<b>");
-    Id c = getId("<c>");
-    Id a2 = getId("<a2>");
-    Id b2 = getId("<b2>");
-    Id c2 = getId("<c2>");
-
-    // TODO<joka921> We could also test the multiplicities here.
-    ASSERT_TRUE(index.PSO().metaData().col0IdExists(b));
-    ASSERT_TRUE(index.PSO().metaData().col0IdExists(b2));
-    ASSERT_FALSE(index.PSO().metaData().col0IdExists(a));
-    ASSERT_FALSE(index.PSO().metaData().col0IdExists(c));
-    ASSERT_FALSE(index.PSO().metaData().col0IdExists(
-        Id::makeFromVocabIndex(VocabIndex::make(735))));
-    ASSERT_FALSE(index.PSO().metaData().getMetaData(b).isFunctional());
-    ASSERT_TRUE(index.PSO().metaData().getMetaData(b2).isFunctional());
-
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(b));
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(b2));
-    ASSERT_FALSE(index.POS().metaData().col0IdExists(a));
-    ASSERT_FALSE(index.POS().metaData().col0IdExists(c));
-    ASSERT_TRUE(index.POS().metaData().getMetaData(b).isFunctional());
-    ASSERT_TRUE(index.POS().metaData().getMetaData(b2).isFunctional());
-
-    // Relation b
-    // Pair index
-    auto testTwo = makeTestScanWidthTwo(index);
-    testTwo("<b>", Permutation::PSO, {{a, c}, {a, c2}});
-    std::vector<std::array<Id, 2>> buffer;
-
-    // Relation b2
-    testTwo("<b2>", Permutation::PSO, {{a, c}, {a2, c2}});
-
+  auto runTest = [](bool loadAllPermutations, bool loadPatterns) {
     {
-      // Test for a previous bug in the scan of two fixed elements: An assertion
-      // wrongly failed if the first Id existed in the permutation, but no
-      // compressed block was found via binary search that could possibly
-      // contain the combination of the ids. In this example <b2> is the largest
-      // predicate that occurs and <c2> is larger than the largest subject that
-      // appears with <b2>.
-      auto testOne = makeTestScanWidthOne(index);
-      testOne("<b2>", "<c2>", Permutation::PSO, {});
+      std::string kb =
+          "<a>  <b>  <c> . \n"
+          "<a>  <b>  <c2> .\n"
+          "<a>  <b2> <c> .\n"
+          "<a2> <b2> <c2> .";
+
+      auto getIndex = [&]() -> decltype(auto) {
+        [[maybe_unused]] decltype(auto) ref =
+            getQec(kb, loadAllPermutations, loadPatterns)->getIndex().getImpl();
+        return ref;
+      };
+      if (!loadAllPermutations && loadPatterns) {
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            getIndex(),
+            ::testing::HasSubstr(
+                "patterns can only be built when all 6 permutations"));
+        return;
+      }
+      const IndexImpl& index = getIndex();
+
+      auto getId = makeGetId(getQec(kb)->getIndex());
+      Id a = getId("<a>");
+      Id b = getId("<b>");
+      Id c = getId("<c>");
+      Id a2 = getId("<a2>");
+      Id b2 = getId("<b2>");
+      Id c2 = getId("<c2>");
+
+      // TODO<joka921> We could also test the multiplicities here.
+      ASSERT_TRUE(index.PSO().metaData().col0IdExists(b));
+      ASSERT_TRUE(index.PSO().metaData().col0IdExists(b2));
+      ASSERT_FALSE(index.PSO().metaData().col0IdExists(a));
+      ASSERT_FALSE(index.PSO().metaData().col0IdExists(c));
+      ASSERT_FALSE(index.PSO().metaData().col0IdExists(
+          Id::makeFromVocabIndex(VocabIndex::make(735))));
+      ASSERT_FALSE(index.PSO().metaData().getMetaData(b).isFunctional());
+      ASSERT_TRUE(index.PSO().metaData().getMetaData(b2).isFunctional());
+
+      ASSERT_TRUE(index.POS().metaData().col0IdExists(b));
+      ASSERT_TRUE(index.POS().metaData().col0IdExists(b2));
+      ASSERT_FALSE(index.POS().metaData().col0IdExists(a));
+      ASSERT_FALSE(index.POS().metaData().col0IdExists(c));
+      ASSERT_TRUE(index.POS().metaData().getMetaData(b).isFunctional());
+      ASSERT_TRUE(index.POS().metaData().getMetaData(b2).isFunctional());
+
+      // Relation b
+      // Pair index
+      auto testTwo = makeTestScanWidthTwo(index);
+      testTwo("<b>", Permutation::PSO, {{a, c}, {a, c2}});
+      std::vector<std::array<Id, 2>> buffer;
+
+      // Relation b2
+      testTwo("<b2>", Permutation::PSO, {{a, c}, {a2, c2}});
+
+      {
+        // Test for a previous bug in the scan of two fixed elements: An
+        // assertion wrongly failed if the first Id existed in the permutation,
+        // but no compressed block was found via binary search that could
+        // possibly contain the combination of the ids. In this example <b2> is
+        // the largest predicate that occurs and <c2> is larger than the largest
+        // subject that appears with <b2>.
+        auto testOne = makeTestScanWidthOne(index);
+        testOne("<b2>", "<c2>", Permutation::PSO, {});
+      }
     }
-  }
-  {
-    std::string kb =
-        "<a> <is-a> <1> .\n"
-        "<a> <is-a> <2> .\n"
-        "<a> <is-a> <0> .\n"
-        "<b> <is-a> <3> .\n"
-        "<b> <is-a> <0> .\n"
-        "<c> <is-a> <1> .\n"
-        "<c> <is-a> <2> .\n";
+    {
+      std::string kb =
+          "<a> <is-a> <1> .\n"
+          "<a> <is-a> <2> .\n"
+          "<a> <is-a> <0> .\n"
+          "<b> <is-a> <3> .\n"
+          "<b> <is-a> <0> .\n"
+          "<c> <is-a> <1> .\n"
+          "<c> <is-a> <2> .\n";
 
-    const IndexImpl& index = getQec(kb)->getIndex().getImpl();
+      const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
-    auto getId = makeGetId(getQec(kb)->getIndex());
-    Id zero = getId("<0>");
-    Id one = getId("<1>");
-    Id two = getId("<2>");
-    Id three = getId("<3>");
-    Id a = getId("<a>");
-    Id b = getId("<b>");
-    Id c = getId("<c>");
-    Id isA = getId("<is-a>");
+      auto getId = makeGetId(getQec(kb)->getIndex());
+      Id zero = getId("<0>");
+      Id one = getId("<1>");
+      Id two = getId("<2>");
+      Id three = getId("<3>");
+      Id a = getId("<a>");
+      Id b = getId("<b>");
+      Id c = getId("<c>");
+      Id isA = getId("<is-a>");
 
-    ASSERT_TRUE(index.PSO().metaData().col0IdExists(isA));
-    ASSERT_FALSE(index.PSO().metaData().col0IdExists(a));
+      ASSERT_TRUE(index.PSO().metaData().col0IdExists(isA));
+      ASSERT_FALSE(index.PSO().metaData().col0IdExists(a));
 
-    ASSERT_FALSE(index.PSO().metaData().getMetaData(isA).isFunctional());
+      ASSERT_FALSE(index.PSO().metaData().getMetaData(isA).isFunctional());
 
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(isA));
-    ASSERT_FALSE(index.POS().metaData().getMetaData(isA).isFunctional());
+      ASSERT_TRUE(index.POS().metaData().col0IdExists(isA));
+      ASSERT_FALSE(index.POS().metaData().getMetaData(isA).isFunctional());
 
-    auto testTwo = makeTestScanWidthTwo(index);
-    testTwo("<is-a>", Permutation::PSO,
-            {{a, zero},
-             {a, one},
-             {a, two},
-             {b, zero},
-             {b, three},
-             {c, one},
-             {c, two}});
+      auto testTwo = makeTestScanWidthTwo(index);
+      testTwo("<is-a>", Permutation::PSO,
+              {{a, zero},
+               {a, one},
+               {a, two},
+               {b, zero},
+               {b, three},
+               {c, one},
+               {c, two}});
 
-    // is-a for POS
-    testTwo("<is-a>", Permutation::POS,
-            {{zero, a},
-             {zero, b},
-             {one, a},
-             {one, c},
-             {two, a},
-             {two, c},
-             {three, b}});
-  }
+      // is-a for POS
+      testTwo("<is-a>", Permutation::POS,
+              {{zero, a},
+               {zero, b},
+               {one, a},
+               {one, c},
+               {two, a},
+               {two, c},
+               {three, b}});
+    }
+  };
+  runTest(true, true);
+  runTest(true, false);
+  runTest(false, false);
+  runTest(false, true);
 }
 
 TEST(CreatePatterns, createPatterns) {
-  std::string kb =
-      "<a>  <b>  <c>  .\n"
-      "<a>  <b>  <c2> .\n"
-      "<a>  <b2> <c>  .\n"
-      "<a2> <b2> <c2> .\n"
-      "<a2> <d>  <c2> .";
+  {
+    std::string kb =
+        "<a>  <b>  <c>  .\n"
+        "<a>  <b>  <c2> .\n"
+        "<a>  <b2> <c>  .\n"
+        "<a2> <b2> <c2> .\n"
+        "<a2> <d>  <c2> .";
 
-  /*
-  const IndexImpl& index = getQec(kb)->getIndex().getImpl();
+    const Index& indexNoImpl = getQec(kb)->getIndex();
+    const IndexImpl& index = indexNoImpl.getImpl();
 
-  // TODO<joka921> reincorporate similar tests with the new behavior.
-  ASSERT_EQ(2u, index.getHasPattern().size());
-  ASSERT_EQ(0u, index.getHasPredicate().size());
-  std::vector<VocabIndex> p0;
-  std::vector<VocabIndex> p1;
-  VocabIndex idx;
-  // Pattern p0 (for subject <a>) consists of <b> and <b2)
-  ASSERT_TRUE(index.getVocab().getId("<b>", &idx));
-  p0.push_back(idx);
-  ASSERT_TRUE(index.getVocab().getId("<b2>", &idx));
-  p0.push_back(idx);
+    ASSERT_EQ(2u, index.getHasPattern().size());
+    ASSERT_EQ(0u, index.getHasPredicate().size());
+    auto getId = ad_utility::testing::makeGetId(indexNoImpl);
+    // Pattern p0 (for subject <a>) consists of <b> and <b2)
+    std::vector<Id> p0{getId("<b>"), getId("<b2>")};
+    // Pattern p1 (for subject <a2>) consists of <b2> and <d>)
+    std::vector<Id> p1{getId("<b2>"), getId("<d>")};
 
-  // Pattern p1 (for subject <as>) consists of <b2> and <d>)
-  p1.push_back(idx);
-  ASSERT_TRUE(index.getVocab().getId("<d>", &idx));
-  p1.push_back(idx);
+    auto checkPattern = [&index](const auto& expected, Id subject) {
+      PatternID patternIdx =
+          index.getHasPattern()[subject.getVocabIndex().get()];
+      const auto& actual = index.getPatterns()[patternIdx];
+      for (size_t i = 0; i < actual.size(); i++) {
+        ASSERT_EQ(expected[i], actual[i]);
+      }
+    };
 
-  auto checkPattern = [](const auto& expected, const auto& actual) {
-    for (size_t i = 0; i < actual.size(); i++) {
-      ASSERT_EQ(Id::makeFromVocabIndex(expected[i]), actual[i]);
-    }
-  };
-
-  ASSERT_TRUE(index.getVocab().getId("<a>", &idx));
-  LOG(INFO) << idx << std::endl;
-  for (size_t i = 0; i < index.getHasPattern().size(); ++i) {
-    LOG(INFO) << index.getHasPattern()[i] << std::endl;
+    checkPattern(p0, getId("<a>"));
+    checkPattern(p1, getId("<a2>"));
   }
-  checkPattern(p0, index.getPatterns()[index.getHasPattern()[idx.get()]]);
-  ASSERT_TRUE(index.getVocab().getId("<a2>", &idx));
-  checkPattern(p1, index.getPatterns()[index.getHasPattern()[idx.get()]]);
-*/
 }
 
 TEST(IndexTest, createFromOnDiskIndexTest) {
@@ -240,7 +250,6 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
 TEST(IndexTest, scanTest) {
   auto testWithAndWithoutPrefixCompression = [](bool useCompression) {
     using enum Permutation::Enum;
-    /*
     std::string kb =
         "<a>  <b>  <c>  . \n"
         "<a>  <b>  <c2> . \n"
@@ -274,15 +283,13 @@ TEST(IndexTest, scanTest) {
       testOne("<b2>", "<c2>", POS, {{a2}});
       testOne("<notExisting>", "<a>", PSO, {});
     }
-    */
-    auto kb =
-        "<a> <is-a> <1> . \n"
-        "<a> <is-a> <2> . \n"
-        "<a> <is-a> <0> . \n"
-        "<b> <is-a> <3> . \n"
-        "<b> <is-a> <0> . \n"
-        "<c> <is-a> <1> . \n"
-        "<c> <is-a> <2> . \n";
+    kb = "<a> <is-a> <1> . \n"
+         "<a> <is-a> <2> . \n"
+         "<a> <is-a> <0> . \n"
+         "<b> <is-a> <3> . \n"
+         "<b> <is-a> <0> . \n"
+         "<c> <is-a> <1> . \n"
+         "<c> <is-a> <2> . \n";
 
     {
       const IndexImpl& index =
@@ -543,7 +550,7 @@ TEST(IndexTest, NumDistinctEntities) {
 }
 
 TEST(IndexTest, NumDistinctEntitiesCornerCases) {
-  const IndexImpl& index = getQec("", false)->getIndex().getImpl();
+  const IndexImpl& index = getQec("", false, false)->getIndex().getImpl();
   AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctSubjects(),
                                ::testing::ContainsRegex("if all 6"));
   AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctObjects(),
@@ -578,4 +585,28 @@ TEST(IndexTest, trivialGettersAndSetters) {
   index.memoryLimitIndexBuilding() = 7_kB;
   EXPECT_EQ(index.memoryLimitIndexBuilding(), 7_kB);
   EXPECT_EQ(std::as_const(index).memoryLimitIndexBuilding(), 7_kB);
+}
+
+TEST(IndexTest, NewlinesInPrefixCompression) {
+  std::string input;
+  for (size_t i : ad_utility::integerRange(200UL)) {
+    input.append(
+        absl::StrCat("<a> <b> \"\"\"\nabc\t\n34as\n\ndj", i, "\"\"\".\n"));
+  }
+  const QueryExecutionContext* ctx = nullptr;
+
+  ASSERT_NO_THROW(ctx = getQec(input));
+  AD_CORRECTNESS_CHECK(ctx != nullptr);
+  using namespace ::testing;
+
+  const auto& prefixes = ctx->getIndex()
+                             .getVocab()
+                             .getInternalVocab()
+                             .getUnderlyingVocabulary()
+                             .getCompressor()
+                             .prefixToCode();
+
+  // There must be at least one of the compression prefixes that compresses the
+  // common structure of the literals.
+  EXPECT_THAT(prefixes, Contains(ContainsRegex("\nabc\t\n")));
 }

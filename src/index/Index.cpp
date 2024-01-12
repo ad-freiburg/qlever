@@ -25,11 +25,6 @@ void Index::createFromFile(const std::string& filename) {
 }
 
 // ____________________________________________________________________________
-void Index::addPatternsToExistingIndex() {
-  pimpl_->addPatternsToExistingIndex();
-}
-
-// ____________________________________________________________________________
 void Index::createFromOnDiskIndex(const std::string& onDiskBase) {
   pimpl_->createFromOnDiskIndex(onDiskBase);
 }
@@ -197,14 +192,10 @@ void Index::setTextName(const std::string& name) {
 }
 
 // ____________________________________________________________________________
-void Index::setUsePatterns(bool usePatterns) {
-  return pimpl_->setUsePatterns(usePatterns);
-}
+bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 
 // ____________________________________________________________________________
-void Index::setLoadAllPermutations(bool loadAllPermutations) {
-  return pimpl_->setLoadAllPermutations(loadAllPermutations);
-}
+bool& Index::loadAllPermutations() { return pimpl_->loadAllPermutations(); }
 
 // ____________________________________________________________________________
 void Index::setKeepTempFiles(bool keepTempFiles) {
@@ -303,8 +294,8 @@ vector<float> Index::getMultiplicities(const TripleComponent& key,
 IdTable Index::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
-    Permutation::Enum p, Permutation::ColumnIndices additionalColumns,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+    Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
   return pimpl_->scan(col0String, col1String, p, additionalColumns,
                       std::move(cancellationHandle));
 }
@@ -312,8 +303,8 @@ IdTable Index::scan(
 // ____________________________________________________________________________
 IdTable Index::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-    Permutation::ColumnIndices additionalColumns,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+    Permutation::ColumnIndicesRef additionalColumns,
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
   return pimpl_->scan(col0Id, col1Id, p, additionalColumns,
                       std::move(cancellationHandle));
 }

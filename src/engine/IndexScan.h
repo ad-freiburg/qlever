@@ -102,9 +102,9 @@ class IndexScan : public Operation {
 
   void computeFullScan(IdTable* result, Permutation::Enum permutation) const;
 
-  size_t computeSizeEstimate();
+  size_t computeSizeEstimate() const;
 
-  string asStringImpl(size_t indent) const override;
+  string getCacheKeyImpl() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

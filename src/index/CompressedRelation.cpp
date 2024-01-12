@@ -4,6 +4,8 @@
 
 #include "CompressedRelation.h"
 
+#include <ranges>
+
 #include "engine/idTable/IdTable.h"
 #include "util/Cache.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
@@ -20,14 +22,14 @@ using namespace std::chrono_literals;
 
 // A small helper function to obtain the begin and end iterator of a range
 static auto getBeginAndEnd(auto& range) {
-  return std::pair{range.begin(), range.end()};
+  return std::pair{std::ranges::begin(range), std::ranges::end(range)};
 }
 
 // ____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
-    auto beginBlock, auto endBlock, OwningColumnIndices columnIndices,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+    auto beginBlock, auto endBlock, ColumnIndices columnIndices,
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
     co_return;
@@ -90,8 +92,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata, std::optional<Id> col1Id,
     std::vector<CompressedBlockMetadata> blockMetadata,
-    OwningColumnIndices additionalColumns,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+    ColumnIndices additionalColumns,
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
   AD_CONTRACT_CHECK(cancellationHandle);
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
   auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
@@ -232,65 +234,72 @@ std::array<std::vector<CompressedBlockMetadata>, 2>
 CompressedRelationReader::getBlocksForJoin(
     const MetadataAndBlocks& metadataAndBlocks1,
     const MetadataAndBlocks& metadataAndBlocks2) {
-  auto relevantBlocks1 = getBlocksFromMetadata(metadataAndBlocks1);
-  auto relevantBlocks2 = getBlocksFromMetadata(metadataAndBlocks2);
-
-  auto metadataForBlock =
-      [&](const CompressedBlockMetadata& block) -> decltype(auto) {
-    if (relevantBlocks1.data() <= &block &&
-        &block < relevantBlocks1.data() + relevantBlocks1.size()) {
-      return metadataAndBlocks1;
-    } else {
-      return metadataAndBlocks2;
-    }
+  // Associate a block together with the relevant ID (col1 or col2) for this
+  // join from the first and last triple.
+  struct BlockWithFirstAndLastId {
+    const CompressedBlockMetadata& block_;
+    Id first_;
+    Id last_;
   };
 
-  auto blockLessThanBlock = [&](const CompressedBlockMetadata& block1,
-                                const CompressedBlockMetadata& block2) {
-    return getRelevantIdFromTriple(block1.lastTriple_,
-                                   metadataForBlock(block1)) <
-           getRelevantIdFromTriple(block2.firstTriple_,
-                                   metadataForBlock(block2));
+  auto blockLessThanBlock = [&](const BlockWithFirstAndLastId& block1,
+                                const BlockWithFirstAndLastId& block2) {
+    return block1.last_ < block2.first_;
   };
 
-  std::array<std::vector<CompressedBlockMetadata>, 2> result;
+  // Transform all the relevant blocks from a `MetadataAndBlocks` a
+  // `BlockWithFirstAndLastId` struct (see above).
+  auto getBlocksWithFirstAndLastId =
+      [&blockLessThanBlock](const MetadataAndBlocks& metadataAndBlocks) {
+        auto getSingleBlock =
+            [&metadataAndBlocks](const CompressedBlockMetadata& block)
+            -> BlockWithFirstAndLastId {
+          return {
+              block,
+              getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
+              getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
+        };
+        auto result = std::views::transform(
+            getBlocksFromMetadata(metadataAndBlocks), getSingleBlock);
+        AD_CORRECTNESS_CHECK(
+            std::ranges::is_sorted(result, blockLessThanBlock));
+        return result;
+      };
 
-  AD_CONTRACT_CHECK(
-      std::ranges::is_sorted(relevantBlocks1, blockLessThanBlock));
-  AD_CONTRACT_CHECK(
-      std::ranges::is_sorted(relevantBlocks2, blockLessThanBlock));
+  auto blocksWithFirstAndLastId1 =
+      getBlocksWithFirstAndLastId(metadataAndBlocks1);
+  auto blocksWithFirstAndLastId2 =
+      getBlocksWithFirstAndLastId(metadataAndBlocks2);
 
   // Find the matching blocks on each side by performing binary search on the
   // other side. Note that it is tempting to reuse the `zipperJoinWithUndef`
   // routine, but this doesn't work because the implicit equality defined by
   // `!lessThan(a,b) && !lessThan(b, a)` is not transitive.
-  for (const auto& block : relevantBlocks1) {
-    if (!std::ranges::equal_range(relevantBlocks2, block, blockLessThanBlock)
-             .empty()) {
-      result[0].push_back(block);
+  auto findMatchingBlocks = [&blockLessThanBlock](const auto& blocks,
+                                                  const auto& otherBlocks) {
+    std::vector<CompressedBlockMetadata> result;
+    for (const auto& block : blocks) {
+      if (!std::ranges::equal_range(otherBlocks, block, blockLessThanBlock)
+               .empty()) {
+        result.push_back(block.block_);
+      }
     }
-  }
-  for (const auto& block : relevantBlocks2) {
-    if (!std::ranges::equal_range(relevantBlocks1, block, blockLessThanBlock)
-             .empty()) {
-      result[1].push_back(block);
-    }
-  }
+    // The following check isn't expensive as there are only few blocks.
+    AD_CORRECTNESS_CHECK(std::ranges::unique(result).begin() == result.end());
+    return result;
+  };
 
-  // The following check shouldn't be too expensive as there are only few
-  // blocks.
-  for (auto& vec : result) {
-    AD_CORRECTNESS_CHECK(std::ranges::unique(vec).begin() == vec.end());
-  }
-  return result;
+  return {
+      findMatchingBlocks(blocksWithFirstAndLastId1, blocksWithFirstAndLastId2),
+      findMatchingBlocks(blocksWithFirstAndLastId2, blocksWithFirstAndLastId1)};
 }
 
 // _____________________________________________________________________________
 IdTable CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
     std::span<const CompressedBlockMetadata> blocks,
-    ColumnIndices additionalColumns,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+    ColumnIndicesRef additionalColumns,
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
   auto columnIndices = prepareColumnIndices(col1Id, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
 
@@ -336,8 +345,8 @@ IdTable CompressedRelationReader::scan(
   result.resize(totalResultSize);
 
   size_t rowIndexOfNextBlockStart = 0;
-  // Lambda that adds a possibly incomplete block (the first or last block) at
-  // the current position.
+  // Lambda that appends a possibly incomplete block (the first or last block)
+  // to the `result`.
   auto addIncompleteBlockIfExists =
       [&rowIndexOfNextBlockStart, &result](
           const std::optional<DecompressedBlock>& incompleteBlock) mutable {
@@ -404,7 +413,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     const CompressedRelationMetadata& relationMetadata,
     std::optional<Id> col1Id, const CompressedBlockMetadata& blockMetadata,
     std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
-    ColumnIndices columnIndices) const {
+    ColumnIndicesRef columnIndices) const {
   std::vector<ColumnIndex> allColumns;
   std::ranges::copy(
       ad_utility::integerRange(blockMetadata.offsetsAndCompressedSize_.size()),
@@ -526,7 +535,7 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
 // _____________________________________________________________________________
 CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
     const CompressedBlockMetadata& blockMetaData,
-    ColumnIndices columnIndices) const {
+    ColumnIndicesRef columnIndices) const {
   CompressedBlock compressedBuffer;
   compressedBuffer.resize(columnIndices.size());
   // TODO<C++23> Use `std::views::zip`
@@ -581,7 +590,7 @@ void CompressedRelationReader::decompressColumn(
 // _____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::readAndDecompressBlock(
     const CompressedBlockMetadata& blockMetaData,
-    ColumnIndices columnIndices) const {
+    ColumnIndicesRef columnIndices) const {
   CompressedBlock compressedColumns =
       readCompressedBlockFromFile(blockMetaData, columnIndices);
   const auto numRowsToRead = blockMetaData.numRows_;
@@ -715,7 +724,7 @@ auto CompressedRelationReader::getFirstAndLastTriple(
 // ____________________________________________________________________________
 std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
     std::initializer_list<ColumnIndex> baseColumns,
-    ColumnIndices additionalColumns) {
+    ColumnIndicesRef additionalColumns) {
   std::vector<ColumnIndex> result;
   result.reserve(baseColumns.size() + additionalColumns.size());
   std::ranges::copy(baseColumns, std::back_inserter(result));
@@ -725,7 +734,7 @@ std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
 
 // ____________________________________________________________________________
 std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
-    const std::optional<Id>& col1Id, ColumnIndices additionalColumns) {
+    const std::optional<Id>& col1Id, ColumnIndicesRef additionalColumns) {
   if (col1Id.has_value()) {
     return prepareColumnIndices({1}, additionalColumns);
   } else {
@@ -918,15 +927,13 @@ CompressedRelationWriter::createPermutationPair(
   // Iterate over the vector and identify relation boundaries, where a
   // relation is the sequence of sortedTriples with equal first component. For
   // PSO and POS, this is a predicate (of which "relation" is a synonym).
-  std::optional<Id> currentCol0;
+  std::optional<Id> col0IdCurrentRelation;
   auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
   // TODO<joka921> Use call_fixed_size if there is benefit to it.
   IdTableStatic<0> relation{numColumns, alloc};
   size_t numBlocksCurrentRel = 0;
   auto compare = [](const auto& a, const auto& b) {
-    // TODO<joka921> can we use some `std::tie/lexicographical compare` trick here?
-    return a[0] != b[0] ? a[0] < b[0] : a[1] < b[1];
-    //return std::ranges::lexicographical_compare(a, b);
+    return std::tie(a[0], a[1]) < std::tie(b[0], b[1]);
   };
   // TODO<joka921> Use `CALL_FIXED_SIZE`.
   ad_utility::CompressedExternalIdTableSorter<decltype(compare), 0>
@@ -934,8 +941,9 @@ CompressedRelationWriter::createPermutationPair(
                          4_GB, alloc);
 
   DistinctIdCounter distinctCol1Counter;
-  auto addBlockForLargeRelation = [&numBlocksCurrentRel, &writer1, &currentCol0,
-                                   &relation, &twinRelationSorter, &blocksize] {
+  auto addBlockForLargeRelation = [&numBlocksCurrentRel, &writer1,
+                                   &col0IdCurrentRelation, &relation,
+                                   &twinRelationSorter, &blocksize] {
     if (relation.empty()) {
       return;
     }
@@ -945,7 +953,7 @@ CompressedRelationWriter::createPermutationPair(
       twinRelationSorter.push(row);
     }
     writer1.addBlockForLargeRelation(
-        currentCol0.value(),
+        col0IdCurrentRelation.value(),
         std::make_shared<IdTable>(std::move(relation).toDynamic()));
     relation.clear();
     relation.reserve(blocksize);
@@ -953,10 +961,10 @@ CompressedRelationWriter::createPermutationPair(
   };
 
   auto finishRelation = [&twinRelationSorter, &writer2, &writer1,
-                         &numBlocksCurrentRel, &currentCol0, &relation,
-                         &distinctCol1Counter, &addBlockForLargeRelation,
-                         &compare, &blocksize, &writeMetadata,
-                         &largeTwinRelationTimer]() {
+                         &numBlocksCurrentRel, &col0IdCurrentRelation,
+                         &relation, &distinctCol1Counter,
+                         &addBlockForLargeRelation, &compare, &blocksize,
+                         &writeMetadata, &largeTwinRelationTimer]() {
     if (numBlocksCurrentRel > 0 || static_cast<double>(relation.numRows()) >
                                        0.8 * static_cast<double>(blocksize)) {
       // The relation is large;
@@ -964,13 +972,14 @@ CompressedRelationWriter::createPermutationPair(
       auto md1 = writer1.finishLargeRelation(distinctCol1Counter.getAndReset());
       largeTwinRelationTimer.cont();
       auto md2 = writer2.addCompleteLargeRelation(
-          currentCol0.value(), twinRelationSorter.getSortedBlocks(blocksize));
+          col0IdCurrentRelation.value(),
+          twinRelationSorter.getSortedBlocks(blocksize));
       largeTwinRelationTimer.stop();
       twinRelationSorter.clear();
       writeMetadata(md1, md2);
     } else {
       // Small relations are written in one go.
-      auto md1 = writer1.addSmallRelation(currentCol0.value(),
+      auto md1 = writer1.addSmallRelation(col0IdCurrentRelation.value(),
                                           distinctCol1Counter.getAndReset(),
                                           relation.asStaticView<0>());
       // We don't use the parallel twinRelationSorter to create the twin
@@ -979,7 +988,7 @@ CompressedRelationWriter::createPermutationPair(
       std::ranges::sort(relation, compare);
       std::ranges::for_each(relation.getColumn(0),
                             std::ref(distinctCol1Counter));
-      auto md2 = writer2.addSmallRelation(currentCol0.value(),
+      auto md2 = writer2.addSmallRelation(col0IdCurrentRelation.value(),
                                           distinctCol1Counter.getAndReset(),
                                           relation.asStaticView<0>());
       writeMetadata(md1, md2);
@@ -988,35 +997,35 @@ CompressedRelationWriter::createPermutationPair(
     numBlocksCurrentRel = 0;
   };
   size_t i = 0;
-  std::vector<ColumnIndex> relationCols{c1, c2};
+  // All columns but the `col0` in the order in which they have to be added to
+  // the relation.
+  std::vector<ColumnIndex> remainingColIndices{c1, c2};
   for (size_t colIdx = 2; colIdx < numColumns; ++colIdx) {
-    relationCols.push_back(colIdx + 1);
+    remainingColIndices.push_back(colIdx + 1);
   }
   inputWaitTimer.cont();
   for (auto& block : AD_FWD(sortedTriples)) {
-    // TODO<joka921> Also add such checks into the other functions inside the
-    // writers.
     AD_CORRECTNESS_CHECK(block.numColumns() == numColumns + 1);
     inputWaitTimer.stop();
     // This only happens when the index is completely empty.
     if (block.empty()) {
       continue;
     }
-    if (!currentCol0.has_value()) {
-      currentCol0 = block.at(0)[c0];
-    }
     auto firstCol = block.getColumn(c0);
-    auto otherColumns = block.asColumnSubsetView(relationCols);
+    auto remainingCols = block.asColumnSubsetView(remainingColIndices);
+    if (!col0IdCurrentRelation.has_value()) {
+      col0IdCurrentRelation = firstCol[0];
+    }
     // TODO<C++23> Use `views::zip`
     for (size_t idx : ad_utility::integerRange(block.numRows())) {
-      Id c0fTriple = firstCol[idx];
-      decltype(auto) curTriple = otherColumns[idx];
-      if (c0fTriple != currentCol0) {
+      Id col0Id = firstCol[idx];
+      decltype(auto) curRemainingCols = remainingCols[idx];
+      if (col0Id != col0IdCurrentRelation) {
         finishRelation();
-        currentCol0 = c0fTriple;
+        col0IdCurrentRelation = col0Id;
       }
-      distinctCol1Counter(curTriple[0]);
-      relation.push_back(curTriple);
+      distinctCol1Counter(curRemainingCols[0]);
+      relation.push_back(curRemainingCols);
       if (relation.size() >= blocksize) {
         addBlockForLargeRelation();
       }
@@ -1048,15 +1057,16 @@ CompressedRelationWriter::createPermutationPair(
   blockCallbackTimer.cont();
   blockCallbackQueue.finish();
   blockCallbackTimer.stop();
-  LOG(INFO) << "Time spent waiting for the input "
+  LOG(TIMING) << "Time spent waiting for the input "
               << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
               << std::endl;
-  LOG(INFO) << "Time spent waiting for large twin relations "
+  LOG(TIMING) << "Time spent waiting for large twin relations "
               << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
               << "s" << std::endl;
-  LOG(INFO) << "Time spent waiting for triple callbacks (e.g. the next sorter) "
-            << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs())
-            << "s" << std::endl;
+  LOG(TIMING)
+      << "Time spent waiting for triple callbacks (e.g. the next sorter) "
+      << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs()) << "s"
+      << std::endl;
   return std::pair{std::move(writer1).getFinishedBlocks(),
                    std::move(writer2).getFinishedBlocks()};
 }

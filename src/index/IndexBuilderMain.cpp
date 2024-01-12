@@ -75,7 +75,7 @@ int main(int argc, char** argv) {
   bool keepTemporaryFiles = false;
   bool onlyPsoAndPos = false;
   bool addWordsFromLiterals = false;
-  std::optional<ad_utility::NonNegative> stxxlMemoryGB;
+  std::optional<ad_utility::MemorySize> stxxlMemory;
   optind = 1;
 
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
@@ -122,13 +122,13 @@ int main(int argc, char** argv) {
       "Disable the precomputation for `ql:has-predicate`.");
   add("no-compressed-vocabulary,N", po::bool_switch(&noPrefixCompression),
       "Do not apply prefix compression to the vocabulary (default: do apply).");
-  add("only-pos-and-pso-permutations,o", po::bool_switch(&onlyPsoAndPos),
+  add("only-pso-and-pos-permutations,o", po::bool_switch(&onlyPsoAndPos),
       "Only build the PSO and POS permutations. This is faster, but then "
       "queries with predicate variables are not supported");
 
   // Options for the index building process.
-  add("stxxl-memory-gb,m", po::value(&stxxlMemoryGB),
-      "The amount of memory in GB to use for sorting during the index build. "
+  add("stxxl-memory,m", po::value(&stxxlMemory),
+      "The amount of memory in to use for sorting during the index build. "
       "Decrease if the index builder runs out of memory.");
   add("keep-temporary-files,k", po::bool_switch(&keepTemporaryFiles),
       "Do not delete temporary files from index creation for debugging.");
@@ -148,9 +148,8 @@ int main(int argc, char** argv) {
     std::cerr << boostOptions << '\n';
     return EXIT_FAILURE;
   }
-  if (stxxlMemoryGB.has_value()) {
-    index.memoryLimitIndexBuilding() = ad_utility::MemorySize::gigabytes(
-        static_cast<size_t>(stxxlMemoryGB.value()));
+  if (stxxlMemory.has_value()) {
+    index.memoryLimitIndexBuilding() = stxxlMemory.value();
   }
   // TODO<joka921> remove this...
   // index.stxxlMemory() = 20_MB;
@@ -182,12 +181,12 @@ int main(int argc, char** argv) {
 
     index.setKbName(kbIndexName);
     index.setTextName(textIndexName);
-    index.setUsePatterns(!noPatterns);
+    index.usePatterns() = !noPatterns;
     index.setOnDiskBase(baseName);
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.setPrefixCompression(!noPrefixCompression);
-    index.setLoadAllPermutations(!onlyPsoAndPos);
+    index.loadAllPermutations() = !onlyPsoAndPos;
     // NOTE: If `onlyAddTextIndex` is true, we do not want to construct an
     // index, but we assume that it already exists. In particular, we then need
     // the vocabulary from the KB index for building the text index.

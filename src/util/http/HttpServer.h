@@ -144,6 +144,9 @@ class HttpServer {
 
     // Wait until the posted task has successfully executed
     future.wait();
+    // Make sure the tests don't run forever because without this `run()` may
+    // not terminate.
+    ioContext_.stop();
   }
 
  private:

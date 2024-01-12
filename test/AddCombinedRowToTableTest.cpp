@@ -30,7 +30,9 @@ TEST(AddCombinedRowToTable, OneJoinColumn) {
         1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
         bufferSize);
     adder.addRow(1, 0);
+    adder.setOnlyLeftInputForOptionalJoin(left);
     adder.addOptionalRow(2);
+    adder.setInput(left, right);
     adder.addRow(3, 2);
     auto numUndefined = adder.numUndefinedPerColumn();
     result = std::move(adder).resultTable();

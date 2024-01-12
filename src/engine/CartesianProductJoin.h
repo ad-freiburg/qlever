@@ -44,9 +44,9 @@ class CartesianProductJoin : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override;
 
  private:
-  // The individual implementation of `asString` (see above) that has to be
+  // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  string asStringImpl(size_t indent) const override;
+  string getCacheKeyImpl() const override;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for

@@ -51,7 +51,7 @@ class CountAvailablePredicates : public Operation {
                            Variable predicateVariable, Variable countVariable);
 
  protected:
-  [[nodiscard]] string asStringImpl(size_t indent) const override;
+  [[nodiscard]] string getCacheKeyImpl() const override;
 
  public:
   [[nodiscard]] string getDescriptor() const override;

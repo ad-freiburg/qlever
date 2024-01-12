@@ -24,9 +24,8 @@ Values::Values(QueryExecutionContext* qec, SparqlValues parsedValues)
 }
 
 // ____________________________________________________________________________
-string Values::asStringImpl(size_t indent) const {
-  return absl::StrCat(std::string(indent, ' '), "VALUES (",
-                      parsedValues_.variablesToString(), ") { ",
+string Values::getCacheKeyImpl() const {
+  return absl::StrCat("VALUES (", parsedValues_.variablesToString(), ") { ",
                       parsedValues_.valuesToString(), " }");
 }
 

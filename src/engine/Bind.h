@@ -21,7 +21,7 @@ class Bind : public Operation {
   parsedQuery::Bind _bind;
   // For the documentation of the overridden members, see Operation.h
  protected:
-  [[nodiscard]] string asStringImpl(size_t indent) const override;
+  [[nodiscard]] string getCacheKeyImpl() const override;
 
  public:
   const parsedQuery::Bind& bind() const { return _bind; }

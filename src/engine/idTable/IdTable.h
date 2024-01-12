@@ -172,8 +172,9 @@ class IdTable {
   // Construct from the number of columns and an allocator. If `NumColumns != 0`
   // Then the argument `numColumns` and `NumColumns` (the static and the
   // dynamic number of columns) must be equal, else a runtime check fails.
+  // Note: this also allows to create an empty view.
   explicit IdTable(size_t numColumns, Allocator allocator = {})
-      requires(columnsAreAllocatable)
+      requires columnsAreAllocatable
       : numColumns_{numColumns}, allocator_{std::move(allocator)} {
     if constexpr (!isDynamic) {
       AD_CONTRACT_CHECK(NumColumns == numColumns);
@@ -673,8 +674,6 @@ class IdTable {
 
  private:
   // Get direct access to the underlying data() as a reference.
-  // TODO<joka921> for `views` the data should be const, but the colums
-  // permutable, check if this is indeed the case for the type of `data_`.
   Data& data() { return data_; }
   const Data& data() const { return data_; }
 
