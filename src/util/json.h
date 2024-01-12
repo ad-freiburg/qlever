@@ -15,6 +15,7 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include <stdexcept>
 
 #include "util/File.h"
+#include "util/TypeTraits.h"
 #define JSON_USE_IMPLICIT_CONVERSIONS 0
 
 #include <absl/strings/str_cat.h>
@@ -32,10 +33,9 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include "util/SourceLocation.h"
 
 // For higher flexibility of the custom json helper functions.
-// TODO Update with the new `SameAsAny`.
 template <typename T>
 concept OrderedOrUnorderedJson =
-    std::same_as<T, nlohmann::json> || std::same_as<T, nlohmann::ordered_json>;
+    ad_utility::SameAsAny<T, nlohmann::json, nlohmann::ordered_json>;
 
 /*
 @brief Read the specified json file and build a json object out of it.
