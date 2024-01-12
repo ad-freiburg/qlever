@@ -112,6 +112,8 @@ struct IdTableAndFirstCol {
  public:
   // Typedef needed for generic interfaces.
   using iterator = std::decay_t<decltype(table_.getColumn(0).begin())>;
+  using const_iterator =
+      std::decay_t<decltype(std::as_const(table_).getColumn(0).begin())>;
 
   // Construct by taking ownership of the table.
   explicit IdTableAndFirstCol(Table t) : table_{std::move(t)} {}

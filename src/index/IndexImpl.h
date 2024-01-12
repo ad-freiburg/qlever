@@ -734,9 +734,9 @@ class IndexImpl {
   // metadata. Also builds the patterns if specified.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  std::optional<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>>
-  createSPOAndSOP(size_t numColumns, auto& isInternalId,
-                  BlocksOfTriples sortedTriples, NextSorter&&... nextSorter);
+  std::optional<PatternCreatorNew::TripleSorter> createSPOAndSOP(
+      size_t numColumns, auto& isInternalId, BlocksOfTriples sortedTriples,
+      NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
@@ -777,8 +777,8 @@ class IndexImpl {
   // of only two permutations (where we have to build the Pxx permutations). In
   // all other cases the Sxx permutations are built first because we need the
   // patterns.
-  std::optional<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>>
-  createFirstPermutationPair(auto&&... args) {
+  std::optional<PatternCreatorNew::TripleSorter> createFirstPermutationPair(
+      auto&&... args) {
     static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
     static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
     if (loadAllPermutations()) {
@@ -798,4 +798,14 @@ class IndexImpl {
     static_assert(std::is_same_v<ThirdPermutation, SortByPSO>);
     return createPSOAndPOS(AD_FWD(args)...);
   }
+
+  // Build the OSP and OPS permutations from the output of the `PatternCreator`.
+  // The permutations will have two additional columns: The subject pattern of
+  // the subject (which is already created by the `PatternCreator`) and the
+  // subject pattern of the object (which is created by this function). Return
+  // these five columns sorted by PSO, to be used as an input for building the
+  // PSO and POS permutations.
+  std::unique_ptr<ExternalSorter<SortByPSO, 5>> buildOspWithPatterns(
+      PatternCreatorNew::TripleSorter sortersFromPatternCreator,
+      auto isQLeverInternalId);
 };
