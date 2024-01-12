@@ -333,7 +333,7 @@ class CompressedExternalIdTableBase {
     AD_CONTRACT_CHECK(NumStaticCols == 0 || NumStaticCols == numCols);
   }
   // TODO<joka921> Shouldn't be public.
-    std::atomic<bool> isFirstMerge = true;
+  std::atomic<bool> isFirstMerge = true;
   // Add a single row to the input. The type of `row` needs to be something that
   // can be `push_back`ed to a `IdTable`.
   void push(const auto& row) requires requires { currentBlock_.push_back(row); }
@@ -417,7 +417,7 @@ class CompressedExternalIdTableBase {
     if (numBlocksPushed_ == 0) {
       AD_CORRECTNESS_CHECK(this->numElementsPushed_ ==
                            this->currentBlock_.size());
-        blockTransformation_(this->currentBlock_);
+      blockTransformation_(this->currentBlock_);
       return false;
     }
     pushBlock(std::move(this->currentBlock_));
@@ -645,10 +645,12 @@ class CompressedExternalIdTableSorter
       const auto& block = this->currentBlock_;
       const auto blocksizeOutput = blocksize.value_or(block.numRows());
       if (block.numRows() <= blocksizeOutput) {
-        // TODO<joka921> We don't need the copy if we only want to iterate once, make this configurable.
-        auto blockAsStatic = IdTableStatic<N>(this->currentBlock_.clone().template toStatic<N>());
+        // TODO<joka921> We don't need the copy if we only want to iterate once,
+        // make this configurable.
+        auto blockAsStatic = IdTableStatic<N>(
+            this->currentBlock_.clone().template toStatic<N>());
         co_yield blockAsStatic;
-        //co_yield std::move(this->currentBlock_).template toStatic<N>();
+        // co_yield std::move(this->currentBlock_).template toStatic<N>();
       } else {
         for (size_t i = 0; i < block.numRows(); i += blocksizeOutput) {
           size_t upper = std::min(i + blocksizeOutput, block.numRows());

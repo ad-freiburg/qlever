@@ -757,8 +757,8 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   totalVocabularySize_ = vocab_.size() + vocab_.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
-  pso_.loadFromDisk(onDiskBase_, false, usePatterns());
-  pos_.loadFromDisk(onDiskBase_, false, usePatterns());
+  pso_.loadFromDisk(onDiskBase_, false, !usePatterns());
+  pos_.loadFromDisk(onDiskBase_, false, !usePatterns());
 
   if (loadAllPermutations_) {
     ops_.loadFromDisk(onDiskBase_);

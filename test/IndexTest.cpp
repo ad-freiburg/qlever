@@ -194,7 +194,7 @@ TEST(CreatePatterns, createPatterns) {
         "<a2> <d>  <c2> .";
 
     const Index& indexNoImpl = getQec(kb)->getIndex();
-    //const IndexImpl& index = indexNoImpl.getImpl();
+    // const IndexImpl& index = indexNoImpl.getImpl();
 
     auto getId = ad_utility::testing::makeGetId(indexNoImpl);
     // Pattern p0 (for subject <a>) consists of <b> and <b2)
