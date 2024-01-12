@@ -135,7 +135,8 @@ auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
     idTable.setColumnSubset(columnIndices);
   };
   return ad_utility::inPlaceTransformView(
-      sorterPtr->template getSortedBlocks<0>(), setSubset);
+      ad_utility::OwningView{sorterPtr->template getSortedBlocks<0>()},
+      setSubset);
 }
 
 // Perform a lazy optional block join on the first column of `leftInput` and
