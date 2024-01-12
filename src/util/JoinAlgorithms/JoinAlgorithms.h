@@ -667,6 +667,47 @@ concept IsJoinSide = ad_utility::isInstantiation<T, JoinSide>;
 
 // The class that actually performs the zipper join for blocks without UNDEF.
 // See the public `zipperJoinForBlocksWithoutUndef` function below for details.
+// The general approach of the algorithm is described in the following. Several
+// details of the actual implementation are slightly different, but the
+// description still helps to understand the algorithm as well as the used
+// terminology.
+
+// First one block from each of the inputs is read into a buffer. We then know,
+// that we can completely join all elements in these buffers that are less than
+// the minimum of the last element in the left buffered block and the right
+// buffered block. Consider for example the following two blocks:
+// left: [0-3]  right : [1-3]
+// We can then safely join all elements that are less than `3`
+// because all elements in both inputs which we haven't seen so far are
+// guaranteed to be `>= 3`. We call this last element (3 in the example) the
+// `currentEl` in the following as well as in the code.
+
+// We then remove all processed elements from the buffered blocks, s.t. only the
+// entries
+// `>= currentEl` remain in the buffer. (Greater than might happen if the last
+// element from the left and right block are not the same). So we are left with
+// the following in the buffers: left: [3-3] right: [3-3]
+
+// We then fill our buffer with blocks from left and right until we have either
+// reached the end of the input or found an element `> currentEl`. We then know
+// that we have all the elements
+// `== currentEl` in the buffers, e.g.
+// left: [3-3] [3-3] [3-7]
+// right: [3-3] [3-3] [3-3] [3-5]
+// We can then add the cartesian product of all the elements `== currentEl` to
+// the result and safely remove these elements from our buffer, leaving us with
+// left: [4-7]  right: [4-5]
+// We also apply the following optimization: It is only required to have all the
+// blocks with the `currentEl` in one of the buffers (either left or right) we
+// can then process the blocks from the other side in a streaming fashion. For
+// example, if there are 5 blocks that contain the `currentEl` on the left side,
+// but 5 million such blocks on the right side, it suffices to have the 5 blocks
+// from the left side plus 1 block from the right side in the buffers at the
+// same time.
+
+// After adding the cartesian product we start a new round with a new
+// `currentEl` (5 in this example). New blocks are added to one of the buffers
+// if they become empty at one point in the algorithm.
 template <IsJoinSide LeftSide, IsJoinSide RightSide, typename LessThan,
           typename CompatibleRowAction>
 struct BlockZipperJoinImpl {
@@ -730,7 +771,8 @@ struct BlockZipperJoinImpl {
   // Fill the buffers in `leftSide_` and rightSide_` until they both contain at
   // least one block and at least one of them contains all the blocks with
   // elements `<= currentEl`. The returned `BlockStatus` reports which of the
-  // sides contain all the relevant blocks.
+  // sides contain all the relevant blocks. Only filling one side is used for
+  // the optimization for the Cartesian product described in the documentation.
   enum struct BlockStatus { leftMissing, rightMissing, allFilled };
   BlockStatus fillEqualToCurrentElBothSides(const auto& currentEl) {
     bool allBlocksFromLeft = false;
@@ -818,9 +860,9 @@ struct BlockZipperJoinImpl {
   };
 
   // Return a vector of subranges of all elements in `blocks` that are equal to
-  // the last element that we can safely join (this is the `currentEl`).
-  // Effectively, these subranges cover all the blocks completely except maybe
-  // the last one, which might contain elements `> currentEl` at the end.
+  // `currentEl`. Effectively, these subranges cover all the blocks completely
+  // except maybe the last one, which might contain elements `> currentEl` at
+  // the end.
   auto getEqualToCurrentEl(const auto& blocks, const auto& currentEl) {
     auto result = blocks;
     if (result.empty()) {
@@ -833,19 +875,18 @@ struct BlockZipperJoinImpl {
   };
 
   // Join the first block in `currentBlocksLeft` with the first block in
-  // `currentBlocksRight`, but ignore all elements that >= min(lastL, lastR)
-  // where `lastL` is the last element of `currentBlocksLeft[0]`, and `lastR`
-  // analogously. The fully joined parts of the block are then removed from
+  // `currentBlocksRight`, but ignore all elements that are `>= currentEl`
+  // The fully joined parts of the block are then removed from
   // `currentBlocksLeft/Right`, as they are not needed anymore.
   template <bool DoOptionalJoin>
-  void joinAndRemoveLessThanCurrentEl(auto& sameBlocksLeft,
-                                      auto& sameBlocksRight,
+  void joinAndRemoveLessThanCurrentEl(auto& currentBlocksLeft,
+                                      auto& currentBlocksRight,
                                       const auto& currentEl) {
     // Get the first blocks.
     auto [fullBlockLeft, subrangeLeft, currentElItL] =
-        getFirstBlock(sameBlocksLeft, currentEl);
+        getFirstBlock(currentBlocksLeft, currentEl);
     auto [fullBlockRight, subrangeRight, currentElItR] =
-        getFirstBlock(sameBlocksRight, currentEl);
+        getFirstBlock(currentBlocksRight, currentEl);
 
     compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
     auto addRowIndex = [begL = fullBlockLeft.get().begin(),
@@ -871,8 +912,8 @@ struct BlockZipperJoinImpl {
     compatibleRowAction_.flush();
 
     // Remove the joined elements.
-    sameBlocksLeft.at(0).setSubrange(currentElItL, subrangeLeft.end());
-    sameBlocksRight.at(0).setSubrange(currentElItR, subrangeRight.end());
+    currentBlocksLeft.at(0).setSubrange(currentElItL, subrangeLeft.end());
+    currentBlocksRight.at(0).setSubrange(currentElItR, subrangeRight.end());
   };
 
   // If the `targetBuffer` is empty, read the next nonempty block from `[it,
@@ -891,32 +932,12 @@ struct BlockZipperJoinImpl {
     }
   };
 
-  // Read the minimal number of unread blocks from `leftBlocks` into
-  // `sameBlocksLeft` and from `rightBlocks` into `sameBlocksRight` s.t. at
-  // least one of these blocks can be fully processed. For example consider the
-  // inputs:
-  //   leftBlocks:  [0-3], [3-3], [3-5], ...
-  //   rightBlocks: [0-3], [3-7], ...
-  // All of these five blocks have to be processed at once in order to be able
-  // to fully process at least one block. Afterwards we have fully processed all
-  // blocks except for the [3-7] block, which has to stay in `sameBlocksRight`
-  // before the next call to `fillBuffer`. To ensure this, all the following
-  // conditions must hold.
-  // 1. All blocks that were previously read into `sameBlocksLeft/Right` but
-  // have not yet been fully processed are still stored in those buffers. This
-  // precondition is enforced by the `joinBuffers` lambda below.
-  // 2. At least one block is contained in `sameBlocksLeft` and
-  // `sameBlocksRight` each.
-  // 3. Consider the minimum of the last element in `sameBlocksLeft[0]` and the
-  // last element of `sameBlocksRight[0]` after condition 2 is fulfilled. All
-  // blocks that contain elements equal to this minimum are read into the
-  // respective buffers. Only blocks that fulfill this condition are read.
-  //
-  // The only exception to these conditions can happen if we are at the end of
-  // one of the inputs. In that case either of `sameBlocksLeft` or
-  // `sameBlocksRight` is empty after calling this function. Then we have
-  // finished processing all blocks and can finish the overall algorithm.
-  void fillBuffer(auto& blockStatus) {
+  // Fill both buffers (left and right) until they contain at least one block.
+  // Then recompute the `currentEl()` and keep on filling the buffers until at
+  // least one of them contains all elements `<= currentEl`. The returned
+  // `BlockStatus` tells us, which of the blocks contain all elements `<=
+  // currentEl`.
+  BlockStatus fillBuffer() {
     AD_CORRECTNESS_CHECK(leftSide_.currentBlocks_.size() <= 1);
     AD_CORRECTNESS_CHECK(rightSide_.currentBlocks_.size() <= 1);
 
@@ -932,11 +953,13 @@ struct BlockZipperJoinImpl {
     }
 
     // Add the remaining blocks such that condition 3 from above is fulfilled.
-    blockStatus = fillEqualToCurrentElBothSides(getCurrentEl());
+    auto blockStatus = fillEqualToCurrentElBothSides(getCurrentEl());
     currentMinEl_ = getCurrentEl();
+    return blockStatus;
   }
 
   // Combine the above functionality and perform one round of joining.
+  // Has to be called alternately with `fillBuffer`.
   template <bool DoOptionalJoin, typename ProjectedEl>
   void joinBuffers(auto& blockStatus) {
     auto& currentBlocksLeft = leftSide_.currentBlocks_;
@@ -1019,9 +1042,8 @@ struct BlockZipperJoinImpl {
   // The actual join routine that combines all the previous functions.
   template <bool DoOptionalJoin>
   void runJoin() {
-    std::optional<BlockStatus> blockStatus;
     while (true) {
-      fillBuffer(blockStatus);
+      BlockStatus blockStatus = fillBuffer();
       if (leftSide_.currentBlocks_.empty() ||
           rightSide_.currentBlocks_.empty()) {
         if constexpr (DoOptionalJoin) {

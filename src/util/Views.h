@@ -138,15 +138,14 @@ auto integerRange(Int upperBound) {
   return std::views::iota(Int{0}, upperBound);
 }
 
-// TODO<joka921> tests
-// Similar to `std::views::transform` but for transformation functions that
-// transform a value in place. The result always only is an input range,
-// independent of the actual range category of the input.
-template <std::ranges::view View,
+// The implementation of `inPlaceTransformView`, see below for details.
+namespace detail {
+template <std::ranges::input_range Range,
           ad_utility::InvocableWithExactReturnType<
-              void, std::ranges::range_reference_t<View>>
+              void, std::ranges::range_reference_t<Range>>
               Transformation>
-auto inPlaceTransformView(View view, Transformation transformation) {
+requires std::ranges::view<Range>
+auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
   // Take a range and yield pairs of [pointerToElementOfRange,
   // boolThatIsInitiallyFalse]. The bool is yielded as a reference and if its
   // value is changed, that change will be stored until the next element is
@@ -172,10 +171,23 @@ auto inPlaceTransformView(View view, Transformation transformation) {
     return *ptr;
   };
 
-  // Combine everything to the actual result view.
+  // Combine everything to the actual result range.
   return std::views::transform(
-      ad_utility::OwningView{makePtrAndBool(std::move(view))},
+      ad_utility::OwningView{makePtrAndBool(std::move(range))},
       actualTransformation);
+}
+}  // namespace detail
+
+// Similar to `std::views::transform` but for transformation functions that
+// transform a value in place. The result always only is an input range,
+// independent of the actual range category of the input.
+template <std::ranges::input_range Range,
+          ad_utility::InvocableWithExactReturnType<
+              void, std::ranges::range_reference_t<Range>>
+              Transformation>
+auto inPlaceTransformView(Range&& range, Transformation transformation) {
+  return detail::inPlaceTransformViewImpl(std::views::all(AD_FWD(range)),
+                                          std::move(transformation));
 }
 
 }  // namespace ad_utility
