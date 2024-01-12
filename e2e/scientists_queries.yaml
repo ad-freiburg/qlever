@@ -52,7 +52,7 @@ queries:
           ?x <is-a> <Scientist> .
           ?x <Place_of_birth> <Ulm> .
           ?t ql:contains-entity ?x .
-          ?t ql:contains-word "relat* physikalische rela*"
+          ?t ql:contains-word "RElaT* phySIKalische rela*"
       }
     checks:
       - num_cols: 5

@@ -159,7 +159,8 @@ class Index {
 
   [[nodiscard]] size_t getSizeOfTextBlockForWord(const std::string& word) const;
 
-  [[nodiscard]] size_t getSizeOfTextBlockForEntities(const std::string& word) const;
+  [[nodiscard]] size_t getSizeOfTextBlockForEntities(
+      const std::string& word) const;
 
   [[nodiscard]] size_t getSizeEstimate(const std::string& words) const;
 

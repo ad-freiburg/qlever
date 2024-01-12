@@ -683,8 +683,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
       // Add one node for each word
       for (const auto& term :
            absl::StrSplit(sv.substr(1, sv.size() - 2), ' ')) {
-        // TODO: lower case... utf to lower
-        std::string s{term};
+        std::string s{ad_utility::utf8ToLower(term)};
         potentialTermsForCvar[t._s.getVariable()].push_back(s);
         addNodeToTripleGraph(
             TripleGraph::Node(tg._nodeStorage.size(), t._s.getVariable(), s, t),

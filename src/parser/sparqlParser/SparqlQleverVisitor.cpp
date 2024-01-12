@@ -1057,8 +1057,8 @@ vector<TripleWithPropertyPath> Visitor::visit(
         if (!s.ends_with('*')) {
           continue;
         }
-        addVisibleVariable(
-            var->getMatchingWordVariable(s.substr(0, s.size() - 1)));
+        addVisibleVariable(var->getMatchingWordVariable(
+            ad_utility::utf8ToLower(s.substr(0, s.size() - 1))));
       }
     } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
       if (const auto* entVar = std::get_if<Variable>(&object)) {

@@ -825,6 +825,14 @@ TEST(QueryPlannerTest, TextIndexScanForEntity) {
               entityScan(Var{"?text"}, "<testEntity>", "test")),
       qec);
 
+  // Test case sensitivity
+  h::expect(
+      "SELECT * WHERE { ?text ql:contains-entity <testEntity> . ?text "
+      "ql:contains-word \"TeST\" }",
+      h::Join(wordScan(Var{"?text"}, "test"),
+              entityScan(Var{"?text"}, "<testEntity>", "test")),
+      qec);
+
   // NOTE: It is important that the TextIndexScanForEntity uses "opti", because
   // we also want to test here if the QueryPlanner assigns the optimal word to
   // the Operation.
