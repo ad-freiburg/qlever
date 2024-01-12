@@ -150,7 +150,10 @@ auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
   // boolThatIsInitiallyFalse]. The bool is yielded as a reference and if its
   // value is changed, that change will be stored until the next element is
   // yielded. This is made use of further below.
-  auto makePtrAndBool = [](auto range)
+  // Note that instead of taking the element by pointer/reference we could also
+  // copy or move it. This implementation never takes a copy, but also modifies
+  // the input.
+  auto makeElementPtrAndBool = [](auto range)
       -> cppcoro::generator<
           std::pair<decltype(std::addressof(*range.begin())), bool>> {
     for (auto& el : range) {
@@ -161,6 +164,12 @@ auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
 
   // Lift the transformation to work on the result of `makePtrAndBool` and to
   // only apply the transformation once for each element.
+  // Note: This works because `std::views::transform` calls the transformation
+  // each time an iterator is dereferenced, so the following lambda is called
+  // multiple times for the same element if the same iterator is dereferenced
+  // multiple times and we therefore have to remember whether the transformation
+  // was already applied, because it changes the element in place. See the unit
+  // tests in `ViewsTest.cpp` for examples.
   auto actualTransformation =
       [transformation](auto& ptrAndBool) -> decltype(auto) {
     auto& [ptr, alreadyTransformed] = ptrAndBool;
@@ -173,13 +182,13 @@ auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
 
   // Combine everything to the actual result range.
   return std::views::transform(
-      ad_utility::OwningView{makePtrAndBool(std::move(range))},
+      ad_utility::OwningView{makeElementPtrAndBool(std::move(range))},
       actualTransformation);
 }
 }  // namespace detail
 
 // Similar to `std::views::transform` but for transformation functions that
-// transform a value in place. The result always only is an input range,
+// transform a value in place. The result is always only an input range,
 // independent of the actual range category of the input.
 template <std::ranges::input_range Range,
           ad_utility::InvocableWithExactReturnType<

@@ -158,7 +158,7 @@ auto lazyOptionalJoinOnFirstColumn(auto&& leftInput, auto&& rightInput,
   };
 
   // There are 5 columns in the result (3 from the triple, as well as subject
-  // patterns of the subject and object.
+  // patterns of the subject and object).
   IdTable outputTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
   // The first argument is the number of join columns.
   auto rowAdder = ad_utility::AddCombinedRowToIdTable{
@@ -194,19 +194,19 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
       sortersFromPatternCreator;
   // The column with index 1 always is `has-predicate` and is not needed here.
   // Note that the order of the columns during index building  is alwasy `SPO`,
-  // but the sorting might be different (e.g. PSO in this case).
+  // but the sorting might be different (PSO in this case).
   auto lazyPatternScan = lazyScanWithPermutedColumns(
       hasPatternPredicateSortedByPSO, std::array<ColumnIndex, 2>{0, 2});
   ad_utility::data_structures::ThreadSafeQueue<IdTable> queue{4};
 
-  // The permutation (2, 1, 0, 3) switches the third column (the object) into
+  // The permutation (2, 1, 0, 3) switches the third column (the object) with
   // the first column (where the join column is expected by the algorithms).
   // This permutation is reverted as part of the `fixBlockAfterPatternJoin`
   // function.
   auto ospAsBlocksTransformed = lazyScanWithPermutedColumns(
       secondSorter, std::array<ColumnIndex, 4>{2, 1, 0, 3});
 
-  // Run the actual joining between the OSP permutation and the `has-pattern`
+  // Run the actual join between the OSP permutation and the `has-pattern`
   // predicate on a background thread. The result will be pushed to the `queue`
   // so that we can consume it asynchronously.
   ad_utility::JThread joinWithPatternThread{[&] {
@@ -245,7 +245,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   }};
 
   // Set up a generator that yields blocks with the following columns:
-  // S P O PatternOfS PatternOfO, sorter by OPS.
+  // S P O PatternOfS PatternOfO, sorted by OPS.
   auto blockGenerator =
       [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
     while (auto block = queue.pop()) {

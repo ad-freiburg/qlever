@@ -671,41 +671,44 @@ concept IsJoinSide = ad_utility::isInstantiation<T, JoinSide>;
 // details of the actual implementation are slightly different, but the
 // description still helps to understand the algorithm as well as the used
 // terminology.
-
+//
 // First one block from each of the inputs is read into a buffer. We then know,
 // that we can completely join all elements in these buffers that are less than
 // the minimum of the last element in the left buffered block and the right
 // buffered block. Consider for example the following two blocks:
 // left: [0-3]  right : [1-3]
-// We can then safely join all elements that are less than `3`
-// because all elements in both inputs which we haven't seen so far are
-// guaranteed to be `>= 3`. We call this last element (3 in the example) the
-// `currentEl` in the following as well as in the code.
-
+// We can then safely join all elements that are less than `3` because all
+// elements in both inputs which we haven't seen so far are guaranteed to be `>=
+// 3`. We call this last element (3 in the example) the `currentEl` in the
+// following as well as in the code.
+//
 // We then remove all processed elements from the buffered blocks, s.t. only the
-// entries
-// `>= currentEl` remain in the buffer. (Greater than might happen if the last
-// element from the left and right block are not the same). So we are left with
-// the following in the buffers: left: [3-3] right: [3-3]
+// entries `>= currentEl` remain in the buffer. (Greater than might happen if
+// the last element from the left and right block are not the same). So we are
+// left with the following in the buffers: left: [3-3] right: [3-3]
 
 // We then fill our buffer with blocks from left and right until we have either
 // reached the end of the input or found an element `> currentEl`. We then know
-// that we have all the elements
-// `== currentEl` in the buffers, e.g.
+// that we have all the elements `== currentEl` in the buffers, e.g.
 // left: [3-3] [3-3] [3-7]
 // right: [3-3] [3-3] [3-3] [3-5]
-// We can then add the cartesian product of all the elements `== currentEl` to
+// We can then add the Cartesian product of all the elements `== currentEl` to
 // the result and safely remove these elements from our buffer, leaving us with
 // left: [4-7]  right: [4-5]
-// We also apply the following optimization: It is only required to have all the
-// blocks with the `currentEl` in one of the buffers (either left or right) we
-// can then process the blocks from the other side in a streaming fashion. For
-// example, if there are 5 blocks that contain the `currentEl` on the left side,
-// but 5 million such blocks on the right side, it suffices to have the 5 blocks
-// from the left side plus 1 block from the right side in the buffers at the
-// same time.
-
-// After adding the cartesian product we start a new round with a new
+// Note that the lower bound for the blocks in the example is not necessarily 4
+// but anything greater than 3. We also apply the following optimization: It is
+// only required to have all the blocks with the `currentEl` in one of the
+// buffers (either left or right) at the same time. We can then process the
+// blocks from the other side in a streaming fashion. For example, if there are
+// 5 blocks that contain the `currentEl` on the left side, but 5 million such
+// blocks on the right side, it suffices to have the 5 blocks from the left side
+// plus 1 block from the right side in the buffers at the same time.
+//
+// TODO<joka921> When an element appears in very many blocks on both sides we
+// currently have a very high memory consumption. To fix this, one would need to
+// have the possibility to to revisit blocks that were seen earlier.
+//
+// After adding the Cartesian product we start a new round with a new
 // `currentEl` (5 in this example). New blocks are added to one of the buffers
 // if they become empty at one point in the algorithm.
 template <IsJoinSide LeftSide, IsJoinSide RightSide, typename LessThan,
@@ -971,7 +974,7 @@ struct BlockZipperJoinImpl {
     ProjectedEl currentEl = getCurrentEl();
     // At this point the `currentBlocksLeft/Right` only consist of elements `>=
     // currentEl`. We now obtain a view on the elements `== currentEl` which are
-    // needed for the next step (the cartesian product). In the last block,
+    // needed for the next step (the Cartesian product). In the last block,
     // there might be elements `> currentEl` which will be processed later.
     auto equalToCurrentElLeft =
         getEqualToCurrentEl(currentBlocksLeft, currentEl);
