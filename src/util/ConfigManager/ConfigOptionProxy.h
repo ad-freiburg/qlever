@@ -12,9 +12,10 @@
 
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
-namespace detail {
+namespace ConfigManagerImpl {
 /*
 @brief Implementation of proxy/reference to a `ConfigOption`. Also saves the
 type of value, that the configuration option holds. Needed, because without a
@@ -26,10 +27,9 @@ access to the referenced config option.
 @tparam ConfigOptionType The kind of config option, this proxy will reference
 to. Must be `ConfigOption`, or `const ConfigOption`.
 */
-template <typename T, typename ConfigOptionType>
-requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes> &&
-         (std::same_as<ConfigOptionType, ConfigOption> ||
-          std::same_as<ConfigOptionType, const ConfigOption>)
+template <
+    SupportedConfigOptionType T,
+    ad_utility::SameAsAny<ConfigOption, const ConfigOption> ConfigOptionType>
 class ConfigOptionProxyImplementation {
   ConfigOptionType* option_;
 
@@ -69,14 +69,16 @@ class ConfigOptionProxyImplementation {
   }
 };
 
-}  // namespace detail
+}  // namespace ConfigManagerImpl
 
 // A const proxy/reference to a `ConfigOption`. Also saves the type of
 // value, that the configuration option holds.
 template <typename T>
 class ConstConfigOptionProxy
-    : public detail::ConfigOptionProxyImplementation<T, const ConfigOption> {
-  using Base = detail::ConfigOptionProxyImplementation<T, const ConfigOption>;
+    : public ConfigManagerImpl::ConfigOptionProxyImplementation<
+          T, const ConfigOption> {
+  using Base =
+      ConfigManagerImpl::ConfigOptionProxyImplementation<T, const ConfigOption>;
 
  public:
   explicit ConstConfigOptionProxy(const ConfigOption& opt) : Base(opt) {}
@@ -86,8 +88,10 @@ class ConstConfigOptionProxy
 // value, that the configuration option holds.
 template <typename T>
 class ConfigOptionProxy
-    : public detail::ConfigOptionProxyImplementation<T, ConfigOption> {
-  using Base = detail::ConfigOptionProxyImplementation<T, ConfigOption>;
+    : public ConfigManagerImpl::ConfigOptionProxyImplementation<T,
+                                                                ConfigOption> {
+  using Base =
+      ConfigManagerImpl::ConfigOptionProxyImplementation<T, ConfigOption>;
 
  public:
   explicit ConfigOptionProxy(ConfigOption& opt) : Base(opt) {}

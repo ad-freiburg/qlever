@@ -38,14 +38,13 @@
 #include "util/antlr/ANTLRErrorHandling.h"
 #include "util/json.h"
 
-namespace ad_utility {
+namespace ad_utility::ConfigManagerImpl {
 // ____________________________________________________________________________
 ConfigManager::HashMapEntry::HashMapEntry(Data&& data)
     : data_{std::make_unique<Data>(std::move(data))} {}
 
 // ____________________________________________________________________________
-template <typename T>
-requires isTypeContainedIn<T, ConfigManager::HashMapEntry::Data>
+template <SameAsAnyTypeIn<ConfigManager::HashMapEntry::Data> T>
 bool ConfigManager::HashMapEntry::implHolds() const {
   // Make sure, that it is not a null pointer.
   AD_CORRECTNESS_CHECK(data_);
@@ -64,9 +63,8 @@ bool ConfigManager::HashMapEntry::holdsSubManager() const {
 }
 
 // ____________________________________________________________________________
-template <typename ReturnType>
-requires isTypeContainedIn<ReturnType, ConfigManager::HashMapEntry::Data> &&
-         std::is_object_v<ReturnType> std::optional<ReturnType*>
+template <SimilarToAnyTypeIn<ConfigManager::HashMapEntry::Data> ReturnType>
+requires std::is_object_v<ReturnType> std::optional<ReturnType*>
 ConfigManager::HashMapEntry::getConfigOptionOrSubManager(
     ad_utility::SimilarTo<ConfigManager::HashMapEntry> auto& instance) {
   using DecayReturnType = std::decay_t<ReturnType>;
@@ -189,12 +187,10 @@ void ConfigManager::visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
 }
 
 // ____________________________________________________________________________
-template <typename HashMapType>
-requires SimilarTo<
-             ad_utility::HashMap<std::string, ConfigManager::HashMapEntry>,
-             HashMapType> &&
-         std::is_object_v<HashMapType>
-auto ConfigManager::allHashMapEntries(
+template <
+    SimilarTo<ad_utility::HashMap<std::string, ConfigManager::HashMapEntry>>
+        HashMapType>
+requires std::is_object_v<HashMapType> auto ConfigManager::allHashMapEntries(
     HashMapType& hashMap, std::string_view pathPrefix,
     const ad_utility::InvocableWithSimilarReturnType<
         bool, const HashMapEntry&> auto& predicate)
@@ -259,9 +255,7 @@ auto ConfigManager::allHashMapEntries(
 }
 
 // ____________________________________________________________________________
-template <typename ReturnReference>
-requires std::same_as<ReturnReference, ConfigOption&> ||
-         std::same_as<ReturnReference, const ConfigOption&>
+template <SameAsAny<ConfigOption&, const ConfigOption&> ReturnReference>
 std::vector<std::pair<std::string, ReturnReference>>
 ConfigManager::configurationOptionsImpl(
     SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>> auto&
@@ -863,7 +857,7 @@ bool ConfigManager::containsOption(const ConfigOption& opt) const {
 }
 
 // ____________________________________________________________________________
-template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+template <ConfigOptionOrManager T>
 void ConfigManager::ConfigurationDocValidatorAssignment::addEntryUnderKey(
     const T& key, const ConfigOptionValidatorManager& manager) {
   getHashMapBasedOnType<T>()[&key].push_back(&manager);
@@ -877,7 +871,7 @@ template void ConfigManager::ConfigurationDocValidatorAssignment::
                                     const ConfigOptionValidatorManager&);
 
 // ____________________________________________________________________________
-template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+template <ConfigOptionOrManager T>
 auto ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
     const T& key) const -> ValueGetterReturnType {
   // The concerned hash map.
@@ -904,4 +898,4 @@ template ConfigManager::ConfigurationDocValidatorAssignment::
     ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
         const ConfigManager&) const;
 
-}  // namespace ad_utility
+}  // namespace ad_utility::ConfigManagerImpl

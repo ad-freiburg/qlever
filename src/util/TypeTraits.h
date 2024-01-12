@@ -5,7 +5,9 @@
 // Type traits for template metaprogramming
 
 #pragma once
+#include <concepts>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -15,16 +17,23 @@
 namespace ad_utility {
 
 namespace detail {
-// Check (via the compiler's template matching mechanism) whether a given type
-// is an instantiation of a given template.
-// Example 1: IsInstantiationOf<std::vector>::Instantiation<std::vector<int>>
-// is true.
-// Example 2: IsInstantiationOf<std::vector>::Instantiation<std:map<int, int>>
-// is false
+/*
+Check (via the compiler's template matching mechanism) whether a given type
+is an instantiation of a given template.
+This also works with aliases, that were created using `using`.
+For example:
+For
+```
+template <typenanme... Ts>
+using A = B<Ts...>;
+```
+the 'call' `IsInstantiationOf<A>::Instantiation<B<int>>::value` and
+`IsInstantiationOf<B>::Instantiation<B<int>>::value` would both return true.
+*/
 template <template <typename...> typename Template>
 struct IsInstantiationOf {
   template <typename T>
-  struct Instantiation : std::false_type {};
+  struct Instantiation;
 
   template <typename... Ts>
   struct Instantiation<Template<Ts...>> : std::true_type {};
@@ -118,25 +127,47 @@ concept SimilarTo = isSimilar<T, U>;
 
 /// True iff `T` is similar (see above) to any of the `Ts...`.
 template <typename T, typename... Ts>
-concept isTypeAnyOf = (... || isSimilar<T, Ts>);
+concept SimilarToAny = (... || isSimilar<T, Ts>);
 
-/// isTypeContainedIn<T, U> It is true iff type U is a pair, tuple or variant
-/// and T `isSimilar` (see above) to one of the types contained in the tuple,
-/// pair or variant.
+/// True iff `T` is the same as any of the `Ts...`.
 template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn = false;
+concept SameAsAny = (... || std::same_as<T, Ts>);
 
-template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn<T, std::tuple<Ts...>> =
-    isTypeAnyOf<T, Ts...>;
+/*
+The implementation for `SimilarToAnyTypeIn` and `SameAsAnyTypeIn` (see below
+namespace detail).
+*/
+namespace detail {
+template <typename T, typename Template>
+struct SimilarToAnyTypeInImpl;
 
-template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn<T, std::variant<Ts...>> =
-    isTypeAnyOf<T, Ts...>;
+template <typename T, template <typename...> typename Template, typename... Ts>
+struct SimilarToAnyTypeInImpl<T, Template<Ts...>>
+    : std::integral_constant<bool, SimilarToAny<T, Ts...>> {};
 
-template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn<T, std::pair<Ts...>> =
-    isTypeAnyOf<T, Ts...>;
+template <typename T, typename Template>
+struct SameAsAnyTypeInImpl;
+
+template <typename T, template <typename...> typename Template, typename... Ts>
+struct SameAsAnyTypeInImpl<T, Template<Ts...>>
+    : std::integral_constant<bool, SameAsAny<T, Ts...>> {};
+
+}  // namespace detail
+/*
+`SimilarToAnyTypeIn<T, U>` is true, iff type `U` is an instantiation of a
+template that only has template type parameters (e.g. `std::pair`, `std::tuple`
+or `std::variant`). and `T` is `isSimilar` (see above) to any of the type
+parameters.
+*/
+template <typename T, typename Template>
+concept SimilarToAnyTypeIn = detail::SimilarToAnyTypeInImpl<T, Template>::value;
+
+/*
+Equivalent to `SimilarToAnyTypeIn` (see above), but checks for exactly matching
+types via `std::same_as`.
+*/
+template <typename T, typename Template>
+concept SameAsAnyTypeIn = detail::SameAsAnyTypeInImpl<T, Template>::value;
 
 /// A templated bool that is always false,
 /// independent of the template parameter.
