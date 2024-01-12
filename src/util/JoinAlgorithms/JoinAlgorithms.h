@@ -625,7 +625,7 @@ class BlockAndSubrange {
   // Overload of `setSubrange` for an actual subrange object.
   template <typename Subrange>
   void setSubrange(const Subrange& subrange) {
-    setSubrange(subrange.begin(), subrange.end());
+    setSubrange(std::ranges::begin(subrange), std::ranges::end(subrange));
   }
 };
 
@@ -638,7 +638,7 @@ struct JoinSide {
   using CurrentBlocks =
       std::vector<detail::BlockAndSubrange<typename Iterator::value_type>>;
   Iterator it_;
-  const End end_;
+  [[no_unique_address]] const End end_;
   const Projection& projection_;
   CurrentBlocks currentBlocks_{};
 
@@ -658,7 +658,8 @@ JoinSide(It, End, const Projection&) -> JoinSide<It, End, Projection>;
 // keeping them valid until the join is completed.
 template <typename Blocks>
 auto makeJoinSide(Blocks& blocks, const auto& projection) {
-  return JoinSide{blocks.begin(), blocks.end(), projection};
+  return JoinSide{std::ranges::begin(blocks), std::ranges::end(blocks),
+                  projection};
 };
 
 // A concept to identify instantiations of the `JoinSide` template.
@@ -706,7 +707,7 @@ concept IsJoinSide = ad_utility::isInstantiation<T, JoinSide>;
 //
 // TODO<joka921> When an element appears in very many blocks on both sides we
 // currently have a very high memory consumption. To fix this, one would need to
-// have the possibility to to revisit blocks that were seen earlier.
+// have the possibility to revisit blocks that were seen earlier.
 //
 // After adding the Cartesian product we start a new round with a new
 // `currentEl` (5 in this example). New blocks are added to one of the buffers

@@ -73,7 +73,7 @@ class AddCombinedRowToIdTable {
       BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
-        inputLeftAndRight_{std::array{std::move(input1), std::move(input2)}},
+        inputLeftAndRight_{std::array{input1, input2}},
         resultTable_{std::move(output)},
         bufferSize_{bufferSize},
         blockwiseCallback_{std::move(blockwiseCallback)} {

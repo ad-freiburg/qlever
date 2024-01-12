@@ -151,8 +151,8 @@ auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
   // value is changed, that change will be stored until the next element is
   // yielded. This is made use of further below.
   // Note that instead of taking the element by pointer/reference we could also
-  // copy or move it. This implementation never takes a copy, but also modifies
-  // the input.
+  // copy or move it. This implementation never takes a copy, but modifies the
+  // input.
   auto makeElementPtrAndBool = [](auto range)
       -> cppcoro::generator<
           std::pair<decltype(std::addressof(*range.begin())), bool>> {
@@ -170,8 +170,8 @@ auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
   // multiple times and we therefore have to remember whether the transformation
   // was already applied, because it changes the element in place. See the unit
   // tests in `ViewsTest.cpp` for examples.
-  auto actualTransformation =
-      [transformation](auto& ptrAndBool) -> decltype(auto) {
+  auto actualTransformation = [transformation = std::move(transformation)](
+                                  auto& ptrAndBool) -> decltype(auto) {
     auto& [ptr, alreadyTransformed] = ptrAndBool;
     if (!alreadyTransformed) {
       alreadyTransformed = true;

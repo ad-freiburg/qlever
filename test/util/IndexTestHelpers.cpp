@@ -123,8 +123,8 @@ Index makeTestIndex(const std::string& indexBasename,
         "\"zz\"@en";
   }
 
-  FILE_BUFFER_SIZE() = 1000;
-  BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP() = 2;
+  FILE_BUFFER_SIZE = 1000;
+  BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 2;
   std::fstream f(inputFilename, std::ios_base::out);
   f << turtleInput.value();
   f.close();

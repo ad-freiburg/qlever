@@ -681,7 +681,7 @@ TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
   // The order of triples in not necessarily the same, so we sort them.
   sortTriples(expectedTriples);
 
-  FILE_BUFFER_SIZE() = 1000;
+  FILE_BUFFER_SIZE = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface) {
     auto result = parseFromFile<Parser>(filename, useBatchInterface);
     EXPECT_THAT(result, ::testing::ElementsAreArray(expectedTriples));
@@ -694,7 +694,7 @@ TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
 // _______________________________________________________________________
 TEST(TurtleParserTest, emptyInput) {
   std::string filename{"turtleParserEmptyInput.dat"};
-  FILE_BUFFER_SIZE() = 1000;
+  FILE_BUFFER_SIZE = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              std::string_view input = "") {
     {
@@ -714,7 +714,7 @@ TEST(TurtleParserTest, emptyInput) {
 // ________________________________________________________________________
 TEST(TurtleParserTest, multilineComments) {
   std::string filename{"turtleParserMultilineComments.dat"};
-  FILE_BUFFER_SIZE() = 1000;
+  FILE_BUFFER_SIZE = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              std::string_view input,
                                              const auto& expectedTriples) {
@@ -768,7 +768,7 @@ TEST(TurtleParserTest, multilineComments) {
 // actual parsing happens on background threads.
 TEST(TurtleParserTest, exceptionPropagation) {
   std::string filename{"turtleParserExceptionPropagation.dat"};
-  FILE_BUFFER_SIZE() = 1000;
+  FILE_BUFFER_SIZE = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              std::string_view input) {
     {
@@ -800,7 +800,7 @@ TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
   };
   // Deliberately chosen s.t. the first triple fits in a block, but the second
   // one doesn't.
-  FILE_BUFFER_SIZE() = 40;
+  FILE_BUFFER_SIZE = 40;
   forAllParallelParsers(testWithParser,
                         "<subject> <predicate> <object> . \n <veryLongSubject> "
                         "<veryLongPredicate> <veryLongObject> .");
@@ -837,6 +837,6 @@ TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
     }
     return longBlock;
   }();
-  FILE_BUFFER_SIZE() = 40;
+  FILE_BUFFER_SIZE = 40;
   forAllParallelParsers(testWithParser, input);
 }

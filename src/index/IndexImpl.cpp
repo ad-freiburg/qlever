@@ -143,7 +143,7 @@ auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
 // `rightInput`. The `resultCallback` will be called for each block of resulting
 // rows. Assumes that `leftInput` and `rightInput` have 6 columns in total, so
 // the result will have 5 columns.
-auto lazyOptionalJoinOnFirstColumn(auto&& leftInput, auto&& rightInput,
+auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
                                    auto resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
   auto projectionForComparator = []<typename T>(const T& rowOrId) {
@@ -162,7 +162,7 @@ auto lazyOptionalJoinOnFirstColumn(auto&& leftInput, auto&& rightInput,
   IdTable outputTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
   // The first argument is the number of join columns.
   auto rowAdder = ad_utility::AddCombinedRowToIdTable{
-      1, std::move(outputTable), BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP(),
+      1, std::move(outputTable), BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP,
       resultCallback};
 
   ad_utility::zipperJoinForBlocksWithoutUndef(leftInput, rightInput, comparator,
@@ -209,40 +209,41 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // Run the actual join between the OSP permutation and the `has-pattern`
   // predicate on a background thread. The result will be pushed to the `queue`
   // so that we can consume it asynchronously.
-  ad_utility::JThread joinWithPatternThread{[&] {
-    // Setup the callback for the join that will buffer the results and push
-    // them to the queue.
-    IdTable outputBufferTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
-    auto pushToQueue =
-        [&, bufferSize =
-                BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP().load()](IdTable& table) {
-          if (table.numRows() >= bufferSize) {
-            if (!outputBufferTable.empty()) {
-              queue.push(std::move(outputBufferTable));
-              outputBufferTable.clear();
-            }
-            queue.push(std::move(table));
-          } else {
-            outputBufferTable.insertAtEnd(table.begin(), table.end());
-            if (outputBufferTable.size() >= bufferSize) {
-              queue.push(std::move(outputBufferTable));
-              outputBufferTable.clear();
-            }
-          }
-          table.clear();
-        };
+  ad_utility::JThread joinWithPatternThread{
+      [&queue, &ospAsBlocksTransformed, &lazyPatternScan] {
+        // Setup the callback for the join that will buffer the results and push
+        // them to the queue.
+        IdTable outputBufferTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
+        auto pushToQueue =
+            [&, bufferSize =
+                    BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP.load()](IdTable& table) {
+              if (table.numRows() >= bufferSize) {
+                if (!outputBufferTable.empty()) {
+                  queue.push(std::move(outputBufferTable));
+                  outputBufferTable.clear();
+                }
+                queue.push(std::move(table));
+              } else {
+                outputBufferTable.insertAtEnd(table.begin(), table.end());
+                if (outputBufferTable.size() >= bufferSize) {
+                  queue.push(std::move(outputBufferTable));
+                  outputBufferTable.clear();
+                }
+              }
+              table.clear();
+            };
 
-    lazyOptionalJoinOnFirstColumn(ospAsBlocksTransformed, lazyPatternScan,
-                                  pushToQueue);
+        lazyOptionalJoinOnFirstColumn(ospAsBlocksTransformed, lazyPatternScan,
+                                      pushToQueue);
 
-    // We still might have some buffered results left, push them to the queue
-    // and then finish the queue.
-    if (!outputBufferTable.empty()) {
-      queue.push(std::move(outputBufferTable));
-      outputBufferTable.clear();
-    }
-    queue.finish();
-  }};
+        // We still might have some buffered results left, push them to the
+        // queue and then finish the queue.
+        if (!outputBufferTable.empty()) {
+          queue.push(std::move(outputBufferTable));
+          outputBufferTable.clear();
+        }
+        queue.finish();
+      }};
 
   // Set up a generator that yields blocks with the following columns:
   // S P O PatternOfS PatternOfO, sorted by OPS.
