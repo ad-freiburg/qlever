@@ -332,6 +332,8 @@ class CompressedExternalIdTableBase {
     this->currentBlock_.reserve(blocksize_);
     AD_CONTRACT_CHECK(NumStaticCols == 0 || NumStaticCols == numCols);
   }
+  // TODO<joka921> Shouldn't be public.
+    std::atomic<bool> isFirstMerge = true;
   // Add a single row to the input. The type of `row` needs to be something that
   // can be `push_back`ed to a `IdTable`.
   void push(const auto& row) requires requires { currentBlock_.push_back(row); }
@@ -364,6 +366,7 @@ class CompressedExternalIdTableBase {
     }
     writer_.clear();
     numBlocksPushed_ = 0;
+    isFirstMerge = true;
   }
 
  protected:
@@ -401,6 +404,9 @@ class CompressedExternalIdTableBase {
   // until the pushing is actually finished, and return `true`. Using this
   // function allows for an efficient usage of this class for very small inputs.
   bool transformAndPushLastBlock() {
+    if (!isFirstMerge) {
+      return numBlocksPushed_ != 0;
+    }
     // If we have pushed at least one (complete) block, then the last future
     // from pushing a block is still in flight. If we have never pushed a block,
     // then also the future cannot be valid.
@@ -411,7 +417,7 @@ class CompressedExternalIdTableBase {
     if (numBlocksPushed_ == 0) {
       AD_CORRECTNESS_CHECK(this->numElementsPushed_ ==
                            this->currentBlock_.size());
-      blockTransformation_(this->currentBlock_);
+        blockTransformation_(this->currentBlock_);
       return false;
     }
     pushBlock(std::move(this->currentBlock_));
@@ -511,7 +517,7 @@ class CompressedExternalIdTableSorterTypeErased {
 // false positives in the memory limit mechanism, so setting the following
 // variable to `true` allows to disable the memory limit.
 inline std::atomic<bool>
-    EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+    EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 
 // The implementation of sorting a single block
 template <typename Comparator>
@@ -604,6 +610,7 @@ class CompressedExternalIdTableSorter
              std::max(1, numBufferedOutputBlocks_ - 2))) {
       co_yield block;
     }
+    this->isFirstMerge = false;
     mergeIsActive_.store(false);
   }
 
@@ -623,7 +630,6 @@ class CompressedExternalIdTableSorter
   }
 
  private:
-  // TODO<joka921> Implement `CallFixedSize` optimization also for the merging.
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return a generator that yields the sorted elements. This
   // function may be called exactly once.
@@ -631,28 +637,18 @@ class CompressedExternalIdTableSorter
   requires(N == NumStaticCols || N == 0)
   cppcoro::generator<IdTableStatic<N>> sortedBlocks(
       std::optional<size_t> blocksize = std::nullopt) {
-    auto impl = [blocksize, this]<size_t I>() {
-      if constexpr (NumStaticCols == 0 || NumStaticCols == I) {
-        return sortedBlocksImpl<I>(blocksize);
-      } else {
-        AD_FAIL();
-        return sortedBlocksImpl<0>(blocksize);
-      }
-    };
-    auto generator =
-        ad_utility::callFixedSize(this->writer_.numColumns(), impl);
-    for (auto& block : generator) {
-      co_yield std::move(block).template toStatic<N>();
-    }
-    /*
     if (!this->transformAndPushLastBlock()) {
       // There was only one block, return it. If a blocksize was explicitly
       // requested for the output, and the single block is larger than this
       // blocksize, we manually have to split it into chunks.
-      auto& block = this->currentBlock_;
+      // TODO<joka921> doesn't need to be const...
+      const auto& block = this->currentBlock_;
       const auto blocksizeOutput = blocksize.value_or(block.numRows());
       if (block.numRows() <= blocksizeOutput) {
-        co_yield std::move(this->currentBlock_).template toStatic<N>();
+        // TODO<joka921> We don't need the copy if we only want to iterate once, make this configurable.
+        auto blockAsStatic = IdTableStatic<N>(this->currentBlock_.clone().template toStatic<N>());
+        co_yield blockAsStatic;
+        //co_yield std::move(this->currentBlock_).template toStatic<N>();
       } else {
         for (size_t i = 0; i < block.numRows(); i += blocksizeOutput) {
           size_t upper = std::min(i + blocksizeOutput, block.numRows());
@@ -713,84 +709,15 @@ class CompressedExternalIdTableSorter
     numPopped += result.numRows();
     co_yield std::move(result).template toStatic<N>();
     AD_CORRECTNESS_CHECK(numPopped == this->numElementsPushed_);
-     */
-  }
-
-  // TODO<joka921> Implement `CallFixedSize` optimization also for the merging.
-  // Transition from the input phase, where `push()` may be called, to the
-  // output phase and return a generator that yields the sorted elements. This
-  // function may be called exactly once.
-  template <size_t N>
-  cppcoro::generator<IdTableStatic<NumStaticCols>> sortedBlocksImpl(
-      std::optional<size_t> blocksize = std::nullopt) {
-    if (!this->transformAndPushLastBlock()) {
-      // There was only one block, return it.
-      co_yield std::move(this->currentBlock_)
-          .template toStatic<NumStaticCols>();
-      co_return;
-    }
-    auto rowGenerators = this->writer_.template getAllRowGenerators<N>();
-
-    const size_t blockSizeOutput =
-        blocksize.value_or(computeBlockSizeForMergePhase(rowGenerators.size()));
-
-    using P = std::pair<decltype(rowGenerators[0].begin()),
-                        decltype(rowGenerators[0].end())>;
-    auto projection = [](const auto& el) -> decltype(auto) {
-      return *el.first;
-    };
-    // NOTE: We have to switch the arguments, because the heap operations by
-    // default order descending...
-    auto comp = [&, this](const auto& a, const auto& b) {
-      return comparator_(projection(b), projection(a));
-    };
-    std::vector<P> pq;
-
-    for (auto& gen : rowGenerators) {
-      pq.emplace_back(gen.begin(), gen.end());
-    }
-    std::ranges::make_heap(pq, comp);
-    IdTableStatic<N> result(this->writer_.numColumns(),
-                            this->writer_.allocator());
-    result.reserve(blockSizeOutput);
-    size_t numPopped = 0;
-    while (!pq.empty()) {
-      std::ranges::pop_heap(pq, comp);
-      auto& min = pq.back();
-      result.push_back(*min.first);
-      ++(min.first);
-      if (min.first == min.second) {
-        pq.pop_back();
-      } else {
-        std::ranges::push_heap(pq, comp);
-      }
-      if (result.size() >= blockSizeOutput) {
-        numPopped += result.numRows();
-        co_yield std::move(result).template toStatic<NumStaticCols>();
-        // The `result` will be moved away, so we have to reset it again.
-        result = IdTableStatic<N>(this->writer_.numColumns(),
-                                  this->writer_.allocator());
-        result.reserve(blockSizeOutput);
-      }
-    }
-    numPopped += result.numRows();
-    co_yield std::move(result).template toStatic<NumStaticCols>();
-    AD_CORRECTNESS_CHECK(numPopped == this->numElementsPushed_);
   }
 
   // _____________________________________________________________
   void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
-    auto doSort = [&]<size_t I>() {
-      auto staticBlock = std::move(block).template toStatic<I>();
 #ifdef _PARALLEL_SORT
-      ad_utility::parallel_sort(staticBlock.begin(), staticBlock.end(),
-                                comparator_);
+    ad_utility::parallel_sort(block.begin(), block.end(), comparator_);
 #else
-      std::ranges::sort(staticBlock, comparator_);
+    std::ranges::sort(block, comparator_);
 #endif
-      block = std::move(staticBlock).template toStatic<NumStaticCols>();
-    };
-    ad_utility::callFixedSize(block.numColumns(), doSort);
   }
 
   // A function with this name is needed by the mixin base class.

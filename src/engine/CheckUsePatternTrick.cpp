@@ -121,7 +121,6 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(
       }
       const auto& subAndPred = patternTrickTuple.value();
       // First try to find a triple for which we can get the special column.
-      // TODO<joka921> Also add the column for the object triple.
       auto tripleBackup = std::move(*it);
       triples.erase(it);
       // TODO<joka921> Code duplication

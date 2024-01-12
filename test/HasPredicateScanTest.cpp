@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
+#if false
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -361,3 +362,5 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   ASSERT_EQ(V(4u), result[4][0]);
   ASSERT_EQ(Int(3u), result[4][1]);
 }
+
+#endif

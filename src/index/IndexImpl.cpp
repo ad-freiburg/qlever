@@ -260,6 +260,8 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
   createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
                               std::move(blockGenerator), *thirdSorter);
+
+  makeIndexFromAdditionalTriples(std::move(*hasPatternPredicateSortedByPSO));
   return thirdSorter;
 }
 // _____________________________________________________________________________
@@ -755,8 +757,8 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   totalVocabularySize_ = vocab_.size() + vocab_.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
-  pso_.loadFromDisk(onDiskBase_);
-  pos_.loadFromDisk(onDiskBase_);
+  pso_.loadFromDisk(onDiskBase_, false, usePatterns());
+  pos_.loadFromDisk(onDiskBase_, false, usePatterns());
 
   if (loadAllPermutations_) {
     ops_.loadFromDisk(onDiskBase_);
@@ -1545,17 +1547,13 @@ std::optional<PatternCreatorNew::TripleSorter> IndexImpl::createSPOAndSOP(
     // For now (especially for testing) We build the new pattern format as well
     // as the old one to see that they match.
     PatternCreatorNew patternCreator{
-        onDiskBase_ + ".index.patterns.new",
+        onDiskBase_ + ".index.patterns",
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
-    PatternCreator patternCreatorOld{onDiskBase_ + ".index.patterns"};
-    auto pushTripleToPatterns = [&patternCreator, &patternCreatorOld,
+    auto pushTripleToPatterns = [&patternCreator,
                                  &isInternalId](const auto& triple) {
       bool ignoreForPatterns = std::ranges::any_of(triple, isInternalId);
       auto tripleArr = std::array{triple[0], triple[1], triple[2]};
       patternCreator.processTriple(tripleArr, ignoreForPatterns);
-      if (!ignoreForPatterns) {
-        patternCreatorOld.processTriple(tripleArr);
-      }
     };
     createPermutationPair(numColumns, AD_FWD(sortedTriples), spo_, sop_,
                           nextSorter.makePushCallback()...,
@@ -1626,7 +1624,7 @@ void IndexImpl::makeIndexFromAdditionalTriples(
     ExternalSorter<SortByPSO>&& additionalTriples) {
   auto onDiskBaseCpy = onDiskBase_;
   onDiskBase_ += ADDITIONAL_TRIPLES_SUFFIX;
-  createPermutationPair(2, std::move(additionalTriples).getSortedBlocks<0>(),
+  createPermutationPair(3, std::move(additionalTriples).getSortedBlocks<0>(),
                         pso_, pos_);
   onDiskBase_ = onDiskBaseCpy;
 }

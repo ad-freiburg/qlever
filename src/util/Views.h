@@ -10,7 +10,6 @@
 
 #include "util/Generator.h"
 #include "util/Log.h"
-#include "util/Timer.h"
 
 namespace ad_utility {
 
@@ -92,9 +91,7 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
   size_t numUnique = 0;
   std::optional<ValueType> lastValueFromPreviousBlock = std::nullopt;
 
-  ad_utility::Timer t{ad_utility::Timer::Started};
   for (auto& block : view) {
-    t.cont();
     if (block.empty()) {
       continue;
     }
@@ -109,13 +106,10 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
     block.erase(it, block.end());
     block.erase(block.begin(), beg);
     numUnique += block.size();
-    t.stop();
     co_yield block;
   }
   LOG(DEBUG) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
   LOG(INFO) << "Number of unique elements: " << numUnique << std::endl;
-  LOG(INFO) << "Time actually spent for unique computation: "
-            << t.msecs().count() << "ms" << std::endl;
 }
 
 // A view that owns its underlying storage. It is a rather simple drop-in

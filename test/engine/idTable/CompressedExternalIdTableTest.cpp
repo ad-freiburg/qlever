@@ -116,12 +116,13 @@ void testExternalSorter(size_t numDynamicColumns, size_t numRows,
 
     std::ranges::sort(randomTable, SortByOSP{});
 
-    auto generator = writer.sortedView();
-
-    using namespace ::testing;
-    auto result =
-        idTableFromRowGenerator<NumStaticColumns>(generator, numDynamicColumns);
-    ASSERT_THAT(result, Eq(randomTable));
+    for (size_t k = 0; k < 5; ++k) {
+      auto generator = writer.sortedView();
+      using namespace ::testing;
+      auto result = idTableFromRowGenerator<NumStaticColumns>(
+          generator, numDynamicColumns);
+      ASSERT_THAT(result, Eq(randomTable)) << "k = " << k;
+    }
     writer.clear();
   }
 }

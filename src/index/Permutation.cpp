@@ -22,7 +22,7 @@ Permutation::Permutation(Enum permutation, Allocator allocator,
 
 // _____________________________________________________________________
 void Permutation::loadFromDisk(const std::string& onDiskBase,
-                               bool onlyLoadAdditional) {
+                               bool onlyLoadAdditional, bool dontLoadAdditional) {
   if (!onlyLoadAdditional) {
     if constexpr (MetaData::_isMmapBased) {
       meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
@@ -46,9 +46,11 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
               << " permutation: " << meta_.statistics() << std::endl;
     isLoaded_ = true;
   }
-  if (additionalPermutation_) {
+  if (additionalPermutation_ && !dontLoadAdditional) {
     additionalPermutation_->loadFromDisk(onDiskBase + ADDITIONAL_TRIPLES_SUFFIX,
                                          false);
+  } else {
+    additionalPermutation_ = nullptr;
   }
 }
 

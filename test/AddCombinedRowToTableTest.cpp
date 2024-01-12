@@ -26,7 +26,7 @@ TEST(AddCombinedRowToTable, OneJoinColumn) {
         makeIdTableFromVector({{7, 14, 0}, {9, 10, 1}, {14, 8, 2}, {33, 5, 3}});
     auto result = makeIdTableFromVector({});
     result.setNumColumns(4);
-    auto adder = ad_utility::AddCombinedRowToIdTable<ad_utility::Noop>(
+    auto adder = ad_utility::AddCombinedRowToIdTable(
         1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
         bufferSize);
     adder.addRow(1, 0);
