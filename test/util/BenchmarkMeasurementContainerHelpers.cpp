@@ -5,12 +5,13 @@
 
 #include "../test/util/BenchmarkMeasurementContainerHelpers.h"
 
+#include "util/TypeTraits.h"
+
 using namespace std::string_literals;
 
 // ____________________________________________________________________________
-template <typename Type>
-requires ad_utility::isTypeContainedIn<Type,
-                                       ad_benchmark::ResultTable::EntryType>
+template <
+    ad_utility::SimilarToAnyTypeIn<ad_benchmark::ResultTable::EntryType> Type>
 Type createDummyValueEntryType() {
   if constexpr (ad_utility::isSimilar<Type, float>) {
     return 4.2f;
