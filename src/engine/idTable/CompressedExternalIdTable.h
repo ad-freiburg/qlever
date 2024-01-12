@@ -631,7 +631,6 @@ class CompressedExternalIdTableSorter
   requires(N == NumStaticCols || N == 0)
   cppcoro::generator<IdTableStatic<N>> sortedBlocks(
       std::optional<size_t> blocksize = std::nullopt) {
-
     auto impl = [blocksize, this]<size_t I>() {
       if constexpr (NumStaticCols == 0 || NumStaticCols == I) {
         return sortedBlocksImpl<I>(blocksize);
@@ -640,9 +639,11 @@ class CompressedExternalIdTableSorter
         return sortedBlocksImpl<0>(blocksize);
       }
     };
-    auto generator = ad_utility::callFixedSize(this->writer_.numColumns(), impl);
-    for (auto& block: generator) {
-    co_yield std::move(block).template toStatic<N>();}
+    auto generator =
+        ad_utility::callFixedSize(this->writer_.numColumns(), impl);
+    for (auto& block : generator) {
+      co_yield std::move(block).template toStatic<N>();
+    }
     /*
     if (!this->transformAndPushLastBlock()) {
       // There was only one block, return it. If a blocksize was explicitly
@@ -724,17 +725,17 @@ class CompressedExternalIdTableSorter
       std::optional<size_t> blocksize = std::nullopt) {
     if (!this->transformAndPushLastBlock()) {
       // There was only one block, return it.
-      co_yield std::move(this->currentBlock_).template toStatic<NumStaticCols>();
+      co_yield std::move(this->currentBlock_)
+          .template toStatic<NumStaticCols>();
       co_return;
     }
-    auto rowGenerators =
-        this->writer_.template getAllRowGenerators<N>();
+    auto rowGenerators = this->writer_.template getAllRowGenerators<N>();
 
     const size_t blockSizeOutput =
         blocksize.value_or(computeBlockSizeForMergePhase(rowGenerators.size()));
 
     using P = std::pair<decltype(rowGenerators[0].begin()),
-        decltype(rowGenerators[0].end())>;
+                        decltype(rowGenerators[0].end())>;
     auto projection = [](const auto& el) -> decltype(auto) {
       return *el.first;
     };
@@ -750,7 +751,7 @@ class CompressedExternalIdTableSorter
     }
     std::ranges::make_heap(pq, comp);
     IdTableStatic<N> result(this->writer_.numColumns(),
-                                        this->writer_.allocator());
+                            this->writer_.allocator());
     result.reserve(blockSizeOutput);
     size_t numPopped = 0;
     while (!pq.empty()) {
@@ -768,7 +769,7 @@ class CompressedExternalIdTableSorter
         co_yield std::move(result).template toStatic<NumStaticCols>();
         // The `result` will be moved away, so we have to reset it again.
         result = IdTableStatic<N>(this->writer_.numColumns(),
-                                              this->writer_.allocator());
+                                  this->writer_.allocator());
         result.reserve(blockSizeOutput);
       }
     }
@@ -782,7 +783,8 @@ class CompressedExternalIdTableSorter
     auto doSort = [&]<size_t I>() {
       auto staticBlock = std::move(block).template toStatic<I>();
 #ifdef _PARALLEL_SORT
-      ad_utility::parallel_sort(staticBlock.begin(), staticBlock.end(), comparator_);
+      ad_utility::parallel_sort(staticBlock.begin(), staticBlock.end(),
+                                comparator_);
 #else
       std::ranges::sort(staticBlock, comparator_);
 #endif

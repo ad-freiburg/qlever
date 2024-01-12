@@ -114,7 +114,8 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
   }
   LOG(DEBUG) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
   LOG(INFO) << "Number of unique elements: " << numUnique << std::endl;
-  LOG(INFO) << "Time actually spent for unique computation: " << t.msecs().count() << "ms" << std::endl;
+  LOG(INFO) << "Time actually spent for unique computation: "
+            << t.msecs().count() << "ms" << std::endl;
 }
 
 // A view that owns its underlying storage. It is a rather simple drop-in

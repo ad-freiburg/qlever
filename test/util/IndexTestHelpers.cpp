@@ -40,6 +40,7 @@ std::vector<std::string> getAllIndexFilenames(
           indexBasename + ".vocabulary.external.idsAndOffsets.mmap"};
 }
 
+/*
 namespace {
 // Check that the old pattern implementation (separate patterns in separate
 // files) have exactly the same contents as the patterns that are folded into
@@ -103,6 +104,7 @@ void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
   // with them.
 }
 }  // namespace
+ */
 
 // ______________________________________________________________
 Index makeTestIndex(const std::string& indexBasename,
@@ -159,9 +161,11 @@ Index makeTestIndex(const std::string& indexBasename,
   index.createFromOnDiskIndex(indexBasename);
   ad_utility::setGlobalLoggingStream(&std::cout);
 
+  /*
   if (usePatterns && loadAllPermutations) {
     checkConsistencyBetweenOldAndNewPatterns(index);
   }
+   */
   return index;
 }
 

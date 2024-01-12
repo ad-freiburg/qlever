@@ -771,10 +771,10 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
 
   if (usePatterns_) {
     try {
-      PatternCreator::readPatternsFromFile(
+      PatternCreatorNew::readPatternsFromFile(
           onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
           avgNumDistinctPredicatesPerSubject_,
-          numDistinctSubjectPredicatePairs_, patterns_, hasPattern_);
+          numDistinctSubjectPredicatePairs_, patterns_);
     } catch (const std::exception& e) {
       LOG(WARN) << "Could not load the patterns. The internal predicate "
                    "`ql:has-predicate` is therefore not available (and certain "

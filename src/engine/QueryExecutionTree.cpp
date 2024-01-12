@@ -162,7 +162,7 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
   } else if constexpr (std::is_same_v<Op, OrderBy>) {
     type_ = ORDER_BY;
   } else if constexpr (std::is_same_v<Op, GroupBy>) {
-    _type = GROUP_BY;
+    type_ = GROUP_BY;
   } else if constexpr (std::is_same_v<Op, Filter>) {
     type_ = FILTER;
   } else if constexpr (std::is_same_v<Op, NeutralElementOperation>) {
