@@ -1042,7 +1042,7 @@ void GroupBy::evaluateAlias(
         sparqlExpression::copyExpressionResult(
             sparqlExpression::ExpressionResult{std::move(aggregateResults)});
   } else {
-    auto occurrences =
+    const auto& occurrences =
         get<std::vector<ParentAndChildIndex>>(groupByVariableSubstitutions);
     // Substitute in the values of the grouped variable
     substituteGroupVariable(occurrences, result);
