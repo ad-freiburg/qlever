@@ -22,6 +22,7 @@
 #include "util/Log.h"
 #include "util/SourceLocation.h"
 #include "util/Timer.h"
+#include "util/TypeTraits.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
@@ -66,7 +67,8 @@ class BenchmarkResults {
   @param constructorArgs Arguments to pass to the constructor of the object,
   that the new `CopyableUniquePtr` will own.
   */
-  template <typename EntryType>
+  template <
+      ad_utility::SameAsAny<ResultTable, ResultEntry, ResultGroup> EntryType>
   static EntryType& addEntryToContainerVector(
       PointerVector<EntryType>& targetVector, auto&&... constructorArgs) {
     targetVector.push_back(ad_utility::make_copyable_unique<EntryType>(
@@ -88,8 +90,7 @@ class BenchmarkResults {
    *  Most of the time a lambda, that calls the actual function to benchmark
    *  with the needed parameters.
    */
-  template <typename Function>
-  requires std::invocable<Function>
+  template <std::invocable Function>
   ResultEntry& addMeasurement(const std::string& descriptor,
                               const Function& functionToMeasure) {
     return addEntryToContainerVector(singleMeasurements_, descriptor,

@@ -42,7 +42,7 @@
 
 using namespace std::string_literals;
 
-namespace ad_utility {
+namespace ad_utility::ConfigManagerImpl {
 
 /*
 @brief Checks, if the given configuration option was set correctly.
@@ -2687,4 +2687,4 @@ TEST(ConfigManagerTest, PrintConfigurationDocComparison) {
   assertStringEqual(exampleConfigManagerExpectedDetailedString,
                     topManager.printConfigurationDoc(true));
 }
-}  // namespace ad_utility
+}  // namespace ad_utility::ConfigManagerImpl
