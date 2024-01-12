@@ -14,7 +14,7 @@
 /*
 @brief Do the `fileToJson` test with the wanted json class type.
 */
-template <IsOrderedOrUnorderedJson WantedJsonClassType>
+template <OrderedOrUnorderedJson WantedJsonClassType>
 static void doFileToJsonTest(
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
