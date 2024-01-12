@@ -127,8 +127,8 @@ inline std::pair<ValueId, ValueId> getRangeFromVocab(
 // consecutive range of IDs. For its usage see below.
 template <typename S>
 concept StoresStringOrId =
-    ad_utility::isTypeAnyOf<S, ValueId, std::string, IdOrString,
-                            std::pair<Id, Id>>;
+    ad_utility::SimilarToAny<S, ValueId, std::string, IdOrString,
+                             std::pair<Id, Id>>;
 // Convert a string or `IdOrString` value into the (possibly empty) range of
 // corresponding `ValueIds` (denoted by a `std::pair<Id, Id>`, see
 // `getRangeFromVocab` above for details). This function also takes `ValueId`s
