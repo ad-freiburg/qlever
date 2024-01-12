@@ -15,7 +15,7 @@
 #include "util/TypeTraits.h"
 
 namespace ad_utility {
-namespace ConfigOptionImpl {
+namespace ConfigManagerImpl {
 /*
 @brief Implementation of proxy/reference to a `ConfigOption`. Also saves the
 type of value, that the configuration option holds. Needed, because without a
@@ -69,16 +69,16 @@ class ConfigOptionProxyImplementation {
   }
 };
 
-}  // namespace ConfigOptionImpl
+}  // namespace ConfigManagerImpl
 
 // A const proxy/reference to a `ConfigOption`. Also saves the type of
 // value, that the configuration option holds.
 template <typename T>
 class ConstConfigOptionProxy
-    : public ConfigOptionImpl::ConfigOptionProxyImplementation<
+    : public ConfigManagerImpl::ConfigOptionProxyImplementation<
           T, const ConfigOption> {
   using Base =
-      ConfigOptionImpl::ConfigOptionProxyImplementation<T, const ConfigOption>;
+      ConfigManagerImpl::ConfigOptionProxyImplementation<T, const ConfigOption>;
 
  public:
   explicit ConstConfigOptionProxy(const ConfigOption& opt) : Base(opt) {}
@@ -88,10 +88,10 @@ class ConstConfigOptionProxy
 // value, that the configuration option holds.
 template <typename T>
 class ConfigOptionProxy
-    : public ConfigOptionImpl::ConfigOptionProxyImplementation<T,
-                                                               ConfigOption> {
+    : public ConfigManagerImpl::ConfigOptionProxyImplementation<T,
+                                                                ConfigOption> {
   using Base =
-      ConfigOptionImpl::ConfigOptionProxyImplementation<T, ConfigOption>;
+      ConfigManagerImpl::ConfigOptionProxyImplementation<T, ConfigOption>;
 
  public:
   explicit ConfigOptionProxy(ConfigOption& opt) : Base(opt) {}

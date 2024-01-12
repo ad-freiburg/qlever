@@ -26,16 +26,8 @@
 #include "util/json.h"
 
 namespace ad_utility {
-// Forward declarations needed for testing.
-namespace ConfigManagerImpl {
-template <typename... Ts>
-std::string generateValidatorName(std::optional<size_t> id);
-class ConfigManagerTest_AddNonExceptionValidator_Test;
-class ConfigManagerTest_AddExceptionValidator_Test;
-class ConfigManagerTest_PrintConfigurationDocComparison_Test;
-}  // namespace ConfigManagerImpl
 
-namespace ConfigOptionImpl {
+namespace ConfigManagerImpl {
 /*
 Describes a configuration option. A configuration option can only hold/parse/set
 values of a specific type, decided when creating the object.
@@ -244,15 +236,11 @@ class ConfigOption {
 
  private:
   // Needed for testing.
-  FRIEND_TEST(::ad_utility::ConfigManagerImpl::ConfigManagerTest,
-              AddNonExceptionValidator);
-  FRIEND_TEST(::ad_utility::ConfigManagerImpl::ConfigManagerTest,
-              AddExceptionValidator);
-  FRIEND_TEST(::ad_utility::ConfigManagerImpl::ConfigManagerTest,
-              PrintConfigurationDocComparison);
+  FRIEND_TEST(ConfigManagerTest, AddNonExceptionValidator);
+  FRIEND_TEST(ConfigManagerTest, AddExceptionValidator);
+  FRIEND_TEST(ConfigManagerTest, PrintConfigurationDocComparison);
   template <typename... Ts>
-  friend std::string ad_utility::ConfigManagerImpl::generateValidatorName(
-      std::optional<size_t> id);
+  friend std::string generateValidatorName(std::optional<size_t> id);
 
   /*
   @brief Return the string representation/name of the type, of the currently
@@ -280,6 +268,6 @@ class ConfigOption {
 template <typename T>
 concept SupportedConfigOptionType =
     ad_utility::SameAsAnyTypeIn<T, ConfigOption::AvailableTypes>;
-}  // namespace ConfigOptionImpl
-using ConfigOptionImpl::ConfigOption;
+}  // namespace ConfigManagerImpl
+using ConfigManagerImpl::ConfigOption;
 }  // namespace ad_utility
