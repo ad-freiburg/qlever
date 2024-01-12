@@ -164,11 +164,10 @@ class GroupBy : public Operation {
     int64_t count_ = 0;
     void increment(auto&& value,
                    const sparqlExpression::EvaluationContext* ctx) {
-      auto valueGetter = ValueGetter{};
-      auto val = valueGetter(AD_FWD(value), ctx);
+      auto val = ValueGetter{}(AD_FWD(value), ctx);
 
       if (const int64_t* intval = std::get_if<int64_t>(&val))
-        sum_ += (double)*intval;
+        sum_ += static_cast<double>(*intval);
       else if (const double* dval = std::get_if<double>(&val))
         sum_ += *dval;
       else
@@ -189,8 +188,7 @@ class GroupBy : public Operation {
     int64_t count_ = 0;
     void increment(auto&& value,
                    const sparqlExpression::EvaluationContext* ctx) {
-      auto valueGetter = ValueGetter{};
-      if (valueGetter(AD_FWD(value), ctx)) count_++;
+      if (ValueGetter{}(AD_FWD(value), ctx)) count_++;
     }
     [[nodiscard]] ValueId calculateResult() const {
       return ValueId::makeFromInt(count_);
@@ -211,15 +209,6 @@ class GroupBy : public Operation {
         : parent_{parent}, nThChild_{nThChild} {
       AD_CONTRACT_CHECK(parent != nullptr);
     }
-  };
-
-  // Stores information required for substitution of grouped by variable in
-  // an expression tree.
-  struct GroupedByVariableSubstitutions {
-    std::vector<ParentAndChildIndex> occurrences_;
-    // Determines whether the grouped by variable appears at the top of an
-    // alias, e.g. `SELECT (?a as ?x) WHERE {...} GROUP BY ?a`.
-    bool topLevel_;
   };
 
   // Used to store the kind of aggregate.
@@ -341,6 +330,14 @@ class GroupBy : public Operation {
       IdTable* resultTable, const HashMapAggregationData& aggregationData,
       size_t dataIndex, size_t beginIndex, size_t endIndex);
 
+  // Substitute away any occurrences of the grouped variable and of aggregate
+  // results, if necessary, and subsequently evaluate the expression of an
+  // alias
+  void evaluateAlias(HashMapAliasInformation& alias, IdTable* result,
+                     sparqlExpression::EvaluationContext& evaluationContext,
+                     const HashMapAggregationData& aggregationData,
+                     LocalVocab* localVocab);
+
   // Sort the HashMap by key and create result table.
   void createResultFromHashMap(
       IdTable* result, const HashMapAggregationData& aggregationData,
@@ -388,15 +385,20 @@ class GroupBy : public Operation {
   static std::optional<GroupBy::HashMapAggregateType> isSupportedAggregate(
       sparqlExpression::SparqlExpression* expr);
 
+  // Determines whether the grouped by variable appears at the top of an
+  // alias, e.g. `SELECT (?a as ?x) WHERE {...} GROUP BY ?a`.
+  struct OccurenceAsRoot {};
+
   // Find all occurrences of grouped by variable for expression `expr`.
-  GroupBy::GroupedByVariableSubstitutions findGroupedVariable(
-      sparqlExpression::SparqlExpression* expr);
+  std::variant<std::vector<ParentAndChildIndex>, OccurenceAsRoot>
+  findGroupedVariable(sparqlExpression::SparqlExpression* expr);
 
   // The recursive implementation of `findGroupedVariable` (see above).
   void findGroupedVariableImpl(
       sparqlExpression::SparqlExpression* expr,
       std::optional<ParentAndChildIndex> parentAndChildIndex,
-      GroupBy::GroupedByVariableSubstitutions& substitutions);
+      std::variant<std::vector<ParentAndChildIndex>, OccurenceAsRoot>&
+          substitutions);
 
   // Find all aggregates for expression `expr`. Return `std::nullopt`
   // if an unsupported aggregate is found.

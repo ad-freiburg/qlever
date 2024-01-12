@@ -528,19 +528,22 @@ TEST_F(GroupByOptimizations, findGroupedVariable) {
   GroupBy groupBy{ad_utility::testing::getQec(), {Variable{"?a"}}, {}, values};
 
   auto variableAtTop = groupBy.findGroupedVariable(expr1.get());
-  ASSERT_TRUE(variableAtTop.topLevel_);
-  ASSERT_EQ(variableAtTop.occurrences_.size(), 0);
+  ASSERT_TRUE(std::get_if<GroupBy::OccurenceAsRoot>(&variableAtTop));
 
   auto variableInExpression = groupBy.findGroupedVariable(expr2.get());
-  ASSERT_FALSE(variableInExpression.topLevel_);
-  ASSERT_EQ(variableInExpression.occurrences_.size(), 1);
-  auto parentAndChildIndex = variableInExpression.occurrences_.at(0);
+  auto variableInExpressionOccurrences =
+      std::get_if<std::vector<GroupBy::ParentAndChildIndex>>(
+          &variableInExpression);
+  ASSERT_TRUE(variableInExpressionOccurrences);
+  ASSERT_EQ(variableInExpressionOccurrences->size(), 1);
+  auto parentAndChildIndex = variableInExpressionOccurrences->at(0);
   ASSERT_EQ(parentAndChildIndex.nThChild_, 0);
   ASSERT_EQ(parentAndChildIndex.parent_, expr2.get());
 
   auto variableNotFound = groupBy.findGroupedVariable(expr3.get());
-  ASSERT_FALSE(variableNotFound.topLevel_);
-  ASSERT_EQ(variableNotFound.occurrences_.size(), 0);
+  auto variableNotFoundOccurrences =
+      std::get_if<std::vector<GroupBy::ParentAndChildIndex>>(&variableNotFound);
+  ASSERT_EQ(variableNotFoundOccurrences->size(), 0);
 }
 
 // _____________________________________________________________________________
