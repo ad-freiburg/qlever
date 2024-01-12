@@ -949,7 +949,7 @@ struct BlockZipperJoinImpl {
       // If the left side is not empty and this is an optional join, then we
       // will add the remaining elements from the `leftSide_` later in the
       // `fillWithAllFromLeft` function.
-      return;
+      return BlockStatus::allFilled;
     }
 
     // Add the remaining blocks such that condition 3 from above is fulfilled.
