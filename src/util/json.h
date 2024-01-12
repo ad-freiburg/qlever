@@ -40,13 +40,13 @@ concept OrderedOrUnorderedJson =
 /*
 @brief Read the specified json file and build a json object out of it.
 
-@tparam JsonType Either `nlohmann::json`, or `nlohmann::ordered_json`.
+@tparam Json Either `nlohmann::json`, or `nlohmann::ordered_json`.
 
 @param jsonFileName Name of the file, or path to the file. Must describe a
 `.json` file.
 */
-template <OrderedOrUnorderedJson JsonType>
-JsonType fileToJson(std::string_view jsonFileName) {
+template <OrderedOrUnorderedJson Json>
+Json fileToJson(std::string_view jsonFileName) {
   // Check, if the filename/-path ends with ".json". Checking, if it's a valid
   // file, is done by `ad_utility::makeIfstream`.
   if (!jsonFileName.ends_with(".json")) {
@@ -56,8 +56,8 @@ JsonType fileToJson(std::string_view jsonFileName) {
   }
 
   try {
-    return JsonType::parse(ad_utility::makeIfstream(jsonFileName));
-  } catch (const typename JsonType::exception& e) {
+    return Json::parse(ad_utility::makeIfstream(jsonFileName));
+  } catch (const typename Json::exception& e) {
     throw std::runtime_error(absl::StrCat(
         "The contents of the file ", jsonFileName,
         " could not be parsed as JSON. The error was: ", e.what()));
