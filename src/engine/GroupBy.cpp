@@ -1108,7 +1108,7 @@ void GroupBy::createResultFromHashMap(
 // _____________________________________________________________________________
 template <typename A>
 concept SupportedAggregates =
-    ad_utility::isTypeContainedIn<A, GroupBy::Aggregations>;
+    ad_utility::SameAsAnyTypeIn<A, GroupBy::Aggregations>;
 
 // _____________________________________________________________________________
 // Visitor function to extract values from the result of an evaluation of
