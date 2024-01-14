@@ -16,17 +16,10 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <vector>
 
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/Log.h"
-
-using std::cerr;
-using std::cout;
-using std::endl;
-using std::string;
-using std::vector;
 
 namespace ad_utility {
 //! Wrapper class for file access. Is supposed to provide
@@ -36,6 +29,8 @@ namespace ad_utility {
 //! to the lack of buffering.
 //! Many methods are copies from the CompleteSearch File.h
 class File {
+  using string = std::string;
+
  private:
   string _name;
   FILE* _file;
@@ -83,8 +78,7 @@ class File {
     if (_file == NULL) {
       std::stringstream err;
       err << "! ERROR opening file \"" << filename << "\" with mode \"" << mode
-          << "\" (" << strerror(errno) << ")" << endl
-          << endl;
+          << "\" (" << strerror(errno) << ")" << std::endl;
       throw std::runtime_error(std::move(err).str());
     }
     _name = filename;
@@ -105,9 +99,8 @@ class File {
       return true;
     }
     if (fclose(_file) != 0) {
-      cout << "! ERROR closing file \"" << _name << "\" (" << strerror(errno)
-           << ")" << endl
-           << endl;
+      std::cout << "! ERROR closing file \"" << _name << "\" ("
+                << strerror(errno) << ")" << std::endl;
       exit(1);
     }
     _file = NULL;
@@ -172,7 +165,7 @@ class File {
     assert(_file);
     off_t returnValue = ftello(_file);
     if (returnValue == (off_t)-1) {
-      cerr << "\n ERROR in tell() : " << strerror(errno) << endl << endl;
+      std::cerr << "\n ERROR in tell() : " << strerror(errno) << std::endl;
       exit(1);
     }
     return returnValue;

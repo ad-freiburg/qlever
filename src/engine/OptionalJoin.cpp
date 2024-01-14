@@ -9,6 +9,7 @@
 #include "engine/CallFixedSize.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________

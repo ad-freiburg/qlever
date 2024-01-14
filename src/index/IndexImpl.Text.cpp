@@ -131,7 +131,7 @@ void IndexImpl::addTextFromContextFile(const string& contextFile,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::buildDocsDB(const string& docsFileName) {
+void IndexImpl::buildDocsDB(const string& docsFileName) const {
   LOG(INFO) << "Building DocsDB...\n";
   std::ifstream docsFile{docsFileName};
   std::ofstream ofs(onDiskBase_ + ".text.docsDB", std::ios_base::out);

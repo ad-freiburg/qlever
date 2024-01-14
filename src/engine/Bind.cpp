@@ -85,6 +85,7 @@ std::vector<QueryExecutionTree*> Bind::getChildren() {
 
 // _____________________________________________________________________________
 ResultTable Bind::computeResult() {
+  using std::endl;
   LOG(DEBUG) << "Get input to BIND operation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Got input to Bind operation." << endl;

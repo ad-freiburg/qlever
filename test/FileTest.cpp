@@ -4,59 +4,9 @@
 
 #include <gtest/gtest.h>
 
-#include <cstdio>
-
 #include "util/File.h"
 
-using std::string;
-using std::vector;
-
 namespace ad_utility {
-class FileTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    {
-      File testFile1("_tmp_testFile1", "w");
-      string content = "line1\nline2\n";
-      testFile1.write(content.c_str(), content.size());
-    }
-    {
-      File testFile2("_tmp_testFile2", "w");
-      string content = "line1\nline2";
-      testFile2.write(content.c_str(), content.size());
-    }
-    {
-      File testFile3("_tmp_testFile3", "w");
-      string content = "line1\n";
-      testFile3.write(content.c_str(), content.size());
-    }
-    {
-      File testFile3("_tmp_testFile4", "w");
-      string content = "";
-      testFile3.write(content.c_str(), content.size());
-    }
-    {
-      File testFileBinary("_tmp_testFileBinary", "w");
-      size_t a = 1;
-      size_t b = 0;
-      size_t c = 5000;
-      off_t off = 3;
-      testFileBinary.write(&a, sizeof(size_t));
-      testFileBinary.write(&b, sizeof(size_t));
-      testFileBinary.write(&c, sizeof(size_t));
-      testFileBinary.write(&off, sizeof(off_t));
-    }
-  }
-
-  void TearDown() override {
-    remove("_tmp_testFile1");
-    remove("_tmp_testFile2");
-    remove("_tmp_testFile3");
-    remove("_tmp_testFile4");
-    remove("_tmp_testFileBinary");
-  }
-};
-
 TEST(File, move) {
   std::string filename = "testFileMove.tmp";
   File file1(filename, "w");
