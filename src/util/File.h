@@ -123,30 +123,6 @@ class File {
     return fread(targetBuffer, (size_t)1, nofBytesToRead, _file);
   }
 
-  // Reads a line from the file into param line and interprets it as ASCII.
-  // Removes the \n from the end of the string.
-  // Returns null on EOF when no chars have been read.
-  // Throws an Exception if the buffer is not sufficiently large.
-  // Warning: std::getTriple which works on a file stream
-  // is generally more performant (it uses a general stream buffer
-  // to wrap the file)
-  // and appeds char by char to the string.
-  bool readLine(string* line, char* buf, size_t bufferSize) {
-    assert(_file);
-    char* retVal = fgets(buf, bufferSize, _file);
-    size_t stringLength = strlen(buf);
-    if (retVal && stringLength > 0 && buf[stringLength - 1] == '\n') {
-      // Remove the trailing \n
-      buf[stringLength - 1] = 0;
-    } else if (retVal && !isAtEof()) {
-      // Stopped inside a line because the end of the buffer was reached.
-      AD_THROW("Buffer too small when reading from file: " + _name +
-               ". Or the line contains a 0 character.");
-    }
-    *line = buf;
-    return retVal;
-  }
-
   // write to current file pointer position
   // returns number of bytes written
   size_t write(const void* sourceBuffer, size_t nofBytesToWrite) {
@@ -154,28 +130,11 @@ class File {
     return fwrite(sourceBuffer, (size_t)1, nofBytesToWrite, _file);
   }
 
-  // write to current file pointer position
-  // returns number of bytes written
-  void writeLine(const string& line) {
-    assert(_file);
-    write(line.c_str(), line.size());
-    write("\n", 1);
-  }
-
   void flush() { fflush(_file); }
 
   bool isAtEof() {
     assert(_file);
     return feof(_file) != 0;
-  }
-
-  //! Read an ASCII file into a vector of strings.
-  //! Each line represents an entry.
-  void readIntoVector(vector<string>* target, char* buf, size_t bufferSize) {
-    string line;
-    while (readLine(&line, buf, bufferSize)) {
-      target->push_back(line);
-    }
   }
 
   //! Seeks a position in the file.
