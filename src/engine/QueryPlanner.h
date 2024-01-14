@@ -103,8 +103,6 @@ class QueryPlanner {
     ad_utility::HashMap<size_t, Node*> _nodeMap;
     std::list<TripleGraph::Node> _nodeStorage;
 
-    ad_utility::HashMap<Variable, vector<size_t>> identifyTextCliques() const;
-
     vector<size_t> bfsLeaveOut(size_t startNode,
                                ad_utility::HashSet<size_t> leaveOut) const;
 
@@ -227,24 +225,26 @@ class QueryPlanner {
       ParsedQuery::GraphPattern* rootPattern);
 
   // Helper function used by the seedFromOrdinaryTriple function
-  void indexScanSingleVarCase(
-      const TripleGraph::Node& node, std::function<void(SubtreePlan)> pushPlan,
-      std::function<void(Permutation::Enum)> addIndexScan);
+  template <typename PushPlanFunction, typename AddedIndexScanFunction>
+  void indexScanSingleVarCase(const TripleGraph::Node& node,
+                              const PushPlanFunction& pushPlan,
+                              const AddedIndexScanFunction& addIndexScan);
 
   // Helper function used by the seedFromOrdinaryTriple function
-  void indexScanTwoVarsCase(
-      const TripleGraph::Node& node,
-      std::function<void(Permutation::Enum)> addIndexScan);
+  template <typename AddedIndexScanFunction>
+  void indexScanTwoVarsCase(const TripleGraph::Node& node,
+                            const AddedIndexScanFunction& addIndexScan) const;
 
   // Helper function used by the seedFromOrdinaryTriple function
-  void indexScanThreeVarsCase(
-      const TripleGraph::Node& node,
-      std::function<void(Permutation::Enum)> addIndexScan);
+  template <typename AddedIndexScanFunction>
+  void indexScanThreeVarsCase(const TripleGraph::Node& node,
+                              const AddedIndexScanFunction& addIndexScan) const;
 
   // Helper function used by the seedFromScansAndText function
-  void seedFromOrdinaryTriple(
-      const TripleGraph::Node& node, std::function<void(SubtreePlan)> pushPlan,
-      std::function<void(Permutation::Enum)> addIndexScan);
+  template <typename PushPlanFunction, typename AddedIndexScanFunction>
+  void seedFromOrdinaryTriple(const TripleGraph::Node& node,
+                              const PushPlanFunction& pushPlan,
+                              const AddedIndexScanFunction& addIndexScan);
 
   /**
    * @brief Fills children with all operations that are associated with a single

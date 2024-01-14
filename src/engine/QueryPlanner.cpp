@@ -721,9 +721,10 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
 }
 
 // _____________________________________________________________________________
+template <typename PushPlanFunction, typename AddedIndexScanFunction>
 void QueryPlanner::indexScanSingleVarCase(
-    const TripleGraph::Node& node, std::function<void(SubtreePlan)> pushPlan,
-    std::function<void(Permutation::Enum)> addIndexScan) {
+    const TripleGraph::Node& node, const PushPlanFunction& pushPlan,
+    const AddedIndexScanFunction& addIndexScan) {
   using enum Permutation::Enum;
 
   // TODO: The case where the same variable appears in subject + predicate or
@@ -762,9 +763,10 @@ void QueryPlanner::indexScanSingleVarCase(
 }
 
 // _____________________________________________________________________________
+template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanTwoVarsCase(
     const TripleGraph::Node& node,
-    std::function<void(Permutation::Enum)> addIndexScan) {
+    const AddedIndexScanFunction& addIndexScan) const {
   using enum Permutation::Enum;
 
   // TODO: The case that the same variable appears in more than one position
@@ -782,9 +784,10 @@ void QueryPlanner::indexScanTwoVarsCase(
 }
 
 // _____________________________________________________________________________
+template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanThreeVarsCase(
     const TripleGraph::Node& node,
-    std::function<void(Permutation::Enum)> addIndexScan) {
+    const AddedIndexScanFunction& addIndexScan) const {
   using enum Permutation::Enum;
 
   if (!_qec || _qec->getIndex().hasAllPermutations()) {
@@ -805,9 +808,10 @@ void QueryPlanner::indexScanThreeVarsCase(
 }
 
 // _____________________________________________________________________________
+template <typename PushPlanFunction, typename AddedIndexScanFunction>
 void QueryPlanner::seedFromOrdinaryTriple(
-    const TripleGraph::Node& node, std::function<void(SubtreePlan)> pushPlan,
-    std::function<void(Permutation::Enum)> addIndexScan) {
+    const TripleGraph::Node& node, const PushPlanFunction& pushPlan,
+    const AddedIndexScanFunction& addIndexScan) {
   if (node._variables.size() == 1) {
     indexScanSingleVarCase(node, pushPlan, addIndexScan);
   } else if (node._variables.size() == 2) {
@@ -837,12 +841,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
     const TripleGraph::Node& node = *tg._nodeMap.find(i)->second;
 
-    auto pushPlan = [&](SubtreePlan plan) {
+    auto pushPlan = [&seeds, i](SubtreePlan plan) {
       plan._idsOfIncludedNodes = (uint64_t(1) << i);
       seeds.push_back(std::move(plan));
     };
 
-    auto addIndexScan = [&](Permutation::Enum permutation) {
+    auto addIndexScan = [this, pushPlan, node](Permutation::Enum permutation) {
       pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, node.triple_));
     };
 
@@ -1385,21 +1389,6 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
          (_nodeMap.find(i)->second->triple_._p._iri ==
               CONTAINS_ENTITY_PREDICATE ||
           _nodeMap.find(i)->second->triple_._p._iri == CONTAINS_WORD_PREDICATE);
-}
-
-// _____________________________________________________________________________
-ad_utility::HashMap<Variable, vector<size_t>>
-QueryPlanner::TripleGraph::identifyTextCliques() const {
-  ad_utility::HashMap<Variable, vector<size_t>> contextVarToTextNodesIds;
-  // Fill contextVar -> triples map
-  for (size_t i = 0; i < _adjLists.size(); ++i) {
-    if (isTextNode(i)) {
-      auto& triple = _nodeMap.find(i)->second->triple_;
-      auto& cvar = triple._s;
-      contextVarToTextNodesIds[cvar.getVariable()].push_back(i);
-    }
-  }
-  return contextVarToTextNodesIds;
 }
 
 // _____________________________________________________________________________

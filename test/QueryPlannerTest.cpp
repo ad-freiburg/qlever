@@ -798,6 +798,14 @@ TEST(QueryPlannerTest, TextIndexScanForWord) {
                         wordScan(Var{"?text2"}, "words*"),
                         wordScan(Var{"?text2"}, "multiple")),
       qec);
+
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "SELECT * WHERE { ?text ql:contains-word test . }");
+  QueryPlanner qp(nullptr);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qp.createExecutionTree(pq),
+      ::testing::ContainsRegex(
+          "ql:contains-word has to be followed by a string in quotes"));
 }
 
 // __________________________________________________________________________
