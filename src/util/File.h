@@ -4,23 +4,21 @@
 
 #pragma once
 #include <absl/strings/str_cat.h>
-#include <assert.h>
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/stat.h>
-#include <unistd.h>
 
+#include <cassert>
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
 
-#include "./Exception.h"
-#include "./Forward.h"
-#include "Log.h"
+#include "util/Exception.h"
+#include "util/Forward.h"
+#include "util/Log.h"
 
 using std::cerr;
 using std::cout;
@@ -132,11 +130,6 @@ class File {
 
   void flush() { fflush(_file); }
 
-  bool isAtEof() {
-    assert(_file);
-    return feof(_file) != 0;
-  }
-
   //! Seeks a position in the file.
   //! Sets the file position indicator for the stream.
   //! The new position is obtained by adding seekOffset
@@ -170,9 +163,6 @@ class File {
     return bytesRead;
   }
 
-  //! get the underlying file descriptor
-  [[nodiscard]] int getFileDescriptor() const { return fileno(_file); }
-
   //! Returns the number of bytes from the beginning
   //! is 0 on opening. Later equal the number of bytes written.
   //! -1 is returned when an error occurs
@@ -202,11 +192,6 @@ class File {
     read(lastOffset, sizeof(off_t), lastOffsetOffset);
 
     return lastOffsetOffset;
-  }
-
-  // Static method to check if a file exists.
-  static bool exists(const std::filesystem::path& path) {
-    return std::filesystem::exists(path);
   }
 };
 

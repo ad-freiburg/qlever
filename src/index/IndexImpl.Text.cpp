@@ -161,7 +161,7 @@ void IndexImpl::buildDocsDB(const string& docsFileName) {
 
   ofs.close();
   // Now append the tmp file to the docsDB file.
-  ad_utility::File out(string(onDiskBase_ + ".text.docsDB").c_str(), "a");
+  ad_utility::File out(onDiskBase_ + ".text.docsDB", "a");
   for (size_t i = 0; i < offsets.size(); ++i) {
     off_t cur = offsets[i];
     out.write(&cur, sizeof(cur));
