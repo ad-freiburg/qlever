@@ -5,6 +5,7 @@
 #pragma once
 #include <absl/strings/str_cat.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <cassert>
 #include <cerrno>
