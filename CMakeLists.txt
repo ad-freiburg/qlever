@@ -368,7 +368,3 @@ qlever_target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_I
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
-
-add_executable(DebugScript src/DebugScript.cpp)
-qlever_target_link_libraries(DebugScript engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
-target_precompile_headers(DebugScript REUSE_FROM engine)
