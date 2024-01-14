@@ -801,7 +801,7 @@ TEST(QueryPlannerTest, TextIndexScanForWord) {
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       SparqlParser::parseQuery(
-      "SELECT * WHERE { ?text ql:contains-word <test> . }"),
+          "SELECT * WHERE { ?text ql:contains-word <test> . }"),
       ::testing::ContainsRegex(
           "ql:contains-word has to be followed by a string in quotes"));
 }
