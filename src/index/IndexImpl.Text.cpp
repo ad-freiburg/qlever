@@ -145,7 +145,7 @@ void IndexImpl::buildDocsDB(const string& docsFileName) {
   while (std::getline(docsFile, line)) {
     std::string_view lineView = line;
     size_t tab = lineView.find('\t');
-    uint64_t contextId;
+    uint64_t contextId = 0;
     std::from_chars(lineView.data(), lineView.data() + tab, contextId);
     lineView = lineView.substr(tab + 1);
     ofs << lineView;
