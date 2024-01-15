@@ -17,7 +17,7 @@ static constexpr auto makeJoin = [](auto* qec, auto subtree,
       subtree->getVariableAndInfoByColumnIndex(subtreeColIndex).first;
   auto hasPatternScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{subtreeVar, HAS_PATTERN_PREDICATE, Variable{"?pattern"}});
+      SparqlTriple{subtreeVar, HAS_PATTERN_PREDICATE, Variable{"?patternInternal"}});
   auto joinedSubtree = ad_utility::makeExecutionTree<Join>(
       qec, std::move(subtree), std::move(hasPatternScan), subtreeColIndex, 0);
   auto column = joinedSubtree->getVariableColumns().at(subtreeVar).columnIndex_;
@@ -103,7 +103,7 @@ size_t HasPredicateScan::getResultWidth() const {
     case ScanType::FULL_SCAN:
       return 2;
     case ScanType::SUBQUERY_S:
-      return subtree().getResultWidth() + 1;
+      return subtree().getResultWidth();
   }
   return -1;
 }
@@ -144,7 +144,8 @@ VariableToColumnMap HasPredicateScan::computeVariableToColumnMap() const {
       break;
     case ScanType::SUBQUERY_S:
       varCols = subtree().getVariableColumns();
-      varCols.insert(std::make_pair(V{_object}, col(getResultWidth() - 1)));
+      varCols.insert(std::make_pair(V{_object}, col(subtreeColIdx())));
+      varCols.erase(Variable{"?patternInternal"});
       break;
   }
   return varCols;

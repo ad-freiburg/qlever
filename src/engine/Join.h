@@ -122,8 +122,11 @@ class Join : public Operation {
                 ColumnIndex jc2, IdTable* dynRes);
 
   static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
-    return tree->getType() == QueryExecutionTree::SCAN &&
-           tree->getResultWidth() == 3;
+    if (tree->getType() != QueryExecutionTree::SCAN) {
+      return false;
+    }
+    const auto& scan = dynamic_cast<const IndexScan&>(*tree->getRootOperation());
+    return scan.numVariables() == 3;
   }
 
  protected:
