@@ -1797,7 +1797,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     // adding this to the candidate plans and not returning.
     candidates.push_back(std::move(opt.value()));
   }
-
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
   // subject column we can use a specialized join that avoids

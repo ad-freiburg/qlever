@@ -151,8 +151,6 @@ int main(int argc, char** argv) {
   if (stxxlMemory.has_value()) {
     index.memoryLimitIndexBuilding() = stxxlMemory.value();
   }
-  // TODO<joka921> remove this...
-  // index.stxxlMemory() = 20_MB;
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.

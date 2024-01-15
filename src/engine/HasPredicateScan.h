@@ -96,7 +96,7 @@ class HasPredicateScan : public Operation {
 
   template <int IN_WIDTH, int OUT_WIDTH>
   void computeSubqueryS(IdTable* result, const IdTable& _subtree,
-                        size_t subtreeColIndex, auto&& hasPattern,
+                        size_t subtreeColIndex,
                         const CompactVectorOfStrings<Id>& patterns);
 
  private:

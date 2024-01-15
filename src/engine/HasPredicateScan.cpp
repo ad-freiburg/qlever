@@ -17,7 +17,8 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
                                    std::string objectVariable)
     : Operation{qec},
       _type{ScanType::SUBQUERY_S},
-      _subtree{std::move(subtree)},
+      _subtree{QueryExecutionTree::createSortedTree(std::move(subtree),
+                                                    {subtreeJoinColumn})},
       _subtreeJoinColumn{subtreeJoinColumn},
       _object{std::move(objectVariable)} {}
 
@@ -332,10 +333,11 @@ void HasPredicateScan::computeSubqueryS(
     IdTable* dynResult, const IdTable& dynInput, const size_t subtreeColIndex,
     const CompactVectorOfStrings<Id>& patterns) {
   auto input = dynInput.asStaticView<IN_WIDTH>();
+  const auto& subtreeVar =
+      _subtree->getVariableAndInfoByColumnIndex(subtreeColIndex).first;
   auto hasPatternScan = ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), Permutation::Enum::PSO,
-      SparqlTriple{Variable{"?s"}, HAS_PATTERN_PREDICATE,
-                   Variable{"?pattern"}});
+      SparqlTriple{subtreeVar, HAS_PATTERN_PREDICATE, Variable{"?pattern"}});
 
   // TODO<joka921> Make this a public static method.
   Join j{getExecutionContext(), _subtree, hasPatternScan, subtreeColIndex, 0};
