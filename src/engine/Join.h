@@ -125,7 +125,8 @@ class Join : public Operation {
     if (tree->getType() != QueryExecutionTree::SCAN) {
       return false;
     }
-    const auto& scan = dynamic_cast<const IndexScan&>(*tree->getRootOperation());
+    const auto& scan =
+        dynamic_cast<const IndexScan&>(*tree->getRootOperation());
     return scan.numVariables() == 3;
   }
 

@@ -46,9 +46,7 @@ class IndexScan : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
-  size_t numVariables() const {
-    return numVariables_;
-  }
+  size_t numVariables() const { return numVariables_; }
 
   void setTextLimit(size_t) override {
     // Do nothing.

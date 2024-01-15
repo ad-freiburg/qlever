@@ -17,10 +17,13 @@ static constexpr auto makeJoin = [](auto* qec, auto subtree,
       subtree->getVariableAndInfoByColumnIndex(subtreeColIndex).first;
   auto hasPatternScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{subtreeVar, HAS_PATTERN_PREDICATE, Variable{"?patternInternal"}});
+      SparqlTriple{subtreeVar, HAS_PATTERN_PREDICATE,
+                   Variable{"?patternInternal"}});
   auto joinedSubtree = ad_utility::makeExecutionTree<Join>(
       qec, std::move(subtree), std::move(hasPatternScan), subtreeColIndex, 0);
-  auto column = joinedSubtree->getVariableColumns().at(subtreeVar).columnIndex_;
+  auto column = joinedSubtree->getVariableColumns()
+                    .at(Variable{"?patternInternal"})
+                    .columnIndex_;
   return HasPredicateScan::SubtreeAndColumnIndex{std::move(joinedSubtree),
                                                  column};
 };
