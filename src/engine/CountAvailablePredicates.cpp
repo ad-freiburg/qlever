@@ -5,6 +5,7 @@
 #include "engine/CountAvailablePredicates.h"
 
 #include "engine/CallFixedSize.h"
+#include "engine/IndexScan.h"
 #include "index/IndexImpl.h"
 
 // _____________________________________________________________________________
@@ -117,7 +118,24 @@ ResultTable CountAvailablePredicates::computeResult() {
   const CompactVectorOfStrings<Id>& patterns =
       _executionContext->getIndex().getPatterns();
 
-  if (_subtree == nullptr) {
+  AD_CORRECTNESS_CHECK(_subtree);
+  bool isFullScan = [&]() {
+    auto indexScan =
+        dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
+    if (!indexScan) {
+      return false;
+    }
+    if (!indexScan->getSubject().isVariable() ||
+        !indexScan->getObject().isVariable()) {
+      return false;
+    }
+
+    return indexScan->getPredicate() == HAS_PATTERN_PREDICATE;
+  }();
+
+  if (isFullScan) {
+    _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+        RuntimeInformation::Status::lazilyMaterialized);
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(&idTable,
                                                              patterns);

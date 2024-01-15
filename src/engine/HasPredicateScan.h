@@ -84,27 +84,20 @@ class HasPredicateScan : public Operation {
   }
 
   // These are made static and public mainly for easier testing
-  static void computeFreeS(IdTable* resultTable, Id objectId,
-                           const std::vector<PatternID>& hasPattern,
-                           const CompactVectorOfStrings<Id>& hasPredicate,
+  static void computeFreeS(IdTable* resultTable, Id objectId, auto&& hasPattern,
                            const CompactVectorOfStrings<Id>& patterns);
 
   static void computeFreeO(IdTable* resultTable, Id subjectAsId,
-                           const std::vector<PatternID>& hasPattern,
-                           const CompactVectorOfStrings<Id>& hasPredicate,
+                           auto&& hasPattern,
                            const CompactVectorOfStrings<Id>& patterns);
 
-  static void computeFullScan(IdTable* resultTable,
-                              const std::vector<PatternID>& hasPattern,
-                              const CompactVectorOfStrings<Id>& hasPredicate,
+  static void computeFullScan(IdTable* resultTable, auto&& hasPattern,
                               const CompactVectorOfStrings<Id>& patterns,
                               size_t resultSize);
 
   template <int IN_WIDTH, int OUT_WIDTH>
   static void computeSubqueryS(IdTable* result, const IdTable& _subtree,
-                               size_t subtreeColIndex,
-                               const std::vector<PatternID>& hasPattern,
-                               const CompactVectorOfStrings<Id>& hasPredicate,
+                               size_t subtreeColIndex, auto&& hasPattern,
                                const CompactVectorOfStrings<Id>& patterns);
 
  private:

@@ -18,6 +18,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
+#include "engine/HasPredicateScan.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/Minus.h"
@@ -163,6 +164,8 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     type_ = ORDER_BY;
   } else if constexpr (std::is_same_v<Op, GroupBy>) {
     type_ = GROUP_BY;
+  } else if constexpr (std::is_same_v<Op, HasPredicateScan>) {
+    type_ = HAS_PREDICATE_SCAN;
   } else if constexpr (std::is_same_v<Op, Filter>) {
     type_ = FILTER;
   } else if constexpr (std::is_same_v<Op, NeutralElementOperation>) {
@@ -204,6 +207,8 @@ template void QueryExecutionTree::setOperation(std::shared_ptr<Service>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<TransitivePath>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<OrderBy>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<GroupBy>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<HasPredicateScan>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Filter>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<NeutralElementOperation>);
