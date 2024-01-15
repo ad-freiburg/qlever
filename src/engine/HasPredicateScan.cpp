@@ -11,15 +11,27 @@
 #include "index/IndexImpl.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
+static constexpr auto makeJoin = [](auto* qec, auto subtree,
+                                    auto subtreeColIndex) {
+  const auto& subtreeVar =
+      subtree->getVariableAndInfoByColumnIndex(subtreeColIndex).first;
+  auto hasPatternScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{subtreeVar, HAS_PATTERN_PREDICATE, Variable{"?pattern"}});
+  auto joinedSubtree = ad_utility::makeExecutionTree<Join>(
+      qec, std::move(subtree), std::move(hasPatternScan), subtreeColIndex, 0);
+  auto column = subtree->getVariableColumns().at(subtreeVar).columnIndex_;
+  return HasPredicateScan::SubtreeAndColumnIndex{std::move(joinedSubtree),
+                                                 column};
+};
+
 HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
                                    std::shared_ptr<QueryExecutionTree> subtree,
                                    size_t subtreeJoinColumn,
                                    std::string objectVariable)
     : Operation{qec},
       _type{ScanType::SUBQUERY_S},
-      _subtree{QueryExecutionTree::createSortedTree(std::move(subtree),
-                                                    {subtreeJoinColumn})},
-      _subtreeJoinColumn{subtreeJoinColumn},
+      _subtree{makeJoin(qec, std::move(subtree), subtreeJoinColumn)},
       _object{std::move(objectVariable)} {}
 
 HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
@@ -61,7 +73,7 @@ string HasPredicateScan::getCacheKeyImpl() const {
       os << "HAS_PREDICATE_SCAN for the full relation";
       break;
     case ScanType::SUBQUERY_S:
-      os << "HAS_PREDICATE_SCAN with S = " << _subtree->getCacheKey();
+      os << "HAS_PREDICATE_SCAN with S = " << subtree().getCacheKey();
       break;
   }
   return std::move(os).str();
@@ -91,7 +103,7 @@ size_t HasPredicateScan::getResultWidth() const {
     case ScanType::FULL_SCAN:
       return 2;
     case ScanType::SUBQUERY_S:
-      return _subtree->getResultWidth() + 1;
+      return subtree().getResultWidth() + 1;
   }
   return -1;
 }
@@ -106,7 +118,7 @@ vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
     case ScanType::FULL_SCAN:
       return {0};
     case ScanType::SUBQUERY_S:
-      return _subtree->resultSortedOn();
+      return subtree().resultSortedOn();
   }
   return {};
 }
@@ -131,7 +143,7 @@ VariableToColumnMap HasPredicateScan::computeVariableToColumnMap() const {
       varCols.insert(std::make_pair(V{_object}, col(1)));
       break;
     case ScanType::SUBQUERY_S:
-      varCols = _subtree->getVariableColumns();
+      varCols = subtree().getVariableColumns();
       varCols.insert(std::make_pair(V{_object}, col(getResultWidth() - 1)));
       break;
   }
@@ -140,13 +152,13 @@ VariableToColumnMap HasPredicateScan::computeVariableToColumnMap() const {
 
 void HasPredicateScan::setTextLimit(size_t limit) {
   if (_type == ScanType::SUBQUERY_S) {
-    _subtree->setTextLimit(limit);
+    subtree().setTextLimit(limit);
   }
 }
 
 bool HasPredicateScan::knownEmptyResult() {
   if (_type == ScanType::SUBQUERY_S) {
-    return _subtree->knownEmptyResult();
+    return subtree().knownEmptyResult();
   } else {
     return false;
   }
@@ -173,10 +185,10 @@ float HasPredicateScan::getMultiplicity(size_t col) {
       break;
     case ScanType::SUBQUERY_S:
       if (col < getResultWidth() - 1) {
-        return _subtree->getMultiplicity(col) *
+        return subtree().getMultiplicity(col) *
                getIndex().getAvgNumDistinctSubjectsPerPredicate();
       } else {
-        return _subtree->getMultiplicity(_subtreeJoinColumn) *
+        return subtree().getMultiplicity(subtreeColIdx()) *
                getIndex().getAvgNumDistinctSubjectsPerPredicate();
       }
   }
@@ -194,7 +206,7 @@ uint64_t HasPredicateScan::getSizeEstimateBeforeLimit() {
     case ScanType::FULL_SCAN:
       return getIndex().getNumDistinctSubjectPredicatePairs();
     case ScanType::SUBQUERY_S:
-      return _subtree->getSizeEstimate() *
+      return subtree().getSizeEstimate() *
              getIndex().getAvgNumDistinctPredicatesPerSubject();
   }
   return 0;
@@ -210,7 +222,7 @@ size_t HasPredicateScan::getCostEstimate() {
     case ScanType::FULL_SCAN:
       return getSizeEstimateBeforeLimit();
     case ScanType::SUBQUERY_S:
-      return _subtree->getCostEstimate() + getSizeEstimateBeforeLimit();
+      return subtree().getCostEstimate() + getSizeEstimateBeforeLimit();
   }
   return 0;
 }
@@ -252,22 +264,18 @@ ResultTable HasPredicateScan::computeResult() {
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     case ScanType::SUBQUERY_S:
 
-      std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
       // TODO<joka921> Reinstate call-fixed-size
       /*
       int inWidth = subresult->idTable().numColumns();
       int outWidth = idTable.numColumns();
        */
-      HasPredicateScan::computeSubqueryS<0, 0>(&idTable, subresult->idTable(),
-                                               _subtreeJoinColumn, patterns);
+      return computeSubqueryS<0, 0>(&idTable, patterns);
       /*
       CALL_FIXED_SIZE((std::array{inWidth, outWidth}),
                       HasPredicateScan::computeSubqueryS, &idTable,
                       subresult->idTable(), _subtreeJoinColumn, hasPattern,
                       patterns);
                       */
-      return {std::move(idTable), resultSortedOn(),
-              subresult->getSharedLocalVocab()};
   }
   AD_FAIL();
 }
@@ -329,31 +337,20 @@ void HasPredicateScan::computeFullScan(
 }
 
 template <int IN_WIDTH, int OUT_WIDTH>
-void HasPredicateScan::computeSubqueryS(
-    IdTable* dynResult, const IdTable& dynInput, const size_t subtreeColIndex,
-    const CompactVectorOfStrings<Id>& patterns) {
-  auto input = dynInput.asStaticView<IN_WIDTH>();
-  const auto& subtreeVar =
-      _subtree->getVariableAndInfoByColumnIndex(subtreeColIndex).first;
-  auto hasPatternScan = ad_utility::makeExecutionTree<IndexScan>(
-      getExecutionContext(), Permutation::Enum::PSO,
-      SparqlTriple{subtreeVar, HAS_PATTERN_PREDICATE, Variable{"?pattern"}});
-
-  // TODO<joka921> Make this a public static method.
-  Join j{getExecutionContext(), _subtree, hasPatternScan, subtreeColIndex, 0};
-  auto subresult = j.computeResultForIndexScanAndIdTable<false>(
-      dynInput, subtreeColIndex,
-      dynamic_cast<IndexScan&>(*hasPatternScan->getRootOperation()), 0);
-  auto patternCol = getResultWidth() - 1;
+ResultTable HasPredicateScan::computeSubqueryS(
+    IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns) {
+  auto subresult = subtree().getResult();
+  auto patternCol = subtreeColIdx();
   // TODO<joka921> Make this better.
-  for (const auto& row : subresult) {
+  for (const auto& row : subresult->idTable()) {
     const auto& pattern = patterns[row[patternCol].getInt()];
     for (auto predicate : pattern) {
       dynResult->push_back(row);
       dynResult->back()[patternCol] = predicate;
     }
   }
-  return;
+  return {std::move(*dynResult), resultSortedOn(),
+          subresult->getSharedLocalVocab()};
 }
 
 void HasPredicateScan::setSubject(const TripleComponent& subject) {

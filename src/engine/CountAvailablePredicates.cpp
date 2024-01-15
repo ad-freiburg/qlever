@@ -292,7 +292,9 @@ void CountAvailablePredicates::computePatternTrick(
       if (patternIndex == NO_PATTERN) {
         continue;
       }
-      AD_EXPENSIVE_CHECK(patternIndex < patterns.size());
+      // TODO<joka921> The failure of the following check would crash OpenMP
+      // runs. and doesn't compile currently. Handle this differently.
+      // AD_EXPENSIVE_CHECK(patternIndex < patterns.size());
       const auto& pattern = patterns[patternIndex];
       numPatternPredicates += pattern.size();
       for (const auto& predicate : pattern) {

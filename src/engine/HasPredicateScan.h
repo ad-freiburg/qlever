@@ -26,10 +26,26 @@ class HasPredicateScan : public Operation {
     SUBQUERY_S
   };
 
+  struct SubtreeAndColumnIndex {
+    std::shared_ptr<QueryExecutionTree> _subtree;
+    size_t _subtreeJoinColumn;
+  };
+
  private:
   ScanType _type;
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  size_t _subtreeJoinColumn;
+  std::optional<SubtreeAndColumnIndex> _subtree;
+
+  QueryExecutionTree& subtree() {
+    auto& ptr = _subtree.value()._subtree;
+    AD_CORRECTNESS_CHECK(ptr != nullptr);
+    return *ptr;
+  }
+
+  const QueryExecutionTree& subtree() const {
+    return const_cast<HasPredicateScan&>(*this).subtree();
+  }
+
+  size_t subtreeColIdx() const { return _subtree.value()._subtreeJoinColumn; }
 
   std::string _subject;
   std::string _object;
@@ -77,7 +93,7 @@ class HasPredicateScan : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override {
     if (_subtree) {
-      return {_subtree.get()};
+      return {std::addressof(subtree())};
     } else {
       return {};
     }
@@ -95,9 +111,8 @@ class HasPredicateScan : public Operation {
                               size_t resultSize);
 
   template <int IN_WIDTH, int OUT_WIDTH>
-  void computeSubqueryS(IdTable* result, const IdTable& _subtree,
-                        size_t subtreeColIndex,
-                        const CompactVectorOfStrings<Id>& patterns);
+  ResultTable computeSubqueryS(IdTable* result,
+                               const CompactVectorOfStrings<Id>& patterns);
 
  private:
   ResultTable computeResult() override;
