@@ -21,8 +21,16 @@ Index makeIndexWithTestSettings() {
 
 std::vector<std::string> getAllIndexFilenames(
     const std::string& indexBasename) {
+  auto add = ADDITIONAL_TRIPLES_SUFFIX;
   return {indexBasename + ".ttl",
           indexBasename + ".index.pos",
+          indexBasename + ".index.pos.meta",
+          indexBasename + add + ".index.pos",
+          indexBasename + add + ".index.pos.meta",
+          indexBasename + ".index.pso",
+          indexBasename + ".index.pso.meta",
+          indexBasename + add + ".index.pso",
+          indexBasename + add + ".index.pso.meta",
           indexBasename + ".index.pso",
           indexBasename + ".index.sop",
           indexBasename + ".index.sop.meta",

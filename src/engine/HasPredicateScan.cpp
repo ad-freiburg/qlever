@@ -20,7 +20,7 @@ static constexpr auto makeJoin = [](auto* qec, auto subtree,
       SparqlTriple{subtreeVar, HAS_PATTERN_PREDICATE, Variable{"?pattern"}});
   auto joinedSubtree = ad_utility::makeExecutionTree<Join>(
       qec, std::move(subtree), std::move(hasPatternScan), subtreeColIndex, 0);
-  auto column = subtree->getVariableColumns().at(subtreeVar).columnIndex_;
+  auto column = joinedSubtree->getVariableColumns().at(subtreeVar).columnIndex_;
   return HasPredicateScan::SubtreeAndColumnIndex{std::move(joinedSubtree),
                                                  column};
 };
