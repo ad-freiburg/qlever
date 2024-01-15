@@ -141,16 +141,19 @@ class Join : public Operation {
   // `IndexScan`s that is actually needed without fully materializing them.
   IdTable computeResultForTwoIndexScans();
 
+ public:
   // A special implementation that is called when one of the children is an
   // `IndexScan`. The argument `scanIsLeft` determines whether the `IndexScan`
   // is the left or the right child of this `Join`. This needs to be known to
   // determine the correct order of the columns in the result.
+  using BlockwiseCallback = std::function<void(IdTable&)>;
   template <bool scanIsLeft>
   IdTable computeResultForIndexScanAndIdTable(const IdTable& idTable,
                                               ColumnIndex joinColTable,
                                               IndexScan& scan,
                                               ColumnIndex joinColScan);
 
+ private:
   using ScanMethodType = std::function<IdTable(Id)>;
 
   ScanMethodType getScanMethod(

@@ -87,18 +87,17 @@ class HasPredicateScan : public Operation {
   static void computeFreeS(IdTable* resultTable, Id objectId, auto&& hasPattern,
                            const CompactVectorOfStrings<Id>& patterns);
 
-  static void computeFreeO(IdTable* resultTable, Id subjectAsId,
-                           auto&& hasPattern,
-                           const CompactVectorOfStrings<Id>& patterns);
+  void computeFreeO(IdTable* resultTable, Id subjectAsId,
+                    const CompactVectorOfStrings<Id>& patterns);
 
   static void computeFullScan(IdTable* resultTable, auto&& hasPattern,
                               const CompactVectorOfStrings<Id>& patterns,
                               size_t resultSize);
 
   template <int IN_WIDTH, int OUT_WIDTH>
-  static void computeSubqueryS(IdTable* result, const IdTable& _subtree,
-                               size_t subtreeColIndex, auto&& hasPattern,
-                               const CompactVectorOfStrings<Id>& patterns);
+  void computeSubqueryS(IdTable* result, const IdTable& _subtree,
+                        size_t subtreeColIndex, auto&& hasPattern,
+                        const CompactVectorOfStrings<Id>& patterns);
 
  private:
   ResultTable computeResult() override;

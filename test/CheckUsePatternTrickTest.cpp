@@ -281,13 +281,10 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
   const auto& triples2 = std::get<parsedQuery::BasicGraphPattern>(
                              pq._rootGraphPattern._graphPatterns.at(0))
                              ._triples;
-  ASSERT_EQ(triples2.size(), 2u);
-  const auto& triple = triples2[0];
-  EXPECT_EQ(triple._s.getVariable().name(), "?x");
-  EXPECT_EQ(triple._p.asString(), "<QLever-internal-function/has-pattern>");
-  EXPECT_EQ(triple._o.getVariable().name(), "?p");
-  const auto& triple2 = triples2[1];
+  ASSERT_EQ(triples2.size(), 1u);
+  const auto& triple2 = triples2[0];
   EXPECT_EQ(triple2._s.getVariable().name(), "?x");
   EXPECT_EQ(triple2._p.asString(), "<is-a>");
   EXPECT_EQ(triple2._o.getVariable().name(), "?y");
+  // TODO<joka921> Also test the additional columns that were added.
 }

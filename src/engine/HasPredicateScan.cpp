@@ -4,8 +4,12 @@
 
 #include "engine/HasPredicateScan.h"
 
+#include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
+#include "engine/IndexScan.h"
+#include "engine/Join.h"
 #include "index/IndexImpl.h"
+#include "util/JoinAlgorithms/JoinColumnMapping.h"
 
 HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
                                    std::shared_ptr<QueryExecutionTree> subtree,
@@ -237,7 +241,7 @@ ResultTable HasPredicateScan::computeResult() {
       if (!getIndex().getId(_subject, &subjectId)) {
         AD_THROW("The subject " + _subject + " is not in the vocabulary.");
       }
-      HasPredicateScan::computeFreeO(&idTable, subjectId, hasPattern, patterns);
+      HasPredicateScan::computeFreeO(&idTable, subjectId, patterns);
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     };
     case ScanType::FULL_SCAN:
@@ -248,11 +252,13 @@ ResultTable HasPredicateScan::computeResult() {
     case ScanType::SUBQUERY_S:
 
       std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
+      // TODO<joka921> Reinstate call-fixed-size
+      /*
       int inWidth = subresult->idTable().numColumns();
       int outWidth = idTable.numColumns();
+       */
       HasPredicateScan::computeSubqueryS<0, 0>(&idTable, subresult->idTable(),
-                                               _subtreeJoinColumn, hasPattern,
-                                               patterns);
+                                               _subtreeJoinColumn, patterns);
       /*
       CALL_FIXED_SIZE((std::array{inWidth, outWidth}),
                       HasPredicateScan::computeSubqueryS, &idTable,
@@ -286,32 +292,21 @@ void HasPredicateScan::computeFreeS(
 }
 
 void HasPredicateScan::computeFreeO(
-    IdTable* resultTable, Id subjectAsId, auto&& hasPattern,
+    IdTable* resultTable, Id subjectAsId,
     const CompactVectorOfStrings<Id>& patterns) {
-  AD_FAIL();
-  /*
-  // Subjects always have to be from the vocabulary
-  if (subjectAsId.getDatatype() != Datatype::VocabIndex) {
-    return;
-  }
-  IdTableStatic<1> result = std::move(*resultTable).toStatic<1>();
-
-  auto subjectIndex = subjectAsId.getVocabIndex().get();
-  if (subjectIndex < hasPattern.size() &&
-      hasPattern[subjectIndex] != NO_PATTERN) {
-    // add the pattern
-    const auto& pattern = patterns[hasPattern[subjectIndex]];
+  auto hasPattern = getExecutionContext()
+                        ->getIndex()
+                        .getImpl()
+                        .getPermutation(Permutation::Enum::PSO)
+                        .scan(qlever::specialIds.at(HAS_PATTERN_PREDICATE),
+                              subjectAsId, {}, cancellationHandle_);
+  // TODO<joka921> This is a simple range.
+  for (auto& patternIdx : hasPattern.getColumn(0)) {
+    const auto& pattern = patterns[patternIdx.getInt()];
     for (const auto& predicate : pattern) {
-      result.push_back({predicate});
-    }
-  } else if (subjectIndex < hasPredicate.size()) {
-    // add the relations
-    for (const auto& predicate : hasPredicate[subjectIndex]) {
-      result.push_back({predicate});
+      resultTable->push_back({predicate});
     }
   }
-  *resultTable = std::move(result).toDynamic();
-   */
 }
 
 void HasPredicateScan::computeFullScan(
@@ -335,47 +330,28 @@ void HasPredicateScan::computeFullScan(
 template <int IN_WIDTH, int OUT_WIDTH>
 void HasPredicateScan::computeSubqueryS(
     IdTable* dynResult, const IdTable& dynInput, const size_t subtreeColIndex,
-    auto&& hasPattern, const CompactVectorOfStrings<Id>& patterns) {
-  AD_FAIL();
-  /*
-  IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
-  const IdTableView<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
+    const CompactVectorOfStrings<Id>& patterns) {
+  auto input = dynInput.asStaticView<IN_WIDTH>();
+  auto hasPatternScan = ad_utility::makeExecutionTree<IndexScan>(
+      getExecutionContext(), Permutation::Enum::PSO,
+      SparqlTriple{Variable{"?s"}, HAS_PATTERN_PREDICATE,
+                   Variable{"?pattern"}});
 
-  LOG(DEBUG) << "HasPredicateScan subresult size " << input.size() << std::endl;
-
-  for (size_t i = 0; i < input.size(); i++) {
-    Id subjectAsId = input(i, subtreeColIndex);
-    if (subjectAsId.getDatatype() != Datatype::VocabIndex) {
-      continue;
-    }
-    auto subjectIndex = subjectAsId.getVocabIndex().get();
-    if (subjectIndex < hasPattern.size() &&
-        hasPattern[subjectIndex] != NO_PATTERN) {
-      // Expand the pattern and add it to the result
-      for (const auto& predicate : patterns[hasPattern[subjectIndex]]) {
-        result.emplace_back();
-        size_t backIdx = result.size() - 1;
-        for (size_t k = 0; k < input.numColumns(); k++) {
-          result(backIdx, k) = input(i, k);
-        }
-        result(backIdx, input.numColumns()) = predicate;
-      }
-    } else if (subjectIndex < hasPredicate.size()) {
-      // add the relations
-      for (const auto& predicate : hasPredicate[subjectIndex]) {
-        result.emplace_back();
-        size_t backIdx = result.size() - 1;
-        for (size_t k = 0; k < input.numColumns(); k++) {
-          result(backIdx, k) = input(i, k);
-        }
-        result(backIdx, input.numColumns()) = predicate;
-      }
-    } else {
-      break;
+  // TODO<joka921> Make this a public static method.
+  Join j{getExecutionContext(), _subtree, hasPatternScan, subtreeColIndex, 0};
+  auto subresult = j.computeResultForIndexScanAndIdTable<false>(
+      dynInput, subtreeColIndex,
+      dynamic_cast<IndexScan&>(*hasPatternScan->getRootOperation()), 0);
+  auto patternCol = getResultWidth() - 1;
+  // TODO<joka921> Make this better.
+  for (const auto& row : subresult) {
+    const auto& pattern = patterns[row[patternCol].getInt()];
+    for (auto predicate : pattern) {
+      dynResult->push_back(row);
+      dynResult->back()[patternCol] = predicate;
     }
   }
-  *dynResult = std::move(result).toDynamic();
-   */
+  return;
 }
 
 void HasPredicateScan::setSubject(const TripleComponent& subject) {
