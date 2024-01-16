@@ -192,8 +192,8 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
     auto isQleverInternalId) {
   auto&& [hasPatternPredicateSortedByPSO, secondSorter] =
       sortersFromPatternCreator;
-  // We need the patterns twice: once for the additional column, and once for the
-  // additional permutation.
+  // We need the patterns twice: once for the additional column, and once for
+  // the additional permutation.
   hasPatternPredicateSortedByPSO->moveResultOnMerge() = false;
   // The column with index 1 always is `has-predicate` and is not needed here.
   // Note that the order of the columns during index building  is alwasy `SPO`,
@@ -778,7 +778,8 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
     }
   }
 
-  [[maybe_unused]] const auto hasAdditionalTriples = [usePatterns = usePatterns_]{
+  [[maybe_unused]] const auto hasAdditionalTriples = [usePatterns =
+                                                          usePatterns_] {
     using enum Permutation::HasAdditionalTriples;
     return usePatterns ? True : False;
   }();
@@ -1647,7 +1648,8 @@ std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
 // _____________________________________________________________________________
 void IndexImpl::makeIndexFromAdditionalTriples(
     ExternalSorter<SortByPSO>&& additionalTriples) {
-  // Manually change the basename and readable names for the additional permutations.
+  // Manually change the basename and readable names for the additional
+  // permutations.
   auto onDiskBaseCpy = onDiskBase_;
   onDiskBase_ += ADDITIONAL_TRIPLES_SUFFIX;
   auto posName =

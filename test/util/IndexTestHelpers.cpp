@@ -5,6 +5,7 @@
 #include "../IndexTestHelpers.h"
 
 #include "./GTestHelpers.h"
+#include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
 
 namespace ad_utility::testing {
@@ -70,6 +71,16 @@ void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
         auto scanResult = index.scan(col0Id, std::nullopt, permutation,
                                      std::array{ColumnIndex{2}, ColumnIndex{3}},
                                      cancellationDummy);
+        auto hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
+        auto scanResult2 =
+            index.scan(hasPatternId, col0Id, Permutation::Enum::PSO, {},
+                       cancellationDummy);
+        AD_CORRECTNESS_CHECK(scanResult2.numRows() <= 1);
+        if (scanResult2.numRows() == 0) {
+          checkSingleElement(index, NO_PATTERN, col0Id);
+        } else {
+          checkSingleElement(index, scanResult2(0, 0).getInt(), col0Id);
+        }
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
           auto patternIdx = row[2].getInt();
@@ -154,14 +165,16 @@ Index makeTestIndex(const std::string& indexBasename,
     EXPECT_EQ(index.usePatterns(), usePatterns);
   }
   {
-    // The SPO permutation currently never has any additional triples, so the following should always fail.
-      Permutation permutation{Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>()};
-      [&]() {
-        AD_EXPECT_THROW_WITH_MESSAGE(
-            permutation.loadFromDisk(indexBasename,
-                                     Permutation::HasAdditionalTriples::True),
-            ::testing::ContainsRegex("Could not open file"));
-      }();
+    // The SPO permutation currently never has any additional triples, so the
+    // following should always fail.
+    Permutation permutation{Permutation::Enum::SPO,
+                            ad_utility::makeUnlimitedAllocator<Id>()};
+    [&]() {
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          permutation.loadFromDisk(indexBasename,
+                                   Permutation::HasAdditionalTriples::True),
+          ::testing::ContainsRegex("Could not open file"));
+    }();
   }
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.usePatterns() = usePatterns;

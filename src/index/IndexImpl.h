@@ -175,10 +175,8 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  Permutation pos_{Permutation::Enum::POS, allocator_
-                   };
-  Permutation pso_{Permutation::Enum::PSO, allocator_
-                   };
+  Permutation pos_{Permutation::Enum::POS, allocator_};
+  Permutation pso_{Permutation::Enum::PSO, allocator_};
   Permutation sop_{Permutation::Enum::SOP, allocator_};
   Permutation spo_{Permutation::Enum::SPO, allocator_};
   Permutation ops_{Permutation::Enum::OPS, allocator_};
