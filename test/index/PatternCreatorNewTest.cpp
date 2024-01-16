@@ -56,7 +56,7 @@ TEST(PatternStatisticsNew, Serialization) {
 }
 
 // Create patterns from a small SPO-sorted sequence of triples.
-void createExamplePatterns(PatternCreatorNew& creator) {
+auto createExamplePatterns(PatternCreatorNew& creator) {
   using A = std::array<Id, 4>;
   std::vector<A> expected;
 
@@ -93,14 +93,16 @@ void createExamplePatterns(PatternCreatorNew& creator) {
   push({V(3), V(11), V(45)}, false, 0);
 
   std::ranges::sort(expected, SortByOSP{});
-  auto triples = std::move(creator).getAllTriplesWithPatternSortedByOSP();
+  auto tripleOutputs = std::move(creator).getTripleSorter();
+  auto& triples = *tripleOutputs.triplesWithSubjectPatternsSortedByOsp_;
   std::vector<std::array<Id, 4>> actual;
-  for (auto& block : triples->getSortedBlocks<4>()) {
+  for (auto& block : triples.getSortedBlocks<4>()) {
     for (const auto& row : block) {
       actual.push_back(static_cast<std::array<Id, 4>>(row));
     }
   }
   EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));
+  return std::move(tripleOutputs.hasPatternPredicateSortedByPSO_);
 }
 
 // Assert that the contents of patterns read from `filename` match the triples
@@ -150,41 +152,10 @@ void assertPatternContents(const std::string& filename,
 TEST(PatternCreatorNew, writeAndReadWithFinish) {
   std::string filename = "patternCreator.test.tmp";
   PatternCreatorNew creator{filename, memForStxxl};
-  createExamplePatterns(creator);
+  auto hashPatternAsPSOPtr = createExamplePatterns(creator);
   creator.finish();
 
-  assertPatternContents(
-      filename,
-      getVectorFromSorter(std::move(creator).getHasPatternSortedByPSO()));
-  ad_utility::deleteFile(filename);
-}
-
-TEST(PatternCreatorNew, writeAndReadWithDestructor) {
-  std::string filename = "patternCreator.test.tmp";
-  TripleVec triples;
-  {
-    PatternCreatorNew creator{filename, memForStxxl};
-    createExamplePatterns(creator);
-    // the extraction of the sorter automatically calls `finish`.
-    triples =
-        getVectorFromSorter(std::move(creator).getHasPatternSortedByPSO());
-  }
-
-  assertPatternContents(filename, triples);
-  ad_utility::deleteFile(filename);
-}
-
-TEST(PatternCreatorNew, writeAndReadWithDestructorAndFinish) {
-  std::string filename = "patternCreator.test.tmp";
-  TripleVec triples;
-  {
-    PatternCreatorNew creator{filename, memForStxxl};
-    createExamplePatterns(creator);
-    creator.finish();
-    triples =
-        getVectorFromSorter(std::move(creator).getHasPatternSortedByPSO());
-  }
-
-  assertPatternContents(filename, triples);
+  assertPatternContents(filename,
+                        getVectorFromSorter(std::move(*hashPatternAsPSOPtr)));
   ad_utility::deleteFile(filename);
 }

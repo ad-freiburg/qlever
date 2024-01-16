@@ -165,3 +165,25 @@ TEST(Views, integerRange) {
   std::ranges::copy(ad_utility::integerRange(42u), std::back_inserter(actual));
   ASSERT_THAT(actual, ::testing::ElementsAreArray(expected));
 }
+
+// __________________________________________________________________________
+TEST(Views, inPlaceTransform) {
+  std::vector v{0, 1, 2, 3, 4, 5};
+  auto twice = [](int& i) { i *= 2; };
+  auto transformed = ad_utility::inPlaceTransformView(v, twice);
+  std::vector<int> res1;
+  std::vector<int> res2;
+  std::vector<int> res3;
+  for (auto it = transformed.begin(); it != transformed.end(); ++it) {
+    res1.push_back(*it);
+    res2.push_back(*it);
+    res3.push_back(*it);
+  }
+
+  EXPECT_THAT(res1, ::testing::ElementsAre(0, 2, 4, 6, 8, 10));
+  // The original range was also modified.
+  EXPECT_THAT(v, ::testing::ElementsAre(0, 2, 4, 6, 8, 10));
+
+  EXPECT_THAT(res2, ::testing::ElementsAreArray(res1));
+  EXPECT_THAT(res3, ::testing::ElementsAreArray(res1));
+}
