@@ -8,50 +8,43 @@
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
-Permutation::Permutation(Enum permutation, Allocator allocator,
-                         HasAdditionalTriples hasAdditionalTriples)
+Permutation::Permutation(Enum permutation, Allocator allocator)
     : readableName_(toString(permutation)),
       fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
       keyOrder_(toKeyOrder(permutation)),
-      allocator_{std::move(allocator)} {
-  if (hasAdditionalTriples == HasAdditionalTriples::True) {
-    additionalPermutation_ = std::make_unique<Permutation>(
-        permutation, std::move(allocator), HasAdditionalTriples::False);
-  }
-}
+      allocator_{std::move(allocator)},
+      permutation_{permutation} {}
 
 // _____________________________________________________________________
 void Permutation::loadFromDisk(const std::string& onDiskBase,
-                               bool onlyLoadAdditional,
-                               bool dontLoadAdditional) {
-  if (!onlyLoadAdditional) {
-    if constexpr (MetaData::_isMmapBased) {
-      meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
-                  ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-    }
-    auto filename = string(onDiskBase + ".index" + fileSuffix_);
-    ad_utility::File file;
-    try {
-      file.open(filename, "r");
-    } catch (const std::runtime_error& e) {
-      AD_THROW(
-          "Could not open the index file " + filename +
-          " for reading. Please check that you have read access to "
-          "this file. If it does not exist, your index is broken. The error "
-          "message was: " +
-          e.what());
-    }
-    meta_.readFromFile(&file);
-    reader_.emplace(allocator_, std::move(file));
-    LOG(INFO) << "Registered " << readableName_
-              << " permutation: " << meta_.statistics() << std::endl;
-    isLoaded_ = true;
+                               HasAdditionalTriples loadAdditionalTriples) {
+  if constexpr (MetaData::_isMmapBased) {
+    meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
+                ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
   }
-  if (additionalPermutation_ && !dontLoadAdditional) {
-    additionalPermutation_->loadFromDisk(onDiskBase + ADDITIONAL_TRIPLES_SUFFIX,
-                                         false);
-  } else {
-    additionalPermutation_ = nullptr;
+  auto filename = string(onDiskBase + ".index" + fileSuffix_);
+  ad_utility::File file;
+  try {
+    file.open(filename, "r");
+  } catch (const std::runtime_error& e) {
+    AD_THROW("Could not open the index file " + filename +
+             " for reading. Please check that you have read access to "
+             "this file. If it does not exist, your index is broken. The error "
+             "message was: " +
+             e.what());
+  }
+  meta_.readFromFile(&file);
+  reader_.emplace(allocator_, std::move(file));
+  LOG(INFO) << "Registered " << readableName_
+            << " permutation: " << meta_.statistics() << std::endl;
+  isLoaded_ = true;
+  if (loadAdditionalTriples == HasAdditionalTriples::True) {
+    additionalPermutation_ =
+        std::make_unique<Permutation>(permutation_, allocator_);
+    additionalPermutation_->readableName_ =
+        "Additional " + additionalPermutation_->readableName_;
+    additionalPermutation_->loadFromDisk(onDiskBase +
+                                         ADDITIONAL_TRIPLES_SUFFIX);
   }
 }
 

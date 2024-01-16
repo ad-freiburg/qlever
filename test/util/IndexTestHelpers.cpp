@@ -153,6 +153,16 @@ Index makeTestIndex(const std::string& indexBasename,
     EXPECT_EQ(index.loadAllPermutations(), loadAllPermutations);
     EXPECT_EQ(index.usePatterns(), usePatterns);
   }
+  {
+    // The SPO permutation currently never has any additional triples, so the following should always fail.
+      Permutation permutation{Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>()};
+      [&]() {
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            permutation.loadFromDisk(indexBasename,
+                                     Permutation::HasAdditionalTriples::True),
+            ::testing::ContainsRegex("Could not open file"));
+      }();
+  }
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.usePatterns() = usePatterns;
   index.loadAllPermutations() = loadAllPermutations;

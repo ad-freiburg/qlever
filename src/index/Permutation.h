@@ -53,14 +53,11 @@ class Permutation {
   // `<onDiskBase><ADDITIONAL_TRIPLES_PREFIX>.xxx` where `onDiskBase` is the
   // argument to `loadFromDisk` below, and `ADDITIONAL_TRIPLES_PREFIX` is a
   // constant from `Constants.h`.
-  explicit Permutation(Enum permutation, Allocator allocator,
-                       HasAdditionalTriples hasAdditionalTriples);
+  explicit Permutation(Enum permutation, Allocator allocator);
 
-  // everything that has to be done when reading an index from disk
-  // TODO<joka921> Why do we need the second argument.
+  // Everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase,
-                    bool onlyLoadAdditional = false,
-                    bool dontLoadAdditional = false);
+                    HasAdditionalTriples loadAdditionalTriples = HasAdditionalTriples::False);
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
@@ -111,7 +108,7 @@ class Permutation {
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
   // for Log output, e.g. "POS"
-  const std::string readableName_;
+  std::string readableName_;
   // e.g. ".pos"
   const std::string fileSuffix_;
   // order of the 3 keys S(0), P(1), and O(2) for which this permutation is
@@ -129,6 +126,7 @@ class Permutation {
   Allocator allocator_;
 
   bool isLoaded_ = false;
+  Enum permutation_;
 
   std::unique_ptr<Permutation> additionalPermutation_;
 };
