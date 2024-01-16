@@ -63,7 +63,20 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/google/googletest.git
         GIT_TAG        f8d7d77c06936315286eb55f8de22cd23c188571 # release-1.14.0
 )
-FetchContent_MakeAvailable(googletest)
+
+################################
+# NLOHMANN JSON #
+FetchContent_Declare(
+        nlohmann-json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03 # release-3.11.3
+)
+FetchContent_GetProperties(nlohmann-json)
+if (NOT nlohmannJson_POPULATED)
+    FetchContent_Populate(nlohmann-json)
+    include_directories(SYSTEM ${nlohmann-json_SOURCE_DIR}/single_include)
+endif()
+
 
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
