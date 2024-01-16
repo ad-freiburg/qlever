@@ -73,10 +73,13 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
         GIT_TAG        9239e6ff444420516b44b7621e8dc7691fcf0e16
 )
+
+# From ANTLR we actually don't want the toplevel directory (which doesn't
+# have a proper `CMakeLists.txt` anyway), but only the C++ runtime which
+# resides in a subdirectory. We additionally need to suppress some warnings
+# only for ANTLR. We therefore have to perform the initialization for
+# ANTLR using `FetchContent` manually.
 FetchContent_GetProperties(antlr)
-# From ANTLR we actually don't want the toplevel directory (which doesn't have a proper `CMakeLists.txt` anyway),
-# but only the C++ runtime which resides in a subdirectory. We additionally need to suppress some warnings only for
-# ANTLR. We therefore have to perform the initialization for ANTLR using `FetchContent` manually.
 if (NOT antlr_POPULATED)
     FetchContent_Populate(antlr)
     set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
