@@ -266,7 +266,7 @@ set(STXXL_CXX_FLAGS "${STXXL_CXX_FLAGS} -Wno-deprecated-declarations")
 FetchContent_Declare(
         stxxl
         GIT_REPOSITORY https://github.com/ad-freiburg/stxxl.git
-        GIT_TAG 4d39edb272f10239c4302f89e448331cb8a57edb
+        GIT_TAG 1ce7ff62e8896ee3673c7302bb537971b5d33f12
 )
 
 ################################
