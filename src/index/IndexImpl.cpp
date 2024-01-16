@@ -259,6 +259,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
   createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
                               std::move(blockGenerator), *thirdSorter);
+  makeIndexFromAdditionalTriples(std::move(*hasPatternPredicateSortedByPSO));
   return thirdSorter;
 }
 // _____________________________________________________________________________
@@ -754,20 +755,9 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   totalVocabularySize_ = vocab_.size() + vocab_.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
-  pso_.loadFromDisk(onDiskBase_);
-  pos_.loadFromDisk(onDiskBase_);
 
-  if (loadAllPermutations_) {
-    ops_.loadFromDisk(onDiskBase_);
-    osp_.loadFromDisk(onDiskBase_);
-    spo_.loadFromDisk(onDiskBase_);
-    sop_.loadFromDisk(onDiskBase_);
-  } else {
-    LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
-                 "with predicate variables will therefore not work"
-              << std::endl;
-  }
-
+  // We have to load the patterns first to figure out if the patterns were built
+  // at all.
   if (usePatterns_) {
     try {
       PatternCreator::readPatternsFromFile(
@@ -783,6 +773,19 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
                 << e.what() << std::endl;
       usePatterns_ = false;
     }
+  }
+  pso_.loadFromDisk(onDiskBase_, false, !usePatterns());
+  pos_.loadFromDisk(onDiskBase_, false, !usePatterns());
+
+  if (loadAllPermutations_) {
+    ops_.loadFromDisk(onDiskBase_);
+    osp_.loadFromDisk(onDiskBase_);
+    spo_.loadFromDisk(onDiskBase_);
+    sop_.loadFromDisk(onDiskBase_);
+  } else {
+    LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
+                 "with predicate variables will therefore not work"
+              << std::endl;
   }
 }
 
@@ -1369,11 +1372,7 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(Id id, Permutation::Enum permutation) const {
-  if (const auto& p = getPermutation(permutation);
-      p.metaData().col0IdExists(id)) {
-    return p.metaData().getMetaData(id).getNofElements();
-  }
-  return 0;
+  return getPermutation(permutation).getResultSizeOfScan(id);
 }
 
 // ___________________________________________________________________________
@@ -1634,4 +1633,14 @@ template <typename Comparator, size_t I>
 std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
     std::string_view permutationName) const {
   return makeSorterImpl<Comparator, I, true>(permutationName);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::makeIndexFromAdditionalTriples(
+    ExternalSorter<SortByPSO>&& additionalTriples) {
+  auto onDiskBaseCpy = onDiskBase_;
+  onDiskBase_ += ADDITIONAL_TRIPLES_SUFFIX;
+  createPermutationPair(3, std::move(additionalTriples).getSortedBlocks<0>(),
+                        pso_, pos_);
+  onDiskBase_ = onDiskBaseCpy;
 }

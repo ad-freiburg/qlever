@@ -8,34 +8,51 @@
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
-Permutation::Permutation(Enum permutation, Allocator allocator)
+Permutation::Permutation(Enum permutation, Allocator allocator,
+                         HasAdditionalTriples hasAdditionalTriples)
     : readableName_(toString(permutation)),
       fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
       keyOrder_(toKeyOrder(permutation)),
-      allocator_{std::move(allocator)} {}
+      allocator_{std::move(allocator)} {
+  if (hasAdditionalTriples == HasAdditionalTriples::True) {
+    additionalPermutation_ = std::make_unique<Permutation>(
+        permutation, std::move(allocator), HasAdditionalTriples::False);
+  }
+}
 
 // _____________________________________________________________________
-void Permutation::loadFromDisk(const std::string& onDiskBase) {
-  if constexpr (MetaData::_isMmapBased) {
-    meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
-                ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
+void Permutation::loadFromDisk(const std::string& onDiskBase,
+                               bool onlyLoadAdditional,
+                               bool dontLoadAdditional) {
+  if (!onlyLoadAdditional) {
+    if constexpr (MetaData::_isMmapBased) {
+      meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
+                  ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
+    }
+    auto filename = string(onDiskBase + ".index" + fileSuffix_);
+    ad_utility::File file;
+    try {
+      file.open(filename, "r");
+    } catch (const std::runtime_error& e) {
+      AD_THROW(
+          "Could not open the index file " + filename +
+          " for reading. Please check that you have read access to "
+          "this file. If it does not exist, your index is broken. The error "
+          "message was: " +
+          e.what());
+    }
+    meta_.readFromFile(&file);
+    reader_.emplace(allocator_, std::move(file));
+    LOG(INFO) << "Registered " << readableName_
+              << " permutation: " << meta_.statistics() << std::endl;
+    isLoaded_ = true;
   }
-  auto filename = string(onDiskBase + ".index" + fileSuffix_);
-  ad_utility::File file;
-  try {
-    file.open(filename, "r");
-  } catch (const std::runtime_error& e) {
-    AD_THROW("Could not open the index file " + filename +
-             " for reading. Please check that you have read access to "
-             "this file. If it does not exist, your index is broken. The error "
-             "message was: " +
-             e.what());
+  if (additionalPermutation_ && !dontLoadAdditional) {
+    additionalPermutation_->loadFromDisk(onDiskBase + ADDITIONAL_TRIPLES_SUFFIX,
+                                         false);
+  } else {
+    additionalPermutation_ = nullptr;
   }
-  meta_.readFromFile(&file);
-  reader_.emplace(allocator_, std::move(file));
-  LOG(INFO) << "Registered " << readableName_
-            << " permutation: " << meta_.statistics() << std::endl;
-  isLoaded_ = true;
 }
 
 // _____________________________________________________________________
@@ -48,6 +65,10 @@ IdTable Permutation::scan(
   }
 
   if (!meta_.col0IdExists(col0Id)) {
+    if (additionalPermutation_) {
+      return additionalPermutation_->scan(col0Id, col1Id, additionalColumns,
+                                          std::move(cancellationHandle));
+    }
     size_t numColumns = col1Id.has_value() ? 1 : 2;
     return IdTable{numColumns, reader().allocator()};
   }
@@ -58,13 +79,23 @@ IdTable Permutation::scan(
 }
 
 // _____________________________________________________________________
-size_t Permutation::getResultSizeOfScan(Id col0Id, Id col1Id) const {
+size_t Permutation::getResultSizeOfScan(Id col0Id,
+                                        std::optional<Id> col1Id) const {
   if (!meta_.col0IdExists(col0Id)) {
+    if (additionalPermutation_) {
+      return additionalPermutation_->getResultSizeOfScan(col0Id, col1Id);
+    }
     return 0;
   }
   const auto& metaData = meta_.getMetaData(col0Id);
 
-  return reader().getResultSizeOfScan(metaData, col1Id, meta_.blockData());
+  // TODO<joka921> should be handled inside the CompressedRelationReader.
+  if (!col1Id.has_value()) {
+    return metaData.getNofElements();
+  }
+
+  return reader().getResultSizeOfScan(metaData, col1Id.value(),
+                                      meta_.blockData());
 }
 
 // _____________________________________________________________________
@@ -111,6 +142,9 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     Id col0Id, std::optional<Id> col1Id) const {
   if (!meta_.col0IdExists(col0Id)) {
+    if (additionalPermutation_) {
+      return additionalPermutation_->getMetadataAndBlocks(col0Id, col1Id);
+    }
     return std::nullopt;
   }
 
@@ -132,6 +166,11 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     ColumnIndicesRef additionalColumns,
     ad_utility::SharedCancellationHandle cancellationHandle) const {
   if (!meta_.col0IdExists(col0Id)) {
+    if (additionalPermutation_) {
+      return additionalPermutation_->lazyScan(col0Id, col1Id, std::move(blocks),
+                                              additionalColumns,
+                                              std::move(cancellationHandle));
+    }
     return {};
   }
   auto relationMetadata = meta_.getMetaData(col0Id);

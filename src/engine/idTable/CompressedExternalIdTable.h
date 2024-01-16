@@ -332,6 +332,8 @@ class CompressedExternalIdTableBase {
     this->currentBlock_.reserve(blocksize_);
     AD_CONTRACT_CHECK(NumStaticCols == 0 || NumStaticCols == numCols);
   }
+  // TODO<joka921> Shouldn't be public.
+  std::atomic<bool> isFirstMerge = true;
   // Add a single row to the input. The type of `row` needs to be something that
   // can be `push_back`ed to a `IdTable`.
   void push(const auto& row) requires requires { currentBlock_.push_back(row); }
@@ -364,6 +366,7 @@ class CompressedExternalIdTableBase {
     }
     writer_.clear();
     numBlocksPushed_ = 0;
+    isFirstMerge = true;
   }
 
  protected:
@@ -401,6 +404,9 @@ class CompressedExternalIdTableBase {
   // until the pushing is actually finished, and return `true`. Using this
   // function allows for an efficient usage of this class for very small inputs.
   bool transformAndPushLastBlock() {
+    if (!isFirstMerge) {
+      return numBlocksPushed_ != 0;
+    }
     // If we have pushed at least one (complete) block, then the last future
     // from pushing a block is still in flight. If we have never pushed a block,
     // then also the future cannot be valid.
@@ -604,6 +610,7 @@ class CompressedExternalIdTableSorter
              std::max(1, numBufferedOutputBlocks_ - 2))) {
       co_yield block;
     }
+    this->isFirstMerge = false;
     mergeIsActive_.store(false);
   }
 
@@ -634,10 +641,16 @@ class CompressedExternalIdTableSorter
       // There was only one block, return it. If a blocksize was explicitly
       // requested for the output, and the single block is larger than this
       // blocksize, we manually have to split it into chunks.
-      auto& block = this->currentBlock_;
+      // TODO<joka921> doesn't need to be const...
+      const auto& block = this->currentBlock_;
       const auto blocksizeOutput = blocksize.value_or(block.numRows());
       if (block.numRows() <= blocksizeOutput) {
-        co_yield std::move(this->currentBlock_).template toStatic<N>();
+        // TODO<joka921> We don't need the copy if we only want to iterate once,
+        // make this configurable.
+        auto blockAsStatic = IdTableStatic<N>(
+            this->currentBlock_.clone().template toStatic<N>());
+        co_yield blockAsStatic;
+        // co_yield std::move(this->currentBlock_).template toStatic<N>();
       } else {
         for (size_t i = 0; i < block.numRows(); i += blocksizeOutput) {
           size_t upper = std::min(i + blocksizeOutput, block.numRows());
