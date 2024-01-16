@@ -7,6 +7,12 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    # will not take effect without FORCE
+    set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "Install top-level directory" FORCE)
+endif()
+
+
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -207,7 +213,6 @@ FetchContent_Declare(
 ################################
 # ABSEIL
 ################################
-
 set(ABSL_ENABLE_INSTALL ON)
 set(ABSL_USE_SYSTEM_INCLUDES ON)
 set(ABSL_PROPAGATE_CXX_STD ON)
