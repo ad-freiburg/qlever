@@ -130,6 +130,7 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(
                    !isVariable(t._p);
           });
       if (matchingTripSubject != triples.end()) {
+        // TODO<joka921> those are magic constants, store them somewhere.
         matchingTripSubject->_additionalScanColumns.emplace_back(
             2, subAndPred.predicate_);
         return patternTrickTuple;

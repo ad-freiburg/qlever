@@ -124,7 +124,7 @@ class IdTable {
   static constexpr bool columnsAreAllocatable =
       std::is_constructible_v<ColumnStorage, size_t, Allocator>;
 
-  using value_type = T;
+  using single_value_type = T;
   // Because of the column-major layout, the `row_type` (a value type that
   // stores the values of a  single row) and the `row_reference` (a type that
   // refers to a specific row of a specific `IdTable`) are different. They are
@@ -134,6 +134,7 @@ class IdTable {
   using row_type = Row<T, NumColumns>;
   using row_reference = RowReference<IdTable, ad_utility::IsConst::False>;
   using const_row_reference = RowReference<IdTable, ad_utility::IsConst::True>;
+  using value_type = row_type;
 
  private:
   // Assign shorter aliases for some types that are important for the correct
@@ -739,7 +740,6 @@ class IdTable : public IdTableStatic<0> {
   using Base = IdTableStatic<0>;
   // Inherit the constructors.
   using Base::Base;
-
   IdTable(Base&& b) : Base(std::move(b)) {}
 };
 

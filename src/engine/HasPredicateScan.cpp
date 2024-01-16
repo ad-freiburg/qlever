@@ -288,6 +288,7 @@ void HasPredicateScan::computeFreeS(
     IdTable* resultTable, Id objectId, auto&& hasPattern,
     const CompactVectorOfStrings<Id>& patterns) {
   IdTableStatic<1> result = std::move(*resultTable).toStatic<1>();
+  // TODO<joka921> This can be a much simpler and cheaper implementation.
   for (const auto& block : hasPattern) {
     auto patternColumn = block.getColumn(1);
     auto subjects = block.getColumn(0);
@@ -296,8 +297,8 @@ void HasPredicateScan::computeFreeS(
       for (const auto& predicate : pattern) {
         if (predicate == objectId) {
           result.push_back({subjects[i]});
+          break;
         }
-        break;
       }
     }
   }

@@ -127,7 +127,7 @@ class RowReferenceImpl {
    public:
     static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
     using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
-    using T = typename Table::value_type;
+    using T = typename Table::single_value_type;
     static constexpr int numStaticColumns = Table::numStaticColumns;
 
     // Grant the `IdTable` class access to the internal details.

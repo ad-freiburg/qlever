@@ -15,21 +15,6 @@ using ad_utility::source_location;
 using namespace ad_utility::memory_literals;
 
 namespace {
-// Implementation of a class that inherits from `IdTable` but is copyable
-// (convenient for testing).
-template <size_t N = 0>
-using TableImpl = std::conditional_t<N == 0, IdTable, IdTableStatic<N>>;
-template <size_t N = 0>
-class CopyableIdTable : public TableImpl<N> {
- public:
-  using Base = TableImpl<N>;
-  using Base::Base;
-  CopyableIdTable(const CopyableIdTable& rhs) : Base{rhs.clone()} {}
-  CopyableIdTable& operator=(const CopyableIdTable& rhs) {
-    static_cast<Base&>(*this) = rhs.clone();
-    return *this;
-  }
-};
 
 // From a `generator` that yields  `IdTable`s, create a single `IdTable` that is
 // the concatenation of all the yielded tables.
