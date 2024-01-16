@@ -29,26 +29,26 @@ namespace ad_utility {
 //! to the lack of buffering.
 //! Many methods are copies from the CompleteSearch File.h
 class File {
+ private:
   using string = std::string;
 
- private:
-  string _name;
-  FILE* _file;
+  string name_;
+  FILE* file_;
 
  public:
   //! Default constructor
   File() {
-    _file = NULL;
-    _name = "";
+    file_ = NULL;
+    name_ = "";
   }
 
   //! Constructor that creates an instance from the
   //! file system.
-  File(const char* filename, const char* mode) : _name(filename) {
+  File(const char* filename, const char* mode) : name_(filename) {
     open(filename, mode);
   }
 
-  File(const string& filename, const char* mode) : _name(filename) {
+  File(const string& filename, const char* mode) : name_(filename) {
     open(filename, mode);
   }
 
@@ -57,14 +57,14 @@ class File {
       close();
     }
 
-    _file = rhs._file;
-    rhs._file = nullptr;
-    _name = std::move(rhs._name);
+    file_ = rhs.file_;
+    rhs.file_ = nullptr;
+    name_ = std::move(rhs.name_);
     return *this;
   }
 
-  File(File&& rhs) : _name{std::move(rhs._name)}, _file{rhs._file} {
-    rhs._file = nullptr;
+  File(File&& rhs) : name_{std::move(rhs.name_)}, file_{rhs.file_} {
+    rhs.file_ = nullptr;
   }
 
   //! Destructor closes file if still open
@@ -74,14 +74,14 @@ class File {
 
   //! OPEN FILE (exit with error if fails, returns true otherwise)
   bool open(const char* filename, const char* mode) {
-    _file = fopen(filename, mode);
-    if (_file == NULL) {
+    file_ = fopen(filename, mode);
+    if (file_ == NULL) {
       std::stringstream err;
       err << "! ERROR opening file \"" << filename << "\" with mode \"" << mode
           << "\" (" << strerror(errno) << ")" << std::endl;
       throw std::runtime_error(std::move(err).str());
     }
-    _name = filename;
+    name_ = filename;
     return true;
   }
 
@@ -91,19 +91,19 @@ class File {
   }
 
   //! checks if the file is open.
-  [[nodiscard]] bool isOpen() const { return (_file != NULL); }
+  [[nodiscard]] bool isOpen() const { return (file_ != NULL); }
 
   //! Close file.
   bool close() {
     if (not isOpen()) {
       return true;
     }
-    if (fclose(_file) != 0) {
-      std::cout << "! ERROR closing file \"" << _name << "\" ("
+    if (fclose(file_) != 0) {
+      std::cout << "! ERROR closing file \"" << name_ << "\" ("
                 << strerror(errno) << ")" << std::endl;
       exit(1);
     }
-    _file = NULL;
+    file_ = NULL;
     return true;
   }
 
@@ -112,18 +112,18 @@ class File {
   // read from current file pointer position
   // returns the number of bytes read
   size_t read(void* targetBuffer, size_t nofBytesToRead) {
-    assert(_file);
-    return fread(targetBuffer, (size_t)1, nofBytesToRead, _file);
+    assert(file_);
+    return fread(targetBuffer, (size_t)1, nofBytesToRead, file_);
   }
 
   // write to current file pointer position
   // returns number of bytes written
   size_t write(const void* sourceBuffer, size_t nofBytesToWrite) {
-    assert(_file);
-    return fwrite(sourceBuffer, (size_t)1, nofBytesToWrite, _file);
+    assert(file_);
+    return fwrite(sourceBuffer, (size_t)1, nofBytesToWrite, file_);
   }
 
-  void flush() { fflush(_file); }
+  void flush() { fflush(file_); }
 
   //! Seeks a position in the file.
   //! Sets the file position indicator for the stream.
@@ -133,16 +133,16 @@ class File {
   bool seek(off_t seekOffset, int seekOrigin) {
     assert((seekOrigin == SEEK_SET) || (seekOrigin == SEEK_CUR) ||
            (seekOrigin == SEEK_END));
-    assert(_file);
-    return fseeko(_file, seekOffset, seekOrigin) == 0;
+    assert(file_);
+    return fseeko(file_, seekOffset, seekOrigin) == 0;
   }
 
   //! Read nofBytesToRead bytes from file starting at the given offset.
   //! Returns the number of bytes read or the error returned by pread()
   //! which is < 0
   ssize_t read(void* targetBuffer, size_t nofBytesToRead, off_t offset) const {
-    assert(_file);
-    const int fd = fileno(_file);
+    assert(file_);
+    const int fd = fileno(file_);
     size_t bytesRead = 0;
     auto* to = static_cast<uint8_t*>(targetBuffer);
     while (bytesRead < nofBytesToRead) {
@@ -162,8 +162,8 @@ class File {
   //! is 0 on opening. Later equal the number of bytes written.
   //! -1 is returned when an error occurs
   [[nodiscard]] off_t tell() const {
-    assert(_file);
-    off_t returnValue = ftello(_file);
+    assert(file_);
+    off_t returnValue = ftello(file_);
     if (returnValue == (off_t)-1) {
       std::cerr << "\n ERROR in tell() : " << strerror(errno) << std::endl;
       exit(1);
@@ -181,7 +181,7 @@ class File {
   // returns the byte offset of the last off_t
   // the off_t itself is passed back by reference
   off_t getLastOffset(off_t* lastOffset) {
-    assert(_file);
+    assert(file_);
     // read the last off_t
     const off_t lastOffsetOffset = sizeOfFile() - sizeof(off_t);
     read(lastOffset, sizeof(off_t), lastOffsetOffset);
