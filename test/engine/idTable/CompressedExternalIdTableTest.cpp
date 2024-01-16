@@ -79,8 +79,9 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
 
 template <size_t NumStaticColumns>
 void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
-                        ad_utility::MemorySize memoryToUse, bool mergeMultipleTimes,
-                        source_location l = source_location::current()) {
+                            ad_utility::MemorySize memoryToUse,
+                            bool mergeMultipleTimes,
+                            source_location l = source_location::current()) {
   auto tr = generateLocationTrace(l);
   std::string filename = "idTableCompressedSorter.testExternalSorter.dat";
   using namespace ad_utility::memory_literals;
@@ -101,7 +102,6 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
 
     std::ranges::sort(randomTable, SortByOSP{});
 
-
     if (mergeMultipleTimes) {
       writer.moveResultOnMerge() = false;
     }
@@ -115,7 +115,7 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
         ASSERT_THAT(result, Eq(randomTable)) << "k = " << k;
       } else {
         EXPECT_ANY_THROW((idTableFromRowGenerator<NumStaticColumns>(
-                             generator, numDynamicColumns)));
+            generator, numDynamicColumns)));
       }
       // We cannot access or change this value after the first merge.
       EXPECT_ANY_THROW(writer.moveResultOnMerge());
