@@ -830,6 +830,7 @@ std::optional<GroupBy::HashMapAggregateType> GroupBy::isSupportedAggregate(
 
   if (hasType<AvgExpression>(expr)) return HashMapAggregateType::AVG;
   if (hasType<CountExpression>(expr)) return HashMapAggregateType::COUNT;
+  if (hasType<MinExpression>(expr)) return HashMapAggregateType::MIN;
 
   // `expr` is an unsupported aggregate
   return std::nullopt;
@@ -893,7 +894,8 @@ void GroupBy::extractValues(
 sparqlExpression::VectorWithMemoryLimit<ValueId>
 GroupBy::getHashMapAggregationResults(
     IdTable* resultTable, const HashMapAggregationData& aggregationData,
-    size_t dataIndex, size_t beginIndex, size_t endIndex) {
+    size_t dataIndex, size_t beginIndex, size_t endIndex,
+    LocalVocab* localVocab) {
   sparqlExpression::VectorWithMemoryLimit<ValueId> aggregateResults(
       getExecutionContext()->getAllocator());
   aggregateResults.resize(endIndex - beginIndex);
@@ -902,11 +904,11 @@ GroupBy::getHashMapAggregationResults(
   auto& aggregateDataVariant =
       aggregationData.getAggregationDataVariant(dataIndex);
 
-  auto op = [&aggregationData, &aggregateDataVariant](Id val) {
+  auto op = [&aggregationData, &aggregateDataVariant, localVocab](Id val) {
     auto index = aggregationData.getIndex(val);
 
-    auto visitor = [&index](auto& aggregateDataVariant) {
-      return aggregateDataVariant.at(index).calculateResult();
+    auto visitor = [&index, localVocab](auto& aggregateDataVariant) {
+      return aggregateDataVariant.at(index).calculateResult(localVocab);
     };
 
     return std::visit(visitor, aggregateDataVariant);
@@ -943,12 +945,12 @@ void GroupBy::substituteGroupVariable(
 void GroupBy::substituteAllAggregates(
     std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
     size_t endIndex, const HashMapAggregationData& aggregationData,
-    IdTable* resultTable) {
+    IdTable* resultTable, LocalVocab* localVocab) {
   // Substitute in the results of all aggregates of `info`.
   for (auto& aggregate : info) {
     auto aggregateResults = getHashMapAggregationResults(
         resultTable, aggregationData, aggregate.aggregateDataIndex_, beginIndex,
-        endIndex);
+        endIndex, localVocab);
 
     // Substitute the resulting vector as a literal
     auto newExpression = std::make_unique<sparqlExpression::VectorIdExpression>(
@@ -1030,7 +1032,7 @@ void GroupBy::evaluateAlias(
     // Get aggregate results
     auto aggregateResults = getHashMapAggregationResults(
         result, aggregationData, aggregate.aggregateDataIndex_,
-        evaluationContext._beginIndex, evaluationContext._endIndex);
+        evaluationContext._beginIndex, evaluationContext._endIndex, localVocab);
 
     // Copy to result table
     decltype(auto) outValues = result->getColumn(alias.outCol_);
@@ -1051,7 +1053,7 @@ void GroupBy::evaluateAlias(
     // expression of the current alias, if `info` is non-empty.
     substituteAllAggregates(info, evaluationContext._beginIndex,
                             evaluationContext._endIndex, aggregationData,
-                            result);
+                            result, localVocab);
 
     // Evaluate top-level alias expression
     sparqlExpression::ExpressionResult expressionResult =

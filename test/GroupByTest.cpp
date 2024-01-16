@@ -729,6 +729,78 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
 }
 
 // _____________________________________________________________________________
+TEST_F(GroupByOptimizations, hashMapOptimizationMinMax) {
+  // Make sure we are calculating the correct result when a grouped variable
+  // occurs in an expression.
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+
+  parsedQuery::SparqlValues input;
+  using TC = TripleComponent;
+
+  // SELECT (MIN(?b) as ?x) WHERE {
+  //   VALUES (?a ?b) { (1.0 3.0) (1.0 7.0) (5.0 4.0)}
+  // } GROUP BY ?a
+  Variable varA = Variable{"?a"};
+  Variable varX = Variable{"?x"};
+  Variable varB = Variable{"?b"};
+
+  input._variables = std::vector{varA, varB};
+  input._values.push_back(std::vector{TC(1.0), TC(42.0)});
+  input._values.push_back(std::vector{TC(1.0), TC(9.0)});
+  input._values.push_back(std::vector{TC(1.0), TC(3.0)});
+  input._values.push_back(std::vector{TC(5.0), TC("c")});
+  input._values.push_back(std::vector{TC(5.0), TC("a")});
+  input._values.push_back(std::vector{TC(5.0), TC("b")});
+  input._values.push_back(std::vector{TC(7.0), TC("g")});
+  input._values.push_back(std::vector{TC(7.0), TC("h")});
+  input._values.push_back(std::vector{TC(7.0), TC("f")});
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<Values>(qec, input);
+
+  using namespace sparqlExpression;
+
+  // Create `Alias` object for `(MIN(?b) as ?x)`.
+  auto expr1 =
+      std::make_unique<MinExpression>(false, makeVariableExpression(varB));
+  auto alias1 =
+      Alias{SparqlExpressionPimpl{std::move(expr1), "MIN(?b)"}, Variable{"?x"}};
+
+  // Set up and evaluate the GROUP BY clause.
+  GroupBy groupBy{ad_utility::testing::getQec(),
+                  {Variable{"?a"}},
+                  {std::move(alias1)},
+                  std::move(values)};
+  auto result = groupBy.getResult();
+  const auto& table = result->idTable();
+
+  // Check the result.
+  auto& localVocab = result->localVocab();
+  auto d = DoubleId;
+  auto l = LocalVocabId;
+  auto getLocalVocabId = [&localVocab, l](const std::string& val) {
+    auto idx = localVocab.getIndexOrNullopt(val);
+    if (idx.has_value()) return l(idx.value().get());
+    return ValueId::makeUndefined();
+  };
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  VariableToColumnMap expectedVariables{
+      {Variable{"?a"}, {0, AlwaysDefined}},
+      {Variable{"?x"}, {1, PossiblyUndefined}}};
+  EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
+  auto expected = makeIdTableFromVector({{d(1), d(3)},
+                                         {d(5), getLocalVocabId("a")},
+                                         {d(7), getLocalVocabId("f")}});
+  EXPECT_EQ(table, expected);
+
+  // Disable optimization for following tests
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+}
+
+// _____________________________________________________________________________
+// TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {}
+
+// _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
   /* Setup query:
   SELECT ?x (AVG(?y) as ?avg)

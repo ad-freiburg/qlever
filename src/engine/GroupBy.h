@@ -13,6 +13,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "gtest/gtest.h"
@@ -174,7 +175,8 @@ class GroupBy : public Operation {
         error_ = true;
       ++count_;
     };
-    [[nodiscard]] ValueId calculateResult() const {
+    [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
+      (void)localVocab;
       if (error_)
         return ValueId::makeUndefined();
       else
@@ -190,8 +192,39 @@ class GroupBy : public Operation {
                    const sparqlExpression::EvaluationContext* ctx) {
       if (ValueGetter{}(AD_FWD(value), ctx)) count_++;
     }
-    [[nodiscard]] ValueId calculateResult() const {
+    [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
+      (void)localVocab;
       return ValueId::makeFromInt(count_);
+    }
+  };
+
+  // Data to perform MIN aggregation using the HashMap optimization.
+  struct MinAggregationData {
+    sparqlExpression::IdOrString minValue_ = ValueId::makeUndefined();
+    void increment(const sparqlExpression::IdOrString& value,
+                   const sparqlExpression::EvaluationContext* ctx) {
+      if (auto val = std::get_if<ValueId>(&minValue_);
+          val != nullptr && val->isUndefined()) {
+        minValue_ = value;
+        return;
+      }
+      auto impl = [&]<typename X, typename Y>(const X& x, const Y& y) {
+        return toBoolNotUndef(
+            sparqlExpression::compareIdsOrStrings<
+                valueIdComparators::Comparison::LT,
+                valueIdComparators::ComparisonForIncompatibleTypes::
+                    CompareByType>(x, y, ctx));
+      };
+      if (std::visit(impl, value, minValue_)) minValue_ = value;
+    }
+    [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
+      if (auto val = std::get_if<ValueId>(&minValue_))
+        return *val;
+      else if (auto str = std::get_if<std::string>(&minValue_)) {
+        auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(*str);
+        return ValueId::makeFromLocalVocabIndex(localVocabIndex);
+      }
+      return ValueId::makeUndefined();
     }
   };
 
@@ -212,7 +245,7 @@ class GroupBy : public Operation {
   };
 
   // Used to store the kind of aggregate.
-  enum class HashMapAggregateType { AVG, COUNT };
+  enum class HashMapAggregateType { AVG, COUNT, MIN };
 
   // Stores information required for evaluation of an aggregate as well
   // as the alias containing it.
@@ -266,7 +299,8 @@ class GroupBy : public Operation {
       const IdTable& subresult, size_t columnIndex, LocalVocab* localVocab);
 
   using Aggregations = std::variant<std::vector<AverageAggregationData>,
-                                    std::vector<CountAggregationData>>;
+                                    std::vector<CountAggregationData>,
+                                    std::vector<MinAggregationData>>;
 
   // Stores the map which associates Ids with vector offsets and
   // the vectors containing the aggregation data.
@@ -286,6 +320,8 @@ class GroupBy : public Operation {
                 std::vector<AverageAggregationData>{});
           if (aggregate.aggregateType_ == HashMapAggregateType::COUNT)
             aggregationData_.emplace_back(std::vector<CountAggregationData>{});
+          if (aggregate.aggregateType_ == HashMapAggregateType::MIN)
+            aggregationData_.emplace_back(std::vector<MinAggregationData>{});
         }
       }
       AD_CONTRACT_CHECK(numAggregates > 0);
@@ -328,7 +364,8 @@ class GroupBy : public Operation {
   // based on the groups stored in the first column of `resultTable`
   sparqlExpression::VectorWithMemoryLimit<ValueId> getHashMapAggregationResults(
       IdTable* resultTable, const HashMapAggregationData& aggregationData,
-      size_t dataIndex, size_t beginIndex, size_t endIndex);
+      size_t dataIndex, size_t beginIndex, size_t endIndex,
+      LocalVocab* localVocab);
 
   // Substitute away any occurrences of the grouped variable and of aggregate
   // results, if necessary, and subsequently evaluate the expression of an
@@ -371,7 +408,7 @@ class GroupBy : public Operation {
   void substituteAllAggregates(std::vector<HashMapAggregateInformation>& info,
                                size_t beginIndex, size_t endIndex,
                                const HashMapAggregationData& aggregationData,
-                               IdTable* resultTable);
+                               IdTable* resultTable, LocalVocab* localVocab);
 
   // Check if an expression is of a certain type.
   template <class T>
