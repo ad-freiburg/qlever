@@ -74,6 +74,9 @@ FetchContent_Declare(
         GIT_TAG        9239e6ff444420516b44b7621e8dc7691fcf0e16
 )
 FetchContent_GetProperties(antlr)
+# From ANTLR we actually don't want the toplevel directory (which doesn't have a proper `CMakeLists.txt` anyway),
+# but only the C++ runtime which resides in a subdirectory. We additionally need to suppress some warnings only for
+# ANTLR. We therefore have to perform the initialization for ANTLR using `FetchContent` manually.
 if (NOT antlr_POPULATED)
     FetchContent_Populate(antlr)
     set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
@@ -284,7 +287,7 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable( googletest ctre abseil re2 stxxl)
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl)
 # Disable some warnings in RE2 and STXXL
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
