@@ -9,6 +9,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________
