@@ -65,14 +65,17 @@ FetchContent_Declare(
 )
 
 ################################
-# NLOHMANN JSON #
+# NLOHMANN JSON
+################################
 FetchContent_Declare(
         nlohmann-json
         GIT_REPOSITORY https://github.com/nlohmann/json.git
         GIT_TAG 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03 # release-3.11.3
 )
+# We only want to include a single file from the nlohmann GitHub repository, so we initialize the submodule
+# manually
 FetchContent_GetProperties(nlohmann-json)
-if (NOT nlohmannJson_POPULATED)
+if (NOT nlohmann-json_POPULATED)
     FetchContent_Populate(nlohmann-json)
     include_directories(SYSTEM ${nlohmann-json_SOURCE_DIR}/single_include)
 endif()

@@ -1030,7 +1030,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                                          allIntegersBecomeDoubles};
   std::string key = "parser-integer-overflow-behavior";
   if (j.count(key)) {
-    std::string value = static_cast<std::string>(j[key]);
+    auto value = static_cast<std::string>(j[key]);
     if (value == overflowingIntegersThrow) {
       LOG(INFO) << "Integers that cannot be represented by QLever will throw "
                    "an exception"
