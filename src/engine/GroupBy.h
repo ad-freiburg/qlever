@@ -198,35 +198,40 @@ class GroupBy : public Operation {
     }
   };
 
-  // Data to perform MIN aggregation using the HashMap optimization.
-  struct MinAggregationData {
-    sparqlExpression::IdOrString minValue_ = ValueId::makeUndefined();
+  // Data to perform MIN/MAX aggregation using the HashMap optimization.
+  template <valueIdComparators::Comparison Comp>
+  struct ExtremumAggregationData {
+    sparqlExpression::IdOrString currentValue_ = ValueId::makeUndefined();
     void increment(const sparqlExpression::IdOrString& value,
                    const sparqlExpression::EvaluationContext* ctx) {
-      if (auto val = std::get_if<ValueId>(&minValue_);
+      if (auto val = std::get_if<ValueId>(&currentValue_);
           val != nullptr && val->isUndefined()) {
-        minValue_ = value;
+        currentValue_ = value;
         return;
       }
       auto impl = [&]<typename X, typename Y>(const X& x, const Y& y) {
         return toBoolNotUndef(
             sparqlExpression::compareIdsOrStrings<
-                valueIdComparators::Comparison::LT,
-                valueIdComparators::ComparisonForIncompatibleTypes::
-                    CompareByType>(x, y, ctx));
+                Comp, valueIdComparators::ComparisonForIncompatibleTypes::
+                          CompareByType>(x, y, ctx));
       };
-      if (std::visit(impl, value, minValue_)) minValue_ = value;
+      if (std::visit(impl, value, currentValue_)) currentValue_ = value;
     }
     [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
-      if (auto val = std::get_if<ValueId>(&minValue_))
+      if (auto val = std::get_if<ValueId>(&currentValue_))
         return *val;
-      else if (auto str = std::get_if<std::string>(&minValue_)) {
+      else if (auto str = std::get_if<std::string>(&currentValue_)) {
         auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(*str);
         return ValueId::makeFromLocalVocabIndex(localVocabIndex);
       }
       return ValueId::makeUndefined();
     }
   };
+
+  using MinAggregationData =
+      ExtremumAggregationData<valueIdComparators::Comparison::LT>;
+  using MaxAggregationData =
+      ExtremumAggregationData<valueIdComparators::Comparison::GT>;
 
   using KeyType = ValueId;
   using ValueType = size_t;
@@ -245,7 +250,7 @@ class GroupBy : public Operation {
   };
 
   // Used to store the kind of aggregate.
-  enum class HashMapAggregateType { AVG, COUNT, MIN };
+  enum class HashMapAggregateType { AVG, COUNT, MIN, MAX };
 
   // Stores information required for evaluation of an aggregate as well
   // as the alias containing it.
@@ -298,9 +303,9 @@ class GroupBy : public Operation {
       IdTable* result, std::vector<HashMapAliasInformation>& aggregateAliases,
       const IdTable& subresult, size_t columnIndex, LocalVocab* localVocab);
 
-  using Aggregations = std::variant<std::vector<AverageAggregationData>,
-                                    std::vector<CountAggregationData>,
-                                    std::vector<MinAggregationData>>;
+  using Aggregations = std::variant<
+      std::vector<AverageAggregationData>, std::vector<CountAggregationData>,
+      std::vector<MinAggregationData>, std::vector<MaxAggregationData>>;
 
   // Stores the map which associates Ids with vector offsets and
   // the vectors containing the aggregation data.
@@ -322,6 +327,8 @@ class GroupBy : public Operation {
             aggregationData_.emplace_back(std::vector<CountAggregationData>{});
           if (aggregate.aggregateType_ == HashMapAggregateType::MIN)
             aggregationData_.emplace_back(std::vector<MinAggregationData>{});
+          if (aggregate.aggregateType_ == HashMapAggregateType::MAX)
+            aggregationData_.emplace_back(std::vector<MaxAggregationData>{});
         }
       }
       AD_CONTRACT_CHECK(numAggregates > 0);

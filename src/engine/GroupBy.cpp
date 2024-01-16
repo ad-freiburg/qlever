@@ -831,6 +831,7 @@ std::optional<GroupBy::HashMapAggregateType> GroupBy::isSupportedAggregate(
   if (hasType<AvgExpression>(expr)) return HashMapAggregateType::AVG;
   if (hasType<CountExpression>(expr)) return HashMapAggregateType::COUNT;
   if (hasType<MinExpression>(expr)) return HashMapAggregateType::MIN;
+  if (hasType<MaxExpression>(expr)) return HashMapAggregateType::MAX;
 
   // `expr` is an unsupported aggregate
   return std::nullopt;
