@@ -406,6 +406,12 @@ struct GroupByOptimizations : ::testing::Test {
         "MAX(?someVariable)"};
   }
 
+  static SparqlExpressionPimpl makeSumPimpl(const Variable& var) {
+    return SparqlExpressionPimpl{
+        std::make_unique<SumExpression>(false, makeVariableExpression(var)),
+        "Sum(?someVariable)"};
+  }
+
   static SparqlExpressionPimpl makeAvgCountPimpl(const Variable& var) {
     auto countExpression =
         std::make_unique<CountExpression>(false, makeVariableExpression(var));
@@ -569,6 +575,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   SparqlExpressionPimpl avgCountXPimpl = makeAvgCountPimpl(varX);
   SparqlExpressionPimpl minXPimpl = makeMinPimpl(varX);
   SparqlExpressionPimpl maxXPimpl = makeMaxPimpl(varX);
+  SparqlExpressionPimpl sumXPimpl = makeSumPimpl(varX);
 
   std::vector<Alias> aliasesAvgX{Alias{avgXPimpl, Variable{"?avg"}}};
   std::vector<Alias> aliasesAvgDistinctX{
@@ -577,6 +584,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
       Alias{avgCountXPimpl, Variable("?avgcount")}};
   std::vector<Alias> aliasesMinX{Alias{minXPimpl, Variable{"?minX"}}};
   std::vector<Alias> aliasesMaxX{Alias{maxXPimpl, Variable{"?maxX"}}};
+  std::vector<Alias> aliasesSumX{Alias{sumXPimpl, Variable{"?sumX"}}};
 
   std::vector<GroupBy::Aggregate> countAggregate = {{countXPimpl, 1}};
   std::vector<GroupBy::Aggregate> avgAggregate = {{avgXPimpl, 1}};
@@ -585,6 +593,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   std::vector<GroupBy::Aggregate> avgCountAggregate = {{avgCountXPimpl, 1}};
   std::vector<GroupBy::Aggregate> minAggregate = {{minXPimpl, 1}};
   std::vector<GroupBy::Aggregate> maxAggregate = {{maxXPimpl, 1}};
+  std::vector<GroupBy::Aggregate> sumAggregate = {{sumXPimpl, 1}};
 
   // Enable optimization
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
@@ -605,10 +614,11 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
   testFailure(variablesOnlyX, aliasesAvgX, subtreeWithSort, avgAggregate);
 
-  // Support for MIN & MAX
+  // Support for MIN & MAX & SUM
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
   testSuccess(variablesOnlyX, aliasesMaxX, subtreeWithSort, maxAggregate);
   testSuccess(variablesOnlyX, aliasesMinX, subtreeWithSort, minAggregate);
+  testSuccess(variablesOnlyX, aliasesSumX, subtreeWithSort, sumAggregate);
 
   // Check details of data structure are correct.
   GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX, subtreeWithSort};
@@ -738,19 +748,21 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
 }
 
 // _____________________________________________________________________________
-TEST_F(GroupByOptimizations, hashMapOptimizationMinMax) {
+TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
+  // Test for support of min, max and sum when using the HashMap optimization.
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
 
-  // SELECT (MIN(?b) as ?x) (MAX(?b) as ?z) WHERE {
+  // SELECT (MIN(?b) as ?x) (MAX(?b) as ?z) (SUM(?b) as ?w) WHERE {
   //   VALUES (?a ?b) { (1.0 3.0) (1.0 7.0) (5.0 4.0)}
   // } GROUP BY ?a
   Variable varA = Variable{"?a"};
   Variable varX = Variable{"?x"};
   Variable varB = Variable{"?b"};
   Variable varZ = Variable{"?z"};
+  Variable varW = Variable{"?w"};
 
   input._variables = std::vector{varA, varB};
   input._values.push_back(std::vector{TC(1.0), TC(42.0)});
@@ -776,10 +788,16 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMax) {
   auto alias2 =
       Alias{SparqlExpressionPimpl{std::move(expr2), "MAX(?b)"}, Variable{"?z"}};
 
+  // Create `Alias` object for `(SUM(?b) as ?w)`.
+  auto expr3 =
+      std::make_unique<SumExpression>(false, makeVariableExpression(varB));
+  auto alias3 =
+      Alias{SparqlExpressionPimpl{std::move(expr3), "SUM(?b)"}, Variable{"?w"}};
+
   // Set up and evaluate the GROUP BY clause.
   GroupBy groupBy{ad_utility::testing::getQec(),
                   {Variable{"?a"}},
-                  {std::move(alias1), std::move(alias2)},
+                  {std::move(alias1), std::move(alias2), std::move(alias3)},
                   std::move(values)};
   auto result = groupBy.getResult();
   const auto& table = result->idTable();
@@ -790,11 +808,12 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMax) {
   VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
       {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?z"}, {2, PossiblyUndefined}}};
+      {Variable{"?z"}, {2, PossiblyUndefined}},
+      {Variable{"?w"}, {3, PossiblyUndefined}}};
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
-  auto expected =
-      makeIdTableFromVector({{d(1), d(3), d(42)}, {d(3), d(1), d(13.37)}});
+  auto expected = makeIdTableFromVector(
+      {{d(1), d(3), d(42), d(54)}, {d(3), d(1), d(13.37), d(18.37)}});
   EXPECT_EQ(table, expected);
 
   // Disable optimization for following tests
@@ -842,6 +861,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
+  // Test to make sure that non-trivial nested expressions are supported.
   /* Setup query:
   SELECT ?x (AVG(?y) as ?avg)
             (?avg + ((2 * COUNT(?y)) * AVG(4 * ?y)) as ?complexAvg)

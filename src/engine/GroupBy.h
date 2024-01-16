@@ -158,7 +158,7 @@ class GroupBy : public Operation {
   bool computeGroupByForJoinWithFullScan(IdTable* result);
 
   // Data to perform the AVG aggregation using the HashMap optimization.
-  struct AverageAggregationData {
+  struct AvgAggregationData {
     using ValueGetter = sparqlExpression::detail::NumericValueGetter;
     bool error_ = false;
     double sum_ = 0;
@@ -233,6 +233,31 @@ class GroupBy : public Operation {
   using MaxAggregationData =
       ExtremumAggregationData<valueIdComparators::Comparison::GT>;
 
+  // Data to perform the SUM aggregation using the HashMap optimization.
+  struct SumAggregationData {
+    using ValueGetter = sparqlExpression::detail::NumericValueGetter;
+    bool error_ = false;
+    double sum_ = 0;
+    void increment(auto&& value,
+                   const sparqlExpression::EvaluationContext* ctx) {
+      auto val = ValueGetter{}(AD_FWD(value), ctx);
+
+      if (const int64_t* intval = std::get_if<int64_t>(&val))
+        sum_ += static_cast<double>(*intval);
+      else if (const double* dval = std::get_if<double>(&val))
+        sum_ += *dval;
+      else
+        error_ = true;
+    };
+    [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
+      (void)localVocab;
+      if (error_)
+        return ValueId::makeUndefined();
+      else
+        return ValueId::makeFromDouble(sum_);
+    }
+  };
+
   using KeyType = ValueId;
   using ValueType = size_t;
 
@@ -250,7 +275,7 @@ class GroupBy : public Operation {
   };
 
   // Used to store the kind of aggregate.
-  enum class HashMapAggregateType { AVG, COUNT, MIN, MAX };
+  enum class HashMapAggregateType { AVG, COUNT, MIN, MAX, SUM };
 
   // Stores information required for evaluation of an aggregate as well
   // as the alias containing it.
@@ -304,8 +329,9 @@ class GroupBy : public Operation {
       const IdTable& subresult, size_t columnIndex, LocalVocab* localVocab);
 
   using Aggregations = std::variant<
-      std::vector<AverageAggregationData>, std::vector<CountAggregationData>,
-      std::vector<MinAggregationData>, std::vector<MaxAggregationData>>;
+      std::vector<AvgAggregationData>, std::vector<CountAggregationData>,
+      std::vector<MinAggregationData>, std::vector<MaxAggregationData>,
+      std::vector<SumAggregationData>>;
 
   // Stores the map which associates Ids with vector offsets and
   // the vectors containing the aggregation data.
@@ -321,14 +347,15 @@ class GroupBy : public Operation {
           ++numAggregates;
 
           if (aggregate.aggregateType_ == HashMapAggregateType::AVG)
-            aggregationData_.emplace_back(
-                std::vector<AverageAggregationData>{});
+            aggregationData_.emplace_back(std::vector<AvgAggregationData>{});
           if (aggregate.aggregateType_ == HashMapAggregateType::COUNT)
             aggregationData_.emplace_back(std::vector<CountAggregationData>{});
           if (aggregate.aggregateType_ == HashMapAggregateType::MIN)
             aggregationData_.emplace_back(std::vector<MinAggregationData>{});
           if (aggregate.aggregateType_ == HashMapAggregateType::MAX)
             aggregationData_.emplace_back(std::vector<MaxAggregationData>{});
+          if (aggregate.aggregateType_ == HashMapAggregateType::SUM)
+            aggregationData_.emplace_back(std::vector<SumAggregationData>{});
         }
       }
       AD_CONTRACT_CHECK(numAggregates > 0);
