@@ -19,7 +19,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Id.h"
 #include "parser/data/Variable.h"
-#include "util/CancellationHandle.h"
 #include "util/ConstexprSmallString.h"
 
 namespace sparqlExpression {
