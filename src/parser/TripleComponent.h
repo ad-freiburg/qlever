@@ -13,8 +13,8 @@
 
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"
-#include "global/SpecialIds.h"
 #include "global/Id.h"
+#include "global/SpecialIds.h"
 #include "parser/RdfEscaping.h"
 #include "parser/data/Variable.h"
 #include "util/Date.h"

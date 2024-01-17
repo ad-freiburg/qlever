@@ -540,8 +540,8 @@ class IdTable {
     AD_CONTRACT_CHECK(std::unique(check.begin(), check.end()) == check.end());
     AD_CONTRACT_CHECK(!subset.empty() && subset.back() < numColumns());
 
-    // If the number of columns is statically fixed, then only a permutation of the columns and not a real
-    // subset is allowed.
+    // If the number of columns is statically fixed, then only a permutation of
+    // the columns and not a real subset is allowed.
     AD_CONTRACT_CHECK(isDynamic || subset.size() == NumColumns);
 
     Data newData;
