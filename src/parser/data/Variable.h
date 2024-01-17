@@ -41,7 +41,7 @@ class Variable {
   Variable getTextScoreVariable() const;
 
   // Converts `?someTextVar` and `?someEntityVar` into
-  // `?ql_someTextVar_score-var_someEntityVar`.
+  // `?ql_someTextVar_score_var_someEntityVar`.
   // Converts `?someTextVar` and `someFixedEntity` into
   // `?ql_someTextVar_fixedEntity_someFixedEntity`.
   // Note that if the the fixed entity contains non ascii characters they are

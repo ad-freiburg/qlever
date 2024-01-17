@@ -22,9 +22,9 @@ class TextIndexScanForWord : public Operation {
 
   ~TextIndexScanForWord() override = default;
 
-  const Variable& getTextRecordVar() const { return textRecordVar_; }
+  const Variable& textRecordVar() const { return textRecordVar_; }
 
-  const std::string& getWord() const { return word_; }
+  const std::string& word() const { return word_; }
 
   string getCacheKeyImpl() const override;
 
@@ -45,10 +45,7 @@ class TextIndexScanForWord : public Operation {
     return 1;
   }
 
-  bool knownEmptyResult() override {
-    return getExecutionContext()->getIndex().getSizeOfTextBlockForWord(word_) ==
-           0;
-  }
+  bool knownEmptyResult() override { return getSizeEstimateBeforeLimit() == 0; }
 
   vector<ColumnIndex> resultSortedOn() const override;
 

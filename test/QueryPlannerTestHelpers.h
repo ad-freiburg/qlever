@@ -93,31 +93,33 @@ inline auto TextIndexScanForWord = [](Variable textRecordVar,
   return RootOperation<::TextIndexScanForWord>(AllOf(
       AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
                   Eq(1 + word.ends_with('*'))),
-      AD_PROPERTY(::TextIndexScanForWord, getTextRecordVar, Eq(textRecordVar)),
-      AD_PROPERTY(::TextIndexScanForWord, getWord, word)));
+      AD_PROPERTY(::TextIndexScanForWord, textRecordVar, Eq(textRecordVar)),
+      AD_PROPERTY(::TextIndexScanForWord, word, word)));
 };
 
 inline auto TextIndexScanForEntity =
     [](Variable textRecordVar, std::variant<Variable, std::string> entity,
        string word) -> QetMatcher {
+  // TODO: Implement AD_THROWING_PROPERTY(..., Exception matcher) and use it
+  // here to test the contract-checks in entityVariable() and fixedEntity().
   if (std::holds_alternative<Variable>(entity)) {
-    return RootOperation<::TextIndexScanForEntity>(
-        AllOf(AD_PROPERTY(::TextIndexScanForEntity, getResultWidth,
-                          Eq(2 + std::holds_alternative<Variable>(entity))),
-              AD_PROPERTY(::TextIndexScanForEntity, getTextRecordVar,
-                          Eq(textRecordVar)),
-              AD_PROPERTY(::TextIndexScanForEntity, getEntityVariable,
-                          std::get<Variable>(entity)),
-              AD_PROPERTY(::TextIndexScanForEntity, getWord, word)));
+    return RootOperation<::TextIndexScanForEntity>(AllOf(
+        AD_PROPERTY(::TextIndexScanForEntity, getResultWidth,
+                    Eq(2 + std::holds_alternative<Variable>(entity))),
+        AD_PROPERTY(::TextIndexScanForEntity, textRecordVar, Eq(textRecordVar)),
+        AD_PROPERTY(::TextIndexScanForEntity, entityVariable,
+                    std::get<Variable>(entity)),
+        AD_PROPERTY(::TextIndexScanForEntity, word, word),
+        AD_PROPERTY(::TextIndexScanForEntity, hasFixedEntity, false)));
   } else {
-    return RootOperation<::TextIndexScanForEntity>(
-        AllOf(AD_PROPERTY(::TextIndexScanForEntity, getResultWidth,
-                          Eq(2 + std::holds_alternative<Variable>(entity))),
-              AD_PROPERTY(::TextIndexScanForEntity, getTextRecordVar,
-                          Eq(textRecordVar)),
-              AD_PROPERTY(::TextIndexScanForEntity, getFixedEntity,
-                          std::get<std::string>(entity)),
-              AD_PROPERTY(::TextIndexScanForEntity, getWord, word)));
+    return RootOperation<::TextIndexScanForEntity>(AllOf(
+        AD_PROPERTY(::TextIndexScanForEntity, getResultWidth,
+                    Eq(2 + std::holds_alternative<Variable>(entity))),
+        AD_PROPERTY(::TextIndexScanForEntity, textRecordVar, Eq(textRecordVar)),
+        AD_PROPERTY(::TextIndexScanForEntity, fixedEntity,
+                    std::get<std::string>(entity)),
+        AD_PROPERTY(::TextIndexScanForEntity, word, word),
+        AD_PROPERTY(::TextIndexScanForEntity, hasFixedEntity, true)));
   }
 };
 

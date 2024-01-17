@@ -13,13 +13,18 @@
 // The entities are saved to the entityVar_. If the operation is called on a
 // fixed entity instead, it only returns entries that contain this entity.
 class TextIndexScanForEntity : public Operation {
+  using FixedEntity = std::pair<std::string, VocabIndex>;
+
  private:
   struct VarOrFixedEntity {
-    VarOrFixedEntity(const QueryExecutionContext* qec,
-                     std::variant<Variable, std::string> entity) {
+    std::variant<Variable, FixedEntity> entity_;
+
+    static std::variant<Variable, FixedEntity> makeEntityVariant(
+        const QueryExecutionContext* qec,
+        std::variant<Variable, std::string> entity) {
       if (std::holds_alternative<std::string>(entity)) {
         VocabIndex index;
-        std::string fixedEntity = std::move(*std::get_if<std::string>(&entity));
+        std::string fixedEntity = std::move(std::get<std::string>(entity));
         bool success = qec->getIndex().getVocab().getId(fixedEntity, &index);
         if (!success) {
           throw std::runtime_error(
@@ -27,21 +32,21 @@ class TextIndexScanForEntity : public Operation {
               " is not part of the underlying knowledge graph and can "
               "therefore not be used as the object of ql:contains-entity");
         }
-        entity_ = std::pair<std::string, VocabIndex>(std::move(fixedEntity),
-                                                     std::move(index));
+        return FixedEntity(std::move(fixedEntity), std::move(index));
       } else {
-        entity_ = std::move(*std::get_if<Variable>(&entity));
+        return std::get<Variable>(entity);
       }
-    }
+    };
+
+    VarOrFixedEntity(const QueryExecutionContext* qec,
+                     std::variant<Variable, std::string> entity)
+        : entity_(makeEntityVariant(qec, std::move(entity))) {}
+
     ~VarOrFixedEntity() = default;
 
     bool hasFixedEntity() const {
-      return std::holds_alternative<std::pair<std::string, VocabIndex>>(
-          entity_);
+      return std::holds_alternative<FixedEntity>(entity_);
     }
-
-    std::variant<Variable, std::pair<std::string, VocabIndex>> entity_ =
-        std::pair<std::string, VocabIndex>{std::string{}, VocabIndex{}};
   };
 
   const Variable textRecordVar_;
@@ -56,28 +61,19 @@ class TextIndexScanForEntity : public Operation {
 
   bool hasFixedEntity() const { return varOrFixed_.hasFixedEntity(); }
 
-  const std::string& getFixedEntity() const {
-    if (!hasFixedEntity()) {
-      AD_CONTRACT_CHECK(
-          "getFixedEntity called on an instance that does not have a fixed "
-          "entity.");
-    }
-    return std::get<std::pair<std::string, VocabIndex>>(varOrFixed_.entity_)
-        .first;
+  const std::string& fixedEntity() const {
+    AD_CONTRACT_CHECK(hasFixedEntity());
+    return std::get<FixedEntity>(varOrFixed_.entity_).first;
   }
 
-  const Variable& getEntityVariable() const {
-    if (hasFixedEntity()) {
-      AD_CONTRACT_CHECK(
-          "getEntityVariable called on an instance that does not have a entity "
-          "variable.");
-    }
+  const Variable& entityVariable() const {
+    AD_CONTRACT_CHECK(!hasFixedEntity());
     return std::get<Variable>(varOrFixed_.entity_);
   }
 
-  const Variable& getTextRecordVar() const { return textRecordVar_; }
+  const Variable& textRecordVar() const { return textRecordVar_; }
 
-  const std::string& getWord() const { return word_; }
+  const std::string& word() const { return word_; }
 
   string getCacheKeyImpl() const override;
 
@@ -106,13 +102,8 @@ class TextIndexScanForEntity : public Operation {
 
  private:
   const VocabIndex& getVocabIndexOfFixedEntity() const {
-    if (!hasFixedEntity()) {
-      AD_CONTRACT_CHECK(
-          "getVocabIndexOfFixedEntity called on an instance that does not have "
-          "a fixed entity and therefore also no VocabIndex.");
-    }
-    return std::get<std::pair<std::string, VocabIndex>>(varOrFixed_.entity_)
-        .second;
+    AD_CONTRACT_CHECK(hasFixedEntity());
+    return std::get<FixedEntity>(varOrFixed_.entity_).second;
   }
 
   ResultTable computeResult() override;

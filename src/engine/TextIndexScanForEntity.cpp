@@ -10,7 +10,7 @@ TextIndexScanForEntity::TextIndexScanForEntity(
     std::variant<Variable, std::string> entity, string word)
     : Operation(qec),
       textRecordVar_(std::move(textRecordVar)),
-      varOrFixed_(VarOrFixedEntity(qec, std::move(entity))),
+      varOrFixed_(qec, std::move(entity)),
       word_(std::move(word)) {}
 
 // _____________________________________________________________________________
@@ -28,9 +28,9 @@ ResultTable TextIndexScanForEntity::computeResult() {
 
   // Add details to the runtimeInfo. This is has no effect on the result.
   if (hasFixedEntity()) {
-    runtimeInfo().addDetail("fixed entity: ", getFixedEntity());
+    runtimeInfo().addDetail("fixed entity: ", fixedEntity());
   } else {
-    runtimeInfo().addDetail("entity var: ", getEntityVariable().name());
+    runtimeInfo().addDetail("entity var: ", entityVariable().name());
   }
   runtimeInfo().addDetail("word: ", word_);
 
@@ -47,10 +47,10 @@ VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
   };
   addDefinedVar(textRecordVar_);
   if (hasFixedEntity()) {
-    addDefinedVar(textRecordVar_.getScoreVariable(getFixedEntity()));
+    addDefinedVar(textRecordVar_.getScoreVariable(fixedEntity()));
   } else {
-    addDefinedVar(getEntityVariable());
-    addDefinedVar(textRecordVar_.getScoreVariable(getEntityVariable()));
+    addDefinedVar(entityVariable());
+    addDefinedVar(textRecordVar_.getScoreVariable(entityVariable()));
   }
   return vcmap;
 }
@@ -86,7 +86,8 @@ uint64_t TextIndexScanForEntity::getSizeEstimateBeforeLimit() {
 
 // _____________________________________________________________________________
 bool TextIndexScanForEntity::knownEmptyResult() {
-  return getExecutionContext()->getIndex().getSizeEstimate(word_) == 0;
+  return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
+             word_) == 0;
 }
 
 // _____________________________________________________________________________
@@ -104,6 +105,6 @@ string TextIndexScanForEntity::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "ENTITY INDEX SCAN FOR WORD: "
      << " with word: \"" << word_ << "\" and fixed-entity: \""
-     << (hasFixedEntity() ? getFixedEntity() : "no fixed-entity") << " \"";
+     << (hasFixedEntity() ? fixedEntity() : "no fixed-entity") << " \"";
   return std::move(os).str();
 }

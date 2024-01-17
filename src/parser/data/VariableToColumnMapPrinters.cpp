@@ -71,7 +71,7 @@ Variable Variable::getScoreVariable(
     // Converts input string to unambiguous result string not containing any
     // special characters. "_" is used as an escaping character.
     for (char c : std::get<std::string>(varOrEntity)) {
-      if (isalpha(c)) {
+      if (isalpha(static_cast<unsigned char>(c))) {
         entity += c;
       } else {
         absl::StrAppend(&entity, "_", std::to_string(c), "_");

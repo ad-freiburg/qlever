@@ -224,6 +224,14 @@ class QueryPlanner {
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
 
+  // Add all the possible index scans for the triple represented by the node.
+  // The triple is "ordinary" in the sense that it is neither a text triple with
+  // ql:contains-word nor a special pattern trick triple.
+  template <typename PushPlanFunction, typename AddedIndexScanFunction>
+  void seedFromOrdinaryTriple(const TripleGraph::Node& node,
+                              const PushPlanFunction& pushPlan,
+                              const AddedIndexScanFunction& addIndexScan);
+
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename PushPlanFunction, typename AddedIndexScanFunction>
   void indexScanSingleVarCase(const TripleGraph::Node& node,
@@ -239,12 +247,6 @@ class QueryPlanner {
   template <typename AddedIndexScanFunction>
   void indexScanThreeVarsCase(const TripleGraph::Node& node,
                               const AddedIndexScanFunction& addIndexScan) const;
-
-  // Helper function used by the seedFromScansAndText function
-  template <typename PushPlanFunction, typename AddedIndexScanFunction>
-  void seedFromOrdinaryTriple(const TripleGraph::Node& node,
-                              const PushPlanFunction& pushPlan,
-                              const AddedIndexScanFunction& addIndexScan);
 
   /**
    * @brief Fills children with all operations that are associated with a single
