@@ -5,9 +5,12 @@
 
 #pragma once
 #include <exception>
+#include <functional>
 #include <sstream>
 #include <string>
 
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
@@ -81,16 +84,31 @@ class Exception : public std::exception {
 // like `__builtin_unreachable()` (last checked by Johannes in Jan 2023).
 #define AD_FAIL() AD_THROW("This code should be unreachable")
 
+namespace ad_utility::detail {
+std::string getMessageImpl(std::string_view s) { return std::string{s}; }
+// std::string getMessageImpl() { return ""; }
+std::string getMessageImpl(
+    ad_utility::InvocableWithConvertibleReturnType<std::string> auto&& F) {
+  return std::invoke(F);
+}
+
+std::string concatMessages(auto&&... messages) {
+  return absl::StrJoin(std::array{getMessageImpl(messages)...}, "; ");
+}
+}  // namespace ad_utility::detail
+
 // Custom assert which does not abort but throws an exception. Use this for
 // conditions that can be violated by calling a public (member) function with
 // invalid inputs. Since it is a macro, the code coverage check will only report
 // a partial coverage for this macro if the condition is never violated, so make
 // sure to integrate a unit test that violates the condition.
-#define AD_CONTRACT_CHECK(condition)                                                                                                                       \
+#define AD_CONTRACT_CHECK(condition, ...)                                                                                                                  \
   if (!(condition)) [[unlikely]] {                                                                                                                         \
     using namespace std::string_literals;                                                                                                                  \
     AD_THROW(                                                                                                                                              \
-        "Assertion `"s + std::string(__STRING(condition)) +                                                                                                \
+        "Assertion `"s +                                                                                                                                   \
+        ad_utility::detail::concatMessages(std::string(__STRING(condition))                                                                                \
+                                               __VA_OPT__(, ) __VA_ARGS__) +                                                                               \
         "` failed. Likely cause: A function was called with arguments that violate the contract of the function. Please report this to the developers."s); \
   }                                                                                                                                                        \
   void(0)
@@ -103,21 +121,24 @@ class Exception : public std::exception {
 // performed, even if it never fails.
 namespace ad_utility::detail {
 inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
-                                   ad_utility::source_location location) {
+                                   ad_utility::source_location location,
+                                   auto&&... additionalMessages) {
   if (!(condition)) [[unlikely]] {
     using namespace std::string_literals;
     // TODO<GCC13> Use `std::format`.
     AD_THROW(
-        "Assertion `"s + std::string(message) +
+        "Assertion `"s +
+            ad_utility::detail::concatMessages(std::string(message),
+                                               additionalMessages...) +
             "` failed. This indicates that an internal function was not implemented correctly, which should never happen. Please report this to the developers"s,
         location);
   }
 }
 }  // namespace ad_utility::detail
-#define AD_CORRECTNESS_CHECK(condition)                  \
+#define AD_CORRECTNESS_CHECK(condition, ...)             \
   ad_utility::detail::adCorrectnessCheckImpl(            \
       static_cast<bool>(condition), __STRING(condition), \
-      ad_utility::source_location::current())
+      ad_utility::source_location::current() __VA_OPT__(, ) __VA_ARGS__)
 
 // This check is similar to `AD_CORRECTNESS_CHECK` (see above), but the check is
 // only compiled and executed when either the `NDEBUG` constant is NOT defined
