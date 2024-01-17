@@ -7,6 +7,12 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    # will not take effect without FORCE
+    set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "Install top-level directory" FORCE)
+endif()
+
+
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -52,17 +58,51 @@ include(FetchContent)
 ################################
 # GTEST AND GMOCK
 ################################
-add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
-include_directories(third_party/googletest/googletest/include)
-include_directories(third_party/googletest/googlemock/include)
+FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG        f8d7d77c06936315286eb55f8de22cd23c188571 # release-1.14.0
+)
+
+################################
+# NLOHMANN JSON
+################################
+FetchContent_Declare(
+        nlohmann-json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03 # release-3.11.3
+)
+# We only want to include a single file from the nlohmann GitHub repository, so we initialize the submodule
+# manually
+FetchContent_GetProperties(nlohmann-json)
+if (NOT nlohmann-json_POPULATED)
+    FetchContent_Populate(nlohmann-json)
+    include_directories(SYSTEM ${nlohmann-json_SOURCE_DIR}/single_include)
+endif()
+
 
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
-set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
-add_subdirectory(third_party/antlr4/runtime/Cpp EXCLUDE_FROM_ALL )
-target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-unqualified-std-cast-call -Wno-error -Wno-deprecated-declarations)
-include_directories(SYSTEM third_party/antlr4/runtime/Cpp/runtime/src )
+FetchContent_Declare(
+        antlr
+        GIT_REPOSITORY https://github.com/antlr/antlr4.git
+        GIT_TAG        9239e6ff444420516b44b7621e8dc7691fcf0e16
+)
+
+# From ANTLR we actually don't want the toplevel directory (which doesn't
+# have a proper `CMakeLists.txt` anyway), but only the C++ runtime which
+# resides in a subdirectory. We additionally need to suppress some warnings
+# only for ANTLR. We therefore have to perform the initialization for
+# ANTLR using `FetchContent` manually.
+FetchContent_GetProperties(antlr)
+if (NOT antlr_POPULATED)
+    FetchContent_Populate(antlr)
+    set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
+    add_subdirectory(${antlr_SOURCE_DIR}/runtime/Cpp EXCLUDE_FROM_ALL )
+    target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-unqualified-std-cast-call -Wno-error -Wno-deprecated-declarations)
+    include_directories(SYSTEM ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src )
+endif()
 
 ################################
 # Threading
@@ -136,7 +176,7 @@ find_package(OpenSSL REQUIRED)
 function (qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::flat_hash_map
         absl::flat_hash_set absl::strings absl::str_format ICU::uc
-        ICU::i18n OpenSSL::SSL OpenSSL::Crypto)
+        ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -195,11 +235,14 @@ FetchContent_Declare(
 ################################
 # ABSEIL
 ################################
-set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
-# For CMake 3.8 and up this will be the default in a future version of abseil
+set(ABSL_ENABLE_INSTALL ON)
+set(ABSL_USE_SYSTEM_INCLUDES ON)
 set(ABSL_PROPAGATE_CXX_STD ON)
-add_subdirectory(third_party/abseil-cpp  EXCLUDE_FROM_ALL)
-include_directories(SYSTEM third_party/abseil-cpp/)
+FetchContent_Declare(
+        abseil
+        GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
+        GIT_TAG 258e5a15759cc3d122d4a4826bc499af91d40aa9 # 2023-12-21
+)
 
 if (USE_PARALLEL)
     include(FindOpenMP)
@@ -241,34 +284,33 @@ add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
 set(USE_GNU_PARALLEL OFF CACHE BOOL "Don't use gnu parallel" FORCE)
 set(USE_OPENMP OFF CACHE BOOL "Don't use OPENMP as default" FORCE)
 
-add_subdirectory(third_party/stxxl EXCLUDE_FROM_ALL)
-
-# apply STXXL CXXFLAGS
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
-include_directories(SYSTEM ${STXXL_INCLUDE_DIRS})
+set(STXXL_CXX_FLAGS "${STXXL_CXX_FLAGS} -Wno-deprecated-declarations")
+FetchContent_Declare(
+        stxxl
+        GIT_REPOSITORY https://github.com/ad-freiburg/stxxl.git
+        GIT_TAG 1ce7ff62e8896ee3673c7302bb537971b5d33f12
+)
 
 ################################
 # RE2
 ################################
-# RE2 has a lot of unused-parameter warnings, we will deactivate
-# these for the subproject
-set(LOCAL_CXX_BACKUP_FLAGS "${CMAKE_CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
-
 set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
-add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
-target_compile_options(re2 PRIVATE -Wno-unused-but-set-variable)
-include_directories(SYSTEM third_party/re2)
-
+FetchContent_Declare(
+        re2
+        GIT_REPOSITORY https://github.com/google/re2.git
+        GIT_TAG bc0faab533e2b27b85b8ad312abf061e33ed6b5d # v.2023-11-01
+        GIT_SHALLOW TRUE
+        OVERRIDE_FIND_PACKAGE
+)
 
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(ctre)
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl)
+# Disable some warnings in RE2 and STXXL
+target_compile_options(re2 PRIVATE -Wno-unused-parameter)
+target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
 include_directories(${ctre_SOURCE_DIR}/single-header)
-
-# reinstate original flags including all warnings
-set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
@@ -329,7 +371,7 @@ endif()
 ##################################################
 # Precompiled headers
 set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
-set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h)
+set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h)
 
 add_subdirectory(src/parser)
 target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
