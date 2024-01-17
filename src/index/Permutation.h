@@ -31,10 +31,6 @@ class Permutation {
   static constexpr auto OPS = Enum::OPS;
   static constexpr auto OSP = Enum::OSP;
 
-  // Does this permutation store a second set of triples with a disjoint set of
-  // `col0Ids`.
-  enum struct HasAdditionalTriples { True, False };
-
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using ColumnIndicesRef = CompressedRelationReader::ColumnIndicesRef;
@@ -48,19 +44,10 @@ class Permutation {
   // `PSO` is converted to [1, 0, 2].
   static std::array<size_t, 3> toKeyOrder(Enum permutation);
 
-  // If `hasAdditionalTriples` is true, then this `Permutation` also manages an
-  // additional set of relations that are stored at
-  // `<onDiskBase><ADDITIONAL_TRIPLES_PREFIX>.xxx` where `onDiskBase` is the
-  // argument to `loadFromDisk` below, and `ADDITIONAL_TRIPLES_PREFIX` is a
-  // constant from `Constants.h`.
-  explicit Permutation(Enum permutation, Allocator allocator,
-                       HasAdditionalTriples hasAdditionalTriples);
+  explicit Permutation(Enum permutation, Allocator allocator);
 
   // everything that has to be done when reading an index from disk
-  // TODO<joka921> Why do we need the second argument.
-  void loadFromDisk(const std::string& onDiskBase,
-                    bool onlyLoadAdditional = false,
-                    bool dontLoadAdditional = false);
+  void loadFromDisk(const std::string& onDiskBase);
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
@@ -102,8 +89,7 @@ class Permutation {
 
   /// Similar to the previous `scan` function, but only get the size of the
   /// result
-  size_t getResultSizeOfScan(Id col0Id,
-                             std::optional<Id> col1Id = std::nullopt) const;
+  size_t getResultSizeOfScan(Id col0Id, Id col1Id) const;
 
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }
@@ -120,8 +106,6 @@ class Permutation {
 
   const MetaData& metaData() const { return meta_; }
   MetaData meta_;
-  ad_utility::HashMap<Id, CompressedRelationMetadata>
-      additionalBuiltinRelationMetadata_;
 
   // This member is `optional` because we initialize it in a deferred way in the
   // `loadFromDisk` method.
@@ -129,6 +113,4 @@ class Permutation {
   Allocator allocator_;
 
   bool isLoaded_ = false;
-
-  std::unique_ptr<Permutation> additionalPermutation_;
 };

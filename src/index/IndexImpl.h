@@ -167,18 +167,12 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  Permutation pos_{Permutation::Enum::POS, allocator_,
-                   Permutation::HasAdditionalTriples::False};
-  Permutation pso_{Permutation::Enum::PSO, allocator_,
-                   Permutation::HasAdditionalTriples::False};
-  Permutation sop_{Permutation::Enum::SOP, allocator_,
-                   Permutation::HasAdditionalTriples::False};
-  Permutation spo_{Permutation::Enum::SPO, allocator_,
-                   Permutation::HasAdditionalTriples::False};
-  Permutation ops_{Permutation::Enum::OPS, allocator_,
-                   Permutation::HasAdditionalTriples::False};
-  Permutation osp_{Permutation::Enum::OSP, allocator_,
-                   Permutation::HasAdditionalTriples::False};
+  Permutation pos_{Permutation::Enum::POS, allocator_};
+  Permutation pso_{Permutation::Enum::PSO, allocator_};
+  Permutation sop_{Permutation::Enum::SOP, allocator_};
+  Permutation spo_{Permutation::Enum::SPO, allocator_};
+  Permutation ops_{Permutation::Enum::OPS, allocator_};
+  Permutation osp_{Permutation::Enum::OSP, allocator_};
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
@@ -812,10 +806,4 @@ class IndexImpl {
   std::unique_ptr<ExternalSorter<SortByPSO, 5>> buildOspWithPatterns(
       PatternCreatorNew::TripleSorter sortersFromPatternCreator,
       auto isQLeverInternalId);
-
-  // Build an index (PSO and POS permutations only) from the
-  // `additionalTriples`. The created files will be stored at `onDiskBase_ +
-  // ADDITIONAL_TRIPLES_PREFIX`.
-  void makeIndexFromAdditionalTriples(
-      ExternalSorter<SortByPSO>&& additionalTriples);
 };

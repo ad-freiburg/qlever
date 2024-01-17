@@ -155,7 +155,6 @@ class Join : public Operation {
                                               IndexScan& scan,
                                               ColumnIndex joinColScan);
 
- private:
   using ScanMethodType = std::function<IdTable(Id)>;
 
   ScanMethodType getScanMethod(

@@ -61,12 +61,7 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
     return tree.getVariableAndInfoByColumnIndex(joinCol).first;
   };
   _joinVar = findJoinVar(*_left, _leftJoinCol);
-  auto otherJoinVar = findJoinVar(*_right, _rightJoinCol);
-  if (_joinVar != otherJoinVar) {
-    LOG(ERROR) << "Mismacht: " << _joinVar.name() << " " << otherJoinVar.name()
-               << std::endl;
-  }
-  AD_CONTRACT_CHECK(_joinVar == otherJoinVar);
+  AD_CONTRACT_CHECK(_joinVar == findJoinVar(*_right, _rightJoinCol));
 }
 
 // _____________________________________________________________________________

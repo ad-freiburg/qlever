@@ -1379,7 +1379,11 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(Id id, Permutation::Enum permutation) const {
-  return getPermutation(permutation).getResultSizeOfScan(id);
+  if (const auto& p = getPermutation(permutation);
+      p.metaData().col0IdExists(id)) {
+    return p.metaData().getMetaData(id).getNofElements();
+  }
+  return 0;
 }
 
 // ___________________________________________________________________________
@@ -1636,14 +1640,4 @@ template <typename Comparator, size_t I>
 std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
     std::string_view permutationName) const {
   return makeSorterImpl<Comparator, I, true>(permutationName);
-}
-
-// _____________________________________________________________________________
-void IndexImpl::makeIndexFromAdditionalTriples(
-    ExternalSorter<SortByPSO>&& additionalTriples) {
-  auto onDiskBaseCpy = onDiskBase_;
-  onDiskBase_ += ADDITIONAL_TRIPLES_SUFFIX;
-  createPermutationPair(3, std::move(additionalTriples).getSortedBlocks<0>(),
-                        pso_, pos_);
-  onDiskBase_ = onDiskBaseCpy;
 }
