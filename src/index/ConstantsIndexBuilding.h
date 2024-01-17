@@ -32,10 +32,9 @@ static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 10'000;
 
 // When reading from a file, Chunks of this size will
 // be fed to the parser at once (10 MiB)
-inline std::atomic<size_t>& FILE_BUFFER_SIZE() {
-  static std::atomic<size_t> fileBufferSize = 10 * (1ul << 20);
-  return fileBufferSize;
-}
+inline std::atomic<size_t> FILE_BUFFER_SIZE = 10 * (1ul << 20);
+
+inline std::atomic<size_t> BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 50'000;
 
 // When the BZIP2 parser encouters a parsing exception it will increase its
 // buffer and try again (we have no other way currently to determine if the

@@ -37,6 +37,12 @@
 #include "util/json.h"
 
 namespace ad_utility {
+namespace ConfigManagerImpl {
+
+// Shorthand concepts, to reduce code duplication.
+class ConfigManager;
+template <typename T>
+concept ConfigOptionOrManager = SameAsAny<T, ConfigOption, ConfigManager>;
 
 /*
 Manages a bunch of `ConfigOption`s.
@@ -101,8 +107,8 @@ class ConfigManager {
 
    private:
     // Implementation for `holdsConfigOption` and `holdsSubManager`.
-    template <typename T>
-    requires isTypeContainedIn<T, Data> bool implHolds() const;
+    template <SameAsAnyTypeIn<Data> T>
+    bool implHolds() const;
 
     /*
     @brief Implementation for `getConfigOption` and `getSubManager`. You can
@@ -111,10 +117,11 @@ class ConfigManager {
     @tparam ReturnType Should be `(const) ConfigOption`, or `(const)
     ConfigManager`.
 
-    @param instance The `HashMapEntry` you want this from.
+    @SameAsAny<const ConfigOption&, ConfigOption& >m instance The `HashMapEntry`
+    you want this from.
     */
-    template <typename ReturnType>
-    requires isTypeContainedIn<ReturnType, Data> && std::is_object_v<ReturnType>
+    template <SimilarToAnyTypeIn<Data> ReturnType>
+    requires std::is_object_v<ReturnType>
     static std::optional<ReturnType*> getConfigOptionOrSubManager(
         ad_utility::SimilarTo<HashMapEntry> auto& instance);
 
@@ -173,9 +180,7 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <typename OptionType>
-  requires ad_utility::isTypeContainedIn<OptionType,
-                                         ConfigOption::AvailableTypes>
+  template <SupportedConfigOptionType OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
@@ -203,10 +208,8 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <typename OptionType,
+  template <SupportedConfigOptionType OptionType,
             std::same_as<OptionType> DefaultValueType = OptionType>
-  requires ad_utility::isTypeContainedIn<OptionType,
-                                         ConfigOption::AvailableTypes>
   ConstConfigOptionProxy<OptionType> addOption(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
@@ -225,9 +228,7 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <typename OptionType>
-  requires ad_utility::isTypeContainedIn<OptionType,
-                                         ConfigOption::AvailableTypes>
+  template <SupportedConfigOptionType OptionType>
   ConstConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn) {
@@ -244,10 +245,8 @@ class ConfigManager {
   @return A reference to the newly created configuration option. This reference
   will stay valid, even after adding more options.
   */
-  template <typename OptionType,
+  template <SupportedConfigOptionType OptionType,
             std::same_as<OptionType> DefaultValueType = OptionType>
-  requires ad_utility::isTypeContainedIn<OptionType,
-                                         ConfigOption::AvailableTypes>
   ConstConfigOptionProxy<OptionType> addOption(
       std::string optionName, std::string_view optionDescription,
       OptionType* variableToPutValueOfTheOptionIn,
@@ -487,10 +486,9 @@ class ConfigManager {
   @param predicate Only the `HashMapEntry` for which a true is returned, will be
   given back.
   */
-  template <typename HashMapType>
-  requires SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>,
-                     HashMapType> &&
-           std::is_object_v<HashMapType> static std::conditional_t<
+  template <
+      SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>> HashMapType>
+  requires std::is_object_v<HashMapType> static std::conditional_t<
       std::is_const_v<HashMapType>,
       const std::vector<std::pair<const std::string, const HashMapEntry&>>,
       std::vector<std::pair<std::string, HashMapEntry&>>>
@@ -549,9 +547,8 @@ class ConfigManager {
   @return A reference to the newly created configuration option. Will stay
   valid, even after more options.
   */
-  template <typename OptionType>
-  requires ad_utility::isTypeContainedIn<OptionType,
-                                         ConfigOption::AvailableTypes>
+  template <
+      ad_utility::SameAsAnyTypeIn<ConfigOption::AvailableTypes> OptionType>
   ConstConfigOptionProxy<OptionType> addOptionImpl(
       const std::vector<std::string>& pathToOption,
       std::string_view optionDescription,
@@ -590,9 +587,7 @@ class ConfigManager {
   @tparam ReturnReference Should be either `ConfigOption&`, or `const
   ConfigOption&`.
   */
-  template <typename ReturnReference>
-  requires std::same_as<ReturnReference, ConfigOption&> ||
-           std::same_as<ReturnReference, const ConfigOption&>
+  template <SameAsAny<ConfigOption&, const ConfigOption&> ReturnReference>
   static std::vector<std::pair<std::string, ReturnReference>>
   configurationOptionsImpl(
       SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>> auto&
@@ -729,7 +724,7 @@ class ConfigManager {
     @brief Add a validator to the list of validators, that are assigned to a
     `ConfigOption`/`ConfigManager`.
     */
-    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+    template <ConfigOptionOrManager T>
     void addEntryUnderKey(const T& key,
                           const ConfigOptionValidatorManager& manager);
 
@@ -739,12 +734,12 @@ class ConfigManager {
 
     @returns If there is no entry for `Key`, return an empty `std::vector`.
     */
-    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+    template <ConfigOptionOrManager T>
     ValueGetterReturnType getEntriesUnderKey(const T& key) const;
 
    private:
     // Return either `configOption_` or `configManager_`, based on type.
-    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+    template <ConfigOptionOrManager T>
     constexpr const MemoryAdressHashMap<T>& getHashMapBasedOnType() const {
       if constexpr (std::same_as<T, ConfigOption>) {
         return configOption_;
@@ -752,7 +747,7 @@ class ConfigManager {
         return configManager_;
       }
     }
-    template <isTypeAnyOf<ConfigOption, ConfigManager> T>
+    template <ConfigOptionOrManager T>
     constexpr MemoryAdressHashMap<T>& getHashMapBasedOnType() {
       if constexpr (std::same_as<T, ConfigOption>) {
         return configOption_;
@@ -795,5 +790,6 @@ class ConfigManager {
       std::string_view pathPrefix,
       const ConfigurationDocValidatorAssignment& assignment) const;
 };
-
+}  // namespace ConfigManagerImpl
+using ConfigManagerImpl::ConfigManager;
 }  // namespace ad_utility

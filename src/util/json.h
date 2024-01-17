@@ -10,6 +10,10 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #ifndef QLEVER_JSON_H
 #define QLEVER_JSON_H
 
+#ifndef EOF
+#define EOF std::char_traits<char>::eof()
+#endif
+
 // Disallow implicit conversions from nlohmann::json to other types,
 // most notably to std::string.
 #include <stdexcept>
@@ -134,7 +138,8 @@ struct adl_serializer<std::monostate> {
           absl::StrCat("Custom type converter (see `",
                        ad_utility::source_location::current().file_name(),
                        "`) from json",
-                       " to `std::monostate`: type must be null, but wasn't."));
+                       " to `std::monostate`: type must be null, but wasn't."),
+          nullptr);
     }
   }
 };
@@ -177,7 +182,8 @@ struct adl_serializer<std::variant<Types...>> {
           absl::StrCat("The given index ", index,
                        " for a std::variant was"
                        " out of range, because the biggest possible index was ",
-                       sizeof...(Types) - 1, "."));
+                       sizeof...(Types) - 1, "."),
+          nullptr);
     }
 
     // Interpreting the value based on its type.

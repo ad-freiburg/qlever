@@ -21,8 +21,7 @@ Column number together with the type of value, that can be found inside the
 column. Note, that **all** entries in the column must have the same type,
 because of `ResultTable::getEntry`.
 */
-template <typename Type>
-requires ad_utility::isTypeContainedIn<Type, ResultTable::EntryType>
+template <ad_utility::SameAsAnyTypeIn<ResultTable::EntryType> Type>
 struct ColumnNumWithType {
   using ColumnType = Type;
   const size_t columnNum_;

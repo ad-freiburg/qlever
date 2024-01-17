@@ -18,9 +18,8 @@ cooperation with `generateSingleParameterValidatorFunction`, while keeping the
 invariant of `generateValidatorFunction` true.
 `variant` slightly changes the returned value.
 */
-template <typename Type>
-requires ad_utility::isTypeContainedIn<Type,
-                                       ad_utility::ConfigOption::AvailableTypes>
+template <
+    ad_utility::SameAsAnyTypeIn<ad_utility::ConfigOption::AvailableTypes> Type>
 Type createDummyValueForValidator(size_t variant);
 
 /*
@@ -46,7 +45,7 @@ creation of multiple different validator functions. For more information,
 what the exact difference is, see the code in `createDummyValueForValidator`.
 */
 template <typename... ParameterTypes>
-requires((ad_utility::isTypeContainedIn<
+requires((ad_utility::SameAsAnyTypeIn<
              ParameterTypes, ad_utility::ConfigOption::AvailableTypes>) &&
          ...)
 auto generateDummyNonExceptionValidatorFunction(size_t variant) {
