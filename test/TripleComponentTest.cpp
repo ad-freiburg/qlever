@@ -157,6 +157,10 @@ TEST(TripleComponent, toValueId) {
   tc = 42;
 
   ASSERT_EQ(tc.toValueIdIfNotString().value(), I(42));
+
+  tc = HAS_PATTERN_PREDICATE;
+  ASSERT_EQ(tc.toValueId(vocab).value(),
+            qlever::specialIds.at(HAS_PATTERN_PREDICATE));
 }
 
 TEST(TripleComponent, settingVariablesAsStringsIsIllegal) {

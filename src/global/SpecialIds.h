@@ -31,6 +31,16 @@ static const inline ad_utility::HashMap<std::string, Id> specialIds = []() {
   AD_CORRECTNESS_CHECK(uniqueIds.size() == result.size());
   return result;
 }();
+
+// Return the [lowerBound, upperBound) for the special Ids.
+// This range can be used to filter them out in cases where we want to ignore
+// triples that were added by QLever for internal reasons.
+static constexpr std::pair<Id, Id> getBoundsForSpecialIds() {
+  constexpr auto upperBound = Id::makeFromBool(false);
+  static_assert(static_cast<int>(Datatype::Undefined) == 0);
+  static_assert(upperBound.getBits() == 1UL << Id::numDataBits);
+  return {Id::fromBits(1), upperBound};
+}
 }  // namespace qlever
 
 #endif  // QLEVER_SPECIALIDS_H

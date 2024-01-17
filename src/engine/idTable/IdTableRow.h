@@ -85,6 +85,14 @@ class Row {
   friend void swap(Row& a, Row& b) { std::swap(a.data_, b.data_); }
 
   bool operator==(const Row& other) const = default;
+
+  // Convert from a static `RowReference` to a `std::array` (makes a copy).
+  explicit operator std::array<T, numStaticColumns>() const
+      requires(numStaticColumns != 0) {
+    std::array<T, numStaticColumns> result;
+    std::ranges::copy(*this, result.begin());
+    return result;
+  }
 };
 
 // The following two classes store a reference to a row in the underlying
@@ -120,7 +128,7 @@ class RowReferenceImpl {
    public:
     static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
     using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
-    using T = typename Table::value_type;
+    using T = typename Table::single_value_type;
     static constexpr int numStaticColumns = Table::numStaticColumns;
 
     // Grant the `IdTable` class access to the internal details.

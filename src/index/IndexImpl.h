@@ -7,6 +7,7 @@
 
 #include <engine/ResultTable.h>
 #include <global/Pattern.h>
+#include <global/SpecialIds.h>
 #include <index/CompressedRelation.h>
 #include <index/ConstantsIndexBuilding.h>
 #include <index/DocsDB.h>
@@ -668,35 +669,43 @@ class IndexImpl {
   // index scan) and `GroupBy.cpp`.
   auto getIgnoredIdRanges(const Permutation::Enum permutation) const {
     std::vector<std::pair<Id, Id>> ignoredRanges;
+    ignoredRanges.emplace_back(qlever::getBoundsForSpecialIds());
 
     auto literalRange = getVocab().prefix_range("\"");
     auto taggedPredicatesRange = getVocab().prefix_range("@");
     auto internalEntitiesRange =
         getVocab().prefix_range(INTERNAL_ENTITIES_URI_PREFIX);
-    ignoredRanges.emplace_back(
-        Id::makeFromVocabIndex(internalEntitiesRange.first),
-        Id::makeFromVocabIndex(internalEntitiesRange.second));
 
+    auto pushIgnoredRange = [&ignoredRanges](const auto& range) {
+      ignoredRanges.emplace_back(Id::makeFromVocabIndex(range.first),
+                                 Id::makeFromVocabIndex(range.second));
+    };
+    pushIgnoredRange(internalEntitiesRange);
     using enum Permutation::Enum;
     if (permutation == SPO || permutation == SOP) {
-      ignoredRanges.push_back({Id::makeFromVocabIndex(literalRange.first),
-                               Id::makeFromVocabIndex(literalRange.second)});
+      pushIgnoredRange(literalRange);
     } else if (permutation == PSO || permutation == POS) {
-      ignoredRanges.push_back(
-          {Id::makeFromVocabIndex(taggedPredicatesRange.first),
-           Id::makeFromVocabIndex(taggedPredicatesRange.second)});
+      pushIgnoredRange(taggedPredicatesRange);
     }
 
-    auto isIllegalPredicateId = [=](Id predicateId) {
+    // A lambda that checks whether the `predicateId` is an internal ID like
+    // `ql:has-pattern` or `@en@rdfs:label`.
+    auto isInternalPredicateId = [internalEntitiesRange,
+                                  taggedPredicatesRange](Id predicateId) {
+      if (predicateId.getDatatype() == Datatype::Undefined) {
+        return true;
+      }
+      AD_CORRECTNESS_CHECK(predicateId.getDatatype() == Datatype::VocabIndex);
       auto idx = predicateId.getVocabIndex();
-      return (idx >= internalEntitiesRange.first &&
-              idx < internalEntitiesRange.second) ||
-             (idx >= taggedPredicatesRange.first &&
-              idx < taggedPredicatesRange.second);
+      auto isInRange = [idx](const auto& range) {
+        return range.first <= idx && idx < range.second;
+      };
+      return (isInRange(internalEntitiesRange) ||
+              isInRange(taggedPredicatesRange));
     };
 
     auto isTripleIgnored = [permutation,
-                            isIllegalPredicateId](const auto& triple) {
+                            isInternalPredicateId](const auto& triple) {
       // TODO<joka921, everybody in the future>:
       // A lot of code (especially for statistical queries in `GroupBy.cpp` and
       // the pattern trick) relies on this function being a noop for the `PSO`
@@ -707,9 +716,9 @@ class IndexImpl {
       // be thoroughly reviewed.
       if (permutation == SPO || permutation == OPS) {
         // Predicates are always entities from the vocabulary.
-        return isIllegalPredicateId(triple[1]);
+        return isInternalPredicateId(triple[1]);
       } else if (permutation == SOP || permutation == OSP) {
-        return isIllegalPredicateId(triple[2]);
+        return isInternalPredicateId(triple[2]);
       }
       return false;
     };
