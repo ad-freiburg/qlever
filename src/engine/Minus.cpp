@@ -4,9 +4,10 @@
 
 #include "Minus.h"
 
-#include "../util/Exception.h"
-#include "CallFixedSize.h"
+#include "engine/CallFixedSize.h"
+#include "util/Exception.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________

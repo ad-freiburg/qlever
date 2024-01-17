@@ -23,7 +23,9 @@
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/Types.h"
 #include "parser/data/VarOrTerm.h"
+#undef EOF
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
+#define EOF std::char_traits<char>::eof()
 #include "util/HashMap.h"
 #include "util/OverloadCallOperator.h"
 #include "util/StringUtils.h"
