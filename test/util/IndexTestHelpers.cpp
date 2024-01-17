@@ -5,6 +5,7 @@
 #include "../IndexTestHelpers.h"
 
 #include "./GTestHelpers.h"
+#include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
 
 namespace ad_utility::testing {
@@ -70,6 +71,19 @@ void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
         auto scanResult = index.scan(col0Id, std::nullopt, permutation,
                                      std::array{ColumnIndex{2}, ColumnIndex{3}},
                                      cancellationDummy);
+        auto hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
+        auto scanResultHasPattern =
+            index.scan(hasPatternId, col0Id, Permutation::Enum::PSO, {},
+                       cancellationDummy);
+        // Each ID has at most one pattern, it can have none if it doesn't
+        // appear as a subject in the knowledge graph.
+        AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
+        if (scanResultHasPattern.numRows() == 0) {
+          checkSingleElement(index, NO_PATTERN, col0Id);
+        } else {
+          checkSingleElement(index, scanResultHasPattern(0, 0).getInt(),
+                             col0Id);
+        }
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
           auto patternIdx = row[2].getInt();
@@ -153,6 +167,7 @@ Index makeTestIndex(const std::string& indexBasename,
     EXPECT_EQ(index.loadAllPermutations(), loadAllPermutations);
     EXPECT_EQ(index.usePatterns(), usePatterns);
   }
+
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.usePatterns() = usePatterns;
   index.loadAllPermutations() = loadAllPermutations;

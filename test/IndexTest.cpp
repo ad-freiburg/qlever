@@ -19,6 +19,8 @@
 
 using namespace ad_utility::testing;
 
+using ::testing::UnorderedElementsAre;
+
 namespace {
 using ad_utility::source_location;
 auto lit = ad_utility::testing::tripleComponentLiteral;
@@ -434,6 +436,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
   // The range of all literals;
   auto literals = std::pair{firstLiteral, increment(lastLiteral)};
 
+  auto specialIds = qlever::getBoundsForSpecialIds();
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::POS);
     ASSERT_FALSE(lambda(std::array{label, firstLiteral, x}));
@@ -443,10 +446,9 @@ TEST(IndexTest, getIgnoredIdRanges) {
     // `ranges`.
     ASSERT_FALSE(lambda(std::array{enLabel, firstLiteral, x}));
     ASSERT_FALSE(lambda(std::array{x, x, x}));
-    ASSERT_EQ(2u, ranges.size());
-
-    ASSERT_EQ(ranges[0], internalEntities);
-    ASSERT_EQ(ranges[1], predicatesWithLangtag);
+    EXPECT_THAT(ranges,
+                UnorderedElementsAre(internalEntities, predicatesWithLangtag,
+                                     specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::PSO);
@@ -457,46 +459,41 @@ TEST(IndexTest, getIgnoredIdRanges) {
     // `ranges`.
     ASSERT_FALSE(lambda(std::array{enLabel, x, firstLiteral}));
     ASSERT_FALSE(lambda(std::array{x, x, x}));
-    ASSERT_EQ(2u, ranges.size());
-
-    ASSERT_EQ(ranges[0], internalEntities);
-    ASSERT_EQ(ranges[1], predicatesWithLangtag);
+    EXPECT_THAT(ranges,
+                UnorderedElementsAre(internalEntities, predicatesWithLangtag,
+                                     specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::SOP);
     ASSERT_TRUE(lambda(std::array{x, firstLiteral, enLabel}));
     ASSERT_FALSE(lambda(std::array{x, firstLiteral, label}));
     ASSERT_FALSE(lambda(std::array{x, x, label}));
-    ASSERT_EQ(2u, ranges.size());
-
-    ASSERT_EQ(ranges[0], internalEntities);
-    ASSERT_EQ(ranges[1], literals);
+    EXPECT_THAT(ranges,
+                UnorderedElementsAre(internalEntities, literals, specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::SPO);
     ASSERT_TRUE(lambda(std::array{x, enLabel, firstLiteral}));
     ASSERT_FALSE(lambda(std::array{x, label, firstLiteral}));
     ASSERT_FALSE(lambda(std::array{x, label, x}));
-    ASSERT_EQ(2u, ranges.size());
-
-    ASSERT_EQ(ranges[0], internalEntities);
-    ASSERT_EQ(ranges[1], literals);
+    EXPECT_THAT(ranges,
+                UnorderedElementsAre(internalEntities, literals, specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::OSP);
     ASSERT_TRUE(lambda(std::array{firstLiteral, x, enLabel}));
     ASSERT_FALSE(lambda(std::array{firstLiteral, x, label}));
     ASSERT_FALSE(lambda(std::array{x, x, label}));
-    ASSERT_EQ(1u, ranges.size());
-    ASSERT_EQ(ranges[0], internalEntities);
+    EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::OPS);
     ASSERT_TRUE(lambda(std::array{firstLiteral, enLabel, x}));
     ASSERT_FALSE(lambda(std::array{firstLiteral, label, x}));
     ASSERT_FALSE(lambda(std::array{x, label, x}));
-    ASSERT_EQ(1u, ranges.size());
-    ASSERT_EQ(ranges[0], internalEntities);
+    auto hasPattern = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
+    ASSERT_TRUE(lambda(std::array{firstLiteral, hasPattern, x}));
+    EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds));
   }
 }
 
@@ -520,29 +517,32 @@ TEST(IndexTest, NumDistinctEntities) {
 
   auto predicates = index.numDistinctPredicates();
   EXPECT_EQ(predicates.normal_, 2);
-  // One added predicate is `ql:langtag` and one added predicate for
-  // each combination of predicate+language that is actually used (e.g.
-  // `@en@label`).
-  EXPECT_EQ(predicates.internal_, 2);
+  // The added predicates are `ql:has-pattern`, `ql:langtag`, and one added
+  // predicate for each combination of predicate+language that is actually used
+  // (e.g. `@en@label`).
+  EXPECT_EQ(predicates.internal_, 3);
   EXPECT_EQ(predicates, index.numDistinctCol0(Permutation::PSO));
   EXPECT_EQ(predicates, index.numDistinctCol0(Permutation::POS));
 
   auto objects = index.numDistinctObjects();
   EXPECT_EQ(objects.normal_, 7);
-  // One added object for each language that is used
+  // One added object for each language that is used.
+  // Note: The pattern indices from the `ql:has-pattern` predicate are currently
+  // not part of `objects.internal_`, but they are also not very important.
   EXPECT_EQ(objects.internal_, 1);
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OSP));
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OPS));
 
   auto numTriples = index.numTriples();
   EXPECT_EQ(numTriples.normal_, 7);
-  // Two added triples for each triple that has an object with a language tag.
-  EXPECT_EQ(numTriples.internal_, 2);
+  // Two added triples for each triple that has an object with a language tag
+  // and one triple per subject for the pattern.
+  EXPECT_EQ(numTriples.internal_, 5);
 
   auto multiplicities = index.getMultiplicities(Permutation::SPO);
-  EXPECT_FLOAT_EQ(multiplicities[0], 9.0 / 4.0);
-  EXPECT_FLOAT_EQ(multiplicities[1], 9.0 / 4.0);
-  EXPECT_FLOAT_EQ(multiplicities[2], 9.0 / 8.0);
+  EXPECT_FLOAT_EQ(multiplicities[0], 12.0 / 4.0);
+  EXPECT_FLOAT_EQ(multiplicities[1], 12.0 / 5.0);
+  EXPECT_FLOAT_EQ(multiplicities[2], 12.0 / 8.0);
 
   multiplicities = index.getMultiplicities("<x>", Permutation::SPO);
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
