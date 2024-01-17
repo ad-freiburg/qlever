@@ -56,22 +56,6 @@ class CopyableIdTable : public TableImpl<N> {
 using IntOrId = std::variant<int64_t, Id>;
 using VectorTable = std::vector<std::vector<IntOrId>>;
 
-// Implementation of a class that inherits from `IdTable` but is copyable
-// (convenient for testing).
-template <size_t N = 0>
-using TableImpl = std::conditional_t<N == 0, IdTable, IdTableStatic<N>>;
-template <size_t N = 0>
-class CopyableIdTable : public TableImpl<N> {
- public:
-  using Base = TableImpl<N>;
-  using Base::Base;
-  CopyableIdTable(const CopyableIdTable& rhs) : Base{rhs.clone()} {}
-  CopyableIdTable& operator=(const CopyableIdTable& rhs) {
-    static_cast<Base&>(*this) = rhs.clone();
-    return *this;
-  }
-};
-
 /*
  * Return an 'IdTable' with the given `content` by applying the
  * `transformation` to each of them. All rows of `content` must have the
