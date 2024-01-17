@@ -120,9 +120,13 @@ auto testNaryExpression = [](auto&& makeExpression,
     }
   }();
 
-  sparqlExpression::EvaluationContext context{*ad_utility::testing::getQec(),
-                                              map, table, alloc, localVocab};
-  ad_utility::CancellationHandle<> cancellationHandle;
+  sparqlExpression::EvaluationContext context{
+      *ad_utility::testing::getQec(),
+      map,
+      table,
+      alloc,
+      localVocab,
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   context._endIndex = resultSize;
 
   // NOTE: We need to clone because `VectorWithMemoryLimit` does not have a copy
@@ -141,7 +145,7 @@ auto testNaryExpression = [](auto&& makeExpression,
   auto expressionPtr = std::apply(makeExpression, std::move(children));
   auto& expression = *expressionPtr;
 
-  ExpressionResult result = expression.evaluate(&context, cancellationHandle);
+  ExpressionResult result = expression.evaluate(&context);
 
   ASSERT_TRUE(std::holds_alternative<std::decay_t<decltype(expected)>>(result));
 
@@ -854,7 +858,7 @@ TEST(SparqlExpression, literalExpression) {
   // Evaluate multiple times to test the caching behavior.
   for (size_t i = 0; i < 15; ++i) {
     ASSERT_EQ((ExpressionResult{IdOrString{"\"notInTheVocabulary\""}}),
-              expr.evaluate(&ctx.context, *ctx.cancellationHandle));
+              expr.evaluate(&ctx.context));
   }
   // A similar test with a constant entry that is part of the vocabulary and can
   // therefore be converted to an ID.
@@ -864,7 +868,7 @@ TEST(SparqlExpression, literalExpression) {
   AD_CORRECTNESS_CHECK(result);
   for (size_t i = 0; i < 15; ++i) {
     ASSERT_EQ((ExpressionResult{IdOrString{idOfX}}),
-              iriExpr.evaluate(&ctx.context, *ctx.cancellationHandle));
+              iriExpr.evaluate(&ctx.context));
   }
 }
 

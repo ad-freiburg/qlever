@@ -57,8 +57,7 @@ void testWithExplicitResult(const SparqlExpression& expression,
                             source_location l = source_location::current()) {
   static TestContext ctx;
   auto trace = generateLocationTrace(l, "testWithExplicitResult");
-  auto resultAsVariant =
-      expression.evaluate(&ctx.context, *ctx.cancellationHandle);
+  auto resultAsVariant = expression.evaluate(&ctx.context);
   const auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
 
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
@@ -198,8 +197,7 @@ auto testPrefixRegexOrderedColumn =
       auto expression = makeRegexExpression(variableAsString, regex,
                                             std::nullopt, childAsStr);
       ASSERT_TRUE(expression.isPrefixExpression());
-      auto resultAsVariant =
-          expression.evaluate(&ctx.context, *ctx.cancellationHandle);
+      auto resultAsVariant = expression.evaluate(&ctx.context);
       const auto& result =
           std::get<ad_utility::SetOfIntervals>(resultAsVariant);
       ASSERT_EQ(result, expected);

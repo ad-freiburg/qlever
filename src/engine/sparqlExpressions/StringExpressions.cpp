@@ -55,9 +55,8 @@ class StringExpressionImpl : public SparqlExpression {
     }
   }
 
-  ExpressionResult evaluate(EvaluationContext* context,
-                            CancellationHandle handle) const override {
-    return impl_->evaluate(context, handle);
+  ExpressionResult evaluate(EvaluationContext* context) const override {
+    return impl_->evaluate(context);
   }
   std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
     return impl_->getCacheKey(varColMap);
@@ -283,8 +282,7 @@ class ConcatExpression : public detail::VariadicExpression {
   using VariadicExpression::VariadicExpression;
 
   // _________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* ctx,
-                            CancellationHandle handle) const override {
+  ExpressionResult evaluate(EvaluationContext* ctx) const override {
     using StringVec = VectorWithMemoryLimit<std::string>;
     // We evaluate one child after the other and append the strings from child i
     // to the strings already constructed for children 0, …, i - 1. The
@@ -300,8 +298,9 @@ class ConcatExpression : public detail::VariadicExpression {
     // were constants (see above).
     std::variant<std::string, StringVec> result{std::string{""}};
     auto visitSingleExpressionResult =
-        [&ctx, &result, &handle ]<SingleExpressionResult T>(T && s)
-            requires std::is_rvalue_reference_v<T&&> {
+        [&ctx, &result]<SingleExpressionResult T>(T&& s)
+            requires std::is_rvalue_reference_v<T&&>
+    {
       if constexpr (isConstantResult<T>) {
         std::string strFromConstant = StringValueGetter{}(s, ctx).value_or("");
         if (std::holds_alternative<std::string>(result)) {
@@ -343,15 +342,15 @@ class ConcatExpression : public detail::VariadicExpression {
               str.has_value()) {
             resultAsVec[i].append(str.value());
           }
-          handle.throwIfCancelled("ConcatExpression");
+          ctx->cancellationHandle_->throwIfCancelled("ConcatExpression");
           ++i;
         }
       }
     };
-    std::ranges::for_each(childrenVec(), [&ctx, &visitSingleExpressionResult,
-                                          &handle](const auto& child) {
-      std::visit(visitSingleExpressionResult, child->evaluate(ctx, handle));
-    });
+    std::ranges::for_each(
+        childrenVec(), [&ctx, &visitSingleExpressionResult](const auto& child) {
+          std::visit(visitSingleExpressionResult, child->evaluate(ctx));
+        });
 
     // Lift the result from `string` to `IdOrString` which is needed for the
     // expression module.

@@ -17,8 +17,7 @@ class RandomExpression : public SparqlExpression {
 
  public:
   // Evaluate a Sparql expression.
-  ExpressionResult evaluate(EvaluationContext* context,
-                            CancellationHandle handle) const override {
+  ExpressionResult evaluate(EvaluationContext* context) const override {
     VectorWithMemoryLimit<Id> result{context->_allocator};
     const size_t numElements = context->_endIndex - context->_beginIndex;
     result.reserve(numElements);
@@ -31,7 +30,7 @@ class RandomExpression : public SparqlExpression {
 
     for (size_t i = 0; i < numElements; ++i) {
       result.push_back(Id::makeFromInt(randInt() >> Id::numDatatypeBits));
-      handle.throwIfCancelled("RandomExpression");
+      context->cancellationHandle_->throwIfCancelled("RandomExpression");
     }
     return result;
   }

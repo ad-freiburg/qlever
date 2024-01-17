@@ -21,8 +21,7 @@ class SampleExpression : public SparqlExpression {
   }
 
   // __________________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context,
-                            CancellationHandle handle) const override;
+  ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _____________________________________________________________________
   vector<Variable> getUnaggregatedVariables() override {

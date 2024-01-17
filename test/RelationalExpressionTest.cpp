@@ -43,7 +43,7 @@ auto makeExpression(SingleExpressionResult auto leftValue,
 // Evaluate the given `expression` on a `TestContext` (see above).
 auto evaluateOnTestContext = [](const SparqlExpression& expression) {
   TestContext context{};
-  return expression.evaluate(&context.context, *context.cancellationHandle);
+  return expression.evaluate(&context.context);
 };
 
 // If `input` has a `.clone` member function, return the result of that
@@ -344,12 +344,10 @@ void testLessThanGreaterThanEqualMultipleValuesHelper(
   auto m = [&]<auto comp>() {
     auto expression =
         makeExpression<comp>(makeCopy(leftValue), makeCopy(rightValue));
-    auto resultAsVariant =
-        expression.evaluate(context, *testContext.cancellationHandle);
+    auto resultAsVariant = expression.evaluate(context);
     auto expressionInverted =
         makeExpression<comp>(makeCopy(rightValue), makeCopy(leftValue));
-    auto resultAsVariantInverted =
-        expressionInverted.evaluate(context, *testContext.cancellationHandle);
+    auto resultAsVariantInverted = expressionInverted.evaluate(context);
     auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
     auto& resultInverted =
         std::get<VectorWithMemoryLimit<Id>>(resultAsVariantInverted);
@@ -451,9 +449,10 @@ auto testNotComparableHelper(T leftValue, U rightValue,
   VariableToColumnMap map;
   LocalVocab localVocab;
   IdTable table{alloc};
-  sparqlExpression::EvaluationContext context{*getQec(), map, table, alloc,
-                                              localVocab};
-  ad_utility::CancellationHandle<> cancellationHandle;
+  sparqlExpression::EvaluationContext context{
+      *getQec(),  map,
+      table,      alloc,
+      localVocab, std::make_shared<ad_utility::CancellationHandle<>>()};
   AD_CONTRACT_CHECK(rightValue.size() == 5);
   context._beginIndex = 0;
   context._endIndex = 5;
@@ -461,11 +460,10 @@ auto testNotComparableHelper(T leftValue, U rightValue,
   auto m = [&]<auto comp>() {
     auto expression =
         makeExpression<comp>(makeCopy(leftValue), makeCopy(rightValue));
-    auto resultAsVariant = expression.evaluate(&context, cancellationHandle);
+    auto resultAsVariant = expression.evaluate(&context);
     auto expressionInverted =
         makeExpression<comp>(makeCopy(rightValue), makeCopy(leftValue));
-    auto resultAsVariantInverted =
-        expressionInverted.evaluate(&context, cancellationHandle);
+    auto resultAsVariantInverted = expressionInverted.evaluate(&context);
     auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
     auto& resultInverted =
         std::get<VectorWithMemoryLimit<Id>>(resultAsVariantInverted);
@@ -618,8 +616,7 @@ void testWithExplicitIdResult(auto leftValue, auto rightValue,
   auto expression = makeExpression<Comp>(liftToValueId(std::move(leftValue)),
                                          liftToValueId(std::move(rightValue)));
   auto trace = generateLocationTrace(l, "test lambda was called here");
-  auto resultAsVariant =
-      expression.evaluate(&ctx.context, *ctx.cancellationHandle);
+  auto resultAsVariant = expression.evaluate(&ctx.context);
   const auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 }
@@ -735,8 +732,7 @@ void testSortedVariableAndConstant(
   TestContext ctx = TestContext::sortedBy(leftValue);
   auto expression =
       makeExpression<Comp>(leftValue, liftToValueId(std::move(rightValue)));
-  auto resultAsVariant =
-      expression.evaluate(&ctx.context, *ctx.cancellationHandle);
+  auto resultAsVariant = expression.evaluate(&ctx.context);
   const auto& result = std::get<ad_utility::SetOfIntervals>(resultAsVariant);
   ASSERT_EQ(result, expected);
 }

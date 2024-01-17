@@ -28,8 +28,7 @@ class VariadicExpression : public SparqlExpression {
       : children_{std::move(children)} {}
 
   // _________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* ctx,
-                            CancellationHandle handle) const override = 0;
+  ExpressionResult evaluate(EvaluationContext* ctx) const override = 0;
 
   // ___________________________________________________
   std::string getCacheKey(const VariableToColumnMap& varColMap) const override {

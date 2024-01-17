@@ -183,8 +183,7 @@ void GroupBy::processGroup(
   evaluationContext._endIndex = blockEnd;
 
   sparqlExpression::ExpressionResult expressionResult =
-      aggregate._expression.getPimpl()->evaluate(&evaluationContext,
-                                                 *cancellationHandle_);
+      aggregate._expression.getPimpl()->evaluate(&evaluationContext);
 
   auto& resultEntry = result->operator()(resultRow, resultColumn);
 
@@ -243,7 +242,8 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), *inTable,
-      getExecutionContext()->getAllocator(), *outLocalVocab);
+      getExecutionContext()->getAllocator(), *outLocalVocab,
+      cancellationHandle_);
 
   // In a GROUP BY evaluation, the expressions need to know which variables are
   // grouped, and to which columns the results of the aliases are written. The
@@ -1056,8 +1056,7 @@ void GroupBy::evaluateAlias(
 
     // Evaluate top-level alias expression
     sparqlExpression::ExpressionResult expressionResult =
-        alias.expr_.getPimpl()->evaluate(&evaluationContext,
-                                         *cancellationHandle_);
+        alias.expr_.getPimpl()->evaluate(&evaluationContext);
 
     // Copy the result so that future aliases may reuse it
     evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
@@ -1085,7 +1084,7 @@ void GroupBy::createResultFromHashMap(
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), *result,
-      getExecutionContext()->getAllocator(), *localVocab);
+      getExecutionContext()->getAllocator(), *localVocab, cancellationHandle_);
 
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};
@@ -1151,7 +1150,7 @@ void GroupBy::computeGroupByForHashMapOptimization(
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), subresult,
-      getExecutionContext()->getAllocator(), *localVocab);
+      getExecutionContext()->getAllocator(), *localVocab, cancellationHandle_);
 
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};
@@ -1177,7 +1176,7 @@ void GroupBy::computeGroupByForHashMapOptimization(
         // Evaluate child expression on block
         auto exprChildren = aggregate.expr_->children();
         sparqlExpression::ExpressionResult expressionResult =
-            exprChildren[0]->evaluate(&evaluationContext, *cancellationHandle_);
+            exprChildren[0]->evaluate(&evaluationContext);
 
         auto& aggregationDataVariant =
             aggregationData.getAggregationDataVariant(

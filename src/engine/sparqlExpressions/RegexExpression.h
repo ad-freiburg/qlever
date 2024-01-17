@@ -30,8 +30,7 @@ class RegexExpression : public SparqlExpression {
   RegexExpression(SparqlExpression::Ptr child, SparqlExpression::Ptr regex,
                   std::optional<SparqlExpression::Ptr> optionalFlags);
 
-  ExpressionResult evaluate(EvaluationContext* context,
-                            CancellationHandle handle) const override;
+  ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _________________________________________________________________________
   [[nodiscard]] string getCacheKey(
@@ -49,11 +48,11 @@ class RegexExpression : public SparqlExpression {
   std::span<SparqlExpression::Ptr> childrenImpl() override;
   // Internal implementations that are called by `evaluate`.
   ExpressionResult evaluatePrefixRegex(
-      const Variable& variable, sparqlExpression::EvaluationContext* context,
-      CancellationHandle handle) const;
+      const Variable& variable,
+      sparqlExpression::EvaluationContext* context) const;
   ExpressionResult evaluateNonPrefixRegex(
-      const Variable& variable, sparqlExpression::EvaluationContext* context,
-      CancellationHandle handle) const;
+      const Variable& variable,
+      sparqlExpression::EvaluationContext* context) const;
 };
 namespace detail {
 // Check if `regex` is a prefix regex which means that it starts with `^` and

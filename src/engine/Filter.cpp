@@ -67,15 +67,14 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputResultTable.idTable(), getExecutionContext()->getAllocator(),
-      inputResultTable.localVocab());
+      inputResultTable.localVocab(), cancellationHandle_);
 
   // TODO<joka921> This should be a mandatory argument to the EvaluationContext
   // constructor.
   evaluationContext._columnsByWhichResultIsSorted = inputResultTable.sortedBy();
 
   sparqlExpression::ExpressionResult expressionResult =
-      _expression.getPimpl()->evaluate(&evaluationContext,
-                                       *cancellationHandle_);
+      _expression.getPimpl()->evaluate(&evaluationContext);
 
   const auto input = inputResultTable.idTable().asStaticView<WIDTH>();
   auto output = std::move(*outputIdTable).toStatic<WIDTH>();

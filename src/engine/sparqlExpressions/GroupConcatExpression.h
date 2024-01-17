@@ -25,12 +25,11 @@ class GroupConcatExpression : public SparqlExpression {
   }
 
   // __________________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context,
-                            CancellationHandle handle) const override {
-    auto impl = [this, &handle, context](
-                    SingleExpressionResult auto&& el) -> ExpressionResult {
+  ExpressionResult evaluate(EvaluationContext* context) const override {
+    auto impl =
+        [this, context](SingleExpressionResult auto&& el) -> ExpressionResult {
       std::string result;
-      auto groupConcatImpl = [this, &result, context, &handle](auto generator) {
+      auto groupConcatImpl = [this, &result, context](auto generator) {
         // TODO<joka921> Make this a configurable constant.
         result.reserve(20000);
         for (auto& inp : generator) {
@@ -41,13 +40,14 @@ class GroupConcatExpression : public SparqlExpression {
             }
             result.append(s.value());
           }
-          handle.throwIfCancelled("GroupConcatExpression");
+          context->cancellationHandle_->throwIfCancelled(
+              "GroupConcatExpression");
         }
       };
       auto generator =
           detail::makeGenerator(AD_FWD(el), context->size(), context);
       if (distinct_) {
-        handle.throwIfCancelled("GroupConcatExpression");
+        context->cancellationHandle_->throwIfCancelled("GroupConcatExpression");
         groupConcatImpl(detail::getUniqueElements(context, context->size(),
                                                   std::move(generator)));
       } else {
@@ -57,7 +57,7 @@ class GroupConcatExpression : public SparqlExpression {
       return IdOrString(std::move(result));
     };
 
-    auto childRes = child_->evaluate(context, handle);
+    auto childRes = child_->evaluate(context);
     return std::visit(impl, std::move(childRes));
   }
 

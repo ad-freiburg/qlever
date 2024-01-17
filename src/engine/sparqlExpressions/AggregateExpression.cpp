@@ -23,13 +23,13 @@ AggregateExpression<AggregateOperation, FinalOp>::AggregateExpression(
 template <typename AggregateOperation, typename FinalOperation>
 ExpressionResult
 AggregateExpression<AggregateOperation, FinalOperation>::evaluate(
-    EvaluationContext* context, CancellationHandle handle) const {
-  auto childResult = _child->evaluate(context, handle);
+    EvaluationContext* context) const {
+  auto childResult = _child->evaluate(context);
 
   return std::visit(
-      [this, context, &handle](auto&& arg) {
+      [this, context](auto&& arg) {
         return evaluateOnChildOperand(_aggregateOp, FinalOperation{}, context,
-                                      _distinct, AD_FWD(arg), handle);
+                                      _distinct, AD_FWD(arg));
       },
       std::move(childResult));
 }

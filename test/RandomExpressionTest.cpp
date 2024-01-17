@@ -13,8 +13,7 @@ TEST(RandomExpression, evaluate) {
   auto& evaluationContext = testContext.context;
   evaluationContext._beginIndex = 43;
   evaluationContext._endIndex = 1044;
-  auto resultAsVariant = RandomExpression{}.evaluate(
-      &evaluationContext, *testContext.cancellationHandle);
+  auto resultAsVariant = RandomExpression{}.evaluate(&evaluationContext);
 
   using V = VectorWithMemoryLimit<Id>;
   ASSERT_TRUE(std::holds_alternative<V>(resultAsVariant));
@@ -44,8 +43,7 @@ TEST(RandomExpression, evaluate) {
   // When we are part of a GROUP BY, we don't expect a vector but a single ID.
   {
     evaluationContext._isPartOfGroupBy = true;
-    auto resultAsVariant2 = RandomExpression{}.evaluate(
-        &evaluationContext, *testContext.cancellationHandle);
+    auto resultAsVariant2 = RandomExpression{}.evaluate(&evaluationContext);
     ASSERT_TRUE(std::holds_alternative<Id>(resultAsVariant2));
   }
 }

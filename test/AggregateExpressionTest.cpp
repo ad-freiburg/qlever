@@ -38,7 +38,7 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
   auto t = TestContext{};
   t.context._endIndex = input.size();
   AggregateExpressionT m{distinct, std::move(d)};
-  auto resAsVariant = m.evaluate(&t.context, *t.cancellationHandle);
+  auto resAsVariant = m.evaluate(&t.context);
   auto res = std::get<U>(resAsVariant);
   EXPECT_EQ(res, expectedResult);
 };

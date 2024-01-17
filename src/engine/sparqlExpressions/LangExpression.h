@@ -30,10 +30,7 @@ class LangExpression : public SparqlExpression {
   // `SparqlExpression`, but they will always fail at runtime when executed. All
   // occurences of `LanguageExpression` should be detected and dealt with by the
   // parser before any of these methods is ever called.
-  ExpressionResult evaluate(EvaluationContext*,
-                            CancellationHandle) const override {
-    AD_FAIL();
-  }
+  ExpressionResult evaluate(EvaluationContext*) const override { AD_FAIL(); }
 
   std::string getCacheKey(const VariableToColumnMap&) const override {
     AD_FAIL();

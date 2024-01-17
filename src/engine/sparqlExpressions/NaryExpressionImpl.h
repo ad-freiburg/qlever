@@ -32,8 +32,7 @@ class NaryExpression : public SparqlExpression {
       : NaryExpression{Children{std::move(children)...}} {}
 
   // __________________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context,
-                            CancellationHandle handle) const override;
+  ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _________________________________________________________________________
   [[nodiscard]] string getCacheKey(
@@ -47,7 +46,6 @@ class NaryExpression : public SparqlExpression {
   template <SingleExpressionResult... Operands>
   static ExpressionResult evaluateOnChildrenOperands(
       NaryOperation naryOperation, EvaluationContext* context,
-      std::remove_reference_t<CancellationHandle>* handle,
       Operands&&... operands) {
     // Perform a more efficient calculation if a specialized function exists
     // that matches all operands.
@@ -68,8 +66,8 @@ class NaryExpression : public SparqlExpression {
         (... && isConstantResult<Operands>);
 
     // The generator for the result of the operation.
-    auto resultGenerator = applyOperation(targetSize, naryOperation, context,
-                                          handle, AD_FWD(operands)...);
+    auto resultGenerator =
+        applyOperation(targetSize, naryOperation, context, AD_FWD(operands)...);
 
     // Compute the result.
     using ResultType = typename decltype(resultGenerator)::value_type;
@@ -147,11 +145,9 @@ NaryExpression<Op>::NaryExpression(Children&& children)
 template <typename NaryOperation>
 requires(isOperation<NaryOperation>)
 ExpressionResult NaryExpression<NaryOperation>::evaluate(
-    EvaluationContext* context, CancellationHandle handle) const {
+    EvaluationContext* context) const {
   auto resultsOfChildren = ad_utility::applyFunctionToEachElementOfTuple(
-      [context, &handle](const auto& child) {
-        return child->evaluate(context, handle);
-      },
+      [context](const auto& child) { return child->evaluate(context); },
       children_);
 
   // Bind the `evaluateOnChildrenOperands` to a lambda.
@@ -163,7 +159,7 @@ ExpressionResult NaryExpression<NaryOperation>::evaluate(
   // and evaluates the expression.
   auto evaluateOnChildrenResults = std::bind_front(
       ad_utility::visitWithVariantsAndParameters,
-      evaluateOnChildOperandsAsLambda, NaryOperation{}, context, &handle);
+      evaluateOnChildOperandsAsLambda, NaryOperation{}, context);
 
   return std::apply(evaluateOnChildrenResults, std::move(resultsOfChildren));
 }

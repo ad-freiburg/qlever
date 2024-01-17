@@ -38,11 +38,9 @@ class SparqlExpression {
  public:
   /// ________________________________________________________________________
   using Ptr = std::unique_ptr<SparqlExpression>;
-  using CancellationHandle = ad_utility::CancellationHandle<>&;
 
   /// Evaluate a Sparql expression.
-  virtual ExpressionResult evaluate(EvaluationContext*,
-                                    CancellationHandle) const = 0;
+  virtual ExpressionResult evaluate(EvaluationContext*) const = 0;
 
   /// Return all variables and IRIs, needed for certain parser methods.
   /// TODO<joka921> should be called getStringLiteralsAndVariables

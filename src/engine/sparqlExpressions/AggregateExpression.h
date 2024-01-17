@@ -49,8 +49,7 @@ class AggregateExpression : public SparqlExpression {
                       AggregateOperation aggregateOp = AggregateOperation{});
 
   // __________________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context,
-                            CancellationHandle handle) const override;
+  ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _________________________________________________________________________
   vector<Variable> getUnaggregatedVariables() override;
@@ -76,8 +75,7 @@ class AggregateExpression : public SparqlExpression {
       []<SingleExpressionResult Operand>(
           const AggregateOperation& aggregateOperation,
           const FinalOperation& finalOperation, EvaluationContext* context,
-          bool distinct, Operand&& operand,
-          CancellationHandle handle) -> ExpressionResult {
+          bool distinct, Operand&& operand) -> ExpressionResult {
     // Perform the more efficient calculation on `SetOfInterval`s if it is
     // possible.
     if (isAnySpecializedFunctionPossible(
@@ -117,33 +115,35 @@ class AggregateExpression : public SparqlExpression {
     auto operands =
         makeGenerator(std::forward<Operand>(operand), inputSize, context);
 
-    auto impl = [&valueGetter, context, &finalOperation, &callFunction,
-                 &handle](auto&& inputs) {
+    auto impl = [&valueGetter, context, &finalOperation,
+                 &callFunction](auto&& inputs) {
       auto it = inputs.begin();
       AD_CORRECTNESS_CHECK(it != inputs.end());
 
       using ResultType = std::decay_t<decltype(callFunction(
           std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
       ResultType result = valueGetter(*it, context);
-      handle.throwIfCancelled("AggregateExpression evaluate on child operand");
+      context->cancellationHandle_->throwIfCancelled(
+          "AggregateExpression evaluate on child operand");
       size_t numValues = 1;
 
       for (++it; it != inputs.end(); ++it) {
         result = callFunction(std::move(result),
                               valueGetter(std::move(*it), context));
-        handle.throwIfCancelled(
+        context->cancellationHandle_->throwIfCancelled(
             "AggregateExpression evaluate on child operand");
         ++numValues;
       }
       result = finalOperation(std::move(result), numValues);
-      handle.throwIfCancelled("AggregateExpression evaluate on child operand");
+      context->cancellationHandle_->throwIfCancelled(
+          "AggregateExpression evaluate on child operand");
       return result;
     };
     auto result = [&]() {
       if (distinct) {
         auto uniqueValues =
             getUniqueElements(context, inputSize, std::move(operands));
-        handle.throwIfCancelled(
+        context->cancellationHandle_->throwIfCancelled(
             "AggregateExpression after filtering unique values");
         return impl(std::move(uniqueValues));
       } else {

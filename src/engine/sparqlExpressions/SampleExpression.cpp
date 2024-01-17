@@ -13,8 +13,7 @@ using namespace sparqlExpression;
 using namespace sparqlExpression::detail;
 
 // ____________________________________________________________________________
-ExpressionResult SampleExpression::evaluate(EvaluationContext* context,
-                                            CancellationHandle handle) const {
+ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
   auto evaluator =
       [context]<typename T>(const T& childResult) -> ExpressionResult {
     if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
@@ -35,5 +34,5 @@ ExpressionResult SampleExpression::evaluate(EvaluationContext* context,
     }
   };
 
-  return std::visit(evaluator, _child->evaluate(context, handle));
+  return std::visit(evaluator, _child->evaluate(context));
 }

@@ -122,10 +122,10 @@ void Bind::computeExpressionBind(
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputResultTable.idTable(), getExecutionContext()->getAllocator(),
-      inputResultTable.localVocab());
+      inputResultTable.localVocab(), cancellationHandle_);
 
   sparqlExpression::ExpressionResult expressionResult =
-      expression->evaluate(&evaluationContext, *cancellationHandle_);
+      expression->evaluate(&evaluationContext);
 
   const auto input = inputResultTable.idTable().asStaticView<IN_WIDTH>();
   auto output = std::move(*outputIdTable).toStatic<OUT_WIDTH>();

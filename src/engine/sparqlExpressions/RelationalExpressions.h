@@ -29,8 +29,7 @@ class RelationalExpression : public SparqlExpression {
   explicit RelationalExpression(Children children)
       : children_{std::move(children)} {}
 
-  ExpressionResult evaluate(EvaluationContext* context,
-                            CancellationHandle handle) const override;
+  ExpressionResult evaluate(EvaluationContext* context) const override;
 
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
