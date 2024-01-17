@@ -364,8 +364,11 @@ class GroupBy : public Operation {
                    MaxAggregationData, SumAggregationData,
                    GroupConcatAggregationData>;
 
+  template <typename T>
+  using VectorWithStandardAllocator = std::vector<T, std::allocator<T>>;
+
   using AggregationDataVectors =
-      ad_utility::LiftedVariant<AggregationData, std::vector>;
+      ad_utility::LiftedVariant<AggregationData, VectorWithStandardAllocator>;
 
   // Stores the map which associates Ids with vector offsets and
   // the vectors containing the aggregation data.
