@@ -825,12 +825,16 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                      getConfigVariables().maxMemory().value_or(0_B).getBytes());
   }
 
+  // A default `stopFunction` for ``, that takes everything and always returns
+  // false.
+  static constexpr auto alwaysFalse = [](const auto&...) { return false; };
+
   /*
   @brief Create a benchmark table for join algorithm, with the given
   parameters for the IdTables, which will keep getting more rows, until the
   `maxTimeSingleMeasurement` getter value, the `maxMemoryBiggerTable()` getter
   value, or the `maxMemory()` getter value of the configuration options was
-  reached/surpassed.
+  reached/surpassed. It will additionally stop, iff `stopFunction` returns true.
   The rows will be the return values of the parameter, you gave a function
   for, and the columns will be:
   - Return values of the parameter, you gave a function for.
@@ -856,6 +860,13 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   @param parameterName The names of the parameter, you gave a growth function
   for. Will be set as the name of the column, which will show the returned
   values of the growth function.
+  @param stopFunction Before generating the next row, this function will be
+  called with the values of the function call arugments `overlap`, `ratioRows`,
+  `smallerTableNumRows`, `smallerTableNumColumns`, `biggerTableNumColumns`,
+  `smallerTableJoinColumnSampleSizeRatio` and
+  `biggerTableJoinColumnSampleSizeRatio` for the to be generated row. Iff. this
+  function returns true, the row will not be generated and the table generation
+  stopped.
   @param overlap The height of the probability for any join column entry of
   smallerTable to be overwritten by a random join column entry of biggerTable.
   @param randomSeed Seed for the random generators.
@@ -878,7 +889,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   chance to be picked.) This adjusts the number of elements in the sample size
   to `Amount of rows * ratio`, which affects the possibility of duplicates.
    */
-  template <isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<size_t> T2,
+  template <ad_utility::InvocableWithExactReturnType<
+                bool, float, size_t, size_t, size_t, size_t, float, float>
+                StopFunction,
+            isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<size_t> T2,
             isTypeOrGrowthFunction<size_t> T3,
             isTypeOrGrowthFunction<size_t> T4,
             isTypeOrGrowthFunction<size_t> T5,
@@ -887,7 +901,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   requires exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>
   ResultTable& makeGrowingBenchmarkTable(
       BenchmarkResults* results, const std::string_view tableDescriptor,
-      std::string parameterName, const T1& overlap,
+      std::string parameterName, StopFunction stopFunction, const T1& overlap,
       ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
       const bool biggerTableSorted, const T2& ratioRows,
       const T3& smallerTableNumRows, const T4& smallerTableNumColumns,
@@ -966,6 +980,28 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       // What's the row number of the next to be added row?
       const size_t rowIdx = table.numRows();
 
+      // Collect the parameter for this row.
+      auto overlapValue{returnOrCall(overlap, rowIdx)};
+      auto ratioRowsValue{returnOrCall(ratioRows, rowIdx)};
+      auto smallerTableNumRowsValue{returnOrCall(smallerTableNumRows, rowIdx)};
+      auto smallerTableNumColumnsValue{
+          returnOrCall(smallerTableNumColumns, rowIdx)};
+      auto biggerTableNumColumnsValue{
+          returnOrCall(biggerTableNumColumns, rowIdx)};
+      auto smallerTableJoinColumnSampleSizeRatioValue{
+          returnOrCall(smallerTableJoinColumnSampleSizeRatio, rowIdx)};
+      auto biggerTableJoinColumnSampleSizeRatioValue{
+          returnOrCall(biggerTableJoinColumnSampleSizeRatio, rowIdx)};
+
+      // Do not generate the row, if the stop function is against it.
+      if (std::invoke(stopFunction, overlapValue, ratioRowsValue,
+                      smallerTableNumRowsValue, smallerTableNumColumnsValue,
+                      biggerTableNumColumnsValue,
+                      smallerTableJoinColumnSampleSizeRatioValue,
+                      biggerTableJoinColumnSampleSizeRatioValue)) {
+        break;
+      }
+
       // Add a new row without content.
       table.addRow();
       table.setEntry(
@@ -981,14 +1017,12 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       A partly filled row is of no use to anyone.
       */
       if (!addMeasurementsToRowOfBenchmarkTable(
-              &table, rowIdx, returnOrCall(overlap, rowIdx),
-              std::invoke(seedGenerator), smallerTableSorted, biggerTableSorted,
-              returnOrCall(ratioRows, rowIdx),
-              returnOrCall(smallerTableNumRows, rowIdx),
-              returnOrCall(smallerTableNumColumns, rowIdx),
-              returnOrCall(biggerTableNumColumns, rowIdx),
-              returnOrCall(smallerTableJoinColumnSampleSizeRatio, rowIdx),
-              returnOrCall(biggerTableJoinColumnSampleSizeRatio, rowIdx))) {
+              &table, rowIdx, overlapValue, std::invoke(seedGenerator),
+              smallerTableSorted, biggerTableSorted, ratioRowsValue,
+              smallerTableNumRowsValue, smallerTableNumColumnsValue,
+              biggerTableNumColumnsValue,
+              smallerTableJoinColumnSampleSizeRatioValue,
+              biggerTableJoinColumnSampleSizeRatioValue)) {
         table.deleteRow(rowIdx);
         break;
       }
@@ -1338,7 +1372,7 @@ class BmOnlyBiggerTableSizeChanges final
                     getConfigVariables().smallerTableNumRows_);
 
         ResultTable& table = makeGrowingBenchmarkTable(
-            &results, tableName, "Row ratio",
+            &results, tableName, "Row ratio", alwaysFalse,
             getConfigVariables().overlapChance_,
             getConfigVariables().randomSeed(), smallerTableSorted,
             biggerTableSorted, growthFunction,
@@ -1401,7 +1435,7 @@ class BmOnlySmallerTableSizeChanges final
 
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Amount of rows in the smaller table",
-              getConfigVariables().overlapChance_,
+              alwaysFalse, getConfigVariables().overlapChance_,
               getConfigVariables().randomSeed(), smallerTableSorted,
               biggerTableSorted, ratioRows, growthFunction,
               getConfigVariables().smallerTableNumColumns_,
@@ -1455,7 +1489,7 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
             10, getConfigVariables().minBiggerTableRows_);
 
         ResultTable& table = makeGrowingBenchmarkTable(
-            &results, tableName, "Amount of rows",
+            &results, tableName, "Amount of rows", alwaysFalse,
             getConfigVariables().overlapChance_,
             getConfigVariables().randomSeed(), smallerTableSorted,
             biggerTableSorted, 1UL, growthFunction,
