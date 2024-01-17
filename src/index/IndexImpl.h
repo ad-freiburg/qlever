@@ -7,6 +7,7 @@
 
 #include <engine/ResultTable.h>
 #include <global/Pattern.h>
+#include <global/SpecialIds.h>
 #include <index/CompressedRelation.h>
 #include <index/ConstantsIndexBuilding.h>
 #include <index/DocsDB.h>
@@ -668,6 +669,7 @@ class IndexImpl {
   // index scan) and `GroupBy.cpp`.
   auto getIgnoredIdRanges(const Permutation::Enum permutation) const {
     std::vector<std::pair<Id, Id>> ignoredRanges;
+    ignoredRanges.emplace_back(qlever::getBoundsForSpecialIds());
 
     auto literalRange = getVocab().prefix_range("\"");
     auto taggedPredicatesRange = getVocab().prefix_range("@");
@@ -688,6 +690,10 @@ class IndexImpl {
     }
 
     auto isIllegalPredicateId = [=](Id predicateId) {
+      if (predicateId.getDatatype() == Datatype::Undefined) {
+        return true;
+      }
+      AD_CORRECTNESS_CHECK(predicateId.getDatatype() == Datatype::VocabIndex);
       auto idx = predicateId.getVocabIndex();
       return (idx >= internalEntitiesRange.first &&
               idx < internalEntitiesRange.second) ||
@@ -808,10 +814,4 @@ class IndexImpl {
   std::unique_ptr<ExternalSorter<SortByPSO, 5>> buildOspWithPatterns(
       PatternCreatorNew::TripleSorter sortersFromPatternCreator,
       auto isQLeverInternalId);
-
-  // Build an index (PSO and POS permutations only) from the
-  // `additionalTriples`. The created files will be stored at `onDiskBase_ +
-  // ADDITIONAL_TRIPLES_PREFIX`.
-  void makeIndexFromAdditionalTriples(
-      ExternalSorter<SortByPSO>&& additionalTriples);
 };

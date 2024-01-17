@@ -262,7 +262,13 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
   createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
                               std::move(blockGenerator), *thirdSorter);
-  makeIndexFromAdditionalTriples(std::move(*hasPatternPredicateSortedByPSO));
+  // Add the `ql:has-pattern` predicate to the sorter s.t. it will get part of
+  // the PSO/POS permutations.
+  auto noPattern = Id::makeFromInt(NO_PATTERN);
+  static_assert(NumColumnsIndexBuilding == 3);
+  for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
+    thirdSorter->push(std::array{row[0], row[1], row[2], row[2], noPattern});
+  }
   return thirdSorter;
 }
 // _____________________________________________________________________________
@@ -286,7 +292,8 @@ void IndexImpl::createFromFile(const string& filename) {
   writeConfiguration();
 
   auto isQleverInternalId = [&indexBuilderData](const auto& id) {
-    return indexBuilderData.vocabularyMetaData_.isQleverInternalId(id);
+    return indexBuilderData.vocabularyMetaData_.isQleverInternalId(id) ||
+           id.getDatatype() == Datatype::Undefined;
   };
 
   // For the first permutation, perform a unique.
@@ -759,8 +766,20 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
 
-  // We have to load the patterns first to figure out if the patterns were built
-  // at all.
+  pso_.loadFromDisk(onDiskBase_);
+  pos_.loadFromDisk(onDiskBase_);
+
+  if (loadAllPermutations_) {
+    ops_.loadFromDisk(onDiskBase_);
+    osp_.loadFromDisk(onDiskBase_);
+    spo_.loadFromDisk(onDiskBase_);
+    sop_.loadFromDisk(onDiskBase_);
+  } else {
+    LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
+                 "with predicate variables will therefore not work"
+              << std::endl;
+  }
+
   if (usePatterns_) {
     try {
       PatternCreator::readPatternsFromFile(
@@ -776,26 +795,6 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
                 << e.what() << std::endl;
       usePatterns_ = false;
     }
-  }
-
-  [[maybe_unused]] const auto hasAdditionalTriples = [usePatterns =
-                                                          usePatterns_] {
-    using enum Permutation::HasAdditionalTriples;
-    return usePatterns ? True : False;
-  }();
-
-  pso_.loadFromDisk(onDiskBase_, hasAdditionalTriples);
-  pos_.loadFromDisk(onDiskBase_, hasAdditionalTriples);
-
-  if (loadAllPermutations_) {
-    ops_.loadFromDisk(onDiskBase_);
-    osp_.loadFromDisk(onDiskBase_);
-    spo_.loadFromDisk(onDiskBase_);
-    sop_.loadFromDisk(onDiskBase_);
-  } else {
-    LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
-                 "with predicate variables will therefore not work"
-              << std::endl;
   }
 }
 
@@ -1382,7 +1381,11 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(Id id, Permutation::Enum permutation) const {
-  return getPermutation(permutation).getResultSizeOfScan(id);
+  if (const auto& p = getPermutation(permutation);
+      p.metaData().col0IdExists(id)) {
+    return p.metaData().getMetaData(id).getNofElements();
+  }
+  return 0;
 }
 
 // ___________________________________________________________________________
@@ -1643,22 +1646,4 @@ template <typename Comparator, size_t I>
 std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
     std::string_view permutationName) const {
   return makeSorterImpl<Comparator, I, true>(permutationName);
-}
-
-// _____________________________________________________________________________
-void IndexImpl::makeIndexFromAdditionalTriples(
-    ExternalSorter<SortByPSO>&& additionalTriples) {
-  // Manually change the basename and readable names for the additional
-  // permutations.
-  auto onDiskBaseCpy = onDiskBase_;
-  onDiskBase_ += ADDITIONAL_TRIPLES_SUFFIX;
-  auto posName =
-      std::exchange(pos_.readableName_, "Additional " + pos_.readableName_);
-  auto psoName =
-      std::exchange(pso_.readableName_, "Additional " + pso_.readableName_);
-  createPermutationPair(3, std::move(additionalTriples).getSortedBlocks<0>(),
-                        pso_, pos_);
-  onDiskBase_ = onDiskBaseCpy;
-  pso_.readableName_ = psoName;
-  pos_.readableName_ = posName;
 }

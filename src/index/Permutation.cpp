@@ -12,12 +12,10 @@ Permutation::Permutation(Enum permutation, Allocator allocator)
     : readableName_(toString(permutation)),
       fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
       keyOrder_(toKeyOrder(permutation)),
-      allocator_{std::move(allocator)},
-      permutation_{permutation} {}
+      allocator_{std::move(allocator)} {}
 
 // _____________________________________________________________________
-void Permutation::loadFromDisk(const std::string& onDiskBase,
-                               HasAdditionalTriples loadAdditionalTriples) {
+void Permutation::loadFromDisk(const std::string& onDiskBase) {
   if constexpr (MetaData::_isMmapBased) {
     meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
                 ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
@@ -38,14 +36,6 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
   LOG(INFO) << "Registered " << readableName_
             << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;
-  if (loadAdditionalTriples == HasAdditionalTriples::True) {
-    additionalPermutation_ =
-        std::make_unique<Permutation>(permutation_, allocator_);
-    additionalPermutation_->readableName_ =
-        "Additional " + additionalPermutation_->readableName_;
-    additionalPermutation_->loadFromDisk(onDiskBase +
-                                         ADDITIONAL_TRIPLES_SUFFIX);
-  }
 }
 
 // _____________________________________________________________________
@@ -58,10 +48,6 @@ IdTable Permutation::scan(
   }
 
   if (!meta_.col0IdExists(col0Id)) {
-    if (additionalPermutation_) {
-      return additionalPermutation_->scan(col0Id, col1Id, additionalColumns,
-                                          std::move(cancellationHandle));
-    }
     size_t numColumns = col1Id.has_value() ? 1 : 2;
     return IdTable{numColumns, reader().allocator()};
   }
@@ -72,23 +58,13 @@ IdTable Permutation::scan(
 }
 
 // _____________________________________________________________________
-size_t Permutation::getResultSizeOfScan(Id col0Id,
-                                        std::optional<Id> col1Id) const {
+size_t Permutation::getResultSizeOfScan(Id col0Id, Id col1Id) const {
   if (!meta_.col0IdExists(col0Id)) {
-    if (additionalPermutation_) {
-      return additionalPermutation_->getResultSizeOfScan(col0Id, col1Id);
-    }
     return 0;
   }
   const auto& metaData = meta_.getMetaData(col0Id);
 
-  // TODO<joka921> should be handled inside the CompressedRelationReader.
-  if (!col1Id.has_value()) {
-    return metaData.getNofElements();
-  }
-
-  return reader().getResultSizeOfScan(metaData, col1Id.value(),
-                                      meta_.blockData());
+  return reader().getResultSizeOfScan(metaData, col1Id, meta_.blockData());
 }
 
 // _____________________________________________________________________
@@ -135,9 +111,6 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     Id col0Id, std::optional<Id> col1Id) const {
   if (!meta_.col0IdExists(col0Id)) {
-    if (additionalPermutation_) {
-      return additionalPermutation_->getMetadataAndBlocks(col0Id, col1Id);
-    }
     return std::nullopt;
   }
 
@@ -159,11 +132,6 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     ColumnIndicesRef additionalColumns,
     ad_utility::SharedCancellationHandle cancellationHandle) const {
   if (!meta_.col0IdExists(col0Id)) {
-    if (additionalPermutation_) {
-      return additionalPermutation_->lazyScan(col0Id, col1Id, std::move(blocks),
-                                              additionalColumns,
-                                              std::move(cancellationHandle));
-    }
     return {};
   }
   auto relationMetadata = meta_.getMetaData(col0Id);
