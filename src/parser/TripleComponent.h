@@ -13,6 +13,7 @@
 
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"
+#include "global/SpecialIds.h"
 #include "global/Id.h"
 #include "parser/RdfEscaping.h"
 #include "parser/data/Variable.h"
@@ -232,6 +233,8 @@ class TripleComponent {
           isString() ? getString() : getLiteral().rawContent();
       if (vocabulary.getId(content, &idx)) {
         return Id::makeFromVocabIndex(idx);
+      } else if (qlever::specialIds.contains(content)) {
+        return qlever::specialIds.at(content);
       } else {
         return std::nullopt;
       }
