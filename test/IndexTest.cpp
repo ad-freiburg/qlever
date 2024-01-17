@@ -525,10 +525,10 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_EQ(predicates, index.numDistinctCol0(Permutation::POS));
 
   auto objects = index.numDistinctObjects();
-  // The pattern indices from the `ql:has-pattern` predicate are currently not
-  // part of these statistics, but they are also not very important.
   EXPECT_EQ(objects.normal_, 7);
-  // One added object for each language that is used
+  // One added object for each language that is used.
+  // Note: The pattern indices from the `ql:has-pattern` predicate are currently
+  // not part of `objects.internal_`, but they are also not very important.
   EXPECT_EQ(objects.internal_, 1);
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OSP));
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OPS));

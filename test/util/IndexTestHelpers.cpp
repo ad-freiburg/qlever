@@ -72,14 +72,17 @@ void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
                                      std::array{ColumnIndex{2}, ColumnIndex{3}},
                                      cancellationDummy);
         auto hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
-        auto scanResult2 =
+        auto scanResultHasPattern =
             index.scan(hasPatternId, col0Id, Permutation::Enum::PSO, {},
                        cancellationDummy);
-        AD_CORRECTNESS_CHECK(scanResult2.numRows() <= 1);
-        if (scanResult2.numRows() == 0) {
+        // Each ID has at most one pattern, it can have none if it doesn't
+        // appear as a subject in the knowledge graph.
+        AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
+        if (scanResultHasPattern.numRows() == 0) {
           checkSingleElement(index, NO_PATTERN, col0Id);
         } else {
-          checkSingleElement(index, scanResult2(0, 0).getInt(), col0Id);
+          checkSingleElement(index, scanResultHasPattern(0, 0).getInt(),
+                             col0Id);
         }
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {

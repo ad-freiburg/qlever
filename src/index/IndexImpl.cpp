@@ -262,18 +262,19 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
   createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
                               std::move(blockGenerator), *thirdSorter);
-  // Add the `ql:has-pattern` predicate to the sorter s.t. it will get part of
-  // the PSO/POS permutations.
+  // Add the `ql:has-pattern` predicate to the sorter such that it will become
+  // part of the PSO/POS permutations.
   LOG(INFO) << "Adding " << hasPatternPredicateSortedByPSO->size()
             << " additional triples to the POS and PSO permutation for the "
-               "`ql:has-pattern` predicate..."
+               "`ql:has-pattern` predicate ..."
             << std::endl;
   auto noPattern = Id::makeFromInt(NO_PATTERN);
   static_assert(NumColumnsIndexBuilding == 3);
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
+    // The repetition of the pattern index (`row[2]`) for the fourth column is
+    // useful for generic unit testing, but not needed otherwise.
     thirdSorter->push(std::array{row[0], row[1], row[2], row[2], noPattern});
   }
-  LOG(INFO) << "Done." << std::endl;
   return thirdSorter;
 }
 // _____________________________________________________________________________
@@ -297,6 +298,8 @@ void IndexImpl::createFromFile(const string& filename) {
   writeConfiguration();
 
   auto isQleverInternalId = [&indexBuilderData](const auto& id) {
+    // The special internal IDs like `ql:has-pattern` (see `SpecialIds.h`)
+    // have the datatype `UNDEFINED`.
     return indexBuilderData.vocabularyMetaData_.isQleverInternalId(id) ||
            id.getDatatype() == Datatype::Undefined;
   };

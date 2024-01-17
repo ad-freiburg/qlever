@@ -316,7 +316,9 @@ class CompressedExternalIdTableBase {
   CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
 
-  std::atomic<bool> isFirstMerge_ = true;
+  // Store whether this table has previously already been iterated over (in
+  // which case this member becomes `false`).
+  std::atomic<bool> isFirstIteration_ = true;
 
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
@@ -366,7 +368,7 @@ class CompressedExternalIdTableBase {
     }
     writer_.clear();
     numBlocksPushed_ = 0;
-    isFirstMerge_ = true;
+    isFirstIteration_ = true;
   }
 
  protected:
@@ -404,7 +406,7 @@ class CompressedExternalIdTableBase {
   // until the pushing is actually finished, and return `true`. Using this
   // function allows for an efficient usage of this class for very small inputs.
   bool transformAndPushLastBlock() {
-    if (!isFirstMerge_) {
+    if (!isFirstIteration_) {
       return numBlocksPushed_ != 0;
     }
     // If we have pushed at least one (complete) block, then the last future
@@ -555,6 +557,7 @@ class CompressedExternalIdTableSorter
   //  output phase.
   int numBufferedOutputBlocks_ = 4;
 
+  // See the `moveResultOnMerge()` getter function for documentation.
   bool moveResultOnMerge_ = true;
 
  public:
@@ -588,10 +591,15 @@ class CompressedExternalIdTableSorter
   using Base::push;
 
   // If set to `false` then the sorted result can be extracted multiple times.
-  // If set to `true` (the result) then the result is moved out and unusable
-  // after the first merge.
+  // If set to `true` then the result is moved out and unusable
+  // after the first merge. In that case an exception will be thrown at the
+  // start of the second merge.
+  // Note: There only is a performance difference between `true` and `false` for
+  // very small inputs that can be sorted in RAM. As soon as we have multiple
+  // blocks that are externalized on disk and then merged, the performance is
+  // exactly the same and the merge process is repeated for each iteration.
   bool& moveResultOnMerge() {
-    AD_CONTRACT_CHECK(this->isFirstMerge_);
+    AD_CONTRACT_CHECK(this->isFirstIteration_);
     return moveResultOnMerge_;
   }
 
@@ -610,7 +618,8 @@ class CompressedExternalIdTableSorter
   requires(N == NumStaticCols || N == 0)
   cppcoro::generator<IdTableStatic<N>> getSortedBlocks(
       std::optional<size_t> blocksize = std::nullopt) {
-    AD_CONTRACT_CHECK(this->isFirstMerge_ || !this->moveResultOnMerge_);
+    // If we move the result out, there must only be a single merge phase.
+    AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
     mergeIsActive_.store(true);
     // Explanation for the second argument: One block is buffered by this
     // generator, one block is buffered inside the `sortedBlocks` generator, so
@@ -621,7 +630,7 @@ class CompressedExternalIdTableSorter
              std::max(1, numBufferedOutputBlocks_ - 2))) {
       co_yield block;
     }
-    this->isFirstMerge_ = false;
+    this->isFirstIteration_ = false;
     mergeIsActive_.store(false);
   }
 

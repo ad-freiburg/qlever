@@ -688,7 +688,10 @@ class IndexImpl {
       pushIgnoredRange(taggedPredicatesRange);
     }
 
-    auto isIllegalPredicateId = [=](Id predicateId) {
+    // A lambda that checks whether the `predicateId` is an internal ID like
+    // `ql:has-pattern` or `@en@rdfs:label`.
+    auto isInternalPredicateId = [internalEntitiesRange,
+                                  taggedPredicatesRange](Id predicateId) {
       if (predicateId.getDatatype() == Datatype::Undefined) {
         return true;
       }
@@ -702,7 +705,7 @@ class IndexImpl {
     };
 
     auto isTripleIgnored = [permutation,
-                            isIllegalPredicateId](const auto& triple) {
+                            isInternalPredicateId](const auto& triple) {
       // TODO<joka921, everybody in the future>:
       // A lot of code (especially for statistical queries in `GroupBy.cpp` and
       // the pattern trick) relies on this function being a noop for the `PSO`
@@ -713,9 +716,9 @@ class IndexImpl {
       // be thoroughly reviewed.
       if (permutation == SPO || permutation == OPS) {
         // Predicates are always entities from the vocabulary.
-        return isIllegalPredicateId(triple[1]);
+        return isInternalPredicateId(triple[1]);
       } else if (permutation == SOP || permutation == OSP) {
-        return isIllegalPredicateId(triple[2]);
+        return isInternalPredicateId(triple[2]);
       }
       return false;
     };
