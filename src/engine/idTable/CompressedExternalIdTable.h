@@ -655,8 +655,6 @@ class CompressedExternalIdTableSorter
       auto& block = this->currentBlock_;
       const auto blocksizeOutput = blocksize.value_or(block.numRows());
       if (block.numRows() <= blocksizeOutput) {
-        // TODO<joka921> We don't need the copy if we only want to iterate once,
-        // make this configurable.
         if (this->moveResultOnMerge_) {
           co_yield std::move(this->currentBlock_).template toStatic<N>();
         } else {
@@ -665,6 +663,7 @@ class CompressedExternalIdTableSorter
           co_yield blockAsStatic;
         }
       } else {
+        // TODO<C++23> Use `std::views::chunk`.
         for (size_t i = 0; i < block.numRows(); i += blocksizeOutput) {
           size_t upper = std::min(i + blocksizeOutput, block.numRows());
           auto curBlock = IdTableStatic<NumStaticCols>(

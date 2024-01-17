@@ -675,18 +675,17 @@ class IndexImpl {
     auto taggedPredicatesRange = getVocab().prefix_range("@");
     auto internalEntitiesRange =
         getVocab().prefix_range(INTERNAL_ENTITIES_URI_PREFIX);
-    ignoredRanges.emplace_back(
-        Id::makeFromVocabIndex(internalEntitiesRange.first),
-        Id::makeFromVocabIndex(internalEntitiesRange.second));
 
+    auto pushIgnoredRange = [&ignoredRanges](const auto& range) {
+      ignoredRanges.emplace_back(Id::makeFromVocabIndex(range.first),
+                                 Id::makeFromVocabIndex(range.second));
+    };
+    pushIgnoredRange(internalEntitiesRange);
     using enum Permutation::Enum;
     if (permutation == SPO || permutation == SOP) {
-      ignoredRanges.push_back({Id::makeFromVocabIndex(literalRange.first),
-                               Id::makeFromVocabIndex(literalRange.second)});
+      pushIgnoredRange(literalRange);
     } else if (permutation == PSO || permutation == POS) {
-      ignoredRanges.push_back(
-          {Id::makeFromVocabIndex(taggedPredicatesRange.first),
-           Id::makeFromVocabIndex(taggedPredicatesRange.second)});
+      pushIgnoredRange(taggedPredicatesRange);
     }
 
     auto isIllegalPredicateId = [=](Id predicateId) {
@@ -695,10 +694,11 @@ class IndexImpl {
       }
       AD_CORRECTNESS_CHECK(predicateId.getDatatype() == Datatype::VocabIndex);
       auto idx = predicateId.getVocabIndex();
-      return (idx >= internalEntitiesRange.first &&
-              idx < internalEntitiesRange.second) ||
-             (idx >= taggedPredicatesRange.first &&
-              idx < taggedPredicatesRange.second);
+      auto isInRange = [idx](const auto& range) {
+        return range.first <= idx && idx < range.second;
+      };
+      return (isInRange(internalEntitiesRange) ||
+              isInRange(taggedPredicatesRange));
     };
 
     auto isTripleIgnored = [permutation,

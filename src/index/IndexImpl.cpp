@@ -264,11 +264,16 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
                               std::move(blockGenerator), *thirdSorter);
   // Add the `ql:has-pattern` predicate to the sorter s.t. it will get part of
   // the PSO/POS permutations.
+  LOG(INFO) << "Adding " << hasPatternPredicateSortedByPSO->size()
+            << " additional triples to the POS and PSO permutation for the "
+               "`ql:has-pattern` predicate..."
+            << std::endl;
   auto noPattern = Id::makeFromInt(NO_PATTERN);
   static_assert(NumColumnsIndexBuilding == 3);
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
     thirdSorter->push(std::array{row[0], row[1], row[2], row[2], noPattern});
   }
+  LOG(INFO) << "Done." << std::endl;
   return thirdSorter;
 }
 // _____________________________________________________________________________
