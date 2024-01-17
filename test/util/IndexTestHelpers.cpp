@@ -45,29 +45,26 @@ std::vector<std::string> getAllIndexFilenames(
 }
 
 namespace {
-// Check that the patterns as stored in the `ql:has-pattern` relation in the PSO and POS permutations have exactly
-// the same contents as the patterns that are folded into the permutations as additional columns.
+// Check that the patterns as stored in the `ql:has-pattern` relation in the PSO
+// and POS permutations have exactly the same contents as the patterns that are
+// folded into the permutations as additional columns.
 void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
   static constexpr size_t col0IdTag = 43;
-  auto cancellationDummy =
-      std::make_shared<ad_utility::CancellationHandle<>>();
+  auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle<>>();
   auto hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
-  auto checkSingleElement = [&cancellationDummy, &hasPatternId](const Index& index, size_t patternIdx, Id id) {
-    auto scanResultHasPattern =
-        index.scan(hasPatternId, id, Permutation::Enum::PSO, {},
-                   cancellationDummy);
+  auto checkSingleElement = [&cancellationDummy, &hasPatternId](
+                                const Index& index, size_t patternIdx, Id id) {
+    auto scanResultHasPattern = index.scan(
+        hasPatternId, id, Permutation::Enum::PSO, {}, cancellationDummy);
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
     if (scanResultHasPattern.numRows() == 0) {
-      checkSingleElement(index, NO_PATTERN, col0Id);
-      EXPECT_EQ(patternIdx, NO_PATTERN)
-                << id << ' ' << NO_PATTERN;
+      EXPECT_EQ(patternIdx, NO_PATTERN) << id << ' ' << NO_PATTERN;
     } else {
-      auto actualPattern = scanResultHasPattern(0, 0).getInt());
-      EXPECT_EQ(patternIdx, actualPattern)
-                << id << ' ' << actualPattern;
+      auto actualPattern = scanResultHasPattern(0, 0).getInt();
+      EXPECT_EQ(patternIdx, actualPattern) << id << ' ' << actualPattern;
     }
   };
 

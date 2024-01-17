@@ -77,6 +77,77 @@ bool isVariableContainedInGraphPatternOperation(
   });
 }
 
+// TODO<joka921> Comment
+void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
+                                   auto& triples, auto it) {
+  // The following lambda tries to find a triple in the `triples` that is not
+  // the current triple `*it` and that has the subject variable of the pattern
+  // trick in its `triplePosition` (which is either the subject or the object)
+  // and a fixed predicate (no variable). If such a triple is found, it is
+  // modified s.t. it also scans the `additionalScanColumn` which has to be the
+  // index of the column where the patterns of the `triplePosition` are stored
+  // in the POS and PSO permutation. Return true iff such a triple was found and
+  // replaced.
+  auto findAndRewriteMatchingTriple = [&subAndPred, &triples, &it](
+                                          auto triplePosition,
+                                          size_t additionalScanColumn) {
+    auto beforeTriple = std::ranges::subrange{triples.begin(), it};
+    auto afterTriple = std::ranges::subrange{it + 1, triples.end()};
+    auto exceptTriple = std::views::join(std::array{beforeTriple, afterTriple});
+    auto matchingTriple = std::ranges::find_if(
+        exceptTriple, [&subAndPred, triplePosition](const SparqlTriple& t) {
+          return std::invoke(triplePosition, t) == subAndPred.subject_ &&
+                 t._p.isIri() && !isVariable(t._p);
+        });
+    if (matchingTriple == exceptTriple.end()) {
+      return false;
+    }
+    matchingTriple->_additionalScanColumns.emplace_back(additionalScanColumn,
+                                                        subAndPred.predicate_);
+    triples.erase(it);
+    return true;
+  };
+
+  if (findAndRewriteMatchingTriple(&SparqlTriple::_s,
+                                   ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN)) {
+    return;
+  }
+  if (findAndRewriteMatchingTriple(&SparqlTriple::_o,
+                                   ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN)) {
+    return;
+  }
+
+  // We could not find a suitable triple to append the additional column, we
+  // therefore transform the triple itself: `?s ?p ?o`  and `?s
+  // ql:has-predicate ?p` will both be transformed to `?s ql:has-pattern
+  // ?p`.
+  auto& triple = *it;
+  triple._o = subAndPred.predicate_;
+  triple._p._iri = HAS_PATTERN_PREDICATE;
+}
+
+// TODO<joka921> Comment
+std::optional<PatternTrickTuple> findPatternTrickTuple(
+    p::BasicGraphPattern* graphPattern, ParsedQuery* parsedQuery,
+    const std::optional<
+        sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>&
+        countedVariable) {
+  // Try to find a triple that either has `ql:has-predicate` as the predicate,
+  // or consists of three variables, and fulfills all the other preconditions
+  // for the pattern trick.
+  auto& triples = graphPattern->_triples;
+  for (auto it = triples.begin(); it != triples.end(); ++it) {
+    auto patternTrickTuple =
+        isTripleSuitableForPatternTrick(*it, parsedQuery, countedVariable);
+    if (!patternTrickTuple.has_value()) {
+      continue;
+    }
+    rewriteTriplesForPatternTrick(patternTrickTuple.value(), triples, it);
+    return patternTrickTuple;
+  }
+  return std::nullopt;
+}
+
 // ____________________________________________________________________________
 std::optional<PatternTrickTuple> checkUsePatternTrick(
     ParsedQuery* parsedQuery) {
@@ -109,50 +180,9 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(
       continue;
     }
 
-    // Try to find a triple that either has `ql:has-predicate` as the predicate,
-    // or consists of three variables, and fulfills all the other preconditions
-    // for the pattern trick.
-    auto& triples = curPattern->_triples;
-    for (auto it = triples.begin(); it != triples.end(); ++it) {
-      auto patternTrickTuple =
-          isTripleSuitableForPatternTrick(*it, parsedQuery, countedVariable);
-      if (!patternTrickTuple.has_value()) {
-        continue;
-      }
-      const auto& subAndPred = patternTrickTuple.value();
-      // First try to find a triple for which we can get the special column.
-      auto tripleBackup = std::move(*it);
-      triples.erase(it);
-      // TODO<joka921> Code duplication
-      auto matchingTripSubject =
-          std::ranges::find_if(triples, [&subAndPred](const SparqlTriple& t) {
-            return t._s == subAndPred.subject_ && t._p.isIri() &&
-                   !isVariable(t._p);
-          });
-      if (matchingTripSubject != triples.end()) {
-        // TODO<joka921> those are magic constants, store them somewhere.
-        matchingTripSubject->_additionalScanColumns.emplace_back(
-            2, subAndPred.predicate_);
-        return patternTrickTuple;
-      }
-      auto matchingTripObject =
-          std::ranges::find_if(triples, [&subAndPred](const SparqlTriple& t) {
-            return t._o == subAndPred.subject_ && t._p.isIri() &&
-                   !isVariable(t._p);
-          });
-      if (matchingTripObject != triples.end()) {
-        matchingTripObject->_additionalScanColumns.emplace_back(
-            3, subAndPred.predicate_);
-        return patternTrickTuple;
-      }
-      // For the three variable triples we have to make the predicate the
-      // object of the `has-pattern` triple.
-      if (tripleBackup._p._iri != HAS_PREDICATE_PREDICATE) {
-        tripleBackup._o = Variable{tripleBackup._p._iri};
-      }
-      // Replace the predicate by `ql:has-pattern`.
-      tripleBackup._p._iri = HAS_PATTERN_PREDICATE;
-      triples.push_back(std::move(tripleBackup));
+    auto patternTrickTuple =
+        findPatternTrickTuple(curPattern, parsedQuery, countedVariable);
+    if (patternTrickTuple.has_value()) {
       return patternTrickTuple;
     }
   }
