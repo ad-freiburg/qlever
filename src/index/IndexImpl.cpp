@@ -1164,7 +1164,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                                          allIntegersBecomeDoubles};
   std::string key = "parser-integer-overflow-behavior";
   if (j.count(key)) {
-    auto value = j[key];
+    auto value = static_cast<std::string>(j[key]);
     if (value == overflowingIntegersThrow) {
       LOG(INFO) << "Integers that cannot be represented by QLever will throw "
                    "an exception"
@@ -1182,8 +1182,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
       turtleParserIntegerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     } else {
-      AD_CONTRACT_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
-                        allModes.end());
+      AD_CONTRACT_CHECK(std::ranges::find(allModes, value) == allModes.end());
       LOG(ERROR) << "Invalid value for " << key << std::endl;
       LOG(INFO) << "The currently supported values are "
                 << absl::StrJoin(allModes, ",") << std::endl;
