@@ -263,7 +263,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
                               std::move(blockGenerator), *thirdSorter);
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
-  // part of the PSO/POS permutations.
+  // part of the PSO and POS permutation.
   LOG(INFO) << "Adding " << hasPatternPredicateSortedByPSO->size()
             << " additional triples to the POS and PSO permutation for the "
                "`ql:has-pattern` predicate ..."

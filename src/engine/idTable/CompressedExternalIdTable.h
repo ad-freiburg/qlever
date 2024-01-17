@@ -591,13 +591,12 @@ class CompressedExternalIdTableSorter
   using Base::push;
 
   // If set to `false` then the sorted result can be extracted multiple times.
-  // If set to `true` then the result is moved out and unusable
-  // after the first merge. In that case an exception will be thrown at the
-  // start of the second merge.
-  // Note: There only is a performance difference between `true` and `false` for
-  // very small inputs that can be sorted in RAM. As soon as we have multiple
-  // blocks that are externalized on disk and then merged, the performance is
-  // exactly the same and the merge process is repeated for each iteration.
+  // If set to `true` then the result is moved out and unusable after the first
+  // merge. In that case an exception will be thrown at the start of the second
+  // merge.
+  // Note: This mechanism gives a performance advantage for very small inputs
+  // that can be completely sorted in RAM. In that case we can avoid a copy of
+  // the sorted result.
   bool& moveResultOnMerge() {
     AD_CONTRACT_CHECK(this->isFirstIteration_);
     return moveResultOnMerge_;
