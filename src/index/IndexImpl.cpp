@@ -794,8 +794,8 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
     }
   }
 
-  pso_.loadFromDisk(onDiskBase_, false);
-  pos_.loadFromDisk(onDiskBase_, false);
+  pso_.loadFromDisk(onDiskBase_);
+  pos_.loadFromDisk(onDiskBase_);
 
   if (loadAllPermutations_) {
     ops_.loadFromDisk(onDiskBase_);
