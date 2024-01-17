@@ -37,7 +37,7 @@ inline string getWordFromResultTable(const QueryExecutionContext* qec,
 
 inline string combineToString(const string& text, const string& word) {
   std::stringstream ss;
-  ss << "Text: " << text << ", Word: " << word << endl;
+  ss << "Text: " << text << ", Word: " << word << std::endl;
   return ss.str();
 }
 }  // namespace textIndexScanTestHelpers
