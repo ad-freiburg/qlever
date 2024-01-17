@@ -167,12 +167,10 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  // Currently the additional triples from the `has-pattern` and `has-predicate`
-  // relations are only stored in the POS and PSO permutation.
   Permutation pos_{Permutation::Enum::POS, allocator_,
-                   Permutation::HasAdditionalTriples::True};
+                   Permutation::HasAdditionalTriples::False};
   Permutation pso_{Permutation::Enum::PSO, allocator_,
-                   Permutation::HasAdditionalTriples::True};
+                   Permutation::HasAdditionalTriples::False};
   Permutation sop_{Permutation::Enum::SOP, allocator_,
                    Permutation::HasAdditionalTriples::False};
   Permutation spo_{Permutation::Enum::SPO, allocator_,

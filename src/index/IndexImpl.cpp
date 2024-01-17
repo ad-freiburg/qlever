@@ -775,7 +775,6 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
 
-
   // We have to load the patterns first to figure out if the patterns were built
   // at all.
   if (usePatterns_) {
