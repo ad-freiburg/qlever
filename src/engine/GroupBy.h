@@ -258,6 +258,31 @@ class GroupBy : public Operation {
     }
   };
 
+  // Data to perform GROUP_CONCAT aggregation using the HashMap optimization.
+  struct GroupConcatAggregationData {
+    using ValueGetter = sparqlExpression::detail::StringValueGetter;
+    std::string currentValue_;
+    std::string seperator_;
+    void increment(auto&& value,
+                   const sparqlExpression::EvaluationContext* ctx) {
+      auto val = ValueGetter{}(AD_FWD(value), ctx);
+      if (val.has_value()) {
+        if (!currentValue_.empty()) currentValue_.append(seperator_);
+        currentValue_.append(val.value());
+      }
+    }
+    [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
+      auto localVocabIndex =
+          localVocab->getIndexAndAddIfNotContained(currentValue_);
+      return ValueId::makeFromLocalVocabIndex(localVocabIndex);
+    }
+
+    explicit GroupConcatAggregationData(std::string seperator)
+        : seperator_{std::move(seperator)} {
+      currentValue_.reserve(20000);
+    }
+  };
+
   using KeyType = ValueId;
   using ValueType = size_t;
 
@@ -275,7 +300,13 @@ class GroupBy : public Operation {
   };
 
   // Used to store the kind of aggregate.
-  enum class HashMapAggregateType { AVG, COUNT, MIN, MAX, SUM };
+  enum class HashMapAggregateType { AVG, COUNT, MIN, MAX, SUM, GROUP_CONCAT };
+
+  // `GROUP_CONCAT` requires additional data.
+  struct HashMapAggregateTypeWithData {
+    HashMapAggregateType type_;
+    std::optional<std::string> seperator_ = std::nullopt;
+  };
 
   // Stores information required for evaluation of an aggregate as well
   // as the alias containing it.
@@ -289,11 +320,11 @@ class GroupBy : public Operation {
     // appears in the parents' children, so that it may be substituted away.
     std::optional<ParentAndChildIndex> parentAndIndex_ = std::nullopt;
     // Which kind of aggregate expression.
-    HashMapAggregateType aggregateType_;
+    HashMapAggregateTypeWithData aggregateType_;
 
     HashMapAggregateInformation(
         sparqlExpression::SparqlExpression* expr, size_t aggregateDataIndex,
-        HashMapAggregateType aggregateType,
+        HashMapAggregateTypeWithData aggregateType,
         std::optional<ParentAndChildIndex> parentAndIndex = std::nullopt)
         : expr_{expr},
           aggregateDataIndex_{aggregateDataIndex},
@@ -328,10 +359,13 @@ class GroupBy : public Operation {
       IdTable* result, std::vector<HashMapAliasInformation>& aggregateAliases,
       const IdTable& subresult, size_t columnIndex, LocalVocab* localVocab);
 
-  using Aggregations = std::variant<
-      std::vector<AvgAggregationData>, std::vector<CountAggregationData>,
-      std::vector<MinAggregationData>, std::vector<MaxAggregationData>,
-      std::vector<SumAggregationData>>;
+  using AggregationData =
+      std::variant<AvgAggregationData, CountAggregationData, MinAggregationData,
+                   MaxAggregationData, SumAggregationData,
+                   GroupConcatAggregationData>;
+
+  using AggregationDataVectors =
+      ad_utility::LiftedVariant<AggregationData, std::vector>;
 
   // Stores the map which associates Ids with vector offsets and
   // the vectors containing the aggregation data.
@@ -346,16 +380,22 @@ class GroupBy : public Operation {
         for (const auto& aggregate : alias.aggregateInfo_) {
           ++numAggregates;
 
-          if (aggregate.aggregateType_ == HashMapAggregateType::AVG)
+          if (aggregate.aggregateType_.type_ == HashMapAggregateType::AVG)
             aggregationData_.emplace_back(std::vector<AvgAggregationData>{});
-          if (aggregate.aggregateType_ == HashMapAggregateType::COUNT)
+          if (aggregate.aggregateType_.type_ == HashMapAggregateType::COUNT)
             aggregationData_.emplace_back(std::vector<CountAggregationData>{});
-          if (aggregate.aggregateType_ == HashMapAggregateType::MIN)
+          if (aggregate.aggregateType_.type_ == HashMapAggregateType::MIN)
             aggregationData_.emplace_back(std::vector<MinAggregationData>{});
-          if (aggregate.aggregateType_ == HashMapAggregateType::MAX)
+          if (aggregate.aggregateType_.type_ == HashMapAggregateType::MAX)
             aggregationData_.emplace_back(std::vector<MaxAggregationData>{});
-          if (aggregate.aggregateType_ == HashMapAggregateType::SUM)
+          if (aggregate.aggregateType_.type_ == HashMapAggregateType::SUM)
             aggregationData_.emplace_back(std::vector<SumAggregationData>{});
+          if (aggregate.aggregateType_.type_ ==
+              HashMapAggregateType::GROUP_CONCAT)
+            aggregationData_.emplace_back(
+                std::vector<GroupConcatAggregationData>{});
+
+          aggregateTypeWithData_.emplace_back(aggregate.aggregateType_);
         }
       }
       AD_CONTRACT_CHECK(numAggregates > 0);
@@ -369,13 +409,14 @@ class GroupBy : public Operation {
     [[nodiscard]] size_t getIndex(Id id) const { return map_.at(id); }
 
     // Get vector containing the aggregation data at `aggregationDataIndex`.
-    Aggregations& getAggregationDataVariant(size_t aggregationDataIndex) {
+    AggregationDataVectors& getAggregationDataVariant(
+        size_t aggregationDataIndex) {
       return aggregationData_.at(aggregationDataIndex);
     }
 
     // Get vector containing the aggregation data at `aggregationDataIndex`,
     // but const.
-    [[nodiscard]] const Aggregations& getAggregationDataVariant(
+    [[nodiscard]] const AggregationDataVectors& getAggregationDataVariant(
         size_t aggregationDataIndex) const {
       return aggregationData_.at(aggregationDataIndex);
     }
@@ -390,7 +431,9 @@ class GroupBy : public Operation {
     // Maps `Id` to vector offsets.
     ad_utility::HashMapWithMemoryLimit<KeyType, ValueType> map_;
     // Stores the actual aggregation data.
-    std::vector<Aggregations> aggregationData_;
+    std::vector<AggregationDataVectors> aggregationData_;
+    // For `GROUP_CONCAT`, we require the type information.
+    std::vector<HashMapAggregateTypeWithData> aggregateTypeWithData_;
   };
 
   // Returns the aggregation results between `beginIndex` and `endIndex`
@@ -453,8 +496,8 @@ class GroupBy : public Operation {
   static bool hasAnyType(const auto& expr);
 
   // Check if an expression is a currently supported aggregate.
-  static std::optional<GroupBy::HashMapAggregateType> isSupportedAggregate(
-      sparqlExpression::SparqlExpression* expr);
+  static std::optional<GroupBy::HashMapAggregateTypeWithData>
+  isSupportedAggregate(sparqlExpression::SparqlExpression* expr);
 
   // Determines whether the grouped by variable appears at the top of an
   // alias, e.g. `SELECT (?a as ?x) WHERE {...} GROUP BY ?a`.

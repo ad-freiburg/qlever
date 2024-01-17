@@ -818,8 +818,8 @@ bool GroupBy::hasAnyType(const auto& expr) {
 }
 
 // _____________________________________________________________________________
-std::optional<GroupBy::HashMapAggregateType> GroupBy::isSupportedAggregate(
-    sparqlExpression::SparqlExpression* expr) {
+std::optional<GroupBy::HashMapAggregateTypeWithData>
+GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   using namespace sparqlExpression;
 
   // `expr` is not a distinct aggregate
@@ -828,11 +828,20 @@ std::optional<GroupBy::HashMapAggregateType> GroupBy::isSupportedAggregate(
   // `expr` is not a nested aggregated
   if (expr->children().front()->containsAggregate()) return std::nullopt;
 
-  if (hasType<AvgExpression>(expr)) return HashMapAggregateType::AVG;
-  if (hasType<CountExpression>(expr)) return HashMapAggregateType::COUNT;
-  if (hasType<MinExpression>(expr)) return HashMapAggregateType::MIN;
-  if (hasType<MaxExpression>(expr)) return HashMapAggregateType::MAX;
-  if (hasType<SumExpression>(expr)) return HashMapAggregateType::SUM;
+  if (hasType<AvgExpression>(expr))
+    return HashMapAggregateTypeWithData{HashMapAggregateType::AVG};
+  if (hasType<CountExpression>(expr))
+    return HashMapAggregateTypeWithData{HashMapAggregateType::COUNT};
+  if (hasType<MinExpression>(expr))
+    return HashMapAggregateTypeWithData{HashMapAggregateType::MIN};
+  if (hasType<MaxExpression>(expr))
+    return HashMapAggregateTypeWithData{HashMapAggregateType::MAX};
+  if (hasType<SumExpression>(expr))
+    return HashMapAggregateTypeWithData{HashMapAggregateType::SUM};
+  if (auto val = hasType<GroupConcatExpression>(expr)) {
+    return HashMapAggregateTypeWithData{HashMapAggregateType::GROUP_CONCAT,
+                                        val.value()->getSeparator()};
+  }
 
   // `expr` is an unsupported aggregate
   return std::nullopt;
@@ -966,6 +975,30 @@ void GroupBy::substituteAllAggregates(
 }
 
 // _____________________________________________________________________________
+template <typename A>
+concept SupportedAggregates =
+    ad_utility::SameAsAnyTypeIn<A, GroupBy::AggregationDataVectors>;
+
+template <SupportedAggregates AggregateDataVector>
+struct ResizeVectorsVisitor {
+  void operator()(AggregateDataVector& vector, size_t numberOfGroups,
+                  const GroupBy::HashMapAggregateTypeWithData& info) const {
+    (void)info;
+    vector.resize(numberOfGroups);
+  }
+};
+
+template <>
+struct ResizeVectorsVisitor<std::vector<GroupBy::GroupConcatAggregationData>> {
+  void operator()(std::vector<GroupBy::GroupConcatAggregationData>& vector,
+                  size_t numberOfGroups,
+                  const GroupBy::HashMapAggregateTypeWithData& info) const {
+    vector.resize(numberOfGroups,
+                  GroupBy::GroupConcatAggregationData{info.seperator_.value()});
+  }
+};
+
+// _____________________________________________________________________________
 std::vector<size_t> GroupBy::HashMapAggregationData::getHashEntries(
     std::span<const Id> ids) {
   std::vector<size_t> hashEntries;
@@ -977,9 +1010,19 @@ std::vector<size_t> GroupBy::HashMapAggregationData::getHashEntries(
     hashEntries.push_back(iterator->second);
   }
 
-  for (auto& aggregation : aggregationData_)
-    std::visit([this](auto& arg) { arg.resize(getNumberOfGroups()); },
-               aggregation);
+  // TODO<C++23> use views::enumerate
+  auto idx = 0;
+  for (auto& aggregation : aggregationData_) {
+    const auto& aggregationTypeWithData = aggregateTypeWithData_.at(idx++);
+    const auto numberOfGroups = getNumberOfGroups();
+    std::visit(
+        [&aggregationTypeWithData,
+         numberOfGroups]<SupportedAggregates T>(T& arg) {
+          ResizeVectorsVisitor<T>{}(arg, numberOfGroups,
+                                    aggregationTypeWithData);
+        },
+        aggregation);
+  }
 
   return hashEntries;
 }
@@ -1108,11 +1151,6 @@ void GroupBy::createResultFromHashMap(
     }
   }
 }
-
-// _____________________________________________________________________________
-template <typename A>
-concept SupportedAggregates =
-    ad_utility::SameAsAnyTypeIn<A, GroupBy::Aggregations>;
 
 // _____________________________________________________________________________
 // Visitor function to extract values from the result of an evaluation of

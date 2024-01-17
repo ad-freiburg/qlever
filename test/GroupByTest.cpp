@@ -16,6 +16,7 @@
 #include "engine/Sort.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "gtest/gtest.h"
@@ -409,7 +410,15 @@ struct GroupByOptimizations : ::testing::Test {
   static SparqlExpressionPimpl makeSumPimpl(const Variable& var) {
     return SparqlExpressionPimpl{
         std::make_unique<SumExpression>(false, makeVariableExpression(var)),
-        "Sum(?someVariable)"};
+        "SUM(?someVariable)"};
+  }
+
+  static SparqlExpressionPimpl makeGroupConcatPimpl(
+      const Variable& var, const std::string& seperator = " ") {
+    return SparqlExpressionPimpl{
+        std::make_unique<GroupConcatExpression>(
+            false, makeVariableExpression(var), seperator),
+        "GROUP_CONCAT(?someVariable)"};
   }
 
   static SparqlExpressionPimpl makeAvgCountPimpl(const Variable& var) {
@@ -817,6 +826,100 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
   EXPECT_EQ(table, expected);
 
   // Disable optimization for following tests
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+
+  std::string turtleInput =
+      "<x> <label> \"C\" . <x> <label> \"B\" . <x> <label> \"A\" . "
+      "<y> <label> \"g\" . <y> <label> \"f\" . <y> <label> \"h\"";
+
+  QueryExecutionContext* qec = getQec(turtleInput);
+
+  Tree xyScan = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO, SparqlTriple{varX, {"<label>"}, varY});
+
+  // Optimization will not be used if subtree is not sort
+  std::vector<ColumnIndex> sortedColumns = {0};
+  Tree subtreeWithSort = makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
+
+  auto groupConcatExpression1 = makeGroupConcatPimpl(varY);
+  auto aliasGC1 = Alias{groupConcatExpression1, varZ};
+
+  auto varW = Variable{"?w"};
+  auto groupConcatExpression2 = makeGroupConcatPimpl(varY, ",");
+  auto aliasGC2 = Alias{groupConcatExpression2, varW};
+
+  // SELECT (GROUP_CONCAT(?y) as ?z) (GROUP_CONCAT(?y;seperator=",") as ?w)
+  // WHERE {...} GROUP BY ?x
+  GroupBy groupBy{qec, variablesOnlyX, {aliasGC1, aliasGC2}, subtreeWithSort};
+  auto result = groupBy.getResult();
+  const auto& table = result->idTable();
+
+  auto getId = makeGetId(qec->getIndex());
+  auto getLocalVocabId = [&result](const std::string& word) {
+    auto value = result->localVocab().getIndexOrNullopt(word);
+    if (value.has_value())
+      return ValueId::makeFromLocalVocabIndex(value.value());
+    else
+      AD_THROW("");
+  };
+
+  auto expected = makeIdTableFromVector(
+      {{getId("<x>"), getLocalVocabId("A B C"), getLocalVocabId("A,B,C")},
+       {getId("<y>"), getLocalVocabId("f g h"), getLocalVocabId("f,g,h")}});
+  EXPECT_EQ(table, expected);
+
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
+  // Test for support of min, max and sum when using the HashMap optimization.
+  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+
+  parsedQuery::SparqlValues input;
+  using TC = TripleComponent;
+
+  input._variables = std::vector{varX, varY};
+  input._values.push_back(std::vector{TC(1.0), TC("B")});
+  input._values.push_back(std::vector{TC(1.0), TC("A")});
+  input._values.push_back(std::vector{TC(1.0), TC("C")});
+  input._values.push_back(std::vector{TC(3.0), TC("g")});
+  input._values.push_back(std::vector{TC(3.0), TC("h")});
+  input._values.push_back(std::vector{TC(3.0), TC("f")});
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<Values>(qec, input);
+
+  auto groupConcatExpression1 = makeGroupConcatPimpl(varY);
+  auto aliasGC1 = Alias{groupConcatExpression1, varZ};
+
+  auto varW = Variable{"?w"};
+  auto groupConcatExpression2 = makeGroupConcatPimpl(varY, ",");
+  auto aliasGC2 = Alias{groupConcatExpression2, varW};
+
+  GroupBy groupBy{qec, variablesOnlyX, {aliasGC1, aliasGC2}, std::move(values)};
+  auto result = groupBy.getResult();
+  const auto& table = result->idTable();
+
+  auto getId = makeGetId(qec->getIndex());
+  auto d = DoubleId;
+  auto getLocalVocabId = [&result](const std::string& word) {
+    auto value = result->localVocab().getIndexOrNullopt(word);
+    if (value.has_value())
+      return ValueId::makeFromLocalVocabIndex(value.value());
+    else
+      AD_THROW("");
+  };
+
+  auto expected = makeIdTableFromVector(
+      {{d(1), getLocalVocabId("B A C"), getLocalVocabId("B,A,C")},
+       {d(3), getLocalVocabId("g h f"), getLocalVocabId("g,h,f")}});
+  EXPECT_EQ(table, expected);
+
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
 }
 
