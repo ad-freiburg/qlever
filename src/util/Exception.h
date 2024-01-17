@@ -85,15 +85,20 @@ class Exception : public std::exception {
 #define AD_FAIL() AD_THROW("This code should be unreachable")
 
 namespace ad_utility::detail {
-std::string getMessageImpl(std::string_view s) { return std::string{s}; }
+std::string getMessageImpl(auto&& s) { return absl::StrCat(AD_FWD(s)); }
 // std::string getMessageImpl() { return ""; }
 std::string getMessageImpl(
     ad_utility::InvocableWithConvertibleReturnType<std::string> auto&& F) {
   return std::invoke(F);
 }
 
-std::string concatMessages(auto&&... messages) {
-  return absl::StrJoin(std::array{getMessageImpl(messages)...}, "; ");
+std::string concatMessages(std::string_view firstMessage, auto&&... messages) {
+  if constexpr (sizeof...(messages) == 0) {
+    return std::string{firstMessage};
+  } else {
+    return absl::StrCat(getMessageImpl(firstMessage), "; ",
+                        getMessageImpl(messages)...);
+  }
 }
 }  // namespace ad_utility::detail
 

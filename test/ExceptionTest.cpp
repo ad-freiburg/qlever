@@ -84,6 +84,12 @@ TEST(Exception, contractCheckWithMessage) {
   };
   AD_EXPECT_THROW_WITH_MESSAGE((failCheck2()),
                                makeMatcher("v.empty(); but v has size 1"));
+
+  auto failCheck3 = [&v] {
+    AD_CONTRACT_CHECK(v.empty(), "but v has size ", v.size(), " and not 0");
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (failCheck3()), makeMatcher("v.empty(); but v has size 1 and not 0"));
 }
 
 TEST(Exception, AD_CORRECTNESS_CHECK) {
@@ -113,6 +119,12 @@ TEST(Exception, correctnessCheckWithMessage) {
   };
   AD_EXPECT_THROW_WITH_MESSAGE((failCheck2()),
                                makeMatcher("v.empty(); but v has size 1"));
+
+  auto failCheck3 = [&v] {
+    AD_CORRECTNESS_CHECK(v.empty(), "but v has size ", v.size(), " and not 0");
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (failCheck3()), makeMatcher("v.empty(); but v has size 1 and not 0"));
 }
 
 TEST(Exception, AD_FAIL) {
