@@ -85,18 +85,29 @@ class Exception : public std::exception {
 #define AD_FAIL() AD_THROW("This code should be unreachable")
 
 namespace ad_utility::detail {
-std::string getMessageImpl(auto&& s) { return absl::StrCat(AD_FWD(s)); }
-// std::string getMessageImpl() { return ""; }
+// Helper functions that convert the various arguments to the
+// `AD_CONTRACT_CHECK` etc. macros to strings.
+// The argument must be
+// * A type that can be passed to `absl::StrCat` (e.g. `string`, `string_views`,
+// builtin numeric types) [first overload]
+// * A callbable that takes no arguments and returns a string [second overload]
+template <typename S>
+requires requires(S&& s) { absl::StrCat(AD_FWD(s)); }
+std::string getMessageImpl(S&& s) {
+  return absl::StrCat(AD_FWD(s));
+}
 std::string getMessageImpl(
-    ad_utility::InvocableWithConvertibleReturnType<std::string> auto&& F) {
-  return std::invoke(F);
+    ad_utility::InvocableWithConvertibleReturnType<std::string> auto&& f) {
+  return std::invoke(f);
 }
 
-std::string concatMessages(std::string_view firstMessage, auto&&... messages) {
+// Helper function used to format the arguments passed to `AD_CONTRACT_CHECK`
+// etc. Return "condition; <concatentation of `getMessageImpl(messages)...`>
+std::string concatMessages(std::string_view condition, auto&&... messages) {
   if constexpr (sizeof...(messages) == 0) {
-    return std::string{firstMessage};
+    return std::string{condition};
   } else {
-    return absl::StrCat(getMessageImpl(firstMessage), "; ",
+    return absl::StrCat(getMessageImpl(condition), "; ",
                         getMessageImpl(messages)...);
   }
 }
@@ -107,6 +118,13 @@ std::string concatMessages(std::string_view firstMessage, auto&&... messages) {
 // invalid inputs. Since it is a macro, the code coverage check will only report
 // a partial coverage for this macro if the condition is never violated, so make
 // sure to integrate a unit test that violates the condition.
+// The first argument is the condition (anything that is convertible to `bool`).
+// Additional arguments are concatenated to get a detailed error message in the
+// failure case. each of these arguments can be either a type that can be
+// converted to a string via `absl::StrCat` (e.g. strings or builtin numeric
+// types) or a callable that produce a `std::string`. The latter case is useful
+// if the error message is expensive to construct because the callables are only
+// invoked if the assertion fails. For examples see `ExceptionTest.cpp`.
 #define AD_CONTRACT_CHECK(condition, ...)                                                                                                                  \
   if (!(condition)) [[unlikely]] {                                                                                                                         \
     using namespace std::string_literals;                                                                                                                  \
@@ -124,6 +142,8 @@ std::string concatMessages(std::string_view firstMessage, auto&&... messages) {
 // Because of the additional indirection via the function call, code coverage
 // tools will consider this call fully covered as soon as the check is
 // performed, even if it never fails.
+// For  details on the usage see the documentation of `AD_CONTRACT_CHECK` above
+// as well as the examples in `ExceptionTest.cpp`
 namespace ad_utility::detail {
 inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
                                    ad_utility::source_location location,

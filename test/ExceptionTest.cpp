@@ -59,7 +59,6 @@ TEST(Exception, AD_THROW) {
 }
 
 TEST(Exception, AD_CONTRACT_CHECK) {
-  ad_utility::source_location l;
   ASSERT_NO_THROW(AD_CONTRACT_CHECK(3 < 5));
   std::vector<int> v;
   ASSERT_NO_THROW(AD_CONTRACT_CHECK(v.empty()));
@@ -93,7 +92,6 @@ TEST(Exception, contractCheckWithMessage) {
 }
 
 TEST(Exception, AD_CORRECTNESS_CHECK) {
-  ad_utility::source_location l;
   ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(3 < 5));
   std::vector<int> v;
   ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(v.empty()));
