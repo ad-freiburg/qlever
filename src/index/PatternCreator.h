@@ -74,6 +74,12 @@ class PatternCreatorNew {
   using OSPSorter4Cols =
       ad_utility::CompressedExternalIdTableSorter<SortByOSP, 4>;
 
+  // Combine all the triples that this pattern creator creates.
+  struct TripleSorter {
+    std::unique_ptr<PSOSorter> hasPatternPredicateSortedByPSO_;
+    std::unique_ptr<OSPSorter4Cols> triplesWithSubjectPatternsSortedByOsp_;
+  };
+
  private:
   // The file to which the patterns will be written.
   std::string filename_;
@@ -104,8 +110,7 @@ class PatternCreatorNew {
     bool isInternal_;
   };
   ad_utility::BufferedVector<TripleAndIsInternal> tripleBuffer_;
-  PSOSorter additionalTriplesPsoSorter_;
-  std::unique_ptr<OSPSorter4Cols> ospSorterTriplesWithPattern_;
+  TripleSorter tripleSorter_;
 
   // The predicates which have already occured in one of the patterns. Needed to
   // count the number of distinct predicates.
@@ -125,12 +130,13 @@ class PatternCreatorNew {
       : filename_{basename},
         patternSerializer_{{basename}},
         tripleBuffer_(100'000, basename + ".tripleBufferForPatterns.dat"),
-        additionalTriplesPsoSorter_{basename + ".additionalTriples.pso.dat",
-                                    memoryLimit / 2,
-                                    ad_utility::makeUnlimitedAllocator<Id>()},
-        ospSorterTriplesWithPattern_{std::make_unique<OSPSorter4Cols>(
-            basename + ".withPatterns.osp.dat", memoryLimit / 2,
-            ad_utility::makeUnlimitedAllocator<Id>())} {
+        tripleSorter_{
+            std::make_unique<PSOSorter>(
+                basename + ".additionalTriples.pso.dat", memoryLimit / 2,
+                ad_utility::makeUnlimitedAllocator<Id>()),
+            std::make_unique<OSPSorter4Cols>(
+                basename + ".withPatterns.osp.dat", memoryLimit / 2,
+                ad_utility::makeUnlimitedAllocator<Id>())} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 
@@ -162,14 +168,10 @@ class PatternCreatorNew {
                                    uint64_t& numDistinctSubjectPredicatePairs,
                                    CompactVectorOfStrings<Id>& patterns);
 
-  // Move the sorted `has-pattern` and `has-predicate` triples out.
-  PSOSorter&& getHasPatternSortedByPSO() && {
+  // Move out the sorted triples after finishing creating the patterns.
+  TripleSorter&& getTripleSorter() && {
     finish();
-    return std::move(additionalTriplesPsoSorter_);
-  }
-  std::unique_ptr<OSPSorter4Cols> getAllTriplesWithPatternSortedByOSP() && {
-    finish();
-    return std::move(ospSorterTriplesWithPattern_);
+    return std::move(tripleSorter_);
   }
 
  private:
@@ -177,7 +179,9 @@ class PatternCreatorNew {
 
   void printStatistics(PatternStatistics patternStatistics) const;
 
-  auto& ospSorterTriplesWithPattern() { return *ospSorterTriplesWithPattern_; }
+  auto& ospSorterTriplesWithPattern() {
+    return *tripleSorter_.triplesWithSubjectPatternsSortedByOsp_;
+  }
 };
 
 // The old version of the pattern creator.

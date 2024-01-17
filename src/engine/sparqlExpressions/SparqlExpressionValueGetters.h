@@ -2,14 +2,13 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H
-#define QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H
-
+#pragma once
 #include <re2/re2.h>
 
-#include "../../global/Id.h"
-#include "../ResultTable.h"
-#include "./SparqlExpressionTypes.h"
+#include "engine/ResultTable.h"
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
+#include "global/Id.h"
+#include "util/TypeTraits.h"
 
 /// Several classes that can be used as the `ValueGetter` template
 /// argument in the SparqlExpression templates in `SparqlExpression.h`
@@ -28,7 +27,7 @@ using IntOrDouble = std::variant<double, int64_t>;
 // values will become `Id::makeUndefined()`.
 template <bool NanToUndef = false, typename T>
 requires std::integral<T> || std::floating_point<T> ||
-         ad_utility::isTypeAnyOf<T, Id, NotNumeric, NumericValue>
+         ad_utility::SimilarToAny<T, Id, NotNumeric, NumericValue>
 Id makeNumericId(T t) {
   if constexpr (std::integral<T>) {
     return Id::makeFromInt(t);
@@ -186,5 +185,3 @@ struct RegexValueGetter {
 };
 
 }  // namespace sparqlExpression::detail
-
-#endif  // QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H

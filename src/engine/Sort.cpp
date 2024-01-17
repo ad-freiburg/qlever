@@ -10,6 +10,7 @@
 #include "CallFixedSize.h"
 #include "QueryExecutionTree.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________

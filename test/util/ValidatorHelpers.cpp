@@ -5,10 +5,11 @@
 
 #include "../test/util/ValidatorHelpers.h"
 
+#include "util/TypeTraits.h"
+
 // ____________________________________________________________________________
-template <typename Type>
-requires ad_utility::isTypeContainedIn<Type,
-                                       ad_utility::ConfigOption::AvailableTypes>
+template <
+    ad_utility::SameAsAnyTypeIn<ad_utility::ConfigOption::AvailableTypes> Type>
 Type createDummyValueForValidator(size_t variant) {
   if constexpr (std::is_same_v<Type, bool>) {
     return variant % 2;

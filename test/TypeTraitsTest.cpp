@@ -3,9 +3,12 @@
 
 #include <gtest/gtest.h>
 
+#include <concepts>
 #include <functional>
+#include <type_traits>
 
 #include "../test/util/TypeTraitsTestHelpers.h"
+#include "util/ConstexprUtils.h"
 #include "util/TypeTraits.h"
 
 using namespace ad_utility;
@@ -17,15 +20,76 @@ TEST(TypeTraits, IsSimilar) {
   ASSERT_TRUE(true);
 }
 
-TEST(TypeTraits, IsContained) {
+/*
+Call the given lambda with explicit types: `std::decay_t<T>`,`const
+std::decay_t<T>`,`std::decay_t<T>&`,`const std::decay_t<T>&`.
+*/
+template <typename T>
+constexpr void callLambdaWithAllVariationsOfType(const auto& lambda) {
+  using decayedT = std::decay_t<T>;
+  lambda.template operator()<decayedT>();
+  lambda.template operator()<const decayedT>();
+  lambda.template operator()<decayedT&>();
+  lambda.template operator()<const decayedT&>();
+  lambda.template operator()<decayedT&&>();
+  lambda.template operator()<const decayedT&&>();
+}
+
+TEST(TypeTraits, SimiliarToAnyTypeIn) {
   using tup = std::tuple<int, char>;
   using nested = std::tuple<tup>;
-  static_assert(isTypeContainedIn<int, tup>);
-  static_assert(isTypeContainedIn<char, tup>);
-  static_assert(isTypeContainedIn<tup, nested>);
-  static_assert(!isTypeContainedIn<tup, char>);
-  static_assert(!isTypeContainedIn<unsigned int, tup>);
-  static_assert(!isTypeContainedIn<int, int>);
+
+  // All the test, were the concept is supposed to return true.
+  forEachTypeInTemplateType<tup>([]<typename TupType>() {
+    callLambdaWithAllVariationsOfType<TupType>(
+        []<typename T>() { static_assert(SimilarToAnyTypeIn<T, tup>); });
+  });
+  static_assert(SimilarToAnyTypeIn<tup, nested>);
+
+  // All the test, were the concept is supposed to return false.
+  forEachTypeInParameterPack<unsigned int, float, bool, size_t, unsigned char>(
+      []<typename WrongType>() {
+        callLambdaWithAllVariationsOfType<WrongType>(
+            []<typename T>() { static_assert(!SimilarToAnyTypeIn<T, tup>); });
+      });
+  static_assert(!SimilarToAnyTypeIn<tup, char>);
+  static_assert(!SimilarToAnyTypeIn<int, int>);
+  ASSERT_TRUE(true);
+}
+
+TEST(TypeTraits, SameAsAnyTypeIn) {
+  using tup = std::tuple<int, const char, bool&, const float&>;
+  using nested = std::tuple<tup>;
+
+  // Successful comparison.
+  forEachTypeInTemplateType<tup>(
+      []<typename TupType>() { static_assert(SameAsAnyTypeIn<TupType, tup>); });
+  static_assert(SameAsAnyTypeIn<tup, nested>);
+
+  // Unsuccessful comparison, where the underlying type is wrong.
+  forEachTypeInParameterPack<tup, size_t, double, unsigned char>(
+      []<typename WrongType>() {
+        callLambdaWithAllVariationsOfType<WrongType>([]<typename T>() {
+          static_assert(!SameAsAnyTypeIn<WrongType, tup>);
+        });
+      });
+
+  // Unsuccessful comparison, where the underlying type is contained, but not
+  // with those qualifiers.
+  auto testNotIncludedWithThoseQualifiers = []<typename TemplatedType>() {
+    forEachTypeInTemplateType<TemplatedType>([]<typename CorrectType>() {
+      callLambdaWithAllVariationsOfType<CorrectType>([]<typename T>() {
+        if constexpr (!std::same_as<CorrectType, T>) {
+          static_assert(!SameAsAnyTypeIn<T, tup>);
+        }
+      });
+    });
+  };
+  testNotIncludedWithThoseQualifiers.template operator()<tup>();
+  testNotIncludedWithThoseQualifiers.template operator()<nested>();
+
+  // Should only works with templated types.
+  static_assert(!SameAsAnyTypeIn<int, int>);
   ASSERT_TRUE(true);
 }
 

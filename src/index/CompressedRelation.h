@@ -325,6 +325,9 @@ using namespace std::string_view_literals;
 /// Manage the reading of relations from disk that have been previously written
 /// using the `CompressedRelationWriter`.
 class CompressedRelationReader {
+  template <typename T>
+  using vector = std::vector<T>;
+
  public:
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using ColumnIndicesRef = std::span<const ColumnIndex>;

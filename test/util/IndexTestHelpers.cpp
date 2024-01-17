@@ -5,6 +5,7 @@
 #include "../IndexTestHelpers.h"
 
 #include "./GTestHelpers.h"
+#include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
 
 namespace ad_utility::testing {
@@ -45,38 +46,64 @@ namespace {
 // files) have exactly the same contents as the patterns that are folded into
 // the PSO and POS permutation.
 void checkConsistencyBetweenOldAndNewPatterns(const Index& index) {
+  static constexpr size_t col0IdTag = 43;
+  auto checkSingleElement = [](const Index& index, size_t patternIdx, Id id) {
+    const auto& hasPattern = index.getHasPattern();
+    auto expectedPattern = [&] {
+      if (id.getDatatype() != Datatype::VocabIndex) {
+        return NO_PATTERN;
+      }
+      auto idx = id.getVocabIndex().get();
+      if (idx >= hasPattern.size()) {
+        return NO_PATTERN;
+      }
+      return hasPattern[idx];
+    }();
+    EXPECT_EQ(patternIdx, expectedPattern)
+        << id << ' ' << index.getHasPattern().size() << ' ' << NO_PATTERN;
+  };
+
   auto checkConsistencyForCol0IdAndPermutation =
-      [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx) {
+      [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx,
+          size_t objectColIdx) {
         auto cancellationDummy =
             std::make_shared<ad_utility::CancellationHandle<>>();
-        auto scanResult =
-            index.scan(col0Id, std::nullopt, permutation,
-                       std::array{ColumnIndex{2}}, cancellationDummy);
-        ASSERT_EQ(scanResult.numColumns(), 3u);
+        auto scanResult = index.scan(col0Id, std::nullopt, permutation,
+                                     std::array{ColumnIndex{2}, ColumnIndex{3}},
+                                     cancellationDummy);
+        auto hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
+        auto scanResultHasPattern =
+            index.scan(hasPatternId, col0Id, Permutation::Enum::PSO, {},
+                       cancellationDummy);
+        // Each ID has at most one pattern, it can have none if it doesn't
+        // appear as a subject in the knowledge graph.
+        AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
+        if (scanResultHasPattern.numRows() == 0) {
+          checkSingleElement(index, NO_PATTERN, col0Id);
+        } else {
+          checkSingleElement(index, scanResultHasPattern(0, 0).getInt(),
+                             col0Id);
+        }
+        ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
-          auto subject = row[subjectColIdx].getVocabIndex().get();
           auto patternIdx = row[2].getInt();
-          if (subject >= index.getHasPattern().size()) {
-            EXPECT_EQ(patternIdx, NO_PATTERN);
-          } else {
-            EXPECT_EQ(patternIdx, index.getHasPattern()[subject])
-                << subject << ' '
-                << index.idToOptionalString(row[subjectColIdx].getVocabIndex())
-                       .value()
-                << ' ' << index.getHasPattern().size() << ' ' << NO_PATTERN;
-          }
+          Id subjectId = row[subjectColIdx];
+          checkSingleElement(index, patternIdx, subjectId);
+          Id objectId = objectColIdx == col0IdTag ? col0Id : row[objectColIdx];
+          auto patternIdxObject = row[3].getInt();
+          checkSingleElement(index, patternIdxObject, objectId);
         }
       };
 
   auto checkConsistencyForPredicate = [&](Id predicateId) {
     using enum Permutation::Enum;
-    checkConsistencyForCol0IdAndPermutation(predicateId, PSO, 0);
-    checkConsistencyForCol0IdAndPermutation(predicateId, POS, 1);
+    checkConsistencyForCol0IdAndPermutation(predicateId, PSO, 0, 1);
+    checkConsistencyForCol0IdAndPermutation(predicateId, POS, 1, 0);
   };
   auto checkConsistencyForObject = [&](Id objectId) {
     using enum Permutation::Enum;
-    checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1);
-    checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0);
+    checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1, col0IdTag);
+    checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, col0IdTag);
   };
   const auto& predicates = index.getImpl().PSO().metaData().data();
   for (const auto& predicate : predicates) {
@@ -111,7 +138,8 @@ Index makeTestIndex(const std::string& indexBasename,
         "\"zz\"@en";
   }
 
-  FILE_BUFFER_SIZE() = 1000;
+  FILE_BUFFER_SIZE = 1000;
+  BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 2;
   std::fstream f(inputFilename, std::ios_base::out);
   f << turtleInput.value();
   f.close();
@@ -143,6 +171,7 @@ Index makeTestIndex(const std::string& indexBasename,
     EXPECT_EQ(index.loadAllPermutations(), loadAllPermutations);
     EXPECT_EQ(index.usePatterns(), usePatterns);
   }
+
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.usePatterns() = usePatterns;
   index.loadAllPermutations() = loadAllPermutations;
