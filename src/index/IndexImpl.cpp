@@ -193,6 +193,9 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
     auto isQleverInternalId) {
   auto&& [hasPatternPredicateSortedByPSO, secondSorter] =
       sortersFromPatternCreator;
+  // We need the patterns twice: once for the additional column, and once for
+  // the additional permutation.
+  hasPatternPredicateSortedByPSO->moveResultOnMerge() = false;
   // The column with index 1 always is `has-predicate` and is not needed here.
   // Note that the order of the columns during index building  is alwasy `SPO`,
   // but the sorting might be different (PSO in this case).
@@ -260,8 +263,19 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
   createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
                               std::move(blockGenerator), *thirdSorter);
-
-  makeIndexFromAdditionalTriples(std::move(*hasPatternPredicateSortedByPSO));
+  // Add the `ql:has-pattern` predicate to the sorter such that it will become
+  // part of the PSO and POS permutation.
+  LOG(INFO) << "Adding " << hasPatternPredicateSortedByPSO->size()
+            << " additional triples to the POS and PSO permutation for the "
+               "`ql:has-pattern` predicate ..."
+            << std::endl;
+  auto noPattern = Id::makeFromInt(NO_PATTERN);
+  static_assert(NumColumnsIndexBuilding == 3);
+  for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
+    // The repetition of the pattern index (`row[2]`) for the fourth column is
+    // useful for generic unit testing, but not needed otherwise.
+    thirdSorter->push(std::array{row[0], row[1], row[2], row[2], noPattern});
+  }
   return thirdSorter;
 }
 // _____________________________________________________________________________
@@ -285,7 +299,10 @@ void IndexImpl::createFromFile(const string& filename) {
   writeConfiguration();
 
   auto isQleverInternalId = [&indexBuilderData](const auto& id) {
-    return indexBuilderData.vocabularyMetaData_.isQleverInternalId(id);
+    // The special internal IDs like `ql:has-pattern` (see `SpecialIds.h`)
+    // have the datatype `UNDEFINED`.
+    return indexBuilderData.vocabularyMetaData_.isQleverInternalId(id) ||
+           id.getDatatype() == Datatype::Undefined;
   };
 
   // For the first permutation, perform a unique.
@@ -758,6 +775,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
 
+
   // We have to load the patterns first to figure out if the patterns were built
   // at all.
   if (usePatterns_) {
@@ -777,8 +795,8 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
     }
   }
 
-  pso_.loadFromDisk(onDiskBase_, false, !usePatterns());
-  pos_.loadFromDisk(onDiskBase_, false, !usePatterns());
+  pso_.loadFromDisk(onDiskBase_, false);
+  pos_.loadFromDisk(onDiskBase_, false);
 
   if (loadAllPermutations_) {
     ops_.loadFromDisk(onDiskBase_);
@@ -1158,7 +1176,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                                          allIntegersBecomeDoubles};
   std::string key = "parser-integer-overflow-behavior";
   if (j.count(key)) {
-    auto value = j[key];
+    auto value = static_cast<std::string>(j[key]);
     if (value == overflowingIntegersThrow) {
       LOG(INFO) << "Integers that cannot be represented by QLever will throw "
                    "an exception"
@@ -1176,8 +1194,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
       turtleParserIntegerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     } else {
-      AD_CONTRACT_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
-                        allModes.end());
+      AD_CONTRACT_CHECK(std::ranges::find(allModes, value) == allModes.end());
       LOG(ERROR) << "Invalid value for " << key << std::endl;
       LOG(INFO) << "The currently supported values are "
                 << absl::StrJoin(allModes, ",") << std::endl;

@@ -4,29 +4,22 @@
 
 #pragma once
 #include <absl/strings/str_cat.h>
-#include <assert.h>
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <cassert>
+#include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <vector>
 
-#include "./Exception.h"
-#include "./Forward.h"
-#include "Log.h"
-
-using std::cerr;
-using std::cout;
-using std::endl;
-using std::string;
-using std::vector;
+#include "util/Exception.h"
+#include "util/Forward.h"
+#include "util/Log.h"
 
 namespace ad_utility {
 //! Wrapper class for file access. Is supposed to provide
@@ -37,23 +30,25 @@ namespace ad_utility {
 //! Many methods are copies from the CompleteSearch File.h
 class File {
  private:
-  string _name;
-  FILE* _file;
+  using string = std::string;
+
+  string name_;
+  FILE* file_;
 
  public:
   //! Default constructor
   File() {
-    _file = NULL;
-    _name = "";
+    file_ = NULL;
+    name_ = "";
   }
 
   //! Constructor that creates an instance from the
   //! file system.
-  File(const char* filename, const char* mode) : _name(filename) {
+  File(const char* filename, const char* mode) : name_(filename) {
     open(filename, mode);
   }
 
-  File(const string& filename, const char* mode) : _name(filename) {
+  File(const string& filename, const char* mode) : name_(filename) {
     open(filename, mode);
   }
 
@@ -62,14 +57,14 @@ class File {
       close();
     }
 
-    _file = rhs._file;
-    rhs._file = nullptr;
-    _name = std::move(rhs._name);
+    file_ = rhs.file_;
+    rhs.file_ = nullptr;
+    name_ = std::move(rhs.name_);
     return *this;
   }
 
-  File(File&& rhs) : _name{std::move(rhs._name)}, _file{rhs._file} {
-    rhs._file = nullptr;
+  File(File&& rhs) : name_{std::move(rhs.name_)}, file_{rhs.file_} {
+    rhs.file_ = nullptr;
   }
 
   //! Destructor closes file if still open
@@ -79,15 +74,14 @@ class File {
 
   //! OPEN FILE (exit with error if fails, returns true otherwise)
   bool open(const char* filename, const char* mode) {
-    _file = fopen(filename, mode);
-    if (_file == NULL) {
+    file_ = fopen(filename, mode);
+    if (file_ == NULL) {
       std::stringstream err;
       err << "! ERROR opening file \"" << filename << "\" with mode \"" << mode
-          << "\" (" << strerror(errno) << ")" << endl
-          << endl;
+          << "\" (" << strerror(errno) << ")" << std::endl;
       throw std::runtime_error(std::move(err).str());
     }
-    _name = filename;
+    name_ = filename;
     return true;
   }
 
@@ -97,20 +91,19 @@ class File {
   }
 
   //! checks if the file is open.
-  [[nodiscard]] bool isOpen() const { return (_file != NULL); }
+  [[nodiscard]] bool isOpen() const { return (file_ != NULL); }
 
   //! Close file.
   bool close() {
     if (not isOpen()) {
       return true;
     }
-    if (fclose(_file) != 0) {
-      cout << "! ERROR closing file \"" << _name << "\" (" << strerror(errno)
-           << ")" << endl
-           << endl;
+    if (fclose(file_) != 0) {
+      std::cout << "! ERROR closing file \"" << name_ << "\" ("
+                << strerror(errno) << ")" << std::endl;
       exit(1);
     }
-    _file = NULL;
+    file_ = NULL;
     return true;
   }
 
@@ -119,64 +112,18 @@ class File {
   // read from current file pointer position
   // returns the number of bytes read
   size_t read(void* targetBuffer, size_t nofBytesToRead) {
-    assert(_file);
-    return fread(targetBuffer, (size_t)1, nofBytesToRead, _file);
-  }
-
-  // Reads a line from the file into param line and interprets it as ASCII.
-  // Removes the \n from the end of the string.
-  // Returns null on EOF when no chars have been read.
-  // Throws an Exception if the buffer is not sufficiently large.
-  // Warning: std::getTriple which works on a file stream
-  // is generally more performant (it uses a general stream buffer
-  // to wrap the file)
-  // and appeds char by char to the string.
-  bool readLine(string* line, char* buf, size_t bufferSize) {
-    assert(_file);
-    char* retVal = fgets(buf, bufferSize, _file);
-    size_t stringLength = strlen(buf);
-    if (retVal && stringLength > 0 && buf[stringLength - 1] == '\n') {
-      // Remove the trailing \n
-      buf[stringLength - 1] = 0;
-    } else if (retVal && !isAtEof()) {
-      // Stopped inside a line because the end of the buffer was reached.
-      AD_THROW("Buffer too small when reading from file: " + _name +
-               ". Or the line contains a 0 character.");
-    }
-    *line = buf;
-    return retVal;
+    assert(file_);
+    return fread(targetBuffer, (size_t)1, nofBytesToRead, file_);
   }
 
   // write to current file pointer position
   // returns number of bytes written
   size_t write(const void* sourceBuffer, size_t nofBytesToWrite) {
-    assert(_file);
-    return fwrite(sourceBuffer, (size_t)1, nofBytesToWrite, _file);
+    assert(file_);
+    return fwrite(sourceBuffer, (size_t)1, nofBytesToWrite, file_);
   }
 
-  // write to current file pointer position
-  // returns number of bytes written
-  void writeLine(const string& line) {
-    assert(_file);
-    write(line.c_str(), line.size());
-    write("\n", 1);
-  }
-
-  void flush() { fflush(_file); }
-
-  bool isAtEof() {
-    assert(_file);
-    return feof(_file) != 0;
-  }
-
-  //! Read an ASCII file into a vector of strings.
-  //! Each line represents an entry.
-  void readIntoVector(vector<string>* target, char* buf, size_t bufferSize) {
-    string line;
-    while (readLine(&line, buf, bufferSize)) {
-      target->push_back(line);
-    }
-  }
+  void flush() { fflush(file_); }
 
   //! Seeks a position in the file.
   //! Sets the file position indicator for the stream.
@@ -186,16 +133,16 @@ class File {
   bool seek(off_t seekOffset, int seekOrigin) {
     assert((seekOrigin == SEEK_SET) || (seekOrigin == SEEK_CUR) ||
            (seekOrigin == SEEK_END));
-    assert(_file);
-    return fseeko(_file, seekOffset, seekOrigin) == 0;
+    assert(file_);
+    return fseeko(file_, seekOffset, seekOrigin) == 0;
   }
 
   //! Read nofBytesToRead bytes from file starting at the given offset.
   //! Returns the number of bytes read or the error returned by pread()
   //! which is < 0
   ssize_t read(void* targetBuffer, size_t nofBytesToRead, off_t offset) const {
-    assert(_file);
-    const int fd = fileno(_file);
+    assert(file_);
+    const int fd = fileno(file_);
     size_t bytesRead = 0;
     auto* to = static_cast<uint8_t*>(targetBuffer);
     while (bytesRead < nofBytesToRead) {
@@ -211,17 +158,14 @@ class File {
     return bytesRead;
   }
 
-  //! get the underlying file descriptor
-  [[nodiscard]] int getFileDescriptor() const { return fileno(_file); }
-
   //! Returns the number of bytes from the beginning
   //! is 0 on opening. Later equal the number of bytes written.
   //! -1 is returned when an error occurs
   [[nodiscard]] off_t tell() const {
-    assert(_file);
-    off_t returnValue = ftello(_file);
+    assert(file_);
+    off_t returnValue = ftello(file_);
     if (returnValue == (off_t)-1) {
-      cerr << "\n ERROR in tell() : " << strerror(errno) << endl << endl;
+      std::cerr << "\n ERROR in tell() : " << strerror(errno) << std::endl;
       exit(1);
     }
     return returnValue;
@@ -237,17 +181,12 @@ class File {
   // returns the byte offset of the last off_t
   // the off_t itself is passed back by reference
   off_t getLastOffset(off_t* lastOffset) {
-    assert(_file);
+    assert(file_);
     // read the last off_t
     const off_t lastOffsetOffset = sizeOfFile() - sizeof(off_t);
     read(lastOffset, sizeof(off_t), lastOffsetOffset);
 
     return lastOffsetOffset;
-  }
-
-  // Static method to check if a file exists.
-  static bool exists(const std::filesystem::path& path) {
-    return std::filesystem::exists(path);
   }
 };
 

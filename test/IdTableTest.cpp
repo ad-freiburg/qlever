@@ -974,6 +974,28 @@ TEST(IdTable, setColumnSubset) {
   ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2}));
 }
 
+TEST(IdTableStatic, setColumnSubset) {
+  using IntTable = columnBasedIdTable::IdTable<int, 3>;
+  IntTable t;
+  t.push_back({0, 10, 20});
+  t.push_back({1, 11, 21});
+  t.push_back({2, 12, 22});
+  t.setColumnSubset(std::array{ColumnIndex(2), ColumnIndex(0), ColumnIndex(1)});
+  ASSERT_EQ(3, t.numColumns());
+  ASSERT_EQ(3, t.numRows());
+  ASSERT_THAT(t.getColumn(0), ::testing::ElementsAre(20, 21, 22));
+  ASSERT_THAT(t.getColumn(1), ::testing::ElementsAre(0, 1, 2));
+  ASSERT_THAT(t.getColumn(2), ::testing::ElementsAre(10, 11, 12));
+
+  // Duplicate columns are not allowed.
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{0, 0, 1}));
+  // A column index is out of range.
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2, 3}));
+
+  // For static tables, we need a permutation, a real subset is not allowed.
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2}));
+}
+
 TEST(IdTable, cornerCases) {
   using Dynamic = columnBasedIdTable::IdTable<int, 0>;
   {

@@ -124,6 +124,7 @@ class IdTable {
   static constexpr bool columnsAreAllocatable =
       std::is_constructible_v<ColumnStorage, size_t, Allocator>;
 
+  // The type of a single entry in a row.
   using single_value_type = T;
   // Because of the column-major layout, the `row_type` (a value type that
   // stores the values of a  single row) and the `row_reference` (a type that
@@ -134,6 +135,10 @@ class IdTable {
   using row_type = Row<T, NumColumns>;
   using row_reference = RowReference<IdTable, ad_utility::IsConst::False>;
   using const_row_reference = RowReference<IdTable, ad_utility::IsConst::True>;
+
+  // This alias is required to make the `IdTable` class work with advanced GTest
+  // features, because GTest uses `Container::value_type` directly instead of
+  // using `std::iterator_traits`.
   using value_type = row_type;
 
  private:
@@ -530,11 +535,14 @@ class IdTable {
   void setColumnSubset(std::span<const ColumnIndex> subset) {
     // First check that the `subset` is indeed a subset of the column
     // indices.
-    AD_CONTRACT_CHECK(isDynamic || subset.size() == NumColumns);
     std::vector<ColumnIndex> check{subset.begin(), subset.end()};
     std::ranges::sort(check);
     AD_CONTRACT_CHECK(std::unique(check.begin(), check.end()) == check.end());
     AD_CONTRACT_CHECK(!subset.empty() && subset.back() < numColumns());
+
+    // If the number of columns is statically fixed, then only a permutation of
+    // the columns and not a real subset is allowed.
+    AD_CONTRACT_CHECK(isDynamic || subset.size() == NumColumns);
 
     Data newData;
     newData.reserve(subset.size());
@@ -740,6 +748,7 @@ class IdTable : public IdTableStatic<0> {
   using Base = IdTableStatic<0>;
   // Inherit the constructors.
   using Base::Base;
+
   IdTable(Base&& b) : Base(std::move(b)) {}
 };
 

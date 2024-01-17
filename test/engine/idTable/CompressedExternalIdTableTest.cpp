@@ -78,9 +78,10 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
 }
 
 template <size_t NumStaticColumns>
-void testExternalSorter(size_t numDynamicColumns, size_t numRows,
-                        ad_utility::MemorySize memoryToUse,
-                        source_location l = source_location::current()) {
+void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
+                            ad_utility::MemorySize memoryToUse,
+                            bool mergeMultipleTimes,
+                            source_location l = source_location::current()) {
   auto tr = generateLocationTrace(l);
   std::string filename = "idTableCompressedSorter.testExternalSorter.dat";
   using namespace ad_utility::memory_literals;
@@ -101,15 +102,36 @@ void testExternalSorter(size_t numDynamicColumns, size_t numRows,
 
     std::ranges::sort(randomTable, SortByOSP{});
 
+    if (mergeMultipleTimes) {
+      writer.moveResultOnMerge() = false;
+    }
+
     for (size_t k = 0; k < 5; ++k) {
       auto generator = writer.sortedView();
       using namespace ::testing;
-      auto result = idTableFromRowGenerator<NumStaticColumns>(
-          generator, numDynamicColumns);
-      ASSERT_THAT(result, Eq(randomTable)) << "k = " << k;
+      if (mergeMultipleTimes || k == 0) {
+        auto result = idTableFromRowGenerator<NumStaticColumns>(
+            generator, numDynamicColumns);
+        ASSERT_THAT(result, Eq(randomTable)) << "k = " << k;
+      } else {
+        EXPECT_ANY_THROW((idTableFromRowGenerator<NumStaticColumns>(
+            generator, numDynamicColumns)));
+      }
+      // We cannot access or change this value after the first merge.
+      EXPECT_ANY_THROW(writer.moveResultOnMerge());
     }
     writer.clear();
   }
+}
+
+template <size_t NumStaticColumns>
+void testExternalSorter(size_t numDynamicColumns, size_t numRows,
+                        ad_utility::MemorySize memoryToUse,
+                        source_location l = source_location::current()) {
+  testExternalSorterImpl<NumStaticColumns>(numDynamicColumns, numRows,
+                                           memoryToUse, true, l);
+  testExternalSorterImpl<NumStaticColumns>(numDynamicColumns, numRows,
+                                           memoryToUse, false, l);
 }
 
 TEST(CompressedExternalIdTable, sorterRandomInputs) {

@@ -16,6 +16,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________

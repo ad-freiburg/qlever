@@ -316,6 +316,10 @@ class CompressedExternalIdTableBase {
   CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
 
+  // Store whether this table has previously already been iterated over (in
+  // which case this member becomes `false`).
+  std::atomic<bool> isFirstIteration_ = true;
+
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
  public:
@@ -332,8 +336,6 @@ class CompressedExternalIdTableBase {
     this->currentBlock_.reserve(blocksize_);
     AD_CONTRACT_CHECK(NumStaticCols == 0 || NumStaticCols == numCols);
   }
-  // TODO<joka921> Shouldn't be public.
-  std::atomic<bool> isFirstMerge = true;
   // Add a single row to the input. The type of `row` needs to be something that
   // can be `push_back`ed to a `IdTable`.
   void push(const auto& row) requires requires { currentBlock_.push_back(row); }
@@ -366,7 +368,7 @@ class CompressedExternalIdTableBase {
     }
     writer_.clear();
     numBlocksPushed_ = 0;
-    isFirstMerge = true;
+    isFirstIteration_ = true;
   }
 
  protected:
@@ -404,7 +406,7 @@ class CompressedExternalIdTableBase {
   // until the pushing is actually finished, and return `true`. Using this
   // function allows for an efficient usage of this class for very small inputs.
   bool transformAndPushLastBlock() {
-    if (!isFirstMerge) {
+    if (!isFirstIteration_) {
       return numBlocksPushed_ != 0;
     }
     // If we have pushed at least one (complete) block, then the last future
@@ -555,6 +557,9 @@ class CompressedExternalIdTableSorter
   //  output phase.
   int numBufferedOutputBlocks_ = 4;
 
+  // See the `moveResultOnMerge()` getter function for documentation.
+  bool moveResultOnMerge_ = true;
+
  public:
   // Constructor.
   CompressedExternalIdTableSorter(
@@ -585,6 +590,18 @@ class CompressedExternalIdTableSorter
   // within this class.
   using Base::push;
 
+  // If set to `false` then the sorted result can be extracted multiple times.
+  // If set to `true` then the result is moved out and unusable after the first
+  // merge. In that case an exception will be thrown at the start of the second
+  // merge.
+  // Note: This mechanism gives a performance advantage for very small inputs
+  // that can be completely sorted in RAM. In that case we can avoid a copy of
+  // the sorted result.
+  bool& moveResultOnMerge() {
+    AD_CONTRACT_CHECK(this->isFirstIteration_);
+    return moveResultOnMerge_;
+  }
+
   // Transition from the input phase, where `push()` can be called, to the
   // output phase and return a generator that yields the sorted elements one by
   // one. Either this function or the following function must be called exactly
@@ -600,6 +617,8 @@ class CompressedExternalIdTableSorter
   requires(N == NumStaticCols || N == 0)
   cppcoro::generator<IdTableStatic<N>> getSortedBlocks(
       std::optional<size_t> blocksize = std::nullopt) {
+    // If we move the result out, there must only be a single merge phase.
+    AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
     mergeIsActive_.store(true);
     // Explanation for the second argument: One block is buffered by this
     // generator, one block is buffered inside the `sortedBlocks` generator, so
@@ -610,7 +629,7 @@ class CompressedExternalIdTableSorter
              std::max(1, numBufferedOutputBlocks_ - 2))) {
       co_yield block;
     }
-    this->isFirstMerge = false;
+    this->isFirstIteration_ = false;
     mergeIsActive_.store(false);
   }
 
@@ -641,17 +660,18 @@ class CompressedExternalIdTableSorter
       // There was only one block, return it. If a blocksize was explicitly
       // requested for the output, and the single block is larger than this
       // blocksize, we manually have to split it into chunks.
-      // TODO<joka921> doesn't need to be const...
-      const auto& block = this->currentBlock_;
+      auto& block = this->currentBlock_;
       const auto blocksizeOutput = blocksize.value_or(block.numRows());
       if (block.numRows() <= blocksizeOutput) {
-        // TODO<joka921> We don't need the copy if we only want to iterate once,
-        // make this configurable.
-        auto blockAsStatic = IdTableStatic<N>(
-            this->currentBlock_.clone().template toStatic<N>());
-        co_yield blockAsStatic;
-        // co_yield std::move(this->currentBlock_).template toStatic<N>();
+        if (this->moveResultOnMerge_) {
+          co_yield std::move(this->currentBlock_).template toStatic<N>();
+        } else {
+          auto blockAsStatic = IdTableStatic<N>(
+              this->currentBlock_.clone().template toStatic<N>());
+          co_yield blockAsStatic;
+        }
       } else {
+        // TODO<C++23> Use `std::views::chunk`.
         for (size_t i = 0; i < block.numRows(); i += blocksizeOutput) {
           size_t upper = std::min(i + blocksizeOutput, block.numRows());
           auto curBlock = IdTableStatic<NumStaticCols>(
