@@ -101,17 +101,32 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
                     biggerTableJoinColumnRef.size());
 
   /*
+  All the distinct elements in the join column of the bigger table.
+  Needed, so that I can randomly (uniform distribution) choose a distinct
+  element in O(1).
+  */
+  std::vector<std::reference_wrapper<const ValueId>>
+      biggerTableJoinColumnDistinctElements;
+
+  /*
   How many instances of a value are inside the join column of the bigger
   table.
   */
-  ad_utility::HashMap<const ValueId, size_t>
-      amountValueInBiggertTableJoinColumn{};
-  amountValueInBiggertTableJoinColumn.reserve(biggerTableJoinColumnRef.size() +
-                                              smallerTableJoinColumnRef.size());
+  ad_utility::HashMap<ValueId, size_t>
+      numOccurrencesValueInBiggertTableJoinColumn{};
   std::ranges::for_each(
       biggerTableJoinColumnRef,
-      [&amountValueInBiggertTableJoinColumn](const ValueId& val) {
-        amountValueInBiggertTableJoinColumn[val]++;
+      [&numOccurrencesValueInBiggertTableJoinColumn,
+       &biggerTableJoinColumnDistinctElements](const ValueId& val) {
+        if (auto numOccurrencesIterator =
+                numOccurrencesValueInBiggertTableJoinColumn.find(val);
+            numOccurrencesIterator !=
+            numOccurrencesValueInBiggertTableJoinColumn.end()) {
+          (numOccurrencesIterator->second)++;
+        } else {
+          numOccurrencesValueInBiggertTableJoinColumn.emplace(val, 0UL);
+          biggerTableJoinColumnDistinctElements.emplace_back(val);
+        }
       });
 
   // Seeds for the random generators, so that things are less similiar.
@@ -121,10 +136,9 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   /*
   Creating the generator for choosing a random distinct join column element
   in the bigger table.
-  We can use the keys of `amountValueInBiggertTableJoinColumn` for this.
   */
   ad_utility::SlowRandomIntGenerator<size_t> randomBiggerTableElement(
-      0, amountValueInBiggertTableJoinColumn.size() - 1, seeds.at(0));
+      0, biggerTableJoinColumnDistinctElements.size() - 1, seeds.at(0));
 
   // Generator for checking, if an overlap should be created.
   ad_utility::RandomDoubleGenerator randomDouble(0, 100, seeds.at(1));
@@ -136,37 +150,36 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   size_t newOverlapMatches{0};
 
   // Create the overlap.
-  ad_utility::HashMap<const ValueId, ValueId> smallerTableElementToNewValue{};
-  amountValueInBiggertTableJoinColumn.reserve(smallerTableJoinColumnRef.size());
+  ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
+      smallerTableElementToNewValue{};
   std::ranges::for_each(
       smallerTableJoinColumnRef,
       [&randomDouble, &probabilityToCreateOverlap,
-       &smallerTableElementToNewValue, &amountValueInBiggertTableJoinColumn,
-       &randomBiggerTableElement, &newOverlapMatches](auto& id) {
+       &smallerTableElementToNewValue,
+       &numOccurrencesValueInBiggertTableJoinColumn, &randomBiggerTableElement,
+       &newOverlapMatches, &biggerTableJoinColumnDistinctElements](auto& id) {
         /*
         If a value has no hash map value, with which it will be overwritten, we
         either assign it its own value, or an element from the bigger table.
         */
         if (auto newValueIterator = smallerTableElementToNewValue.find(id);
             newValueIterator != smallerTableElementToNewValue.end()) {
-          const ValueId& newValue = (*newValueIterator).second;
+          const ValueId& newValue = newValueIterator->second;
           id = newValue;
           // Values, that are only found in the smaller table, are added to the
           // hash map with value 0.
-          newOverlapMatches += amountValueInBiggertTableJoinColumn[newValue];
+          newOverlapMatches +=
+              numOccurrencesValueInBiggertTableJoinColumn[newValue];
         } else if (randomDouble() <= probabilityToCreateOverlap) {
           /*
-          Randomly assign one of the elements in the bigger table to be the new
-          value. This can only happen the first time, an element in the smaller
-          table is encountered, because afterwards it will always have an entry
-          in the hash map for the new values.
+          Randomly assign one of the distinct elements in the bigger table to be
+          the new value. This can only happen the first time, an element in the
+          smaller table is encountered, because afterwards it will always have
+          an entry in the hash map for the new values.
           */
-          // TODO Can this be done cleaner?
-          smallerTableElementToNewValue[id] =
-              *(std::views::drop(
-                    std::views::keys(amountValueInBiggertTableJoinColumn),
-                    randomBiggerTableElement())
-                    .begin());
+          smallerTableElementToNewValue.emplace(
+              id, biggerTableJoinColumnDistinctElements.at(
+                      randomBiggerTableElement()));
         } else {
           /*
           Assign the value to itself.
@@ -174,7 +187,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
           'encounter' with an distinct element in the smaller table and save
           ressources.
           */
-          smallerTableElementToNewValue[id] = id;
+          smallerTableElementToNewValue.emplace(id, id);
         }
       });
 
