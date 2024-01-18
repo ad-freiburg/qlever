@@ -634,7 +634,7 @@ boost::asio::awaitable<void> Server::processQuery(
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
     qet.getRootOperation()->recursivelySetCancellationHandle(
-        std::move(cancellationHandle));
+        cancellationHandle);
     qet.getRootOperation()->recursivelySetTimeConstraint(timeLimit);
     auto timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
