@@ -1,1 +1,1 @@
-addLinkAndDiscoverTest(PatternCreatorNewTest index)
+addLinkAndDiscoverTest(PatternCreatorTest index)

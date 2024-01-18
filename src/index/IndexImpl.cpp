@@ -189,7 +189,7 @@ auto fixBlockAfterPatternJoin(auto block) {
 
 // ____________________________________________________________________________
 std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
-    PatternCreatorNew::TripleSorter sortersFromPatternCreator,
+    PatternCreator::TripleSorter sortersFromPatternCreator,
     auto isQleverInternalId) {
   auto&& [hasPatternPredicateSortedByPSO, secondSorter] =
       sortersFromPatternCreator;
@@ -793,7 +793,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   // at all.
   if (usePatterns_) {
     try {
-      PatternCreatorNew::readPatternsFromFile(
+      PatternCreator::readPatternsFromFile(
           onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
           avgNumDistinctPredicatesPerSubject_,
           numDistinctSubjectPredicatePairs_, patterns_);
@@ -1557,19 +1557,19 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-std::optional<PatternCreatorNew::TripleSorter> IndexImpl::createSPOAndSOP(
+std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     size_t numColumns, auto& isInternalId, BlocksOfTriples sortedTriples,
     NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
   auto numSubjectCounter =
       makeNumDistinctIdsCounter<0>(numSubjectsNormal, isInternalId);
-  std::optional<PatternCreatorNew::TripleSorter> result;
+  std::optional<PatternCreator::TripleSorter> result;
   if (usePatterns_) {
     // We will return the next sorter.
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 0);
     // For now (especially for testing) We build the new pattern format as well
     // as the old one to see that they match.
-    PatternCreatorNew patternCreator{
+    PatternCreator patternCreator{
         onDiskBase_ + ".index.patterns",
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator,
