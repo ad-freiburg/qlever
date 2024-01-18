@@ -747,12 +747,12 @@ void IndexImpl::getContextListForWords(const string& words,
       if (!term.ends_with('*')) {
         skipColumns.push_back(i);
       }
-      wepVecs.push_back(getWordPostingsForTerm(term));
+      wepVecs.push_back(getWordPostingsForTermWep(term));
       i++;
     }
     wep = FTSAlgorithms::crossIntersectKWay(wepVecs, nullptr);
   } else {
-    wep = getWordPostingsForTerm(terms[0]);
+    wep = getWordPostingsForTermWep(terms[0]);
   }
 
   AD_CONTRACT_CHECK(wep.wids_.size() >= terms.size());
@@ -787,7 +787,7 @@ void IndexImpl::getContextListForWords(const string& words,
 }
 
 // _____________________________________________________________________________
-Index::WordEntityPostings IndexImpl::readWordCl(
+Index::WordEntityPostings IndexImpl::readWordClWep(
     const TextBlockMetaData& tbmd) const {
   Index::WordEntityPostings wep;
   wep.cids_ = readGapComprList<TextRecordIndex>(
@@ -804,7 +804,30 @@ Index::WordEntityPostings IndexImpl::readWordCl(
 }
 
 // _____________________________________________________________________________
-Index::WordEntityPostings IndexImpl::readWordEntityCl(
+IdTable IndexImpl::readWordCl(
+    const TextBlockMetaData& tbmd,
+    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+  IdTable idTable{2, allocator};
+  vector<TextRecordIndex> cids = readGapComprList<TextRecordIndex>(
+      tbmd._cl._nofElements, tbmd._cl._startContextlist,
+      static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),
+      &TextRecordIndex::make);
+  idTable.resize(cids.size());
+  std::ranges::transform(cids, idTable.getColumn(0).begin(),
+                         &Id::makeFromTextRecordIndex);
+  std::ranges::transform(
+      readFreqComprList<WordIndex>(
+          tbmd._cl._nofElements, tbmd._cl._startWordlist,
+          static_cast<size_t>(tbmd._cl._startScorelist -
+                              tbmd._cl._startWordlist)),
+      idTable.getColumn(1).begin(), [](WordIndex id) {
+        return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
+      });
+  return idTable;
+}
+
+// _____________________________________________________________________________
+Index::WordEntityPostings IndexImpl::readWordEntityClWep(
     const TextBlockMetaData& tbmd) const {
   Index::WordEntityPostings wep;
   wep.cids_ = readGapComprList<TextRecordIndex>(
@@ -825,7 +848,36 @@ Index::WordEntityPostings IndexImpl::readWordEntityCl(
 }
 
 // _____________________________________________________________________________
-Index::WordEntityPostings IndexImpl::getWordPostingsForTerm(
+IdTable IndexImpl::readWordEntityCl(
+    const TextBlockMetaData& tbmd,
+    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+  IdTable idTable{3, allocator};
+  vector<TextRecordIndex> cids = readGapComprList<TextRecordIndex>(
+      tbmd._entityCl._nofElements, tbmd._entityCl._startContextlist,
+      static_cast<size_t>(tbmd._entityCl._startWordlist -
+                          tbmd._entityCl._startContextlist),
+      &TextRecordIndex::make);
+  idTable.resize(cids.size());
+  std::ranges::transform(cids, idTable.getColumn(0).begin(),
+                         &Id::makeFromTextRecordIndex);
+  std::ranges::copy(
+      readFreqComprList<Id>(tbmd._entityCl._nofElements,
+                            tbmd._entityCl._startWordlist,
+                            static_cast<size_t>(tbmd._entityCl._startScorelist -
+                                                tbmd._entityCl._startWordlist),
+                            &Id::fromBits),
+      idTable.getColumn(1).begin());
+  std::ranges::transform(
+      readFreqComprList<Score>(
+          tbmd._entityCl._nofElements, tbmd._entityCl._startScorelist,
+          static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
+                              tbmd._entityCl._startScorelist)),
+      idTable.getColumn(2).begin(), &Id::makeFromInt);
+  return idTable;
+}
+
+// _____________________________________________________________________________
+Index::WordEntityPostings IndexImpl::getWordPostingsForTermWep(
     const string& term) const {
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
   Index::WordEntityPostings wep;
@@ -834,14 +886,35 @@ Index::WordEntityPostings IndexImpl::getWordPostingsForTerm(
     return wep;
   }
   const auto& tbmd = optionalTbmd.value().tbmd_;
-  wep = readWordCl(tbmd);
+  wep = readWordClWep(tbmd);
   if (optionalTbmd.value().hasToBeFiltered_) {
-    wep = FTSAlgorithms::filterByRange(optionalTbmd.value().idRange_, wep);
+    wep = FTSAlgorithms::filterByRangeWep(optionalTbmd.value().idRange_, wep);
   }
   LOG(DEBUG) << "Word postings for term: " << term
              << ": cids: " << wep.cids_.size() << " scores "
              << wep.scores_.size() << '\n';
   return wep;
+}
+
+// _____________________________________________________________________________
+IdTable IndexImpl::getWordPostingsForTerm(
+    const string& term,
+    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+  LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
+  IdTable idTable{allocator};
+  auto optionalTbmd = getTextBlockMetadataForWordOrPrefix(term);
+  if (!optionalTbmd.has_value()) {
+    return idTable;
+  }
+  const auto& tbmd = optionalTbmd.value().tbmd_;
+  idTable = readWordCl(tbmd, allocator);
+  if (optionalTbmd.value().hasToBeFiltered_) {
+    idTable =
+        FTSAlgorithms::filterByRange(optionalTbmd.value().idRange_, idTable);
+  }
+  LOG(DEBUG) << "Word postings for term: " << term
+             << ": cids: " << idTable.getColumn(0).size() << '\n';
+  return idTable;
 }
 
 // _____________________________________________________________________________
@@ -871,7 +944,7 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
         skipColumns.push_back(i);
       }
       if (i != useElFromTerm) {
-        wepVecs.push_back(getWordPostingsForTerm(terms[i]));
+        wepVecs.push_back(getWordPostingsForTermWep(terms[i]));
       }
     }
     wepVecs.push_back(getEntityPostingsForTerm(terms[useElFromTerm]));
@@ -1030,12 +1103,25 @@ Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
     return resultWep;
   }
   const auto& tbmd = optTbmd.value().tbmd_;
-  Index::WordEntityPostings matchingContextsWep = getWordPostingsForTerm(term);
+  Index::WordEntityPostings matchingContextsWep =
+      getWordPostingsForTermWep(term);
 
   // Read the full lists
-  Index::WordEntityPostings eBlockWep = readWordEntityCl(tbmd);
+  Index::WordEntityPostings eBlockWep = readWordEntityClWep(tbmd);
   resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
   return resultWep;
+}
+
+// _____________________________________________________________________________
+IdTable IndexImpl::getEntityMentionsForWord(
+    const string& term,
+    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+  auto optTbmd = getTextBlockMetadataForWordOrPrefix(term);
+  if (!optTbmd.has_value()) {
+    return IdTable{allocator};
+  }
+  const auto& tbmd = optTbmd.value().tbmd_;
+  return readWordEntityCl(tbmd, allocator);
 }
 
 // _____________________________________________________________________________
@@ -1381,6 +1467,30 @@ size_t IndexImpl::getIndexOfBestSuitedElTerm(
 }
 
 // _____________________________________________________________________________
+size_t IndexImpl::getSizeOfTextBlockForEntities(const string& word) const {
+  if (word.empty()) {
+    return 0;
+  }
+  auto optTbmd = getTextBlockMetadataForWordOrPrefix(word);
+  if (!optTbmd.has_value()) {
+    return 0;
+  }
+  return optTbmd.value().tbmd_._entityCl._nofElements;
+}
+
+// _____________________________________________________________________________
+size_t IndexImpl::getSizeOfTextBlockForWord(const string& word) const {
+  if (word.empty()) {
+    return 0;
+  }
+  auto optTbmd = getTextBlockMetadataForWordOrPrefix(word);
+  if (!optTbmd.has_value()) {
+    return 0;
+  }
+  return optTbmd.value().tbmd_._cl._nofElements;
+}
+
+// _____________________________________________________________________________
 size_t IndexImpl::getSizeEstimate(const string& words) const {
   // TODO vector can be of type std::string_view if called functions
   //  are updated to accept std::string_view instead of const std::string&
@@ -1408,10 +1518,12 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
   AD_CORRECTNESS_CHECK(!word.empty());
   IdRange<WordVocabIndex> idRange;
   if (word.ends_with(PREFIX_CHAR)) {
-    if (!textVocab_.getIdRangeForFullTextPrefix(word, &idRange)) {
+    auto idRangeOpt = textVocab_.getIdRangeForFullTextPrefix(word);
+    if (!idRangeOpt.has_value()) {
       LOG(INFO) << "Prefix: " << word << " not in vocabulary\n";
       return std::nullopt;
     }
+    idRange = idRangeOpt.value();
   } else {
     WordVocabIndex idx;
     if (!textVocab_.getId(word, &idx)) {

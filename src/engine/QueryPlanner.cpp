@@ -4,34 +4,37 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <engine/Bind.h>
-#include <engine/CartesianProductJoin.h>
-#include <engine/CheckUsePatternTrick.h>
-#include <engine/CountAvailablePredicates.h>
-#include <engine/Distinct.h>
-#include <engine/Filter.h>
-#include <engine/GroupBy.h>
-#include <engine/HasPredicateScan.h>
-#include <engine/IndexScan.h>
-#include <engine/Join.h>
-#include <engine/Minus.h>
-#include <engine/MultiColumnJoin.h>
-#include <engine/NeutralElementOperation.h>
-#include <engine/OptionalJoin.h>
-#include <engine/OrderBy.h>
-#include <engine/QueryPlanner.h>
-#include <engine/Service.h>
-#include <engine/Sort.h>
-#include <engine/TextOperationWithFilter.h>
-#include <engine/TextOperationWithoutFilter.h>
-#include <engine/TransitivePath.h>
-#include <engine/Union.h>
-#include <engine/Values.h>
-#include <parser/Alias.h>
-#include <parser/SparqlParserHelpers.h>
+#include "engine/QueryPlanner.h"
 
 #include <algorithm>
 #include <ctime>
+
+#include "engine/Bind.h"
+#include "engine/CartesianProductJoin.h"
+#include "engine/CheckUsePatternTrick.h"
+#include "engine/CountAvailablePredicates.h"
+#include "engine/Distinct.h"
+#include "engine/Filter.h"
+#include "engine/GroupBy.h"
+#include "engine/HasPredicateScan.h"
+#include "engine/IndexScan.h"
+#include "engine/Join.h"
+#include "engine/Minus.h"
+#include "engine/MultiColumnJoin.h"
+#include "engine/NeutralElementOperation.h"
+#include "engine/OptionalJoin.h"
+#include "engine/OrderBy.h"
+#include "engine/Service.h"
+#include "engine/Sort.h"
+#include "engine/TextIndexScanForEntity.h"
+#include "engine/TextIndexScanForWord.h"
+#include "engine/TextOperationWithFilter.h"
+#include "engine/TextOperationWithoutFilter.h"
+#include "engine/TransitivePath.h"
+#include "engine/Union.h"
+#include "engine/Values.h"
+#include "parser/Alias.h"
+#include "parser/SparqlParserHelpers.h"
 
 namespace p = parsedQuery;
 namespace {
@@ -188,9 +191,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   auto optimizeCommutativ = [this](const auto& triples, const auto& plans,
                                    const auto& filters) {
     auto tg = createTripleGraph(&triples);
-    LOG(TRACE) << "Collapse text cliques..." << std::endl;
-    tg.collapseTextCliques();
-    LOG(TRACE) << "Collapse text cliques done." << std::endl;
     // always apply all filters to be safe.
     // TODO<joka921> it could be possible, to allow the DpTab to leave
     // results unfiltered and add the filters later, but this has to be
@@ -464,9 +464,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // joinCandidates lambda;
   if (candidatePlans.size() > 1 || !candidateTriples._triples.empty()) {
     auto tg = createTripleGraph(&candidateTriples);
-    LOG(TRACE) << "Collapse text cliques..." << std::endl;
-    tg.collapseTextCliques();
-    LOG(TRACE) << "Collapse text cliques done." << std::endl;
     auto lastRow = fillDpTab(tg, rootPattern->_filters, candidatePlans).back();
     candidateTriples._triples.clear();
     candidatePlans.clear();
@@ -646,34 +643,182 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
   return added;
 }
 
+void QueryPlanner::addNodeToTripleGraph(const TripleGraph::Node& node,
+                                        QueryPlanner::TripleGraph& tg) const {
+  // TODO<joka921> This needs quite some refactoring: The IDs of the nodes have
+  // to be ascending as an invariant, so we can store all the nodes in a
+  // vector<unique_ptr> or even a plain vector.
+  tg._nodeStorage.emplace_back(node);
+  auto& addedNode = tg._nodeStorage.back();
+  tg._nodeMap[addedNode.id_] = &addedNode;
+  tg._adjLists.emplace_back();
+  AD_CORRECTNESS_CHECK(tg._adjLists.size() == tg._nodeStorage.size());
+  AD_CORRECTNESS_CHECK(tg._adjLists.size() == addedNode.id_ + 1);
+  // Now add an edge between the added node and every node sharing a var.
+  for (auto& addedNodevar : addedNode._variables) {
+    for (size_t i = 0; i < addedNode.id_; ++i) {
+      auto& otherNode = *tg._nodeMap[i];
+      if (otherNode._variables.contains(addedNodevar)) {
+        // There is an edge between *it->second and the node with id "id".
+        tg._adjLists[addedNode.id_].push_back(otherNode.id_);
+        tg._adjLists[otherNode.id_].push_back(addedNode.id_);
+      }
+    }
+  }
+}
+
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const p::BasicGraphPattern* pattern) const {
   TripleGraph tg;
-  if (pattern->_triples.size() > 64) {
-    AD_THROW("At most 64 triples allowed at the moment.");
-  }
+  size_t numNodesInTripleGraph = 0;
+  ad_utility::HashMap<Variable, string> optTermForCvar;
+  ad_utility::HashMap<Variable, vector<string>> potentialTermsForCvar;
+  vector<const SparqlTriple*> entityTriples;
+  // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
-    // Add a node for the triple.
-    tg._nodeStorage.emplace_back(TripleGraph::Node(tg._nodeStorage.size(), t));
-    auto& addedNode = tg._nodeStorage.back();
-    tg._nodeMap[addedNode._id] = &tg._nodeStorage.back();
-    tg._adjLists.emplace_back(vector<size_t>());
-    assert(tg._adjLists.size() == tg._nodeStorage.size());
-    assert(tg._adjLists.size() == addedNode._id + 1);
-    // Now add an edge between the added node and every node sharing a var.
-    for (auto& addedNodevar : addedNode._variables) {
-      for (size_t i = 0; i < addedNode._id; ++i) {
-        auto& otherNode = *tg._nodeMap[i];
-        if (otherNode._variables.count(addedNodevar) > 0) {
-          // There is an edge between *it->second and the node with id "id".
-          tg._adjLists[addedNode._id].push_back(otherNode._id);
-          tg._adjLists[otherNode._id].push_back(addedNode._id);
-        }
+    if (t._p._iri == CONTAINS_WORD_PREDICATE) {
+      std::string buffer = t._o.toString();
+      std::string_view sv{buffer};
+      // Add one node for each word
+      for (const auto& term :
+           absl::StrSplit(sv.substr(1, sv.size() - 2), ' ')) {
+        std::string s{ad_utility::utf8ToLower(term)};
+        potentialTermsForCvar[t._s.getVariable()].push_back(s);
+        addNodeToTripleGraph(
+            TripleGraph::Node(tg._nodeStorage.size(), t._s.getVariable(), s, t),
+            tg);
+        numNodesInTripleGraph++;
       }
+    } else if (t._p._iri == CONTAINS_ENTITY_PREDICATE) {
+      entityTriples.push_back(&t);
+    } else {
+      addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(), t), tg);
+      numNodesInTripleGraph++;
     }
   }
+  for (const auto& [cvar, terms] : potentialTermsForCvar) {
+    optTermForCvar[cvar] =
+        terms[_qec->getIndex().getIndexOfBestSuitedElTerm(terms)];
+  }
+  for (const SparqlTriple* t : entityTriples) {
+    Variable currentVar = t->_s.getVariable();
+    if (!optTermForCvar.contains(currentVar)) {
+      AD_THROW(
+          "Missing ql:contains-word statement. A ql:contains-entity "
+          "statement always also needs corresponding ql:contains-word "
+          "statement.");
+    }
+    addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(), currentVar,
+                                           optTermForCvar[currentVar], *t),
+                         tg);
+    numNodesInTripleGraph++;
+  }
+  if (numNodesInTripleGraph > 64) {
+    AD_THROW("At most 64 triples allowed at the moment.");
+  }
   return tg;
+}
+
+// _____________________________________________________________________________
+template <typename PushPlanFunction, typename AddedIndexScanFunction>
+void QueryPlanner::indexScanSingleVarCase(
+    const TripleGraph::Node& node, const PushPlanFunction& pushPlan,
+    const AddedIndexScanFunction& addIndexScan) {
+  using enum Permutation::Enum;
+
+  // TODO: The case where the same variable appears in subject + predicate or
+  // object + predicate is missing here and leads to an assertion failure.
+  if (isVariable(node.triple_._s) && isVariable(node.triple_._o) &&
+      node.triple_._s == node.triple_._o) {
+    if (isVariable(node.triple_._p._iri)) {
+      AD_THROW("Triple with one variable repeated three times");
+    }
+    LOG(DEBUG) << "Subject variable same as object variable" << std::endl;
+    // Need to handle this as IndexScan with a new unique
+    // variable + Filter. Works in both directions
+    Variable filterVar = generateUniqueVarName();
+    auto scanTriple = node.triple_;
+    scanTriple._o = filterVar;
+    auto scanTree = makeExecutionTree<IndexScan>(_qec, PSO, scanTriple);
+    // The simplest way to set up the filtering expression is to use the
+    // parser.
+    std::string filterString =
+        absl::StrCat("FILTER (", scanTriple._s.getVariable().name(), "=",
+                     filterVar.name(), ")");
+    auto filter = sparqlParserHelpers::ParserAndVisitor{filterString}
+                      .parseTypesafe(&SparqlAutomaticParser::filterR)
+                      .resultOfParse_;
+    auto plan =
+        makeSubtreePlan<Filter>(_qec, scanTree, std::move(filter.expression_));
+    pushPlan(std::move(plan));
+  } else if (isVariable(node.triple_._s)) {
+    addIndexScan(POS);
+  } else if (isVariable(node.triple_._o)) {
+    addIndexScan(PSO);
+  } else {
+    AD_CONTRACT_CHECK(isVariable(node.triple_._p));
+    addIndexScan(SOP);
+  }
+}
+
+// _____________________________________________________________________________
+template <typename AddedIndexScanFunction>
+void QueryPlanner::indexScanTwoVarsCase(
+    const TripleGraph::Node& node,
+    const AddedIndexScanFunction& addIndexScan) const {
+  using enum Permutation::Enum;
+
+  // TODO: The case that the same variable appears in more than one position
+  // leads (as in indexScanSingleVarCase) to an assertion.
+  if (!isVariable(node.triple_._p._iri)) {
+    addIndexScan(PSO);
+    addIndexScan(POS);
+  } else if (!isVariable(node.triple_._s)) {
+    addIndexScan(SPO);
+    addIndexScan(SOP);
+  } else if (!isVariable(node.triple_._o)) {
+    addIndexScan(OSP);
+    addIndexScan(OPS);
+  }
+}
+
+// _____________________________________________________________________________
+template <typename AddedIndexScanFunction>
+void QueryPlanner::indexScanThreeVarsCase(
+    const TripleGraph::Node& node,
+    const AddedIndexScanFunction& addIndexScan) const {
+  using enum Permutation::Enum;
+
+  if (!_qec || _qec->getIndex().hasAllPermutations()) {
+    // Add plans for all six permutations.
+    addIndexScan(OPS);
+    addIndexScan(OSP);
+    addIndexScan(PSO);
+    addIndexScan(POS);
+    addIndexScan(SPO);
+    addIndexScan(SOP);
+  } else {
+    AD_THROW(
+        "With only 2 permutations registered (no -a option), "
+        "triples should have at most two variables. "
+        "Not the case in: " +
+        node.triple_.asString());
+  }
+}
+
+// _____________________________________________________________________________
+template <typename PushPlanFunction, typename AddedIndexScanFunction>
+void QueryPlanner::seedFromOrdinaryTriple(
+    const TripleGraph::Node& node, const PushPlanFunction& pushPlan,
+    const AddedIndexScanFunction& addIndexScan) {
+  if (node._variables.size() == 1) {
+    indexScanSingleVarCase(node, pushPlan, addIndexScan);
+  } else if (node._variables.size() == 2) {
+    indexScanTwoVarsCase(node, addIndexScan);
+  } else {
+    indexScanThreeVarsCase(node, addIndexScan);
+  }
 }
 
 // _____________________________________________________________________________
@@ -696,30 +841,30 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
     const TripleGraph::Node& node = *tg._nodeMap.find(i)->second;
 
-    auto pushPlan = [&](SubtreePlan plan) {
+    auto pushPlan = [&seeds, i](SubtreePlan plan) {
       plan._idsOfIncludedNodes = (uint64_t(1) << i);
       seeds.push_back(std::move(plan));
     };
 
-    auto addIndexScan = [&](Permutation::Enum permutation) {
-      pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, node._triple));
+    auto addIndexScan = [this, pushPlan, node](Permutation::Enum permutation) {
+      pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, node.triple_));
     };
 
     using enum Permutation::Enum;
 
-    if (node._cvar.has_value()) {
+    if (node.isTextNode()) {
       seeds.push_back(getTextLeafPlan(node));
       continue;
     }
     if (node._variables.empty()) {
       AD_THROW("Triples should have at least one variable. Not the case in: " +
-               node._triple.asString());
+               node.triple_.asString());
     }
 
     // If the predicate is a property path, we have to recursively set up the
     // index scans.
-    if (node._triple._p._operation != PropertyPath::Operation::IRI) {
-      for (SubtreePlan& plan : seedFromPropertyPathTriple(node._triple)) {
+    if (node.triple_._p._operation != PropertyPath::Operation::IRI) {
+      for (SubtreePlan& plan : seedFromPropertyPathTriple(node.triple_)) {
         pushPlan(std::move(plan));
       }
       continue;
@@ -728,7 +873,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     // At this point, we know that the predicate is a simple IRI or a variable.
 
     if (_qec && !_qec->getIndex().hasAllPermutations() &&
-        isVariable(node._triple._p._iri)) {
+        isVariable(node.triple_._p._iri)) {
       AD_THROW(
           "The query contains a predicate variable, but only the PSO "
           "and POS permutations were loaded. Rerun the server without "
@@ -736,74 +881,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           "necessary also rebuild the index.");
     }
 
-    if (node._triple._p._iri == HAS_PREDICATE_PREDICATE) {
-      pushPlan(makeSubtreePlan<HasPredicateScan>(_qec, node._triple));
+    if (node.triple_._p._iri == HAS_PREDICATE_PREDICATE) {
+      pushPlan(makeSubtreePlan<HasPredicateScan>(_qec, node.triple_));
       continue;
     }
 
-    if (node._variables.size() == 1) {
-      // There is exactly one variable in the triple (may occur twice).
-      if (isVariable(node._triple._s) && isVariable(node._triple._o) &&
-          node._triple._s == node._triple._o) {
-        if (isVariable(node._triple._p._iri)) {
-          AD_THROW("Triple with one variable repeated three times");
-        }
-        LOG(DEBUG) << "Subject variable same as object variable" << std::endl;
-        // Need to handle this as IndexScan with a new unique
-        // variable + Filter. Works in both directions
-        Variable filterVar = generateUniqueVarName();
-        auto scanTriple = node._triple;
-        scanTriple._o = filterVar;
-        auto scanTree = makeExecutionTree<IndexScan>(_qec, PSO, scanTriple);
-        // The simplest way to set up the filtering expression is to use the
-        // parser.
-        std::string filterString =
-            absl::StrCat("FILTER (", scanTriple._s.getVariable().name(), "=",
-                         filterVar.name(), ")");
-        auto filter = sparqlParserHelpers::ParserAndVisitor{filterString}
-                          .parseTypesafe(&SparqlAutomaticParser::filterR)
-                          .resultOfParse_;
-        auto plan = makeSubtreePlan<Filter>(_qec, scanTree,
-                                            std::move(filter.expression_));
-        pushPlan(std::move(plan));
-      } else if (isVariable(node._triple._s)) {
-        addIndexScan(POS);
-      } else if (isVariable(node._triple._o)) {
-        addIndexScan(PSO);
-      } else {
-        AD_CONTRACT_CHECK(isVariable(node._triple._p));
-        addIndexScan(SOP);
-      }
-    } else if (node._variables.size() == 2) {
-      // Add plans for both possible scan directions.
-      if (!isVariable(node._triple._p._iri)) {
-        addIndexScan(PSO);
-        addIndexScan(POS);
-      } else if (!isVariable(node._triple._s)) {
-        addIndexScan(SPO);
-        addIndexScan(SOP);
-      } else if (!isVariable(node._triple._o)) {
-        addIndexScan(OSP);
-        addIndexScan(OPS);
-      }
-    } else {
-      // The current triple contains three distinct variables.
-      if (!_qec || _qec->getIndex().hasAllPermutations()) {
-        // Add plans for all six permutations.
-        addIndexScan(OPS);
-        addIndexScan(OSP);
-        addIndexScan(PSO);
-        addIndexScan(POS);
-        addIndexScan(SPO);
-        addIndexScan(SOP);
-      } else {
-        AD_THROW(
-            "With only 2 permutations registered (no -a option), "
-            "triples should have at most two variables. "
-            "Not the case in: " +
-            node._triple.asString());
-      }
-    }
+    seedFromOrdinaryTriple(node, pushPlan, addIndexScan);
   }
   return seeds;
 }
@@ -973,11 +1056,29 @@ Variable QueryPlanner::generateUniqueVarName() {
 // _____________________________________________________________________________
 QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
     const QueryPlanner::TripleGraph::Node& node) const {
+  AD_CONTRACT_CHECK(node.wordPart_.has_value());
+  string word = node.wordPart_.value();
   SubtreePlan plan(_qec);
-  plan._idsOfIncludedNodes |= (size_t(1) << node._id);
-  AD_CONTRACT_CHECK(node._wordPart.has_value());
-  plan._qet = makeExecutionTree<TextOperationWithoutFilter>(
-      _qec, node._wordPart.value(), node._variables, node._cvar.value());
+  if (node.triple_._p._iri == CONTAINS_ENTITY_PREDICATE) {
+    if (node._variables.size() == 2) {
+      // TODO<joka921>: This is not nice, refactor the whole TripleGraph class
+      // to make these checks more explicity.
+      Variable evar = *(node._variables.begin()) == node.cvar_.value()
+                          ? *(++node._variables.begin())
+                          : *(node._variables.begin());
+      plan = makeSubtreePlan<TextIndexScanForEntity>(_qec, node.cvar_.value(),
+                                                     evar, word);
+    } else {
+      // Fixed entity case
+      AD_CORRECTNESS_CHECK(node._variables.size() == 1);
+      plan = makeSubtreePlan<TextIndexScanForEntity>(
+          _qec, node.cvar_.value(), node.triple_._o.toString(), word);
+    }
+  } else {
+    plan =
+        makeSubtreePlan<TextIndexScanForWord>(_qec, node.cvar_.value(), word);
+  }
+  plan._idsOfIncludedNodes |= (size_t(1) << node.id_);
   return plan;
 }
 
@@ -1043,13 +1144,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
 string QueryPlanner::TripleGraph::asString() const {
   std::ostringstream os;
   for (size_t i = 0; i < _adjLists.size(); ++i) {
-    if (!_nodeMap.find(i)->second->_cvar.has_value()) {
-      os << i << " " << _nodeMap.find(i)->second->_triple.asString() << " : (";
+    if (!_nodeMap.find(i)->second->cvar_.has_value()) {
+      os << i << " " << _nodeMap.find(i)->second->triple_.asString() << " : (";
     } else {
       os << i << " {TextOP for "
-         << _nodeMap.find(i)->second->_cvar.value().name() << ", wordPart: \""
-         << absl::StrJoin(_nodeMap.find(i)->second->_wordPart.value(), " ")
-         << "\"} : (";
+         << _nodeMap.find(i)->second->cvar_.value().name() << ", wordPart: \""
+         << _nodeMap.find(i)->second->wordPart_.value() << "\"} : (";
     }
 
     for (size_t j = 0; j < _adjLists[i].size(); ++j) {
@@ -1286,24 +1386,9 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
   return _nodeMap.count(i) > 0 &&
-         (_nodeMap.find(i)->second->_triple._p._iri ==
+         (_nodeMap.find(i)->second->triple_._p._iri ==
               CONTAINS_ENTITY_PREDICATE ||
-          _nodeMap.find(i)->second->_triple._p._iri == CONTAINS_WORD_PREDICATE);
-}
-
-// _____________________________________________________________________________
-ad_utility::HashMap<Variable, vector<size_t>>
-QueryPlanner::TripleGraph::identifyTextCliques() const {
-  ad_utility::HashMap<Variable, vector<size_t>> contextVarToTextNodesIds;
-  // Fill contextVar -> triples map
-  for (size_t i = 0; i < _adjLists.size(); ++i) {
-    if (isTextNode(i)) {
-      auto& triple = _nodeMap.find(i)->second->_triple;
-      auto& cvar = triple._s;
-      contextVarToTextNodesIds[cvar.getVariable()].push_back(i);
-    }
-  }
-  return contextVarToTextNodesIds;
+          _nodeMap.find(i)->second->triple_._p._iri == CONTAINS_WORD_PREDICATE);
 }
 
 // _____________________________________________________________________________
@@ -1432,7 +1517,7 @@ QueryPlanner::TripleGraph::TripleGraph(
     const std::vector<std::pair<Node, std::vector<size_t>>>& init) {
   for (const std::pair<Node, std::vector<size_t>>& p : init) {
     _nodeStorage.push_back(p.first);
-    _nodeMap[p.first._id] = &_nodeStorage.back();
+    _nodeMap[p.first.id_] = &_nodeStorage.back();
     _adjLists.push_back(p.second);
   }
 }
@@ -1451,7 +1536,7 @@ QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
     if (keep.count(i) > 0) {
       _nodeStorage.push_back(*other._nodeMap.find(i)->second);
       idChange[i] = _nodeMap.size();
-      _nodeStorage.back()._id = _nodeMap.size();
+      _nodeStorage.back().id_ = _nodeMap.size();
       _nodeMap[idChange[i]] = &_nodeStorage.back();
     }
   }
@@ -1493,123 +1578,6 @@ QueryPlanner::TripleGraph& QueryPlanner::TripleGraph::operator=(
 QueryPlanner::TripleGraph::TripleGraph()
     : _adjLists(), _nodeMap(), _nodeStorage() {}
 
-// ___________________________________________________________________________
-namespace {
-
-// Remove the quotation marks around an enquoted literal and convert it to lower
-// case. This is only used in the `collapseTextCliques` function.
-string stripAndLowercaseLiteral(std::string_view lit) {
-  AD_CORRECTNESS_CHECK(lit.size() >= 2 && lit.starts_with('"') &&
-                       lit.ends_with('"'));
-  lit.remove_prefix(1);
-  lit.remove_suffix(1);
-  return ad_utility::utf8ToLower(lit);
-}
-}  // namespace
-
-// _____________________________________________________________________________
-void QueryPlanner::TripleGraph::collapseTextCliques() {
-  // TODO: Could use more refactoring.
-
-  // Create a map from context var to triples it occurs in (the cliques).
-  ad_utility::HashMap<Variable, vector<size_t>> cvarsToTextNodes(
-      identifyTextCliques());
-  if (cvarsToTextNodes.empty()) {
-    return;
-  }
-  // Now turn each such clique into a new node the represents that whole
-  // text operation clique.
-  size_t id = 0;
-  vector<Node> textNodes;
-  ad_utility::HashMap<size_t, size_t> removedNodeIds;
-  vector<std::set<size_t>> tnAdjSetsToOldIds;
-  for (auto& cvarsToTextNode : cvarsToTextNodes) {
-    auto& cvar = cvarsToTextNode.first;
-    std::vector<string> words;
-    vector<SparqlTriple> trips;
-    tnAdjSetsToOldIds.emplace_back();
-    auto& adjNodes = tnAdjSetsToOldIds.back();
-    for (auto nid : cvarsToTextNode.second) {
-      removedNodeIds[nid] = id;
-      adjNodes.insert(_adjLists[nid].begin(), _adjLists[nid].end());
-      auto& triple = _nodeMap[nid]->_triple;
-      trips.push_back(triple);
-      // TODO<joka921> I think the check "is the predicate ql:contains_word" is
-      // missing. Verify this.
-      if (triple._s == cvar && triple._o.isLiteral()) {
-        std::vector<std::string> newWords = absl::StrSplit(
-            stripAndLowercaseLiteral(
-                triple._o.getLiteral().normalizedLiteralContent().get()),
-            ' ');
-        words.insert(words.end(), newWords.begin(), newWords.end());
-      }
-    }
-    textNodes.emplace_back(id, cvar, std::move(words), trips);
-    ++id;
-    assert(tnAdjSetsToOldIds.size() == id);
-  }
-
-  // Finally update the graph (node ids and adj lists).
-  vector<vector<size_t>> oldAdjLists = _adjLists;
-  std::list<TripleGraph::Node> oldNodeStorage = _nodeStorage;
-  _nodeStorage.clear();
-  _nodeMap.clear();
-  _adjLists.clear();
-  ad_utility::HashMap<size_t, size_t> idMapOldToNew;
-  ad_utility::HashMap<size_t, size_t> idMapNewToOld;
-
-  // Storage and ids.
-  for (auto& tn : textNodes) {
-    _nodeStorage.push_back(tn);
-    _nodeMap[tn._id] = &_nodeStorage.back();
-  }
-
-  for (auto& n : oldNodeStorage) {
-    if (removedNodeIds.count(n._id) == 0) {
-      idMapOldToNew[n._id] = id;
-      idMapNewToOld[id] = n._id;
-      n._id = id++;
-      _nodeStorage.push_back(n);
-      _nodeMap[n._id] = &_nodeStorage.back();
-    }
-  }
-
-  // Adj lists
-  // First for newly created text nodes.
-  for (size_t i = 0; i < tnAdjSetsToOldIds.size(); ++i) {
-    const auto& nodes = tnAdjSetsToOldIds[i];
-    std::set<size_t> adjNodes;
-    for (auto nid : nodes) {
-      if (removedNodeIds.count(nid) == 0) {
-        adjNodes.insert(idMapOldToNew[nid]);
-      } else if (removedNodeIds[nid] != i) {
-        adjNodes.insert(removedNodeIds[nid]);
-      }
-    }
-    vector<size_t> adjList;
-    adjList.insert(adjList.begin(), adjNodes.begin(), adjNodes.end());
-    _adjLists.emplace_back(adjList);
-  }
-  assert(_adjLists.size() == textNodes.size());
-  assert(_adjLists.size() == tnAdjSetsToOldIds.size());
-  // Then for remaining (regular) nodes.
-  for (size_t i = textNodes.size(); i < _nodeMap.size(); ++i) {
-    const Node& node = *_nodeMap[i];
-    const auto& oldAdjList = oldAdjLists[idMapNewToOld[node._id]];
-    std::set<size_t> adjNodes;
-    for (auto nid : oldAdjList) {
-      if (removedNodeIds.count(nid) == 0) {
-        adjNodes.insert(idMapOldToNew[nid]);
-      } else {
-        adjNodes.insert(removedNodeIds[nid]);
-      }
-    }
-    vector<size_t> adjList;
-    adjList.insert(adjList.begin(), adjNodes.begin(), adjNodes.end());
-    _adjLists.emplace_back(adjList);
-  }
-}
-
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isSimilar(
     const QueryPlanner::TripleGraph& other) const {
@@ -1629,8 +1597,8 @@ bool QueryPlanner::TripleGraph::isSimilar(
     bool hasMatch = false;
     for (const Node& n2 : other._nodeStorage) {
       if (n.isSimilar(n2)) {
-        id_map[n._id] = n2._id;
-        id_map_reverse[n2._id] = n._id;
+        id_map[n.id_] = n2.id_;
+        id_map_reverse[n2.id_] = n.id_;
         hasMatch = true;
         break;
       } else {

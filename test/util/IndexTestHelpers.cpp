@@ -123,7 +123,8 @@ Index makeTestIndex(const std::string& indexBasename,
                     std::optional<std::string> turtleInput,
                     bool loadAllPermutations, bool usePatterns,
                     bool usePrefixCompression,
-                    ad_utility::MemorySize blocksizePermutations) {
+                    ad_utility::MemorySize blocksizePermutations,
+                    bool createTextIndex) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
@@ -155,6 +156,9 @@ Index makeTestIndex(const std::string& indexBasename,
     index.setPrefixCompression(usePrefixCompression);
     index.loadAllPermutations() = loadAllPermutations;
     index.createFromFile(inputFilename);
+    if (createTextIndex) {
+      index.addTextFromContextFile("", true);
+    }
   }
   if (!usePatterns || !loadAllPermutations) {
     // If we have no patterns, or only two permutations, then check the graceful
@@ -172,6 +176,9 @@ Index makeTestIndex(const std::string& indexBasename,
   index.usePatterns() = usePatterns;
   index.loadAllPermutations() = loadAllPermutations;
   index.createFromOnDiskIndex(indexBasename);
+  if (createTextIndex) {
+    index.addTextFromOnDiskIndex();
+  }
   ad_utility::setGlobalLoggingStream(&std::cout);
 
   if (usePatterns && loadAllPermutations) {
@@ -184,7 +191,8 @@ Index makeTestIndex(const std::string& indexBasename,
 QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                               bool loadAllPermutations, bool usePatterns,
                               bool usePrefixCompression,
-                              ad_utility::MemorySize blocksizePermutations) {
+                              ad_utility::MemorySize blocksizePermutations,
+                              bool createTextIndex) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -230,20 +238,20 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
     std::string testIndexBasename =
         "_staticGlobalTestIndex" + std::to_string(contextMap.size());
     contextMap.emplace(
-        key,
-        Context{TypeErasedCleanup{[testIndexBasename]() {
-                  for (const std::string& indexFilename :
-                       getAllIndexFilenames(testIndexBasename)) {
-                    // Don't log when a file can't be deleted,
-                    // because the logging might already be
-                    // destroyed.
-                    ad_utility::deleteFile(indexFilename, false);
-                  }
-                }},
-                std::make_unique<Index>(makeTestIndex(
-                    testIndexBasename, turtleInput, loadAllPermutations,
-                    usePatterns, usePrefixCompression, blocksizePermutations)),
-                std::make_unique<QueryResultCache>()});
+        key, Context{TypeErasedCleanup{[testIndexBasename]() {
+                       for (const std::string& indexFilename :
+                            getAllIndexFilenames(testIndexBasename)) {
+                         // Don't log when a file can't be deleted,
+                         // because the logging might already be
+                         // destroyed.
+                         ad_utility::deleteFile(indexFilename, false);
+                       }
+                     }},
+                     std::make_unique<Index>(makeTestIndex(
+                         testIndexBasename, turtleInput, loadAllPermutations,
+                         usePatterns, usePrefixCompression,
+                         blocksizePermutations, createTextIndex)),
+                     std::make_unique<QueryResultCache>()});
   }
   return contextMap.at(key).qec_.get();
 }

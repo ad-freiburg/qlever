@@ -25,9 +25,14 @@ class FTSAlgorithms {
  public:
   // Filters all wep entries out where the wid does not lay inside the
   // idRange.
-  static WordEntityPostings filterByRange(
+  static WordEntityPostings filterByRangeWep(
       const IdRange<WordVocabIndex>& idRange,
       const WordEntityPostings& wepPreFilter);
+
+  // Filters all IdTable entries out where the WordIndex does not lay inside the
+  // idRange.
+  static IdTable filterByRange(const IdRange<WordVocabIndex>& idRange,
+                               const IdTable& idPreFilter);
 
   // Intersects matchingContextsWep and eBlockWep on the cids_ attribute. If
   // there are multiple matches for the same cid then we calculate every

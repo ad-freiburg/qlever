@@ -48,28 +48,32 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
   v.createFromSet(s);
 
   uint64_t word0 = 0;
-  IdRange retVal;
   // Match exactly one
-  ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordA1*", &retVal));
-  ASSERT_EQ(word0 + 1, retVal.first().get());
-  ASSERT_EQ(word0 + 1, retVal.last().get());
+  auto retVal = v.getIdRangeForFullTextPrefix("wordA1*");
+  ASSERT_TRUE(retVal.has_value());
+  ASSERT_EQ(word0 + 1, retVal.value().first().get());
+  ASSERT_EQ(word0 + 1, retVal.value().last().get());
 
   // Match all
-  ASSERT_TRUE(v.getIdRangeForFullTextPrefix("word*", &retVal));
-  ASSERT_EQ(word0, retVal.first().get());
-  ASSERT_EQ(word0 + 4, retVal.last().get());
+  retVal = v.getIdRangeForFullTextPrefix("word*");
+  ASSERT_TRUE(retVal.has_value());
+  ASSERT_EQ(word0, retVal.value().first().get());
+  ASSERT_EQ(word0 + 4, retVal.value().last().get());
 
   // Match first two
-  ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordA*", &retVal));
-  ASSERT_EQ(word0, retVal.first().get());
-  ASSERT_EQ(word0 + 1, retVal.last().get());
+  retVal = v.getIdRangeForFullTextPrefix("wordA*");
+  ASSERT_TRUE(retVal.has_value());
+  ASSERT_EQ(word0, retVal.value().first().get());
+  ASSERT_EQ(word0 + 1, retVal.value().last().get());
 
   // Match last three
-  ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordB*", &retVal));
-  ASSERT_EQ(word0 + 2, retVal.first().get());
-  ASSERT_EQ(word0 + 4, retVal.last().get());
+  retVal = v.getIdRangeForFullTextPrefix("wordB*");
+  ASSERT_TRUE(retVal.has_value());
+  ASSERT_EQ(word0 + 2, retVal.value().first().get());
+  ASSERT_EQ(word0 + 4, retVal.value().last().get());
 
-  ASSERT_FALSE(v.getIdRangeForFullTextPrefix("foo*", &retVal));
+  retVal = v.getIdRangeForFullTextPrefix("foo*");
+  ASSERT_FALSE(retVal.has_value());
 }
 
 TEST(VocabularyTest, readWriteTest) {

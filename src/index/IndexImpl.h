@@ -305,6 +305,17 @@ class IndexImpl {
   // --------------------------------------------------------------------------
   std::string_view wordIdToString(WordIndex wordIndex) const;
 
+  size_t getSizeOfTextBlockForEntities(const string& words) const;
+
+  // Returns the size of the whole textblock. If the word is very long or not
+  // prefixed then only a small number of words actually match. So the final
+  // result is much smaller.
+  // Note that as a cost estimate the estimation is correct. Because we always
+  // have to read the complete block and then filter by the actually needed
+  // words.
+  // TODO: improve size estimate by adding a correction factor.
+  size_t getSizeOfTextBlockForWord(const string& words) const;
+
   size_t getSizeEstimate(const string& words) const;
 
   void callFixedGetContextListForWords(const string& words,
@@ -335,14 +346,45 @@ class IndexImpl {
   Index::WordEntityPostings getContextEntityScoreListsForWords(
       const string& words) const;
 
-  Index::WordEntityPostings getWordPostingsForTerm(const string& term) const;
+  // Does the same as getWordPostingsForTerm but returns a
+  // WordEntityPosting. Sorted by textRecord.
+  Index::WordEntityPostings getWordPostingsForTermWep(
+      const string& wordOrPrefix) const;
+
+  // Returns a set of [textRecord, term] pairs where the term is contained in
+  // the textRecord. The term can be either the wordOrPrefix itself or a word
+  // that has wordOrPrefix as a prefix. Returned IdTable has columns:
+  // textRecord, word. Sorted by textRecord.
+  IdTable getWordPostingsForTerm(
+      const string& wordOrPrefix,
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   Index::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
 
-  Index::WordEntityPostings readWordCl(const TextBlockMetaData& tbmd) const;
+  // Returns a set of textRecords and their corresponding entities and
+  // scores. Each textRecord contains its corresponding entity and the term.
+  // Returned IdTable has columns: textRecord, entity, score. Sorted by
+  // textRecord.
+  // NOTE: This returns a superset because it contains the whole block and
+  // unfitting words are filtered out later by the join with the
+  // TextIndexScanForWords operation.
+  IdTable getEntityMentionsForWord(
+      const string& term,
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
-  Index::WordEntityPostings readWordEntityCl(
+  size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
+
+  Index::WordEntityPostings readWordClWep(const TextBlockMetaData& tbmd) const;
+
+  IdTable readWordCl(const TextBlockMetaData& tbmd,
+                     const ad_utility::AllocatorWithLimit<Id>& allocator) const;
+
+  Index::WordEntityPostings readWordEntityClWep(
       const TextBlockMetaData& tbmd) const;
+
+  IdTable readWordEntityCl(
+      const TextBlockMetaData& tbmd,
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= docsDB_._size) {
@@ -549,8 +591,6 @@ class IndexImpl {
   vector<T> readFreqComprList(
       size_t nofElements, off_t from, size_t nofBytes,
       MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;
-
-  size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
   // Get the metadata for the block from the text index that contains the
   // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like

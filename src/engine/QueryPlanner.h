@@ -36,40 +36,22 @@ class QueryPlanner {
     TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
 
     struct Node {
-      Node(size_t id, SparqlTriple t) : _id(id), _triple(std::move(t)) {
-        if (isVariable(_triple._s)) {
-          _variables.insert(_triple._s.getVariable());
+      Node(size_t id, SparqlTriple t) : id_(id), triple_(std::move(t)) {
+        if (isVariable(triple_._s)) {
+          _variables.insert(triple_._s.getVariable());
         }
-        if (isVariable(_triple._p)) {
-          _variables.insert(Variable{_triple._p._iri});
+        if (isVariable(triple_._p)) {
+          _variables.insert(Variable{triple_._p._iri});
         }
-        if (isVariable(_triple._o)) {
-          _variables.insert(_triple._o.getVariable());
+        if (isVariable(triple_._o)) {
+          _variables.insert(triple_._o.getVariable());
         }
       }
 
-      Node(size_t id, const Variable& cvar, std::vector<std::string> words,
-           const vector<SparqlTriple>& trips)
-          : _id(id),
-            // TODO<joka921> What is this triple used for? If it is just a
-            // dummy, then we can replace it by a `variant<Triple,
-            // TextNodeData>`.
-            _triple(cvar, PropertyPath::fromIri(INTERNAL_TEXT_MATCH_PREDICATE),
-                    TripleComponent::UNDEF{}),
-            _cvar(cvar),
-            _wordPart(std::move(words)) {
-        _variables.insert(cvar);
-        for (const auto& t : trips) {
-          if (isVariable(t._s)) {
-            _variables.insert(t._s.getVariable());
-          }
-          if (isVariable(t._p)) {
-            _variables.insert(Variable{t._p._iri});
-          }
-          if (isVariable(t._o)) {
-            _variables.insert(t._o.getVariable());
-          }
-        }
+      Node(size_t id, Variable cvar, std::string word, SparqlTriple t)
+          : Node(id, std::move(t)) {
+        cvar_ = std::move(cvar);
+        wordPart_ = std::move(word);
       }
 
       Node(const Node& other) = default;
@@ -79,30 +61,32 @@ class QueryPlanner {
       // Returns true if the two nodes equal apart from the id
       // and the order of variables
       bool isSimilar(const Node& other) const {
-        return _triple == other._triple && _cvar == other._cvar &&
-               _wordPart == other._wordPart && _variables == other._variables;
+        return triple_ == other.triple_ && cvar_ == other.cvar_ &&
+               wordPart_ == other.wordPart_ && _variables == other._variables;
       }
 
+      bool isTextNode() const { return cvar_.has_value(); }
+
       friend std::ostream& operator<<(std::ostream& out, const Node& n) {
-        out << "id: " << n._id << " triple: " << n._triple.asString()
+        out << "id: " << n.id_ << " triple: " << n.triple_.asString()
             << " vars_ ";
         for (const auto& s : n._variables) {
           out << s.name() << ", ";
         }
         // TODO<joka921> Should the `cvar` and the `wordPart` be stored
         // together?
-        if (n._cvar.has_value()) {
-          out << " cvar " << n._cvar.value().name() << " wordPart "
-              << absl::StrJoin(n._wordPart.value(), " ");
+        if (n.cvar_.has_value()) {
+          out << " cvar " << n.cvar_.value().name() << " wordPart "
+              << n.wordPart_.value();
         }
         return out;
       }
 
-      size_t _id;
-      SparqlTriple _triple;
+      size_t id_;
+      SparqlTriple triple_;
       ad_utility::HashSet<Variable> _variables;
-      std::optional<Variable> _cvar = std::nullopt;
-      std::optional<std::vector<std::string>> _wordPart = std::nullopt;
+      std::optional<Variable> cvar_ = std::nullopt;
+      std::optional<std::string> wordPart_ = std::nullopt;
     };
 
     // Allows for manually building triple graphs for testing
@@ -119,12 +103,8 @@ class QueryPlanner {
     ad_utility::HashMap<size_t, Node*> _nodeMap;
     std::list<TripleGraph::Node> _nodeStorage;
 
-    ad_utility::HashMap<Variable, vector<size_t>> identifyTextCliques() const;
-
     vector<size_t> bfsLeaveOut(size_t startNode,
                                ad_utility::HashSet<size_t> leaveOut) const;
-
-    void collapseTextCliques();
 
    private:
     vector<std::pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
@@ -219,6 +199,8 @@ class QueryPlanner {
   [[nodiscard]] TripleGraph createTripleGraph(
       const parsedQuery::BasicGraphPattern* pattern) const;
 
+  void addNodeToTripleGraph(const TripleGraph::Node&, TripleGraph&) const;
+
   void setEnablePatternTrick(bool enablePatternTrick);
 
   // Create a set of possible execution trees for the given parsed query. The
@@ -241,6 +223,30 @@ class QueryPlanner {
 
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
+
+  // Add all the possible index scans for the triple represented by the node.
+  // The triple is "ordinary" in the sense that it is neither a text triple with
+  // ql:contains-word nor a special pattern trick triple.
+  template <typename PushPlanFunction, typename AddedIndexScanFunction>
+  void seedFromOrdinaryTriple(const TripleGraph::Node& node,
+                              const PushPlanFunction& pushPlan,
+                              const AddedIndexScanFunction& addIndexScan);
+
+  // Helper function used by the seedFromOrdinaryTriple function
+  template <typename PushPlanFunction, typename AddedIndexScanFunction>
+  void indexScanSingleVarCase(const TripleGraph::Node& node,
+                              const PushPlanFunction& pushPlan,
+                              const AddedIndexScanFunction& addIndexScan);
+
+  // Helper function used by the seedFromOrdinaryTriple function
+  template <typename AddedIndexScanFunction>
+  void indexScanTwoVarsCase(const TripleGraph::Node& node,
+                            const AddedIndexScanFunction& addIndexScan) const;
+
+  // Helper function used by the seedFromOrdinaryTriple function
+  template <typename AddedIndexScanFunction>
+  void indexScanThreeVarsCase(const TripleGraph::Node& node,
+                              const AddedIndexScanFunction& addIndexScan) const;
 
   /**
    * @brief Fills children with all operations that are associated with a single
