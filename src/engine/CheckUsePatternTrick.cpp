@@ -93,7 +93,8 @@ void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
                                           size_t additionalScanColumn) {
     auto beforeTriple = std::ranges::subrange{triples.begin(), it};
     auto afterTriple = std::ranges::subrange{it + 1, triples.end()};
-    auto exceptTriple = std::views::join(std::array{beforeTriple, afterTriple});
+    auto exceptTriple = std::views::join(
+        ad_utility::OwningView{std::array{beforeTriple, afterTriple}});
     auto matchingTriple = std::ranges::find_if(
         exceptTriple, [&subAndPred, triplePosition](const SparqlTriple& t) {
           return std::invoke(triplePosition, t) == subAndPred.subject_ &&

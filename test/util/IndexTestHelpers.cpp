@@ -73,16 +73,20 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
           size_t objectColIdx) {
         auto cancellationDummy =
             std::make_shared<ad_utility::CancellationHandle<>>();
-        auto scanResult = index.scan(col0Id, std::nullopt, permutation,
-                                     std::array{ColumnIndex{2}, ColumnIndex{3}},
-                                     cancellationDummy);
+        auto scanResult =
+            index.scan(col0Id, std::nullopt, permutation,
+                       std::array{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
+                                  ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN},
+                       cancellationDummy);
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
-          auto patternIdx = row[2].getInt();
+          auto patternIdx =
+              row[ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN].getInt();
           Id subjectId = row[subjectColIdx];
           checkSingleElement(index, patternIdx, subjectId);
           Id objectId = objectColIdx == col0IdTag ? col0Id : row[objectColIdx];
-          auto patternIdxObject = row[3].getInt();
+          auto patternIdxObject =
+              row[ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN].getInt();
           checkSingleElement(index, patternIdxObject, objectId);
         }
       };

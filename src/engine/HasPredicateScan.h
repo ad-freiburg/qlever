@@ -110,7 +110,7 @@ class HasPredicateScan : public Operation {
                               const CompactVectorOfStrings<Id>& patterns,
                               size_t resultSize);
 
-  template <int IN_WIDTH, int OUT_WIDTH>
+  template <int WIDTH>
   ResultTable computeSubqueryS(IdTable* result,
                                const CompactVectorOfStrings<Id>& patterns);
 

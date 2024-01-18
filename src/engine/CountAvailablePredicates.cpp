@@ -252,12 +252,7 @@ void CountAvailablePredicates::computePatternTrick(
       if (inputIdx > 0 && subjectId == subjectColumn[inputIdx - 1]) {
         continue;
       }
-      if (subjectId.getDatatype() != Datatype::VocabIndex) {
-        // Ignore numeric literals and other types that are folded into
-        // the value IDs. They can never be subjects and thus also have no
-        // patterns.
-        continue;
-      }
+
       patternCounts[patternColumn[inputIdx].getInt()]++;
     }
   }
@@ -274,6 +269,7 @@ void CountAvailablePredicates::computePatternTrick(
 
   LOG(DEBUG) << "Start translating pattern counts to predicate counts"
              << std::endl;
+  bool illegalPatternIndexFound = false;
   if (patternVec.begin() !=
       patternVec.end()) {  // avoid segfaults with OpenMP on GCC
 #pragma omp parallel
@@ -282,19 +278,22 @@ void CountAvailablePredicates::computePatternTrick(
     reduction(MergeHashmapsId : predicateCounts)                               \
     reduction(+ : numPredicatesSubsumedInPatterns)                             \
     reduction(+ : numEntitiesWithPatterns) reduction(+ : numPatternPredicates) \
-    reduction(+ : numListPredicates) shared(patternVec, patterns)
+    reduction(+ : numListPredicates) shared(patternVec, patterns)              \
+    reduction(|| : illegalPatternIndexFound)
     // TODO<joka921> When we use iterators (`patternVec.begin()`) for the loop,
     // there is a strange warning on clang15 when OpenMP is activated. Find out
     // whether this is a known issue and whether this will be fixed in later
     // versions of clang.
     for (size_t i = 0; i != patternVec.size(); ++i) {
       auto [patternIndex, patternCount] = patternVec[i];
-      if (patternIndex == NO_PATTERN) {
+      // TODO<joka921> As soon as we have a better way of handling the
+      // parallelism, the following block can become a simple AD_CONTRACT_CHECK.
+      if (patternIndex >= patterns.size()) {
+        if (patternIndex != NO_PATTERN) {
+          illegalPatternIndexFound = true;
+        }
         continue;
       }
-      // TODO<joka921> The failure of the following check would crash OpenMP
-      // runs. and doesn't compile currently. Handle this differently.
-      // AD_EXPENSIVE_CHECK(patternIndex < patterns.size());
       const auto& pattern = patterns[patternIndex];
       numPatternPredicates += pattern.size();
       for (const auto& predicate : pattern) {
@@ -303,6 +302,7 @@ void CountAvailablePredicates::computePatternTrick(
       }
     }
   }
+  AD_CONTRACT_CHECK(!illegalPatternIndexFound);
   LOG(DEBUG) << "Finished translating pattern counts to predicate counts"
              << std::endl;
   // write the predicate counts to the result

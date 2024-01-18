@@ -65,6 +65,25 @@ TEST_F(HasPredicateScanTest, fullScan) {
       qec,
       SparqlTriple{Variable{"?s"}, HAS_PREDICATE_PREDICATE, Variable{"?p"}}};
   runTest(scan, {{x, p}, {x, p2}, {y, p}, {y, p3}, {z, p3}});
+
+  // Full scans with the same variable in the subject and object are not
+  // supported
+  auto makeIllegalScan = [this] {
+    return HasPredicateScan{
+        qec,
+        SparqlTriple{Variable{"?s"}, HAS_PREDICATE_PREDICATE, Variable{"?s"}}};
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeIllegalScan(),
+      ::testing::ContainsRegex(
+          "same variable for subject and object not supported"));
+
+  // Triples without any variables also aren't supported currently
+  auto makeIllegalScan2 = [this] {
+    return HasPredicateScan{
+        qec, SparqlTriple{"<x>", HAS_PREDICATE_PREDICATE, "<y>"}};
+  };
+  EXPECT_ANY_THROW(makeIllegalScan2());
 }
 
 TEST_F(HasPredicateScanTest, subtree) {
@@ -76,13 +95,26 @@ TEST_F(HasPredicateScanTest, subtree) {
 
 TEST_F(HasPredicateScanTest, patternTrickWithSubtree) {
   auto triple = SparqlTriple{Var{"?x"}, "<p3>", Var{"?y"}};
-  triple._additionalScanColumns.emplace_back(2, Variable{"?predicate"});
+  triple._additionalScanColumns.emplace_back(
+      ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, Variable{"?predicate"});
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO, triple);
   auto patternTrick = CountAvailablePredicates(
       qec, indexScan, 1, Var{"?predicate"}, Var{"?count"});
 
   runTestUnordered(patternTrick, {{p3, Int(2)}, {p, Int(1)}});
+}
+
+TEST_F(HasPredicateScanTest, patternTrickWithSubtreeTwoFixedElements) {
+  auto triple = SparqlTriple{Var{"?x"}, "<p3>", "<o4>"};
+  triple._additionalScanColumns.emplace_back(
+      ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, Variable{"?predicate"});
+  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::POS, triple);
+  auto patternTrick = CountAvailablePredicates(
+      qec, indexScan, 0, Var{"?predicate"}, Var{"?count"});
+
+  runTestUnordered(patternTrick, {{p3, Int(1)}, {p, Int(1)}});
 }
 
 TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
