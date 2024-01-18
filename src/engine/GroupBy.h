@@ -175,7 +175,7 @@ class GroupBy : public Operation {
         error_ = true;
       ++count_;
     };
-    [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
+    [[nodiscard]] ValueId calculateResult(const LocalVocab* localVocab) const {
       (void)localVocab;
       if (error_)
         return ValueId::makeUndefined();
@@ -192,7 +192,7 @@ class GroupBy : public Operation {
                    const sparqlExpression::EvaluationContext* ctx) {
       if (ValueGetter{}(AD_FWD(value), ctx)) count_++;
     }
-    [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
+    [[nodiscard]] ValueId calculateResult(const LocalVocab* localVocab) const {
       (void)localVocab;
       return ValueId::makeFromInt(count_);
     }
@@ -209,7 +209,7 @@ class GroupBy : public Operation {
         currentValue_ = value;
         return;
       }
-      auto impl = [&]<typename X, typename Y>(const X& x, const Y& y) {
+      auto impl = [&ctx]<typename X, typename Y>(const X& x, const Y& y) {
         return toBoolNotUndef(
             sparqlExpression::compareIdsOrStrings<
                 Comp, valueIdComparators::ComparisonForIncompatibleTypes::
@@ -249,7 +249,7 @@ class GroupBy : public Operation {
       else
         error_ = true;
     };
-    [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
+    [[nodiscard]] ValueId calculateResult(const LocalVocab* localVocab) const {
       (void)localVocab;
       if (error_)
         return ValueId::makeUndefined();
@@ -329,7 +329,7 @@ class GroupBy : public Operation {
         : expr_{expr},
           aggregateDataIndex_{aggregateDataIndex},
           parentAndIndex_{parentAndIndex},
-          aggregateType_{aggregateType} {
+          aggregateType_{std::move(aggregateType)} {
       AD_CONTRACT_CHECK(expr != nullptr);
     }
   };
@@ -378,23 +378,23 @@ class GroupBy : public Operation {
         const ad_utility::AllocatorWithLimit<Id>& alloc,
         const std::vector<HashMapAliasInformation>& aggregateAliases)
         : map_{alloc} {
+      using enum HashMapAggregateType;
       size_t numAggregates = 0;
       for (const auto& alias : aggregateAliases) {
         for (const auto& aggregate : alias.aggregateInfo_) {
           ++numAggregates;
 
-          if (aggregate.aggregateType_.type_ == HashMapAggregateType::AVG)
+          if (aggregate.aggregateType_.type_ == AVG)
             aggregationData_.emplace_back(std::vector<AvgAggregationData>{});
-          if (aggregate.aggregateType_.type_ == HashMapAggregateType::COUNT)
+          if (aggregate.aggregateType_.type_ == COUNT)
             aggregationData_.emplace_back(std::vector<CountAggregationData>{});
-          if (aggregate.aggregateType_.type_ == HashMapAggregateType::MIN)
+          if (aggregate.aggregateType_.type_ == MIN)
             aggregationData_.emplace_back(std::vector<MinAggregationData>{});
-          if (aggregate.aggregateType_.type_ == HashMapAggregateType::MAX)
+          if (aggregate.aggregateType_.type_ == MAX)
             aggregationData_.emplace_back(std::vector<MaxAggregationData>{});
-          if (aggregate.aggregateType_.type_ == HashMapAggregateType::SUM)
+          if (aggregate.aggregateType_.type_ == SUM)
             aggregationData_.emplace_back(std::vector<SumAggregationData>{});
-          if (aggregate.aggregateType_.type_ ==
-              HashMapAggregateType::GROUP_CONCAT)
+          if (aggregate.aggregateType_.type_ == GROUP_CONCAT)
             aggregationData_.emplace_back(
                 std::vector<GroupConcatAggregationData>{});
 

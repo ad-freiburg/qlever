@@ -820,6 +820,7 @@ bool GroupBy::hasAnyType(const auto& expr) {
 // _____________________________________________________________________________
 std::optional<GroupBy::HashMapAggregateTypeWithData>
 GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
+  using enum GroupBy::HashMapAggregateType;
   using namespace sparqlExpression;
 
   // `expr` is not a distinct aggregate
@@ -828,18 +829,14 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   // `expr` is not a nested aggregated
   if (expr->children().front()->containsAggregate()) return std::nullopt;
 
-  if (hasType<AvgExpression>(expr))
-    return HashMapAggregateTypeWithData{HashMapAggregateType::AVG};
+  if (hasType<AvgExpression>(expr)) return HashMapAggregateTypeWithData{AVG};
   if (hasType<CountExpression>(expr))
-    return HashMapAggregateTypeWithData{HashMapAggregateType::COUNT};
-  if (hasType<MinExpression>(expr))
-    return HashMapAggregateTypeWithData{HashMapAggregateType::MIN};
-  if (hasType<MaxExpression>(expr))
-    return HashMapAggregateTypeWithData{HashMapAggregateType::MAX};
-  if (hasType<SumExpression>(expr))
-    return HashMapAggregateTypeWithData{HashMapAggregateType::SUM};
+    return HashMapAggregateTypeWithData{COUNT};
+  if (hasType<MinExpression>(expr)) return HashMapAggregateTypeWithData{MIN};
+  if (hasType<MaxExpression>(expr)) return HashMapAggregateTypeWithData{MAX};
+  if (hasType<SumExpression>(expr)) return HashMapAggregateTypeWithData{SUM};
   if (auto val = hasType<GroupConcatExpression>(expr)) {
-    return HashMapAggregateTypeWithData{HashMapAggregateType::GROUP_CONCAT,
+    return HashMapAggregateTypeWithData{GROUP_CONCAT,
                                         val.value()->getSeparator()};
   }
 
@@ -1013,7 +1010,7 @@ std::vector<size_t> GroupBy::HashMapAggregationData::getHashEntries(
   // TODO<C++23> use views::enumerate
   auto idx = 0;
   for (auto& aggregation : aggregationData_) {
-    const auto& aggregationTypeWithData = aggregateTypeWithData_.at(idx++);
+    const auto& aggregationTypeWithData = aggregateTypeWithData_.at(idx);
     const auto numberOfGroups = getNumberOfGroups();
     std::visit(
         [&aggregationTypeWithData,
@@ -1022,6 +1019,7 @@ std::vector<size_t> GroupBy::HashMapAggregationData::getHashEntries(
                                     aggregationTypeWithData);
         },
         aggregation);
+    ++idx;
   }
 
   return hashEntries;
