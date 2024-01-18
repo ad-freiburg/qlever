@@ -194,7 +194,9 @@ struct EvaluationContext {
         _inputTable{inputTable},
         _allocator{allocator},
         _localVocab{localVocab},
-        cancellationHandle_{std::move(cancellationHandle)} {}
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(cancellationHandle_);
+  }
 
   bool isResultSortedBy(const Variable& variable) {
     if (_columnsByWhichResultIsSorted.empty()) {
