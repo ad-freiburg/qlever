@@ -109,9 +109,9 @@ ResultTable CountAvailablePredicates::computeResult() {
       _executionContext->getIndex().getPatterns();
 
   AD_CORRECTNESS_CHECK(_subtree);
-  // Determine whether we can perform the full scan optimization.
-  // It can be applied if the subtree is a single Index scan of a
-  // triple `?s ql:has-pattern ?p`.
+  // Determine whether we can perform the full scan optimization. It can be
+  // applied if the `_subtree` is a single index scan of a triple
+  // `?s ql:has-pattern ?p`.
   // TODO<joka921> As soon as we have a lazy implementation for all index scans
   // or even all operations Then the special case for all entities can be
   // removed.
@@ -173,7 +173,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   }
 
   LOG(DEBUG) << "Using " << patternCounts.size()
-             << " patterns for computing the result." << std::endl;
+             << " patterns for computing the result" << std::endl;
   for (const auto& [patternIdx, count] : patternCounts) {
     AD_CORRECTNESS_CHECK(patternIdx < patterns.size());
     for (const auto& predicate : patterns[patternIdx]) {
@@ -246,13 +246,13 @@ void CountAvailablePredicates::computePatternTrick(
     reduction(+ : numEntitiesWithPatterns) reduction(+ : numPatternPredicates) \
     reduction(+ : numListPredicates)                                           \
     shared(input, subjectColumn, patternColumn)
-    for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
+    for (size_t i = 0; i < input.size(); ++i) {
       // Skip over elements with the same subject (don't count them twice)
-      Id subjectId = subjectColumn[inputIdx];
-      if (inputIdx > 0 && subjectId == subjectColumn[inputIdx - 1]) {
+      Id subjectId = subjectColumn[i];
+      if (i > 0 && subjectId == subjectColumn[i - 1]) {
         continue;
       }
-      patternCounts[patternColumn[inputIdx].getInt()]++;
+      patternCounts[patternColumn[i].getInt()]++;
     }
   }
   LOG(DEBUG) << "Using " << patternCounts.size()

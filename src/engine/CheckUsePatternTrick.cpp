@@ -83,17 +83,16 @@ bool isVariableContainedInGraphPatternOperation(
 // joining all the triples. This can be either done by retrieving one of the
 // additional columns where the patterns are stored in the PSO and POS
 // permutation or, if no triple suitable for adding this column exists, by
-// adding an additional triple `?subject ql:has-pattern ?predicate`.
+// adding a triple `?subject ql:has-pattern ?predicate`.
 static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
                                           std::vector<SparqlTriple>& triples) {
-  // The following lambda tries to find a triple in the `triples` that is not
-  // the current triple `*it` and that has the subject variable of the pattern
-  // trick in its `triplePosition` (which is either the subject or the object)
-  // and a fixed predicate (no variable). If such a triple is found, it is
-  // modified s.t. it also scans the `additionalScanColumn` which has to be the
-  // index of the column where the patterns of the `triplePosition` are stored
-  // in the POS and PSO permutation. Return true iff such a triple was found and
-  // replaced.
+  // The following lambda tries to find a triple in the `triples` that has the
+  // subject variable of the pattern trick in its `triplePosition` (which is
+  // either the subject or the object) and a fixed predicate (no variable). If
+  // such a triple is found, it is modified s.t. it also scans the
+  // `additionalScanColumn` which has to be the index of the column where the
+  // patterns of the `triplePosition` are stored in the POS and PSO permutation.
+  // Return true iff such a triple was found and replaced.
   auto findAndRewriteMatchingTriple = [&subAndPred, &triples](
                                           auto triplePosition,
                                           size_t additionalScanColumn) {
@@ -113,25 +112,24 @@ static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
   if (findAndRewriteMatchingTriple(&SparqlTriple::_s,
                                    ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN)) {
     return;
-  }
-  if (findAndRewriteMatchingTriple(&SparqlTriple::_o,
-                                   ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN)) {
+  } else if (findAndRewriteMatchingTriple(
+                 &SparqlTriple::_o, ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN)) {
     return;
+  } else {
+    // We could not find a suitable triple to append the additional column, we
+    // therefore add an explicit triple `?s ql:has_pattern ?p`
+    triples.emplace_back(subAndPred.subject_, HAS_PATTERN_PREDICATE,
+                         subAndPred.predicate_);
   }
-
-  // We could not find a suitable triple to append the additional column, we
-  // therefore add an explicit triple `?s ql:has_pattern ?p`
-  triples.emplace_back(subAndPred.subject_, HAS_PATTERN_PREDICATE,
-                       subAndPred.predicate_);
 }
 
 // Helper function for `checkUsePatternTrick`.
 // Check if any of the triples in the `graphPattern` has the form `?s
 // ql:has-predicate ?p` or `?s ?p ?o` and that the other conditions for the
 // pattern trick are fulfilled (nameley that the variables `?p` and if present
-// `?o` don't appear elsewhere in the `parsedQuery`.
-// If such a triple is found, the query is modified such that it behaves as if
-// the triple was replace by `?s ql:has-pattern ?p` See the documentation of
+// `?o` don't appear elsewhere in the `parsedQuery`. If such a triple is found,
+// the query is modified such that it behaves as if the triple was replace by
+// `?s ql:has-pattern ?p`. See the documentation of
 // `rewriteTriplesForPatternTrick` above.
 static std::optional<PatternTrickTuple> findPatternTrickTuple(
     p::BasicGraphPattern* graphPattern, const ParsedQuery* parsedQuery,

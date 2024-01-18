@@ -27,7 +27,6 @@ std::vector<std::string> getAllIndexFilenames(
           indexBasename + ".index.pos.meta",
           indexBasename + ".index.pso",
           indexBasename + ".index.pso.meta",
-          indexBasename + ".index.pso",
           indexBasename + ".index.sop",
           indexBasename + ".index.sop.meta",
           indexBasename + ".index.spo",

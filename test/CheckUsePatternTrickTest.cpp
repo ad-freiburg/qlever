@@ -270,10 +270,10 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
                               pq._rootGraphPattern._graphPatterns.at(0))
                               ._triples;
     ASSERT_EQ(triples.size(), 1u);
-    const auto& tr = triples[0];
-    EXPECT_EQ(tr._s.getVariable().name(), "?x");
-    EXPECT_EQ(tr._p.asString(), HAS_PATTERN_PREDICATE);
-    EXPECT_EQ(tr._o.getVariable().name(), "?p");
+    const auto& triple = triples[0];
+    EXPECT_EQ(triple._s.getVariable().name(), "?x");
+    EXPECT_EQ(triple._p.asString(), HAS_PATTERN_PREDICATE);
+    EXPECT_EQ(triple._o.getVariable().name(), "?p");
   }
 
   {
@@ -305,15 +305,15 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
     // The triple `?x ql:has-predicate ?p` has been removed from the query, but
     // an additional scan column for the pattern of the object has been added to
     // the `?y <is-a> ?x` triple.
-    const auto& triples2 = std::get<parsedQuery::BasicGraphPattern>(
-                               pq._rootGraphPattern._graphPatterns.at(0))
-                               ._triples;
-    ASSERT_EQ(triples2.size(), 1u);
-    const auto& triple2 = triples2[0];
-    EXPECT_EQ(triple2._s.getVariable().name(), "?y");
-    EXPECT_EQ(triple2._p.asString(), "<is-a>");
-    EXPECT_EQ(triple2._o.getVariable().name(), "?x");
-    EXPECT_THAT(triple2._additionalScanColumns,
+    const auto& triples = std::get<parsedQuery::BasicGraphPattern>(
+                              pq._rootGraphPattern._graphPatterns.at(0))
+                              ._triples;
+    ASSERT_EQ(triples.size(), 1u);
+    const auto& triple = triples[0];
+    EXPECT_EQ(triple._s.getVariable().name(), "?y");
+    EXPECT_EQ(triple._p.asString(), "<is-a>");
+    EXPECT_EQ(triple._o.getVariable().name(), "?x");
+    EXPECT_THAT(triple._additionalScanColumns,
                 ElementsAre(std::pair{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN,
                                       Variable{"?p"}}));
   }

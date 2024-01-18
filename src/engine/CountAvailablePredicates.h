@@ -84,7 +84,6 @@ class CountAvailablePredicates : public Operation {
   const Variable& countVariable() const { return _countVariable; }
 
  private:
-  // This method is declared here solely for unit testing purposes
   /**
    * @brief Computes all relations that have one of input[inputCol]'s entities
    *        as a subject and counts the number of their occurrences.

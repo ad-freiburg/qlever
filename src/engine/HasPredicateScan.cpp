@@ -1,6 +1,7 @@
 // Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//                 Chair of Algorithms and Data Structures.
+// Authors: (2018 - 2019) Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//          (2024 -     ) Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
 #include "engine/HasPredicateScan.h"
 
