@@ -774,12 +774,13 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
   Variable varW = Variable{"?w"};
 
   input._variables = std::vector{varA, varB};
-  input._values.push_back(std::vector{TC(1.0), TC(42.0)});
+  input._values.push_back(std::vector{TC(1.0), TC(42)});
   input._values.push_back(std::vector{TC(1.0), TC(9.0)});
-  input._values.push_back(std::vector{TC(1.0), TC(3.0)});
+  input._values.push_back(std::vector{TC(1.0), TC(3)});
   input._values.push_back(std::vector{TC(3.0), TC(13.37)});
   input._values.push_back(std::vector{TC(3.0), TC(1.0)});
   input._values.push_back(std::vector{TC(3.0), TC(4.0)});
+  input._values.push_back(std::vector<TripleComponent>{TC(4.0), TC::UNDEF{}});
   auto qec = ad_utility::testing::getQec();
   auto values = ad_utility::makeExecutionTree<Values>(qec, input);
 
@@ -813,6 +814,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
 
   // Check the result.
   auto d = DoubleId;
+  auto i = IntId;
+  auto undef = ValueId::makeUndefined();
   using enum ColumnIndexAndTypeInfo::UndefStatus;
   VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
@@ -821,8 +824,9 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
       {Variable{"?w"}, {3, PossiblyUndefined}}};
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
-  auto expected = makeIdTableFromVector(
-      {{d(1), d(3), d(42), d(54)}, {d(3), d(1), d(13.37), d(18.37)}});
+  auto expected = makeIdTableFromVector({{d(1), i(3), i(42), d(54)},
+                                         {d(3), d(1), d(13.37), d(18.37)},
+                                         {d(4), undef, undef, undef}});
   EXPECT_EQ(table, expected);
 
   // Disable optimization for following tests
