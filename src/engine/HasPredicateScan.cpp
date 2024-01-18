@@ -48,10 +48,10 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
                                    size_t subtreeJoinColumn,
                                    Variable objectVariable)
     : Operation{qec},
-      _type{ScanType::SUBQUERY_S},
-      _subtree{makeJoin(qec, std::move(subtree), subtreeJoinColumn,
+      type_{ScanType::SUBQUERY_S},
+      subtree_{makeJoin(qec, std::move(subtree), subtreeJoinColumn,
                         Variable{objectVariable})},
-      _object{std::move(objectVariable)} {}
+      object_{std::move(objectVariable)} {}
 
 // A small helper function that sanitizes the `triple` which is passed to the
 // constructor of `HasPredicateScan` and determines the corresponding
@@ -79,20 +79,20 @@ static HasPredicateScan::ScanType getScanType(const SparqlTriple& triple) {
 HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
                                    SparqlTriple triple)
     : Operation{qec},
-      _type{getScanType(triple)},
-      _subject{triple._s},
-      _object{triple._o} {}
+      type_{getScanType(triple)},
+      subject_{triple._s},
+      object_{triple._o} {}
 
 // ___________________________________________________________________________
 string HasPredicateScan::getCacheKeyImpl() const {
   std::ostringstream os;
-  checkType(_type);
-  switch (_type) {
+  checkType(type_);
+  switch (type_) {
     case ScanType::FREE_S:
-      os << "HAS_PREDICATE_SCAN with O = " << _object;
+      os << "HAS_PREDICATE_SCAN with O = " << object_;
       break;
     case ScanType::FREE_O:
-      os << "HAS_PREDICATE_SCAN with S = " << _subject;
+      os << "HAS_PREDICATE_SCAN with S = " << subject_;
       break;
     case ScanType::FULL_SCAN:
       os << "HAS_PREDICATE_SCAN for the full relation";
@@ -106,16 +106,16 @@ string HasPredicateScan::getCacheKeyImpl() const {
 
 // ___________________________________________________________________________
 string HasPredicateScan::getDescriptor() const {
-  checkType(_type);
-  switch (_type) {
+  checkType(type_);
+  switch (type_) {
     case ScanType::FREE_S:
-      return "HasPredicateScan free subject: " + _subject.toRdfLiteral();
+      return "HasPredicateScan free subject: " + subject_.toRdfLiteral();
     case ScanType::FREE_O:
-      return "HasPredicateScan free object: " + _object.toRdfLiteral();
+      return "HasPredicateScan free object: " + object_.toRdfLiteral();
     case ScanType::FULL_SCAN:
       return "HasPredicateScan full scan";
     case ScanType::SUBQUERY_S:
-      return "HasPredicateScan with a subquery on " + _subject.toRdfLiteral();
+      return "HasPredicateScan with a subquery on " + subject_.toRdfLiteral();
     default:
       return "HasPredicateScan";
   }
@@ -123,8 +123,8 @@ string HasPredicateScan::getDescriptor() const {
 
 // ___________________________________________________________________________
 size_t HasPredicateScan::getResultWidth() const {
-  checkType(_type);
-  switch (_type) {
+  checkType(type_);
+  switch (type_) {
     case ScanType::FREE_S:
       return 1;
     case ScanType::FREE_O:
@@ -139,8 +139,8 @@ size_t HasPredicateScan::getResultWidth() const {
 
 // ___________________________________________________________________________
 vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
-  checkType(_type);
-  switch (_type) {
+  checkType(type_);
+  switch (type_) {
     case ScanType::FREE_S:
       // is the lack of sorting here a problem?
       return {};
@@ -160,15 +160,15 @@ VariableToColumnMap HasPredicateScan::computeVariableToColumnMap() const {
   // undefined values.
   auto col = makeAlwaysDefinedColumn;
 
-  checkType(_type);
-  switch (_type) {
+  checkType(type_);
+  switch (type_) {
     case ScanType::FREE_S:
-      return {{_subject.getVariable(), col(0)}};
+      return {{subject_.getVariable(), col(0)}};
     case ScanType::FREE_O:
-      return {{_object.getVariable(), col(0)}};
+      return {{object_.getVariable(), col(0)}};
     case ScanType::FULL_SCAN:
-      return {{_subject.getVariable(), col(0)},
-              {_object.getVariable(), col(1)}};
+      return {{subject_.getVariable(), col(0)},
+              {object_.getVariable(), col(1)}};
     case ScanType::SUBQUERY_S:
       return subtree().getVariableColumns();
   }
@@ -177,14 +177,14 @@ VariableToColumnMap HasPredicateScan::computeVariableToColumnMap() const {
 
 // ___________________________________________________________________________
 void HasPredicateScan::setTextLimit(size_t limit) {
-  if (_type == ScanType::SUBQUERY_S) {
+  if (type_ == ScanType::SUBQUERY_S) {
     subtree().setTextLimit(limit);
   }
 }
 
 // ___________________________________________________________________________
 bool HasPredicateScan::knownEmptyResult() {
-  if (_type == ScanType::SUBQUERY_S) {
+  if (type_ == ScanType::SUBQUERY_S) {
     return subtree().knownEmptyResult();
   } else {
     return false;
@@ -195,7 +195,7 @@ bool HasPredicateScan::knownEmptyResult() {
 float HasPredicateScan::getMultiplicity(size_t col) {
   // Default value for columns about which we know nothing.
   double result = 1.0;
-  switch (_type) {
+  switch (type_) {
     case ScanType::FREE_S:
       if (col == 0) {
         result = getIndex().getAvgNumDistinctPredicatesPerSubject();
@@ -227,7 +227,7 @@ float HasPredicateScan::getMultiplicity(size_t col) {
 
 // ___________________________________________________________________________
 uint64_t HasPredicateScan::getSizeEstimateBeforeLimit() {
-  switch (_type) {
+  switch (type_) {
     case ScanType::FREE_S:
       return static_cast<uint64_t>(
           getIndex().getAvgNumDistinctPredicatesPerSubject());
@@ -247,7 +247,7 @@ uint64_t HasPredicateScan::getSizeEstimateBeforeLimit() {
 // ___________________________________________________________________________
 size_t HasPredicateScan::getCostEstimate() {
   // TODO: these size estimates only work if all predicates are functional
-  switch (_type) {
+  switch (type_) {
     case ScanType::FREE_S:
       return getSizeEstimateBeforeLimit();
     case ScanType::FREE_O:
@@ -282,14 +282,14 @@ ResultTable HasPredicateScan::computeResult() {
     }
     return id.value();
   };
-  switch (_type) {
+  switch (type_) {
     case ScanType::FREE_S: {
-      HasPredicateScan::computeFreeS(&idTable, getId(_object), hasPattern,
+      HasPredicateScan::computeFreeS(&idTable, getId(object_), hasPattern,
                                      patterns);
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     };
     case ScanType::FREE_O: {
-      HasPredicateScan::computeFreeO(&idTable, getId(_subject), patterns);
+      HasPredicateScan::computeFreeO(&idTable, getId(subject_), patterns);
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     };
     case ScanType::FULL_SCAN:
@@ -388,7 +388,7 @@ ResultTable HasPredicateScan::computeSubqueryS(
 }
 
 // ___________________________________________________________________________
-const TripleComponent& HasPredicateScan::getObject() const { return _object; }
+const TripleComponent& HasPredicateScan::getObject() const { return object_; }
 
 // ___________________________________________________________________________
-HasPredicateScan::ScanType HasPredicateScan::getType() const { return _type; }
+HasPredicateScan::ScanType HasPredicateScan::getType() const { return type_; }

@@ -27,16 +27,16 @@ class HasPredicateScan : public Operation {
   };
 
   struct SubtreeAndColumnIndex {
-    std::shared_ptr<QueryExecutionTree> _subtree;
-    size_t _subtreeJoinColumn;
+    std::shared_ptr<QueryExecutionTree> subtree_;
+    size_t subtreeJoinColumn_;
   };
 
  private:
-  ScanType _type;
-  std::optional<SubtreeAndColumnIndex> _subtree;
+  ScanType type_;
+  std::optional<SubtreeAndColumnIndex> subtree_;
 
   QueryExecutionTree& subtree() {
-    auto* ptr = _subtree.value()._subtree.get();
+    auto* ptr = subtree_.value().subtree_.get();
     AD_CORRECTNESS_CHECK(ptr != nullptr);
     return *ptr;
   }
@@ -45,10 +45,10 @@ class HasPredicateScan : public Operation {
     return const_cast<HasPredicateScan&>(*this).subtree();
   }
 
-  size_t subtreeColIdx() const { return _subtree.value()._subtreeJoinColumn; }
+  size_t subtreeColIdx() const { return subtree_.value().subtreeJoinColumn_; }
 
-  TripleComponent _subject;
-  TripleComponent _object;
+  TripleComponent subject_;
+  TripleComponent object_;
 
  public:
   HasPredicateScan() = delete;
@@ -88,7 +88,7 @@ class HasPredicateScan : public Operation {
   [[nodiscard]] const TripleComponent& getObject() const;
 
   vector<QueryExecutionTree*> getChildren() override {
-    if (_subtree) {
+    if (subtree_) {
       return {std::addressof(subtree())};
     } else {
       return {};

@@ -14,27 +14,27 @@ CountAvailablePredicates::CountAvailablePredicates(
     size_t subjectColumnIndex, Variable predicateVariable,
     Variable countVariable)
     : Operation(qec),
-      _subtree(QueryExecutionTree::createSortedTree(std::move(subtree),
+      subtree_(QueryExecutionTree::createSortedTree(std::move(subtree),
                                                     {subjectColumnIndex})),
-      _subjectColumnIndex(subjectColumnIndex),
-      _predicateVariable(std::move(predicateVariable)),
-      _countVariable(std::move(countVariable)) {}
+      subjectColumnIndex_(subjectColumnIndex),
+      predicateVariable_(std::move(predicateVariable)),
+      countVariable_(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::getCacheKeyImpl() const {
   std::ostringstream os;
-  if (_subtree == nullptr) {
+  if (subtree_ == nullptr) {
     os << "COUNT_AVAILABLE_PREDICATES for all entities";
   } else {
-    os << "COUNT_AVAILABLE_PREDICATES (col " << _subjectColumnIndex << ")\n"
-       << _subtree->getCacheKey();
+    os << "COUNT_AVAILABLE_PREDICATES (col " << subjectColumnIndex_ << ")\n"
+       << subtree_->getCacheKey();
   }
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::getDescriptor() const {
-  if (_subtree == nullptr) {
+  if (subtree_ == nullptr) {
     return "CountAvailablePredicates for a all entities";
   }
   return "CountAvailablePredicates";
@@ -54,8 +54,8 @@ VariableToColumnMap CountAvailablePredicates::computeVariableToColumnMap()
     const {
   VariableToColumnMap varCols;
   auto col = makeAlwaysDefinedColumn;
-  varCols[_predicateVariable] = col(0);
-  varCols[_countVariable] = col(1);
+  varCols[predicateVariable_] = col(0);
+  varCols[countVariable_] = col(1);
   return varCols;
 }
 
@@ -69,14 +69,14 @@ float CountAvailablePredicates::getMultiplicity([[maybe_unused]] size_t col) {
 
 // _____________________________________________________________________________
 uint64_t CountAvailablePredicates::getSizeEstimateBeforeLimit() {
-  if (_subtree.get() != nullptr) {
+  if (subtree_.get() != nullptr) {
     // Predicates are only computed for entities in the subtrees result.
 
     // This estimate is probably wildly innacurrate, but as it does not
     // depend on the order of operations of the subtree should be sufficient
     // for the type of optimizations the optimizer can currently do.
-    size_t num_distinct = _subtree->getSizeEstimate() /
-                          _subtree->getMultiplicity(_subjectColumnIndex);
+    size_t num_distinct = subtree_->getSizeEstimate() /
+                          subtree_->getMultiplicity(subjectColumnIndex_);
     return num_distinct / getIndex().getAvgNumDistinctSubjectsPerPredicate();
   } else {
     // Predicates are counted for all entities. In this case the size estimate
@@ -88,11 +88,11 @@ uint64_t CountAvailablePredicates::getSizeEstimateBeforeLimit() {
 
 // _____________________________________________________________________________
 size_t CountAvailablePredicates::getCostEstimate() {
-  if (_subtree.get() != nullptr) {
+  if (subtree_.get() != nullptr) {
     // Without knowing the ratio of elements that will have a pattern assuming
     // constant cost per entry should be reasonable (altough non distinct
     // entries are of course actually cheaper).
-    return _subtree->getCostEstimate() + _subtree->getSizeEstimate();
+    return subtree_->getCostEstimate() + subtree_->getSizeEstimate();
   } else {
     // the cost is proportional to the number of elements we need to write.
     return getSizeEstimateBeforeLimit();
@@ -108,16 +108,16 @@ ResultTable CountAvailablePredicates::computeResult() {
   const CompactVectorOfStrings<Id>& patterns =
       _executionContext->getIndex().getPatterns();
 
-  AD_CORRECTNESS_CHECK(_subtree);
+  AD_CORRECTNESS_CHECK(subtree_);
   // Determine whether we can perform the full scan optimization. It can be
-  // applied if the `_subtree` is a single index scan of a triple
+  // applied if the `subtree_` is a single index scan of a triple
   // `?s ql:has-pattern ?p`.
   // TODO<joka921> As soon as we have a lazy implementation for all index scans
   // or even all operations Then the special case for all entities can be
   // removed.
   bool isPatternTrickForAllEntities = [&]() {
     auto indexScan =
-        dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
+        dynamic_cast<const IndexScan*>(subtree_->getRootOperation().get());
     if (!indexScan) {
       return false;
     }
@@ -130,21 +130,21 @@ ResultTable CountAvailablePredicates::computeResult() {
   }();
 
   if (isPatternTrickForAllEntities) {
-    _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+    subtree_->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
         RuntimeInformation::Status::lazilyMaterialized);
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(&idTable,
                                                              patterns);
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
-    std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
+    std::shared_ptr<const ResultTable> subresult = subtree_->getResult();
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 
     size_t width = subresult->idTable().numColumns();
-    size_t patternColumn = _subtree->getVariableColumn(_predicateVariable);
+    size_t patternColumn = subtree_->getVariableColumn(predicateVariable_);
     CALL_FIXED_SIZE(width, &computePatternTrick, subresult->idTable(), &idTable,
-                    patterns, _subjectColumnIndex, patternColumn,
+                    patterns, subjectColumnIndex_, patternColumn,
                     runtimeInfo());
     return {std::move(idTable), resultSortedOn(),
             subresult->getSharedLocalVocab()};

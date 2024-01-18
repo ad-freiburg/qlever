@@ -23,13 +23,13 @@ using std::vector;
 // specified input column as its subject. The second output column contains a
 // count of how many of the input entities fulfill that requirement for that
 // predicate. This operation requires the use of the usePatterns option both
-// when building as well as when loading the index.
+// when building and when loading the index.
 class CountAvailablePredicates : public Operation {
  private:
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  size_t _subjectColumnIndex;
-  Variable _predicateVariable;
-  Variable _countVariable;
+  std::shared_ptr<QueryExecutionTree> subtree_;
+  size_t subjectColumnIndex_;
+  Variable predicateVariable_;
+  Variable countVariable_;
 
  public:
   /**
@@ -54,18 +54,18 @@ class CountAvailablePredicates : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override {
     using R = vector<QueryExecutionTree*>;
-    return _subtree != nullptr ? R{_subtree.get()} : R{};
+    return subtree_ != nullptr ? R{subtree_.get()} : R{};
   }
 
   void setTextLimit(size_t limit) override {
-    if (_subtree != nullptr) {
-      _subtree->setTextLimit(limit);
+    if (subtree_ != nullptr) {
+      subtree_->setTextLimit(limit);
     }
   }
 
   bool knownEmptyResult() override {
-    if (_subtree != nullptr) {
-      return _subtree->knownEmptyResult();
+    if (subtree_ != nullptr) {
+      return subtree_->knownEmptyResult();
     }
     return false;
   }
@@ -79,9 +79,9 @@ class CountAvailablePredicates : public Operation {
   size_t getCostEstimate() override;
 
   // Getters for testing.
-  size_t subjectColumnIndex() const { return _subjectColumnIndex; }
-  const Variable& predicateVariable() const { return _predicateVariable; }
-  const Variable& countVariable() const { return _countVariable; }
+  size_t subjectColumnIndex() const { return subjectColumnIndex_; }
+  const Variable& predicateVariable() const { return predicateVariable_; }
+  const Variable& countVariable() const { return countVariable_; }
 
  private:
   /**
