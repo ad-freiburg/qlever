@@ -487,10 +487,6 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
       joinColumnR.begin();
   std::pair undefRangeA{joinColumnL.begin(), joinColumnL.begin() + numUndefA};
   std::pair undefRangeB{joinColumnR.begin(), joinColumnR.begin() + numUndefB};
-  auto lessWithCancellationCheck = [this](auto&& a, auto&& b) {
-    checkCancellation();
-    return std::ranges::less{}(AD_FWD(a), AD_FWD(b));
-  };
 
   // Determine whether we should use the galloping join optimization.
   if (a.size() / b.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
@@ -500,12 +496,13 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
     auto inverseAddRow = [&addRow](const auto& rowA, const auto& rowB) {
       addRow(rowB, rowA);
     };
-    ad_utility::gallopingJoin(joinColumnR, joinColumnL,
-                              lessWithCancellationCheck, inverseAddRow);
+    ad_utility::gallopingJoin(joinColumnR, joinColumnL, std::ranges::less{},
+                              inverseAddRow, {},
+                              [this]() { checkCancellation(); });
   } else if (b.size() / a.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
              numUndefB == 0) {
-    ad_utility::gallopingJoin(joinColumnL, joinColumnR,
-                              lessWithCancellationCheck, addRow);
+    ad_utility::gallopingJoin(joinColumnL, joinColumnR, std::ranges::less{},
+                              addRow, {}, [this]() { checkCancellation(); });
   } else {
     auto findSmallerUndefRangeLeft =
         [undefRangeA](
@@ -525,13 +522,15 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
     auto numOutOfOrder = [&]() {
       if (numUndefB == 0 && numUndefA == 0) {
         return ad_utility::zipperJoinWithUndef(
-            joinColumnL, joinColumnR, lessWithCancellationCheck, addRow,
-            ad_utility::noop, ad_utility::noop);
+            joinColumnL, joinColumnR, std::ranges::less{}, addRow,
+            ad_utility::noop, ad_utility::noop, {},
+            [this]() { checkCancellation(); });
 
       } else {
         return ad_utility::zipperJoinWithUndef(
-            joinColumnL, joinColumnR, lessWithCancellationCheck, addRow,
-            findSmallerUndefRangeLeft, findSmallerUndefRangeRight);
+            joinColumnL, joinColumnR, std::ranges::less{}, addRow,
+            findSmallerUndefRangeLeft, findSmallerUndefRangeRight, {},
+            [this]() { checkCancellation(); });
       }
     }();
     AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
