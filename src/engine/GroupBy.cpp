@@ -141,11 +141,10 @@ VariableToColumnMap GroupBy::computeVariableToColumnMap() const {
   return result;
 }
 
-float GroupBy::getMultiplicity(size_t col) {
+float GroupBy::getMultiplicity([[maybe_unused]] size_t col) {
   // Group by should currently not be used in the optimizer, unless
   // it is part of a subquery. In that case multiplicities may only be
   // taken from the actual result
-  (void)col;
   return 1;
 }
 
@@ -979,8 +978,8 @@ concept SupportedAggregates =
 template <SupportedAggregates AggregateDataVector>
 struct ResizeVectorsVisitor {
   void operator()(AggregateDataVector& vector, size_t numberOfGroups,
-                  const GroupBy::HashMapAggregateTypeWithData& info) const {
-    (void)info;
+                  [[maybe_unused]] const GroupBy::HashMapAggregateTypeWithData&
+                      info) const {
     vector.resize(numberOfGroups);
   }
 };
@@ -991,7 +990,7 @@ struct ResizeVectorsVisitor<std::vector<GroupBy::GroupConcatAggregationData>> {
                   size_t numberOfGroups,
                   const GroupBy::HashMapAggregateTypeWithData& info) const {
     vector.resize(numberOfGroups,
-                  GroupBy::GroupConcatAggregationData{info.seperator_.value()});
+                  GroupBy::GroupConcatAggregationData{info.separator_.value()});
   }
 };
 
@@ -1153,7 +1152,7 @@ void GroupBy::createResultFromHashMap(
 // _____________________________________________________________________________
 // Visitor function to extract values from the result of an evaluation of
 // the child expression of an aggregate, and subsequently processing the values
-// by calling the `increment` function of the corresponding aggregate.
+// by calling the `addValue` function of the corresponding aggregate.
 static constexpr auto makeProcessGroupsVisitor =
     [](size_t blockSize,
        const sparqlExpression::EvaluationContext* evaluationContext,
@@ -1171,7 +1170,7 @@ static constexpr auto makeProcessGroupsVisitor =
           auto vectorOffset = hashEntries[hashEntryIndex];
           auto& aggregateData = aggregationDataVector.at(vectorOffset);
 
-          aggregateData.increment(val, evaluationContext);
+          aggregateData.addValue(val, evaluationContext);
 
           ++hashEntryIndex;
         }

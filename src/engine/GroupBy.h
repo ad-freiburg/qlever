@@ -163,8 +163,8 @@ class GroupBy : public Operation {
     bool error_ = false;
     double sum_ = 0;
     int64_t count_ = 0;
-    void increment(auto&& value,
-                   const sparqlExpression::EvaluationContext* ctx) {
+    void addValue(auto&& value,
+                  const sparqlExpression::EvaluationContext* ctx) {
       auto val = ValueGetter{}(AD_FWD(value), ctx);
 
       if (const int64_t* intval = std::get_if<int64_t>(&val))
@@ -175,8 +175,8 @@ class GroupBy : public Operation {
         error_ = true;
       ++count_;
     };
-    [[nodiscard]] ValueId calculateResult(const LocalVocab* localVocab) const {
-      (void)localVocab;
+    [[nodiscard]] ValueId calculateResult(
+        [[maybe_unused]] const LocalVocab* localVocab) const {
       if (error_)
         return ValueId::makeUndefined();
       else
@@ -188,12 +188,12 @@ class GroupBy : public Operation {
   struct CountAggregationData {
     using ValueGetter = sparqlExpression::detail::IsValidValueGetter;
     int64_t count_ = 0;
-    void increment(auto&& value,
-                   const sparqlExpression::EvaluationContext* ctx) {
+    void addValue(auto&& value,
+                  const sparqlExpression::EvaluationContext* ctx) {
       if (ValueGetter{}(AD_FWD(value), ctx)) count_++;
     }
-    [[nodiscard]] ValueId calculateResult(const LocalVocab* localVocab) const {
-      (void)localVocab;
+    [[nodiscard]] ValueId calculateResult(
+        [[maybe_unused]] const LocalVocab* localVocab) const {
       return ValueId::makeFromInt(count_);
     }
   };
@@ -202,8 +202,8 @@ class GroupBy : public Operation {
   template <valueIdComparators::Comparison Comp>
   struct ExtremumAggregationData {
     sparqlExpression::IdOrString currentValue_ = ValueId::makeUndefined();
-    void increment(const sparqlExpression::IdOrString& value,
-                   const sparqlExpression::EvaluationContext* ctx) {
+    void addValue(const sparqlExpression::IdOrString& value,
+                  const sparqlExpression::EvaluationContext* ctx) {
       if (auto val = std::get_if<ValueId>(&currentValue_);
           val != nullptr && val->isUndefined()) {
         currentValue_ = value;
@@ -218,13 +218,14 @@ class GroupBy : public Operation {
       if (std::visit(impl, value, currentValue_)) currentValue_ = value;
     }
     [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
-      if (auto val = std::get_if<ValueId>(&currentValue_))
-        return *val;
-      else if (auto str = std::get_if<std::string>(&currentValue_)) {
-        auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(*str);
+      auto valueIdResultGetter = [](ValueId id) { return id; };
+      auto stringResultGetter = [localVocab](const std::string& str) {
+        auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
         return ValueId::makeFromLocalVocabIndex(localVocabIndex);
-      }
-      return ValueId::makeUndefined();
+      };
+      auto resultGetter = ad_utility::OverloadCallOperator(valueIdResultGetter,
+                                                           stringResultGetter);
+      return std::visit(resultGetter, currentValue_);
     }
   };
 
@@ -238,8 +239,8 @@ class GroupBy : public Operation {
     using ValueGetter = sparqlExpression::detail::NumericValueGetter;
     bool error_ = false;
     double sum_ = 0;
-    void increment(auto&& value,
-                   const sparqlExpression::EvaluationContext* ctx) {
+    void addValue(auto&& value,
+                  const sparqlExpression::EvaluationContext* ctx) {
       auto val = ValueGetter{}(AD_FWD(value), ctx);
 
       if (const int64_t* intval = std::get_if<int64_t>(&val))
@@ -249,8 +250,8 @@ class GroupBy : public Operation {
       else
         error_ = true;
     };
-    [[nodiscard]] ValueId calculateResult(const LocalVocab* localVocab) const {
-      (void)localVocab;
+    [[nodiscard]] ValueId calculateResult(
+        [[maybe_unused]] const LocalVocab* localVocab) const {
       if (error_)
         return ValueId::makeUndefined();
       else
@@ -262,12 +263,12 @@ class GroupBy : public Operation {
   struct GroupConcatAggregationData {
     using ValueGetter = sparqlExpression::detail::StringValueGetter;
     std::string currentValue_;
-    std::string seperator_;
-    void increment(auto&& value,
-                   const sparqlExpression::EvaluationContext* ctx) {
+    std::string separator_;
+    void addValue(auto&& value,
+                  const sparqlExpression::EvaluationContext* ctx) {
       auto val = ValueGetter{}(AD_FWD(value), ctx);
       if (val.has_value()) {
-        if (!currentValue_.empty()) currentValue_.append(seperator_);
+        if (!currentValue_.empty()) currentValue_.append(separator_);
         currentValue_.append(val.value());
       }
     }
@@ -277,8 +278,8 @@ class GroupBy : public Operation {
       return ValueId::makeFromLocalVocabIndex(localVocabIndex);
     }
 
-    explicit GroupConcatAggregationData(std::string seperator)
-        : seperator_{std::move(seperator)} {
+    explicit GroupConcatAggregationData(std::string separator)
+        : separator_{std::move(separator)} {
       currentValue_.reserve(20000);
     }
   };
@@ -305,7 +306,7 @@ class GroupBy : public Operation {
   // `GROUP_CONCAT` requires additional data.
   struct HashMapAggregateTypeWithData {
     HashMapAggregateType type_;
-    std::optional<std::string> seperator_ = std::nullopt;
+    std::optional<std::string> separator_ = std::nullopt;
   };
 
   // Stores information required for evaluation of an aggregate as well
