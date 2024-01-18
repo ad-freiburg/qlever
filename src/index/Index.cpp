@@ -123,6 +123,16 @@ std::string_view Index::wordIdToString(WordIndex wordIndex) const {
 }
 
 // ____________________________________________________________________________
+size_t Index::getSizeOfTextBlockForWord(const std::string& word) const {
+  return pimpl_->getSizeOfTextBlockForWord(word);
+}
+
+// ____________________________________________________________________________
+size_t Index::getSizeOfTextBlockForEntities(const std::string& word) const {
+  return pimpl_->getSizeOfTextBlockForEntities(word);
+}
+
+// ____________________________________________________________________________
 size_t Index::getSizeEstimate(const std::string& words) const {
   return pimpl_->getSizeEstimate(words);
 }
@@ -170,15 +180,28 @@ Index::WordEntityPostings Index::getContextEntityScoreListsForWords(
 }
 
 // ____________________________________________________________________________
-Index::WordEntityPostings Index::getWordPostingsForTerm(
-    const std::string& term) const {
-  return pimpl_->getWordPostingsForTerm(term);
+IdTable Index::getWordPostingsForTerm(
+    const std::string& term,
+    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+  return pimpl_->getWordPostingsForTerm(term, allocator);
 }
 
 // ____________________________________________________________________________
 Index::WordEntityPostings Index::getEntityPostingsForTerm(
     const std::string& term) const {
   return pimpl_->getEntityPostingsForTerm(term);
+}
+
+// ____________________________________________________________________________
+IdTable Index::getEntityMentionsForWord(
+    const string& term,
+    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+  return pimpl_->getEntityMentionsForWord(term, allocator);
+}
+
+// ____________________________________________________________________________
+size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
+  return pimpl_->getIndexOfBestSuitedElTerm(terms);
 }
 
 // ____________________________________________________________________________
