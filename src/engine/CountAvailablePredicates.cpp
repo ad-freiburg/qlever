@@ -167,20 +167,22 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
                     std::nullopt, {}, cancellationHandle_);
   for (const auto& idTable : fullHasPattern) {
     for (const auto& patternId : idTable.getColumn(1)) {
+      AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
       patternCounts[patternId.getInt()]++;
     }
   }
 
   LOG(DEBUG) << "Using " << patternCounts.size()
              << " patterns for computing the result." << std::endl;
-  for (const auto& it : patternCounts) {
-    for (const auto& predicate : patterns[it.first]) {
-      predicateCounts[predicate] += it.second;
+  for (const auto& [patternIdx, count] : patternCounts) {
+    AD_CORRECTNESS_CHECK(patternIdx < patterns.size());
+    for (const auto& predicate : patterns[patternIdx]) {
+      predicateCounts[predicate] += count;
     }
   }
   result.reserve(predicateCounts.size());
-  for (const auto& it : predicateCounts) {
-    result.push_back({it.first, Id::makeFromInt(it.second)});
+  for (const auto& [predicateId, count] : predicateCounts) {
+    result.push_back({predicateId, Id::makeFromInt(count)});
   }
   *dynResult = std::move(result).toDynamic();
 }
@@ -250,7 +252,6 @@ void CountAvailablePredicates::computePatternTrick(
       if (inputIdx > 0 && subjectId == subjectColumn[inputIdx - 1]) {
         continue;
       }
-
       patternCounts[patternColumn[inputIdx].getInt()]++;
     }
   }

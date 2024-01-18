@@ -45,39 +45,42 @@ static constexpr auto makeJoin =
 HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
                                    std::shared_ptr<QueryExecutionTree> subtree,
                                    size_t subtreeJoinColumn,
-                                   std::string objectVariable)
+                                   Variable objectVariable)
     : Operation{qec},
       _type{ScanType::SUBQUERY_S},
       _subtree{makeJoin(qec, std::move(subtree), subtreeJoinColumn,
                         Variable{objectVariable})},
       _object{std::move(objectVariable)} {}
 
+// A small helper function that sanitizes the `triple` which is passed to the
+// constructor of `HasPredicateScan` and determines the corresponding
+// `ScanType`.
+static HasPredicateScan::ScanType getScanType(const SparqlTriple& triple) {
+  using enum HasPredicateScan::ScanType;
+  AD_CONTRACT_CHECK(triple._p._iri == HAS_PREDICATE_PREDICATE);
+  if (isVariable(triple._s) && (isVariable(triple._o))) {
+    if (triple._s == triple._o) {
+      throw std::runtime_error{
+          "ql:has-predicate with same variable for subject and object not "
+          "supported."};
+    }
+    return FULL_SCAN;
+  } else if (isVariable(triple._s)) {
+    return FREE_S;
+  } else if (isVariable(triple._o)) {
+    return FREE_O;
+  } else {
+    AD_FAIL();
+  }
+}
+
 // ___________________________________________________________________________
 HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
                                    SparqlTriple triple)
-    : Operation{qec} {
-  // Just pick one direction, they should be equivalent.
-  AD_CONTRACT_CHECK(triple._p._iri == HAS_PREDICATE_PREDICATE);
-  // TODO(schnelle): Handle ?p ql:has-predicate ?p
-  _type = [&]() {
-    if (isVariable(triple._s) && (isVariable(triple._o))) {
-      if (triple._s == triple._o) {
-        throw std::runtime_error{
-            "ql:has-predicate with same variable for subject and object not "
-            "supported."};
-      }
-      return ScanType::FULL_SCAN;
-    } else if (isVariable(triple._s)) {
-      return ScanType::FREE_S;
-    } else if (isVariable(triple._o)) {
-      return ScanType::FREE_O;
-    } else {
-      AD_FAIL();
-    }
-  }();
-  setSubject(triple._s);
-  setObject(triple._o);
-}
+    : Operation{qec},
+      _type{getScanType(triple)},
+      _subject{triple._s},
+      _object{triple._o} {}
 
 // ___________________________________________________________________________
 string HasPredicateScan::getCacheKeyImpl() const {
@@ -105,13 +108,13 @@ string HasPredicateScan::getDescriptor() const {
   checkType(_type);
   switch (_type) {
     case ScanType::FREE_S:
-      return "HasPredicateScan free subject: " + _subject;
+      return "HasPredicateScan free subject: " + _subject.toRdfLiteral();
     case ScanType::FREE_O:
-      return "HasPredicateScan free object: " + _object;
+      return "HasPredicateScan free object: " + _object.toRdfLiteral();
     case ScanType::FULL_SCAN:
       return "HasPredicateScan full scan";
     case ScanType::SUBQUERY_S:
-      return "HasPredicateScan with a subquery on " + _subject;
+      return "HasPredicateScan with a subquery on " + _subject.toRdfLiteral();
     default:
       return "HasPredicateScan";
   }
@@ -152,7 +155,6 @@ vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
 
 // ___________________________________________________________________________
 VariableToColumnMap HasPredicateScan::computeVariableToColumnMap() const {
-  using V = Variable;
   // All the columns that are newly created by this operation contain no
   // undefined values.
   auto col = makeAlwaysDefinedColumn;
@@ -160,11 +162,12 @@ VariableToColumnMap HasPredicateScan::computeVariableToColumnMap() const {
   checkType(_type);
   switch (_type) {
     case ScanType::FREE_S:
-      return {{V{_subject}, col(0)}};
+      return {{_subject.getVariable(), col(0)}};
     case ScanType::FREE_O:
-      return {{V{_object}, col(0)}};
+      return {{_object.getVariable(), col(0)}};
     case ScanType::FULL_SCAN:
-      return {{V{_subject}, col(0)}, {V{_object}, col(1)}};
+      return {{_subject.getVariable(), col(0)},
+              {_object.getVariable(), col(1)}};
     case ScanType::SUBQUERY_S:
       return subtree().getVariableColumns();
   }
@@ -204,18 +207,18 @@ float HasPredicateScan::getMultiplicity(size_t col) {
       break;
     case ScanType::FULL_SCAN:
       if (col == 0) {
-        result =  getIndex().getAvgNumDistinctPredicatesPerSubject();
+        result = getIndex().getAvgNumDistinctPredicatesPerSubject();
       } else if (col == 1) {
-        result =  getIndex().getAvgNumDistinctSubjectsPerPredicate();
+        result = getIndex().getAvgNumDistinctSubjectsPerPredicate();
       }
       break;
     case ScanType::SUBQUERY_S:
       if (col < getResultWidth() - 1) {
         result = subtree().getMultiplicity(col) *
-               getIndex().getAvgNumDistinctSubjectsPerPredicate();
+                 getIndex().getAvgNumDistinctSubjectsPerPredicate();
       } else {
-        result =  subtree().getMultiplicity(subtreeColIdx()) *
-               getIndex().getAvgNumDistinctSubjectsPerPredicate();
+        result = subtree().getMultiplicity(subtreeColIdx()) *
+                 getIndex().getAvgNumDistinctSubjectsPerPredicate();
       }
   }
   return static_cast<float>(result);
@@ -270,21 +273,22 @@ ResultTable HasPredicateScan::computeResult() {
           .lazyScan(qlever::specialIds.at(HAS_PATTERN_PREDICATE), std::nullopt,
                     std::nullopt, {}, cancellationHandle_);
 
+  auto getId = [this](const TripleComponent tc) {
+    std::optional<Id> id = tc.toValueId(getIndex().getVocab());
+    if (!id.has_value()) {
+      AD_THROW("The entity '" + tc.toRdfLiteral() +
+               "' required by `ql:has-predicate` is not in the vocabulary.");
+    }
+    return id.value();
+  };
   switch (_type) {
     case ScanType::FREE_S: {
-      Id objectId;
-      if (!getIndex().getId(_object, &objectId)) {
-        AD_THROW("The predicate '" + _object + "' is not in the vocabulary.");
-      }
-      HasPredicateScan::computeFreeS(&idTable, objectId, hasPattern, patterns);
+      HasPredicateScan::computeFreeS(&idTable, getId(_object), hasPattern,
+                                     patterns);
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     };
     case ScanType::FREE_O: {
-      Id subjectId;
-      if (!getIndex().getId(_subject, &subjectId)) {
-        AD_THROW("The subject " + _subject + " is not in the vocabulary.");
-      }
-      HasPredicateScan::computeFreeO(&idTable, subjectId, patterns);
+      HasPredicateScan::computeFreeO(&idTable, getId(_subject), patterns);
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     };
     case ScanType::FULL_SCAN:
@@ -294,7 +298,7 @@ ResultTable HasPredicateScan::computeResult() {
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     case ScanType::SUBQUERY_S:
 
-       auto width = static_cast<int>(idTable.numColumns());
+      auto width = static_cast<int>(idTable.numColumns());
       auto doCompute = [this, &idTable, &patterns]<int width>() {
         return computeSubqueryS<width>(&idTable, patterns);
       };
@@ -383,37 +387,7 @@ ResultTable HasPredicateScan::computeSubqueryS(
 }
 
 // ___________________________________________________________________________
-void HasPredicateScan::setSubject(const TripleComponent& subject) {
-  // TODO<joka921> Make the _subject and _object `Variant<Variable,...>`.
-  if (subject.isString()) {
-    _subject = subject.getString();
-  } else if (subject.isVariable()) {
-    _subject = subject.getVariable().name();
-  } else {
-    throw ParseException{
-        absl::StrCat("The subject of a ql:has-predicate triple must be an IRI "
-                     "or a variable, but was \"",
-                     subject.toString(), "\"")};
-  }
-}
-
-// ___________________________________________________________________________
-void HasPredicateScan::setObject(const TripleComponent& object) {
-  // TODO<joka921> Make the _subject and _object `Variant<Variable,...>`.
-  if (object.isString()) {
-    _object = object.getString();
-  } else if (object.isVariable()) {
-    _object = object.getVariable().name();
-  } else {
-    throw ParseException{
-        absl::StrCat("The object of a ql:has-predicate triple must be an IRI "
-                     "or a variable, but was \"",
-                     object.toString(), "\"")};
-  }
-}
-
-// ___________________________________________________________________________
-const std::string& HasPredicateScan::getObject() const { return _object; }
+const TripleComponent& HasPredicateScan::getObject() const { return _object; }
 
 // ___________________________________________________________________________
 HasPredicateScan::ScanType HasPredicateScan::getType() const { return _type; }

@@ -78,13 +78,14 @@ bool isVariableContainedInGraphPatternOperation(
 }
 
 // Internal helper function.
-// Modify the `triples` s.t. the patterns for `subAndPred.subject_` will appear in a column
-// with the variable `subAndPred.predicate_` when evaluating and joining all the triples.
-// This can be either done by retrieving one of the additional columns where the patterns are stored in the
-// PSO and POS permutation or, if no triple suitable for adding this column exists, by adding an additional
-// triple `?subject ql:has-pattern ?predicate`.
+// Modify the `triples` s.t. the patterns for `subAndPred.subject_` will appear
+// in a column with the variable `subAndPred.predicate_` when evaluating and
+// joining all the triples. This can be either done by retrieving one of the
+// additional columns where the patterns are stored in the PSO and POS
+// permutation or, if no triple suitable for adding this column exists, by
+// adding an additional triple `?subject ql:has-pattern ?predicate`.
 static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
-                                   std::vector<SparqlTriple>& triples) {
+                                          std::vector<SparqlTriple>& triples) {
   // The following lambda tries to find a triple in the `triples` that is not
   // the current triple `*it` and that has the subject variable of the pattern
   // trick in its `triplePosition` (which is either the subject or the object)
@@ -120,15 +121,18 @@ static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
 
   // We could not find a suitable triple to append the additional column, we
   // therefore add an explicit triple `?s ql:has_pattern ?p`
-  triples.emplace_back(subAndPred.subject_, HAS_PATTERN_PREDICATE, subAndPred.predicate_);
+  triples.emplace_back(subAndPred.subject_, HAS_PATTERN_PREDICATE,
+                       subAndPred.predicate_);
 }
 
 // Helper function for `checkUsePatternTrick`.
-// Check if any of the triples in the `graphPattern` has the form `?s ql:has-predicate ?p` or `?s ?p ?o` and
-// that the other conditions for the pattern trick are fulfilled (nameley that the variables `?p` and if present
+// Check if any of the triples in the `graphPattern` has the form `?s
+// ql:has-predicate ?p` or `?s ?p ?o` and that the other conditions for the
+// pattern trick are fulfilled (nameley that the variables `?p` and if present
 // `?o` don't appear elsewhere in the `parsedQuery`.
-// If such a triple is found, the query is modified such that it behaves as if the triple was replace by `?s ql:has-pattern ?p`
-// See the documentation of `rewriteTriplesForPatternTrick` above.
+// If such a triple is found, the query is modified such that it behaves as if
+// the triple was replace by `?s ql:has-pattern ?p` See the documentation of
+// `rewriteTriplesForPatternTrick` above.
 static std::optional<PatternTrickTuple> findPatternTrickTuple(
     p::BasicGraphPattern* graphPattern, const ParsedQuery* parsedQuery,
     const std::optional<

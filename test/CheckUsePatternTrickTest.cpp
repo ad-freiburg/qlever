@@ -281,11 +281,12 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
         "SELECT ?p WHERE {?x ql:has-predicate ?p . ?x <is-a> ?y } GROUP BY ?p");
     auto patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
     ASSERT_TRUE(patternTrickTuple.has_value());
-    // The triple `?x ql:has-predicate ?p` has been removed from the query, but an additional
-    // scan column for the pattern of the subject has been added to the `?x <is-a> ?y` triple.
+    // The triple `?x ql:has-predicate ?p` has been removed from the query, but
+    // an additional scan column for the pattern of the subject has been added
+    // to the `?x <is-a> ?y` triple.
     const auto& triples = std::get<parsedQuery::BasicGraphPattern>(
-                               pq._rootGraphPattern._graphPatterns.at(0))
-                               ._triples;
+                              pq._rootGraphPattern._graphPatterns.at(0))
+                              ._triples;
     ASSERT_EQ(triples.size(), 1u);
     const auto& triple = triples[0];
     EXPECT_EQ(triple._s.getVariable().name(), "?x");
@@ -301,8 +302,9 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
         "SELECT ?p WHERE {?x ql:has-predicate ?p . ?y <is-a> ?x } GROUP BY ?p");
     auto patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
     ASSERT_TRUE(patternTrickTuple.has_value());
-    // The triple `?x ql:has-predicate ?p` has been removed from the query, but an additional
-    // scan column for the pattern of the object has been added to the `?y <is-a> ?x` triple.
+    // The triple `?x ql:has-predicate ?p` has been removed from the query, but
+    // an additional scan column for the pattern of the object has been added to
+    // the `?y <is-a> ?x` triple.
     const auto& triples2 = std::get<parsedQuery::BasicGraphPattern>(
                                pq._rootGraphPattern._graphPatterns.at(0))
                                ._triples;

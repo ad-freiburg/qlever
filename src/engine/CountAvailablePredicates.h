@@ -32,7 +32,6 @@ class CountAvailablePredicates : public Operation {
   Variable _countVariable;
 
  public:
-
   /**
    * @brief Creates a new CountAvailablePredicates operation that returns
    * predicates and their counts for the entities in column subjectColumnIndex
@@ -111,8 +110,6 @@ class CountAvailablePredicates : public Operation {
   void computePatternTrickAllEntities(
       IdTable* result, const CompactVectorOfStrings<Id>& patterns) const;
 
-
- private:
   ResultTable computeResult() override;
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };

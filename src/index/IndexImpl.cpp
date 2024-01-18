@@ -807,7 +807,6 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
       usePatterns_ = false;
     }
   }
-
 }
 
 // _____________________________________________________________________________

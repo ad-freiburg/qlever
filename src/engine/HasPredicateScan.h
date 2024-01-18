@@ -47,8 +47,8 @@ class HasPredicateScan : public Operation {
 
   size_t subtreeColIdx() const { return _subtree.value()._subtreeJoinColumn; }
 
-  std::string _subject;
-  std::string _object;
+  TripleComponent _subject;
+  TripleComponent _object;
 
  public:
   HasPredicateScan() = delete;
@@ -56,16 +56,12 @@ class HasPredicateScan : public Operation {
   // TODO: The last argument should be of type `Variable`.
   HasPredicateScan(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
-                   size_t subtreeJoinColumn, std::string objectVariable);
+                   size_t subtreeJoinColumn, Variable objectVariable);
 
   HasPredicateScan(QueryExecutionContext* qec, SparqlTriple triple);
 
  private:
   [[nodiscard]] string getCacheKeyImpl() const override;
-
-  void setSubject(const TripleComponent& subject);
-
-  void setObject(const TripleComponent& object);
 
  public:
   [[nodiscard]] string getDescriptor() const override;
@@ -89,7 +85,7 @@ class HasPredicateScan : public Operation {
  public:
   [[nodiscard]] ScanType getType() const;
 
-  [[nodiscard]] const std::string& getObject() const;
+  [[nodiscard]] const TripleComponent& getObject() const;
 
   vector<QueryExecutionTree*> getChildren() override {
     if (_subtree) {

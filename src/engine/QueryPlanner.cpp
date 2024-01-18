@@ -1892,7 +1892,8 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
   // Note that this is a new operation.
   auto object = static_cast<HasPredicateScan*>(
                     hasPredicateScanTree->getRootOperation().get())
-                    ->getObject();
+                    ->getObject()
+                    .getVariable();
   auto plan = makeSubtreePlan<HasPredicateScan>(
       qec, std::move(otherTree), otherTreeJoinColumn, std::move(object));
   mergeSubtreePlanIds(plan, a, b);
