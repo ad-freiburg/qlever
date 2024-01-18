@@ -71,6 +71,8 @@ static const std::string INTERNAL_VARIABLE_PREFIX =
     "?_QLever_internal_variable_";
 
 static constexpr std::string_view TEXTSCORE_VARIABLE_PREFIX = "?ql_textscore_";
+static constexpr std::string_view ENTITY_VARIABLE_PREFIX = "?ql_entity_";
+static constexpr std::string_view SCORE_VARIABLE_PREFIX = "?ql_score_";
 static constexpr std::string_view MATCHINGWORD_VARIABLE_PREFIX =
     "?ql_matchingword_";
 

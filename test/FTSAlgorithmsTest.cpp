@@ -29,7 +29,7 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   Index::WordEntityPostings resultWep;
 
   // Empty
-  resultWep = FTSAlgorithms::filterByRange(idRange, wep);
+  resultWep = FTSAlgorithms::filterByRangeWep(idRange, wep);
   ASSERT_EQ(0u, resultWep.cids_.size());
 
   // None
@@ -37,7 +37,7 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   wep.wids_ = {{2}};
   wep.scores_ = {1};
 
-  resultWep = FTSAlgorithms::filterByRange(idRange, wep);
+  resultWep = FTSAlgorithms::filterByRangeWep(idRange, wep);
   ASSERT_EQ(0u, resultWep.cids_.size());
 
   // Match
@@ -45,7 +45,7 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   wep.wids_ = {{2, 5, 7, 5, 6}};
   wep.scores_ = {1, 1, 1, 1, 1};
 
-  resultWep = FTSAlgorithms::filterByRange(idRange, wep);
+  resultWep = FTSAlgorithms::filterByRangeWep(idRange, wep);
   EXPECT_THAT(resultWep.cids_,
               ::testing::ElementsAre(TRID(0), TRID(1), TRID(2), TRID(3)));
   EXPECT_THAT(resultWep.eids_, ::testing::ElementsAre());
@@ -57,7 +57,7 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   wep.scores_ = {1, 1, 1, 1, 1, 1};
 
   // Partial
-  resultWep = FTSAlgorithms::filterByRange(idRange, wep);
+  resultWep = FTSAlgorithms::filterByRangeWep(idRange, wep);
   EXPECT_THAT(resultWep.cids_,
               ::testing::ElementsAre(TRID(0), TRID(1), TRID(2), TRID(3)));
   EXPECT_THAT(resultWep.eids_, ::testing::ElementsAre());
