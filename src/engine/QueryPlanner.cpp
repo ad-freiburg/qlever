@@ -534,32 +534,28 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     const p::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab,
     const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple) {
-  const vector<SubtreePlan>* previous = nullptr;
+  AD_CORRECTNESS_CHECK(!dpTab.empty());
+  const vector<SubtreePlan>& previous = dpTab.back();
   auto aliases = selectClause.getAliases();
-  if (!dpTab.empty()) {
-    previous = &dpTab.back();
-  }
+
   vector<SubtreePlan> added;
 
   Variable predicateVariable = patternTrickTuple.predicate_;
   Variable countVariable =
       aliases.empty() ? generateUniqueVarName() : aliases[0]._target;
-  if (previous != nullptr && !previous->empty()) {
-    added.reserve(previous->size());
-    for (const auto& parent : *previous) {
-      // Determine the column containing the subjects for which we are
-      // interested in their predicates.
-      auto subjectColumn =
-          parent._qet->getVariableColumn(patternTrickTuple.subject_);
-      auto patternTrickPlan = makeSubtreePlan<CountAvailablePredicates>(
-          _qec, parent._qet, subjectColumn, predicateVariable, countVariable);
-      added.push_back(std::move(patternTrickPlan));
-    }
-  } else {
-    // Use the pattern trick without a subtree
-    SubtreePlan patternTrickPlan = makeSubtreePlan<CountAvailablePredicates>(
-        _qec, predicateVariable, countVariable);
-    added.push_back(std::move(patternTrickPlan));
+  // Pattern tricks always contain at least one triple, otherwise something
+  // has gone wrong inside the `CheckUsePatternTrick` module.
+  AD_CORRECTNESS_CHECK(!previous.empty());
+  added.reserve(previous.size());
+  for (const auto& parent : previous) {
+    // Determine the column containing the subjects for which we are
+    // interested in their predicates.
+    // TODO<joka921> Move this lookup from subjects to columns
+    // into the `CountAvailablePredicates` class where it belongs
+    auto subjectColumn =
+        parent._qet->getVariableColumn(patternTrickTuple.subject_);
+    added.push_back(makeSubtreePlan<CountAvailablePredicates>(
+        _qec, parent._qet, subjectColumn, predicateVariable, countVariable));
   }
   return added;
 }
@@ -1864,7 +1860,8 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
   // Note that this is a new operation.
   auto object = static_cast<HasPredicateScan*>(
                     hasPredicateScanTree->getRootOperation().get())
-                    ->getObject();
+                    ->getObject()
+                    .getVariable();
   auto plan = makeSubtreePlan<HasPredicateScan>(
       qec, std::move(otherTree), otherTreeJoinColumn, std::move(object));
   mergeSubtreePlanIds(plan, a, b);

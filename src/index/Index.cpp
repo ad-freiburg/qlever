@@ -88,16 +88,6 @@ std::pair<Id, Id> Index::prefix_range(const std::string& prefix) const {
 }
 
 // ____________________________________________________________________________
-const vector<PatternID>& Index::getHasPattern() const {
-  return pimpl_->getHasPattern();
-}
-
-// ____________________________________________________________________________
-const CompactVectorOfStrings<Id>& Index::getHasPredicate() const {
-  return pimpl_->getHasPredicate();
-}
-
-// ____________________________________________________________________________
 const CompactVectorOfStrings<Id>& Index::getPatterns() const {
   return pimpl_->getPatterns();
 }

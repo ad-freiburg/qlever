@@ -2,362 +2,188 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
 
 #include "./IndexTestHelpers.h"
-#include "./util/AllocatorTestHelpers.h"
+#include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/HasPredicateScan.h"
-#include "engine/SortPerformanceEstimator.h"
 #include "engine/ValuesForTesting.h"
 
-using ad_utility::testing::makeAllocator;
 namespace {
-auto V = ad_utility::testing::VocabId;
+using ad_utility::testing::makeAllocator;
 auto Int = ad_utility::testing::IntId;
 
-// used to test HasRelationScan with a subtree
-auto makeDummyOperation() {
-  IdTable result{makeAllocator()};
-  result.setNumColumns(2);
-  for (size_t i = 0; i < 10; i++) {
-    result.push_back({V(10 - i), V(2 * i)});
+// A text fixture that is used in the following. It consists of a small index
+// and variables for all the IDs that appear in the index.
+class HasPredicateScanTest : public ::testing::Test {
+ public:
+  using V = Variable;
+  std::string kg =
+      "<x> <p> <o>. <x> <p2> <o2>. <x> <p2> <o3> . <y> <p> <o> . <y> <p3> "
+      "<o4>. <z> <p3> <o2>.";
+  // Mapping from subjects to distinct predicates (makes reading the test
+  // results easier). x -> p p2 y -> p p3 z -> p3
+  QueryExecutionContext* qec = ad_utility::testing::getQec(kg);
+  std::function<Id(const std::string&)> getId =
+      ad_utility::testing::makeGetId(qec->getIndex());
+  Id x = getId("<x>");
+  Id y = getId("<y>");
+  Id z = getId("<z>");
+  Id p = getId("<p>");
+  Id p2 = getId("<p2>");
+  Id p3 = getId("<p3>");
+
+  // Expect that the result of the `operation` matches the `expectedElements`.
+  void runTest(Operation& operation, const VectorTable& expectedElements) {
+    auto expected = makeIdTableFromVector(expectedElements);
+    EXPECT_THAT(operation.getResult()->idTable(),
+                ::testing::ElementsAreArray(expected));
   }
-  std::vector<std::optional<Variable>> vars{Variable{"?a"}, Variable{"?b"}};
-  return ad_utility::makeExecutionTree<ValuesForTesting>(
-      ad_utility::testing::getQec(), std::move(result), std::move(vars));
-}
+
+  // Expect that the result of the `operation` matches the `expectedElements`,
+  // but without taking the order into account.
+  void runTestUnordered(Operation& op, const VectorTable& expectedElements) {
+    auto expected = makeIdTableFromVector(expectedElements);
+    EXPECT_THAT(op.getResult()->idTable(),
+                ::testing::UnorderedElementsAreArray(expected));
+  }
+};
 }  // namespace
 
-TEST(HasPredicateScan, freeS) {
-  // Used to store the result.
-  IdTable idTable{makeAllocator()};
-  idTable.setNumColumns(1);
-  // Maps entities to their patterns. If an entity id is higher than the lists
-  // length the hasRelation relation is used instead.
-  vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
-  // The has relation relation, which is used when an entity does not have a
-  // pattern
-  vector<vector<Id>> hasRelationSrc = {{},           {V(0), V(3)}, {V(0)},
-                                       {},           {},           {V(0), V(3)},
-                                       {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
-  // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
-                                    {V(1), V(3), V(4), V(2), V(0)}};
-
-  // These are used to store the relations and patterns in contiguous blocks
-  // of memory.
-  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
-  CompactVectorOfStrings<Id> patterns(patternsSrc);
-
-  // Find all entities that are in a triple with predicate 3
-  HasPredicateScan::computeFreeS(&idTable, V(3), hasPattern, hasRelation,
-                                 patterns);
-  IdTable& result = idTable;
-
-  // the result set does not guarantee any sorting so we have to sort manually
-  std::sort(result.begin(), result.end(),
-            [](const auto& a, const auto& b) { return a[0] < b[0]; });
-
-  // three entties with a pattern and four entities without one are in the
-  // relation
-  ASSERT_EQ(7u, result.size());
-  ASSERT_EQ(V(0u), result[0][0]);
-  ASSERT_EQ(V(1u), result[1][0]);
-  ASSERT_EQ(V(3u), result[2][0]);
-  ASSERT_EQ(V(4u), result[3][0]);
-  ASSERT_EQ(V(5u), result[4][0]);
-  ASSERT_EQ(V(6u), result[5][0]);
-  ASSERT_EQ(V(8u), result[6][0]);
+// TODO<joka921> In addition to the manual setups of the operations, we could
+// also test the query setup in an E2E session by going through the
+// queryPlanner.
+// _____________________________________________________________
+TEST_F(HasPredicateScanTest, freeS) {
+  // ?x ql:has-predicate <p>, expected result : <x> and <y>
+  auto scan = HasPredicateScan{
+      qec, SparqlTriple{Variable{"?x"}, HAS_PREDICATE_PREDICATE, "<p>"}};
+  runTest(scan, {{x}, {y}});
 }
 
-TEST(HasPredicateScan, freeO) {
-  // Used to store the result.
-  IdTable result{makeAllocator()};
-  result.setNumColumns(1);
-  // Maps entities to their patterns. If an entity id is higher than the lists
-  // length the hasRelation relation is used instead.
-  vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
-  // The has relation relation, which is used when an entity does not have a
-  // pattern
-  vector<vector<Id>> hasRelationSrc = {{},           {V(0), V(3)}, {V(0)},
-                                       {},           {},           {V(0), V(3)},
-                                       {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
-  // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
-                                    {V(1), V(3), V(4), V(2), V(0)}};
-
-  // These are used to store the relations and patterns in contiguous blocks
-  // of memory.
-  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
-  CompactVectorOfStrings<Id> patterns(patternsSrc);
-
-  // Find all predicates for entity 3 (pattern 1)
-  HasPredicateScan::computeFreeO(&result, V(3), hasPattern, hasRelation,
-                                 patterns);
-
-  ASSERT_EQ(5u, result.size());
-  ASSERT_EQ(V(1u), result[0][0]);
-  ASSERT_EQ(V(3u), result[1][0]);
-  ASSERT_EQ(V(4u), result[2][0]);
-  ASSERT_EQ(V(2u), result[3][0]);
-  ASSERT_EQ(V(0u), result[4][0]);
-
-  result.clear();
-
-  // Find all predicates for entity 6 (has-relation entry 6)
-  HasPredicateScan::computeFreeO(&result, V(6), hasPattern, hasRelation,
-                                 patterns);
-
-  ASSERT_EQ(2u, result.size());
-  ASSERT_EQ(V(3u), result[0][0]);
-  ASSERT_EQ(V(4u), result[1][0]);
+// _____________________________________________________________
+TEST_F(HasPredicateScanTest, freeO) {
+  // <x> ql:has-predicate ?p, expected result : <p> and <p2>
+  auto scan = HasPredicateScan{
+      qec, SparqlTriple{"<x>", HAS_PREDICATE_PREDICATE, Variable{"?p"}}};
+  runTest(scan, {{p}, {p2}});
 }
 
-TEST(HasPredicateScan, fullScan) {
-  // Used to store the result.
-  IdTable result{makeAllocator()};
-  result.setNumColumns(2);
-  // Maps entities to their patterns. If an entity id is higher than the lists
-  // length the hasRelation relation is used instead.
-  vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
-  // The has relation relation, which is used when an entity does not have a
-  // pattern
-  vector<vector<Id>> hasRelationSrc = {{}, {V(0), V(3)}, {V(0)},
-                                       {}, {},           {V(0), V(3)}};
-  // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
-                                    {V(1), V(3), V(4), V(2), V(0)}};
+// _____________________________________________________________
+TEST_F(HasPredicateScanTest, fullScan) {
+  // ?x ql:has-predicate ?y, expect the full mapping.
+  auto scan = HasPredicateScan{
+      qec,
+      SparqlTriple{Variable{"?s"}, HAS_PREDICATE_PREDICATE, Variable{"?p"}}};
+  runTest(scan, {{x, p}, {x, p2}, {y, p}, {y, p3}, {z, p3}});
 
-  // These are used to store the relations and patterns in contiguous blocks
-  // of memory.
-  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
-  CompactVectorOfStrings<Id> patterns(patternsSrc);
+  // Full scans with the same variable in the subject and object are not
+  // supported.
+  auto makeIllegalScan = [this] {
+    return HasPredicateScan{
+        qec,
+        SparqlTriple{Variable{"?s"}, HAS_PREDICATE_PREDICATE, Variable{"?s"}}};
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeIllegalScan(),
+      ::testing::ContainsRegex(
+          "same variable for subject and object not supported"));
 
-  // Query for all relations
-  HasPredicateScan::computeFullScan(&result, hasPattern, hasRelation, patterns,
-                                    16);
-
-  ASSERT_EQ(16u, result.size());
-
-  // check the entity ids
-  ASSERT_EQ(V(0u), result[0][0]);
-  ASSERT_EQ(V(0u), result[1][0]);
-  ASSERT_EQ(V(0u), result[2][0]);
-  ASSERT_EQ(V(1u), result[3][0]);
-  ASSERT_EQ(V(1u), result[4][0]);
-  ASSERT_EQ(V(2u), result[5][0]);
-  ASSERT_EQ(V(3u), result[6][0]);
-  ASSERT_EQ(V(3u), result[7][0]);
-  ASSERT_EQ(V(3u), result[8][0]);
-  ASSERT_EQ(V(3u), result[9][0]);
-  ASSERT_EQ(V(3u), result[10][0]);
-  ASSERT_EQ(V(4u), result[11][0]);
-  ASSERT_EQ(V(4u), result[12][0]);
-  ASSERT_EQ(V(4u), result[13][0]);
-  ASSERT_EQ(V(5u), result[14][0]);
-  ASSERT_EQ(V(5u), result[15][0]);
-
-  // check the predicate ids
-  ASSERT_EQ(V(0u), result[0][1]);
-  ASSERT_EQ(V(2u), result[1][1]);
-  ASSERT_EQ(V(3u), result[2][1]);
-  ASSERT_EQ(V(0u), result[3][1]);
-  ASSERT_EQ(V(3u), result[4][1]);
-  ASSERT_EQ(V(0u), result[5][1]);
-  ASSERT_EQ(V(1u), result[6][1]);
-  ASSERT_EQ(V(3u), result[7][1]);
-  ASSERT_EQ(V(4u), result[8][1]);
-  ASSERT_EQ(V(2u), result[9][1]);
-  ASSERT_EQ(V(0u), result[10][1]);
-  ASSERT_EQ(V(0u), result[11][1]);
-  ASSERT_EQ(V(2u), result[12][1]);
-  ASSERT_EQ(V(3u), result[13][1]);
-  ASSERT_EQ(V(0u), result[14][1]);
-  ASSERT_EQ(V(3u), result[15][1]);
+  // Triples without any variables also aren't supported currently.
+  auto makeIllegalScan2 = [this] {
+    return HasPredicateScan{
+        qec, SparqlTriple{"<x>", HAS_PREDICATE_PREDICATE, "<y>"}};
+  };
+  EXPECT_ANY_THROW(makeIllegalScan2());
 }
 
-TEST(HasPredicateScan, subtreeS) {
-  // Used to store the result.
-  IdTable result{makeAllocator()};
-  result.setNumColumns(3);
-  // Maps entities to their patterns. If an entity id is higher than the lists
-  // length the hasRelation relation is used instead.
-  vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
-  // The has relation relation, which is used when an entity does not have a
-  // pattern
-  vector<vector<Id>> hasRelationSrc = {{},           {V(0), V(3)}, {V(0)},
-                                       {},           {},           {V(0), V(3)},
-                                       {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
-  // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
-                                    {V(1), V(3), V(4), V(2), V(0)}};
-
-  // These are used to store the relations and patterns in contiguous blocks
-  // of memory.
-  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
-  CompactVectorOfStrings<Id> patterns(patternsSrc);
-
-  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-  QueryResultCache cache{};
-  QueryExecutionContext ctx(index, &cache, makeAllocator(),
-                            SortPerformanceEstimator{});
-
-  // create the subtree operation
-  std::shared_ptr<QueryExecutionTree> subtree = makeDummyOperation();
-
-  std::shared_ptr<const ResultTable> subresult = subtree->getResult();
-  int in_width = 2;
-  int out_width = 3;
-  CALL_FIXED_SIZE((std::array{in_width, out_width}),
-                  HasPredicateScan::computeSubqueryS, &result,
-                  subresult->idTable(), 1, hasPattern, hasRelation, patterns);
-
-  // the sum of the count of every second entities relations
-  ASSERT_EQ(10u, result.size());
-
-  // check for the first column
-
-  // check for the entity ids
-  ASSERT_EQ(V(10u), result[0][0]);
-  ASSERT_EQ(V(10u), result[1][0]);
-  ASSERT_EQ(V(10u), result[2][0]);
-  ASSERT_EQ(V(9u), result[3][0]);
-  ASSERT_EQ(V(8u), result[4][0]);
-  ASSERT_EQ(V(8u), result[5][0]);
-  ASSERT_EQ(V(8u), result[6][0]);
-  ASSERT_EQ(V(7u), result[7][0]);
-  ASSERT_EQ(V(7u), result[8][0]);
-  ASSERT_EQ(V(6u), result[9][0]);
-
-  // check for the entity ids
-  ASSERT_EQ(V(0u), result[0][1]);
-  ASSERT_EQ(V(0u), result[1][1]);
-  ASSERT_EQ(V(0u), result[2][1]);
-  ASSERT_EQ(V(2u), result[3][1]);
-  ASSERT_EQ(V(4u), result[4][1]);
-  ASSERT_EQ(V(4u), result[5][1]);
-  ASSERT_EQ(V(4u), result[6][1]);
-  ASSERT_EQ(V(6u), result[7][1]);
-  ASSERT_EQ(V(6u), result[8][1]);
-  ASSERT_EQ(V(8u), result[9][1]);
-
-  // check for the predicate ids
-  ASSERT_EQ(V(0u), result[0][2]);
-  ASSERT_EQ(V(2u), result[1][2]);
-  ASSERT_EQ(V(3u), result[2][2]);
-  ASSERT_EQ(V(0u), result[3][2]);
-  ASSERT_EQ(V(0u), result[4][2]);
-  ASSERT_EQ(V(2u), result[5][2]);
-  ASSERT_EQ(V(3u), result[6][2]);
-  ASSERT_EQ(V(3u), result[7][2]);
-  ASSERT_EQ(V(4u), result[8][2]);
-  ASSERT_EQ(V(3u), result[9][2]);
+// _____________________________________________________________
+TEST_F(HasPredicateScanTest, subtree) {
+  // ?x ?y <o4> . ?x ql:has-predicate ?predicate.
+  // The first triple matches only `<y> <p3> <o4>`, so we get the pattern
+  // for `y` with an additional column that always is `<p3.`
+  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::OPS, SparqlTriple{V{"?x"}, "?y", "<o4>"});
+  auto scan = HasPredicateScan{qec, indexScan, 1, V{"?predicate"}};
+  runTest(scan, {{p3, y, p}, {p3, y, p3}});
 }
 
-TEST(CountAvailablePredicates, patternTrickTest) {
-  // The input table containing entity ids
-  IdTable input(1, makeAllocator());
-  for (uint64_t i = 0; i < 8; i++) {
-    input.push_back({V(i)});
-  }
-  // Used to store the result.
-  IdTable result(2, makeAllocator());
-  // Maps entities to their patterns. If an entity id is higher than the lists
-  // length the hasRelation relation is used instead.
-  vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
-  // The has relation relation, which is used when an entity does not have a
-  // pattern
-  vector<vector<Id>> hasRelationSrc = {{},           {V(0), V(3)}, {V(0)},
-                                       {},           {},           {V(0), V(3)},
-                                       {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
-  // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
-                                    {V(1), V(3), V(4), V(2), V(0)}};
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickWithSubtree) {
+  /* Manual setup of the operations for the following pattern trick
+   * query:
+   * SELECT ?predicate COUNT(DISTINCT ?x) WHERE {
+   *   ?x <p3> ?y.
+   *   ?x ?predicate ?o
+   * } GROUP BY ?predicate
+   */
+  auto triple = SparqlTriple{V{"?x"}, "<p3>", V{"?y"}};
+  triple._additionalScanColumns.emplace_back(
+      ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, V{"?predicate"});
+  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO, triple);
+  auto patternTrick =
+      CountAvailablePredicates(qec, indexScan, 1, V{"?predicate"}, V{"?count"});
 
-  // These are used to store the relations and patterns in contiguous blocks
-  // of memory.
-  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
-  CompactVectorOfStrings<Id> patterns(patternsSrc);
+  runTestUnordered(patternTrick, {{p3, Int(2)}, {p, Int(1)}});
+}
 
-  RuntimeInformation runtimeInfo{};
-  try {
-    CALL_FIXED_SIZE(input.numColumns(),
-                    CountAvailablePredicates::computePatternTrick, input,
-                    &result, hasPattern, hasRelation, patterns, 0, runtimeInfo);
-  } catch (const std::runtime_error& e) {
-    // More verbose output in the case of an exception occuring.
-    std::cout << e.what() << std::endl;
-    ASSERT_TRUE(false);
-  }
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickWithSubtreeTwoFixedElements) {
+  /* Manual setup of the operations for the following pattern trick
+   * query (not so different, but increases the test coverage):
+   * SELECT ?predicate COUNT(DISTINCT ?x) WHERE {
+   *   ?x <p3> <o4>.
+   *   ?x ?predicate ?o
+   * } GROUP BY ?predicate
+   */
+  auto triple = SparqlTriple{V{"?x"}, "<p3>", "<o4>"};
+  triple._additionalScanColumns.emplace_back(
+      ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, Variable{"?predicate"});
+  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::POS, triple);
+  auto patternTrick =
+      CountAvailablePredicates(qec, indexScan, 0, V{"?predicate"}, V{"?count"});
 
-  std::sort(
-      result.begin(), result.end(),
-      [](const auto& i1, const auto& i2) -> bool { return i1[0] < i2[0]; });
-  ASSERT_EQ(5u, result.size());
+  runTestUnordered(patternTrick, {{p3, Int(1)}, {p, Int(1)}});
+}
 
-  ASSERT_EQ(V(0u), result(0, 0));
-  ASSERT_EQ(Int(6u), result(0, 1));
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickIllegalInput) {
+  auto I = ad_utility::testing::IntId;
+  auto Voc = ad_utility::testing::VocabId;
+  // The subtree of the `CountAvailablePredicates` is illegal, because the
+  // pattern index column contains the entry `273` which is neither `NO_PATTERN`
+  // nor a valid pattern index.
+  auto illegalInput =
+      makeIdTableFromVector({{Voc(0), I(273)}, {Voc(1), I(NO_PATTERN)}});
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(illegalInput),
+      std::vector<std::optional<Variable>>{V{"?x"}, V{"?predicate"}});
 
-  ASSERT_EQ(V(1u), result(1, 0));
-  ASSERT_EQ(Int(1u), result(1, 1));
+  auto patternTrick =
+      CountAvailablePredicates(qec, subtree, 1, V{"?predicate"}, V{"?count"});
+  EXPECT_ANY_THROW(runTestUnordered(patternTrick, {{p3, Int(2)}, {p, Int(1)}}));
+}
 
-  ASSERT_EQ(V(2u), result(2, 0));
-  ASSERT_EQ(Int(4u), result(2, 1));
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
+  /* Manual setup of the operations for the full pattern trick:
+   * SELECT ?predicate COUNT(DISTINCT ?x) WHERE {
+   *   ?x ?predicate ?o
+   * } GROUP BY ?predicate
+   */
+  auto triple = SparqlTriple{V{"?x"}, HAS_PATTERN_PREDICATE, V{"?predicate"}};
+  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO, triple);
+  auto patternTrick =
+      CountAvailablePredicates(qec, indexScan, 0, V{"?predicate"}, V{"?count"});
 
-  ASSERT_EQ(V(3u), result(3, 0));
-  ASSERT_EQ(Int(6u), result(3, 1));
-
-  ASSERT_EQ(V(4u), result(4, 0));
-  ASSERT_EQ(Int(3u), result(4, 1));
-
-  //  ASSERT_EQ(0u, result[0][0]);
-  //  ASSERT_EQ(5u, result[0][1]);
-  //
-  //  ASSERT_EQ(1u, result[1][0]);
-  //  ASSERT_EQ(1u, result[1][1]);
-  //
-  //  ASSERT_EQ(2u, result[2][0]);
-  //  ASSERT_EQ(4u, result[2][1]);
-  //
-  //  ASSERT_EQ(3u, result[3][0]);
-  //  ASSERT_EQ(5u, result[3][1]);
-  //
-  //  ASSERT_EQ(4u, result[4][0]);
-  //  ASSERT_EQ(3u, result[4][1]);
-
-  // Test the pattern trick for all entities
-  result.clear();
-  try {
-    CountAvailablePredicates::computePatternTrickAllEntities(
-        &result, hasPattern, hasRelation, patterns);
-  } catch (const std::runtime_error& e) {
-    // More verbose output in the case of an exception occuring.
-    std::cout << e.what() << std::endl;
-    ASSERT_TRUE(false);
-  }
-  std::sort(
-      result.begin(), result.end(),
-      [](const auto& i1, const auto& i2) -> bool { return i1[0] < i2[0]; });
-
-  ASSERT_EQ(5u, result.size());
-
-  ASSERT_EQ(V(0u), result[0][0]);
-  ASSERT_EQ(Int(6u), result[0][1]);
-
-  ASSERT_EQ(V(1u), result[1][0]);
-  ASSERT_EQ(Int(1u), result[1][1]);
-
-  ASSERT_EQ(V(2u), result[2][0]);
-  ASSERT_EQ(Int(4u), result[2][1]);
-
-  ASSERT_EQ(V(3u), result[3][0]);
-  ASSERT_EQ(Int(7u), result[3][1]);
-
-  ASSERT_EQ(V(4u), result[4][0]);
-  ASSERT_EQ(Int(3u), result[4][1]);
+  runTestUnordered(patternTrick, {{p3, Int(2)}, {p2, Int(1)}, {p, Int(2)}});
 }

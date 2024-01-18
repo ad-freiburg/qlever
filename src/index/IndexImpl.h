@@ -162,15 +162,6 @@ class IndexImpl {
    * @brief Maps pattern ids to sets of predicate ids.
    */
   CompactVectorOfStrings<Id> patterns_;
-  /**
-   * @brief Maps entity ids to pattern ids.
-   */
-  std::vector<PatternID> hasPattern_;
-  /**
-   * @brief Maps entity ids to sets of predicate ids
-   */
-  CompactVectorOfStrings<Id> hasPredicate_;
-
   ad_utility::AllocatorWithLimit<Id> allocator_;
 
   // TODO: make those private and allow only const access
@@ -279,8 +270,6 @@ class IndexImpl {
   // ___________________________________________________________________________
   std::pair<Id, Id> prefix_range(const std::string& prefix) const;
 
-  const vector<PatternID>& getHasPattern() const;
-  const CompactVectorOfStrings<Id>& getHasPredicate() const;
   const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
    * @return The multiplicity of the Entites column (0) of the full has-relation
@@ -783,7 +772,7 @@ class IndexImpl {
   // metadata. Also builds the patterns if specified.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  std::optional<PatternCreatorNew::TripleSorter> createSPOAndSOP(
+  std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
       size_t numColumns, auto& isInternalId, BlocksOfTriples sortedTriples,
       NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
@@ -826,7 +815,7 @@ class IndexImpl {
   // of only two permutations (where we have to build the Pxx permutations). In
   // all other cases the Sxx permutations are built first because we need the
   // patterns.
-  std::optional<PatternCreatorNew::TripleSorter> createFirstPermutationPair(
+  std::optional<PatternCreator::TripleSorter> createFirstPermutationPair(
       auto&&... args) {
     static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
     static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
@@ -855,6 +844,6 @@ class IndexImpl {
   // these five columns sorted by PSO, to be used as an input for building the
   // PSO and POS permutations.
   std::unique_ptr<ExternalSorter<SortByPSO, 5>> buildOspWithPatterns(
-      PatternCreatorNew::TripleSorter sortersFromPatternCreator,
+      PatternCreator::TripleSorter sortersFromPatternCreator,
       auto isQLeverInternalId);
 };

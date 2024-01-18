@@ -131,8 +131,6 @@ class Index {
 
   [[nodiscard]] std::pair<Id, Id> prefix_range(const std::string& prefix) const;
 
-  [[nodiscard]] const vector<PatternID>& getHasPattern() const;
-  [[nodiscard]] const CompactVectorOfStrings<Id>& getHasPredicate() const;
   [[nodiscard]] const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
    * @return The multiplicity of the entites column (0) of the full has-relation
