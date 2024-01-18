@@ -15,7 +15,6 @@
 class TextIndexScanForEntity : public Operation {
   using FixedEntity = std::pair<std::string, VocabIndex>;
 
- private:
   struct VarOrFixedEntity {
     std::variant<Variable, FixedEntity> entity_;
 
