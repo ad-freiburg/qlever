@@ -9,16 +9,6 @@
 #include "index/IndexImpl.h"
 
 // _____________________________________________________________________________
-CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
-                                                   Variable predicateVariable,
-                                                   Variable countVariable)
-    : Operation(qec),
-      _subtree(nullptr),
-      _subjectColumnIndex(0),
-      _predicateVariable(std::move(predicateVariable)),
-      _countVariable(std::move(countVariable)) {}
-
-// _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
     size_t subjectColumnIndex, Variable predicateVariable,
@@ -119,7 +109,13 @@ ResultTable CountAvailablePredicates::computeResult() {
       _executionContext->getIndex().getPatterns();
 
   AD_CORRECTNESS_CHECK(_subtree);
-  bool isFullScan = [&]() {
+  // Determine whether we can perform the full scan optimization.
+  // It can be applied if the subtree is a single Index scan of a
+  // triple `?s ql:has-pattern ?p`.
+  // TODO<joka921> As soon as we have a lazy implementation for all index scans
+  // or even all operations Then the special case for all entities can be
+  // removed.
+  bool isPatternTrickForAllEntities = [&]() {
     auto indexScan =
         dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
     if (!indexScan) {
@@ -133,7 +129,7 @@ ResultTable CountAvailablePredicates::computeResult() {
     return indexScan->getPredicate() == HAS_PATTERN_PREDICATE;
   }();
 
-  if (isFullScan) {
+  if (isPatternTrickForAllEntities) {
     _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
         RuntimeInformation::Status::lazilyMaterialized);
     // Compute the predicates for all entities
@@ -155,6 +151,7 @@ ResultTable CountAvailablePredicates::computeResult() {
   }
 }
 
+// _____________________________________________________________________________
 void CountAvailablePredicates::computePatternTrickAllEntities(
     IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns) const {
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
@@ -208,6 +205,7 @@ class MergeableHashMap : public ad_utility::HashMap<T, size_t> {
   }
 };
 
+// _____________________________________________________________________________
 template <size_t WIDTH>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,

@@ -20,8 +20,11 @@ struct PatternTrickTuple {
  * CountAvailablePredicates operation) is applicable to the given
  * parsed query. If a ql:has-predicate triple is found and
  * CountAvailablePredicates can be used for it, the triple's predicate will be
- * replaced by `ql:has-pattern`. The mapping from the pattern to the predicates
- * contained in that pattern will later be done by the pattern trick.
+ * replaced by `ql:has-pattern`. If possible, then this rewrite is performed by completely
+ * removing the triple and adding the `ql:has-pattern` as an additional scan column to one
+ * of the other triples (note that we have folded the patterns for the subject and object into
+ * the PSO and POS permutation. The mapping from the pattern to the predicates
+ * contained in that pattern will later be done by the `CountAvailablePredicates` operation.
  */
 std::optional<PatternTrickTuple> checkUsePatternTrick(ParsedQuery* parsedQuery);
 

@@ -32,13 +32,6 @@ class CountAvailablePredicates : public Operation {
   Variable _countVariable;
 
  public:
-  /**
-   * @brief Creates a new CountAvailablePredicates operation that returns
-   * predicates and their counts for all entities.
-   */
-  explicit CountAvailablePredicates(QueryExecutionContext* qec,
-                                    Variable predicateVariable,
-                                    Variable countVariable);
 
   /**
    * @brief Creates a new CountAvailablePredicates operation that returns
@@ -86,6 +79,12 @@ class CountAvailablePredicates : public Operation {
  public:
   size_t getCostEstimate() override;
 
+  // Getters for testing.
+  size_t subjectColumnIndex() const { return _subjectColumnIndex; }
+  const Variable& predicateVariable() const { return _predicateVariable; }
+  const Variable& countVariable() const { return _countVariable; }
+
+ private:
   // This method is declared here solely for unit testing purposes
   /**
    * @brief Computes all relations that have one of input[inputCol]'s entities
@@ -106,13 +105,12 @@ class CountAvailablePredicates : public Operation {
                                   size_t patternColumnIdx,
                                   RuntimeInformation& runtimeInfo);
 
+  // Special implementation for the full pattern trick.
+  // Perform a lazy scan over the full `ql:has-pattern` relation,
+  // and then count and expand the patterns.
   void computePatternTrickAllEntities(
       IdTable* result, const CompactVectorOfStrings<Id>& patterns) const;
 
-  // Getters for testing.
-  size_t subjectColumnIndex() const { return _subjectColumnIndex; }
-  const Variable& predicateVariable() const { return _predicateVariable; }
-  const Variable& countVariable() const { return _countVariable; }
 
  private:
   ResultTable computeResult() override;

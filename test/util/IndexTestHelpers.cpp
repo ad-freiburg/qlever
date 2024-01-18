@@ -75,8 +75,8 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
             std::make_shared<ad_utility::CancellationHandle<>>();
         auto scanResult =
             index.scan(col0Id, std::nullopt, permutation,
-                       std::array{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
-                                  ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN},
+                       std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
+                                  ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
                        cancellationDummy);
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {

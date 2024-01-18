@@ -1160,7 +1160,7 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
 }
 
 // ___________________________________________________________________________
-TEST(QueryPlanner, CountAvailabelPredicates) {
+TEST(QueryPlanner, CountAvailablePredicates) {
   h::expect(
       "SELECT ?p (COUNT(DISTINCT ?s) as ?cnt) WHERE { ?s ?p ?o} GROUP BY ?p",
       h::CountAvailablePredicates(
@@ -1172,4 +1172,6 @@ TEST(QueryPlanner, CountAvailabelPredicates) {
       h::CountAvailablePredicates(
           0, Var{"?p"}, Var{"?cnt"},
           h::IndexScanFromStrings("?s", HAS_PATTERN_PREDICATE, "?p")));
+  // TODO<joka921> Add a test for the case with subtrees with and without
+  // rewriting of triples.
 }

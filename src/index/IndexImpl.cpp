@@ -775,6 +775,20 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
 
+  pso_.loadFromDisk(onDiskBase_);
+  pos_.loadFromDisk(onDiskBase_);
+
+  if (loadAllPermutations_) {
+    ops_.loadFromDisk(onDiskBase_);
+    osp_.loadFromDisk(onDiskBase_);
+    spo_.loadFromDisk(onDiskBase_);
+    sop_.loadFromDisk(onDiskBase_);
+  } else {
+    LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
+                 "with predicate variables will therefore not work"
+              << std::endl;
+  }
+
   // We have to load the patterns first to figure out if the patterns were built
   // at all.
   if (usePatterns_) {
@@ -794,19 +808,6 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
     }
   }
 
-  pso_.loadFromDisk(onDiskBase_);
-  pos_.loadFromDisk(onDiskBase_);
-
-  if (loadAllPermutations_) {
-    ops_.loadFromDisk(onDiskBase_);
-    osp_.loadFromDisk(onDiskBase_);
-    spo_.loadFromDisk(onDiskBase_);
-    sop_.loadFromDisk(onDiskBase_);
-  } else {
-    LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
-                 "with predicate variables will therefore not work"
-              << std::endl;
-  }
 }
 
 // _____________________________________________________________________________

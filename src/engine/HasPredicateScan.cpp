@@ -189,50 +189,53 @@ bool HasPredicateScan::knownEmptyResult() {
 
 // ___________________________________________________________________________
 float HasPredicateScan::getMultiplicity(size_t col) {
+  // Default value for columns about which we know nothing.
+  double result = 1.0;
   switch (_type) {
     case ScanType::FREE_S:
       if (col == 0) {
-        return getIndex().getAvgNumDistinctPredicatesPerSubject();
+        result = getIndex().getAvgNumDistinctPredicatesPerSubject();
       }
       break;
     case ScanType::FREE_O:
       if (col == 0) {
-        return getIndex().getAvgNumDistinctSubjectsPerPredicate();
+        result = getIndex().getAvgNumDistinctSubjectsPerPredicate();
       }
       break;
     case ScanType::FULL_SCAN:
       if (col == 0) {
-        return getIndex().getAvgNumDistinctPredicatesPerSubject();
+        result =  getIndex().getAvgNumDistinctPredicatesPerSubject();
       } else if (col == 1) {
-        return getIndex().getAvgNumDistinctSubjectsPerPredicate();
+        result =  getIndex().getAvgNumDistinctSubjectsPerPredicate();
       }
       break;
     case ScanType::SUBQUERY_S:
       if (col < getResultWidth() - 1) {
-        return subtree().getMultiplicity(col) *
+        result = subtree().getMultiplicity(col) *
                getIndex().getAvgNumDistinctSubjectsPerPredicate();
       } else {
-        return subtree().getMultiplicity(subtreeColIdx()) *
+        result =  subtree().getMultiplicity(subtreeColIdx()) *
                getIndex().getAvgNumDistinctSubjectsPerPredicate();
       }
   }
-  return 1;
+  return static_cast<float>(result);
 }
 
 // ___________________________________________________________________________
 uint64_t HasPredicateScan::getSizeEstimateBeforeLimit() {
   switch (_type) {
     case ScanType::FREE_S:
-      return static_cast<size_t>(
+      return static_cast<uint64_t>(
           getIndex().getAvgNumDistinctPredicatesPerSubject());
     case ScanType::FREE_O:
-      return static_cast<size_t>(
+      return static_cast<uint64_t>(
           getIndex().getAvgNumDistinctSubjectsPerPredicate());
     case ScanType::FULL_SCAN:
       return getIndex().getNumDistinctSubjectPredicatePairs();
     case ScanType::SUBQUERY_S:
-      return subtree().getSizeEstimate() *
-             getIndex().getAvgNumDistinctPredicatesPerSubject();
+      return static_cast<uint64_t>(
+          static_cast<double>(subtree().getSizeEstimate()) *
+          getIndex().getAvgNumDistinctPredicatesPerSubject());
   }
   return 0;
 }
@@ -291,7 +294,7 @@ ResultTable HasPredicateScan::computeResult() {
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     case ScanType::SUBQUERY_S:
 
-      int width = idTable.numColumns();
+       auto width = static_cast<int>(idTable.numColumns());
       auto doCompute = [this, &idTable, &patterns]<int width>() {
         return computeSubqueryS<width>(&idTable, patterns);
       };
@@ -302,7 +305,7 @@ ResultTable HasPredicateScan::computeResult() {
 
 // ___________________________________________________________________________
 void HasPredicateScan::computeFreeS(
-    IdTable* resultTable, Id objectId, auto&& hasPattern,
+    IdTable* resultTable, Id objectId, auto& hasPattern,
     const CompactVectorOfStrings<Id>& patterns) {
   IdTableStatic<1> result = std::move(*resultTable).toStatic<1>();
   // TODO<joka921> This can be a much simpler and cheaper implementation that
@@ -327,7 +330,7 @@ void HasPredicateScan::computeFreeS(
 // ___________________________________________________________________________
 void HasPredicateScan::computeFreeO(
     IdTable* resultTable, Id subjectAsId,
-    const CompactVectorOfStrings<Id>& patterns) {
+    const CompactVectorOfStrings<Id>& patterns) const {
   auto hasPattern = getExecutionContext()
                         ->getIndex()
                         .getImpl()
@@ -335,8 +338,8 @@ void HasPredicateScan::computeFreeO(
                         .scan(qlever::specialIds.at(HAS_PATTERN_PREDICATE),
                               subjectAsId, {}, cancellationHandle_);
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
-  for (auto& patternIdx : hasPattern.getColumn(0)) {
-    const auto& pattern = patterns[patternIdx.getInt()];
+  for (Id patternId : hasPattern.getColumn(0)) {
+    const auto& pattern = patterns[patternId.getInt()];
     resultTable->resize(pattern.size());
     std::ranges::copy(pattern, resultTable->getColumn(0).begin());
   }
@@ -344,7 +347,7 @@ void HasPredicateScan::computeFreeO(
 
 // ___________________________________________________________________________
 void HasPredicateScan::computeFullScan(
-    IdTable* resultTable, auto&& hasPattern,
+    IdTable* resultTable, auto& hasPattern,
     const CompactVectorOfStrings<Id>& patterns, size_t resultSize) {
   IdTableStatic<2> result = std::move(*resultTable).toStatic<2>();
   result.reserve(resultSize);

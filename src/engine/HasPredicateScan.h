@@ -36,7 +36,7 @@ class HasPredicateScan : public Operation {
   std::optional<SubtreeAndColumnIndex> _subtree;
 
   QueryExecutionTree& subtree() {
-    auto& ptr = _subtree.value()._subtree;
+    auto* ptr = _subtree.value()._subtree.get();
     AD_CORRECTNESS_CHECK(ptr != nullptr);
     return *ptr;
   }
@@ -100,13 +100,13 @@ class HasPredicateScan : public Operation {
   }
 
   // These are made static and public mainly for easier testing
-  static void computeFreeS(IdTable* resultTable, Id objectId, auto&& hasPattern,
+  static void computeFreeS(IdTable* resultTable, Id objectId, auto& hasPattern,
                            const CompactVectorOfStrings<Id>& patterns);
 
   void computeFreeO(IdTable* resultTable, Id subjectAsId,
-                    const CompactVectorOfStrings<Id>& patterns);
+                    const CompactVectorOfStrings<Id>& patterns) const;
 
-  static void computeFullScan(IdTable* resultTable, auto&& hasPattern,
+  static void computeFullScan(IdTable* resultTable, auto& hasPattern,
                               const CompactVectorOfStrings<Id>& patterns,
                               size_t resultSize);
 
