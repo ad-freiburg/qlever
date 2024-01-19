@@ -828,15 +828,15 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   // `expr` is not a nested aggregated
   if (expr->children().front()->containsAggregate()) return std::nullopt;
 
-  if (hasType<AvgExpression>(expr)) return HashMapAggregateTypeWithData{AVG};
-  if (hasType<CountExpression>(expr))
-    return HashMapAggregateTypeWithData{COUNT};
-  if (hasType<MinExpression>(expr)) return HashMapAggregateTypeWithData{MIN};
-  if (hasType<MaxExpression>(expr)) return HashMapAggregateTypeWithData{MAX};
-  if (hasType<SumExpression>(expr)) return HashMapAggregateTypeWithData{SUM};
+  using H = HashMapAggregateTypeWithData;
+
+  if (hasType<AvgExpression>(expr)) return H{AVG};
+  if (hasType<CountExpression>(expr)) return H{COUNT};
+  if (hasType<MinExpression>(expr)) return H{MIN};
+  if (hasType<MaxExpression>(expr)) return H{MAX};
+  if (hasType<SumExpression>(expr)) return H{SUM};
   if (auto val = hasType<GroupConcatExpression>(expr)) {
-    return HashMapAggregateTypeWithData{GROUP_CONCAT,
-                                        val.value()->getSeparator()};
+    return H{GROUP_CONCAT, val.value()->getSeparator()};
   }
 
   // `expr` is an unsupported aggregate
@@ -975,25 +975,6 @@ template <typename A>
 concept SupportedAggregates =
     ad_utility::SameAsAnyTypeIn<A, GroupBy::AggregationDataVectors>;
 
-template <SupportedAggregates AggregateDataVector>
-struct ResizeVectorsVisitor {
-  void operator()(AggregateDataVector& vector, size_t numberOfGroups,
-                  [[maybe_unused]] const GroupBy::HashMapAggregateTypeWithData&
-                      info) const {
-    vector.resize(numberOfGroups);
-  }
-};
-
-template <>
-struct ResizeVectorsVisitor<std::vector<GroupBy::GroupConcatAggregationData>> {
-  void operator()(std::vector<GroupBy::GroupConcatAggregationData>& vector,
-                  size_t numberOfGroups,
-                  const GroupBy::HashMapAggregateTypeWithData& info) const {
-    vector.resize(numberOfGroups,
-                  GroupBy::GroupConcatAggregationData{info.separator_.value()});
-  }
-};
-
 // _____________________________________________________________________________
 std::vector<size_t> GroupBy::HashMapAggregationData::getHashEntries(
     std::span<const Id> ids) {
@@ -1006,16 +987,29 @@ std::vector<size_t> GroupBy::HashMapAggregationData::getHashEntries(
     hashEntries.push_back(iterator->second);
   }
 
+  auto resizeVectors =
+      []<SupportedAggregates T>(
+          T& arg, size_t numberOfGroups,
+          [[maybe_unused]] const GroupBy::HashMapAggregateTypeWithData& info) {
+        if constexpr (std::same_as<T, sparqlExpression::VectorWithMemoryLimit<
+                                          GroupConcatAggregationData>>) {
+          arg.resize(numberOfGroups,
+                     GroupConcatAggregationData{info.separator_.value()});
+        } else {
+          arg.resize(numberOfGroups);
+        }
+      };
+
   // TODO<C++23> use views::enumerate
   auto idx = 0;
   for (auto& aggregation : aggregationData_) {
     const auto& aggregationTypeWithData = aggregateTypeWithData_.at(idx);
     const auto numberOfGroups = getNumberOfGroups();
+
     std::visit(
-        [&aggregationTypeWithData,
+        [&resizeVectors, &aggregationTypeWithData,
          numberOfGroups]<SupportedAggregates T>(T& arg) {
-          ResizeVectorsVisitor<T>{}(arg, numberOfGroups,
-                                    aggregationTypeWithData);
+          resizeVectors(arg, numberOfGroups, aggregationTypeWithData);
         },
         aggregation);
     ++idx;

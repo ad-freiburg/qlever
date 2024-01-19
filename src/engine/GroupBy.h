@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "engine/GroupByHashMapOptimization.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
@@ -157,133 +158,6 @@ class GroupBy : public Operation {
   // `?z`.
   bool computeGroupByForJoinWithFullScan(IdTable* result);
 
-  // Data to perform the AVG aggregation using the HashMap optimization.
-  struct AvgAggregationData {
-    using ValueGetter = sparqlExpression::detail::NumericValueGetter;
-    bool error_ = false;
-    double sum_ = 0;
-    int64_t count_ = 0;
-    void addValue(auto&& value,
-                  const sparqlExpression::EvaluationContext* ctx) {
-      auto val = ValueGetter{}(AD_FWD(value), ctx);
-
-      if (const int64_t* intval = std::get_if<int64_t>(&val))
-        sum_ += static_cast<double>(*intval);
-      else if (const double* dval = std::get_if<double>(&val))
-        sum_ += *dval;
-      else
-        error_ = true;
-      ++count_;
-    };
-    [[nodiscard]] ValueId calculateResult(
-        [[maybe_unused]] const LocalVocab* localVocab) const {
-      if (error_)
-        return ValueId::makeUndefined();
-      else
-        return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
-    }
-  };
-
-  // Data to perform the COUNT aggregation using the HashMap optimization.
-  struct CountAggregationData {
-    using ValueGetter = sparqlExpression::detail::IsValidValueGetter;
-    int64_t count_ = 0;
-    void addValue(auto&& value,
-                  const sparqlExpression::EvaluationContext* ctx) {
-      if (ValueGetter{}(AD_FWD(value), ctx)) count_++;
-    }
-    [[nodiscard]] ValueId calculateResult(
-        [[maybe_unused]] const LocalVocab* localVocab) const {
-      return ValueId::makeFromInt(count_);
-    }
-  };
-
-  // Data to perform MIN/MAX aggregation using the HashMap optimization.
-  template <valueIdComparators::Comparison Comp>
-  struct ExtremumAggregationData {
-    sparqlExpression::IdOrString currentValue_ = ValueId::makeUndefined();
-    void addValue(const sparqlExpression::IdOrString& value,
-                  const sparqlExpression::EvaluationContext* ctx) {
-      if (auto val = std::get_if<ValueId>(&currentValue_);
-          val != nullptr && val->isUndefined()) {
-        currentValue_ = value;
-        return;
-      }
-      auto impl = [&ctx]<typename X, typename Y>(const X& x, const Y& y) {
-        return toBoolNotUndef(
-            sparqlExpression::compareIdsOrStrings<
-                Comp, valueIdComparators::ComparisonForIncompatibleTypes::
-                          CompareByType>(x, y, ctx));
-      };
-      if (std::visit(impl, value, currentValue_)) currentValue_ = value;
-    }
-    [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
-      auto valueIdResultGetter = [](ValueId id) { return id; };
-      auto stringResultGetter = [localVocab](const std::string& str) {
-        auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
-        return ValueId::makeFromLocalVocabIndex(localVocabIndex);
-      };
-      auto resultGetter = ad_utility::OverloadCallOperator(valueIdResultGetter,
-                                                           stringResultGetter);
-      return std::visit(resultGetter, currentValue_);
-    }
-  };
-
-  using MinAggregationData =
-      ExtremumAggregationData<valueIdComparators::Comparison::LT>;
-  using MaxAggregationData =
-      ExtremumAggregationData<valueIdComparators::Comparison::GT>;
-
-  // Data to perform the SUM aggregation using the HashMap optimization.
-  struct SumAggregationData {
-    using ValueGetter = sparqlExpression::detail::NumericValueGetter;
-    bool error_ = false;
-    double sum_ = 0;
-    void addValue(auto&& value,
-                  const sparqlExpression::EvaluationContext* ctx) {
-      auto val = ValueGetter{}(AD_FWD(value), ctx);
-
-      if (const int64_t* intval = std::get_if<int64_t>(&val))
-        sum_ += static_cast<double>(*intval);
-      else if (const double* dval = std::get_if<double>(&val))
-        sum_ += *dval;
-      else
-        error_ = true;
-    };
-    [[nodiscard]] ValueId calculateResult(
-        [[maybe_unused]] const LocalVocab* localVocab) const {
-      if (error_)
-        return ValueId::makeUndefined();
-      else
-        return ValueId::makeFromDouble(sum_);
-    }
-  };
-
-  // Data to perform GROUP_CONCAT aggregation using the HashMap optimization.
-  struct GroupConcatAggregationData {
-    using ValueGetter = sparqlExpression::detail::StringValueGetter;
-    std::string currentValue_;
-    std::string separator_;
-    void addValue(auto&& value,
-                  const sparqlExpression::EvaluationContext* ctx) {
-      auto val = ValueGetter{}(AD_FWD(value), ctx);
-      if (val.has_value()) {
-        if (!currentValue_.empty()) currentValue_.append(separator_);
-        currentValue_.append(val.value());
-      }
-    }
-    [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
-      auto localVocabIndex =
-          localVocab->getIndexAndAddIfNotContained(currentValue_);
-      return ValueId::makeFromLocalVocabIndex(localVocabIndex);
-    }
-
-    explicit GroupConcatAggregationData(std::string separator)
-        : separator_{std::move(separator)} {
-      currentValue_.reserve(20000);
-    }
-  };
-
   using KeyType = ValueId;
   using ValueType = size_t;
 
@@ -365,11 +239,9 @@ class GroupBy : public Operation {
                    MaxAggregationData, SumAggregationData,
                    GroupConcatAggregationData>;
 
-  template <typename T>
-  using VectorWithStandardAllocator = std::vector<T, std::allocator<T>>;
-
   using AggregationDataVectors =
-      ad_utility::LiftedVariant<AggregationData, VectorWithStandardAllocator>;
+      ad_utility::LiftedVariant<AggregationData,
+                                sparqlExpression::VectorWithMemoryLimit>;
 
   // Stores the map which associates Ids with vector offsets and
   // the vectors containing the aggregation data.
@@ -378,26 +250,27 @@ class GroupBy : public Operation {
     HashMapAggregationData(
         const ad_utility::AllocatorWithLimit<Id>& alloc,
         const std::vector<HashMapAliasInformation>& aggregateAliases)
-        : map_{alloc} {
+        : alloc_{alloc}, map_{alloc} {
       using enum HashMapAggregateType;
       size_t numAggregates = 0;
       for (const auto& alias : aggregateAliases) {
         for (const auto& aggregate : alias.aggregateInfo_) {
           ++numAggregates;
 
-          if (aggregate.aggregateType_.type_ == AVG)
-            aggregationData_.emplace_back(std::vector<AvgAggregationData>{});
-          if (aggregate.aggregateType_.type_ == COUNT)
-            aggregationData_.emplace_back(std::vector<CountAggregationData>{});
-          if (aggregate.aggregateType_.type_ == MIN)
-            aggregationData_.emplace_back(std::vector<MinAggregationData>{});
-          if (aggregate.aggregateType_.type_ == MAX)
-            aggregationData_.emplace_back(std::vector<MaxAggregationData>{});
-          if (aggregate.aggregateType_.type_ == SUM)
-            aggregationData_.emplace_back(std::vector<SumAggregationData>{});
-          if (aggregate.aggregateType_.type_ == GROUP_CONCAT)
-            aggregationData_.emplace_back(
-                std::vector<GroupConcatAggregationData>{});
+          auto addIf = [this]<typename T, HashMapAggregateType target>(
+                           const HashMapAggregateInformation& info) {
+            if (info.aggregateType_.type_ == target)
+              aggregationData_.emplace_back(
+                  sparqlExpression::VectorWithMemoryLimit<T>{alloc_});
+          };
+
+          addIf.template operator()<AvgAggregationData, AVG>(aggregate);
+          addIf.template operator()<CountAggregationData, COUNT>(aggregate);
+          addIf.template operator()<MinAggregationData, MIN>(aggregate);
+          addIf.template operator()<MaxAggregationData, MAX>(aggregate);
+          addIf.template operator()<SumAggregationData, SUM>(aggregate);
+          addIf.template operator()<GroupConcatAggregationData, GROUP_CONCAT>(
+              aggregate);
 
           aggregateTypeWithData_.emplace_back(aggregate.aggregateType_);
         }
@@ -432,6 +305,8 @@ class GroupBy : public Operation {
     [[nodiscard]] size_t getNumberOfGroups() const { return map_.size(); }
 
    private:
+    // Allocator used for creating new vectors.
+    const ad_utility::AllocatorWithLimit<Id>& alloc_;
     // Maps `Id` to vector offsets.
     ad_utility::HashMapWithMemoryLimit<KeyType, ValueType> map_;
     // Stores the actual aggregation data.

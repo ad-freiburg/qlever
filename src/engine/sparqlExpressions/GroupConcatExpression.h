@@ -59,7 +59,7 @@ class GroupConcatExpression : public SparqlExpression {
   }
 
   // Required when using the hash map optimization.
-  std::string getSeparator() const { return separator_; }
+  [[nodiscard]] const std::string& getSeparator() const { return separator_; }
 
   // A `GroupConcatExpression` is an aggregate, so it never leaves any
   // unaggregated variables.
