@@ -23,8 +23,18 @@ using namespace std::literals;
 template <typename HttpHandler>
 class TestHttpServer {
  private:
-  using WebSocketHandlerType = std::function<net::awaitable<void>(
-      const http::request<http::string_body>&, tcp::socket)>;
+  static constexpr auto webSocketSessionSupplier =
+      [](net::io_context& ioContext) {
+        using namespace ad_utility::websocket;
+        return [queryHub = QueryHub{ioContext}, registry = QueryRegistry{}](
+                   const http::request<http::string_body>& request,
+                   tcp::socket socket) mutable {
+          return WebSocketSession::handleSession(queryHub, registry, request,
+                                                 std::move(socket));
+        };
+      };
+  using WebSocketHandlerType =
+      decltype(webSocketSessionSupplier(std::declval<net::io_context&>()));
 
   // The server.
   std::shared_ptr<HttpServer<HttpHandler, WebSocketHandlerType>> server_;
@@ -44,18 +54,8 @@ class TestHttpServer {
   // Create server on localhost. Port 0 instructs the operating system to choose
   // a free port of its choice.
   explicit TestHttpServer(HttpHandler httpHandler) {
-    auto webSocketSessionSupplier = [](net::io_context& ioContext) {
-      using namespace ad_utility::websocket;
-      return [queryHub = QueryHub{ioContext}, registry = QueryRegistry{}](
-                 const http::request<http::string_body>& request,
-                 tcp::socket socket) mutable {
-        return WebSocketSession::handleSession(queryHub, registry, request,
-                                               std::move(socket));
-      };
-    };
     server_ = std::make_shared<HttpServer<HttpHandler, WebSocketHandlerType>>(
-        0, "0.0.0.0", 1, std::move(httpHandler),
-        std::move(webSocketSessionSupplier));
+        0, "0.0.0.0", 1, std::move(httpHandler), webSocketSessionSupplier);
   }
 
   // Get port on which this server is running.

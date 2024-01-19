@@ -383,3 +383,5 @@ addLinkAndDiscoverTest(ParseableDurationTest)
 addLinkAndDiscoverTest(ConstantsTest)
 
 addLinkAndDiscoverTest(JThreadTest)
+
+addLinkAndDiscoverTest(PointerGuardTest)
