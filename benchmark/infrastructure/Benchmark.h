@@ -197,7 +197,8 @@ class BenchmarkInterface {
   */
   void updateDefaultGeneralMetadata() {
     BenchmarkMetadata& meta{getGeneralMetadata()};
-    meta.addKeyValuePair("dateOfMeasurement", ad_utility::Log::getTimeStamp());
+    meta.addKeyValuePair("time-of-measurement",
+                         ad_utility::Log::getTimeStamp());
   }
 };
 
