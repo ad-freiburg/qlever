@@ -167,10 +167,8 @@ class BenchmarkInterface {
   virtual std::string name() const = 0;
 
   // Getter for the general metadata of the class.
-  BenchmarkMetadata& getGeneralMetadata() { return generalClassMetadata_; };
-  const BenchmarkMetadata& getGeneralMetadata() const {
-    return generalClassMetadata_;
-  };
+  BenchmarkMetadata& getGeneralMetadata();
+  const BenchmarkMetadata& getGeneralMetadata() const;
 
   /*
   @brief Run all your benchmarks. The `BenchmarkResults` class is a management
@@ -183,8 +181,8 @@ class BenchmarkInterface {
   virtual ~BenchmarkInterface() = default;
 
   // Needed for manipulation by the infrastructure.
-  ad_utility::ConfigManager& getConfigManager() { return manager_; }
-  const ad_utility::ConfigManager& getConfigManager() const { return manager_; }
+  ad_utility::ConfigManager& getConfigManager();
+  const ad_utility::ConfigManager& getConfigManager() const;
 
   /*
   @brief Only used for manipulaton via the infrastructure. Is called directly
@@ -195,11 +193,7 @@ class BenchmarkInterface {
   - A time stamp containing the time and date of this call. Can be used to
   identify the time and date, `runAllBenchmarks` was run.
   */
-  void updateDefaultGeneralMetadata() {
-    BenchmarkMetadata& meta{getGeneralMetadata()};
-    meta.addKeyValuePair("time-of-measurement",
-                         ad_utility::Log::getTimeStamp());
-  }
+  void updateDefaultGeneralMetadata();
 };
 
 /*

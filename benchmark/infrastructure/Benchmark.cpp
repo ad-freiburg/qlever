@@ -95,4 +95,30 @@ auto BenchmarkResults::getTables() const -> std::vector<ResultTable> {
       resultTables_,
       [](const auto& pointer) -> ResultTable { return (*pointer); });
 }
+
+// ____________________________________________________________________________
+BenchmarkMetadata& BenchmarkInterface::getGeneralMetadata() {
+  return generalClassMetadata_;
+}
+
+// ____________________________________________________________________________
+const BenchmarkMetadata& BenchmarkInterface::getGeneralMetadata() const {
+  return generalClassMetadata_;
+}
+
+// ____________________________________________________________________________
+ad_utility::ConfigManager& BenchmarkInterface::getConfigManager() {
+  return manager_;
+}
+
+// ____________________________________________________________________________
+const ad_utility::ConfigManager& BenchmarkInterface::getConfigManager() const {
+  return manager_;
+}
+
+// ____________________________________________________________________________
+void BenchmarkInterface::updateDefaultGeneralMetadata() {
+  BenchmarkMetadata& meta{getGeneralMetadata()};
+  meta.addKeyValuePair("time-of-measurement", ad_utility::Log::getTimeStamp());
+}
 }  // namespace ad_benchmark
