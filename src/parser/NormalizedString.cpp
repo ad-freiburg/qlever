@@ -7,16 +7,12 @@
 #include <algorithm>
 #include <iostream>
 
-#include "../util/Log.h"
-
 std::ostream& operator<<(std::ostream& str, NormalizedChar c) {
   str << c.c_;
   return str;
 }
 
 NormalizedString fromStringUnsafe(std::string_view input) {
-  LOG(WARN) << "Warning, using unsafe debugging function `fromStringUnsafe` to "
-               "create a NormalizedString";
   NormalizedString normalizedString;
   normalizedString.resize(input.size());
 

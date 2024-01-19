@@ -20,7 +20,7 @@ IriType& LiteralOrIriType::getIriTypeObject() {
   return std::get<IriType>(data);
 }
 
-std::string_view LiteralOrIriType::getIriString() {
+NormalizedStringView LiteralOrIriType::getIriString() {
   IriType& iriType = getIriTypeObject();
   return iriType.getIri();
 }
@@ -48,17 +48,17 @@ bool LiteralOrIriType::hasDatatype() {
   return literal.hasDatatype();
 }
 
-std::string_view LiteralOrIriType::getLiteralContent() {
+NormalizedStringView LiteralOrIriType::getLiteralContent() {
   LiteralType& literal = getLiteralTypeObject();
   return literal.getContent();
 }
 
-std::string_view LiteralOrIriType::getLanguageTag() {
+NormalizedStringView LiteralOrIriType::getLanguageTag() {
   LiteralType& literal = getLiteralTypeObject();
   return literal.getLanguageTag();
 }
 
-std::string_view LiteralOrIriType::getDatatype() {
+NormalizedStringView LiteralOrIriType::getDatatype() {
   LiteralType& literal = getLiteralTypeObject();
   return literal.getDatatype();
 }

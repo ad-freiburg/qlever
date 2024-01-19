@@ -4,8 +4,6 @@
 
 #pragma once
 
-#include <string>
-
 #include "IriType.h"
 #include "LiteralType.h"
 
@@ -22,18 +20,18 @@ class LiteralOrIriType {
 
  public:
   // Creates a new LiteralOrIriType based on a LiteralType object
-  LiteralOrIriType(LiteralType data);
+  explicit LiteralOrIriType(LiteralType data);
   // Creates a new LiteralOrIriType based on a IriType object
-  LiteralOrIriType(IriType data);
+  explicit LiteralOrIriType(IriType data);
 
   // Returns true, if object contains an IriType object
-  bool isIri() const;
+  [[nodiscard]] bool isIri() const;
   // Returns iri string of contained IriType object if available, throws
   // exception otherwise
-  std::string_view getIriString();
+  NormalizedStringView getIriString();
 
   // Returns true, if object contains an LiteralType object
-  bool isLiteral() const;
+  [[nodiscard]] bool isLiteral() const;
   // Returns true if contained LiteralType object has a language tag, throws
   // exception if no LiteralType object is contained
   bool hasLanguageTag();
@@ -42,11 +40,11 @@ class LiteralOrIriType {
   bool hasDatatype();
   // Returns content of contained LiteralType as string, throws exception if no
   // LiteralType object is contained
-  std::string_view getLiteralContent();
+  NormalizedStringView getLiteralContent();
   // Returns the language tag of the contained LiteralType, throws exception if
   // no LiteralType object is contained or object has no language tag
-  std::string_view getLanguageTag();
+  NormalizedStringView getLanguageTag();
   // Returns the datatype of the contained LiteralType, throws exception if no
   // LiteralType object is contained or object has no datatype
-  std::string_view getDatatype();
+  NormalizedStringView getDatatype();
 };

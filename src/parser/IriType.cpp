@@ -4,6 +4,8 @@
 
 #include "IriType.h"
 
-IriType::IriType(std::string iri) { this->iri = iri; }
+#include <utility>
 
-std::string_view IriType::getIri() const { return this->iri; }
+IriType::IriType(NormalizedString iri) { this->iri = std::move(iri); }
+
+NormalizedStringView IriType::getIri() const { return this->iri; }

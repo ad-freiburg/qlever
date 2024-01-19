@@ -6,18 +6,20 @@
 
 #include <string>
 
+#include "NormalizedString.h"
+
 class IriType {
  private:
   // TODO Should we store the base and the prefix separately as string_view to
   // save memory?
 
   // Stores the string value of the IRI
-  std::string iri;
+  NormalizedString iri;
 
  public:
   // Created a new iri object
-  IriType(std::string iri);
+  explicit IriType(NormalizedString iri);
 
   // Returns the string value of the iri object
-  std::string_view getIri() const;
+  [[nodiscard]] NormalizedStringView getIri() const;
 };

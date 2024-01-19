@@ -4,26 +4,26 @@
 
 #pragma once
 
-#include <string>
+#include "NormalizedString.h"
 
 enum LiteralDescriptor { NONE, LANGUAGE_TAG, DATATYPE };
 
 class LiteralType {
  private:
   // Stores the string value of the literal
-  std::string content;
+  NormalizedString content;
   // Stores the optional language tag or the optional datatype if applicable
-  std::string descriptorValue;
+  NormalizedString descriptorValue;
   // Stores information if the literal has a language tag, a datatype, or non of
   // these two assigned to it
   LiteralDescriptor descriptorType;
 
  public:
   // Creates a new literal without any descriptor
-  LiteralType(std::string content);
+  LiteralType(NormalizedString content);
 
   // Created a new literal with the given descriptor
-  LiteralType(std::string content, std::string datatypeOrLanguageTag,
+  LiteralType(NormalizedString content, NormalizedString datatypeOrLanguageTag,
               LiteralDescriptor type);
 
   // Returns true if the literal has an assigned language tag
@@ -33,13 +33,13 @@ class LiteralType {
   bool hasDatatype() const;
 
   // Returns the value of the literal, without any datatype or language tag
-  std::string_view getContent() const;
+  NormalizedStringView getContent() const;
 
   // Returns the language tag of the literal if available.
   // Throws an exception if the literal has no language tag.
-  std::string_view getLanguageTag() const;
+  NormalizedStringView getLanguageTag() const;
 
   // Returns the datatype of the literal if available.
   // Throws an exception if the literal has no datatype.
-  std::string_view getDatatype() const;
+  NormalizedStringView getDatatype() const;
 };

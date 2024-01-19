@@ -9,51 +9,56 @@
 #include "parser/IriType.h"
 #include "parser/LiteralOrIriType.h"
 #include "parser/LiteralType.h"
+#include "parser/NormalizedString.h"
 
 TEST(IriTypeTest, IriTypeCreation) {
-  IriType iri("http://www.wikidata.org/entity/Q3138");
+  IriType iri(fromStringUnsafe("http://www.wikidata.org/entity/Q3138"));
 
-  EXPECT_THAT("http://www.wikidata.org/entity/Q3138", iri.getIri());
+  EXPECT_THAT("http://www.wikidata.org/entity/Q3138",
+              asStringView(iri.getIri()));
 }
 
 TEST(LiteralTypeTest, LiteralTypeTest) {
-  LiteralType literal("Hello World");
+  LiteralType literal(fromStringUnsafe("Hello World"));
 
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
-  EXPECT_THAT("Hello World", literal.getContent());
+  EXPECT_THAT("Hello World", asStringView(literal.getContent()));
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 }
 
 TEST(LiteralTypeTest, LiteralTypeTestWithDatatype) {
-  LiteralType literal("Hello World", "xsd:string", LiteralDescriptor::DATATYPE);
+  LiteralType literal(fromStringUnsafe("Hello World"),
+                      fromStringUnsafe("xsd:string"),
+                      LiteralDescriptor::DATATYPE);
 
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_TRUE(literal.hasDatatype());
-  EXPECT_THAT("Hello World", literal.getContent());
+  EXPECT_THAT("Hello World", asStringView(literal.getContent()));
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
-  EXPECT_THAT("xsd:string", literal.getDatatype());
+  EXPECT_THAT("xsd:string", asStringView(literal.getDatatype()));
 }
 
 TEST(LiteralTypeTest, LiteralTypeTestWithLanguagetag) {
-  LiteralType literal("Hallo Welt", "de", LiteralDescriptor::LANGUAGE_TAG);
+  LiteralType literal(fromStringUnsafe("Hallo Welt"), fromStringUnsafe("de"),
+                      LiteralDescriptor::LANGUAGE_TAG);
 
   EXPECT_TRUE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
-  EXPECT_THAT("Hallo Welt", literal.getContent());
-  EXPECT_THAT("de", literal.getLanguageTag());
+  EXPECT_THAT("Hallo Welt", asStringView(literal.getContent()));
+  EXPECT_THAT("de", asStringView(literal.getLanguageTag()));
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 }
 
 TEST(LiteralOrIriType, LiteralOrIriTypeWithIri) {
-  LiteralOrIriType iri(IriType("http://www.wikidata.org/entity/Q3138"));
+  LiteralOrIriType iri(
+      IriType(fromStringUnsafe("http://www.wikidata.org/entity/Q3138")));
 
   EXPECT_TRUE(iri.isIri());
-  EXPECT_NO_THROW(iri.getIriTypeObject());
-  EXPECT_THAT("http://www.wikidata.org/entity/Q3138", iri.getIriString());
+  EXPECT_THAT("http://www.wikidata.org/entity/Q3138",
+              asStringView(iri.getIriString()));
   EXPECT_FALSE(iri.isLiteral());
-  EXPECT_THROW(iri.getLiteralTypeObject(), ad_utility::Exception);
   EXPECT_THROW(iri.hasLanguageTag(), ad_utility::Exception);
   EXPECT_THROW(iri.hasDatatype(), ad_utility::Exception);
   EXPECT_THROW(iri.getLiteralContent(), ad_utility::Exception);
@@ -62,48 +67,44 @@ TEST(LiteralOrIriType, LiteralOrIriTypeWithIri) {
 }
 
 TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteral) {
-  LiteralOrIriType literal(LiteralType("Hello World"));
+  LiteralOrIriType literal(LiteralType(fromStringUnsafe("Hello World")));
 
   EXPECT_FALSE(literal.isIri());
-  EXPECT_THROW(literal.getIriTypeObject(), ad_utility::Exception);
   EXPECT_THROW(literal.getIriString(), ad_utility::Exception);
   EXPECT_TRUE(literal.isLiteral());
-  EXPECT_NO_THROW(literal.getLiteralTypeObject());
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
-  EXPECT_THAT("Hello World", literal.getLiteralContent());
+  EXPECT_THAT("Hello World", asStringView(literal.getLiteralContent()));
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 }
 
 TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndDatatype) {
-  LiteralOrIriType literal(
-      LiteralType("Hello World", "xsd:string", LiteralDescriptor::DATATYPE));
+  LiteralOrIriType literal(LiteralType(fromStringUnsafe("Hello World"),
+                                       fromStringUnsafe("xsd:string"),
+                                       LiteralDescriptor::DATATYPE));
 
   EXPECT_FALSE(literal.isIri());
-  EXPECT_THROW(literal.getIriTypeObject(), ad_utility::Exception);
   EXPECT_THROW(literal.getIriString(), ad_utility::Exception);
   EXPECT_TRUE(literal.isLiteral());
-  EXPECT_NO_THROW(literal.getLiteralTypeObject());
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_TRUE(literal.hasDatatype());
-  EXPECT_THAT("Hello World", literal.getLiteralContent());
+  EXPECT_THAT("Hello World", asStringView(literal.getLiteralContent()));
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
-  EXPECT_THAT("xsd:string", literal.getDatatype());
+  EXPECT_THAT("xsd:string", asStringView(literal.getDatatype()));
 }
 
 TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndLanguageTag) {
-  LiteralOrIriType literal(
-      LiteralType("Hej världen", "se", LiteralDescriptor::LANGUAGE_TAG));
+  LiteralOrIriType literal(LiteralType(fromStringUnsafe("Hej världen"),
+                                       fromStringUnsafe("se"),
+                                       LiteralDescriptor::LANGUAGE_TAG));
 
   EXPECT_FALSE(literal.isIri());
-  EXPECT_THROW(literal.getIriTypeObject(), ad_utility::Exception);
   EXPECT_THROW(literal.getIriString(), ad_utility::Exception);
   EXPECT_TRUE(literal.isLiteral());
-  EXPECT_NO_THROW(literal.getLiteralTypeObject());
   EXPECT_TRUE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
-  EXPECT_THAT("Hej världen", literal.getLiteralContent());
-  EXPECT_THAT("se", literal.getLanguageTag());
+  EXPECT_THAT("Hej världen", asStringView(literal.getLiteralContent()));
+  EXPECT_THAT("se", asStringView(literal.getLanguageTag()));
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 }

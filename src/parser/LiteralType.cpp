@@ -4,16 +4,19 @@
 
 #include "LiteralType.h"
 
-LiteralType::LiteralType(std::string content) {
-  this->content = content;
+#include <utility>
+
+LiteralType::LiteralType(NormalizedString content) {
+  this->content = std::move(content);
   this->descriptorType = LiteralDescriptor::NONE;
 }
 
-LiteralType::LiteralType(std::string content, std::string datatypeOrLanguageTag,
+LiteralType::LiteralType(NormalizedString content,
+                         NormalizedString datatypeOrLanguageTag,
                          LiteralDescriptor type) {
-  this->content = content;
+  this->content = std::move(content);
   this->descriptorType = type;
-  this->descriptorValue = datatypeOrLanguageTag;
+  this->descriptorValue = std::move(datatypeOrLanguageTag);
 }
 
 bool LiteralType::hasLanguageTag() const {
@@ -24,16 +27,16 @@ bool LiteralType::hasDatatype() const {
   return this->descriptorType == LiteralDescriptor::DATATYPE;
 }
 
-std::string_view LiteralType::getContent() const { return this->content; }
+NormalizedStringView LiteralType::getContent() const { return this->content; }
 
-std::string_view LiteralType::getDatatype() const {
+NormalizedStringView LiteralType::getDatatype() const {
   if (!hasDatatype()) {
     AD_THROW("The literal does not have an explicit datatype.");
   }
   return this->descriptorValue;
 }
 
-std::string_view LiteralType::getLanguageTag() const {
+NormalizedStringView LiteralType::getLanguageTag() const {
   if (!hasLanguageTag()) {
     AD_THROW("The literal does not have an explicit language tag.");
   }
