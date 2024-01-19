@@ -2,19 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 
-#include "./CountAvailablePredicates.h"
+#include "engine/CountAvailablePredicates.h"
 
-#include "./CallFixedSize.h"
-
-// _____________________________________________________________________________
-CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
-                                                   Variable predicateVariable,
-                                                   Variable countVariable)
-    : Operation(qec),
-      _subtree(nullptr),
-      _subjectColumnIndex(0),
-      _predicateVariable(std::move(predicateVariable)),
-      _countVariable(std::move(countVariable)) {}
+#include "engine/CallFixedSize.h"
+#include "engine/IndexScan.h"
+#include "index/IndexImpl.h"
 
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(
@@ -22,27 +14,27 @@ CountAvailablePredicates::CountAvailablePredicates(
     size_t subjectColumnIndex, Variable predicateVariable,
     Variable countVariable)
     : Operation(qec),
-      _subtree(QueryExecutionTree::createSortedTree(std::move(subtree),
+      subtree_(QueryExecutionTree::createSortedTree(std::move(subtree),
                                                     {subjectColumnIndex})),
-      _subjectColumnIndex(subjectColumnIndex),
-      _predicateVariable(std::move(predicateVariable)),
-      _countVariable(std::move(countVariable)) {}
+      subjectColumnIndex_(subjectColumnIndex),
+      predicateVariable_(std::move(predicateVariable)),
+      countVariable_(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::getCacheKeyImpl() const {
   std::ostringstream os;
-  if (_subtree == nullptr) {
+  if (subtree_ == nullptr) {
     os << "COUNT_AVAILABLE_PREDICATES for all entities";
   } else {
-    os << "COUNT_AVAILABLE_PREDICATES (col " << _subjectColumnIndex << ")\n"
-       << _subtree->getCacheKey();
+    os << "COUNT_AVAILABLE_PREDICATES (col " << subjectColumnIndex_ << ")\n"
+       << subtree_->getCacheKey();
   }
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::getDescriptor() const {
-  if (_subtree == nullptr) {
+  if (subtree_ == nullptr) {
     return "CountAvailablePredicates for a all entities";
   }
   return "CountAvailablePredicates";
@@ -62,8 +54,8 @@ VariableToColumnMap CountAvailablePredicates::computeVariableToColumnMap()
     const {
   VariableToColumnMap varCols;
   auto col = makeAlwaysDefinedColumn;
-  varCols[_predicateVariable] = col(0);
-  varCols[_countVariable] = col(1);
+  varCols[predicateVariable_] = col(0);
+  varCols[countVariable_] = col(1);
   return varCols;
 }
 
@@ -77,14 +69,14 @@ float CountAvailablePredicates::getMultiplicity([[maybe_unused]] size_t col) {
 
 // _____________________________________________________________________________
 uint64_t CountAvailablePredicates::getSizeEstimateBeforeLimit() {
-  if (_subtree.get() != nullptr) {
+  if (subtree_.get() != nullptr) {
     // Predicates are only computed for entities in the subtrees result.
 
     // This estimate is probably wildly innacurrate, but as it does not
     // depend on the order of operations of the subtree should be sufficient
     // for the type of optimizations the optimizer can currently do.
-    size_t num_distinct = _subtree->getSizeEstimate() /
-                          _subtree->getMultiplicity(_subjectColumnIndex);
+    size_t num_distinct = subtree_->getSizeEstimate() /
+                          subtree_->getMultiplicity(subjectColumnIndex_);
     return num_distinct / getIndex().getAvgNumDistinctSubjectsPerPredicate();
   } else {
     // Predicates are counted for all entities. In this case the size estimate
@@ -96,11 +88,11 @@ uint64_t CountAvailablePredicates::getSizeEstimateBeforeLimit() {
 
 // _____________________________________________________________________________
 size_t CountAvailablePredicates::getCostEstimate() {
-  if (_subtree.get() != nullptr) {
+  if (subtree_.get() != nullptr) {
     // Without knowing the ratio of elements that will have a pattern assuming
     // constant cost per entry should be reasonable (altough non distinct
     // entries are of course actually cheaper).
-    return _subtree->getCostEstimate() + _subtree->getSizeEstimate();
+    return subtree_->getCostEstimate() + subtree_->getSizeEstimate();
   } else {
     // the cost is proportional to the number of elements we need to write.
     return getSizeEstimateBeforeLimit();
@@ -113,68 +105,84 @@ ResultTable CountAvailablePredicates::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(2);
 
-  const std::vector<PatternID>& hasPattern =
-      _executionContext->getIndex().getHasPattern();
-  const CompactVectorOfStrings<Id>& hasPredicate =
-      _executionContext->getIndex().getHasPredicate();
   const CompactVectorOfStrings<Id>& patterns =
       _executionContext->getIndex().getPatterns();
 
-  if (_subtree == nullptr) {
+  AD_CORRECTNESS_CHECK(subtree_);
+  // Determine whether we can perform the full scan optimization. It can be
+  // applied if the `subtree_` is a single index scan of a triple
+  // `?s ql:has-pattern ?p`.
+  // TODO<joka921> As soon as we have a lazy implementation for all index scans
+  // or even all operations Then the special case for all entities can be
+  // removed.
+  bool isPatternTrickForAllEntities = [&]() {
+    auto indexScan =
+        dynamic_cast<const IndexScan*>(subtree_->getRootOperation().get());
+    if (!indexScan) {
+      return false;
+    }
+    if (!indexScan->getSubject().isVariable() ||
+        !indexScan->getObject().isVariable()) {
+      return false;
+    }
+
+    return indexScan->getPredicate() == HAS_PATTERN_PREDICATE;
+  }();
+
+  if (isPatternTrickForAllEntities) {
+    subtree_->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+        RuntimeInformation::Status::lazilyMaterialized);
     // Compute the predicates for all entities
-    CountAvailablePredicates::computePatternTrickAllEntities(
-        &idTable, hasPattern, hasPredicate, patterns);
+    CountAvailablePredicates::computePatternTrickAllEntities(&idTable,
+                                                             patterns);
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
-    std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
+    std::shared_ptr<const ResultTable> subresult = subtree_->getResult();
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 
     size_t width = subresult->idTable().numColumns();
+    size_t patternColumn = subtree_->getVariableColumn(predicateVariable_);
     CALL_FIXED_SIZE(width, &computePatternTrick, subresult->idTable(), &idTable,
-                    hasPattern, hasPredicate, patterns, _subjectColumnIndex,
+                    patterns, subjectColumnIndex_, patternColumn,
                     runtimeInfo());
     return {std::move(idTable), resultSortedOn(),
             subresult->getSharedLocalVocab()};
   }
 }
 
+// _____________________________________________________________________________
 void CountAvailablePredicates::computePatternTrickAllEntities(
-    IdTable* dynResult, const vector<PatternID>& hasPattern,
-    const CompactVectorOfStrings<Id>& hasPredicate,
-    const CompactVectorOfStrings<Id>& patterns) {
+    IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns) const {
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   LOG(DEBUG) << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
-
-  size_t maxId = std::max(hasPattern.size(), hasPredicate.size());
-  for (size_t i = 0; i < maxId; i++) {
-    if (i < hasPattern.size() && hasPattern[i] != NO_PATTERN) {
-      patternCounts[hasPattern[i]]++;
-    } else if (i < hasPredicate.size()) {
-      auto predicates = hasPredicate[i];
-      for (const auto& predicate : predicates) {
-        auto it = predicateCounts.find(predicate);
-        if (it == predicateCounts.end()) {
-          predicateCounts[predicate] = 1;
-        } else {
-          it->second++;
-        }
-      }
+  auto fullHasPattern =
+      getExecutionContext()
+          ->getIndex()
+          .getImpl()
+          .getPermutation(Permutation::Enum::PSO)
+          .lazyScan(qlever::specialIds.at(HAS_PATTERN_PREDICATE), std::nullopt,
+                    std::nullopt, {}, cancellationHandle_);
+  for (const auto& idTable : fullHasPattern) {
+    for (const auto& patternId : idTable.getColumn(1)) {
+      AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
+      patternCounts[patternId.getInt()]++;
     }
   }
 
   LOG(DEBUG) << "Using " << patternCounts.size()
-             << " patterns for computing the result." << std::endl;
-  for (const auto& it : patternCounts) {
-    for (const auto& predicate : patterns[it.first]) {
-      predicateCounts[predicate] += it.second;
+             << " patterns for computing the result" << std::endl;
+  for (const auto& [patternIdx, count] : patternCounts) {
+    AD_CORRECTNESS_CHECK(patternIdx < patterns.size());
+    for (const auto& predicate : patterns[patternIdx]) {
+      predicateCounts[predicate] += count;
     }
   }
   result.reserve(predicateCounts.size());
-  for (const auto& it : predicateCounts) {
-    result.push_back({it.first, Id::makeFromInt(it.second)});
+  for (const auto& [predicateId, count] : predicateCounts) {
+    result.push_back({predicateId, Id::makeFromInt(count)});
   }
   *dynResult = std::move(result).toDynamic();
 }
@@ -199,17 +207,16 @@ class MergeableHashMap : public ad_utility::HashMap<T, size_t> {
   }
 };
 
+// _____________________________________________________________________________
 template <size_t WIDTH>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
-    const vector<PatternID>& hasPattern,
-    const CompactVectorOfStrings<Id>& hasPredicate,
-    const CompactVectorOfStrings<Id>& patterns, const size_t subjectColumn,
-    RuntimeInformation& runtimeInfo) {
+    const CompactVectorOfStrings<Id>& patterns, const size_t subjectColumnIdx,
+    const size_t patternColumnIdx, RuntimeInformation& runtimeInfo) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   LOG(DEBUG) << "For " << input.size() << " entities in column "
-             << subjectColumn << std::endl;
+             << subjectColumnIdx << std::endl;
 
   MergeableHashMap<Id> predicateCounts;
   MergeableHashMap<size_t> patternCounts;
@@ -229,6 +236,8 @@ void CountAvailablePredicates::computePatternTrick(
   size_t numListPredicates = 0;
 
   if (input.size() > 0) {  // avoid strange OpenMP segfaults on GCC
+    decltype(auto) subjectColumn = input.getColumn(subjectColumnIdx);
+    decltype(auto) patternColumn = input.getColumn(patternColumnIdx);
 #pragma omp parallel
 #pragma omp single
 #pragma omp taskloop grainsize(500000) default(none)                           \
@@ -236,43 +245,14 @@ void CountAvailablePredicates::computePatternTrick(
     reduction(MergeHashmapsSizeT : patternCounts)                              \
     reduction(+ : numEntitiesWithPatterns) reduction(+ : numPatternPredicates) \
     reduction(+ : numListPredicates)                                           \
-    shared(input, subjectColumn, hasPattern, hasPredicate)
-    for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
+    shared(input, subjectColumn, patternColumn)
+    for (size_t i = 0; i < input.size(); ++i) {
       // Skip over elements with the same subject (don't count them twice)
-      Id subjectId = input(inputIdx, subjectColumn);
-      if (inputIdx > 0 && subjectId == input(inputIdx - 1, subjectColumn)) {
+      Id subjectId = subjectColumn[i];
+      if (i > 0 && subjectId == subjectColumn[i - 1]) {
         continue;
       }
-      if (subjectId.getDatatype() != Datatype::VocabIndex) {
-        // Ignore numeric literals and other types that are folded into
-        // the value IDs. They can never be subjects and thus also have no
-        // patterns.
-        continue;
-      }
-      auto subject = subjectId.getVocabIndex().get();
-
-      if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
-        // The subject matches a pattern
-        patternCounts[hasPattern[subject]]++;
-        numEntitiesWithPatterns++;
-      } else if (subject < hasPredicate.size()) {
-        // The subject does not match a pattern
-        const auto& pattern = hasPredicate[subject];
-        numListPredicates += pattern.size();
-        if (!pattern.empty()) {
-          for (const auto& predicate : pattern) {
-            predicateCounts[predicate]++;
-          }
-        } else {
-          LOG(TRACE) << "No pattern or has-relation entry found for entity "
-                     << std::to_string(subject) << std::endl;
-        }
-      } else {
-        LOG(TRACE) << "Subject " << subject
-                   << " does not appear to be an entity "
-                      "(its id is to high)."
-                   << std::endl;
-      }
+      patternCounts[patternColumn[i].getInt()]++;
     }
   }
   LOG(DEBUG) << "Using " << patternCounts.size()
@@ -288,6 +268,7 @@ void CountAvailablePredicates::computePatternTrick(
 
   LOG(DEBUG) << "Start translating pattern counts to predicate counts"
              << std::endl;
+  bool illegalPatternIndexFound = false;
   if (patternVec.begin() !=
       patternVec.end()) {  // avoid segfaults with OpenMP on GCC
 #pragma omp parallel
@@ -296,13 +277,22 @@ void CountAvailablePredicates::computePatternTrick(
     reduction(MergeHashmapsId : predicateCounts)                               \
     reduction(+ : numPredicatesSubsumedInPatterns)                             \
     reduction(+ : numEntitiesWithPatterns) reduction(+ : numPatternPredicates) \
-    reduction(+ : numListPredicates) shared(patternVec, patterns)
+    reduction(+ : numListPredicates) shared(patternVec, patterns)              \
+    reduction(|| : illegalPatternIndexFound)
     // TODO<joka921> When we use iterators (`patternVec.begin()`) for the loop,
     // there is a strange warning on clang15 when OpenMP is activated. Find out
     // whether this is a known issue and whether this will be fixed in later
     // versions of clang.
     for (size_t i = 0; i != patternVec.size(); ++i) {
       auto [patternIndex, patternCount] = patternVec[i];
+      // TODO<joka921> As soon as we have a better way of handling the
+      // parallelism, the following block can become a simple AD_CONTRACT_CHECK.
+      if (patternIndex >= patterns.size()) {
+        if (patternIndex != NO_PATTERN) {
+          illegalPatternIndexFound = true;
+        }
+        continue;
+      }
       const auto& pattern = patterns[patternIndex];
       numPatternPredicates += pattern.size();
       for (const auto& predicate : pattern) {
@@ -311,6 +301,7 @@ void CountAvailablePredicates::computePatternTrick(
       }
     }
   }
+  AD_CONTRACT_CHECK(!illegalPatternIndexFound);
   LOG(DEBUG) << "Finished translating pattern counts to predicate counts"
              << std::endl;
   // write the predicate counts to the result
@@ -349,7 +340,7 @@ void CountAvailablePredicates::computePatternTrick(
   LOG(DEBUG) << "The conceptual cost with patterns was " << costWithPatterns
              << " vs " << costWithoutPatterns << " without patterns"
              << std::endl;
-  // Print the cost improvement using the the pattern trick gave us
+  // Print the cost improvement using the pattern trick gave us
   LOG(DEBUG) << "This gives a ratio  with to without of " << costRatio
              << std::endl;
 
