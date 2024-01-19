@@ -15,21 +15,6 @@ using ad_utility::source_location;
 using namespace ad_utility::memory_literals;
 
 namespace {
-// Implementation of a class that inherits from `IdTable` but is copyable
-// (convenient for testing).
-template <size_t N = 0>
-using TableImpl = std::conditional_t<N == 0, IdTable, IdTableStatic<N>>;
-template <size_t N = 0>
-class CopyableIdTable : public TableImpl<N> {
- public:
-  using Base = TableImpl<N>;
-  using Base::Base;
-  CopyableIdTable(const CopyableIdTable& rhs) : Base{rhs.clone()} {}
-  CopyableIdTable& operator=(const CopyableIdTable& rhs) {
-    static_cast<Base&>(*this) = rhs.clone();
-    return *this;
-  }
-};
 
 // From a `generator` that yields  `IdTable`s, create a single `IdTable` that is
 // the concatenation of all the yielded tables.
@@ -93,9 +78,10 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
 }
 
 template <size_t NumStaticColumns>
-void testExternalSorter(size_t numDynamicColumns, size_t numRows,
-                        ad_utility::MemorySize memoryToUse,
-                        source_location l = source_location::current()) {
+void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
+                            ad_utility::MemorySize memoryToUse,
+                            bool mergeMultipleTimes,
+                            source_location l = source_location::current()) {
   auto tr = generateLocationTrace(l);
   std::string filename = "idTableCompressedSorter.testExternalSorter.dat";
   using namespace ad_utility::memory_literals;
@@ -116,14 +102,36 @@ void testExternalSorter(size_t numDynamicColumns, size_t numRows,
 
     std::ranges::sort(randomTable, SortByOSP{});
 
-    auto generator = writer.sortedView();
+    if (mergeMultipleTimes) {
+      writer.moveResultOnMerge() = false;
+    }
 
-    using namespace ::testing;
-    auto result =
-        idTableFromRowGenerator<NumStaticColumns>(generator, numDynamicColumns);
-    ASSERT_THAT(result, Eq(randomTable));
+    for (size_t k = 0; k < 5; ++k) {
+      auto generator = writer.sortedView();
+      using namespace ::testing;
+      if (mergeMultipleTimes || k == 0) {
+        auto result = idTableFromRowGenerator<NumStaticColumns>(
+            generator, numDynamicColumns);
+        ASSERT_THAT(result, Eq(randomTable)) << "k = " << k;
+      } else {
+        EXPECT_ANY_THROW((idTableFromRowGenerator<NumStaticColumns>(
+            generator, numDynamicColumns)));
+      }
+      // We cannot access or change this value after the first merge.
+      EXPECT_ANY_THROW(writer.moveResultOnMerge());
+    }
     writer.clear();
   }
+}
+
+template <size_t NumStaticColumns>
+void testExternalSorter(size_t numDynamicColumns, size_t numRows,
+                        ad_utility::MemorySize memoryToUse,
+                        source_location l = source_location::current()) {
+  testExternalSorterImpl<NumStaticColumns>(numDynamicColumns, numRows,
+                                           memoryToUse, true, l);
+  testExternalSorterImpl<NumStaticColumns>(numDynamicColumns, numRows,
+                                           memoryToUse, false, l);
 }
 
 TEST(CompressedExternalIdTable, sorterRandomInputs) {

@@ -841,22 +841,22 @@ TEST(ParserTest, testSolutionModifiers) {
 
   {
     auto pq = SparqlParser::parseQuery(
-        "SELECT DISTINCT ?x ?ql_textscore_x ?y WHERE \t {?x "
+        "SELECT DISTINCT ?x ?ql_score_x_var_y ?y WHERE \t {?x "
         "ql:contains-entity ?y}\n"
-        "ORDER BY ASC(?y) DESC(?ql_textscore_x) LIMIT 10 OFFSET 15");
+        "ORDER BY ASC(?y) DESC(?ql_score_x_var_y) LIMIT 10 OFFSET 15");
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(3u, selectClause.getSelectedVariables().size());
-    ASSERT_EQ(Var{"?ql_textscore_x"}, selectClause.getSelectedVariables()[1]);
+    ASSERT_EQ(Var{"?ql_score_x_var_y"}, selectClause.getSelectedVariables()[1]);
     ASSERT_EQ(1u, c._triples.size());
     ASSERT_EQ(10u, pq._limitOffset._limit);
     ASSERT_EQ(15u, pq._limitOffset._offset);
     ASSERT_EQ(size_t(2), pq._orderBy.size());
     ASSERT_EQ(Var{"?y"}, pq._orderBy[0].variable_);
     ASSERT_FALSE(pq._orderBy[0].isDescending_);
-    ASSERT_EQ(Var{"?ql_textscore_x"}, pq._orderBy[1].variable_);
+    ASSERT_EQ(Var{"?ql_score_x_var_y"}, pq._orderBy[1].variable_);
     ASSERT_TRUE(pq._orderBy[1].isDescending_);
     ASSERT_TRUE(selectClause.distinct_);
     ASSERT_FALSE(selectClause.reduced_);

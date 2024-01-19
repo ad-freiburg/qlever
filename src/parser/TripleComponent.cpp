@@ -80,7 +80,9 @@ std::optional<Id> TripleComponent::toValueIdIfNotString() const {
 
 // ____________________________________________________________________________
 std::string TripleComponent::toRdfLiteral() const {
-  if (isString()) {
+  if (isVariable()) {
+    return getVariable().name();
+  } else if (isString()) {
     return getString();
   } else if (isLiteral()) {
     return getLiteral().rawContent();

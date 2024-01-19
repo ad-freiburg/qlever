@@ -7,6 +7,7 @@
 
 #include <engine/ResultTable.h>
 #include <global/Pattern.h>
+#include <global/SpecialIds.h>
 #include <index/CompressedRelation.h>
 #include <index/ConstantsIndexBuilding.h>
 #include <index/DocsDB.h>
@@ -161,15 +162,6 @@ class IndexImpl {
    * @brief Maps pattern ids to sets of predicate ids.
    */
   CompactVectorOfStrings<Id> patterns_;
-  /**
-   * @brief Maps entity ids to pattern ids.
-   */
-  std::vector<PatternID> hasPattern_;
-  /**
-   * @brief Maps entity ids to sets of predicate ids
-   */
-  CompactVectorOfStrings<Id> hasPredicate_;
-
   ad_utility::AllocatorWithLimit<Id> allocator_;
 
   // TODO: make those private and allow only const access
@@ -228,7 +220,7 @@ class IndexImpl {
                               bool addWordsFromLiterals);
 
   // Build docsDB file from given file (one text record per line).
-  void buildDocsDB(const string& docsFile);
+  void buildDocsDB(const string& docsFile) const;
 
   // Adds text index from on disk index that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
@@ -278,8 +270,6 @@ class IndexImpl {
   // ___________________________________________________________________________
   std::pair<Id, Id> prefix_range(const std::string& prefix) const;
 
-  const vector<PatternID>& getHasPattern() const;
-  const CompactVectorOfStrings<Id>& getHasPredicate() const;
   const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
    * @return The multiplicity of the Entites column (0) of the full has-relation
@@ -303,6 +293,17 @@ class IndexImpl {
   // TEXT RETRIEVAL
   // --------------------------------------------------------------------------
   std::string_view wordIdToString(WordIndex wordIndex) const;
+
+  size_t getSizeOfTextBlockForEntities(const string& words) const;
+
+  // Returns the size of the whole textblock. If the word is very long or not
+  // prefixed then only a small number of words actually match. So the final
+  // result is much smaller.
+  // Note that as a cost estimate the estimation is correct. Because we always
+  // have to read the complete block and then filter by the actually needed
+  // words.
+  // TODO: improve size estimate by adding a correction factor.
+  size_t getSizeOfTextBlockForWord(const string& words) const;
 
   size_t getSizeEstimate(const string& words) const;
 
@@ -334,14 +335,45 @@ class IndexImpl {
   Index::WordEntityPostings getContextEntityScoreListsForWords(
       const string& words) const;
 
-  Index::WordEntityPostings getWordPostingsForTerm(const string& term) const;
+  // Does the same as getWordPostingsForTerm but returns a
+  // WordEntityPosting. Sorted by textRecord.
+  Index::WordEntityPostings getWordPostingsForTermWep(
+      const string& wordOrPrefix) const;
+
+  // Returns a set of [textRecord, term] pairs where the term is contained in
+  // the textRecord. The term can be either the wordOrPrefix itself or a word
+  // that has wordOrPrefix as a prefix. Returned IdTable has columns:
+  // textRecord, word. Sorted by textRecord.
+  IdTable getWordPostingsForTerm(
+      const string& wordOrPrefix,
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   Index::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
 
-  Index::WordEntityPostings readWordCl(const TextBlockMetaData& tbmd) const;
+  // Returns a set of textRecords and their corresponding entities and
+  // scores. Each textRecord contains its corresponding entity and the term.
+  // Returned IdTable has columns: textRecord, entity, score. Sorted by
+  // textRecord.
+  // NOTE: This returns a superset because it contains the whole block and
+  // unfitting words are filtered out later by the join with the
+  // TextIndexScanForWords operation.
+  IdTable getEntityMentionsForWord(
+      const string& term,
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
-  Index::WordEntityPostings readWordEntityCl(
+  size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
+
+  Index::WordEntityPostings readWordClWep(const TextBlockMetaData& tbmd) const;
+
+  IdTable readWordCl(const TextBlockMetaData& tbmd,
+                     const ad_utility::AllocatorWithLimit<Id>& allocator) const;
+
+  Index::WordEntityPostings readWordEntityClWep(
       const TextBlockMetaData& tbmd) const;
+
+  IdTable readWordEntityCl(
+      const TextBlockMetaData& tbmd,
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= docsDB_._size) {
@@ -549,8 +581,6 @@ class IndexImpl {
       size_t nofElements, off_t from, size_t nofBytes,
       MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;
 
-  size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
-
   // Get the metadata for the block from the text index that contains the
   // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like
   // "astro*". Returns `nullopt` if no suitable block was found because no
@@ -668,35 +698,43 @@ class IndexImpl {
   // index scan) and `GroupBy.cpp`.
   auto getIgnoredIdRanges(const Permutation::Enum permutation) const {
     std::vector<std::pair<Id, Id>> ignoredRanges;
+    ignoredRanges.emplace_back(qlever::getBoundsForSpecialIds());
 
     auto literalRange = getVocab().prefix_range("\"");
     auto taggedPredicatesRange = getVocab().prefix_range("@");
     auto internalEntitiesRange =
         getVocab().prefix_range(INTERNAL_ENTITIES_URI_PREFIX);
-    ignoredRanges.emplace_back(
-        Id::makeFromVocabIndex(internalEntitiesRange.first),
-        Id::makeFromVocabIndex(internalEntitiesRange.second));
 
+    auto pushIgnoredRange = [&ignoredRanges](const auto& range) {
+      ignoredRanges.emplace_back(Id::makeFromVocabIndex(range.first),
+                                 Id::makeFromVocabIndex(range.second));
+    };
+    pushIgnoredRange(internalEntitiesRange);
     using enum Permutation::Enum;
     if (permutation == SPO || permutation == SOP) {
-      ignoredRanges.push_back({Id::makeFromVocabIndex(literalRange.first),
-                               Id::makeFromVocabIndex(literalRange.second)});
+      pushIgnoredRange(literalRange);
     } else if (permutation == PSO || permutation == POS) {
-      ignoredRanges.push_back(
-          {Id::makeFromVocabIndex(taggedPredicatesRange.first),
-           Id::makeFromVocabIndex(taggedPredicatesRange.second)});
+      pushIgnoredRange(taggedPredicatesRange);
     }
 
-    auto isIllegalPredicateId = [=](Id predicateId) {
+    // A lambda that checks whether the `predicateId` is an internal ID like
+    // `ql:has-pattern` or `@en@rdfs:label`.
+    auto isInternalPredicateId = [internalEntitiesRange,
+                                  taggedPredicatesRange](Id predicateId) {
+      if (predicateId.getDatatype() == Datatype::Undefined) {
+        return true;
+      }
+      AD_CORRECTNESS_CHECK(predicateId.getDatatype() == Datatype::VocabIndex);
       auto idx = predicateId.getVocabIndex();
-      return (idx >= internalEntitiesRange.first &&
-              idx < internalEntitiesRange.second) ||
-             (idx >= taggedPredicatesRange.first &&
-              idx < taggedPredicatesRange.second);
+      auto isInRange = [idx](const auto& range) {
+        return range.first <= idx && idx < range.second;
+      };
+      return (isInRange(internalEntitiesRange) ||
+              isInRange(taggedPredicatesRange));
     };
 
     auto isTripleIgnored = [permutation,
-                            isIllegalPredicateId](const auto& triple) {
+                            isInternalPredicateId](const auto& triple) {
       // TODO<joka921, everybody in the future>:
       // A lot of code (especially for statistical queries in `GroupBy.cpp` and
       // the pattern trick) relies on this function being a noop for the `PSO`
@@ -707,9 +745,9 @@ class IndexImpl {
       // be thoroughly reviewed.
       if (permutation == SPO || permutation == OPS) {
         // Predicates are always entities from the vocabulary.
-        return isIllegalPredicateId(triple[1]);
+        return isInternalPredicateId(triple[1]);
       } else if (permutation == SOP || permutation == OSP) {
-        return isIllegalPredicateId(triple[2]);
+        return isInternalPredicateId(triple[2]);
       }
       return false;
     };
@@ -734,9 +772,9 @@ class IndexImpl {
   // metadata. Also builds the patterns if specified.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  std::optional<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>>
-  createSPOAndSOP(size_t numColumns, auto& isInternalId,
-                  BlocksOfTriples sortedTriples, NextSorter&&... nextSorter);
+  std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
+      size_t numColumns, auto& isInternalId, BlocksOfTriples sortedTriples,
+      NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
@@ -777,8 +815,8 @@ class IndexImpl {
   // of only two permutations (where we have to build the Pxx permutations). In
   // all other cases the Sxx permutations are built first because we need the
   // patterns.
-  std::optional<std::unique_ptr<PatternCreatorNew::OSPSorter4Cols>>
-  createFirstPermutationPair(auto&&... args) {
+  std::optional<PatternCreator::TripleSorter> createFirstPermutationPair(
+      auto&&... args) {
     static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
     static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
     if (loadAllPermutations()) {
@@ -798,4 +836,14 @@ class IndexImpl {
     static_assert(std::is_same_v<ThirdPermutation, SortByPSO>);
     return createPSOAndPOS(AD_FWD(args)...);
   }
+
+  // Build the OSP and OPS permutations from the output of the `PatternCreator`.
+  // The permutations will have two additional columns: The subject pattern of
+  // the subject (which is already created by the `PatternCreator`) and the
+  // subject pattern of the object (which is created by this function). Return
+  // these five columns sorted by PSO, to be used as an input for building the
+  // PSO and POS permutations.
+  std::unique_ptr<ExternalSorter<SortByPSO, 5>> buildOspWithPatterns(
+      PatternCreator::TripleSorter sortersFromPatternCreator,
+      auto isQLeverInternalId);
 };

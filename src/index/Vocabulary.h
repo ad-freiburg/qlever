@@ -148,13 +148,13 @@ class Vocabulary {
   bool getId(const string& word, IndexType* idx) const;
 
   //! Get an Id range that matches a prefix.
-  //! Return value signals if something was found at all.
+  //! Return value also signals if something was found at all.
   //! CAVEAT! TODO<discovered by joka921>: This is only used for the text index,
   //! and uses a range, where the last index is still within the range which is
   //! against C++ conventions!
   // consider using the prefixRange function.
-  bool getIdRangeForFullTextPrefix(const string& word,
-                                   IdRange<IndexType>* range) const;
+  std::optional<IdRange<IndexType>> getIdRangeForFullTextPrefix(
+      const string& word) const;
 
   ad_utility::HashMap<Datatypes, std::pair<IndexType, IndexType>>
   getRangesForDatatypes() const;
