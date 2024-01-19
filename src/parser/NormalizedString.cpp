@@ -7,12 +7,16 @@
 #include <algorithm>
 #include <iostream>
 
+#include "../util/Log.h"
+
 std::ostream& operator<<(std::ostream& str, NormalizedChar c) {
   str << c.c_;
   return str;
 }
 
 NormalizedString fromStringUnsafe(std::string_view input) {
+  LOG(WARN) << "Warning, using unsafe debugging function `fromStringUnsafe` to "
+               "create a NormalizedString";
   NormalizedString normalizedString;
   normalizedString.resize(input.size());
 
@@ -30,11 +34,4 @@ NormalizedString normalizeFromLiteralContent(std::string_view literal) {
 std::string_view asStringView(NormalizedStringView normalizedStringView) {
   return {reinterpret_cast<const char*>(normalizedStringView.data()),
           normalizedStringView.size()};
-}
-
-int main() {
-  NormalizedString s = fromStringUnsafe("hallo Bene");
-  NormalizedStringView sv = s;
-  sv.remove_prefix(2);
-  std::cout << asStringView(sv) << std::endl;
 }
