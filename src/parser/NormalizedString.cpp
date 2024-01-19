@@ -4,7 +4,6 @@
 
 #include "NormalizedString.h"
 
-#include <algorithm>
 #include <iostream>
 
 std::ostream& operator<<(std::ostream& str, NormalizedChar c) {

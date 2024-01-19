@@ -10,9 +10,6 @@
 
 class IriType {
  private:
-  // TODO Should we store the base and the prefix separately as string_view to
-  // save memory?
-
   // Stores the string value of the IRI
   NormalizedString iri;
 
