@@ -10,9 +10,9 @@
 
 // _____________________________________________________________________________
 static constexpr auto numericValueAdder =
-    []<typename T>(T value, double& sum, [[maybe_unused]] bool& error)requires std::is_arithmetic_v<T> {
-        sum += static_cast<double>(value);
-    };
+        []<typename T>(T value, double &sum, [[maybe_unused]] bool &error)requires std::is_arithmetic_v<T> {
+            sum += static_cast<double>(value);
+        };
 static constexpr auto nonNumericValueAdder =
     [](sparqlExpression::detail::NotNumeric, [[maybe_unused]] double& sum,
        bool& error) { error = true; };
