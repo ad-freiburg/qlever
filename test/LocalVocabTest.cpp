@@ -299,7 +299,7 @@ TEST(LocalVocab, propagation) {
   checkLocalVocab(transitivePath, std::vector<std::string>{"x", "y1", "y2"});
 
   // PATTERN TRICK operations.
-  HasPredicateScan hasPredicateScan(testQec, qet(values1), 0, "?z");
+  HasPredicateScan hasPredicateScan(testQec, qet(values1), 0, Variable{"?z"});
   checkLocalVocab(hasPredicateScan, std::vector<std::string>{"x", "y1", "y2"});
   CountAvailablePredicates countAvailablePredictes(
       testQec, qet(values1), 0, Variable{"?x"}, Variable{"?y"});

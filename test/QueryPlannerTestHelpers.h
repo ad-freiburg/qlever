@@ -8,6 +8,7 @@
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
+#include "engine/CountAvailablePredicates.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/MultiColumnJoin.h"
@@ -15,6 +16,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
+#include "engine/TextIndexScanForEntity.h"
+#include "engine/TextIndexScanForWord.h"
 #include "engine/TransitivePath.h"
 #include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
@@ -86,6 +89,41 @@ inline auto IndexScan =
             AD_PROPERTY(IndexScan, getObject, Eq(object))));
 };
 
+inline auto TextIndexScanForWord = [](Variable textRecordVar,
+                                      string word) -> QetMatcher {
+  return RootOperation<::TextIndexScanForWord>(AllOf(
+      AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
+                  Eq(1 + word.ends_with('*'))),
+      AD_PROPERTY(::TextIndexScanForWord, textRecordVar, Eq(textRecordVar)),
+      AD_PROPERTY(::TextIndexScanForWord, word, word)));
+};
+
+inline auto TextIndexScanForEntity =
+    [](Variable textRecordVar, std::variant<Variable, std::string> entity,
+       string word) -> QetMatcher {
+  // TODO: Implement AD_THROWING_PROPERTY(..., Exception matcher) and use it
+  // here to test the contract-checks in entityVariable() and fixedEntity().
+  if (std::holds_alternative<Variable>(entity)) {
+    return RootOperation<::TextIndexScanForEntity>(AllOf(
+        AD_PROPERTY(::TextIndexScanForEntity, getResultWidth,
+                    Eq(2 + std::holds_alternative<Variable>(entity))),
+        AD_PROPERTY(::TextIndexScanForEntity, textRecordVar, Eq(textRecordVar)),
+        AD_PROPERTY(::TextIndexScanForEntity, entityVariable,
+                    std::get<Variable>(entity)),
+        AD_PROPERTY(::TextIndexScanForEntity, word, word),
+        AD_PROPERTY(::TextIndexScanForEntity, hasFixedEntity, false)));
+  } else {
+    return RootOperation<::TextIndexScanForEntity>(AllOf(
+        AD_PROPERTY(::TextIndexScanForEntity, getResultWidth,
+                    Eq(2 + std::holds_alternative<Variable>(entity))),
+        AD_PROPERTY(::TextIndexScanForEntity, textRecordVar, Eq(textRecordVar)),
+        AD_PROPERTY(::TextIndexScanForEntity, fixedEntity,
+                    std::get<std::string>(entity)),
+        AD_PROPERTY(::TextIndexScanForEntity, word, word),
+        AD_PROPERTY(::TextIndexScanForEntity, hasFixedEntity, true)));
+  }
+};
+
 inline auto Bind = [](const QetMatcher& childMatcher,
                       std::string_view expression,
                       Variable target) -> QetMatcher {
@@ -102,6 +140,23 @@ inline auto Bind = [](const QetMatcher& childMatcher,
 inline auto NeutralElementOperation = []() {
   return RootOperation<::NeutralElementOperation>(
       An<const ::NeutralElementOperation&>());
+};
+
+// Matcher for a `CountAvailablePredicates` operation. The case of 0 children
+// means that it's a full scan.
+inline auto CountAvailablePredicates =
+    [](size_t subjectColumnIdx, const Variable& predicateVar,
+       const Variable& countVar,
+       const std::same_as<QetMatcher> auto&... childMatchers)
+        requires(sizeof...(childMatchers) <= 1) {
+  return RootOperation<::CountAvailablePredicates>(AllOf(
+      AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
+                  Eq(subjectColumnIdx)),
+      AD_PROPERTY(::CountAvailablePredicates, predicateVariable,
+                  Eq(predicateVar)),
+      AD_PROPERTY(::CountAvailablePredicates, countVariable, Eq(countVar)),
+      AD_PROPERTY(Operation, getChildren,
+                  ElementsAre(Pointee(childMatchers)...))));
 };
 
 // Same as above, but the subject, predicate, and object are passed in as

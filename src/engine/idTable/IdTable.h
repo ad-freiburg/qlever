@@ -124,7 +124,8 @@ class IdTable {
   static constexpr bool columnsAreAllocatable =
       std::is_constructible_v<ColumnStorage, size_t, Allocator>;
 
-  using value_type = T;
+  // The type of a single entry in a row.
+  using single_value_type = T;
   // Because of the column-major layout, the `row_type` (a value type that
   // stores the values of a  single row) and the `row_reference` (a type that
   // refers to a specific row of a specific `IdTable`) are different. They are
@@ -134,6 +135,11 @@ class IdTable {
   using row_type = Row<T, NumColumns>;
   using row_reference = RowReference<IdTable, ad_utility::IsConst::False>;
   using const_row_reference = RowReference<IdTable, ad_utility::IsConst::True>;
+
+  // This alias is required to make the `IdTable` class work with advanced GTest
+  // features, because GTest uses `Container::value_type` directly instead of
+  // using `std::iterator_traits`.
+  using value_type = row_type;
 
  private:
   // Assign shorter aliases for some types that are important for the correct
@@ -172,8 +178,9 @@ class IdTable {
   // Construct from the number of columns and an allocator. If `NumColumns != 0`
   // Then the argument `numColumns` and `NumColumns` (the static and the
   // dynamic number of columns) must be equal, else a runtime check fails.
+  // Note: this also allows to create an empty view.
   explicit IdTable(size_t numColumns, Allocator allocator = {})
-      requires(!isView && columnsAreAllocatable)
+      requires columnsAreAllocatable
       : numColumns_{numColumns}, allocator_{std::move(allocator)} {
     if constexpr (!isDynamic) {
       AD_CONTRACT_CHECK(NumColumns == numColumns);
@@ -525,13 +532,17 @@ class IdTable {
   // numColumns()` implies that the function applies a permutation to the table.
   // For example `setColumnSubset({1, 2, 0})` rotates the columns of a table
   // with three columns left by one element.
-  void setColumnSubset(std::span<const ColumnIndex> subset) requires isDynamic {
+  void setColumnSubset(std::span<const ColumnIndex> subset) {
     // First check that the `subset` is indeed a subset of the column
     // indices.
     std::vector<ColumnIndex> check{subset.begin(), subset.end()};
     std::ranges::sort(check);
     AD_CONTRACT_CHECK(std::unique(check.begin(), check.end()) == check.end());
     AD_CONTRACT_CHECK(!subset.empty() && subset.back() < numColumns());
+
+    // If the number of columns is statically fixed, then only a permutation of
+    // the columns and not a real subset is allowed.
+    AD_CONTRACT_CHECK(isDynamic || subset.size() == NumColumns);
 
     Data newData;
     newData.reserve(subset.size());

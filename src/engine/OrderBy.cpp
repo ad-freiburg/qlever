@@ -12,6 +12,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "global/ValueIdComparators.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________

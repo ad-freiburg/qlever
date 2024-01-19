@@ -67,8 +67,6 @@ class FileReadSerializer {
     }
   }
 
-  bool isExhausted() { return _file.isAtEof(); }
-
   void setSerializationPosition(SerializationPosition position) {
     _file.seek(static_cast<off_t>(position), SEEK_SET);
   }

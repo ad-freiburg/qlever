@@ -28,6 +28,8 @@
 #include "engine/OrderBy.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "engine/TextIndexScanForEntity.h"
+#include "engine/TextIndexScanForWord.h"
 #include "engine/TextOperationWithFilter.h"
 #include "engine/TextOperationWithoutFilter.h"
 #include "engine/TransitivePath.h"
@@ -176,6 +178,10 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     type_ = TEXT_WITH_FILTER;
   } else if constexpr (std::is_same_v<Op, TextOperationWithoutFilter>) {
     type_ = TEXT_WITHOUT_FILTER;
+  } else if constexpr (std::is_same_v<Op, TextIndexScanForWord>) {
+    type_ = TEXT_INDEX_SCAN_FOR_WORD;
+  } else if constexpr (std::is_same_v<Op, TextIndexScanForEntity>) {
+    type_ = TEXT_INDEX_SCAN_FOR_ENTITY;
   } else if constexpr (std::is_same_v<Op, CountAvailablePredicates>) {
     type_ = COUNT_AVAILABLE_PREDICATES;
   } else if constexpr (std::is_same_v<Op, Minus>) {
@@ -217,6 +223,10 @@ template void QueryExecutionTree::setOperation(
     std::shared_ptr<TextOperationWithFilter>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<TextOperationWithoutFilter>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<TextIndexScanForWord>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<TextIndexScanForEntity>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<CountAvailablePredicates>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Minus>);

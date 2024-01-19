@@ -196,8 +196,7 @@ class ResultTable : public BenchmarkMetadataGetter {
    Starts with `(0,0)`.
   @param functionToMeasure The function, which execution time will be measured.
   */
-  template <typename Function>
-  requires std::invocable<Function>
+  template <std::invocable Function>
   void addMeasurement(const size_t& row, const size_t& column,
                       const Function& functionToMeasure) {
     AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
@@ -227,8 +226,7 @@ class ResultTable : public BenchmarkMetadataGetter {
 
   @param row, column Which table entry to read. Starts with `(0,0)`.
   */
-  template <typename T>
-  requires ad_utility::isTypeContainedIn<T, EntryType>
+  template <ad_utility::SameAsAnyTypeIn<EntryType> T>
   T getEntry(const size_t row, const size_t column) const {
     AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
     static_assert(!ad_utility::isSimilar<T, std::monostate>);
@@ -327,8 +325,7 @@ class ResultGroup : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, who's execution time will be
   measured and saved.
   */
-  template <typename Function>
-  requires std::invocable<Function>
+  template <std::invocable Function>
   ResultEntry& addMeasurement(const std::string& descriptor,
                               const Function& functionToMeasure) {
     resultEntries_.push_back(ad_utility::make_copyable_unique<ResultEntry>(
@@ -375,8 +372,8 @@ class ResultGroup : public BenchmarkMetadataGetter {
 
  private:
   // The implementation for the general deletion of entries.
-  template <ad_utility::isTypeAnyOf<ResultEntry, ResultTable> T>
-  requires std::same_as<std::decay_t<T>, T> void deleteEntryImpl(T& entry);
+  template <ad_utility::SameAsAny<ResultEntry, ResultTable> T>
+  void deleteEntryImpl(T& entry);
 };
 
 }  // namespace ad_benchmark

@@ -43,7 +43,8 @@ Index makeTestIndex(const std::string& indexBasename,
                     std::optional<std::string> turtleInput = std::nullopt,
                     bool loadAllPermutations = true, bool usePatterns = true,
                     bool usePrefixCompression = true,
-                    ad_utility::MemorySize blocksizePermutations = 16_B);
+                    ad_utility::MemorySize blocksizePermutations = 16_B,
+                    bool createTextIndex = false);
 
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
@@ -53,7 +54,8 @@ QueryExecutionContext* getQec(
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,
     bool usePrefixCompression = true,
-    ad_utility::MemorySize blocksizePermutations = 16_B);
+    ad_utility::MemorySize blocksizePermutations = 16_B,
+    bool createTextIndex = false);
 
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the
