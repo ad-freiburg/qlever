@@ -14,7 +14,6 @@ class LiteralOrIriType {
   using LiteralOrIriVariant = std::variant<LiteralType, IriType>;
   LiteralOrIriVariant data;
 
-
   // Returns contained IriType object if available, throws exception otherwise
   IriType& getIriTypeObject();
   // Returns contained LiteralType object if available, throws exception

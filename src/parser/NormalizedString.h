@@ -11,10 +11,8 @@ struct NormalizedChar {
   char c_;
 };
 
-
 using NormalizedStringView = std::basic_string_view<NormalizedChar>;
 using NormalizedString = std::basic_string<NormalizedChar>;
-
 
 NormalizedString fromStringUnsafe(std::string_view input);
 NormalizedString normalizeFromLiteralContent(std::string_view literal);
