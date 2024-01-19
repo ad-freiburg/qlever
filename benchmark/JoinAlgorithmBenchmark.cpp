@@ -16,6 +16,7 @@
 #include <functional>
 #include <limits>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -195,6 +196,162 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 }
 
 /*
+@brief Create overlaps between the join columns of the IdTables until at least,
+by randomly choosing distinct elements from the join column of the smaller table
+and overiding all their occurrences in the join column with randomly choosen
+distinct elements from the join column of the bigger table.
+
+@param smallerTable The table, where distinct join column elements will be
+overwritten.
+@param biggerTable The table, where distinct join column elements will be copied
+from.
+@param probabilityToCreateOverlap The height of the probability for any distinct
+join column element of smallerTable to be overwritten by a random distinct join
+column element of biggerTable.
+@param randomSeed Seed for the random generators.
+
+@returns The number of new overlap matches created. That is, the amount
+of rows added to the result of a join operation with the two given tables.
+*/
+static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
+                                    const IdTableAndJoinColumn& biggerTable,
+                                    const size_t wantedNumNewOverlapMatches,
+                                    ad_utility::RandomSeed randomSeed) {
+  // For easier access.
+  auto smallerTableJoinColumnRef{
+      smallerTable->idTable.getColumn(smallerTable->joinColumn)};
+  const auto& biggerTableJoinColumnRef{
+      biggerTable.idTable.getColumn(biggerTable.joinColumn)};
+
+  // Is the bigger table actually bigger?
+  AD_CONTRACT_CHECK(smallerTableJoinColumnRef.size() <=
+                    biggerTableJoinColumnRef.size());
+
+  /*
+  All the distinct elements in the join columns. Needed, so that we can randomly
+  choose them with an uniform distribution.
+  */
+  using DistinctElementsVector =
+      std::vector<std::reference_wrapper<const ValueId>>;
+  DistinctElementsVector smallerTableJoinColumnDistinctElements;
+  DistinctElementsVector biggerTableJoinColumnDistinctElements;
+
+  // How many instances of a value are inside the join column of a table.
+  using NumOccurencesMap = ad_utility::HashMap<ValueId, size_t>;
+  NumOccurencesMap numOccurrencesValueInSmallerTableJoinColumn{};
+  NumOccurencesMap numOccurrencesValueInBiggerTableJoinColumn{};
+
+  // Collect the number of occurences and the distinct elements.
+  for (size_t idx = 0; idx < smallerTableJoinColumnRef.size() ||
+                       idx < biggerTableJoinColumnRef.size();
+       idx++) {
+    const auto loopBody =
+        [&idx](const std::span<const ValueId>& joinColumnReference,
+               DistinctElementsVector& distinctElementsVec,
+               NumOccurencesMap& numOccurrencesMap) {
+          // Only do anything, if the index is not to far yet.
+          if (idx < joinColumnReference.size()) {
+            const auto& id{joinColumnReference[idx]};
+
+            /*
+            Use the hash map of the occurrences, to keep track of, if we already
+            'encountered' a value.
+            */
+            if (auto numOccurrencesIterator = numOccurrencesMap.find(id);
+                numOccurrencesIterator != numOccurrencesMap.end()) {
+              (numOccurrencesIterator->second)++;
+            } else {
+              numOccurrencesMap.emplace(id, 0UL);
+              distinctElementsVec.emplace_back(id);
+            }
+          }
+        };
+    loopBody(smallerTableJoinColumnRef, smallerTableJoinColumnDistinctElements,
+             numOccurrencesValueInSmallerTableJoinColumn);
+    loopBody(biggerTableJoinColumnRef, biggerTableJoinColumnDistinctElements,
+             numOccurrencesValueInBiggerTableJoinColumn);
+  }
+
+  // Seeds for the random generators, so that things are less similiar.
+  const std::array<ad_utility::RandomSeed, 2> seeds =
+      createArrayOfRandomSeeds<2>(std::move(randomSeed));
+
+  /*
+  Creating the generator for choosing a random distinct join column element
+  in the bigger table.
+  */
+  ad_utility::SlowRandomIntGenerator<size_t> randomBiggerTableElement(
+      0, biggerTableJoinColumnDistinctElements.size() - 1, seeds.at(0));
+
+  /*
+  Assign distinct join column elements of the smaller table to be overwritten by
+  the bigger table, until we created enough new overlap matches.
+  */
+  randomShuffle(smallerTableJoinColumnDistinctElements.begin(),
+                smallerTableJoinColumnDistinctElements.end(), seeds.at(1));
+  size_t newOverlapMatches{0};
+  ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
+      smallerTableElementToNewValue{};
+  /*
+  In case, our smallest overshot is still closer to `wantedNumNewOverlapMatches`
+  than our biggest undershot.
+  First value is the smaller table value, second value the bigger table value
+  and the `size_t` is the number of new matches created, when replacing the
+  smaller table value with the bigger table value in the smaller table join
+  column.
+  */
+  std::optional<std::tuple<std::reference_wrapper<const ValueId>,
+                           std::reference_wrapper<const ValueId>, size_t>>
+      smallestOvershot;
+  ;
+  std::ranges::for_each(
+      smallerTableJoinColumnDistinctElements,
+      [&biggerTableJoinColumnDistinctElements, &randomBiggerTableElement,
+       &numOccurrencesValueInSmallerTableJoinColumn,
+       &numOccurrencesValueInBiggerTableJoinColumn, &wantedNumNewOverlapMatches,
+       &newOverlapMatches, &smallerTableElementToNewValue,
+       &smallestOvershot](const ValueId& smallerTableId) {
+        const auto& biggerTableId{biggerTableJoinColumnDistinctElements.at(
+            randomBiggerTableElement())};
+        const size_t overlapMatches{
+            numOccurrencesValueInSmallerTableJoinColumn.at(smallerTableId) *
+            numOccurrencesValueInBiggerTableJoinColumn.at(biggerTableId)};
+
+        // Just add as long as possible and always save the smallest overshot.
+        if (newOverlapMatches + overlapMatches <= wantedNumNewOverlapMatches) {
+          smallerTableElementToNewValue.emplace(smallerTableId, biggerTableId);
+          newOverlapMatches += overlapMatches;
+        } else if (!smallestOvershot.has_value() ||
+                   std::get<2>(smallestOvershot.value()) > overlapMatches) {
+          smallestOvershot.emplace(smallerTableId, biggerTableId,
+                                   overlapMatches);
+        }
+      });
+
+  // Add the smallest overshot, if it leaves us closer to the wanted amount of
+  // matches.
+  if (smallestOvershot.has_value() &&
+      (std::get<2>(smallestOvershot.value()) + newOverlapMatches) -
+              wantedNumNewOverlapMatches <
+          wantedNumNewOverlapMatches - newOverlapMatches) {
+    const auto& val{smallestOvershot.value()};
+    smallerTableElementToNewValue.emplace(std::get<0>(val), std::get<1>(val));
+    newOverlapMatches += std::get<2>(val);
+  }
+
+  // Overwrite the designated values in the smaller table.
+  std::ranges::for_each(
+      smallerTableJoinColumnRef, [&smallerTableElementToNewValue](auto& id) {
+        if (auto newValueIterator = smallerTableElementToNewValue.find(id);
+            newValueIterator != smallerTableElementToNewValue.end()) {
+          id = newValueIterator->second;
+        }
+      });
+
+  return newOverlapMatches;
+}
+
+/*
 The columns of the automaticly generated benchmark tables contain the following
 informations:
 - The parameter, that changes with every row.
@@ -340,6 +497,7 @@ struct ConfigVariables {
   float biggerTableJoinColumnSampleSizeRatio_;
   size_t minRatioRows_;
   size_t maxRatioRows_;
+  std::vector<float> benchmarkSampleSizeRatios_;
 
   /*
   The max time for a single measurement and the max memory, that a single
@@ -522,6 +680,19 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "allowed to take. `0` for unlimited time. Note: This can only be "
         "checked, after a measurement was taken.",
         &configVariables_.maxTimeSingleMeasurement_, 0.f);
+
+    decltype(auto) benchmarkSampleSizeRatios = config.addOption(
+        "benchmarkSampleSizeRatios",
+        "The sample size ratios for the benchmark class `Benchmarktables, "
+        "where only the sample size ratio changes.`, where the sample size "
+        "ratio for the smaller and bigger table are set to every element "
+        "combination in the cartesian product of this set with itself. "
+        "Example: For `{1.0, 2.0}` we would set both sample size ratios to "
+        "`1.0`, to `2.0`, the smaller table sample size ratio to `1.0` and the "
+        "bigger table sample size ratio to `2.0`, and the smaller table sample "
+        "size ratio to `2.0` and the bigger table sample size ratio to `1.0`.",
+        &configVariables_.benchmarkSampleSizeRatios_,
+        std::vector{0.1f, 1.f, 10.f});
 
     // Helper function for generating lambdas for validators.
 
@@ -712,6 +883,41 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             "'", biggerTableSampleSizeRatio.getConfigOption().getIdentifier(),
             "' must be bigger than 0."),
         biggerTableSampleSizeRatio);
+    config.addValidator(
+        [](const std::vector<float>& vec) {
+          return std::ranges::all_of(
+              vec, [](const float ratio) { return ratio >= 0.f; });
+        },
+        absl::StrCat(
+            "All entries in '",
+            benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
+            "' must be bigger than, or equal to, 0."),
+        absl::StrCat(
+            "All entries in '",
+            benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
+            "' must be bigger than, or equal to, 0."),
+        benchmarkSampleSizeRatios);
+
+    /*
+    We later signal, that the row generation for the sample size ration tables
+    should be stopped, by returning a float, that is the biggest entry in the
+    vector plus 1.
+    So, of course, that has to be possible.
+    */
+    config.addValidator(
+        [](const std::vector<float>& vec) {
+          return std::ranges::max(vec) <=
+                 std::numeric_limits<float>::max() - 1.f;
+        },
+        absl::StrCat(
+            "All entries in '",
+            benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
+            "' must be bigger than, or equal to, 0."),
+        absl::StrCat(
+            "All entries in '",
+            benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
+            "' must be bigger than, or equal to, 0."),
+        benchmarkSampleSizeRatios);
 
     /*
     Is `randomSeed_` smaller/equal than the max value for seeds?
@@ -792,13 +998,6 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   void addDefaultMetadata(BenchmarkMetadata* meta) const {
     // Information, that is interesting for all the benchmarking classes.
     meta->addKeyValuePair("dateOfCreation", dateOfCreation_);
-    meta->addKeyValuePair(
-        "smallerTableJoinColumnSampleSizeRatio",
-        getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
-    meta->addKeyValuePair(
-        "biggerTableJoinColumnSampleSizeRatio",
-        getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
-    meta->addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
     meta->addKeyValuePair("randomSeed",
                           getConfigVariables().randomSeed().get());
     meta->addKeyValuePair("smallerTableNumColumns",
@@ -825,8 +1024,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                      getConfigVariables().maxMemory().value_or(0_B).getBytes());
   }
 
-  // A default `stopFunction` for ``, that takes everything and always returns
-  // false.
+  // A default `stopFunction` for `makeGrowingBenchmarkTable`, that takes
+  // everything and always returns false.
   static constexpr auto alwaysFalse = [](const auto&...) { return false; };
 
   /*
@@ -869,6 +1068,11 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   stopped.
   @param overlap The height of the probability for any join column entry of
   smallerTable to be overwritten by a random join column entry of biggerTable.
+  @param resultTableNumRows How many rows the result of joining the two
+  generated tables should have. The function argument `overlap` will be ignored,
+  if a value for this parameter was given. Note: The actual result table size
+  will be as close as possible to the wanted size, but it can not be guaranteed
+  to be exactly the same.
   @param randomSeed Seed for the random generators.
   @param smallerTableSorted, biggerTableSorted Should the bigger/smaller table
   be sorted by his join column before being joined? More specificly, some
@@ -902,6 +1106,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   ResultTable& makeGrowingBenchmarkTable(
       BenchmarkResults* results, const std::string_view tableDescriptor,
       std::string parameterName, StopFunction stopFunction, const T1& overlap,
+      std::optional<size_t> resultTableNumRows,
       ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
       const bool biggerTableSorted, const T2& ratioRows,
       const T3& smallerTableNumRows, const T4& smallerTableNumColumns,
@@ -1017,10 +1222,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       A partly filled row is of no use to anyone.
       */
       if (!addMeasurementsToRowOfBenchmarkTable(
-              &table, rowIdx, overlapValue, std::invoke(seedGenerator),
-              smallerTableSorted, biggerTableSorted, ratioRowsValue,
-              smallerTableNumRowsValue, smallerTableNumColumnsValue,
-              biggerTableNumColumnsValue,
+              &table, rowIdx, overlapValue, resultTableNumRows,
+              std::invoke(seedGenerator), smallerTableSorted, biggerTableSorted,
+              ratioRowsValue, smallerTableNumRowsValue,
+              smallerTableNumColumnsValue, biggerTableNumColumnsValue,
               smallerTableJoinColumnSampleSizeRatioValue,
               biggerTableJoinColumnSampleSizeRatioValue)) {
         table.deleteRow(rowIdx);
@@ -1065,6 +1270,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   */
   bool addMeasurementsToRowOfBenchmarkTable(
       ResultTable* table, const size_t& rowIdx, const float overlap,
+      std::optional<size_t> resultTableNumRows,
       ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
       const bool biggerTableSorted, const size_t& ratioRows,
       const size_t& smallerTableNumRows, const size_t& smallerTableNumColumns,
@@ -1243,7 +1449,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     Note: The value for `numRowsOfResult` is correct, because the content of
     the `IdTable`s is disjunct.
     */
-    if (overlap > 0) {
+    if (resultTableNumRows.has_value()) {
+      numRowsOfResult = createOverlapRandomly(
+          &smallerTable, biggerTable, resultTableNumRows.value(), seeds.at(4));
+    } else if (overlap > 0) {
       numRowsOfResult = createOverlapRandomly(&smallerTable, biggerTable,
                                               overlap, seeds.at(4));
     }
@@ -1373,7 +1582,7 @@ class BmOnlyBiggerTableSizeChanges final
 
         ResultTable& table = makeGrowingBenchmarkTable(
             &results, tableName, "Row ratio", alwaysFalse,
-            getConfigVariables().overlapChance_,
+            getConfigVariables().overlapChance_, std::nullopt,
             getConfigVariables().randomSeed(), smallerTableSorted,
             biggerTableSorted, growthFunction,
             getConfigVariables().smallerTableNumRows_,
@@ -1398,6 +1607,13 @@ class BmOnlyBiggerTableSizeChanges final
     meta.addKeyValuePair("Value changing with every row", "ratioRows");
     meta.addKeyValuePair("smallerTableNumRows",
                          getConfigVariables().smallerTableNumRows_);
+    meta.addKeyValuePair(
+        "smallerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
+    meta.addKeyValuePair(
+        "biggerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
+    meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
     GeneralInterfaceImplementation::addDefaultMetadata(&meta);
     return meta;
   }
@@ -1435,7 +1651,7 @@ class BmOnlySmallerTableSizeChanges final
 
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Amount of rows in the smaller table",
-              alwaysFalse, getConfigVariables().overlapChance_,
+              alwaysFalse, getConfigVariables().overlapChance_, std::nullopt,
               getConfigVariables().randomSeed(), smallerTableSorted,
               biggerTableSorted, ratioRows, growthFunction,
               getConfigVariables().smallerTableNumColumns_,
@@ -1459,6 +1675,13 @@ class BmOnlySmallerTableSizeChanges final
     BenchmarkMetadata meta{};
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableNumRows");
+    meta.addKeyValuePair(
+        "smallerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
+    meta.addKeyValuePair(
+        "biggerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
+    meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
     GeneralInterfaceImplementation::addDefaultMetadata(&meta);
     return meta;
   }
@@ -1490,7 +1713,7 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
         ResultTable& table = makeGrowingBenchmarkTable(
             &results, tableName, "Amount of rows", alwaysFalse,
-            getConfigVariables().overlapChance_,
+            getConfigVariables().overlapChance_, std::nullopt,
             getConfigVariables().randomSeed(), smallerTableSorted,
             biggerTableSorted, 1UL, growthFunction,
             getConfigVariables().smallerTableNumColumns_,
@@ -1514,6 +1737,112 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableNumRows");
     meta.addKeyValuePair("ratioRows", 1);
+    meta.addKeyValuePair(
+        "smallerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
+    meta.addKeyValuePair(
+        "biggerTableJoinColumnSampleSizeRatio",
+        getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
+    meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
+    GeneralInterfaceImplementation::addDefaultMetadata(&meta);
+    return meta;
+  }
+};
+
+// Create benchmark tables, where the tables are the same size and
+// both just get more rows.
+class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
+  // For easier metadata transcription.
+  size_t ratioRows_;
+  size_t smallerTableNumRows_;
+
+  // The wanted size of the result table.
+  size_t sizeResult_;
+
+ public:
+  std::string name() const override {
+    return "Benchmarktables, where only the sample size ratio changes.";
+  }
+
+  BenchmarkResults runAllBenchmarks() override {
+    BenchmarkResults results{};
+    const auto& ratios{getConfigVariables().benchmarkSampleSizeRatios_};
+    const float maxSampleSizeRatio{std::ranges::max(ratios)};
+    const float minSampleSizeRatio{std::ranges::min(ratios)};
+
+    /*
+    We work with the biggest possible smaller and bigger table. That should make
+    any difference in execution time easier to find.
+    */
+    ratioRows_ = getConfigVariables().minRatioRows_;
+    smallerTableNumRows_ = getConfigVariables().maxBiggerTableRows_ /
+                           getConfigVariables().minRatioRows_;
+
+    /*
+    Growth function. Simply walks through the sample size ratios, until it runs
+    out of them. Then it returns the biggest sample size ratio plus 1.
+    */
+    const auto growthFunction = [&ratios,
+                                 &maxSampleSizeRatio](const size_t& rowIdx) {
+      if (rowIdx < ratios.size()) {
+        return ratios.at(rowIdx);
+      } else {
+        return maxSampleSizeRatio + 1.f;
+      }
+    };
+
+    // Stop, if we run out of sample size ratios.
+    const auto stopFunction = [&maxSampleSizeRatio](
+                                  float, size_t, size_t, size_t, size_t,
+                                  float smallerTableJoinColumnSampleSizeRatio,
+                                  float biggerTableJoinColumnSampleSizeRatio) {
+      return !(smallerTableJoinColumnSampleSizeRatio <= maxSampleSizeRatio &&
+               biggerTableJoinColumnSampleSizeRatio <= maxSampleSizeRatio);
+    };
+
+    // TODO Calculate a better number. Maybe the Erwartungswert?
+    sizeResult_ = getConfigVariables().maxBiggerTableRows_ * 2;
+
+    // Making a benchmark table for all combination of IdTables being sorted.
+    for (const bool smallerTableSorted : {false, true}) {
+      for (const bool biggerTableSorted : {false, true}) {
+        for (const float smallerTableSampleSizeRatio : ratios) {
+          const std::string& tableName = absl::StrCat(
+              "Tables, where the sample size ratio of the smaller table is ",
+              smallerTableSampleSizeRatio,
+              " and the sample size ratio for the bigger table changes.");
+          ResultTable& table = makeGrowingBenchmarkTable(
+              &results, tableName, "Bigger table sample size ratio",
+              stopFunction, getConfigVariables().overlapChance_, sizeResult_,
+              getConfigVariables().randomSeed(), smallerTableSorted,
+              biggerTableSorted, ratioRows_, smallerTableNumRows_,
+              getConfigVariables().smallerTableNumColumns_,
+              getConfigVariables().biggerTableNumColumns_,
+              smallerTableSampleSizeRatio, growthFunction);
+
+          // Add the metadata, that changes with every call and can't be
+          // generalized.
+          BenchmarkMetadata& meta = table.metadata();
+          meta.addKeyValuePair("smallerTableSorted", smallerTableSorted);
+          meta.addKeyValuePair("biggerTableSorted", biggerTableSorted);
+          meta.addKeyValuePair("smallerTableJoinColumnSampleSizeRatio",
+                               smallerTableSampleSizeRatio);
+        }
+      }
+    }
+
+    return results;
+  }
+
+  BenchmarkMetadata getMetadata() const override {
+    BenchmarkMetadata meta{};
+    meta.addKeyValuePair("Value changing with every row",
+                         "biggerTableJoinColumnSampleSizeRatio");
+    meta.addKeyValuePair("ratioRows", ratioRows_);
+    meta.addKeyValuePair("smallerTableNumRows", smallerTableNumRows_);
+    meta.addKeyValuePair("wantesResultTableSize", sizeResult_);
+    meta.addKeyValuePair("benchmarkSampleSizeRatios",
+                         getConfigVariables().benchmarkSampleSizeRatios_);
     GeneralInterfaceImplementation::addDefaultMetadata(&meta);
     return meta;
   }
@@ -1523,4 +1852,5 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 AD_REGISTER_BENCHMARK(BmSameSizeRowGrowth);
 AD_REGISTER_BENCHMARK(BmOnlySmallerTableSizeChanges);
 AD_REGISTER_BENCHMARK(BmOnlyBiggerTableSizeChanges);
+AD_REGISTER_BENCHMARK(BmSampleSizeRatio);
 }  // namespace ad_benchmark
