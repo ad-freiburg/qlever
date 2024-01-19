@@ -35,6 +35,22 @@ struct IdTableAndJoinColumn {
   size_t joinColumn;
 };
 
+// Implementation of a class that inherits from `IdTable` but is copyable
+// (convenient for testing).
+template <size_t N = 0>
+using TableImpl = std::conditional_t<N == 0, IdTable, IdTableStatic<N>>;
+template <size_t N = 0>
+class CopyableIdTable : public TableImpl<N> {
+ public:
+  using Base = TableImpl<N>;
+  using Base::Base;
+  CopyableIdTable(const CopyableIdTable& rhs) : Base{rhs.clone()} {}
+  CopyableIdTable& operator=(const CopyableIdTable& rhs) {
+    static_cast<Base&>(*this) = rhs.clone();
+    return *this;
+  }
+};
+
 // For easier reading. We repeat that type combination so often, that this
 // will make things a lot easier in terms of reading and writing.
 using IntOrId = std::variant<int64_t, Id>;

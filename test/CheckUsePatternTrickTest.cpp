@@ -258,27 +258,63 @@ TEST(CheckUsePatternTrick, checkUsePatternTrick) {
 }
 
 TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
-  auto pq = SparqlParser::parseQuery(
-      "SELECT ?p WHERE {?x ql:has-predicate ?p} GROUP BY ?p");
-  auto patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
-  ASSERT_TRUE(patternTrickTuple.has_value());
-  // The pattern trick triple has been removed from the query.
-  const auto& triples = std::get<parsedQuery::BasicGraphPattern>(
-                            pq._rootGraphPattern._graphPatterns.at(0))
-                            ._triples;
-  ASSERT_TRUE(triples.empty());
+  using namespace ::testing;
+  {
+    auto pq = SparqlParser::parseQuery(
+        "SELECT ?p WHERE {?x ql:has-predicate ?p} GROUP BY ?p");
+    auto patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
+    ASSERT_TRUE(patternTrickTuple.has_value());
+    // The triple `?x ql:has-predicate ?p` has been replaced by
+    // `?x ql:has-pattern ?p`.
+    const auto& triples = std::get<parsedQuery::BasicGraphPattern>(
+                              pq._rootGraphPattern._graphPatterns.at(0))
+                              ._triples;
+    ASSERT_EQ(triples.size(), 1u);
+    const auto& triple = triples[0];
+    EXPECT_EQ(triple._s.getVariable().name(), "?x");
+    EXPECT_EQ(triple._p.asString(), HAS_PATTERN_PREDICATE);
+    EXPECT_EQ(triple._o.getVariable().name(), "?p");
+  }
 
-  pq = SparqlParser::parseQuery(
-      "SELECT ?p WHERE {?x ql:has-predicate ?p . ?x <is-a> ?y } GROUP BY ?p");
-  patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
-  ASSERT_TRUE(patternTrickTuple.has_value());
-  // The pattern trick triple has been removed from the query.,
-  const auto& triples2 = std::get<parsedQuery::BasicGraphPattern>(
-                             pq._rootGraphPattern._graphPatterns.at(0))
-                             ._triples;
-  ASSERT_EQ(triples2.size(), 1u);
-  const auto& triple = triples2[0];
-  ASSERT_EQ(triple._s.getVariable().name(), "?x");
-  ASSERT_EQ(triple._p.asString(), "<is-a>");
-  ASSERT_EQ(triple._o.getVariable().name(), "?y");
+  {
+    auto pq = SparqlParser::parseQuery(
+        "SELECT ?p WHERE {?x ql:has-predicate ?p . ?x <is-a> ?y } GROUP BY ?p");
+    auto patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
+    ASSERT_TRUE(patternTrickTuple.has_value());
+    // The triple `?x ql:has-predicate ?p` has been removed from the query, but
+    // an additional scan column for the pattern of the subject has been added
+    // to the `?x <is-a> ?y` triple.
+    const auto& triples = std::get<parsedQuery::BasicGraphPattern>(
+                              pq._rootGraphPattern._graphPatterns.at(0))
+                              ._triples;
+    ASSERT_EQ(triples.size(), 1u);
+    const auto& triple = triples[0];
+    EXPECT_EQ(triple._s.getVariable().name(), "?x");
+    EXPECT_EQ(triple._p.asString(), "<is-a>");
+    EXPECT_EQ(triple._o.getVariable().name(), "?y");
+    EXPECT_THAT(triple._additionalScanColumns,
+                ElementsAre(std::pair{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
+                                      Variable{"?p"}}));
+  }
+
+  {
+    auto pq = SparqlParser::parseQuery(
+        "SELECT ?p WHERE {?x ql:has-predicate ?p . ?y <is-a> ?x } GROUP BY ?p");
+    auto patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
+    ASSERT_TRUE(patternTrickTuple.has_value());
+    // The triple `?x ql:has-predicate ?p` has been removed from the query, but
+    // an additional scan column for the pattern of the object has been added to
+    // the `?y <is-a> ?x` triple.
+    const auto& triples = std::get<parsedQuery::BasicGraphPattern>(
+                              pq._rootGraphPattern._graphPatterns.at(0))
+                              ._triples;
+    ASSERT_EQ(triples.size(), 1u);
+    const auto& triple = triples[0];
+    EXPECT_EQ(triple._s.getVariable().name(), "?y");
+    EXPECT_EQ(triple._p.asString(), "<is-a>");
+    EXPECT_EQ(triple._o.getVariable().name(), "?x");
+    EXPECT_THAT(triple._additionalScanColumns,
+                ElementsAre(std::pair{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN,
+                                      Variable{"?p"}}));
+  }
 }

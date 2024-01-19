@@ -187,20 +187,20 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
     // caught by the `processQuery` method, where the error message will be
     // printed *and* included in an error response sent to the client.
     LOG(ERROR) << "Waited for a result from another thread which then failed"
-               << endl;
+               << std::endl;
     LOG(DEBUG) << getCacheKey();
     throw ad_utility::AbortException(e);
   } catch (const std::exception& e) {
     // We are in the innermost level of the exception, so print
-    LOG(ERROR) << "Aborted Operation" << endl;
-    LOG(DEBUG) << getCacheKey() << endl;
+    LOG(ERROR) << "Aborted Operation" << std::endl;
+    LOG(DEBUG) << getCacheKey() << std::endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(e);
   } catch (...) {
     // We are in the innermost level of the exception, so print
-    LOG(ERROR) << "Aborted Operation" << endl;
-    LOG(DEBUG) << getCacheKey() << endl;
+    LOG(ERROR) << "Aborted Operation" << std::endl;
+    LOG(DEBUG) << getCacheKey() << std::endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(

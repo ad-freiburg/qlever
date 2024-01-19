@@ -7,7 +7,7 @@ add_subdirectory(util)
 # general test utilities and all libraries that are specified as additional
 # arguments.
 function (linkTest basename)
-    qlever_target_link_libraries(${basename} ${ARGN} gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
 
 # Add the exectutable ${basename} that is compiled from the source file
@@ -224,9 +224,6 @@ addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 addLinkAndDiscoverTest(VocabularyTest index)
 
 addLinkAndDiscoverTest(IteratorTest)
-
-# Here we also seem to have race conditions on the tests
-addLinkAndDiscoverTestSerial(PatternCreatorTest index)
 
 # Stxxl currently always uses a file ./-stxxl.disk for all indices, which
 # makes it impossible to run the test cases for the Index class in parallel.
