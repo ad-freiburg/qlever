@@ -7,7 +7,6 @@
 #include "./IndexImpl.h"
 
 #include <algorithm>
-#include <cmath>
 #include <cstdio>
 #include <future>
 #include <optional>
@@ -23,7 +22,6 @@
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/Serializer/FileSerializer.h"
@@ -841,23 +839,6 @@ size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
   throwExceptionIfNoPatterns();
   return numDistinctSubjectPredicatePairs_;
 }
-
-// _____________________________________________________________________________
-template <class T>
-void IndexImpl::writeAsciiListFile(const string& filename, const T& ids) const {
-  std::ofstream f(filename);
-
-  for (size_t i = 0; i < ids.size(); ++i) {
-    f << ids[i] << ' ';
-  }
-  f.close();
-}
-
-template void IndexImpl::writeAsciiListFile<vector<Id>>(
-    const string& filename, const vector<Id>& ids) const;
-
-template void IndexImpl::writeAsciiListFile<vector<Score>>(
-    const string& filename, const vector<Score>& ids) const;
 
 // _____________________________________________________________________________
 bool IndexImpl::isLiteral(const string& object) const {
