@@ -267,6 +267,9 @@ const std::string& Index::getTextName() const { return pimpl_->getTextName(); }
 const std::string& Index::getKbName() const { return pimpl_->getKbName(); }
 
 // ____________________________________________________________________________
+const std::string& Index::getIndexId() const { return pimpl_->getIndexId(); }
+
+// ____________________________________________________________________________
 Index::NumNormalAndInternal Index::numTriples() const {
   return pimpl_->numTriples();
 }
