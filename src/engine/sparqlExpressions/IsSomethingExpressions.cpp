@@ -39,14 +39,20 @@ inline const auto isIriImpl = [](std::optional<std::string> arg) {
 using isIriExpression = NARY<1, FV<decltype(isIriImpl), StringValueGetterRaw>>;
 
 // isBlank
-inline const auto isBlankImpl = [](std::optional<std::string> arg) {
-  LOG(DEBUG) << "isBlankImpl called with "
-             << (arg.has_value() ? arg.value() : "std::nullopt") << std::endl;
-  return Id::makeFromBool(arg.has_value() && arg.value().size() > 1 &&
-                          arg.value().front() == '_');
+inline const auto isBlankImpl = [](bool isBlankNode) {
+  return Id::makeFromBool(isBlankNode);
 };
 using isBlankExpression =
-    NARY<1, FV<decltype(isBlankImpl), StringValueGetterRaw>>;
+    NARY<1, FV<decltype(isBlankImpl), IsBlankNodeValueGetter>>;
+// inline const auto isBlankImpl = [](std::optional<std::string> arg) {
+//   LOG(DEBUG) << "isBlankImpl called with "
+//              << (arg.has_value() ? arg.value() : "std::nullopt") <<
+//              std::endl;
+//   return Id::makeFromBool(arg.has_value() && arg.value().size() > 1 &&
+//                           arg.value().front() == '_');
+// };
+// using isBlankExpression =
+//     NARY<1, FV<decltype(isBlankImpl), StringValueGetterRaw>>;
 
 // isLiteral
 inline const auto isLiteralImpl = [](std::optional<std::string> arg) {

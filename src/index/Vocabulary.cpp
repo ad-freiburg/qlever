@@ -1,22 +1,23 @@
-// Copyright 2011, University of Freiburg,
+// Copyright 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchholb>,
-//          Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+// Authors: Björn Buchhold <buchhold@gmail.com>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "./Vocabulary.h"
+#include "index/Vocabulary.h"
 
 #include <fstream>
 #include <iostream>
 
-#include "../parser/RdfEscaping.h"
-#include "../parser/Tokenizer.h"
-#include "../util/BatchedPipeline.h"
-#include "../util/File.h"
-#include "../util/HashMap.h"
-#include "../util/HashSet.h"
-#include "../util/Serializer/FileSerializer.h"
-#include "../util/json.h"
-#include "./ConstantsIndexBuilding.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "parser/RdfEscaping.h"
+#include "parser/Tokenizer.h"
+#include "util/BatchedPipeline.h"
+#include "util/File.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/json.h"
 
 using std::string;
 
@@ -45,6 +46,30 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName,
     LOG(INFO) << "Number of words in external vocabulary: "
               << externalVocabulary_.size() << std::endl;
   }
+
+  LOG(INFO) << "Computing ranges for IRIs, blank nodes, and literals ..."
+            << std::endl;
+  prefixIdRangesIRIs_.set("<", internalVocabulary_, externalVocabulary_);
+  prefixIdRangesBlankNodes_.set("_:", internalVocabulary_, externalVocabulary_);
+  prefixIdRangesLiterals_.set("\"", internalVocabulary_, externalVocabulary_);
+
+  // For debugging purposes, let's show the word ranges.
+  // LOG(INFO) << "Ranges for IRIs (indexes): " <<
+  // prefixIdRangesIRIs_.toString()
+  //           << std::endl;
+  // LOG(INFO) << "Ranges for blank nodes (indexes): "
+  //           << prefixIdRangesBlankNodes_.toString() << std::endl;
+  // LOG(INFO) << "Ranges for literals (indexes): "
+  //           << prefixIdRangesLiterals_.toString() << std::endl;
+  auto getWordFunction = [this](auto index) {
+    return this->indexToOptionalString(index).value_or("NOT_IN_VOCAB");
+  };
+  LOG(INFO) << "Ranges for IRIs: "
+            << prefixIdRangesIRIs_.toString(getWordFunction) << std::endl;
+  LOG(INFO) << "Ranges for blank nodes: "
+            << prefixIdRangesBlankNodes_.toString(getWordFunction) << std::endl;
+  LOG(INFO) << "Ranges for literals: "
+            << prefixIdRangesLiterals_.toString(getWordFunction) << std::endl;
 }
 
 // _____________________________________________________________________________

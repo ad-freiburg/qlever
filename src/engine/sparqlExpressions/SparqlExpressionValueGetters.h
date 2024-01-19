@@ -127,6 +127,26 @@ struct StringValueGetterImpl {
 using StringValueGetter = StringValueGetterImpl<true>;
 using StringValueGetterRaw = StringValueGetterImpl<false>;
 
+// Return true iff the value is a blank node.
+//
+// TODO: How to have analogous value gettters for isIRI and isLiteral without
+// code duplication?
+struct IsBlankNodeValueGetter {
+  bool operator()(ValueId id, const EvaluationContext* context) const {
+    return id.getDatatype() == Datatype::VocabIndex &&
+           context->_qec.getIndex()
+               .getVocab()
+               .prefixIdRangesBlankNodes_.contains(id.getVocabIndex());
+  }
+  bool operator()(const std::string& s, const EvaluationContext*) const {
+    return s.starts_with("_:");
+  }
+  bool operator()(IdOrString s, const EvaluationContext* ctx) const {
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
+  }
+};
+
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a `std::optional<DateOrLargeYear>`.
 struct DateValueGetter {
