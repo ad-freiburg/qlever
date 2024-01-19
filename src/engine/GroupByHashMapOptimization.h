@@ -8,25 +8,31 @@
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
+// _____________________________________________________________________________
+static constexpr auto numericValueAdder =
+    []<typename T>(T value, double& sum, [[maybe_unused]] bool& error)
+        requires std::is_arithmetic_v<T> { sum += static_cast<double>(value); };
+static constexpr auto nonNumericValueAdder =
+    [](sparqlExpression::detail::NotNumeric, [[maybe_unused]] double& sum,
+       bool& error) { error = true; };
+static constexpr auto valueAdder =
+    ad_utility::OverloadCallOperator(numericValueAdder, nonNumericValueAdder);
+
+// Data to perform the AVG aggregation using the HashMap optimization.
 struct AvgAggregationData {
   using ValueGetter = sparqlExpression::detail::NumericValueGetter;
   bool error_ = false;
   double sum_ = 0;
   int64_t count_ = 0;
+
+  // _____________________________________________________________________________
   void addValue(auto&& value, const sparqlExpression::EvaluationContext* ctx) {
     auto val = ValueGetter{}(AD_FWD(value), ctx);
-    auto intValueAdder = [this](int64_t intValue) {
-      sum_ += static_cast<double>(intValue);
-    };
-    auto doubleValueAdder = [this](double doubleValue) { sum_ += doubleValue; };
-    auto notNumericAdder = [this](sparqlExpression::detail::NotNumeric) {
-      error_ = true;
-    };
-    std::visit(ad_utility::OverloadCallOperator(intValueAdder, doubleValueAdder,
-                                                notNumericAdder),
-               val);
+    std::visit([this](auto val) { valueAdder(val, sum_, error_); }, val);
     count_++;
   };
+
+  // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
       [[maybe_unused]] const LocalVocab* localVocab) const {
     if (error_)
@@ -40,9 +46,13 @@ struct AvgAggregationData {
 struct CountAggregationData {
   using ValueGetter = sparqlExpression::detail::IsValidValueGetter;
   int64_t count_ = 0;
+
+  // _____________________________________________________________________________
   void addValue(auto&& value, const sparqlExpression::EvaluationContext* ctx) {
     if (ValueGetter{}(AD_FWD(value), ctx)) count_++;
   }
+
+  // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
       [[maybe_unused]] const LocalVocab* localVocab) const {
     return ValueId::makeFromInt(count_);
@@ -53,6 +63,8 @@ struct CountAggregationData {
 template <valueIdComparators::Comparison Comp>
 struct ExtremumAggregationData {
   sparqlExpression::IdOrString currentValue_ = ValueId::makeUndefined();
+
+  // _____________________________________________________________________________
   void addValue(const sparqlExpression::IdOrString& value,
                 const sparqlExpression::EvaluationContext* ctx) {
     if (auto val = std::get_if<ValueId>(&currentValue_);
@@ -68,6 +80,8 @@ struct ExtremumAggregationData {
     };
     if (std::visit(impl, value, currentValue_)) currentValue_ = value;
   }
+
+  // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
     auto valueIdResultGetter = [](ValueId id) { return id; };
     auto stringResultGetter = [localVocab](const std::string& str) {
@@ -90,19 +104,14 @@ struct SumAggregationData {
   using ValueGetter = sparqlExpression::detail::NumericValueGetter;
   bool error_ = false;
   double sum_ = 0;
+
+  // _____________________________________________________________________________
   void addValue(auto&& value, const sparqlExpression::EvaluationContext* ctx) {
     auto val = ValueGetter{}(AD_FWD(value), ctx);
-    auto intValueAdder = [this](int64_t intValue) {
-      sum_ += static_cast<double>(intValue);
-    };
-    auto doubleValueAdder = [this](double doubleValue) { sum_ += doubleValue; };
-    auto notNumericAdder = [this](sparqlExpression::detail::NotNumeric) {
-      error_ = true;
-    };
-    std::visit(ad_utility::OverloadCallOperator(intValueAdder, doubleValueAdder,
-                                                notNumericAdder),
-               val);
+    std::visit([this](auto val) { valueAdder(val, sum_, error_); }, val);
   };
+
+  // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
       [[maybe_unused]] const LocalVocab* localVocab) const {
     if (error_)
@@ -117,6 +126,8 @@ struct GroupConcatAggregationData {
   using ValueGetter = sparqlExpression::detail::StringValueGetter;
   std::string currentValue_;
   std::string separator_;
+
+  // _____________________________________________________________________________
   void addValue(auto&& value, const sparqlExpression::EvaluationContext* ctx) {
     auto val = ValueGetter{}(AD_FWD(value), ctx);
     if (val.has_value()) {
@@ -124,12 +135,15 @@ struct GroupConcatAggregationData {
       currentValue_.append(val.value());
     }
   }
+
+  // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
     auto localVocabIndex =
         localVocab->getIndexAndAddIfNotContained(currentValue_);
     return ValueId::makeFromLocalVocabIndex(localVocabIndex);
   }
 
+  // _____________________________________________________________________________
   explicit GroupConcatAggregationData(std::string separator)
       : separator_{std::move(separator)} {
     currentValue_.reserve(20000);

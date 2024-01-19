@@ -991,8 +991,8 @@ std::vector<size_t> GroupBy::HashMapAggregationData::getHashEntries(
       []<SupportedAggregates T>(
           T& arg, size_t numberOfGroups,
           [[maybe_unused]] const GroupBy::HashMapAggregateTypeWithData& info) {
-        if constexpr (std::same_as<T, sparqlExpression::VectorWithMemoryLimit<
-                                          GroupConcatAggregationData>>) {
+        if constexpr (std::same_as<typename T::value_type,
+                                   GroupConcatAggregationData>) {
           arg.resize(numberOfGroups,
                      GroupConcatAggregationData{info.separator_.value()});
         } else {
