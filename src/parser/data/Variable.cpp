@@ -2,13 +2,14 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include "parser/data/Variable.h"
+
 #include <ctre-unicode.hpp>
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "index/Index.h"
 #include "parser/data/ConstructQueryExportContext.h"
-#include "parser/data/Variable.h"
 
 // ___________________________________________________________________________
 Variable::Variable(std::string name) : _name{std::move(name)} {
@@ -51,11 +52,6 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
     }
   }
   return std::nullopt;
-}
-
-// _____________________________________________________________________________
-Variable Variable::getTextScoreVariable() const {
-  return Variable{absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, name().substr(1))};
 }
 
 // _____________________________________________________________________________
