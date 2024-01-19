@@ -47,4 +47,6 @@ class LiteralOrIriType {
   // Returns the datatype of the contained LiteralType, throws exception if no
   // LiteralType object is contained or object has no datatype
   NormalizedStringView getDatatype();
+
+  static LiteralOrIriType fromStringToLiteralOrIri(std::string_view input);
 };

@@ -4,6 +4,8 @@
 
 #include "LiteralOrIriType.h"
 
+#include <algorithm>
+
 LiteralOrIriType::LiteralOrIriType(IriType data) : data(data) {}
 LiteralOrIriType::LiteralOrIriType(LiteralType data) : data(data) {}
 
@@ -61,4 +63,64 @@ NormalizedStringView LiteralOrIriType::getLanguageTag() {
 NormalizedStringView LiteralOrIriType::getDatatype() {
   LiteralType& literal = getLiteralTypeObject();
   return literal.getDatatype();
+}
+
+LiteralOrIriType fromStringToLiteral(std::string_view input,
+                                     std::string_view c) {
+  auto pos = input.find(c, c.length());
+  if (pos == 1) {
+    AD_THROW("Cannot create LiteralOrIriType from the input " + input +
+             " because of missing or invalid closing quote character");
+  }
+
+  std::string_view literal_content = input.substr(c.length(), pos - c.length());
+
+  // No language tag or datatype
+  if (pos == input.length() - c.length()) {
+    return LiteralOrIriType(LiteralType(fromStringUnsafe(literal_content)));
+  }
+
+  std::string_view suffix =
+      input.substr(pos + c.length(), input.length() - pos - c.length());
+
+  if (suffix.starts_with("@")) {
+    std::string_view language_tag = suffix.substr(1, suffix.length() - 1);
+    LiteralType literal = LiteralType(fromStringUnsafe(literal_content),
+                                      fromStringUnsafe(language_tag),
+                                      LiteralDescriptor::LANGUAGE_TAG);
+    return LiteralOrIriType(literal);
+  }
+  if (suffix.starts_with("^^")) {
+    std::string_view datatype = suffix.substr(2, suffix.length() - 2);
+    LiteralType literal =
+        LiteralType(fromStringUnsafe(literal_content),
+                    fromStringUnsafe(datatype), LiteralDescriptor::DATATYPE);
+    return LiteralOrIriType(literal);
+  }
+  AD_THROW("Cannot create LiteralOrIriType from the input " + input +
+           "because of invalid suffix.");
+}
+
+LiteralOrIriType LiteralOrIriType::fromStringToLiteralOrIri(
+    std::string_view input) {
+  if (input.starts_with("<") && input.ends_with(">")) {
+    std::string_view iri_content = input.substr(1, input.size() - 2);
+    if (auto pos =
+            iri_content.find_first_of("<>\" {}|\\^`", 0) != std::string::npos) {
+      AD_THROW("Iri " + input + " contains invalid character " +
+               input.substr(pos, 1) + ".");
+    }
+    return LiteralOrIriType(IriType(fromStringUnsafe(iri_content)));
+  }
+
+  else if (input.starts_with(R"(""")"))
+    return fromStringToLiteral(input, R"(""")");
+  else if (input.starts_with("'''"))
+    return fromStringToLiteral(input, "'''");
+  else if (input.starts_with('"'))
+    return fromStringToLiteral(input, "\"");
+  else if (input.starts_with('\''))
+    return fromStringToLiteral(input, "`");
+
+  AD_THROW("Cannot create LiteralOrIriType from the input " + input);
 }

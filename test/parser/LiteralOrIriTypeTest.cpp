@@ -108,3 +108,80 @@ TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndLanguageTag) {
   EXPECT_THAT("se", asStringView(literal.getLanguageTag()));
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 }
+
+TEST(LiteralOrIriTypeFromString, CreateIriTypeFromString) {
+  std::string s = "<http://example.org/book/book1>";
+  LiteralOrIriType iri = LiteralOrIriType::fromStringToLiteralOrIri(s);
+  EXPECT_TRUE(iri.isIri());
+  EXPECT_FALSE(iri.isLiteral());
+  EXPECT_THAT("http://example.org/book/book1",
+              asStringView(iri.getIriString()));
+}
+
+TEST(LiteralOrIriTypeFromString, CreateIriTypeFromStringInvalidCharacter) {
+  std::string s = "<http://example.org/book/book^1>";
+  EXPECT_THROW(LiteralOrIriType::fromStringToLiteralOrIri(s),
+               ad_utility::Exception);
+}
+
+TEST(LiteralOrIriTypeFromString, CreateLiteralTypeFromString) {
+  std::string s = "\"Hej världen\"";
+  LiteralOrIriType literal = LiteralOrIriType::fromStringToLiteralOrIri(s);
+  EXPECT_TRUE(literal.isLiteral());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  EXPECT_THAT("Hej världen", asStringView(literal.getLiteralContent()));
+}
+
+TEST(LiteralOrIriTypeFromString, CreateLiteralTypeWithLanguageTagFromString) {
+  std::string s = "\"Hej världen\"@se";
+  LiteralOrIriType literal = LiteralOrIriType::fromStringToLiteralOrIri(s);
+  EXPECT_TRUE(literal.isLiteral());
+  EXPECT_TRUE(literal.hasLanguageTag());
+  EXPECT_THAT("Hej världen", asStringView(literal.getLiteralContent()));
+  EXPECT_THAT("se", asStringView(literal.getLanguageTag()));
+}
+
+TEST(LiteralOrIriTypeFromString, CreateLiteralTypeWithDatatypeFromString) {
+  std::string s = "\"ABCD\"^^test:type";
+  LiteralOrIriType literal = LiteralOrIriType::fromStringToLiteralOrIri(s);
+  EXPECT_TRUE(literal.isLiteral());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_THAT("ABCD", asStringView(literal.getLiteralContent()));
+  EXPECT_THAT("test:type", asStringView(literal.getDatatype()));
+}
+
+TEST(LiteralOrIriTypeFromString,
+     CreateLiteralTypeWithDatatypeFromStringWithThreeDoubleQuotes) {
+  std::string s = R"("""ABCD"""^^test:type)";
+  LiteralOrIriType literal = LiteralOrIriType::fromStringToLiteralOrIri(s);
+  EXPECT_TRUE(literal.isLiteral());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_THAT("ABCD", asStringView(literal.getLiteralContent()));
+  EXPECT_THAT("test:type", asStringView(literal.getDatatype()));
+}
+
+TEST(LiteralOrIriTypeFromString,
+     CreateLiteralTypeWithDatatypeFromStringWithThreeSingleQuotes) {
+  std::string s = R"('''ABCD'''^^test:type)";
+  LiteralOrIriType literal = LiteralOrIriType::fromStringToLiteralOrIri(s);
+  EXPECT_TRUE(literal.isLiteral());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_THAT("ABCD", asStringView(literal.getLiteralContent()));
+  EXPECT_THAT("test:type", asStringView(literal.getDatatype()));
+}
+
+TEST(LiteralOrIriTypeFromString, CreateLiteralTypeFromStringInvalidQuotation) {
+  std::string s = "\"Hej världen";
+  EXPECT_THROW(LiteralOrIriType::fromStringToLiteralOrIri(s),
+               ad_utility::Exception);
+  s = "Hej världen";
+  EXPECT_THROW(LiteralOrIriType::fromStringToLiteralOrIri(s),
+               ad_utility::Exception);
+  s = "\"\"\"Hej världen\"";
+  EXPECT_THROW(LiteralOrIriType::fromStringToLiteralOrIri(s),
+               ad_utility::Exception);
+  s = "\"Hej världen'";
+  EXPECT_THROW(LiteralOrIriType::fromStringToLiteralOrIri(s),
+               ad_utility::Exception);
+}
