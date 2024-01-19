@@ -9,16 +9,20 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 // _____________________________________________________________________________
-static constexpr auto numericValueAdder =
-    []<typename T>(T value, double& sum, [[maybe_unused]] bool& error)
-        requires std::is_arithmetic_v<T> {
-  sum += static_cast<double>(value);
-};
-static constexpr auto nonNumericValueAdder =
-    [](sparqlExpression::detail::NotNumeric, [[maybe_unused]] double& sum,
-       bool& error) { error = true; };
-static constexpr auto valueAdder =
-    ad_utility::OverloadCallOperator(numericValueAdder, nonNumericValueAdder);
+// For `SUM` and `AVG`, add value to sum if it is numeric, otherwise
+// set error flag.
+static constexpr auto valueAdder = []() {
+  auto numericValueAdder =
+      []<typename T>(T value, double& sum, [[maybe_unused]] bool& error)
+          requires std::is_arithmetic_v<T> {
+    sum += static_cast<double>(value);
+  };
+  auto nonNumericValueAdder = [](sparqlExpression::detail::NotNumeric,
+                                 [[maybe_unused]] double& sum,
+                                 bool& error) { error = true; };
+  return ad_utility::OverloadCallOperator(numericValueAdder,
+                                          nonNumericValueAdder);
+}();
 
 // Data to perform the AVG aggregation using the HashMap optimization.
 struct AvgAggregationData {
