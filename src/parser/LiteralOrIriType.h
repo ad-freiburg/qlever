@@ -14,6 +14,13 @@ class LiteralOrIriType {
   using LiteralOrIriVariant = std::variant<LiteralType, IriType>;
   LiteralOrIriVariant data;
 
+
+  // Returns contained IriType object if available, throws exception otherwise
+  IriType& getIriTypeObject();
+  // Returns contained LiteralType object if available, throws exception
+  // otherwise
+  LiteralType& getLiteralTypeObject();
+
  public:
   // Creates a new LiteralOrIriType based on a LiteralType object
   LiteralOrIriType(LiteralType data);
@@ -22,17 +29,12 @@ class LiteralOrIriType {
 
   // Returns true, if object contains an IriType object
   bool isIri() const;
-  // Returns contained IriType object if available, throws exception otherwise
-  IriType& getIriTypeObject();
   // Returns iri string of contained IriType object if available, throws
   // exception otherwise
   std::string_view getIriString();
 
   // Returns true, if object contains an LiteralType object
   bool isLiteral() const;
-  // Returns contained LiteralType object if available, throws exception
-  // otherwise
-  LiteralType& getLiteralTypeObject();
   // Returns true if contained LiteralType object has a language tag, throws
   // exception if no LiteralType object is contained
   bool hasLanguageTag();
