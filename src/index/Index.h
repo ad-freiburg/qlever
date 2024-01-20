@@ -237,6 +237,8 @@ class Index {
 
   const std::string& getKbName() const;
 
+  const std::string& getIndexId() const;
+
   NumNormalAndInternal numTriples() const;
 
   size_t getNofTextRecords() const;
