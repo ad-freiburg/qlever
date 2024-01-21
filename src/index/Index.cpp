@@ -25,8 +25,9 @@ void Index::createFromFile(const std::string& filename) {
 }
 
 // ____________________________________________________________________________
-void Index::createFromOnDiskIndex(const std::string& onDiskBase) {
-  pimpl_->createFromOnDiskIndex(onDiskBase);
+void Index::createFromOnDiskIndex(const std::string& onDiskBaseIndex,
+                                  const std::string& onDiskBaseVocabulary) {
+  pimpl_->createFromOnDiskIndex(onDiskBaseIndex, onDiskBaseVocabulary);
 }
 
 // ____________________________________________________________________________
@@ -193,8 +194,9 @@ const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
 }
 
 // ____________________________________________________________________________
-void Index::setOnDiskBase(const std::string& onDiskBase) {
-  return pimpl_->setOnDiskBase(onDiskBase);
+void Index::setOnDiskBase(const std::string& onDiskBaseIndex,
+                          const std::string& onDiskBaseVocabulary) {
+  return pimpl_->setOnDiskBase(onDiskBaseIndex, onDiskBaseVocabulary);
 }
 
 // ____________________________________________________________________________

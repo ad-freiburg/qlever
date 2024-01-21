@@ -61,7 +61,8 @@ int main(int argc, char** argv) {
   std::locale locWithNumberGrouping(loc, &facet);
   ad_utility::Log::imbue(locWithNumberGrouping);
 
-  string baseName;
+  string baseNameIndex;
+  string baseNameVocabulary;
   string wordsfile;
   string docsfile;
   string textIndexName;
@@ -86,8 +87,11 @@ int main(int argc, char** argv) {
     boostOptions.add_options()(std::forward<Args>(args)...);
   };
   add("help,h", "Produce this help message.");
-  add("index-basename,i", po::value(&baseName)->required(),
-      "The basename of the output files (required).");
+  add("index-basename,i", po::value(&baseNameIndex)->required(),
+      "The basename of the index files (required).");
+  add("vocabulary-basename,v", po::value(&baseNameVocabulary),
+      "The basename of the vocabulary files"
+      "(default: same as basename of the index fles).");
   add("kg-input-file,f", po::value(&inputFile),
       "The file with the knowledge graph data to be parsed from. If omitted, "
       "will read from stdin.");
@@ -152,6 +156,12 @@ int main(int argc, char** argv) {
     index.memoryLimitIndexBuilding() = stxxlMemory.value();
   }
 
+  // If no external vocabulary basename was specified, use the same as the
+  // index basename.
+  if (baseNameVocabulary.empty()) {
+    baseNameVocabulary = baseNameIndex;
+  }
+
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.
   if (textIndexName.empty() && !wordsfile.empty()) {
@@ -170,9 +180,9 @@ int main(int argc, char** argv) {
 
   try {
     LOG(TRACE) << "Configuring STXXL..." << std::endl;
-    size_t posOfLastSlash = baseName.rfind('/');
-    string location = baseName.substr(0, posOfLastSlash + 1);
-    string tail = baseName.substr(posOfLastSlash + 1);
+    size_t posOfLastSlash = baseNameIndex.rfind('/');
+    string location = baseNameIndex.substr(0, posOfLastSlash + 1);
+    string tail = baseNameIndex.substr(posOfLastSlash + 1);
     writeStxxlConfigFile(location, tail);
     string stxxlFileName = getStxxlDiskFileName(location, tail);
     LOG(TRACE) << "done." << std::endl;
@@ -180,7 +190,7 @@ int main(int argc, char** argv) {
     index.setKbName(kbIndexName);
     index.setTextName(textIndexName);
     index.usePatterns() = !noPatterns;
-    index.setOnDiskBase(baseName);
+    index.setOnDiskBase(baseNameIndex, baseNameVocabulary);
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.setPrefixCompression(!noPrefixCompression);

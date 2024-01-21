@@ -86,7 +86,7 @@ void IndexImpl::addTextFromContextFile(const string& contextFile,
                                        bool addWordsFromLiterals) {
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
-  string indexFilename = onDiskBase_ + ".text.index";
+  string indexFilename = onDiskBaseIndex_ + ".text.index";
   // Either read words from given file or consider each literal as text record
   // or both (but at least one of them, otherwise this function is not called).
   if (!contextFile.empty()) {
@@ -107,14 +107,14 @@ void IndexImpl::addTextFromContextFile(const string& contextFile,
   LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
   vocab_ = RdfsVocabulary{};
   readConfiguration();
-  vocab_.readFromFile(onDiskBase_ + INTERNAL_VOCAB_SUFFIX,
-                      onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+  vocab_.readFromFile(onDiskBaseVocabulary_ + INTERNAL_VOCAB_SUFFIX,
+                      onDiskBaseVocabulary_ + EXTERNAL_VOCAB_SUFFIX);
 
   // Build the text vocabulary (first scan over the text records).
   LOG(INFO) << "Building text vocabulary ..." << std::endl;
   size_t nofLines =
       processWordsForVocabulary(contextFile, addWordsFromLiterals);
-  textVocab_.writeToFile(onDiskBase_ + ".text.vocabulary");
+  textVocab_.writeToFile(onDiskBaseVocabulary_ + ".text.vocabulary");
 
   // Build the half-inverted lists (second scan over the text records).
   LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
@@ -134,7 +134,7 @@ void IndexImpl::addTextFromContextFile(const string& contextFile,
 void IndexImpl::buildDocsDB(const string& docsFileName) const {
   LOG(INFO) << "Building DocsDB...\n";
   std::ifstream docsFile{docsFileName};
-  std::ofstream ofs(onDiskBase_ + ".text.docsDB", std::ios_base::out);
+  std::ofstream ofs(onDiskBaseIndex_ + ".text.docsDB", std::ios_base::out);
   // To avoid excessive use of RAM,
   // we write the offsets to and stxxl:vector first;
   stxxl::vector<off_t> offsets;
@@ -161,7 +161,7 @@ void IndexImpl::buildDocsDB(const string& docsFileName) const {
 
   ofs.close();
   // Now append the tmp file to the docsDB file.
-  ad_utility::File out(onDiskBase_ + ".text.docsDB", "a");
+  ad_utility::File out(onDiskBaseIndex_ + ".text.docsDB", "a");
   for (size_t i = 0; i < offsets.size(); ++i) {
     off_t cur = offsets[i];
     out.write(&cur, sizeof(cur));
@@ -173,10 +173,10 @@ void IndexImpl::buildDocsDB(const string& docsFileName) const {
 // _____________________________________________________________________________
 void IndexImpl::addTextFromOnDiskIndex() {
   // Read the text vocabulary (into RAM).
-  textVocab_.readFromFile(onDiskBase_ + ".text.vocabulary");
+  textVocab_.readFromFile(onDiskBaseVocabulary_ + ".text.vocabulary");
 
   // Initialize the text index.
-  std::string textIndexFileName = onDiskBase_ + ".text.index";
+  std::string textIndexFileName = onDiskBaseIndex_ + ".text.index";
   LOG(INFO) << "Reading metadata from file " << textIndexFileName << " ..."
             << std::endl;
   textIndexFile_.open(textIndexFileName.c_str(), "r");
@@ -194,11 +194,11 @@ void IndexImpl::addTextFromOnDiskIndex() {
   // without this, but then there is no content to show when a text record
   // matches. This is perfectly fine when the text records come from IRIs or
   // literals from our RDF vocabulary.
-  std::string docsDbFileName = onDiskBase_ + ".text.docsDB";
+  std::string docsDbFileName = onDiskBaseIndex_ + ".text.docsDB";
   std::ifstream f(docsDbFileName.c_str());
   if (f.good()) {
     f.close();
-    docsDB_.init(string(onDiskBase_ + ".text.docsDB"));
+    docsDB_.init(string(onDiskBaseIndex_ + ".text.docsDB"));
     LOG(INFO) << "Registered text records: #records = " << docsDB_._size
               << std::endl;
   } else {
@@ -707,8 +707,8 @@ size_t IndexImpl::writeCodebook(const vector<T>& codebook,
 
 // _____________________________________________________________________________
 void IndexImpl::openTextFileHandle() {
-  AD_CONTRACT_CHECK(!onDiskBase_.empty());
-  textIndexFile_.open(string(onDiskBase_ + ".text.index").c_str(), "r");
+  AD_CONTRACT_CHECK(!onDiskBaseIndex_.empty());
+  textIndexFile_.open(string(onDiskBaseIndex_ + ".text.index").c_str(), "r");
 }
 
 // _____________________________________________________________________________

@@ -79,7 +79,8 @@ class Index {
   // constructed using the `createFromFile` method which is typically called via
   // `IndexBuilderMain`. Read necessary metadata into memory and open file
   // handles.
-  void createFromOnDiskIndex(const std::string& onDiskBase);
+  void createFromOnDiskIndex(const std::string& onDiskBaseIndex,
+                             const std::string& onDiskVocabulary);
 
   // Add a text index to a complete KB index. First read the given context
   // file (if file name not empty), then add words from literals (if true).
@@ -181,7 +182,8 @@ class Index {
 
   ad_utility::MemorySize& blocksizePermutationsPerColumn();
 
-  void setOnDiskBase(const std::string& onDiskBase);
+  void setOnDiskBase(const std::string& onDiskBaseIndex,
+                     const std::string& onDiskBaseVocabulary);
 
   void setSettingsFile(const std::string& filename);
 

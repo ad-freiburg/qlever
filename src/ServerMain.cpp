@@ -39,7 +39,8 @@ int main(int argc, char** argv) {
   // filled / set depending on the options.
   using ad_utility::NonNegative;
 
-  std::string indexBasename;
+  std::string baseNameIndex;
+  std::string baseNameVocabulary;
   std::string accessToken;
   bool text = false;
   unsigned short port;
@@ -59,8 +60,11 @@ int main(int argc, char** argv) {
   };
   add("help,h", "Produce this help message.");
   // TODO<joka921> Can we output the "required" automatically?
-  add("index-basename,i", po::value<std::string>(&indexBasename)->required(),
+  add("index-basename,i", po::value<std::string>(&baseNameIndex)->required(),
       "The basename of the index files (required).");
+  add("vocabulary-basename,v", po::value<std::string>(&baseNameVocabulary),
+      "The basename of the vocabulary files"
+      " (default: same as basename of the index files).");
   add("port,p", po::value<unsigned short>(&port)->required(),
       "The port on which HTTP requests are served (required).");
   add("access-token,a", po::value<std::string>(&accessToken)->default_value(""),
@@ -122,6 +126,11 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
+  // If no vocabulary basename is given, use the index basename.
+  if (baseNameVocabulary.empty()) {
+    baseNameVocabulary = baseNameIndex;
+  }
+
   LOG(INFO) << EMPH_ON << "QLever Server, compiled on "
             << qlever::version::DatetimeOfCompilation << " using git hash "
             << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
@@ -129,7 +138,8 @@ int main(int argc, char** argv) {
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
                   std::move(accessToken), !noPatternTrick);
-    server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);
+    server.run(baseNameIndex, baseNameVocabulary, text, !noPatterns,
+               !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()

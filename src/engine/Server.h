@@ -41,13 +41,15 @@ class Server {
 
  private:
   //! Initialize the server.
-  void initialize(const string& indexBaseName, bool useText,
-                  bool usePatterns = true, bool loadAllPermutations = true);
+  void initialize(const string& baseNameIndex, const string& baseNameVocabulary,
+                  bool useText, bool usePatterns = true,
+                  bool loadAllPermutations = true);
 
  public:
   //! First initialize the server. Then loop, wait for requests and trigger
   //! processing. This method never returns except when throwing an exception.
-  void run(const string& indexBaseName, bool useText, bool usePatterns = true,
+  void run(const string& baseNameIndex, const string& baseNameVocabulary,
+           bool useText, bool usePatterns = true,
            bool loadAllPermutations = true);
 
   Index& index() { return index_; }
