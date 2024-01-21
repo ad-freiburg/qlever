@@ -39,12 +39,12 @@ jobs:
         include:
           - compiler: clang
             compiler-version: 16
-            asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
+            asan-flags: "-fsanitize=address -fno-omit-frame-pointer -g"
             build-type: Release
             expensive-tests: false
           - compiler: clang
             compiler-version: 16
-            ubsan-flags: " -fsanitize=undefined"
+            ubsan-flags: " -fsanitize=undefined -g"
             build-type: Release
             expensive-tests: false
           - compiler: clang
