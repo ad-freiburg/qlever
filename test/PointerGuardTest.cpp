@@ -34,6 +34,16 @@ TEST(PointerGuard, checkUninitializedDoesntBlock) {
 }
 
 // ____________________________________________________________________________
+TEST(PointerGuard, checkExpiredPointerDoesntBlock) {
+  auto future = runAsynchronously([]() {
+    PointerGuard<int> guard;
+    guard.set(std::make_shared<int>(0));
+  });
+  ASSERT_EQ(future.wait_for(DEFAULT_TIMEOUT), std::future_status::ready)
+      << "Destructor did not stop blocking";
+}
+
+// ____________________________________________________________________________
 TEST(PointerGuard, verifyCorrectBlockingBehaviour) {
   std::shared_ptr<int> ptr = std::make_shared<int>(1337);
   auto future = runAsynchronously([weakPtr = std::weak_ptr{ptr}]() mutable {
