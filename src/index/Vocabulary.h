@@ -238,12 +238,16 @@ class Vocabulary {
   //! Return value signals if something was found at all.
   bool getId(const string& word, IndexType* idx) const;
 
-  //! Get an Id range that matches a prefix.
-  //! Return value also signals if something was found at all.
-  //! CAVEAT! TODO<discovered by joka921>: This is only used for the text
-  //! index, and uses a range, where the last index is still within the range
-  //! which is against C++ conventions!
-  // consider using the prefixRange function.
+  // Get an Id range that matches a prefix.
+  // Return value also signals if something was found at all.
+  //
+  // TODO<discovered by joka921>: This is only used for the text index, and
+  // uses a range, where the last index is still within the range which is
+  // against C++ conventions! Consider using the `prefix_range` function.
+  //
+  // TODO: This currenly only looks in the internal vocabulary. Should we also
+  // look in the external vocabulary? And what exactly is this method needed
+  // for and do we need it at all?
   std::optional<IdRange<IndexType>> getIdRangeForFullTextPrefix(
       const string& word) const;
 
