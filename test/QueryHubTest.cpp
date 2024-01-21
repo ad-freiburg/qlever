@@ -186,8 +186,16 @@ ASYNC_TEST(QueryHub, verifyNoErrorWhenQueryIdMissing) {
   auto queryId = QueryId::idFromString("abc");
   auto distributor =
       co_await queryHub.createOrAcquireDistributorForSending(queryId);
+  // Under normal conditions this would happen when
+  // `createOrAcquireDistributorForSending` is called after the reference count
+  // of the previous distributor with the same id reached zero, but before the
+  // destructor running the cleanup could remove the entry. Because this edge
+  // case is very hard to simulate under real conditions (dependent on
+  // scheduling of the operating system) we just fake it here to check the
+  // behaviour we desire.
   queryHub.socketDistributors_->clear();
   EXPECT_NO_THROW(co_await distributor->signalEnd());
+  EXPECT_TRUE(queryHub.socketDistributors_->empty());
 }
 
 // _____________________________________________________________________________
