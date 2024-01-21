@@ -49,6 +49,13 @@ class QueryHub {
   friend net::awaitable<void>
   QueryHub_testCorrectReschedulingForEmptyPointerOnDestruct_coroutine(
       net::io_context&);
+  friend net::awaitable<void> QueryHub_verifyNoOpOnDestroyedQueryHub_coroutine(
+      net::io_context&);
+  friend net::awaitable<void>
+  QueryHub_verifyNoOpOnDestroyedQueryHubAfterSchedule_coroutine(
+      net::io_context&);
+  friend net::awaitable<void>
+  QueryHub_verifyNoErrorWhenQueryIdMissing_coroutine(net::io_context&);
 
   /// Implementation of createOrAcquireDistributorForSending and
   /// createOrAcquireDistributorForReceiving, without thread safety,
