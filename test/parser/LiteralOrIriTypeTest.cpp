@@ -188,3 +188,34 @@ TEST(LiteralOrIriTypeFromString, CreateLiteralTypeFromStringInvalidQuotation) {
   s = "\"Hej världen'";
   EXPECT_THROW(LiteralOrIri::fromRdfToLiteralOrIri(s), ad_utility::Exception);
 }
+
+TEST(LiteralOrIriToRDF, exportIriToRdfString) {
+  LiteralOrIri iri =
+      LiteralOrIri(Iri(fromStringUnsafe("https://example.org/books/book1")));
+  EXPECT_THAT("<https://example.org/books/book1>", iri.toRdf());
+}
+
+TEST(LiteralOrIriToRDF, exportLiteralWithoutDescriptorToRdfString) {
+  LiteralOrIri literal = LiteralOrIri(Literal(fromStringUnsafe("Hello World")));
+  EXPECT_THAT("\"Hello World\"", literal.toRdf());
+}
+
+TEST(LiteralOrIriToRDF, exportLiteralWithLanguageTagToRdfString) {
+  LiteralOrIri literal = LiteralOrIri(Literal(fromStringUnsafe("Hello World"),
+                                              fromStringUnsafe("en"),
+                                              LiteralDescriptor::LANGUAGE_TAG));
+  EXPECT_THAT("\"Hello World\"@en", literal.toRdf());
+}
+
+TEST(LiteralOrIriToRDF, exportLiteralWithDatatypeToRdfString) {
+  LiteralOrIri literal = LiteralOrIri(Literal(fromStringUnsafe("Hello World"),
+                                              fromStringUnsafe("test:type"),
+                                              LiteralDescriptor::DATATYPE));
+  EXPECT_THAT("\"Hello World\"^^test:type", literal.toRdf());
+}
+
+TEST(LiteralOrIriToRDF, importRDFStringAndExportItAsRDFString) {
+  std::string literalRdfString = "\"Hello World\"@en";
+  LiteralOrIri literal = LiteralOrIri::fromRdfToLiteralOrIri(literalRdfString);
+  EXPECT_THAT(literalRdfString, literal.toRdf());
+}

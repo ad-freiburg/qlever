@@ -59,6 +59,11 @@ class LiteralOrIri {
   // Literal object is contained or object has no datatype
   NormalizedStringView getDatatype();
 
+  // Return the stored value as valid rdf, including angled brackets if value
+  // is an Iri, or quotes and "@" or "^^" if value is a literal (with
+  // descriptor)
+  std::string toRdf();
+
   // Parse the given input and if it is a valid rdf term, return a
   // LiteralOrIri object containing the parsed iri or literal.
   static LiteralOrIri fromRdfToLiteralOrIri(std::string_view input);

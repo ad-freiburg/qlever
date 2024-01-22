@@ -54,6 +54,16 @@ NormalizedStringView LiteralOrIri::getDatatype() {
   return getLiteral().getDatatype();
 }
 
+std::string LiteralOrIri::toRdf() {
+  if (isIri()) {
+    return getIri().toRdf();
+  } else if (isLiteral()) {
+    return getLiteral().toRdf();
+  } else {
+    AD_THROW("LiteralOrIri value is neither literal or iri");
+  }
+}
+
 LiteralOrIri fromStringToLiteral(std::string_view input, std::string_view c) {
   auto pos = input.find(c, c.length());
   if (pos == 0) {

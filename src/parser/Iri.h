@@ -24,5 +24,8 @@ class Iri {
   explicit Iri(NormalizedString iri);
 
   // Return the string value of the iri object
-  [[nodiscard]] NormalizedStringView getContent() const;
+  NormalizedStringView getContent() const;
+
+  // Return the iri encoded as RDF term
+  std::string toRdf() const;
 };

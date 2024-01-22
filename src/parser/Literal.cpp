@@ -42,3 +42,16 @@ NormalizedStringView Literal::getLanguageTag() const {
   }
   return this->descriptorValue_;
 }
+
+std::string Literal::toRdf() const {
+  std::string rdf = "\"" + asStringView(content_) + "\"";
+
+  switch (descriptorType_) {
+    case LiteralDescriptor::NONE:
+      return rdf;
+    case LiteralDescriptor::LANGUAGE_TAG:
+      return rdf + "@" + asStringView(descriptorValue_);
+    case LiteralDescriptor::DATATYPE:
+      return rdf + "^^" + asStringView(descriptorValue_);
+  }
+}

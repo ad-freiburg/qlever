@@ -6,6 +6,10 @@
 
 #include <utility>
 
+#include "NormalizedString.h"
+
 Iri::Iri(NormalizedString iri) : iri_{std::move(iri)} {}
 
 NormalizedStringView Iri::getContent() const { return iri_; }
+
+std::string Iri::toRdf() const { return "<" + asStringView(iri_) + ">"; }

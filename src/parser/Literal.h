@@ -51,4 +51,7 @@ class Literal {
   // Return the datatype of the literal if available.
   // Throws an exception if the literal has no datatype.
   NormalizedStringView getDatatype() const;
+
+  // Return the literal encoded as rdf literal
+  std::string toRdf() const;
 };
