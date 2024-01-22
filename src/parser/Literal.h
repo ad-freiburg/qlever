@@ -8,7 +8,7 @@
 
 enum LiteralDescriptor { NONE, LANGUAGE_TAG, DATATYPE };
 
-class LiteralType {
+class Literal {
  private:
   // Stores the string value of the literal
   NormalizedString content;
@@ -20,10 +20,10 @@ class LiteralType {
 
  public:
   // Creates a new literal without any descriptor
-  LiteralType(NormalizedString content);
+  Literal(NormalizedString content);
 
   // Created a new literal with the given descriptor
-  LiteralType(NormalizedString content, NormalizedString datatypeOrLanguageTag,
+  Literal(NormalizedString content, NormalizedString datatypeOrLanguageTag,
               LiteralDescriptor type);
 
   // Returns true if the literal has an assigned language tag

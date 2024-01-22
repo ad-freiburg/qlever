@@ -2,16 +2,16 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
-#include "LiteralType.h"
+#include "Literal.h"
 
 #include <utility>
 
-LiteralType::LiteralType(NormalizedString content) {
+Literal::Literal(NormalizedString content) {
   this->content = std::move(content);
   this->descriptorType = LiteralDescriptor::NONE;
 }
 
-LiteralType::LiteralType(NormalizedString content,
+Literal::Literal(NormalizedString content,
                          NormalizedString datatypeOrLanguageTag,
                          LiteralDescriptor type) {
   this->content = std::move(content);
@@ -19,24 +19,24 @@ LiteralType::LiteralType(NormalizedString content,
   this->descriptorValue = std::move(datatypeOrLanguageTag);
 }
 
-bool LiteralType::hasLanguageTag() const {
+bool Literal::hasLanguageTag() const {
   return this->descriptorType == LiteralDescriptor::LANGUAGE_TAG;
 }
 
-bool LiteralType::hasDatatype() const {
+bool Literal::hasDatatype() const {
   return this->descriptorType == LiteralDescriptor::DATATYPE;
 }
 
-NormalizedStringView LiteralType::getContent() const { return this->content; }
+NormalizedStringView Literal::getContent() const { return this->content; }
 
-NormalizedStringView LiteralType::getDatatype() const {
+NormalizedStringView Literal::getDatatype() const {
   if (!hasDatatype()) {
     AD_THROW("The literal does not have an explicit datatype.");
   }
   return this->descriptorValue;
 }
 
-NormalizedStringView LiteralType::getLanguageTag() const {
+NormalizedStringView Literal::getLanguageTag() const {
   if (!hasLanguageTag()) {
     AD_THROW("The literal does not have an explicit language tag.");
   }

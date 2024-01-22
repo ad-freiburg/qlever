@@ -8,14 +8,14 @@
 
 #include "NormalizedString.h"
 
-class IriType {
+class Iri {
  private:
   // Stores the string value of the IRI
   NormalizedString iri;
 
  public:
   // Created a new iri object
-  explicit IriType(NormalizedString iri);
+  explicit Iri(NormalizedString iri);
 
   // Returns the string value of the iri object
   [[nodiscard]] NormalizedStringView getIri() const;
