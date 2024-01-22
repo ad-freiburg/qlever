@@ -9,7 +9,7 @@
 #include "NormalizedString.h"
 
 class Iri {
-  // A class to hold IRIs. It does not contain the leading or trailing
+  // A class to hold IRIs. It does not store the leading or trailing
   // angled bracket.
   //
   // E.g. For the input "<http://example.org/books/book1>",

@@ -6,9 +6,9 @@
 
 #include <algorithm>
 
-LiteralOrIri::LiteralOrIri(Iri data) : data_{std::move(data)} {}
+LiteralOrIri::LiteralOrIri(Iri iri) : data_{std::move(iri)} {}
 
-LiteralOrIri::LiteralOrIri(Literal data) : data_{std::move(data)} {}
+LiteralOrIri::LiteralOrIri(Literal literal) : data_{std::move(literal)} {}
 
 bool LiteralOrIri::isIri() const { return std::holds_alternative<Iri>(data_); }
 

@@ -9,15 +9,19 @@
 enum class LiteralDescriptor { NONE, LANGUAGE_TAG, DATATYPE };
 
 class Literal {
+  // A class to hold literal values.
+
  private:
-  // Store the string value of the literal
+  // Store the string value of the literal withour the surounding quotation marks or trainling descriptor.
+  //  "Hello World"@en -> Hello World
   NormalizedString content_;
 
-  // Store the optional language tag or the optional datatype if applicable
+  // Store the optional language tag or the optional datatype if applicable without their prefixes
+  // "Hello World"@en -> en
+  // "Hello World"^^test:type -> test:type
   NormalizedString descriptorValue_;
 
-  // Store information if the literal has a language tag, a datatype, or non of
-  // these two assigned to it
+  // Store information if the literal has a language tag, a datatype, or no descriptor
   LiteralDescriptor descriptorType_;
 
  public:

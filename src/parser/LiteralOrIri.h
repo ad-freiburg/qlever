@@ -25,9 +25,9 @@ class LiteralOrIri {
 
  public:
   // Create a new LiteralOrIri based on a Literal object
-  explicit LiteralOrIri(Literal data);
+  explicit LiteralOrIri(Literal literal);
   // Create a new LiteralOrIri based on an Iri object
-  explicit LiteralOrIri(Iri data);
+  explicit LiteralOrIri(Iri iri);
 
   // Return true if object contains an Iri object
   bool isIri() const;
