@@ -2,9 +2,9 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
-#include <utility>
-
 #include "Iri.h"
+
+#include <utility>
 
 // __________________________________________
 Iri::Iri(NormalizedString iri) : iri_{std::move(iri)} {}
