@@ -8,45 +8,56 @@
 #include "Literal.h"
 
 class LiteralOrIri {
+  // A wrapper class that can contain either an Iri or a Literal object.
+
  private:
   using LiteralOrIriVariant = std::variant<Literal, Iri>;
   LiteralOrIriVariant data;
 
-  // Returns contained Iri object if available, throws exception otherwise
-  Iri& getIriTypeObject();
-  // Returns contained Literal object if available, throws exception
+  // Return contained Iri object if available, throw exception otherwise
+  Iri& getIri();
+
+  // Return contained Literal object if available, throw exception
   // otherwise
-  Literal& getLiteralTypeObject();
+  Literal& getLiteral();
 
  public:
-  // Creates a new LiteralOrIri based on a Literal object
+  // Create a new LiteralOrIri based on a Literal object
   explicit LiteralOrIri(Literal data);
-  // Creates a new LiteralOrIri based on a Iri object
+  // Create a new LiteralOrIri based on an Iri object
   explicit LiteralOrIri(Iri data);
 
-  // Returns true, if object contains an Iri object
-  [[nodiscard]] bool isIri() const;
-  // Returns iri string of contained Iri object if available, throws
-  // exception otherwise
-  NormalizedStringView getIriString();
+  // Return true if object contains an Iri object
+  bool isIri() const;
 
-  // Returns true, if object contains an Literal object
-  [[nodiscard]] bool isLiteral() const;
-  // Returns true if contained Literal object has a language tag, throws
+  // Return iri string of contained Iri object if available, throw
+  // exception otherwise
+  NormalizedStringView getIriContent();
+
+  // Return true if object contains a Literal object
+  bool isLiteral() const;
+
+  // Return true if contained Literal object has a language tag, throw
   // exception if no Literal object is contained
   bool hasLanguageTag();
-  // Returns true if contained Literal object has a datatype, throws
+
+  // Return true if contained Literal object has a datatype, throw
   // exception if no Literal object is contained
   bool hasDatatype();
-  // Returns content of contained Literal as string, throws exception if no
+
+  // Return content of contained Literal as string, throw exception if no
   // Literal object is contained
   NormalizedStringView getLiteralContent();
-  // Returns the language tag of the contained Literal, throws exception if
+
+  // Return the language tag of the contained Literal, throw exception if
   // no Literal object is contained or object has no language tag
   NormalizedStringView getLanguageTag();
-  // Returns the datatype of the contained Literal, throws exception if no
+  
+  // Return the datatype of the contained Literal, throw exception if no
   // Literal object is contained or object has no datatype
   NormalizedStringView getDatatype();
 
-  static LiteralOrIri fromStringToLiteralOrIri(std::string_view input);
+  // Parse the given input and if it is a valid rdf term, return a
+  // LiteralOrIri object containing the parsed iri or literal.
+  static LiteralOrIri fromRdfToLiteralOrIri(std::string_view input);
 };

@@ -1,6 +1,6 @@
-//
-// Created by beckermann on 1/19/24.
-//
+// Copyright 2023, University of Freiburg,
+//                 Chair of Algorithms and Data Structures.
+// Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
 #pragma once
 
@@ -11,8 +11,13 @@ struct NormalizedChar {
   char c_;
 };
 
-using NormalizedStringView = std::basic_string_view<NormalizedChar>;
+// A bespoke string representation that ensures the content
+// is correctly encoded and does not contain invalid characters
 using NormalizedString = std::basic_string<NormalizedChar>;
+
+// A string view representation of above described normalized strings
+using NormalizedStringView = std::basic_string_view<NormalizedChar>;
+
 
 // Creates a new NormalizedString object by just copying the contents of the
 // input.

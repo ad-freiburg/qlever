@@ -17,13 +17,13 @@ class Iri {
   // only "http://example.org/books/book1" is to be stored in the iri variable.
 
  private:
-  // Stores the string value of the IRI
+  // Store the string value of the IRI
   NormalizedString iri;
 
  public:
-  // Created a new iri object
+  // Create a new iri object
   explicit Iri(NormalizedString iri);
 
-  // Returns the string value of the iri object
+  // Return the string value of the iri object
   [[nodiscard]] NormalizedStringView getContent() const;
 };

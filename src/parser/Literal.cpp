@@ -6,29 +6,26 @@
 
 #include <utility>
 
-Literal::Literal(NormalizedString content) {
-  this->content = std::move(content);
-  this->descriptorType = LiteralDescriptor::NONE;
-}
+Literal::Literal(NormalizedString content) : content{std::move(content)}, descriptorType{LiteralDescriptor::NONE} {}
 
 Literal::Literal(NormalizedString content,
                          NormalizedString datatypeOrLanguageTag,
-                         LiteralDescriptor type) {
-  this->content = std::move(content);
-  this->descriptorType = type;
-  this->descriptorValue = std::move(datatypeOrLanguageTag);
-}
+                         LiteralDescriptor type) : content{std::move(content)}, descriptorValue{std::move(datatypeOrLanguageTag)}, descriptorType{type} {}
 
+//
 bool Literal::hasLanguageTag() const {
-  return this->descriptorType == LiteralDescriptor::LANGUAGE_TAG;
+  return descriptorType == LiteralDescriptor::LANGUAGE_TAG;
 }
 
+//
 bool Literal::hasDatatype() const {
-  return this->descriptorType == LiteralDescriptor::DATATYPE;
+  return descriptorType == LiteralDescriptor::DATATYPE;
 }
 
-NormalizedStringView Literal::getContent() const { return this->content; }
+//
+NormalizedStringView Literal::getContent() const { return content; }
 
+//
 NormalizedStringView Literal::getDatatype() const {
   if (!hasDatatype()) {
     AD_THROW("The literal does not have an explicit datatype.");
