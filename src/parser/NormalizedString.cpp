@@ -6,11 +6,6 @@
 
 #include <iostream>
 
-std::ostream& operator<<(std::ostream& str, NormalizedChar c) {
-  str << c.c_;
-  return str;
-}
-
 NormalizedString fromStringUnsafe(std::string_view input) {
   NormalizedString normalizedString;
   normalizedString.resize(input.size());
@@ -19,11 +14,6 @@ NormalizedString fromStringUnsafe(std::string_view input) {
                  [](char c) { return NormalizedChar{c}; });
 
   return normalizedString;
-}
-
-NormalizedString normalizeFromLiteralContent(std::string_view literal) {
-  // TODO remove and replace invalid characters
-  return fromStringUnsafe(literal);
 }
 
 std::string_view asStringView(NormalizedStringView normalizedStringView) {

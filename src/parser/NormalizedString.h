@@ -25,8 +25,5 @@ using NormalizedStringView = std::basic_string_view<NormalizedChar>;
 //           once the normalizeFromLiteralContent function is implemented
 NormalizedString fromStringUnsafe(std::string_view input);
 
-// Normalizes the given literal and returns is as a new NormalizedString object
-NormalizedString normalizeFromLiteralContent(std::string_view literal);
-
 // Returns the given NormalizedStringView as a string_view.
 std::string_view asStringView(NormalizedStringView normalizedStringView);
