@@ -48,7 +48,7 @@ TEST(HttpServer, HttpTest) {
     // Create a client, and send a GET and a POST request in one session.
     // The constants in those test loops can be increased to find threading
     // issues using the thread sanitizer. However, these constants can't be
-    // higher by default because the checks on GitHub actions will run forwever
+    // higher by default because the checks on GitHub actions will run forever
     // if they are.
     {
       std::vector<ad_utility::JThread> threads;
@@ -115,9 +115,7 @@ TEST(HttpServer, HttpTest) {
 
     // Check that after shutting down, no more new connections are accepted.
     httpServer.shutDown();
-    /*
     ASSERT_ANY_THROW(
         HttpClient("localhost", std::to_string(httpServer.getPort())));
-        */
   }
 }
