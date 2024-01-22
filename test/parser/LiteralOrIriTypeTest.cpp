@@ -30,8 +30,7 @@ TEST(LiteralTypeTest, LiteralTypeTest) {
 
 TEST(LiteralTypeTest, LiteralTypeTestWithDatatype) {
   Literal literal(fromStringUnsafe("Hello World"),
-                      fromStringUnsafe("xsd:string"),
-                      LiteralDescriptor::DATATYPE);
+                  fromStringUnsafe("xsd:string"), LiteralDescriptor::DATATYPE);
 
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_TRUE(literal.hasDatatype());
@@ -42,7 +41,7 @@ TEST(LiteralTypeTest, LiteralTypeTestWithDatatype) {
 
 TEST(LiteralTypeTest, LiteralTypeTestWithLanguagetag) {
   Literal literal(fromStringUnsafe("Hallo Welt"), fromStringUnsafe("de"),
-                      LiteralDescriptor::LANGUAGE_TAG);
+                  LiteralDescriptor::LANGUAGE_TAG);
 
   EXPECT_TRUE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
@@ -81,8 +80,8 @@ TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteral) {
 
 TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndDatatype) {
   LiteralOrIri literal(Literal(fromStringUnsafe("Hello World"),
-                                       fromStringUnsafe("xsd:string"),
-                                       LiteralDescriptor::DATATYPE));
+                               fromStringUnsafe("xsd:string"),
+                               LiteralDescriptor::DATATYPE));
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -96,8 +95,8 @@ TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndDatatype) {
 
 TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndLanguageTag) {
   LiteralOrIri literal(Literal(fromStringUnsafe("Hej världen"),
-                                       fromStringUnsafe("se"),
-                                       LiteralDescriptor::LANGUAGE_TAG));
+                               fromStringUnsafe("se"),
+                               LiteralDescriptor::LANGUAGE_TAG));
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -120,8 +119,7 @@ TEST(LiteralOrIriTypeFromString, CreateIriTypeFromString) {
 
 TEST(LiteralOrIriTypeFromString, CreateIriTypeFromStringInvalidCharacter) {
   std::string s = "<http://example.org/book/book^1>";
-  EXPECT_THROW(LiteralOrIri::fromRdfToLiteralOrIri(s),
-               ad_utility::Exception);
+  EXPECT_THROW(LiteralOrIri::fromRdfToLiteralOrIri(s), ad_utility::Exception);
 }
 
 TEST(LiteralOrIriTypeFromString, CreateLiteralTypeFromString) {
@@ -182,15 +180,11 @@ TEST(LiteralOrIriTypeFromString,
 
 TEST(LiteralOrIriTypeFromString, CreateLiteralTypeFromStringInvalidQuotation) {
   std::string s = "\"Hej världen";
-  EXPECT_THROW(LiteralOrIri::fromRdfToLiteralOrIri(s),
-               ad_utility::Exception);
+  EXPECT_THROW(LiteralOrIri::fromRdfToLiteralOrIri(s), ad_utility::Exception);
   s = "Hej världen";
-  EXPECT_THROW(LiteralOrIri::fromRdfToLiteralOrIri(s),
-               ad_utility::Exception);
+  EXPECT_THROW(LiteralOrIri::fromRdfToLiteralOrIri(s), ad_utility::Exception);
   s = "\"\"\"Hej världen\"";
-  EXPECT_THROW(LiteralOrIri::fromRdfToLiteralOrIri(s),
-               ad_utility::Exception);
+  EXPECT_THROW(LiteralOrIri::fromRdfToLiteralOrIri(s), ad_utility::Exception);
   s = "\"Hej världen'";
-  EXPECT_THROW(LiteralOrIri::fromRdfToLiteralOrIri(s),
-               ad_utility::Exception);
+  EXPECT_THROW(LiteralOrIri::fromRdfToLiteralOrIri(s), ad_utility::Exception);
 }

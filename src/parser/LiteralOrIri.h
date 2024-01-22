@@ -4,9 +4,10 @@
 
 #pragma once
 
+#include <variant>
+
 #include "Iri.h"
 #include "Literal.h"
-#include <variant>
 
 class LiteralOrIri {
   // A wrapper class that can contain either an Iri or a Literal object.
@@ -53,7 +54,7 @@ class LiteralOrIri {
   // Return the language tag of the contained Literal, throw exception if
   // no Literal object is contained or object has no language tag
   NormalizedStringView getLanguageTag();
-  
+
   // Return the datatype of the contained Literal, throw exception if no
   // Literal object is contained or object has no datatype
   NormalizedStringView getDatatype();

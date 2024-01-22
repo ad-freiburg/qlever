@@ -26,7 +26,7 @@ class Literal {
 
   // Create a new literal with the given descriptor
   Literal(NormalizedString content, NormalizedString datatypeOrLanguageTag,
-              LiteralDescriptor type);
+          LiteralDescriptor type);
 
   // Return true if the literal has an assigned language tag
   bool hasLanguageTag() const;
@@ -44,5 +44,4 @@ class Literal {
   // Return the datatype of the literal if available.
   // Throws an exception if the literal has no datatype.
   NormalizedStringView getDatatype() const;
-
 };

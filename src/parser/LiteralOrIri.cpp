@@ -10,10 +10,7 @@ LiteralOrIri::LiteralOrIri(Iri data) : data_{std::move(data)} {}
 
 LiteralOrIri::LiteralOrIri(Literal data) : data_{std::move(data)} {}
 
-
-bool LiteralOrIri::isIri() const {
-  return std::holds_alternative<Iri>(data_);
-}
+bool LiteralOrIri::isIri() const { return std::holds_alternative<Iri>(data_); }
 
 Iri& LiteralOrIri::getIri() {
   if (!isIri()) {
@@ -41,13 +38,9 @@ Literal& LiteralOrIri::getLiteral() {
   return std::get<Literal>(data_);
 }
 
-bool LiteralOrIri::hasLanguageTag() {
-  return getLiteral().hasLanguageTag();
-}
+bool LiteralOrIri::hasLanguageTag() { return getLiteral().hasLanguageTag(); }
 
-bool LiteralOrIri::hasDatatype() {
-  return getLiteral().hasDatatype();
-}
+bool LiteralOrIri::hasDatatype() { return getLiteral().hasDatatype(); }
 
 NormalizedStringView LiteralOrIri::getLiteralContent() {
   return getLiteral().getContent();
@@ -61,8 +54,7 @@ NormalizedStringView LiteralOrIri::getDatatype() {
   return getLiteral().getDatatype();
 }
 
-LiteralOrIri fromStringToLiteral(std::string_view input,
-                                     std::string_view c) {
+LiteralOrIri fromStringToLiteral(std::string_view input, std::string_view c) {
   auto pos = input.find(c, c.length());
   if (pos == 0) {
     AD_THROW("Cannot create LiteralOrIri from the input " + input +
@@ -81,24 +73,23 @@ LiteralOrIri fromStringToLiteral(std::string_view input,
 
   if (suffix.starts_with("@")) {
     std::string_view languageTag = suffix.substr(1, suffix.length() - 1);
-    auto literal = Literal(fromStringUnsafe(content),
-                                      fromStringUnsafe(languageTag),
-                                      LiteralDescriptor::LANGUAGE_TAG);
+    auto literal =
+        Literal(fromStringUnsafe(content), fromStringUnsafe(languageTag),
+                LiteralDescriptor::LANGUAGE_TAG);
     return LiteralOrIri(literal);
   }
   if (suffix.starts_with("^^")) {
     std::string_view datatype = suffix.substr(2, suffix.length() - 2);
     auto literal =
-        Literal(fromStringUnsafe(content),
-                    fromStringUnsafe(datatype), LiteralDescriptor::DATATYPE);
+        Literal(fromStringUnsafe(content), fromStringUnsafe(datatype),
+                LiteralDescriptor::DATATYPE);
     return LiteralOrIri(literal);
   }
   AD_THROW("Cannot create LiteralOrIri from the input " + input +
            "because of invalid suffix.");
 }
 
-LiteralOrIri LiteralOrIri::fromRdfToLiteralOrIri(
-    std::string_view input) {
+LiteralOrIri LiteralOrIri::fromRdfToLiteralOrIri(std::string_view input) {
   if (input.starts_with("<") && input.ends_with(">")) {
     std::string_view content = input.substr(1, input.size() - 2);
     if (auto pos =

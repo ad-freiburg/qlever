@@ -9,7 +9,6 @@
 #include "NormalizedString.h"
 
 class Iri {
-
   // A class to hold IRIs. It does not contain the leading or trailing
   // angled bracket.
   //

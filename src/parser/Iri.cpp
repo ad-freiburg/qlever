@@ -6,6 +6,6 @@
 
 #include <utility>
 
-Iri::Iri(NormalizedString iri) : iri_{std::move(iri)}{}
+Iri::Iri(NormalizedString iri) : iri_{std::move(iri)} {}
 
 NormalizedStringView Iri::getContent() const { return iri_; }

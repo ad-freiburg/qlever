@@ -6,11 +6,14 @@
 
 #include <utility>
 
-Literal::Literal(NormalizedString content) : content_{std::move(content)}, descriptorType_{LiteralDescriptor::NONE} {}
+Literal::Literal(NormalizedString content)
+    : content_{std::move(content)}, descriptorType_{LiteralDescriptor::NONE} {}
 
 Literal::Literal(NormalizedString content,
-                         NormalizedString datatypeOrLanguageTag,
-                         LiteralDescriptor type) : content_{std::move(content)}, descriptorValue_{std::move(datatypeOrLanguageTag)}, descriptorType_{type} {}
+                 NormalizedString datatypeOrLanguageTag, LiteralDescriptor type)
+    : content_{std::move(content)},
+      descriptorValue_{std::move(datatypeOrLanguageTag)},
+      descriptorType_{type} {}
 
 //
 bool Literal::hasLanguageTag() const {
