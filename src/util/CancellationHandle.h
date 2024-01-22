@@ -129,7 +129,10 @@ class CancellationHandle {
     using DurationType =
         std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
 
-    if (state == CancellationState::CHECK_WINDOW_MISSED) {
+    bool windowMissed = state == CancellationState::CHECK_WINDOW_MISSED;
+    auto changed = cancellationState_.compare_exchange_strong(
+        state, CancellationState::NOT_CANCELLED, std::memory_order_relaxed);
+    if (windowMissed && changed) {
       LOG(WARN) << "Cancellation check missed deadline of "
                 << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
                 << " by "
@@ -139,9 +142,6 @@ class CancellationHandle {
                 << std::invoke(detailSupplier, AD_FWD(argTypes)...)
                 << std::endl;
     }
-
-    cancellationState_.compare_exchange_strong(
-        state, CancellationState::NOT_CANCELLED, std::memory_order_relaxed);
   }
 
   /// Internal function that starts the watch dog. It will set this
@@ -234,6 +234,8 @@ class CancellationHandle {
   FRIEND_TEST(CancellationHandle,
               verifyCheckAfterDeadlineMissDoesReportProperly);
   FRIEND_TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel);
+  FRIEND_TEST(CancellationHandle,
+              verifyCheckAfterDeadlineMissDoesntReportTwiceWhenRacing);
 };
 
 using SharedCancellationHandle = std::shared_ptr<CancellationHandle<>>;

@@ -289,6 +289,35 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 
 // _____________________________________________________________________________
 
+TEST(CancellationHandle,
+     verifyCheckAfterDeadlineMissDoesntReportTwiceWhenRacing) {
+  auto& choice = ad_utility::LogstreamChoice::get();
+  CancellationHandle<ENABLED> handle;
+
+  auto& originalOStream = choice.getStream();
+  absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
+
+  std::ostringstream testStream;
+  choice.setStream(&testStream);
+
+  handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
+  handle.cancellationState_ = CHECK_WINDOW_MISSED;
+
+  handle.pleaseWatchDog(CHECK_WINDOW_MISSED, std::identity{}, "my-detail");
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
+
+  EXPECT_THAT(testStream.str(), HasSubstr("my-detail"));
+
+  testStream.clear();
+
+  handle.pleaseWatchDog(CHECK_WINDOW_MISSED, std::identity{}, "other-detail");
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
+
+  EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr("other-detail")));
+}
+
+// _____________________________________________________________________________
+
 TEST(CancellationHandle, expectDisabledHandleIsAlwaysFalse) {
   CancellationHandle<DISABLED> handle;
 
