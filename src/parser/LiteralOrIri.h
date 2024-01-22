@@ -6,13 +6,14 @@
 
 #include "Iri.h"
 #include "Literal.h"
+#include <variant>
 
 class LiteralOrIri {
   // A wrapper class that can contain either an Iri or a Literal object.
 
  private:
   using LiteralOrIriVariant = std::variant<Literal, Iri>;
-  LiteralOrIriVariant data;
+  LiteralOrIriVariant data_;
 
   // Return contained Iri object if available, throw exception otherwise
   Iri& getIri();

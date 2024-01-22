@@ -6,13 +6,13 @@
 
 #include <algorithm>
 
-LiteralOrIri::LiteralOrIri(Iri data) : data{std::move(data)} {}
+LiteralOrIri::LiteralOrIri(Iri data) : data_{std::move(data)} {}
 
-LiteralOrIri::LiteralOrIri(Literal data) : data{std::move(data)} {}
+LiteralOrIri::LiteralOrIri(Literal data) : data_{std::move(data)} {}
 
 
 bool LiteralOrIri::isIri() const {
-  return std::holds_alternative<Iri>(data);
+  return std::holds_alternative<Iri>(data_);
 }
 
 Iri& LiteralOrIri::getIri() {
@@ -21,7 +21,7 @@ Iri& LiteralOrIri::getIri() {
         "LiteralOrIri object does not contain an Iri object and thus "
         "cannot return it");
   }
-  return std::get<Iri>(data);
+  return std::get<Iri>(data_);
 }
 
 NormalizedStringView LiteralOrIri::getIriContent() {
@@ -29,7 +29,7 @@ NormalizedStringView LiteralOrIri::getIriContent() {
 }
 
 bool LiteralOrIri::isLiteral() const {
-  return std::holds_alternative<Literal>(data);
+  return std::holds_alternative<Literal>(data_);
 }
 
 Literal& LiteralOrIri::getLiteral() {
@@ -38,7 +38,7 @@ Literal& LiteralOrIri::getLiteral() {
         "LiteralOrIri object does not contain an Literal object and "
         "thus cannot return it");
   }
-  return std::get<Literal>(data);
+  return std::get<Literal>(data_);
 }
 
 bool LiteralOrIri::hasLanguageTag() {
@@ -69,27 +69,27 @@ LiteralOrIri fromStringToLiteral(std::string_view input,
              " because of missing or invalid closing quote character");
   }
 
-  std::string_view literal_content = input.substr(c.length(), pos - c.length());
+  std::string_view content = input.substr(c.length(), pos - c.length());
 
   // No language tag or datatype
   if (pos == input.length() - c.length()) {
-    return LiteralOrIri(Literal(fromStringUnsafe(literal_content)));
+    return LiteralOrIri(Literal(fromStringUnsafe(content)));
   }
 
   std::string_view suffix =
       input.substr(pos + c.length(), input.length() - pos - c.length());
 
   if (suffix.starts_with("@")) {
-    std::string_view language_tag = suffix.substr(1, suffix.length() - 1);
-    Literal literal = Literal(fromStringUnsafe(literal_content),
-                                      fromStringUnsafe(language_tag),
+    std::string_view languageTag = suffix.substr(1, suffix.length() - 1);
+    auto literal = Literal(fromStringUnsafe(content),
+                                      fromStringUnsafe(languageTag),
                                       LiteralDescriptor::LANGUAGE_TAG);
     return LiteralOrIri(literal);
   }
   if (suffix.starts_with("^^")) {
     std::string_view datatype = suffix.substr(2, suffix.length() - 2);
-    Literal literal =
-        Literal(fromStringUnsafe(literal_content),
+    auto literal =
+        Literal(fromStringUnsafe(content),
                     fromStringUnsafe(datatype), LiteralDescriptor::DATATYPE);
     return LiteralOrIri(literal);
   }
@@ -100,13 +100,13 @@ LiteralOrIri fromStringToLiteral(std::string_view input,
 LiteralOrIri LiteralOrIri::fromRdfToLiteralOrIri(
     std::string_view input) {
   if (input.starts_with("<") && input.ends_with(">")) {
-    std::string_view iri_content = input.substr(1, input.size() - 2);
+    std::string_view content = input.substr(1, input.size() - 2);
     if (auto pos =
-            iri_content.find_first_of("<>\" {}|\\^`", 0) != std::string::npos) {
+            content.find_first_of(R"(<>" {}|\^`)", 0) != std::string::npos) {
       AD_THROW("Iri " + input + " contains invalid character " +
                input.substr(pos, 1) + ".");
     }
-    return LiteralOrIri(Iri(fromStringUnsafe(iri_content)));
+    return LiteralOrIri(Iri(fromStringUnsafe(content)));
   }
 
   else if (input.starts_with(R"(""")"))

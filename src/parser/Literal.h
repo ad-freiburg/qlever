@@ -6,19 +6,19 @@
 
 #include "NormalizedString.h"
 
-enum LiteralDescriptor { NONE, LANGUAGE_TAG, DATATYPE };
+enum class LiteralDescriptor { NONE, LANGUAGE_TAG, DATATYPE };
 
 class Literal {
  private:
   // Store the string value of the literal
-  NormalizedString content;
+  NormalizedString content_;
 
   // Store the optional language tag or the optional datatype if applicable
-  NormalizedString descriptorValue;
+  NormalizedString descriptorValue_;
 
   // Store information if the literal has a language tag, a datatype, or non of
   // these two assigned to it
-  LiteralDescriptor descriptorType;
+  LiteralDescriptor descriptorType_;
 
  public:
   // Create a new literal without any descriptor

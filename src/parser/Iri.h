@@ -18,7 +18,7 @@ class Iri {
 
  private:
   // Store the string value of the IRI
-  NormalizedString iri;
+  NormalizedString iri_;
 
  public:
   // Create a new iri object
