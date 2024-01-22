@@ -34,8 +34,8 @@ inline auto makeDeleteFromDistributors =
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
                                                    bool isSender) {
-  if (socketDistributors_->contains(queryId)) {
-    auto& reference = socketDistributors_->at(queryId);
+  if (socketDistributors_.get().contains(queryId)) {
+    auto& reference = socketDistributors_.get().at(queryId);
     if (auto ptr = reference.pointer_.lock()) {
       if (isSender) {
         // Ensure only single sender reference is acquired for a single session
@@ -44,7 +44,7 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
       }
       co_return ptr;
     } else {
-      socketDistributors_->erase(queryId);
+      socketDistributors_.get().erase(queryId);
     }
   }
 
@@ -53,7 +53,7 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
   // because in unit tests the callback might be invoked after this
   // `QueryHub` was destroyed.
   auto cleanupCall = [globalStrand = globalStrand_,
-                      socketDistributors = std::weak_ptr{socketDistributors_},
+                      socketDistributors = socketDistributors_.getWeak(),
                       queryId,
                       alreadyCalled = false](bool alwaysDelete) mutable {
     AD_CORRECTNESS_CHECK(!alreadyCalled);
@@ -62,11 +62,13 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
     // the io_context backing the global strand which is used here for
     // scheduling. Otherwise, if the QueryHub is already destroyed, then
     // just do nothing, no need for cleanup in this case.
-    if (auto _ = socketDistributors.lock()) {
-      net::dispatch(globalStrand, makeDeleteFromDistributors(
-                                      std::move(socketDistributors),
-                                      std::move(queryId), alwaysDelete));
+    auto pointer = socketDistributors.lock();
+    if (!pointer) {
+      return;
     }
+    net::dispatch(globalStrand,
+                  makeDeleteFromDistributors(std::move(socketDistributors),
+                                             std::move(queryId), alwaysDelete));
     // We don't wait for the deletion to complete here, but only for its
     // scheduling. We still get the expected behavior because all accesses
     // to the `socketDistributor` are synchronized via a strand and
@@ -75,8 +77,8 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
 
   auto distributor = std::make_shared<QueryToSocketDistributor>(
       ioContext_, std::move(cleanupCall));
-  socketDistributors_->emplace(queryId,
-                               WeakReferenceHolder{distributor, isSender});
+  socketDistributors_.get().emplace(queryId,
+                                    WeakReferenceHolder{distributor, isSender});
   co_return distributor;
 }
 

@@ -6,7 +6,7 @@
 
 #include <chrono>
 #include <future>
-#include <string_view>
+#include <optional>
 #include <thread>
 
 #include "util/PointerGuard.h"
@@ -27,29 +27,31 @@ auto runAsynchronously(Func func) {
 }
 
 // ____________________________________________________________________________
-TEST(PointerGuard, checkUninitializedDoesntBlock) {
-  auto future = runAsynchronously([]() { PointerGuard<int> guard; });
-  ASSERT_EQ(future.wait_for(DEFAULT_TIMEOUT), std::future_status::ready)
-      << "Destructor did not stop blocking";
+TEST(PointerGuard, checkEmptyPointerThrowsException) {
+  EXPECT_THROW(PointerGuard<int> guard{nullptr}, ad_utility::Exception);
+}
+
+// ____________________________________________________________________________
+TEST(PointerGuard, checkGuardProvidesCorrectAccessToReference) {
+  PointerGuard<int> guard{std::make_shared<int>(42)};
+  EXPECT_EQ(guard.get(), 42);
+  EXPECT_EQ(*guard.getWeak().lock(), 42);
 }
 
 // ____________________________________________________________________________
 TEST(PointerGuard, checkExpiredPointerDoesntBlock) {
-  auto future = runAsynchronously([]() {
-    PointerGuard<int> guard;
-    guard.set(std::make_shared<int>(0));
-  });
+  auto future = runAsynchronously(
+      []() { PointerGuard<int> guard{std::make_shared<int>(0)}; });
   ASSERT_EQ(future.wait_for(DEFAULT_TIMEOUT), std::future_status::ready)
-      << "Destructor did not stop blocking";
+      << "Destructor of a PointerGuard with expired shared pointer should not "
+         "block";
 }
 
 // ____________________________________________________________________________
 TEST(PointerGuard, verifyCorrectBlockingBehaviour) {
-  std::shared_ptr<int> ptr = std::make_shared<int>(1337);
-  auto future = runAsynchronously([weakPtr = std::weak_ptr{ptr}]() mutable {
-    PointerGuard<int> guard;
-    guard.set(std::move(weakPtr));
-  });
+  auto ptr = std::make_shared<int>(1337);
+  auto future = runAsynchronously(
+      [ptr]() mutable { PointerGuard<int> guard{std::move(ptr)}; });
 
   // Pointer should block here
   ASSERT_EQ(future.wait_for(DEFAULT_TIMEOUT), std::future_status::timeout);
@@ -61,16 +63,13 @@ TEST(PointerGuard, verifyCorrectBlockingBehaviour) {
 
 // ____________________________________________________________________________
 TEST(PointerGuard, verifyCorrectMoveSemantics) {
-  std::shared_ptr<int> ptr = std::make_shared<int>(1337);
-  std::shared_ptr<PointerGuard<int>> outerGuard =
-      std::make_shared<PointerGuard<int>>();
-  auto future1 =
-      runAsynchronously([weakPtr = std::weak_ptr{ptr}, outerGuard]() mutable {
-        PointerGuard<int> guard;
-        guard.set(std::move(weakPtr));
-        *outerGuard = std::move(guard);
-        outerGuard.reset();
-      });
+  auto ptr = std::make_shared<int>(1337);
+  auto outerGuard = std::make_shared<std::optional<PointerGuard<int>>>();
+  auto future1 = runAsynchronously([ptr, outerGuard]() mutable {
+    PointerGuard<int> guard{std::move(ptr)};
+    *outerGuard = std::move(guard);
+    outerGuard.reset();
+  });
 
   ASSERT_EQ(future1.wait_for(DEFAULT_TIMEOUT), std::future_status::ready);
   ASSERT_EQ(outerGuard.use_count(), 1);

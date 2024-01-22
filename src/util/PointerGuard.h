@@ -16,28 +16,32 @@ namespace ad_utility {
 /// references left.
 template <typename T>
 class PointerGuard {
-  std::weak_ptr<T> pointer_{};
+  std::shared_ptr<T> pointer_{};
 
  public:
   // Define constructors and delete copy with potential surprising behaviour.
-  constexpr PointerGuard() noexcept = default;
+  explicit PointerGuard(std::shared_ptr<T> pointer)
+      : pointer_{std::move(pointer)} {
+    // Make sure pointer does actually point to something
+    AD_CONTRACT_CHECK(pointer_);
+  }
   PointerGuard(PointerGuard&&) noexcept = default;
   PointerGuard(const PointerGuard&) noexcept = delete;
   PointerGuard& operator=(PointerGuard&&) noexcept = default;
   PointerGuard& operator=(const PointerGuard&) noexcept = delete;
 
-  /// Set the internal weak pointer to the passed value.
-  /// Usually this should be the constructor,
-  /// but due to the nature of this class it should usually be declared before
-  /// any potential shared pointer to guard, otherwise the destructor would
-  /// block infinitely, resulting in a deadlock. So that's why 2-step
-  /// initialization is necessary here.
-  void set(std::weak_ptr<T> pointer) { pointer_ = std::move(pointer); }
+  /// Get a weak pointer representation of the underlying shared pointer
+  std::weak_ptr<T> getWeak() const noexcept { return pointer_; }
+
+  /// Get a reference of the underlying object
+  T& get() noexcept { return *pointer_; }
 
   /// Destructor that blocks until the passed pointer no longer has any
   /// references to it.
   ~PointerGuard() {
-    while (!pointer_.expired()) {
+    std::weak_ptr weakPtr{pointer_};
+    pointer_.reset();
+    while (!weakPtr.expired()) {
       // Sleep shortly between checks
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }

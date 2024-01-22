@@ -166,7 +166,7 @@ ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHubAfterSchedule) {
     started.wait(false);
 
     co_await distributor->signalEnd();
-    distributorMap = queryHub->socketDistributors_;
+    distributorMap = queryHub->socketDistributors_.getWeak();
     // Destroy object
     queryHub.reset();
 
@@ -193,9 +193,9 @@ ASYNC_TEST(QueryHub, verifyNoErrorWhenQueryIdMissing) {
   // case is very hard to simulate under real conditions (dependent on
   // scheduling of the operating system) we just fake it here to check the
   // behaviour we desire.
-  queryHub.socketDistributors_->clear();
+  queryHub.socketDistributors_.get().clear();
   EXPECT_NO_THROW(co_await distributor->signalEnd());
-  EXPECT_TRUE(queryHub.socketDistributors_->empty());
+  EXPECT_TRUE(queryHub.socketDistributors_.get().empty());
 }
 
 // _____________________________________________________________________________
