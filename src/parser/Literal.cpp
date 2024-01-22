@@ -54,4 +54,6 @@ std::string Literal::toRdf() const {
     case LiteralDescriptor::DATATYPE:
       return rdf + "^^" + asStringView(descriptorValue_);
   }
+
+  AD_THROW("Invalid value of descriptorType_");
 }

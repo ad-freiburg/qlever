@@ -23,7 +23,7 @@ class Literal {
   //  "Hello World"^^test:type -> test:type
   NormalizedString descriptorValue_;
 
-  // Store information if the literal has a language tag, a datatype, or no
+  // Store if the literal has a language tag, a datatype, or no
   // descriptor
   LiteralDescriptor descriptorType_;
 
