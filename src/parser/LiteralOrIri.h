@@ -32,8 +32,8 @@ class LiteralOrIri {
   // Return true if object contains an Iri object
   bool isIri() const;
 
-  // Return iri string of contained Iri object if available, throw
-  // exception otherwise
+  // Return iri content of contained Iri object without any leading or trailing angled brackets.
+  // Throws Exception if object does not contain an Iri object.
   NormalizedStringView getIriContent();
 
   // Return true if object contains a Literal object

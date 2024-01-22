@@ -41,17 +41,18 @@ class Literal {
   // Return true if the literal has an assigned datatype
   bool hasDatatype() const;
 
-  // Return the value of the literal, without any datatype or language tag
+  // Return the value of the literal without quotation marks and  without any datatype or language tag
   NormalizedStringView getContent() const;
 
-  // Return the language tag of the literal if available.
+  // Return the language tag of the literal, if available, without leading @ character.
   // Throws an exception if the literal has no language tag.
   NormalizedStringView getLanguageTag() const;
 
-  // Return the datatype of the literal if available.
+  // Return the datatype of the literal, if available, withour leading ^^ prefix.
   // Throws an exception if the literal has no datatype.
   NormalizedStringView getDatatype() const;
 
-  // Return the literal encoded as rdf literal
+  // Return the stored literal as valid rdf including quotation marks and, if applicable,
+  // descriptor prefix "@" or "^^".
   std::string toRdf() const;
 };

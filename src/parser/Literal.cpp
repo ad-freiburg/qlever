@@ -35,7 +35,7 @@ NormalizedStringView Literal::getDatatype() const {
   if (!hasDatatype()) {
     AD_THROW("The literal does not have an explicit datatype.");
   }
-  return this->descriptorValue_;
+  return descriptorValue_;
 }
 
 // __________________________________________
@@ -43,7 +43,7 @@ NormalizedStringView Literal::getLanguageTag() const {
   if (!hasLanguageTag()) {
     AD_THROW("The literal does not have an explicit language tag.");
   }
-  return this->descriptorValue_;
+  return descriptorValue_;
 }
 
 // __________________________________________
