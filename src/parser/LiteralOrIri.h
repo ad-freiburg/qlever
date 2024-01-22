@@ -47,24 +47,26 @@ class LiteralOrIri {
   // exception if no Literal object is contained
   bool hasDatatype();
 
-  // Return content of contained Literal as string, throw exception if no
-  // Literal object is contained
+  // Return content of contained Literal as string without leading or training
+  // quotation marks. Throw exception if no Literal object is contained
   NormalizedStringView getLiteralContent();
 
-  // Return the language tag of the contained Literal, throw exception if
-  // no Literal object is contained or object has no language tag
+  // Return the language tag of the contained Literal without leading @
+  // character. Throw exception if no Literal object is contained or object has
+  // no language tag.
   NormalizedStringView getLanguageTag();
 
-  // Return the datatype of the contained Literal, throw exception if no
-  // Literal object is contained or object has no datatype
+  // Return the datatype of the contained Literal without "^^" prefix.
+  // Throw exception if no Literal object is contained or object has no
+  // datatype.
   NormalizedStringView getDatatype();
 
   // Return the stored value as valid rdf, including angled brackets if value
-  // is an Iri, or quotes and "@" or "^^" if value is a literal (with
-  // descriptor)
+  // is an Iri, or including quotes (and if applicable descriptor prefix "@" or
+  // "^^") if value is a Literal.
   std::string toRdf();
 
-  // Parse the given input and if it is a valid rdf term, return a
+  // Parse the given input and if it is a valid rdf term and return a
   // LiteralOrIri object containing the parsed iri or literal.
-  static LiteralOrIri fromRdfToLiteralOrIri(std::string_view input);
+  static LiteralOrIri parseRdf(std::string_view input);
 };

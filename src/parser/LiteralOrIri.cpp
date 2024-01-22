@@ -99,7 +99,7 @@ LiteralOrIri fromStringToLiteral(std::string_view input, std::string_view c) {
            "because of invalid suffix.");
 }
 
-LiteralOrIri LiteralOrIri::fromRdfToLiteralOrIri(std::string_view input) {
+LiteralOrIri LiteralOrIri::parseRdf(std::string_view input) {
   if (input.starts_with("<") && input.ends_with(">")) {
     std::string_view content = input.substr(1, input.size() - 2);
     if (auto pos =
