@@ -24,7 +24,7 @@ Iri& LiteralOrIri::getIriTypeObject() {
 
 NormalizedStringView LiteralOrIri::getIriString() {
   Iri& iriType = getIriTypeObject();
-  return iriType.getIri();
+  return iriType.getContent();
 }
 
 bool LiteralOrIri::isLiteral() const {

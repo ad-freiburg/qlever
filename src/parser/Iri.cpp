@@ -8,4 +8,4 @@
 
 Iri::Iri(NormalizedString iri) { this->iri = std::move(iri); }
 
-NormalizedStringView Iri::getIri() const { return this->iri; }
+NormalizedStringView Iri::getContent() const { return this->iri; }

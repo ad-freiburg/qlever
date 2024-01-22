@@ -15,7 +15,7 @@ TEST(IriTypeTest, IriTypeCreation) {
   Iri iri(fromStringUnsafe("http://www.wikidata.org/entity/Q3138"));
 
   EXPECT_THAT("http://www.wikidata.org/entity/Q3138",
-              asStringView(iri.getIri()));
+              asStringView(iri.getContent()));
 }
 
 TEST(LiteralTypeTest, LiteralTypeTest) {
