@@ -22,9 +22,9 @@ add_library(parser
         GraphPatternOperation.cpp
         # The `Variable.cpp` from the subdirectory is linked here because otherwise we get linking errors.
         GraphPattern.cpp data/VariableToColumnMapPrinters.cpp
-        IriType.cpp
-        LiteralType.cpp
-        LiteralOrIriType.cpp
+        Iri.cpp
+        Literal.cpp
+        LiteralOrIri.cpp
         NormalizedString.cpp)
 qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine)
 
