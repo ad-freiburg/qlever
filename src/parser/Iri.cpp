@@ -8,8 +8,11 @@
 
 #include "NormalizedString.h"
 
+// __________________________________________
 Iri::Iri(NormalizedString iri) : iri_{std::move(iri)} {}
 
+// __________________________________________
 NormalizedStringView Iri::getContent() const { return iri_; }
 
+// __________________________________________
 std::string Iri::toRdf() const { return "<" + asStringView(iri_) + ">"; }

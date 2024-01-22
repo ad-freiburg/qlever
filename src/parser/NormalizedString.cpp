@@ -4,8 +4,7 @@
 
 #include "NormalizedString.h"
 
-#include <iostream>
-
+// __________________________________________
 NormalizedString fromStringUnsafe(std::string_view input) {
   NormalizedString normalizedString;
   normalizedString.resize(input.size());
@@ -16,6 +15,7 @@ NormalizedString fromStringUnsafe(std::string_view input) {
   return normalizedString;
 }
 
+// __________________________________________
 std::string_view asStringView(NormalizedStringView normalizedStringView) {
   return {reinterpret_cast<const char*>(normalizedStringView.data()),
           normalizedStringView.size()};

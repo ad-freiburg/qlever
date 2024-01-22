@@ -6,29 +6,31 @@
 
 #include <utility>
 
+// __________________________________________
 Literal::Literal(NormalizedString content)
     : content_{std::move(content)}, descriptorType_{LiteralDescriptor::NONE} {}
 
+// __________________________________________
 Literal::Literal(NormalizedString content,
                  NormalizedString datatypeOrLanguageTag, LiteralDescriptor type)
     : content_{std::move(content)},
       descriptorValue_{std::move(datatypeOrLanguageTag)},
       descriptorType_{type} {}
 
-//
+// __________________________________________
 bool Literal::hasLanguageTag() const {
   return descriptorType_ == LiteralDescriptor::LANGUAGE_TAG;
 }
 
-//
+// __________________________________________
 bool Literal::hasDatatype() const {
   return descriptorType_ == LiteralDescriptor::DATATYPE;
 }
 
-//
+// __________________________________________
 NormalizedStringView Literal::getContent() const { return content_; }
 
-//
+// __________________________________________
 NormalizedStringView Literal::getDatatype() const {
   if (!hasDatatype()) {
     AD_THROW("The literal does not have an explicit datatype.");
@@ -36,6 +38,7 @@ NormalizedStringView Literal::getDatatype() const {
   return this->descriptorValue_;
 }
 
+// __________________________________________
 NormalizedStringView Literal::getLanguageTag() const {
   if (!hasLanguageTag()) {
     AD_THROW("The literal does not have an explicit language tag.");
@@ -43,6 +46,7 @@ NormalizedStringView Literal::getLanguageTag() const {
   return this->descriptorValue_;
 }
 
+// __________________________________________
 std::string Literal::toRdf() const {
   std::string rdf = "\"" + asStringView(content_) + "\"";
 

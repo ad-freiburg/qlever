@@ -6,12 +6,16 @@
 
 #include <algorithm>
 
+// __________________________________________
 LiteralOrIri::LiteralOrIri(Iri iri) : data_{std::move(iri)} {}
 
+// __________________________________________
 LiteralOrIri::LiteralOrIri(Literal literal) : data_{std::move(literal)} {}
 
+// __________________________________________
 bool LiteralOrIri::isIri() const { return std::holds_alternative<Iri>(data_); }
 
+// __________________________________________
 Iri& LiteralOrIri::getIri() {
   if (!isIri()) {
     AD_THROW(
@@ -21,14 +25,17 @@ Iri& LiteralOrIri::getIri() {
   return std::get<Iri>(data_);
 }
 
+// __________________________________________
 NormalizedStringView LiteralOrIri::getIriContent() {
   return getIri().getContent();
 }
 
+// __________________________________________
 bool LiteralOrIri::isLiteral() const {
   return std::holds_alternative<Literal>(data_);
 }
 
+// __________________________________________
 Literal& LiteralOrIri::getLiteral() {
   if (!isLiteral()) {
     AD_THROW(
@@ -38,22 +45,28 @@ Literal& LiteralOrIri::getLiteral() {
   return std::get<Literal>(data_);
 }
 
+// __________________________________________
 bool LiteralOrIri::hasLanguageTag() { return getLiteral().hasLanguageTag(); }
 
+// __________________________________________
 bool LiteralOrIri::hasDatatype() { return getLiteral().hasDatatype(); }
 
+// __________________________________________
 NormalizedStringView LiteralOrIri::getLiteralContent() {
   return getLiteral().getContent();
 }
 
+// __________________________________________
 NormalizedStringView LiteralOrIri::getLanguageTag() {
   return getLiteral().getLanguageTag();
 }
 
+// __________________________________________
 NormalizedStringView LiteralOrIri::getDatatype() {
   return getLiteral().getDatatype();
 }
 
+// __________________________________________
 std::string LiteralOrIri::toRdf() {
   if (isIri()) {
     return getIri().toRdf();
@@ -64,6 +77,7 @@ std::string LiteralOrIri::toRdf() {
   }
 }
 
+// __________________________________________
 LiteralOrIri fromStringToLiteral(std::string_view input, std::string_view c) {
   auto pos = input.find(c, c.length());
   if (pos == 0) {
@@ -99,6 +113,7 @@ LiteralOrIri fromStringToLiteral(std::string_view input, std::string_view c) {
            "because of invalid suffix.");
 }
 
+// __________________________________________
 LiteralOrIri LiteralOrIri::parseRdf(std::string_view input) {
   if (input.starts_with("<") && input.ends_with(">")) {
     std::string_view content = input.substr(1, input.size() - 2);
