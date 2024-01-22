@@ -12,16 +12,19 @@ class Literal {
   // A class to hold literal values.
 
  private:
-  // Store the string value of the literal withour the surounding quotation marks or trainling descriptor.
+  // Store the string value of the literal without the surrounding quotation
+  // marks or trailing descriptor.
   //  "Hello World"@en -> Hello World
   NormalizedString content_;
 
-  // Store the optional language tag or the optional datatype if applicable without their prefixes
-  // "Hello World"@en -> en
-  // "Hello World"^^test:type -> test:type
+  // Store the optional language tag or the optional datatype if applicable
+  // without their prefixes.
+  //  "Hello World"@en -> en
+  //  "Hello World"^^test:type -> test:type
   NormalizedString descriptorValue_;
 
-  // Store information if the literal has a language tag, a datatype, or no descriptor
+  // Store information if the literal has a language tag, a datatype, or no
+  // descriptor
   LiteralDescriptor descriptorType_;
 
  public:
