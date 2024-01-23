@@ -583,9 +583,6 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   // The variables, that our configuration option will write to.
   ConfigVariables configVariables_;
 
-  // The date of this objects instantiation.
-  const std::string dateOfCreation_{ad_utility::Log::getTimeStamp()};
-
  public:
   // The variables, that the configuration option of this class will write to.
   const ConfigVariables& getConfigVariables() const { return configVariables_; }
@@ -997,7 +994,6 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   */
   void addDefaultMetadata(BenchmarkMetadata* meta) const {
     // Information, that is interesting for all the benchmarking classes.
-    meta->addKeyValuePair("dateOfCreation", dateOfCreation_);
     meta->addKeyValuePair("randomSeed",
                           getConfigVariables().randomSeed().get());
     meta->addKeyValuePair("smallerTableNumColumns",
@@ -1162,9 +1158,6 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // For creating a new random seed for every new row.
     RandomSeedGenerator seedGenerator{std::move(randomSeed)};
 
-    // Save the date of creation for the metadata.
-    const std::string dateOfCreation{ad_utility::Log::getTimeStamp()};
-
     /*
     Now on to creating the benchmark table. Because we don't know, how many
     row names we will have, we just create a table without row names.
@@ -1174,9 +1167,6 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         {std::move(parameterName), "Time for sorting", "Merge/Galloping join",
          "Sorting + merge/galloping join", "Hash join",
          "Number of rows in resulting IdTable", "Speedup of hash join"});
-
-    // Save the date of creation.
-    table.metadata().addKeyValuePair("dateOfCreation", dateOfCreation);
 
     /*
     Adding measurements to the table, as long as possible.
@@ -1599,11 +1589,8 @@ class BmOnlyBiggerTableSizeChanges final
       }
     }
 
-    return results;
-  }
-
-  BenchmarkMetadata getMetadata() const override {
-    BenchmarkMetadata meta{};
+    // Add the general metadata.
+    BenchmarkMetadata& meta{getGeneralMetadata()};
     meta.addKeyValuePair("Value changing with every row", "ratioRows");
     meta.addKeyValuePair("smallerTableNumRows",
                          getConfigVariables().smallerTableNumRows_);
@@ -1615,7 +1602,8 @@ class BmOnlyBiggerTableSizeChanges final
         getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
     meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
     GeneralInterfaceImplementation::addDefaultMetadata(&meta);
-    return meta;
+
+    return results;
   }
 };
 
@@ -1668,11 +1656,9 @@ class BmOnlySmallerTableSizeChanges final
         }
       }
     }
-    return results;
-  }
 
-  BenchmarkMetadata getMetadata() const override {
-    BenchmarkMetadata meta{};
+    // Add the general metadata.
+    BenchmarkMetadata& meta{getGeneralMetadata()};
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableNumRows");
     meta.addKeyValuePair(
@@ -1683,7 +1669,7 @@ class BmOnlySmallerTableSizeChanges final
         getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
     meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
     GeneralInterfaceImplementation::addDefaultMetadata(&meta);
-    return meta;
+    return results;
   }
 };
 
@@ -1729,11 +1715,8 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
       }
     }
 
-    return results;
-  }
-
-  BenchmarkMetadata getMetadata() const override {
-    BenchmarkMetadata meta{};
+    // Add the general metadata.
+    BenchmarkMetadata& meta{getGeneralMetadata()};
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableNumRows");
     meta.addKeyValuePair("ratioRows", 1);
@@ -1745,7 +1728,7 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
         getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
     meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
     GeneralInterfaceImplementation::addDefaultMetadata(&meta);
-    return meta;
+    return results;
   }
 };
 
@@ -1836,11 +1819,8 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
       }
     }
 
-    return results;
-  }
-
-  BenchmarkMetadata getMetadata() const override {
-    BenchmarkMetadata meta{};
+    // Add the general metadata.
+    BenchmarkMetadata& meta{getGeneralMetadata()};
     meta.addKeyValuePair("Value changing with every row",
                          "biggerTableJoinColumnSampleSizeRatio");
     meta.addKeyValuePair("ratioRows", ratioRows_);
@@ -1849,7 +1829,7 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     meta.addKeyValuePair("benchmarkSampleSizeRatios",
                          getConfigVariables().benchmarkSampleSizeRatios_);
     GeneralInterfaceImplementation::addDefaultMetadata(&meta);
-    return meta;
+    return results;
   }
 };
 
