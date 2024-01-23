@@ -349,6 +349,7 @@ void IndexImpl::createFromFile(const string& filename) {
 // _____________________________________________________________________________
 IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial) {
+  /*
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
@@ -458,9 +459,11 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(INFO) << "Number of QLever-internal triples created: "
             << (*idTriples.wlock())->size() << " [may contain duplicates]"
             << std::endl;
+            */
 
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
+  /*
   if (vocabPrefixCompressed_) {
     LOG(INFO) << "Merging partial vocabularies in byte order "
               << "(internal only) ..." << std::endl;
@@ -490,6 +493,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                                  NUM_COMPRESSION_PREFIXES, 1, true);
     ad_utility::deleteFile(vocabFileForPrefixCalculation);
   }
+   */
 
   LOG(INFO) << "Merging partial vocabularies in Unicode order "
             << "(internal and external) ..." << std::endl;
@@ -504,6 +508,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto internalVocabularyAction = [&wordWriter](const auto& word) {
       wordWriter.push(word.data(), word.size());
     };
+    // Num files is currently.
+    static constexpr size_t numFiles = 16379;
     return v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
                              internalVocabularyAction,
                              memoryLimitIndexBuilding());
@@ -516,9 +522,15 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
             << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
             << std::endl;
 
+  while (true) {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  };
+  /*
   res.idTriples = std::move(*idTriples.wlock());
   res.actualPartialSizes = std::move(actualPartialSizes);
+   */
 
+  /*
   LOG(INFO) << "Removing temporary files ..." << std::endl;
   for (size_t n = 0; n < numFiles; ++n) {
     deleteTemporaryFile(absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, n));
@@ -527,6 +539,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                                        PARTIAL_VOCAB_FILE_NAME, n));
     }
   }
+   */
 
   return res;
 }
