@@ -144,7 +144,7 @@ class CancellationHandle {
                                              steady_clock::now() -
                                              startTimeoutWindow_.load()) +
                                          DESIRED_CANCELLATION_CHECK_INTERVAL}
-                    << ", should be at most"
+                    << ", should be at most "
                     << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
                     << ". Stage: "
                     << std::invoke(detailSupplier, AD_FWD(argTypes)...)
@@ -211,12 +211,18 @@ class CancellationHandle {
   /// Return true if this cancellation handle has been cancelled, false
   /// otherwise. Note: Make sure to not use this value to set any other atomic
   /// value with relaxed memory ordering, as this may lead to out-of-thin-air
-  /// values. It also does not interact with the watchdog at all, prefer
-  /// `throwIfCancelled` if possible.
-  AD_ALWAYS_INLINE bool isCancelled() const {
+  /// values. If the watchdog is enabled, this will please it and print
+  /// a warning with the passed detail string.
+  AD_ALWAYS_INLINE bool isCancelled(std::string_view details) {
     if constexpr (CancellationEnabled) {
-      return detail::isCancelled(
-          cancellationState_.load(std::memory_order_relaxed));
+      auto state = cancellationState_.load(std::memory_order_relaxed);
+      bool isCancelled = detail::isCancelled(state);
+      if constexpr (WatchDogEnabled) {
+        if (!isCancelled && state != CancellationState::NOT_CANCELLED) {
+          pleaseWatchDog(state, std::identity{}, details);
+        }
+      }
+      return isCancelled;
     } else {
       return false;
     }
@@ -250,6 +256,7 @@ class CancellationHandle {
               verifyCheckAfterDeadlineMissDoesReportProperly);
   FRIEND_TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel);
   FRIEND_TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary);
+  FRIEND_TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog);
 };
 
 using SharedCancellationHandle = std::shared_ptr<CancellationHandle<>>;

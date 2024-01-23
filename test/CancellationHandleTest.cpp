@@ -48,7 +48,7 @@ TEST(CancellationHandle, verifyConstructorDoesNotAcceptNoReason) {
 TYPED_TEST(CancellationHandleFixture, verifyNotCancelledByDefault) {
   auto& handle = this->handle_;
 
-  EXPECT_FALSE(handle.isCancelled());
+  EXPECT_FALSE(handle.isCancelled(""));
   EXPECT_NO_THROW(handle.throwIfCancelled(""));
   EXPECT_NO_THROW(handle.throwIfCancelled([]() { return ""; }));
 }
@@ -70,7 +70,7 @@ TYPED_TEST(CancellationHandleFixture, verifyTimeoutCancellationWorks) {
   handle.cancel(TIMEOUT);
 
   auto timeoutMessageMatcher = AllOf(HasSubstr(detail), HasSubstr("timeout"));
-  EXPECT_TRUE(handle.isCancelled());
+  EXPECT_TRUE(handle.isCancelled(""));
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(handle.throwIfCancelled(detail),
                                         timeoutMessageMatcher,
                                         CancellationException);
@@ -88,7 +88,7 @@ TYPED_TEST(CancellationHandleFixture, verifyManualCancellationWorks) {
 
   auto cancellationMessageMatcher =
       AllOf(HasSubstr(detail), HasSubstr("manual cancellation"));
-  EXPECT_TRUE(handle.isCancelled());
+  EXPECT_TRUE(handle.isCancelled(""));
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(handle.throwIfCancelled(detail),
                                         cancellationMessageMatcher,
                                         CancellationException);
@@ -116,7 +116,7 @@ TYPED_TEST(CancellationHandleFixture,
         }
       },
       CancellationException);
-  EXPECT_TRUE(handle.isCancelled());
+  EXPECT_TRUE(handle.isCancelled(""));
 }
 
 // _____________________________________________________________________________
@@ -335,10 +335,41 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
 // _____________________________________________________________________________
 
+TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
+  // If the log level is not high enough this test will fail
+  static_assert(LOGLEVEL >= WARN);
+  auto& choice = ad_utility::LogstreamChoice::get();
+  CancellationHandle<ENABLED> handle;
+
+  auto& originalOStream = choice.getStream();
+  absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
+
+  std::ostringstream testStream;
+  choice.setStream(&testStream);
+
+  handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
+  handle.cancellationState_ = CHECK_WINDOW_MISSED;
+
+  handle.isCancelled("my-detail");
+
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
+  EXPECT_THAT(std::move(testStream).str(), HasSubstr("my-detail"));
+
+  handle.cancellationState_ = WAITING_FOR_CHECK;
+  testStream.str("");
+
+  handle.isCancelled("my-detail");
+
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
+  EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr("my-detail")));
+}
+
+// _____________________________________________________________________________
+
 TEST(CancellationHandle, expectDisabledHandleIsAlwaysFalse) {
   CancellationHandle<DISABLED> handle;
 
-  EXPECT_FALSE(handle.isCancelled());
+  EXPECT_FALSE(handle.isCancelled(""));
   EXPECT_NO_THROW(handle.throwIfCancelled("Abc"));
 }
 
