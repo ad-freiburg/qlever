@@ -59,7 +59,8 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     uint64_t numWords;
     infile >> numWords;
     std::future<std::vector<TripleComponentWithIndex>> fut;
-    auto readBlock = [&, i = 0ul]() mutable {
+    size_t i = 0ul;
+    auto readBlock = [&]() mutable {
       std::vector<TripleComponentWithIndex> vec;
       vec.reserve(numRowsBufferSizeGenerator);
       std::lock_guard l{generatorMutex};
