@@ -102,16 +102,28 @@ std::string getMessageImpl(
 }
 
 // Helper function used to format the arguments passed to `AD_CONTRACT_CHECK`
-// etc. Return "condition; <concatentation of `getMessageImpl(messages)...`>
-std::string concatMessages(std::string_view condition, auto&&... messages) {
+// etc. Return "<concatentation of `getMessageImpl(messages)...`>" followed by
+// a full stop and space if there is at least one message.
+std::string concatMessages(auto&&... messages) {
   if constexpr (sizeof...(messages) == 0) {
-    return std::string{condition};
+    return "";
   } else {
-    return absl::StrCat(getMessageImpl(condition), "; ",
-                        getMessageImpl(messages)...);
+    return absl::StrCat(getMessageImpl(messages)..., ". ");
   }
 }
 }  // namespace ad_utility::detail
+
+// A macro for the common implementation of `AD_CONTRACT_CHECK` and
+// `AD_CORRECTNESS_CHECK` (see below).
+#define AD_CHECK_IMPL(condition, conditionString, sourceLocation, ...)      \
+  using namespace std::string_literals;                                     \
+  if (!(condition)) [[unlikely]] {                                          \
+    AD_THROW("Assertion `"s + std::string(conditionString) + "` failed. " + \
+                 ad_utility::detail::concatMessages(__VA_ARGS__) +          \
+                 "Please report this to the developers"s,                   \
+             sourceLocation);                                               \
+  }                                                                         \
+  void(0)
 
 // Custom assert which does not abort but throws an exception. Use this for
 // conditions that can be violated by calling a public (member) function with
@@ -125,16 +137,10 @@ std::string concatMessages(std::string_view condition, auto&&... messages) {
 // types) or a callable that produce a `std::string`. The latter case is useful
 // if the error message is expensive to construct because the callables are only
 // invoked if the assertion fails. For examples see `ExceptionTest.cpp`.
-#define AD_CONTRACT_CHECK(condition, ...)                                                                                                                  \
-  if (!(condition)) [[unlikely]] {                                                                                                                         \
-    using namespace std::string_literals;                                                                                                                  \
-    AD_THROW(                                                                                                                                              \
-        "Assertion `"s +                                                                                                                                   \
-        ad_utility::detail::concatMessages(std::string(__STRING(condition))                                                                                \
-                                               __VA_OPT__(, ) __VA_ARGS__) +                                                                               \
-        "` failed. Likely cause: A function was called with arguments that violate the contract of the function. Please report this to the developers."s); \
-  }                                                                                                                                                        \
-  void(0)
+#define AD_CONTRACT_CHECK(condition, ...)                             \
+  AD_CHECK_IMPL(condition, __STRING(condition),                       \
+                ad_utility::source_location::current() __VA_OPT__(, ) \
+                    __VA_ARGS__)
 
 // Custom assert which does not abort but throws an exception. Use this for
 // conditions that can never be violated via a public (member) function. It is
@@ -148,16 +154,7 @@ namespace ad_utility::detail {
 inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
                                    ad_utility::source_location location,
                                    auto&&... additionalMessages) {
-  if (!(condition)) [[unlikely]] {
-    using namespace std::string_literals;
-    // TODO<GCC13> Use `std::format`.
-    AD_THROW(
-        "Assertion `"s +
-            ad_utility::detail::concatMessages(std::string(message),
-                                               additionalMessages...) +
-            "` failed. This indicates that an internal function was not implemented correctly, which should never happen. Please report this to the developers"s,
-        location);
-  }
+  AD_CHECK_IMPL(condition, message, location, additionalMessages...);
 }
 }  // namespace ad_utility::detail
 #define AD_CORRECTNESS_CHECK(condition, ...)             \

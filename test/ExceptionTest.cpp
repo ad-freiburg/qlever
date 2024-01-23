@@ -21,8 +21,8 @@ auto makeMatcher = [](std::string condition,
   auto approximateLineMatcher =
       AnyOf(e(line - 4), e(line - 3), e(line - 2), e(line - 1), e(line),
             e(line + 1), e(line + 2));
-  return AllOf(StartsWith(absl::StrCat("Assertion `", condition, "` failed.")),
-               ContainsRegex(l.file_name()), approximateLineMatcher);
+  return AllOf(HasSubstr(condition), HasSubstr(l.file_name()),
+               approximateLineMatcher);
 };
 
 void checkContains(const std::exception& e, std::string_view substring) {
@@ -73,22 +73,33 @@ TEST(Exception, contractCheckWithMessage) {
   std::vector<int> v;
 
   v.push_back(27);
-  auto failCheck = [&v] { AD_CONTRACT_CHECK(v.empty(), "v must be empty"); };
-  AD_EXPECT_THROW_WITH_MESSAGE((failCheck()),
-                               makeMatcher("v.empty(); v must be empty"));
+  auto failCheck = [&v] { AD_CONTRACT_CHECK(v.empty(), "`v` must be empty"); };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (failCheck()),
+      makeMatcher("Assertion `v.empty()` failed. `v` must be empty. Please"));
 
   auto failCheck2 = [&v] {
-    AD_CONTRACT_CHECK(
-        v.empty(), [&v] { return absl::StrCat("but v has size ", v.size()); });
-  };
-  AD_EXPECT_THROW_WITH_MESSAGE((failCheck2()),
-                               makeMatcher("v.empty(); but v has size 1"));
-
-  auto failCheck3 = [&v] {
-    AD_CONTRACT_CHECK(v.empty(), "but v has size ", v.size(), " and not 0");
+    AD_CONTRACT_CHECK(v.empty(),
+                      [&v] { return absl::StrCat("`v` has size ", v.size()); });
   };
   AD_EXPECT_THROW_WITH_MESSAGE(
-      (failCheck3()), makeMatcher("v.empty(); but v has size 1 and not 0"));
+      (failCheck2()),
+      makeMatcher("Assertion `v.empty()` failed. `v` has size 1. Please"));
+
+  auto failCheck3 = [&v] {
+    AD_CONTRACT_CHECK(v.empty(), "`v` has size ", v.size(), " and not 0");
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (failCheck3()),
+      makeMatcher(
+          "Assertion `v.empty()` failed. `v` has size 1 and not 0. Please"));
+
+  // No additional message, check that no additional full stops or spaces are
+  // inserted.
+  auto failCheck4 = [&v] { AD_CONTRACT_CHECK(v.empty()); };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (failCheck4()),
+      makeMatcher("Assertion `v.empty()` failed. Please report"));
 }
 
 TEST(Exception, AD_CORRECTNESS_CHECK) {
@@ -107,22 +118,35 @@ TEST(Exception, correctnessCheckWithMessage) {
   std::vector<int> v;
 
   v.push_back(27);
-  auto failCheck = [&v] { AD_CORRECTNESS_CHECK(v.empty(), "v must be empty"); };
-  AD_EXPECT_THROW_WITH_MESSAGE((failCheck()),
-                               makeMatcher("v.empty(); v must be empty"));
+  auto failCheck = [&v] {
+    AD_CORRECTNESS_CHECK(v.empty(), "`v` must be empty");
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (failCheck()),
+      makeMatcher("Assertion `v.empty()` failed. `v` must be empty. Please"));
 
   auto failCheck2 = [&v] {
     AD_CORRECTNESS_CHECK(
-        v.empty(), [&v] { return absl::StrCat("but v has size ", v.size()); });
-  };
-  AD_EXPECT_THROW_WITH_MESSAGE((failCheck2()),
-                               makeMatcher("v.empty(); but v has size 1"));
-
-  auto failCheck3 = [&v] {
-    AD_CORRECTNESS_CHECK(v.empty(), "but v has size ", v.size(), " and not 0");
+        v.empty(), [&v] { return absl::StrCat("`v` has size ", v.size()); });
   };
   AD_EXPECT_THROW_WITH_MESSAGE(
-      (failCheck3()), makeMatcher("v.empty(); but v has size 1 and not 0"));
+      (failCheck2()),
+      makeMatcher("Assertion `v.empty()` failed. `v` has size 1. Please"));
+
+  auto failCheck3 = [&v] {
+    AD_CORRECTNESS_CHECK(v.empty(), "`v` has size ", v.size(), " and not 0");
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (failCheck3()),
+      makeMatcher(
+          "Assertion `v.empty()` failed. `v` has size 1 and not 0. Please"));
+
+  // No additional message, check that no additional full stops or spaces are
+  // inserted.
+  auto failCheck4 = [&v] { AD_CORRECTNESS_CHECK(v.empty()); };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (failCheck4()),
+      makeMatcher("Assertion `v.empty()` failed. Please report"));
 }
 
 TEST(Exception, AD_FAIL) {
