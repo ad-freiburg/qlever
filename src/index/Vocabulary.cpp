@@ -21,6 +21,73 @@
 
 using std::string;
 
+// ____________________________________________________________________________
+template <typename StringType, typename ComparatorType, typename IndexT>
+void Vocabulary<StringType, ComparatorType, IndexT>::setRangesForPrefix(
+    PrefixRanges& ranges, std::string_view prefix) {
+  // NOTE: If a prefix is not present in a vocabulary, `first` and `last`of
+  // the range returned by `prefix_range` will both be equal.
+  auto rangeInternal = internalVocabulary_.prefix_range(prefix);
+  auto rangeExternal = externalVocabulary_.prefix_range(prefix);
+  ranges.rangeInternalBegin_ = IndexType::make(rangeInternal.first);
+  ranges.rangeInternalEnd_ = IndexType::make(rangeInternal.second);
+  auto offset = internalVocabulary_.size();
+  ranges.rangeExternalBegin_ = IndexType::make(rangeExternal.first + offset);
+  ranges.rangeExternalEnd_ = IndexType::make(rangeExternal.second + offset);
+}
+
+// ____________________________________________________________________________
+template <typename StringType, typename ComparatorType, typename IndexT>
+bool Vocabulary<StringType, ComparatorType, IndexT>::containedInRanges(
+    IndexT index, const PrefixRanges& ranges) const {
+  return (ranges.rangeInternalBegin_ <= index &&
+          index < ranges.rangeInternalEnd_) ||
+         (ranges.rangeExternalBegin_ <= index &&
+          index < ranges.rangeExternalEnd_);
+}
+
+// ____________________________________________________________________________
+// template <typename StringType, typename ComparatorType, typename IndexT>
+// std::string Vocabulary<StringType, ComparatorType,
+//                        IndexT>::PrefixRangeInternalAndExternal::toString()
+//     const {
+//   std::ostringstream os;
+//   os << "[" << rangeInternalBegin_ << " - " << rangeInternalEnd_ << "]"
+//      << " [" << rangeExternalBegin_ << " - " << rangeExternalEnd_ << "]";
+//   return os.str();
+//   // std::string toString(auto getWordFunction) const {
+//   //   auto rangeToString = [&](auto begin, auto end) {
+//   //     return begin == end
+//   //                ? std::string("[EMPTY RANGE]")
+//   //                : absl::StrCat("[", getWordFunction(begin), " - ",
+//   //                               getWordFunction(end.decremented()), "]");
+//   //   };
+//   //   return absl::StrCat(
+//   //       rangeToString(rangeInternalBegin_, rangeInternalEnd_), " ",
+//   //       rangeToString(rangeExternalBegin_, rangeExternalEnd_));
+//   // }
+// }
+
+// ____________________________________________________________________________
+template <typename StringType, typename ComparatorType, typename IndexT>
+bool Vocabulary<StringType, ComparatorType, IndexT>::isIri(IndexT index) const {
+  return containedInRanges(index, prefixRangesIris_);
+}
+
+// ____________________________________________________________________________
+template <typename StringType, typename ComparatorType, typename IndexT>
+bool Vocabulary<StringType, ComparatorType, IndexT>::isBlankNode(
+    IndexT index) const {
+  return containedInRanges(index, prefixRangesBlankNodes_);
+}
+
+// ____________________________________________________________________________
+template <typename StringType, typename ComparatorType, typename IndexT>
+bool Vocabulary<StringType, ComparatorType, IndexT>::isLiteral(
+    IndexT index) const {
+  return containedInRanges(index, prefixRangesLiterals_);
+}
+
 // _____________________________________________________________________________
 template <class S, class C, typename I>
 void Vocabulary<S, C, I>::readFromFile(const string& fileName,
@@ -47,12 +114,18 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName,
               << externalVocabulary_.size() << std::endl;
   }
 
-  LOG(INFO) << "Computing ranges for IRIs, blank nodes, and literals ..."
-            << std::endl;
-  prefixIdRangesIRIs_.set("<", internalVocabulary_, externalVocabulary_);
-  prefixIdRangesBlankNodes_.set("_:", internalVocabulary_, externalVocabulary_);
-  prefixIdRangesLiterals_.set("\"", internalVocabulary_, externalVocabulary_);
+  // Precomputing ranges for IRIs, blank nodes, and literals, for faster
+  // processing of the `isIrI`, `isBlankNode`, and `isLiteral` functions.
+  //
+  // NOTE: We only need this for the vocabulary of the main index, where
+  // `I` is `VocabIndex`. However, since this is a negligible one-time cost,
+  // it does not harm to do it for all vocabularies.
+  setRangesForPrefix(prefixRangesIris_, "<");
+  setRangesForPrefix(prefixRangesBlankNodes_, "_:");
+  setRangesForPrefix(prefixRangesLiterals_, "\"");
 
+  // TODO Code for debugging, remove it before committing TODO
+  //
   // For debugging purposes, let's show the word ranges.
   // LOG(INFO) << "Ranges for IRIs (indexes): " <<
   // prefixIdRangesIRIs_.toString()
@@ -61,15 +134,17 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName,
   //           << prefixIdRangesBlankNodes_.toString() << std::endl;
   // LOG(INFO) << "Ranges for literals (indexes): "
   //           << prefixIdRangesLiterals_.toString() << std::endl;
-  auto getWordFunction = [this](auto index) {
-    return this->indexToOptionalString(index).value_or("NOT_IN_VOCAB");
-  };
-  LOG(INFO) << "Ranges for IRIs: "
-            << prefixIdRangesIRIs_.toString(getWordFunction) << std::endl;
-  LOG(INFO) << "Ranges for blank nodes: "
-            << prefixIdRangesBlankNodes_.toString(getWordFunction) << std::endl;
-  LOG(INFO) << "Ranges for literals: "
-            << prefixIdRangesLiterals_.toString(getWordFunction) << std::endl;
+  // auto getWordFunction = [this](auto index) {
+  //   return this->indexToOptionalString(index).value_or("NOT_IN_VOCAB");
+  // };
+  // LOG(INFO) << "Ranges for IRIs: "
+  //           << prefixIdRangesIris_.toString(getWordFunction) << std::endl;
+  // LOG(INFO) << "Ranges for blank nodes: "
+  //           << prefixIdRangesBlankNodes_.toString(getWordFunction) <<
+  //           std::endl;
+  // LOG(INFO) << "Ranges for literals: "
+  //           << prefixIdRangesLiterals_.toString(getWordFunction) <<
+  //           std::endl;
 }
 
 // _____________________________________________________________________________
@@ -99,23 +174,23 @@ void Vocabulary<S, C, I>::createFromSet(
 
 // _____________________________________________________________________________
 template <class S, class C, class I>
-bool Vocabulary<S, C, I>::isLiteral(const string& word) {
-  return word.size() > 0 && word[0] == '\"';
+bool Vocabulary<S, C, I>::stringIsLiteral(const string& s) {
+  return s.size() > 0 && s[0] == '\"';
 }
 
 // _____________________________________________________________________________
 template <class S, class C, class I>
-bool Vocabulary<S, C, I>::shouldBeExternalized(const string& word) const {
+bool Vocabulary<S, C, I>::shouldBeExternalized(const string& s) const {
   // TODO<joka921> Completely refactor the Vocabulary on the different
   // Types, it is a mess.
 
   // If the string is not compressed, this means that this is a text vocabulary
   // and thus doesn't support externalization.
   if constexpr (std::is_same_v<S, CompressedString>) {
-    if (!isLiteral(word)) {
-      return shouldEntityBeExternalized(word);
+    if (!stringIsLiteral(s)) {
+      return shouldEntityBeExternalized(s);
     } else {
-      return shouldLiteralBeExternalized(word);
+      return shouldLiteralBeExternalized(s);
     }
   } else {
     return false;

@@ -1292,6 +1292,7 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("ISIRI(?x)", matchUnary(&makeIsIriExpression));
   expectBuiltInCall("ISBLANK(?x)", matchUnary(&makeIsBlankExpression));
   expectBuiltInCall("ISLITERAL(?x)", matchUnary(&makeIsLiteralExpression));
+  expectBuiltInCall("ISNUMERIC(?x)", matchUnary(&makeIsNumericExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
   expectBuiltInCall("COALESCE(?x)", matchUnary(makeCoalesceExpressionVariadic));
   expectBuiltInCall("COALESCE()", matchNary(makeCoalesceExpressionVariadic));

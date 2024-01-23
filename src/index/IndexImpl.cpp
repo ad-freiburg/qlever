@@ -861,7 +861,7 @@ template void IndexImpl::writeAsciiListFile<vector<Score>>(
 
 // _____________________________________________________________________________
 bool IndexImpl::isLiteral(const string& object) const {
-  return decltype(vocab_)::isLiteral(object);
+  return decltype(vocab_)::stringIsLiteral(object);
 }
 
 // _____________________________________________________________________________

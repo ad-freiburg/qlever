@@ -8,6 +8,7 @@
 #include "engine/ResultTable.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Id.h"
+#include "util/ConstexprSmallString.h"
 #include "util/TypeTraits.h"
 
 /// Several classes that can be used as the `ValueGetter` template
@@ -127,21 +128,45 @@ struct StringValueGetterImpl {
 using StringValueGetter = StringValueGetterImpl<true>;
 using StringValueGetterRaw = StringValueGetterImpl<false>;
 
-// Return true iff the value is a blank node.
-//
-// TODO: How to have analogous value gettters for isIRI and isLiteral without
-// code duplication?
-struct IsBlankNodeValueGetter {
-  bool operator()(ValueId id, const EvaluationContext* context) const {
-    return id.getDatatype() == Datatype::VocabIndex &&
-           context->_qec.getIndex()
-               .getVocab()
-               .prefixIdRangesBlankNodes_.contains(id.getVocabIndex());
+// Value getters for `isIRI`, `isBlank`, and `isLiteral`.
+template <auto isSomethingFunction, auto prefix>
+struct IsSomethingValueGetter {
+  Id operator()(ValueId id, const EvaluationContext* context) const {
+    return Id::makeFromBool(id.getDatatype() == Datatype::VocabIndex &&
+                            std::invoke(isSomethingFunction,
+                                        context->_qec.getIndex().getVocab(),
+                                        id.getVocabIndex()));
   }
-  bool operator()(const std::string& s, const EvaluationContext*) const {
-    return s.starts_with("_:");
+  Id operator()(const std::string& s, const EvaluationContext*) const {
+    return Id::makeFromBool(s.starts_with(prefix));
   }
-  bool operator()(IdOrString s, const EvaluationContext* ctx) const {
+  Id operator()(IdOrString s, const EvaluationContext* ctx) const {
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
+  }
+};
+using IsIriValueGetter =
+    IsSomethingValueGetter<&Index::Vocab::isIri,
+                           ad_utility::ConstexprSmallString<2>{"<"}>;
+using IsBlankNodeValueGetter =
+    IsSomethingValueGetter<&Index::Vocab::isBlankNode,
+                           ad_utility::ConstexprSmallString<3>{"_:"}>;
+using IsLiteralValueGetter =
+    IsSomethingValueGetter<&Index::Vocab::isLiteral,
+                           ad_utility::ConstexprSmallString<2>{"\""}>;
+
+// Value getter for `isNumeric`. Regarding which datatypes count as numeric,
+// see https://www.w3.org/TR/sparql11-query/#operandDataTypes .
+struct IsNumericValueGetter {
+  Id operator()(ValueId id, const EvaluationContext*) const {
+    Datatype datatype = id.getDatatype();
+    return Id::makeFromBool(datatype == Datatype::Double ||
+                            datatype == Datatype::Int);
+  }
+  Id operator()(const std::string&, const EvaluationContext*) const {
+    return Id::makeFromBool(false);
+  }
+  Id operator()(IdOrString s, const EvaluationContext* ctx) const {
     return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
                       std::move(s));
   }

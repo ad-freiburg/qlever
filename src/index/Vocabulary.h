@@ -53,66 +53,6 @@ class IdRange {
   IndexT last_{};
 };
 
-// A class for storing the two range of IDs of a prefix in the internal and in
-// the external vocabulary.
-//
-// TODO: Store ranges of `Id`s here. That way, we don't have to extract the
-// index from the `Id` in `IsBlankNodeValueGetter::operator()` etc.
-template <typename InternalVocabulary, typename ExternalVocabulary,
-          typename IndexType>
-class PrefixIdRangeInternalAndExternal {
- private:
-  IndexType rangeInternalBegin_;
-  IndexType rangeInternalEnd_;
-  IndexType rangeExternalBegin_;
-  IndexType rangeExternalEnd_;
-
- public:
-  // Set ranges for given prefix.
-  void set(std::string prefix, const InternalVocabulary& internalVocabulary,
-           const ExternalVocabulary& externalVocabulary) {
-    // NOTE: If a prefix is not present in a vocabulary, `first` and `last`of
-    // the range returned by `prefix_range` will both be equal to the size of
-    // the vocabulary.
-    auto rangeInternal = internalVocabulary.prefix_range(prefix);
-    auto rangeExternal = externalVocabulary.prefix_range(prefix);
-    // LOG(INFO) << "Ranges found for prefix '" << prefix << "': "
-    //           << "[" << rangeInternal.first << " - " << rangeInternal.second
-    //           << ", size = " << internalVocabulary.size() << "]"
-    //           << " [" << rangeExternal.first << " - " << rangeExternal.second
-    //           << ", size = " << externalVocabulary.size() << "]" <<
-    //           std::endl;
-    rangeInternalBegin_ = IndexType::make(rangeInternal.first);
-    rangeInternalEnd_ = IndexType::make(rangeInternal.second);
-    auto offset = internalVocabulary.size();
-    rangeExternalBegin_ = IndexType::make(rangeExternal.first + offset);
-    rangeExternalEnd_ = IndexType::make(rangeExternal.second + offset);
-  }
-  // Check range for given index.
-  bool contains(IndexType index) const {
-    return (rangeInternalBegin_ <= index && index < rangeInternalEnd_) ||
-           (rangeExternalBegin_ <= index && index < rangeExternalEnd_);
-  }
-  // Show range (for debugging).
-  std::string toString() {
-    std::ostringstream os;
-    os << "[" << rangeInternalBegin_ << " - " << rangeInternalEnd_ << "]"
-       << " [" << rangeExternalBegin_ << " - " << rangeExternalEnd_ << "]";
-    return os.str();
-  }
-  std::string toString(auto getWordFunction) const {
-    auto rangeToString = [&](auto begin, auto end) {
-      return begin == end
-                 ? std::string("[EMPTY RANGE]")
-                 : absl::StrCat("[", getWordFunction(begin), " - ",
-                                getWordFunction(end.decremented()), "]");
-    };
-    return absl::StrCat(rangeToString(rangeInternalBegin_, rangeInternalEnd_),
-                        " ",
-                        rangeToString(rangeExternalBegin_, rangeExternalEnd_));
-  }
-};
-
 // Stream operator for convenience.
 template <typename IndexType>
 inline std::ostream& operator<<(std::ostream& stream,
@@ -130,11 +70,11 @@ struct Prefix {
   string fulltext_;
 };
 
-//! A vocabulary. Wraps a vector of strings
-//! and provides additional methods for retrieval.
-//! Template parameters that are supported are:
-//! std::string -> no compression is applied
-//! CompressedString -> prefix compression is applied
+// A vocabulary. Wraps a vector of strings
+// and provides additional methods for retrieval.
+// Template parameters that are supported are:
+// std::string -> no compression is applied
+// CompressedString -> prefix compression is applied
 template <typename StringType, typename ComparatorType, typename IndexT>
 class Vocabulary {
   // The different type of data that is stored in the vocabulary
@@ -174,15 +114,26 @@ class Vocabulary {
       UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
   ExternalVocabulary externalVocabulary_;
 
- public:
+  // Internal type for storing the two ranges of a prefix (in
+  // `internalVocabulary_` and `externalVocabulary_`, respectively).
+  struct PrefixRanges {
+    IndexT rangeInternalBegin_;
+    IndexT rangeInternalEnd_;
+    IndexT rangeExternalBegin_;
+    IndexT rangeExternalEnd_;
+  };
+
   // ID ranges for IRIs, blank nodes, and literals. Used for the efficient
   // computation of the `isIRI`, `isBlankNode`, and `isLiteral` functions.
-  using PrefixIdRanges =
-      PrefixIdRangeInternalAndExternal<InternalVocabulary, ExternalVocabulary,
-                                       IndexT>;
-  PrefixIdRanges prefixIdRangesIRIs_;
-  PrefixIdRanges prefixIdRangesBlankNodes_;
-  PrefixIdRanges prefixIdRangesLiterals_;
+  PrefixRanges prefixRangesIris_;
+  PrefixRanges prefixRangesBlankNodes_;
+  PrefixRanges prefixRangesLiterals_;
+
+  // Set ranges for given prefix.
+  void setRangesForPrefix(PrefixRanges& ranges, std::string_view prefix);
+
+  // Check if given index is in range.
+  bool containedInRanges(IndexT index, const PrefixRanges& ranges) const;
 
  public:
   using SortLevel = typename ComparatorType::Level;
@@ -260,7 +211,11 @@ class Vocabulary {
   // only used during Index building, not needed for compressed vocabulary
   void createFromSet(const ad_utility::HashSet<std::string>& set);
 
-  static bool isLiteral(const string& word);
+  static bool stringIsLiteral(const string& s);
+
+  bool isIri(IndexT index) const;
+  bool isBlankNode(IndexT index) const;
+  bool isLiteral(IndexT index) const;
 
   bool shouldBeExternalized(const string& word) const;
 

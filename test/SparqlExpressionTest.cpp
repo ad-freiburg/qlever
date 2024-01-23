@@ -726,14 +726,17 @@ TEST(SparqlExpression, isSomethingFunctions) {
   const auto F = Id::makeFromBool(false);
   // TODO(hannahbast): Without the \"\"lit, the last test fails. Why?
   testUnaryExpression(makeIsIriExpression,
-                      IdOrStrings{"<iri>", "\"\"lit", "_:u", "x", I(42), U},
-                      Ids{T, F, F, F, F, F});
+                      IdOrStrings{"<i>", "\"\"l", "_:u", "x", I(42), D(1), U},
+                      Ids{T, F, F, F, F, F, F});
   testUnaryExpression(makeIsBlankExpression,
-                      IdOrStrings{"<iri>", "\"\"lit", "_:u", "x", I(42), U},
-                      Ids{F, F, T, F, F, F});
+                      IdOrStrings{"<i>", "\"\"l", "_:u", "x", I(42), D(1), U},
+                      Ids{F, F, T, F, F, F, F});
   testUnaryExpression(makeIsLiteralExpression,
-                      IdOrStrings{"<iri>", "\"\"lit", "_:u", "x", I(42), U},
-                      Ids{F, T, F, F, F, F});
+                      IdOrStrings{"<i>", "\"\"l", "_:u", "x", I(42), D(1), U},
+                      Ids{F, T, F, F, F, F, F});
+  testUnaryExpression(makeIsNumericExpression,
+                      IdOrStrings{"<i>", "\"\"l", "_:u", "x", I(42), D(1), U},
+                      Ids{F, F, F, F, T, T, F});
 }
 
 // ____________________________________________________________________________
