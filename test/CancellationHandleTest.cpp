@@ -264,6 +264,8 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
+  // If the log level is not high enough this test will fail
+  static_assert(LOGLEVEL >= WARN);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -291,8 +293,9 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 
 // _____________________________________________________________________________
 
-TEST(CancellationHandle,
-     verifyCheckAfterDeadlineMissDoesntReportTwiceWhenRacing) {
+TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
+  // If the log level is not high enough this test will fail
+  static_assert(LOGLEVEL >= WARN);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -305,37 +308,28 @@ TEST(CancellationHandle,
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
 
+  // The first call should trigger a log
   handle.pleaseWatchDog(CHECK_WINDOW_MISSED, std::identity{}, "my-detail");
+
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
+  EXPECT_THAT(std::move(testStream).str(), HasSubstr("my-detail"));
 
-  EXPECT_THAT(testStream.str(), HasSubstr("my-detail"));
+  testStream.str("");
 
-  testStream.clear();
-
+  // The second call should not trigger a log because the state has already
+  // been reset
   handle.pleaseWatchDog(CHECK_WINDOW_MISSED, std::identity{}, "other-detail");
-  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
 
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr("other-detail")));
-}
 
-// _____________________________________________________________________________
-
-TEST(CancellationHandle, verifyPleasWatchDogDoesntReportWhenNothingIsMissed) {
-  auto& choice = ad_utility::LogstreamChoice::get();
-  CancellationHandle<ENABLED> handle;
-
-  auto& originalOStream = choice.getStream();
-  absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
-
-  std::ostringstream testStream;
-  choice.setStream(&testStream);
-
-  handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
+  testStream.str("");
 
+  // WAITING_FOR_CHECK should not trigger a log
   handle.pleaseWatchDog(WAITING_FOR_CHECK, std::identity{}, "my-detail");
-  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
 
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr("my-detail")));
 }
 
