@@ -11,7 +11,20 @@
 #include "util/File.h"
 #include "util/json.h"
 
-TEST(JsonUtilityFunctionTests, fileToJson) {
+/*
+@brief Do the `fileToJson` test with the wanted json class type.
+*/
+template <OrderedOrUnorderedJson WantedJsonClassType>
+static void doFileToJsonTest(
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{generateLocationTrace(l, "doFileToJsonTest")};
+
+  // The `fileToJson` function with the wanted json class type.
+  const auto& fileToJsonWithWantedType = [](std::string_view jsonFileName) {
+    return fileToJson<WantedJsonClassType>(jsonFileName);
+  };
+
   // Creates a file with the given name and content. Can be deleted with
   // `ad_utility::deleteFile(fileName)`.
   auto createFile = [](std::string_view fileName, auto fileContent) {
@@ -22,41 +35,43 @@ TEST(JsonUtilityFunctionTests, fileToJson) {
 
   // The helper function only wants `.json` files.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      fileToJson("NotAJsonFile.txt"),
+      fileToJsonWithWantedType("NotAJsonFile.txt"),
       ::testing::ContainsRegex(R"(NotAJsonFile\.txt.*json file)"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      fileToJson("NotAJsonFile.md"),
+      fileToJsonWithWantedType("NotAJsonFile.md"),
       ::testing::ContainsRegex(R"(NotAJsonFile\.md.*json file)"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      fileToJson("NotAJsonFile.mp4"),
+      fileToJsonWithWantedType("NotAJsonFile.mp4"),
       ::testing::ContainsRegex(R"(NotAJsonFile\.mp4.*json file)"));
 
   // File doesn't exist.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      fileToJson("FileINeverCreated.json"),
+      fileToJsonWithWantedType("FileINeverCreated.json"),
       ::testing::ContainsRegex(R"(Could not open file)"));
 
   // File exists, but doesn't contain valid json.
   createFile("NotJson.json", R"("d":4)");
   AD_EXPECT_THROW_WITH_MESSAGE(
-      fileToJson("NotJson.json"),
+      fileToJsonWithWantedType("NotJson.json"),
       ::testing::ContainsRegex("could not be parsed as JSON"));
   ad_utility::deleteFile("NotJson.json");
 
   // Creates a temporare file, containing the given json object, and checks, if
   // `fileToJson` recreates it correctly.
-  auto makeTempFileAndCompare = [&createFile](const nlohmann::json& j) {
-    // Creating the file.
-    constexpr std::string_view fileName{"TempTestFile.json"};
-    createFile(fileName, j);
+  auto makeTempFileAndCompare =
+      [&createFile, &fileToJsonWithWantedType](const WantedJsonClassType& j) {
+        // Creating the file.
+        constexpr std::string_view fileName{"TempTestFile.json"};
+        createFile(fileName, j);
 
-    EXPECT_EQ(j, fileToJson(fileName));
+        EXPECT_EQ(j, fileToJsonWithWantedType(fileName));
 
-    // Deleting the file.
-    ad_utility::deleteFile(fileName);
-  };
+        // Deleting the file.
+        ad_utility::deleteFile(fileName);
+      };
 
-  makeTempFileAndCompare(nlohmann::json::parse(R"({ "name"   : "John Smith",
+  makeTempFileAndCompare(
+      WantedJsonClassType::parse(R"({ "name"   : "John Smith",
   "sku"    : "20223",
   "price"  : 23.95,
   "shipTo" : { "name" : "Jane Smith",
@@ -70,6 +85,10 @@ TEST(JsonUtilityFunctionTests, fileToJson) {
                "state" : "NY",
                "zip"   : "12345" }
 })"));
+}
+TEST(JsonUtilityFunctionTests, fileToJson) {
+  doFileToJsonTest<nlohmann::json>();
+  doFileToJsonTest<nlohmann::ordered_json>();
 }
 
 TEST(JsonUtilTests, JsonToTypeString) {
