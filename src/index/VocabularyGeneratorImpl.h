@@ -51,16 +51,33 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 
   std::vector<cppcoro::generator<QueueWord>> generators;
 
+  static constexpr size_t numRowsBufferSizeGenerator = 20;
+  std::mutex generatorMutex;
   auto makeGenerator = [&](size_t fileIdx) -> cppcoro::generator<QueueWord> {
     ad_utility::serialization::FileReadSerializer infile{
         absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIdx)};
     uint64_t numWords;
     infile >> numWords;
-    TripleComponentWithIndex val;
-    for ([[maybe_unused]] auto idx : ad_utility::integerRange(numWords)) {
-      infile >> val;
-      QueueWord word{std::move(val), fileIdx};
-      co_yield word;
+    auto readBlock = [&, i = 0ul]() mutable {
+      std::vector<TripleComponentWithIndex> vec;
+      vec.reserve(numRowsBufferSizeGenerator);
+      std::lock_guard l{generatorMutex};
+      while (vec.size() < numRowsBufferSizeGenerator && i < numWords) {
+        vec.emplace_back();
+        infile >> vec.back();
+        ++i;
+      }
+      return vec;
+    };
+    while (true) {
+      auto block = readBlock();
+      if (block.empty()) {
+        co_return;
+      }
+      for (TripleComponentWithIndex& val : block) {
+        QueueWord word{std::move(val), fileIdx};
+        co_yield word;
+      }
     }
   };
   if (!_noIdMapsAndIgnoreExternalVocab) {
