@@ -158,6 +158,7 @@ class IndexImpl {
   size_t numPredicatesNormal_ = 0;
   size_t numObjectsNormal_ = 0;
   size_t numTriplesNormal_ = 0;
+  string indexId_;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
@@ -307,39 +308,6 @@ class IndexImpl {
 
   size_t getSizeEstimate(const string& words) const;
 
-  void callFixedGetContextListForWords(const string& words,
-                                       IdTable* result) const;
-
-  template <int WIDTH>
-  void getContextListForWords(const string& words, IdTable* result) const;
-
-  void getECListForWordsOneVar(const string& words, size_t limit,
-                               IdTable* result) const;
-
-  // With two or more variables.
-  void getECListForWords(const string& words, size_t nofVars, size_t limit,
-                         IdTable* result) const;
-
-  // With filtering. Needs many template instantiations but
-  // only nofVars truly makes a difference. Others are just data types
-  // of result tables.
-  void getFilteredECListForWords(const string& words, const IdTable& filter,
-                                 size_t filterColumn, size_t nofVars,
-                                 size_t limit, IdTable* result) const;
-
-  // Special cast with a width-one filter.
-  void getFilteredECListForWordsWidthOne(const string& words,
-                                         const IdTable& filter, size_t nofVars,
-                                         size_t limit, IdTable* result) const;
-
-  Index::WordEntityPostings getContextEntityScoreListsForWords(
-      const string& words) const;
-
-  // Does the same as getWordPostingsForTerm but returns a
-  // WordEntityPosting. Sorted by textRecord.
-  Index::WordEntityPostings getWordPostingsForTermWep(
-      const string& wordOrPrefix) const;
-
   // Returns a set of [textRecord, term] pairs where the term is contained in
   // the textRecord. The term can be either the wordOrPrefix itself or a word
   // that has wordOrPrefix as a prefix. Returned IdTable has columns:
@@ -347,8 +315,6 @@ class IndexImpl {
   IdTable getWordPostingsForTerm(
       const string& wordOrPrefix,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
-
-  Index::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
 
   // Returns a set of textRecords and their corresponding entities and
   // scores. Each textRecord contains its corresponding entity and the term.
@@ -363,13 +329,8 @@ class IndexImpl {
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
-  Index::WordEntityPostings readWordClWep(const TextBlockMetaData& tbmd) const;
-
   IdTable readWordCl(const TextBlockMetaData& tbmd,
                      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
-
-  Index::WordEntityPostings readWordEntityClWep(
-      const TextBlockMetaData& tbmd) const;
 
   IdTable readWordEntityCl(
       const TextBlockMetaData& tbmd,
@@ -420,6 +381,8 @@ class IndexImpl {
   const string& getTextName() const { return textMeta_.getName(); }
 
   const string& getKbName() const { return pso_.metaData().getName(); }
+
+  const string& getIndexId() const { return indexId_; }
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
@@ -641,9 +604,6 @@ class IndexImpl {
   friend class IndexTest_createFromTsvTest_Test;
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
-
-  template <class T>
-  void writeAsciiListFile(const string& filename, const T& ids) const;
 
   bool isLiteral(const string& object) const;
 
