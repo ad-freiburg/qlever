@@ -5,6 +5,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
+#include "util/ChunkedForLoop.h"
 
 namespace sparqlExpression {
 namespace detail::conditional_expressions {
@@ -33,6 +34,7 @@ class CoalesceExpression : public VariadicExpression {
 
   // _____________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
+    constexpr size_t CHUNK_SIZE = 1'000'000;
     // Set up one vector with the indices of the elements that are still unbound
     // so far and one for the indices that remain unbound after applying one of
     // the children.
@@ -42,10 +44,15 @@ class CoalesceExpression : public VariadicExpression {
     nextUnboundIndices.reserve(ctx->size());
 
     // Initially all result are unbound.
-    for (size_t i = 0; i < ctx->size(); ++i) {
-      // TODO<C++23> use `std::ranges::to<vector>(std::views::iota...)`.
-      unboundIndices.push_back(i);
-    }
+    ad_utility::chunkedForLoop<CHUNK_SIZE>(
+        0, ctx->size(),
+        [&unboundIndices](size_t i) {
+          // TODO<C++23> use `std::ranges::to<vector>(std::views::iota...)`.
+          unboundIndices.push_back(i);
+        },
+        [ctx]() {
+          ctx->cancellationHandle_->throwIfCancelled("CoalesceExpression");
+        });
     VectorWithMemoryLimit<IdOrString> result{ctx->_allocator};
     std::fill_n(std::back_inserter(result), ctx->size(),
                 IdOrString{Id::makeUndefined()});
@@ -58,16 +65,22 @@ class CoalesceExpression : public VariadicExpression {
     };
 
     auto visitConstantExpressionResult = [
-      &nextUnboundIndices, &unboundIndices, &isUnbound, &result
+      ctx, &nextUnboundIndices, &unboundIndices, &isUnbound, &result
     ]<SingleExpressionResult T>(T && childResult) requires isConstantResult<T> {
       IdOrString constantResult{AD_FWD(childResult)};
       if (isUnbound(constantResult)) {
         nextUnboundIndices = std::move(unboundIndices);
         return;
       }
-      for (const auto& idx : unboundIndices) {
-        result[idx] = constantResult;
-      }
+      ad_utility::chunkedForLoop<CHUNK_SIZE>(
+          0, unboundIndices.size(),
+          [&unboundIndices, &result, &constantResult](size_t idx) {
+            result[unboundIndices[idx]] = constantResult;
+          },
+          [ctx]() {
+            ctx->cancellationHandle_->throwIfCancelled(
+                "CoalesceExpression constant expression result");
+          });
     };
 
     // For a single child result, write the result at the indices where the
@@ -79,27 +92,31 @@ class CoalesceExpression : public VariadicExpression {
             requires std::is_rvalue_reference_v<T&&> {
       static_assert(!isConstantResult<T>);
       auto gen = detail::makeGenerator(AD_FWD(childResult), ctx->size(), ctx);
-      // Index of the current row.
-      size_t i = 0;
       // Iterator to the next index where the result so far is unbound.
       auto unboundIdxIt = unboundIndices.begin();
       AD_CORRECTNESS_CHECK(unboundIdxIt != unboundIndices.end());
-      for (auto& el : gen) {
-        // Skip all the indices where the result is already bound from a
-        // previous child.
-        if (i == *unboundIdxIt) {
-          if (IdOrString val{std::move(el)}; isUnbound(val)) {
-            nextUnboundIndices.push_back(i);
-          } else {
-            result.at(*unboundIdxIt) = std::move(val);
-          }
-          ++unboundIdxIt;
-          if (unboundIdxIt == unboundIndices.end()) {
-            return;
-          }
-        }
-        ++i;
-      }
+      auto generatorIterator = gen.begin();
+      ad_utility::chunkedForLoop<CHUNK_SIZE>(
+          0, ctx->size(),
+          [&unboundIdxIt, &isUnbound, &nextUnboundIndices, &result,
+           &unboundIndices, &generatorIterator](size_t i) {
+            // Skip all the indices where the result is already bound from a
+            // previous child.
+            if (i == *unboundIdxIt) {
+              if (IdOrString val{std::move(*generatorIterator)};
+                  isUnbound(val)) {
+                nextUnboundIndices.push_back(i);
+              } else {
+                result.at(*unboundIdxIt) = std::move(val);
+              }
+              ++unboundIdxIt;
+              if (unboundIdxIt == unboundIndices.end()) {
+                return;
+              }
+            }
+            ++generatorIterator;
+          },
+          []() {});
     };
     auto visitExpressionResult =
         [
