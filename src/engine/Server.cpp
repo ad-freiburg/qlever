@@ -312,6 +312,10 @@ Awaitable<void> Server::process(
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
     response = createJsonResponse(RuntimeParameters().toMap(), request);
+  } else if (auto cmd = checkParameter("cmd", "get-index-id")) {
+    logCommand(cmd, "get index ID");
+    response = createOkResponse(index_.getIndexId(), request,
+                                ad_utility::MediaType::textPlain);
   } else if (auto cmd =
                  checkParameter("cmd", "dump-active-queries", accessTokenOk)) {
     logCommand(cmd, "dump active queries");

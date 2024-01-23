@@ -158,19 +158,11 @@ class IndexImpl {
   size_t numPredicatesNormal_ = 0;
   size_t numObjectsNormal_ = 0;
   size_t numTriplesNormal_ = 0;
+  string indexId_;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
   CompactVectorOfStrings<Id> patterns_;
-  /**
-   * @brief Maps entity ids to pattern ids.
-   */
-  std::vector<PatternID> hasPattern_;
-  /**
-   * @brief Maps entity ids to sets of predicate ids
-   */
-  CompactVectorOfStrings<Id> hasPredicate_;
-
   ad_utility::AllocatorWithLimit<Id> allocator_;
 
   // TODO: make those private and allow only const access
@@ -279,8 +271,6 @@ class IndexImpl {
   // ___________________________________________________________________________
   std::pair<Id, Id> prefix_range(const std::string& prefix) const;
 
-  const vector<PatternID>& getHasPattern() const;
-  const CompactVectorOfStrings<Id>& getHasPredicate() const;
   const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
    * @return The multiplicity of the Entites column (0) of the full has-relation
@@ -318,39 +308,6 @@ class IndexImpl {
 
   size_t getSizeEstimate(const string& words) const;
 
-  void callFixedGetContextListForWords(const string& words,
-                                       IdTable* result) const;
-
-  template <int WIDTH>
-  void getContextListForWords(const string& words, IdTable* result) const;
-
-  void getECListForWordsOneVar(const string& words, size_t limit,
-                               IdTable* result) const;
-
-  // With two or more variables.
-  void getECListForWords(const string& words, size_t nofVars, size_t limit,
-                         IdTable* result) const;
-
-  // With filtering. Needs many template instantiations but
-  // only nofVars truly makes a difference. Others are just data types
-  // of result tables.
-  void getFilteredECListForWords(const string& words, const IdTable& filter,
-                                 size_t filterColumn, size_t nofVars,
-                                 size_t limit, IdTable* result) const;
-
-  // Special cast with a width-one filter.
-  void getFilteredECListForWordsWidthOne(const string& words,
-                                         const IdTable& filter, size_t nofVars,
-                                         size_t limit, IdTable* result) const;
-
-  Index::WordEntityPostings getContextEntityScoreListsForWords(
-      const string& words) const;
-
-  // Does the same as getWordPostingsForTerm but returns a
-  // WordEntityPosting. Sorted by textRecord.
-  Index::WordEntityPostings getWordPostingsForTermWep(
-      const string& wordOrPrefix) const;
-
   // Returns a set of [textRecord, term] pairs where the term is contained in
   // the textRecord. The term can be either the wordOrPrefix itself or a word
   // that has wordOrPrefix as a prefix. Returned IdTable has columns:
@@ -358,8 +315,6 @@ class IndexImpl {
   IdTable getWordPostingsForTerm(
       const string& wordOrPrefix,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
-
-  Index::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
 
   // Returns a set of textRecords and their corresponding entities and
   // scores. Each textRecord contains its corresponding entity and the term.
@@ -374,13 +329,8 @@ class IndexImpl {
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
-  Index::WordEntityPostings readWordClWep(const TextBlockMetaData& tbmd) const;
-
   IdTable readWordCl(const TextBlockMetaData& tbmd,
                      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
-
-  Index::WordEntityPostings readWordEntityClWep(
-      const TextBlockMetaData& tbmd) const;
 
   IdTable readWordEntityCl(
       const TextBlockMetaData& tbmd,
@@ -431,6 +381,8 @@ class IndexImpl {
   const string& getTextName() const { return textMeta_.getName(); }
 
   const string& getKbName() const { return pso_.metaData().getName(); }
+
+  const string& getIndexId() const { return indexId_; }
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
@@ -653,9 +605,6 @@ class IndexImpl {
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
 
-  template <class T>
-  void writeAsciiListFile(const string& filename, const T& ids) const;
-
   bool isLiteral(const string& object) const;
 
  public:
@@ -783,7 +732,7 @@ class IndexImpl {
   // metadata. Also builds the patterns if specified.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  std::optional<PatternCreatorNew::TripleSorter> createSPOAndSOP(
+  std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
       size_t numColumns, auto& isInternalId, BlocksOfTriples sortedTriples,
       NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
@@ -826,7 +775,7 @@ class IndexImpl {
   // of only two permutations (where we have to build the Pxx permutations). In
   // all other cases the Sxx permutations are built first because we need the
   // patterns.
-  std::optional<PatternCreatorNew::TripleSorter> createFirstPermutationPair(
+  std::optional<PatternCreator::TripleSorter> createFirstPermutationPair(
       auto&&... args) {
     static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
     static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
@@ -855,6 +804,6 @@ class IndexImpl {
   // these five columns sorted by PSO, to be used as an input for building the
   // PSO and POS permutations.
   std::unique_ptr<ExternalSorter<SortByPSO, 5>> buildOspWithPatterns(
-      PatternCreatorNew::TripleSorter sortersFromPatternCreator,
+      PatternCreator::TripleSorter sortersFromPatternCreator,
       auto isQLeverInternalId);
 };

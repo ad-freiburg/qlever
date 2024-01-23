@@ -30,15 +30,16 @@ Secondly, you should write your class inside the `ad_benchmark` namespace, where
 Now, the interface for benchmark classes has 5 functions:
 
 - `name`
-- `getMetadata`
+- `getGeneralMetadata`
 - `runAllBenchmarks`
-- `getConfigManager`  
-
-`getMetadata` is for advanced features, and comes with a default implementation, that doesn't actually do anything. So it can be safely ignored for the time being.  
-
-Likewise, `getConfigManager` can always be ignored. This is a function purely for usage by the infrastructure and already implemented.
+- `getConfigManager`
+- `updateDefaultGeneralMetadata`  
 
 `name` should just return the name of your benchmark class, so that you can easily identify it later.
+
+`getGeneralMetadata` and `getConfigManager`are getters for member variables, that are used for advanced features. So they can be safely ignored for the time being.
+
+`updateDefaultGeneralMetadata` exists solely for the infrastructure and should be ignored.
 
 `runAllBenchmarks` is where you actually measure your functions using the classes of `BenchmarkMeasurementContainer.h`, which should be created using `BenchmarkResults`, who will save them and later pass them on for processing by the infrastructure.
 Which could look like this:
@@ -125,7 +126,7 @@ You can find instances of `BenchmarkMetadata` for your usage at 4 locations:
 
 - At `metadata()` of created `ResultTable` objects, in order to give metadata information about the table.
 
-- Writing a `getMetadata` function, like in the `BenchmarkInterface`, in order to give more general metadata information about your benchmark class. This is mostly, so that you don't have to constantly repeat metadata information, that are true for all the things you are measuring, in other places. For example, this would be a good place to give the name of an algorithm, if your whole benchmark class is about measuring the runtimes of one. Or you could give the time, at which those benchmark measurements were taken.
+- In your own class, under the getter `getGeneralMetadata()`. The returned member variable exists in order to give more general metadata information about your benchmark class. This is mostly, so that you don't have to constantly repeat metadata information, that are true for all the things you are measuring, in other places. For example, this would be a good place to give the name of an algorithm, if your whole benchmark class is about measuring the runtimes of one.
 
 ## Runtime configuration
 

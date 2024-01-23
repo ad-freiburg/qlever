@@ -68,7 +68,7 @@ std::string benchmarkResultsToString(
 
   // Visualize the general metadata.
   if (const std::string& metadataString = getMetadataPrettyString(
-          benchmarkClass->getMetadata(), "General metadata: ", "");
+          benchmarkClass->getGeneralMetadata(), "General metadata: ", "");
       !metadataString.empty()) {
     visualization << metadataString;
   } else {

@@ -194,6 +194,12 @@ static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 // `CancellationHandle::throwIfCancelled` is called regularly.
 constexpr std::chrono::milliseconds DESIRED_CANCELLATION_CHECK_INTERVAL{50};
 
+// In the PSO and PSO permutations the patterns of the subject and object are
+// stored at the following indices. Note that the col0 (the P) is not part of
+// the result, so the column order for PSO is S O PatternS PatternO.
+constexpr size_t ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN = 2;
+constexpr size_t ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN = 3;
+
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Bool;
   using ad_utility::detail::parameterShortNames::Double;
