@@ -12,7 +12,8 @@ using ad_utility::chunkedForLoop;
 
 TEST(ChunkedForLoop, testEmptyRange) {
   std::atomic_bool flag = false;
-  chunkedForLoop<1>(0, 0, [&](size_t) { flag = true; }, [&]() { flag = true; });
+  chunkedForLoop<1>(
+      0, 0, [&](size_t) { flag = true; }, [&]() { flag = true; });
   chunkedForLoop<10>(
       0, 0, [&](size_t) { flag = true; }, [&]() { flag = true; });
   chunkedForLoop<100>(
@@ -26,7 +27,8 @@ TEST(ChunkedForLoop, testEmptyRange) {
 // _____________________________________________________________________________________________________________________
 TEST(ChunkedForLoop, testReverseRange) {
   std::atomic_bool flag = false;
-  chunkedForLoop<1>(1, 0, [&](size_t) { flag = true; }, [&]() { flag = true; });
+  chunkedForLoop<1>(
+      1, 0, [&](size_t) { flag = true; }, [&]() { flag = true; });
   chunkedForLoop<10>(
       2, 0, [&](size_t) { flag = true; }, [&]() { flag = true; });
   chunkedForLoop<100>(
