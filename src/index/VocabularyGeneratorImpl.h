@@ -58,6 +58,7 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
         absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIdx)};
     uint64_t numWords;
     infile >> numWords;
+    std::future<std::vector<TripleComponentWithIndex>> fut;
     auto readBlock = [&, i = 0ul]() mutable {
       std::vector<TripleComponentWithIndex> vec;
       vec.reserve(numRowsBufferSizeGenerator);
@@ -69,11 +70,13 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
       }
       return vec;
     };
+    fut = std::async(std::launch::async, readBlock);
     while (true) {
-      auto block = readBlock();
+      auto block = fut.get();
       if (block.empty()) {
         co_return;
       }
+      fut = std::async(std::launch::async, readBlock);
       for (TripleComponentWithIndex& val : block) {
         QueueWord word{std::move(val), fileIdx};
         co_yield word;
