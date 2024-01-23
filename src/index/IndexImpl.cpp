@@ -285,7 +285,7 @@ void IndexImpl::createFromFile(const string& filename) {
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
 
-  //readIndexBuilderSettingsFromFile();
+  readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(nullptr);
