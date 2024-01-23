@@ -8,13 +8,14 @@
 
 namespace ad_benchmark {
 /*
- * A rather basic wrapper for nlohmann::json, which only allows basic adding
- * of key value pairs and returning of the json string.
+ * A rather basic wrapper for nlohmann::ordered_json, which only allows basic
+ * adding of key value pairs and returning of the ordered_json string.
  */
 class BenchmarkMetadata {
   // No real reason, to really build everything ourselves, when the
-  // nlohmann::json object already containes everything, that we could need.
-  nlohmann::json data_;
+  // nlohmann::ordered_json object already containes everything, that we could
+  // need.
+  nlohmann::ordered_json data_;
 
  public:
   /*
@@ -56,7 +57,8 @@ class BenchmarkMetadata {
   }
 
   // JSON serialization.
-  friend void to_json(nlohmann::json& j, const BenchmarkMetadata& metadata) {
+  friend void to_json(nlohmann::ordered_json& j,
+                      const BenchmarkMetadata& metadata) {
     j = metadata.data_;
   }
 };
