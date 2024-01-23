@@ -31,9 +31,9 @@ class PointerGuard {
   PointerGuard& operator=(const PointerGuard&) noexcept = delete;
 
   /// Get a weak pointer representation of the underlying shared pointer
-  std::weak_ptr<T> getWeak() const noexcept { return pointer_; }
+  std::weak_ptr<T> getWeak() noexcept { return pointer_; }
 
-  /// Get a reference of the underlying object
+  /// Get a reference to the underlying object
   T& get() noexcept { return *pointer_; }
 
   /// Destructor that blocks until the passed pointer no longer has any

@@ -34,8 +34,9 @@ inline auto makeDeleteFromDistributors =
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
                                                    bool isSender) {
-  if (socketDistributors_.get().contains(queryId)) {
-    auto& reference = socketDistributors_.get().at(queryId);
+  auto& distributors = socketDistributors_.get();
+  if (distributors.contains(queryId)) {
+    auto& reference = distributors.at(queryId);
     if (auto ptr = reference.pointer_.lock()) {
       if (isSender) {
         // Ensure only single sender reference is acquired for a single session
@@ -44,7 +45,7 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
       }
       co_return ptr;
     } else {
-      socketDistributors_.get().erase(queryId);
+      distributors.erase(queryId);
     }
   }
 
@@ -77,8 +78,7 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
 
   auto distributor = std::make_shared<QueryToSocketDistributor>(
       ioContext_, std::move(cleanupCall));
-  socketDistributors_.get().emplace(queryId,
-                                    WeakReferenceHolder{distributor, isSender});
+  distributors.emplace(queryId, WeakReferenceHolder{distributor, isSender});
   co_return distributor;
 }
 
