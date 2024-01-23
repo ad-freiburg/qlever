@@ -1801,7 +1801,12 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     };
 
     // TODO Calculate a better number. Maybe the Erwartungswert?
-    sizeResult_ = getConfigVariables().maxBiggerTableRows_ * 2;
+    sizeResult_ = static_cast<size_t>(
+        static_cast<double>(smallerTableNumRows_ * smallerTableNumRows_ *
+                            ratioRows_) /
+        (static_cast<double>(smallerTableNumRows_) * maxSampleSizeRatio +
+         static_cast<double>(smallerTableNumRows_ * ratioRows_) *
+             maxSampleSizeRatio));
 
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
