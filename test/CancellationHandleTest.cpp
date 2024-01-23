@@ -284,7 +284,9 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
             HasSubstr(ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
                           .toString()),
             // Check for small miss window
-            ContainsRegex("by [0-9]ms")));
+            ContainsRegex("least 5[0-9]ms")));
+  // This test assumes this interval to be 50ms to build the regex
+  static_assert(DESIRED_CANCELLATION_CHECK_INTERVAL == 50ms);
 }
 
 // _____________________________________________________________________________

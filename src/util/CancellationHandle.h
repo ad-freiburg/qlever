@@ -139,19 +139,22 @@ class CancellationHandle {
               state, CancellationState::NOT_CANCELLED,
               std::memory_order_relaxed)) {
         if (windowMissed) {
-          LOG(WARN) << "Cancellation check missed deadline of "
-                    << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
-                    << " by "
+          LOG(WARN) << "The time since the last timeout check is at least "
                     << ParseableDuration{duration_cast<DurationType>(
-                           steady_clock::now() - startTimeoutWindow_.load())}
+                                             steady_clock::now() -
+                                             startTimeoutWindow_.load()) +
+                                         DESIRED_CANCELLATION_CHECK_INTERVAL}
+                    << ", should be at most"
+                    << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
                     << ". Stage: "
                     << std::invoke(detailSupplier, AD_FWD(argTypes)...)
                     << std::endl;
         }
         break;
       }
-      // If state is NOT_CANCELLED don't this means another thread
-      // did already report the missed deadline, so don't report a second time.
+      // If state is NOT_CANCELLED this means another thread already reported
+      // the missed deadline, so we don't report a second time or a cancellation
+      // kicked in and there is no need to continue the loop.
     } while (!detail::isCancelled(state) &&
              state != CancellationState::NOT_CANCELLED);
   }
