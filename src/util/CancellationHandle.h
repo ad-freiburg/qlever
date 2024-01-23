@@ -236,6 +236,8 @@ class CancellationHandle {
   FRIEND_TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel);
   FRIEND_TEST(CancellationHandle,
               verifyCheckAfterDeadlineMissDoesntReportTwiceWhenRacing);
+  FRIEND_TEST(CancellationHandle,
+              verifyPleasWatchDogDoesntReportWhenNothingIsMissed);
 };
 
 using SharedCancellationHandle = std::shared_ptr<CancellationHandle<>>;

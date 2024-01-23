@@ -318,6 +318,29 @@ TEST(CancellationHandle,
 
 // _____________________________________________________________________________
 
+TEST(CancellationHandle, verifyPleasWatchDogDoesntReportWhenNothingIsMissed) {
+  auto& choice = ad_utility::LogstreamChoice::get();
+  CancellationHandle<ENABLED> handle;
+
+  auto& originalOStream = choice.getStream();
+  absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
+
+  std::ostringstream testStream;
+  choice.setStream(&testStream);
+
+  handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
+  handle.cancellationState_ = CHECK_WINDOW_MISSED;
+
+  handle.pleaseWatchDog(WAITING_FOR_CHECK, std::identity{}, "my-detail");
+  // WAITING_FOR_CHECK has been replaced with CHECK_WINDOW_MISSED
+  // on another thread, so we expect the code to not replace the value
+  EXPECT_EQ(handle.cancellationState_, CHECK_WINDOW_MISSED);
+
+  EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr("my-detail")));
+}
+
+// _____________________________________________________________________________
+
 TEST(CancellationHandle, expectDisabledHandleIsAlwaysFalse) {
   CancellationHandle<DISABLED> handle;
 
