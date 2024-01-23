@@ -50,7 +50,8 @@ class CopyableUniquePtr : public std::unique_ptr<T, Deleter> {
   CopyableUniquePtr& operator=(CopyableUniquePtr&& ptr) = default;
 
   // Json serialization.
-  friend void to_json(nlohmann::json& j, const CopyableUniquePtr& p) {
+  friend void to_json(OrderedOrUnorderedJson auto& j,
+                      const CopyableUniquePtr& p) {
     /*
     The serialization of `CopyableUniquePtr` would have identical code to the
     serialization of a normal unique pointer, so we just re-cast it, to save on

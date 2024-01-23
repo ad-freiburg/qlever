@@ -19,6 +19,7 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
+#include "util/Log.h"
 #include "util/SourceLocation.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
@@ -132,7 +133,8 @@ class BenchmarkResults {
 
   // Json serialization. The implementation can be found in
   // `BenchmarkToJson`.
-  friend void to_json(nlohmann::json& j, const BenchmarkResults& results);
+  friend void to_json(nlohmann::ordered_json& j,
+                      const BenchmarkResults& results);
 };
 
 /*
@@ -148,10 +150,6 @@ class BenchmarkInterface {
   */
   ad_utility::ConfigManager manager_;
 
- public:
-  // A human-readable name that will be printed as part of the output.
-  virtual std::string name() const = 0;
-
   /*
   For the general metadata of a class. Mostly information, that is the same
   for every benchmark, so that every entry of the `BenchmarkResults` doesn't
@@ -159,17 +157,21 @@ class BenchmarkInterface {
   For example: Let's say, you are measuring the same benchmarks for different
   versions of an algorithm. You could add the metadata information, which
   version it is, to every `resultGroup`, `resultTable`, etc., but that is a bit
-  clunky. Instead, you make one `BenchmarkInterface` instance for every
-  version and simply return which version you are using as metadata through
-  `getMetadata`.
+  clunky. Instead, you make one `BenchmarkInterface` instance for every version
+  and simply return which version you are using as metadata through .
   */
-  virtual BenchmarkMetadata getMetadata() const {
-    // Default behaviour.
-    return BenchmarkMetadata{};
-  }
+  BenchmarkMetadata generalClassMetadata_;
+
+ public:
+  // A human-readable name that will be printed as part of the output.
+  virtual std::string name() const = 0;
+
+  // Getter for the general metadata of the class.
+  BenchmarkMetadata& getGeneralMetadata();
+  const BenchmarkMetadata& getGeneralMetadata() const;
 
   /*
-  Run all your benchmarks. The `BenchmarkResults` class is a management
+  @brief Run all your benchmarks. The `BenchmarkResults` class is a management
   class for measuering the execution time of functions and organizing the
   results.
   */
@@ -179,8 +181,19 @@ class BenchmarkInterface {
   virtual ~BenchmarkInterface() = default;
 
   // Needed for manipulation by the infrastructure.
-  ad_utility::ConfigManager& getConfigManager() { return manager_; }
-  const ad_utility::ConfigManager& getConfigManager() const { return manager_; }
+  ad_utility::ConfigManager& getConfigManager();
+  const ad_utility::ConfigManager& getConfigManager() const;
+
+  /*
+  @brief Only used for manipulaton via the infrastructure. Is called directly
+  before `runAllBenchmarks`.
+
+  Add/update the default metadata of the benchmark class. Currently
+  adds/updates:
+  - A time stamp containing the time and date of this call. Can be used to
+  identify the time and date, `runAllBenchmarks` was run.
+  */
+  void updateDefaultGeneralMetadata();
 };
 
 /*
@@ -215,13 +228,13 @@ class BenchmarkRegister {
   static void parseConfigWithAllRegisteredBenchmarks(const nlohmann::json& j);
 
   /*
-   * @brief Measures all the registered benchmarks and returns the resulting
-   *  `BenchmarkResuls` objects.
-   *
-   * @return Every benchmark class get's measured with their own
-   *  `BenchmarkResults`. They should be in the same order as the
-   *  registrations.
-   */
+  @brief For each registered benchmark:
+  - Update the default class metadata.
+  - Run the measurments.
+
+  @return Every benchmark class get's measured with their own
+  `BenchmarkResults`. They should be in the same order as the registrations.
+  */
   static std::vector<BenchmarkResults> runAllRegisteredBenchmarks();
 
   /*

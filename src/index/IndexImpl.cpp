@@ -7,7 +7,6 @@
 #include "./IndexImpl.h"
 
 #include <algorithm>
-#include <cmath>
 #include <cstdio>
 #include <future>
 #include <memory>
@@ -848,23 +847,6 @@ size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
 }
 
 // _____________________________________________________________________________
-template <class T>
-void IndexImpl::writeAsciiListFile(const string& filename, const T& ids) const {
-  std::ofstream f(filename);
-
-  for (size_t i = 0; i < ids.size(); ++i) {
-    f << ids[i] << ' ';
-  }
-  f.close();
-}
-
-template void IndexImpl::writeAsciiListFile<vector<Id>>(
-    const string& filename, const vector<Id>& ids) const;
-
-template void IndexImpl::writeAsciiListFile<vector<Score>>(
-    const string& filename, const vector<Score>& ids) const;
-
-// _____________________________________________________________________________
 bool IndexImpl::isLiteral(const string& object) const {
   return decltype(vocab_)::isLiteral(object);
 }
@@ -976,7 +958,7 @@ void IndexImpl::readConfiguration() {
       "date", "The date of the last breaking change of the index format.",
       &indexFormatVersionDate);
 
-  configurationJson_ = fileToJson(onDiskBase_ + CONFIGURATION_FILE);
+  configurationJson_ = fileToJson<json>(onDiskBase_ + CONFIGURATION_FILE);
 
   /*
   Because an out of date index format version can cause the parsing for
@@ -1056,6 +1038,14 @@ void IndexImpl::readConfiguration() {
     // If the permutations simply don't exist, then we can never load them.
     loadAllPermutations_ = false;
   }
+
+  // Compute unique ID for this index.
+  //
+  // TODO: This is a simplistic way. It would be better to incorporate bytes
+  // from the index files.
+  indexId_ = absl::StrCat("#", getKbName(), ".", numTriplesNormal_, ".",
+                          numSubjectsNormal_, ".", numPredicatesNormal_, ".",
+                          numObjectsNormal_);
 }
 
 // ___________________________________________________________________________
@@ -1221,7 +1211,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 
   // Set the options.
   if (!settingsFileName_.empty()) {
-    config.parseConfig(fileToJson(settingsFileName_));
+    config.parseConfig(fileToJson<json>(settingsFileName_));
   } else {
     config.parseConfig(json(json::value_t::object));
   }
