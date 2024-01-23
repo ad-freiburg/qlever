@@ -39,6 +39,19 @@ auto U = Id::makeUndefined();
 using Ids = std::vector<Id>;
 using IdOrStrings = std::vector<IdOrString>;
 
+// All the helper functions `testUnaryExpression` etc. below internally evaluate
+// the given expressions using the `TestContext` class, so it is possible to use
+// IDs from the global and local vocab of this class to test expressions. For
+// example `testContext().x` is the ID of the entity `<x>` in the vocabulary of
+// the index on which the expressions will be evaluated. For details see the
+// `TestContext` class. Note: The indirection via a function is necessary
+// because otherwise the `gtest_discover_test` step of the CMake build fails for
+// some reason.
+const auto& testContext() {
+  static TestContext ctx{};
+  return ctx;
+}
+
 // Test allocator (the inputs to our `SparqlExpression`s are
 // `VectorWithMemoryLimit`s, and these require an `AllocatorWithLimit`).
 //
@@ -120,8 +133,8 @@ auto testNaryExpression = [](auto&& makeExpression,
     }
   }();
 
-  sparqlExpression::EvaluationContext context{*ad_utility::testing::getQec(),
-                                              map, table, alloc, localVocab};
+  TestContext outerContext;
+  sparqlExpression::EvaluationContext& context = outerContext.context;
   context._endIndex = resultSize;
 
   // NOTE: We need to clone because `VectorWithMemoryLimit` does not have a copy
@@ -400,6 +413,39 @@ auto testUnaryExpression =
       testNaryExpression(makeFunction, liftVector(expected),
                          liftVector(operand));
     };
+
+// An even more convenient helper for testing unary expressions. For an example
+// usage see the test for the `encodeForUri` expression below.
+template <auto makeFunction>
+struct TestUnaryExpression {
+  // The operands and expected values are passed in as `std::vector`s.
+  template <SingleExpressionResult OperandType,
+            SingleExpressionResult OutputType>
+  void operator()(std::vector<OperandType> operand,
+                  std::vector<OutputType> expected,
+                  source_location l = source_location::current()) {
+    auto trace = generateLocationTrace(l);
+    testNaryExpression(makeFunction, liftVector(expected), liftVector(operand));
+  }
+
+  // The operands and expected values are passed in as `SingleExpressionResult`s
+  // directly.
+  template <SingleExpressionResult OperandType,
+            SingleExpressionResult OutputType>
+  void operator()(OperandType operand, OutputType expected,
+                  source_location l = source_location::current()) {
+    return operator()(std::vector{operand}, std::vector{expected}, l);
+  }
+
+  // The operands and expected are passed in as `std::string`. The arguments are
+  // automatically converted to `IdOrString` and then passed to the expression.
+  void operator()(std::string operand, std::string expected,
+                  source_location l = source_location::current()) {
+    return operator()(IdOrString{std::move(operand)},
+                      IdOrString{std::move(expected)}, l);
+  }
+};
+
 TEST(SparqlExpression, dateOperators) {
   // Test `YearExpression`, `MonthExpression`, `DayExpression`,
   //  `HoursExpression`, `MinutesExpression`, and `SecondsExpression`.
@@ -868,21 +914,23 @@ TEST(SparqlExpression, literalExpression) {
 }
 
 // ______________________________________________________________________________
-auto checkEncodeForUri =
-    std::bind_front(testUnaryExpression, &makeEncodeForUriExpression);
 TEST(SparqlExpression, encodeForUri) {
-  checkEncodeForUri(IdOrStrings{"Los Angeles"}, IdOrStrings{"Los%20Angeles"});
-  checkEncodeForUri(IdOrStrings{"\"Los Angeles\"@en"},
-                    IdOrStrings{"Los%20Angeles"});
-  checkEncodeForUri(IdOrStrings{"\"Los Angeles\"^^xsd:string"},
-                    IdOrStrings{"Los%20Angeles"});
-  checkEncodeForUri(IdOrStrings{"\"Los \\\"Angeles\"^^xsd:string"},
-                    IdOrStrings{"Los%20%5C%22Angeles"});
-  checkEncodeForUri(IdOrStrings{"\"Los Angeles"},
-                    IdOrStrings{"%22Los%20Angeles"});
-  checkEncodeForUri(IdOrStrings{"L\"os \"Angeles"},
-                    IdOrStrings{"L%22os%20%22Angeles"});
-  checkEncodeForUri(IdOrStrings{U}, IdOrStrings{U});
+  auto checkEncodeForUri = TestUnaryExpression<&makeEncodeForUriExpression>{};
+  using IoS = IdOrString;
+  checkEncodeForUri("Los Angeles", "Los%20Angeles");
+  checkEncodeForUri("\"Los Angeles\"@en", "Los%20Angeles");
+  checkEncodeForUri("\"Los Angeles\"^^xsd:string", "Los%20Angeles");
+  checkEncodeForUri("\"Los \\\"Angeles\"^^xsd:string", "Los%20%5C%22Angeles");
+  checkEncodeForUri("\"Los Angeles", "%22Los%20Angeles");
+  checkEncodeForUri("L\"os \"Angeles", "L%22os%20%22Angeles");
+  // Literals from the global and local vocab.
+  checkEncodeForUri(testContext().aelpha, IoS{"%C3%A4lpha"});
+  checkEncodeForUri(testContext().notInVocabA, IoS{"notInVocabA"});
+  // Entities from the local and global vocab (become undefined without STR()
+  // around the expression).
+  checkEncodeForUri(testContext().label, IoS{U});
+  checkEncodeForUri(testContext().notInVocabC, IoS{U});
+  checkEncodeForUri(U, IoS{U});
 }
 
 // ______________________________________________________________________________
