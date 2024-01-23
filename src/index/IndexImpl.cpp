@@ -288,7 +288,11 @@ void IndexImpl::createFromFile(const string& filename) {
   readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
+      createIdTriplesAndVocab(nullptr);
+  /*
+  IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(makeTurtleParser(filename));
+      */
 
   compressInternalVocabularyIfSpecified(indexBuilderData.prefixes_);
 
