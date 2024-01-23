@@ -332,9 +332,7 @@ TEST(CancellationHandle, verifyPleasWatchDogDoesntReportWhenNothingIsMissed) {
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
 
   handle.pleaseWatchDog(WAITING_FOR_CHECK, std::identity{}, "my-detail");
-  // WAITING_FOR_CHECK has been replaced with CHECK_WINDOW_MISSED
-  // on another thread, so we expect the code to not replace the value
-  EXPECT_EQ(handle.cancellationState_, CHECK_WINDOW_MISSED);
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
 
   EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr("my-detail")));
 }

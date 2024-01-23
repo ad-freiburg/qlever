@@ -121,6 +121,8 @@ class CancellationHandle {
   /// Make sure internal state is set back to
   /// `CancellationState::NOT_CANCELLED`, in order to prevent logging warnings
   /// in the console that would otherwise be triggered by the watchdog.
+  /// NOTE: The parameter state is expected to be one of `CHECK_WINDOW_MISSED`
+  /// or `WAITING_FOR_CHECK`, otherwise it behaves unexpectedly!
   template <typename... ArgTypes>
   void pleaseWatchDog(CancellationState state,
                       const InvocableWithConvertibleReturnType<
@@ -130,18 +132,28 @@ class CancellationHandle {
         std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
 
     bool windowMissed = state == CancellationState::CHECK_WINDOW_MISSED;
-    auto changed = cancellationState_.compare_exchange_strong(
-        state, CancellationState::NOT_CANCELLED, std::memory_order_relaxed);
-    if (windowMissed && changed) {
-      LOG(WARN) << "Cancellation check missed deadline of "
-                << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
-                << " by "
-                << ParseableDuration{duration_cast<DurationType>(
-                       steady_clock::now() - startTimeoutWindow_.load())}
-                << ". Stage: "
-                << std::invoke(detailSupplier, AD_FWD(argTypes)...)
-                << std::endl;
-    }
+    // Because we know `state` will be one of `CHECK_WINDOW_MISSED` or
+    // `WAITING_FOR_CHECK` at this point, we can skip the initial check.
+    do {
+      if (cancellationState_.compare_exchange_weak(
+              state, CancellationState::NOT_CANCELLED,
+              std::memory_order_relaxed)) {
+        if (windowMissed) {
+          LOG(WARN) << "Cancellation check missed deadline of "
+                    << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
+                    << " by "
+                    << ParseableDuration{duration_cast<DurationType>(
+                           steady_clock::now() - startTimeoutWindow_.load())}
+                    << ". Stage: "
+                    << std::invoke(detailSupplier, AD_FWD(argTypes)...)
+                    << std::endl;
+        }
+        break;
+      }
+      // If state is NOT_CANCELLED don't this means another thread
+      // did already report the missed deadline, so don't report a second time.
+    } while (!detail::isCancelled(state) &&
+             state != CancellationState::NOT_CANCELLED);
   }
 
   /// Internal function that starts the watch dog. It will set this

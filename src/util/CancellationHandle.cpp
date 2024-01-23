@@ -36,10 +36,13 @@ void CancellationHandle<Mode>::startWatchDogInternal() requires WatchDogEnabled
         cancellationState_.compare_exchange_strong(state, WAITING_FOR_CHECK,
                                                    std::memory_order_relaxed);
       } else if (state == WAITING_FOR_CHECK) {
-        if (cancellationState_.compare_exchange_strong(
-                state, CHECK_WINDOW_MISSED, std::memory_order_relaxed)) {
-          startTimeoutWindow_ = steady_clock::now();
-        }
+        // This variable needs to be set before compare exchange,
+        // otherwise another thread might read an old value before
+        // the new value is set. This might lead to redundant stores,
+        // which is acceptable here.
+        startTimeoutWindow_ = steady_clock::now();
+        cancellationState_.compare_exchange_strong(state, CHECK_WINDOW_MISSED,
+                                                   std::memory_order_relaxed);
       }
     } while (!watchDogState_.conditionVariable_.wait_for(
         lock, DESIRED_CANCELLATION_CHECK_INTERVAL,
