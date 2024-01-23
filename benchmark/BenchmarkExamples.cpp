@@ -78,11 +78,6 @@ class BMSingleMeasurements : public ConfigOptions {
  public:
   std::string name() const final { return "Example for single measurements"; }
 
-  BenchmarkMetadata getMetadata() const final {
-    // Again, nothing to really do here.
-    return BenchmarkMetadata{};
-  }
-
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
 
@@ -120,11 +115,6 @@ class BMSingleMeasurements : public ConfigOptions {
 class BMGroups : public ConfigOptions {
  public:
   std::string name() const final { return "Example for group benchmarks"; }
-
-  BenchmarkMetadata getMetadata() const final {
-    // Again, nothing to really do here.
-    return BenchmarkMetadata{};
-  }
 
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
@@ -205,11 +195,6 @@ class BMTables : public ConfigOptions {
  public:
   std::string name() const final { return "Example for table benchmarks"; }
 
-  BenchmarkMetadata getMetadata() const final {
-    // Again, nothing to really do here.
-    return BenchmarkMetadata{};
-  }
-
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
 
@@ -282,23 +267,19 @@ class BMConfigurationAndMetadataExample : public ConfigOptions {
     return "Example for the usage of configuration and metadata";
   }
 
-  BenchmarkMetadata getMetadata() const final {
-    // This class will simply transcribe the data of the configuration options
-    // to this `BenchmarkMetadta` object.
-    BenchmarkMetadata meta{};
-
+  /*
+  This class will simply transcribe the data of the configuration options
+  to the general metadata of the class.
+  */
+  BenchmarkResults runAllBenchmarks() final {
+    BenchmarkMetadata& meta{getGeneralMetadata()};
     meta.addKeyValuePair("date", dateString_);
     meta.addKeyValuePair("numberOfStreetSigns", numberOfStreetSigns_);
     meta.addKeyValuePair("wonOnTryX", wonOnTryX_);
     meta.addKeyValuePair("Balance on Steves saving account",
                          balanceOnStevesSavingAccount_);
-
-    return meta;
+    return BenchmarkResults{};
   }
-
-  // This is just a dummy, because this class is only an example for other
-  // features of the benchmark infrastructure.
-  BenchmarkResults runAllBenchmarks() final { return BenchmarkResults{}; }
 };
 
 // Registering the benchmarks.

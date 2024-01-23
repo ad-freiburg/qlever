@@ -122,7 +122,8 @@ class ResultEntry : public BenchmarkMetadataGetter {
                                   const ResultEntry& resultEntry);
 
   // JSON serialization.
-  friend void to_json(nlohmann::json& j, const ResultEntry& resultEntry);
+  friend void to_json(nlohmann::ordered_json& j,
+                      const ResultEntry& resultEntry);
 };
 
 // Describes a table of measured execution times of functions.
@@ -265,7 +266,8 @@ class ResultTable : public BenchmarkMetadataGetter {
   size_t numColumns() const;
 
   // JSON serialization.
-  friend void to_json(nlohmann::json& j, const ResultTable& resultTable);
+  friend void to_json(nlohmann::ordered_json& j,
+                      const ResultTable& resultTable);
 
  private:
   /*
@@ -368,7 +370,8 @@ class ResultGroup : public BenchmarkMetadataGetter {
                                   const ResultGroup& resultGroup);
 
   // JSON serialization.
-  friend void to_json(nlohmann::json& j, const ResultGroup& resultGroup);
+  friend void to_json(nlohmann::ordered_json& j,
+                      const ResultGroup& resultGroup);
 
  private:
   // The implementation for the general deletion of entries.

@@ -215,6 +215,19 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   ASSERT_TRUE(index.POS().metaData().getMetaData(b2).isFunctional());
 };
 
+TEST(IndexTest, indexId) {
+  std::string kb =
+      "<a1> <b> <c1> .\n"
+      "<a2> <b> <c2> .\n"
+      "<a2> <b> <c1> .\n"
+      "<a3> <b> <c2> .";
+  // Build index with all permutations (arg 2) and no patterns (arg 3). That
+  // way, we get four triples, two distinct subjects, one distinct predicate
+  // and two distinct objects.
+  const Index& index = getQec(kb, true, false)->getIndex();
+  ASSERT_EQ(index.getIndexId(), "#.4.3.1.2");
+}
+
 TEST(IndexTest, scanTest) {
   auto testWithAndWithoutPrefixCompression = [](bool useCompression) {
     using enum Permutation::Enum;

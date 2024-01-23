@@ -7,7 +7,6 @@
 #include "./IndexImpl.h"
 
 #include <algorithm>
-#include <cmath>
 #include <cstdio>
 #include <future>
 #include <optional>
@@ -23,7 +22,6 @@
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/Serializer/FileSerializer.h"
@@ -843,23 +841,6 @@ size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
 }
 
 // _____________________________________________________________________________
-template <class T>
-void IndexImpl::writeAsciiListFile(const string& filename, const T& ids) const {
-  std::ofstream f(filename);
-
-  for (size_t i = 0; i < ids.size(); ++i) {
-    f << ids[i] << ' ';
-  }
-  f.close();
-}
-
-template void IndexImpl::writeAsciiListFile<vector<Id>>(
-    const string& filename, const vector<Id>& ids) const;
-
-template void IndexImpl::writeAsciiListFile<vector<Score>>(
-    const string& filename, const vector<Score>& ids) const;
-
-// _____________________________________________________________________________
 bool IndexImpl::isLiteral(const string& object) const {
   return decltype(vocab_)::isLiteral(object);
 }
@@ -1025,12 +1006,19 @@ void IndexImpl::readConfiguration() {
   };
 
   loadDataMember("has-all-permutations", loadAllPermutations_, true);
-
   loadDataMember("num-predicates-normal", numPredicatesNormal_);
   // These might be missing if there are only two permutations.
   loadDataMember("num-subjects-normal", numSubjectsNormal_, 0);
   loadDataMember("num-objects-normal", numObjectsNormal_, 0);
   loadDataMember("num-triples-normal", numTriplesNormal_);
+
+  // Compute unique ID for this index.
+  //
+  // TODO: This is a simplistic way. It would be better to incorporate bytes
+  // from the index files.
+  indexId_ = absl::StrCat("#", getKbName(), ".", numTriplesNormal_, ".",
+                          numSubjectsNormal_, ".", numPredicatesNormal_, ".",
+                          numObjectsNormal_);
 }
 
 // ___________________________________________________________________________

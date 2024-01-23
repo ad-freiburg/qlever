@@ -28,8 +28,6 @@
 #include "engine/Sort.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
-#include "engine/TextOperationWithFilter.h"
-#include "engine/TextOperationWithoutFilter.h"
 #include "engine/TransitivePath.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
@@ -1704,13 +1702,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     // The candidates are not connected
     return candidates;
   }
-  // Find join variable(s) / columns.
-  if (jcs.size() == 2 && (a._qet->getType() == TEXT_WITHOUT_FILTER ||
-                          b._qet->getType() == TEXT_WITHOUT_FILTER)) {
-    LOG(WARN) << "Not considering possible join on "
-              << "two columns, if they involve text operations.\n";
-    return candidates;
-  }
 
   if (a.type == SubtreePlan::MINUS) {
     AD_THROW(
@@ -1753,14 +1744,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
-  // If one of the join results is a text operation without filter
-  // also consider using the other one as filter and thus
-  // turning this join into a text operation with filter, instead.
-  if (auto opt = createJoinAsTextFilter(a, b, jcs)) {
-    // It might still be cheaper to perform a "normal" join, so we are simply
-    // adding this to the candidate plans and not returning.
-    candidates.push_back(std::move(opt.value()));
-  }
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
   // subject column we can use a specialized join that avoids
@@ -1864,40 +1847,6 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
                     .getVariable();
   auto plan = makeSubtreePlan<HasPredicateScan>(
       qec, std::move(otherTree), otherTreeJoinColumn, std::move(object));
-  mergeSubtreePlanIds(plan, a, b);
-  return plan;
-}
-
-// ______________________________________________________________________________________
-auto QueryPlanner::createJoinAsTextFilter(
-    SubtreePlan a, SubtreePlan b,
-    const std::vector<std::array<ColumnIndex, 2>>& jcs)
-    -> std::optional<SubtreePlan> {
-  using enum QueryExecutionTree::OperationType;
-  if (!(a._qet->getType() == TEXT_WITHOUT_FILTER ||
-        b._qet->getType() == TEXT_WITHOUT_FILTER)) {
-    return std::nullopt;
-  }
-  // If one of the join results is a text operation without filter
-  // also consider using the other one as filter and thus
-  // turning this join into a text operation with filter, instead,
-  bool aTextOp = true;
-  // If both are TextOps, the smaller one will be used as filter.
-  if (a._qet->getType() != TEXT_WITHOUT_FILTER ||
-      (b._qet->getType() == TEXT_WITHOUT_FILTER &&
-       b._qet->getSizeEstimate() > a._qet->getSizeEstimate())) {
-    aTextOp = false;
-  }
-  const auto& textPlanTree = aTextOp ? a._qet : b._qet;
-  const auto& filterTree = aTextOp ? b._qet : a._qet;
-  size_t otherPlanJc = aTextOp ? jcs[0][1] : jcs[0][0];
-  const TextOperationWithoutFilter& noFilter =
-      *static_cast<const TextOperationWithoutFilter*>(
-          textPlanTree->getRootOperation().get());
-  auto qec = textPlanTree->getRootOperation()->getExecutionContext();
-  SubtreePlan plan = makeSubtreePlan<TextOperationWithFilter>(
-      qec, noFilter.getWordPart(), noFilter.getVars(), noFilter.getCVar(),
-      filterTree, otherPlanJc);
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 }
