@@ -1735,13 +1735,6 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 // Create benchmark tables, where the tables are the same size and
 // both just get more rows.
 class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
-  // For easier metadata transcription.
-  size_t ratioRows_;
-  size_t smallerTableNumRows_;
-
-  // The wanted size of the result table.
-  size_t sizeResult_;
-
  public:
   std::string name() const override {
     return "Benchmarktables, where only the sample size ratio changes.";
@@ -1757,9 +1750,9 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     We work with the biggest possible smaller and bigger table. That should make
     any difference in execution time easier to find.
     */
-    ratioRows_ = getConfigVariables().minRatioRows_;
-    smallerTableNumRows_ = getConfigVariables().maxBiggerTableRows_ /
-                           getConfigVariables().minRatioRows_;
+    const size_t ratioRows{getConfigVariables().minRatioRows_};
+    const size_t smallerTableNumRows{getConfigVariables().maxBiggerTableRows_ /
+                                     getConfigVariables().minRatioRows_};
 
     /*
     Growth function. Simply walks through the sample size ratios, until it runs
@@ -1784,12 +1777,12 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     };
 
     // TODO Calculate a better number. Maybe the Erwartungswert?
-    sizeResult_ = static_cast<size_t>(
-        static_cast<double>(smallerTableNumRows_ * smallerTableNumRows_ *
-                            ratioRows_) /
-        (static_cast<double>(smallerTableNumRows_) * maxSampleSizeRatio +
-         static_cast<double>(smallerTableNumRows_ * ratioRows_) *
-             maxSampleSizeRatio));
+    const size_t sizeResult{static_cast<size_t>(
+        static_cast<double>(smallerTableNumRows * smallerTableNumRows *
+                            ratioRows) /
+        (static_cast<double>(smallerTableNumRows) * maxSampleSizeRatio +
+         static_cast<double>(smallerTableNumRows * ratioRows) *
+             maxSampleSizeRatio))};
 
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
@@ -1801,9 +1794,9 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
               " and the sample size ratio for the bigger table changes.");
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Bigger table sample size ratio",
-              stopFunction, getConfigVariables().overlapChance_, sizeResult_,
+              stopFunction, getConfigVariables().overlapChance_, sizeResult,
               getConfigVariables().randomSeed(), smallerTableSorted,
-              biggerTableSorted, ratioRows_, smallerTableNumRows_,
+              biggerTableSorted, ratioRows, smallerTableNumRows,
               getConfigVariables().smallerTableNumColumns_,
               getConfigVariables().biggerTableNumColumns_,
               smallerTableSampleSizeRatio, growthFunction);
@@ -1823,9 +1816,9 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     BenchmarkMetadata& meta{getGeneralMetadata()};
     meta.addKeyValuePair("Value changing with every row",
                          "biggerTableJoinColumnSampleSizeRatio");
-    meta.addKeyValuePair("ratioRows", ratioRows_);
-    meta.addKeyValuePair("smallerTableNumRows", smallerTableNumRows_);
-    meta.addKeyValuePair("wantesResultTableSize", sizeResult_);
+    meta.addKeyValuePair("ratioRows", ratioRows);
+    meta.addKeyValuePair("smallerTableNumRows", smallerTableNumRows);
+    meta.addKeyValuePair("wantesResultTableSize", sizeResult);
     meta.addKeyValuePair("benchmarkSampleSizeRatios",
                          getConfigVariables().benchmarkSampleSizeRatios_);
     GeneralInterfaceImplementation::addDefaultMetadata(&meta);
