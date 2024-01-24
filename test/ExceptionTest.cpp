@@ -12,14 +12,14 @@
 using namespace ad_utility;
 
 namespace {
-auto makeMatcher = [](std::string condition,
+auto makeMatcher = [](const std::string& condition,
                       ad_utility::source_location l =
                           ad_utility::source_location::current()) {
   using namespace ::testing;
   auto line = l.line();
   auto e = [](size_t l) { return EndsWith(std::to_string(l)); };
   auto approximateLineMatcher =
-      AnyOf(e(line - 5), (line - 4), e(line - 3), e(line - 2), e(line - 1),
+      AnyOf(e(line - 5), e(line - 4), e(line - 3), e(line - 2), e(line - 1),
             e(line), e(line + 1), e(line + 2));
   return AllOf(HasSubstr(condition), HasSubstr(l.file_name()),
                approximateLineMatcher);
