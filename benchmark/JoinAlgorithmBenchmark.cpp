@@ -196,18 +196,18 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 }
 
 /*
-@brief Create overlaps between the join columns of the IdTables until at least,
-by randomly choosing distinct elements from the join column of the smaller table
-and overiding all their occurrences in the join column with randomly choosen
-distinct elements from the join column of the bigger table.
+@brief Create overlaps between the join columns of the IdTables until it is no
+longer possible to grow closer to the wanted number of overlap matches.
+Note: Because of runtime complexity concerns, not all overlap possibilities can
+be tried and the end result can be quite unoptimal.
 
 @param smallerTable The table, where distinct join column elements will be
 overwritten.
 @param biggerTable The table, where distinct join column elements will be copied
 from.
-@param probabilityToCreateOverlap The height of the probability for any distinct
-join column element of smallerTable to be overwritten by a random distinct join
-column element of biggerTable.
+@param wantedNumNewOverlapMatches How many new overlap matches should be
+created. Note, that it is not always possible to reach the wanted number
+exactly.
 @param randomSeed Seed for the random generators.
 
 @returns The number of new overlap matches created. That is, the amount
