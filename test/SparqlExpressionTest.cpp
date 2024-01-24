@@ -58,14 +58,21 @@ const auto& testContext() {
 using ad_utility::AllocatorWithLimit;
 AllocatorWithLimit<Id> alloc = ad_utility::testing::makeAllocator();
 
+// A concept for a type that is either a `SingleExpressionResult`, a
+// `std::vector<T>` where `T` is a `SingleExpressionResult` or something that
+// can be converted to a `string_view`. All those types can be used as input to
+// the test helper functions below and are converted to `ExpressionResult`s by
+// the test machinery.
 template <typename T>
 concept VectorOrExpressionResult =
     SingleExpressionResult<T> ||
     (ad_utility::isVector<T> && isConstantResult<typename T::value_type>) ||
     std::convertible_to<T, std::string_view>;
 
+// Convert a `VectorOrExpressionResult` (see above) to a type that is supported
+// by the expression module.
 template <VectorOrExpressionResult T>
-auto liftVector(T vec) {
+SingleExpressionResult auto toExpressionResult(T vec) {
   if constexpr (SingleExpressionResult<T>) {
     return vec;
   } else if constexpr (std::convertible_to<T, std::string_view>) {
@@ -194,8 +201,9 @@ auto testNaryExpressionImpl =
 auto testNaryExpression = [](auto&& makeExpression,
                              VectorOrExpressionResult auto const& expected,
                              VectorOrExpressionResult auto const&... operands) {
-  return testNaryExpressionImpl(makeExpression, liftVector(clone(expected)),
-                                liftVector(clone(operands))...);
+  return testNaryExpressionImpl(makeExpression,
+                                toExpressionResult(clone(expected)),
+                                toExpressionResult(clone(operands))...);
 };
 
 // Assert that the given commutative binary expression has the `expected` result
@@ -398,7 +406,8 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(times13, mixed, D(1.0 / 1.3));
 }
 
-// TODO<joka921> Comment.
+// Test that the unary expression that is specified by the `makeFunction` yields
+// the `expected` result when being given the `operand`.
 template <auto makeFunction>
 auto testUnaryExpression = [](VectorOrExpressionResult auto const& operand,
                               VectorOrExpressionResult auto const& expected,
