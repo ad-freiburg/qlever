@@ -35,6 +35,7 @@ class CoalesceExpression : public VariadicExpression {
 
   // _____________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
+    // Arbitrarily chosen interval after which to check for cancellation.
     constexpr size_t CHUNK_SIZE = 1'000'000;
     // Set up one vector with the indices of the elements that are still unbound
     // so far and one for the indices that remain unbound after applying one of

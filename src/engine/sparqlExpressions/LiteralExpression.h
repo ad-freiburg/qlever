@@ -37,8 +37,7 @@ class LiteralExpression : public SparqlExpression {
   const T& value() const { return _value; }
 
   // Evaluating just returns the constant/literal value.
-  ExpressionResult evaluate(
-      [[maybe_unused]] EvaluationContext* context) const override {
+  ExpressionResult evaluate(EvaluationContext* context) const override {
     // Common code for the `Literal` and `std::string` case.
     auto getIdOrString = [this,
                           &context](const std::string& s) -> ExpressionResult {
