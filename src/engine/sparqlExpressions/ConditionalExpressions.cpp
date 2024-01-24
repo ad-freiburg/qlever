@@ -6,6 +6,7 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
 #include "util/ChunkedForLoop.h"
+#include "util/CompilerWarnings.h"
 
 namespace sparqlExpression {
 namespace detail::conditional_expressions {
@@ -67,7 +68,11 @@ class CoalesceExpression : public VariadicExpression {
     auto visitConstantExpressionResult = [
       ctx, &nextUnboundIndices, &unboundIndices, &isUnbound, &result
     ]<SingleExpressionResult T>(T && childResult) requires isConstantResult<T> {
-      IdOrString constantResult{AD_FWD(childResult)};
+      // GCC 12 & 13 report this as potentially uninitialized
+      // variable, which seems to be a false positive, so suppress the
+      // warning here
+      SUPPRESS_MAYBE_UNINITIALIZED(
+          IdOrString constantResult{AD_FWD(childResult)};)
       if (isUnbound(constantResult)) {
         nextUnboundIndices = std::move(unboundIndices);
         return;
