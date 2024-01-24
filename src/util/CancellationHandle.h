@@ -122,7 +122,7 @@ class CancellationHandle {
   /// `CancellationState::NOT_CANCELLED`, in order to prevent logging warnings
   /// in the console that would otherwise be triggered by the watchdog.
   /// NOTE: The parameter state is expected to be one of `CHECK_WINDOW_MISSED`
-  /// or `WAITING_FOR_CHECK`, otherwise it behaves unexpectedly!
+  /// or `WAITING_FOR_CHECK`, otherwise it will violate the correctness check.
   template <typename... ArgTypes>
   void pleaseWatchDog(CancellationState state,
                       const InvocableWithConvertibleReturnType<
@@ -130,6 +130,8 @@ class CancellationHandle {
                       ArgTypes&&... argTypes) requires WatchDogEnabled {
     using DurationType =
         std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
+    AD_CORRECTNESS_CHECK(!detail::isCancelled(state) &&
+                         state != CancellationState::NOT_CANCELLED);
 
     bool windowMissed = state == CancellationState::CHECK_WINDOW_MISSED;
     // Because we know `state` will be one of `CHECK_WINDOW_MISSED` or
@@ -257,6 +259,8 @@ class CancellationHandle {
   FRIEND_TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel);
   FRIEND_TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary);
   FRIEND_TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog);
+  FRIEND_TEST(CancellationHandle,
+              verifyPleaseWatchDogDoesNotAcceptInvalidState);
 };
 
 using SharedCancellationHandle = std::shared_ptr<CancellationHandle<>>;

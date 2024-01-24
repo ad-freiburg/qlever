@@ -335,6 +335,18 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
 // _____________________________________________________________________________
 
+TEST(CancellationHandle, verifyPleaseWatchDogDoesNotAcceptInvalidState) {
+  CancellationHandle<ENABLED> handle;
+  EXPECT_THROW(handle.pleaseWatchDog(NOT_CANCELLED, std::identity{}, ""),
+               ad_utility::Exception);
+  EXPECT_THROW(handle.pleaseWatchDog(MANUAL, std::identity{}, ""),
+               ad_utility::Exception);
+  EXPECT_THROW(handle.pleaseWatchDog(TIMEOUT, std::identity{}, ""),
+               ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+
 TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
   // If the log level is not high enough this test will fail
   static_assert(LOGLEVEL >= WARN);
