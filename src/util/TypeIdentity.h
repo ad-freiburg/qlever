@@ -8,6 +8,6 @@
 #include <type_traits>
 
 namespace ad_utility::use_type_identity {
-  template <typename T>
-  static constexpr auto TI = std::type_identity<T>{};
+template <typename T>
+static constexpr auto TI = std::type_identity<T>{};
 }
