@@ -40,9 +40,15 @@ using ad_utility::testing::IntId;
 // `QueryExecutionContext` from `getQec()` (see above), and  has an `inputTable`
 // that refers to a previous partial query result with multiple columns of
 // various types. For details see the constructor.
+// It is possible to add additional IDs to the vocab and the local vocab by
+// adding corresponding triples to the `turtleInput` and appropriate calls to
+// `localVocab.getIndexAndAddIfNotContained` (see below), but the contents of
+// the `table` should remain unchanged, because several unit tests rely on its
+// exact contents.
 struct TestContext {
   static const inline std::string turtleInput =
-      "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
+      "<x> <label> \"alpha\" . <x> <label> \"Alpha\". <x> <label> \"älpha\" . "
+      "<x> <label> \"A\" . "
       "<x> "
       "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
       "\"zz\"@en";
@@ -58,7 +64,7 @@ struct TestContext {
   Id x, label, alpha, aelpha, A, Beta, zz;
   // IDs of literals (the first two) and entities (the latter two) in the local
   // vocab.
-  Id notInVocabA, notInVocabB, notInVocabC, notInVocabD;
+  Id notInVocabA, notInVocabB, notInVocabC, notInVocabD, notInVocabAelpha;
   TestContext() {
     // First get some IDs for strings from the vocabulary to later reuse them
     x = getId("<x>");
@@ -76,6 +82,8 @@ struct TestContext {
         localVocab.getIndexAndAddIfNotContained("<notInVocabC>"));
     notInVocabD = Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained("<notInVocabD>"));
+    notInVocabAelpha = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained("\"notInVocabÄlpha\""));
 
     // Set up the `table` that represents the previous partial query results. It
     // has five columns/variables: ?ints (only integers), ?doubles (only

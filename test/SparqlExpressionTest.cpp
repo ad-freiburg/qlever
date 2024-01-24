@@ -55,10 +55,27 @@ const auto& testContext() {
 // Test allocator (the inputs to our `SparqlExpression`s are
 // `VectorWithMemoryLimit`s, and these require an `AllocatorWithLimit`).
 //
-// TODO: Can't we define a type here, so that we can easily construct vectors of
-// any type that use `alloc` as allocator.
 using ad_utility::AllocatorWithLimit;
 AllocatorWithLimit<Id> alloc = ad_utility::testing::makeAllocator();
+
+template <typename T>
+concept VectorOrExpressionResult =
+    SingleExpressionResult<T> ||
+    (ad_utility::isVector<T> && isConstantResult<typename T::value_type>) ||
+    std::convertible_to<T, std::string_view>;
+
+template <VectorOrExpressionResult T>
+auto liftVector(T vec) {
+  if constexpr (SingleExpressionResult<T>) {
+    return vec;
+  } else if constexpr (std::convertible_to<T, std::string_view>) {
+    return IdOrString{std::string{std::string_view{vec}}};
+  } else {
+    return VectorWithMemoryLimit<typename T::value_type>{
+        std::make_move_iterator(vec.begin()),
+        std::make_move_iterator(vec.end()), alloc};
+  }
+}
 
 // A matcher for `ValueId`s that also handles floating point comparisons
 // (precision issues as well as NaNs) correctly.
@@ -79,108 +96,113 @@ AllocatorWithLimit<Id> alloc = ad_utility::testing::makeAllocator();
         AD_PROPERTY(Id, getDouble, doubleMatcherCast));
   }
 }
-// Assert that the vectors `a` and `b` are equal. The case `V<double>` is
-// treated separately because we want to consider two elements that are both
-// `NaN` as equal for the test, but they are not equal wrt `==` (by definition,
-// a `NaN` is not equal to anything).
-auto checkResultsEqual = []<SingleExpressionResult A, SingleExpressionResult B>(
-                             const A& expected, const B& actual,
-                             source_location l = source_location::current()) {
-  auto t = generateLocationTrace(l);
-  if constexpr (ad_utility::isSimilar<A, B>) {
-    if constexpr (isVectorResult<A>) {
-      if constexpr (std::is_same_v<typename A::value_type, Id>) {
-        auto matcherVec = ad_utility::transform(
-            expected, [](const Id id) { return matchId(id); });
-        ASSERT_THAT(actual, ::testing::ElementsAreArray(matcherVec));
-      } else {
-        ASSERT_THAT(actual, ::testing::ElementsAreArray(expected));
-      }
 
-    } else {
-      ASSERT_EQ(actual, expected);
-    }
+// Return a matcher that matches a result of an expression that is not a vector.
+// If it is an ID (possibly contained in the `IdOrString` variant), then the
+// `matchId` matcher from above is used, else we test for equality.
+template <typename T>
+requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
+  if constexpr (std::is_same_v<T, Id>) {
+    return matchId(expected);
+  } else if constexpr (std::is_same_v<T, IdOrString>) {
+    return std::visit(
+        []<typename U>(const U& el) {
+          return ::testing::MatcherCast<const IdOrString&>(
+              ::testing::VariantWith<U>(nonVectorResultMatcher(el)));
+        },
+        expected);
   } else {
-    FAIL() << "Result type does not match";
+    return ::testing::Eq(expected);
+  }
+}
+
+// Return a matcher, that matches the `expected` expression result. The case of
+// `expected` being a single element or a vector and the case of `expected`
+// storing `Ids` which have to be handled using the `matchId` matcher (see
+// above) are all handled correctly.
+auto sparqlExpressionResultMatcher =
+    []<SingleExpressionResult Expected>(const Expected& expected) {
+      if constexpr (isVectorResult<Expected>) {
+        auto matcherVec =
+            ad_utility::transform(expected, [](const auto& singleExpected) {
+              return nonVectorResultMatcher(singleExpected);
+            });
+        return ::testing::ElementsAreArray(matcherVec);
+      } else {
+        return nonVectorResultMatcher(expected);
+      }
+    };
+
+// A generic function that can copy all kinds of `SingleExpressionResult`s. Note
+// that we have disabled the implicit copying of vector results, but for testing
+// this is very useful.
+auto clone = [](const auto& x) {
+  if constexpr (requires { x.clone(); }) {
+    return x.clone();
+  } else {
+    return x;
   }
 };
+
+// The implementation of `testNaryExpression` directly below.
+auto testNaryExpressionImpl =
+    [](auto&& makeExpression, SingleExpressionResult auto const& expected,
+       SingleExpressionResult auto const&... operands) {
+      ad_utility::AllocatorWithLimit<Id> alloc{
+          ad_utility::testing::makeAllocator()};
+      VariableToColumnMap map;
+      LocalVocab localVocab;
+      IdTable table{alloc};
+
+      // Get the size of `operand`: size for a vector, 1 otherwise.
+      auto getResultSize = []<typename T>(const T& operand) -> size_t {
+        if constexpr (isVectorResult<T>) {
+          return operand.size();
+        }
+        return 1;
+      };
+
+      const auto resultSize = [&operands..., &getResultSize]() {
+        if constexpr (sizeof...(operands) == 0) {
+          (void)getResultSize;
+          return 0ul;
+        } else {
+          return std::max({getResultSize(operands)...});
+        }
+      }();
+
+      TestContext outerContext;
+      sparqlExpression::EvaluationContext& context = outerContext.context;
+      context._endIndex = resultSize;
+
+      std::array<SparqlExpression::Ptr, sizeof...(operands)> children{
+          std::make_unique<DummyExpression>(
+              ExpressionResult{clone(operands)})...};
+
+      auto expressionPtr = std::apply(makeExpression, std::move(children));
+      auto& expression = *expressionPtr;
+
+      ExpressionResult result = expression.evaluate(&context);
+
+      using ExpectedType = std::decay_t<decltype(expected)>;
+      ASSERT_THAT(result, ::testing::VariantWith<ExpectedType>(
+                              sparqlExpressionResultMatcher(expected)));
+    };
 
 // Assert that the given `NaryExpression` with the given `operands` has the
 // `expected` result.
 auto testNaryExpression = [](auto&& makeExpression,
-                             SingleExpressionResult auto&& expected,
-                             SingleExpressionResult auto&&... operands) {
-  ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::testing::makeAllocator()};
-  VariableToColumnMap map;
-  LocalVocab localVocab;
-  IdTable table{alloc};
-
-  // Get the size of `operand`: size for a vector, 1 otherwise.
-  auto getResultSize = []<typename T>(const T& operand) -> size_t {
-    if constexpr (isVectorResult<T>) {
-      return operand.size();
-    }
-    return 1;
-  };
-
-  const auto resultSize = [&operands..., &getResultSize]() {
-    if constexpr (sizeof...(operands) == 0) {
-      (void)getResultSize;
-      return 0ul;
-    } else {
-      return std::max({getResultSize(operands)...});
-    }
-  }();
-
-  TestContext outerContext;
-  sparqlExpression::EvaluationContext& context = outerContext.context;
-  context._endIndex = resultSize;
-
-  // NOTE: We need to clone because `VectorWithMemoryLimit` does not have a copy
-  // constructor (deliberately).
-  auto clone = [](const auto& x) {
-    if constexpr (requires { x.clone(); }) {
-      return x.clone();
-    } else {
-      return x;
-    }
-  };
-
-  std::array<SparqlExpression::Ptr, sizeof...(operands)> children{
-      std::make_unique<DummyExpression>(ExpressionResult{clone(operands)})...};
-
-  auto expressionPtr = std::apply(makeExpression, std::move(children));
-  auto& expression = *expressionPtr;
-
-  ExpressionResult result = expression.evaluate(&context);
-
-  ASSERT_TRUE(std::holds_alternative<std::decay_t<decltype(expected)>>(result));
-
-  std::visit(checkResultsEqual, ExpressionResult{clone(expected)}, result);
-  // ASSERT_EQ(result, ExpressionResult{clone(expected)});
+                             VectorOrExpressionResult auto const& expected,
+                             VectorOrExpressionResult auto const&... operands) {
+  return testNaryExpressionImpl(makeExpression, liftVector(clone(expected)),
+                                liftVector(clone(operands))...);
 };
-
-template <typename T>
-concept VectorOrExpressionResult =
-    SingleExpressionResult<T> ||
-    (ad_utility::isVector<T> && isConstantResult<typename T::value_type>);
-
-template <VectorOrExpressionResult T>
-auto liftVector(T vec) {
-  if constexpr (SingleExpressionResult<T>) {
-    return vec;
-  } else {
-    return VectorWithMemoryLimit<typename T::value_type>{
-        std::make_move_iterator(vec.begin()),
-        std::make_move_iterator(vec.end()), alloc};
-  }
-}
 
 // Assert that the given commutative binary expression has the `expected` result
 // in both orders of the operands `op1` and `op2`.
+template <auto makeFunction>
 auto testBinaryExpressionCommutative =
-    [](auto makeFunction, const SingleExpressionResult auto& expected,
+    [](const SingleExpressionResult auto& expected,
        const SingleExpressionResult auto& op1,
        const SingleExpressionResult auto& op2,
        source_location l = source_location::current()) {
@@ -189,55 +211,30 @@ auto testBinaryExpressionCommutative =
       testNaryExpression(makeFunction, expected, op2, op1);
     };
 
-auto testBinaryExpression = [](auto makeExpression,
-                               const SingleExpressionResult auto& expected,
-                               const SingleExpressionResult auto& op1,
-                               const SingleExpressionResult auto& op2,
-                               source_location l = source_location::current()) {
-  auto t = generateLocationTrace(l);
-  testNaryExpression(makeExpression, expected, op1, op2);
-};
-
-// Test a binary expression, but the operands and expected result are passed in
-// via `std::vector`, not as a `VectorWithMemoryLimit`. This makes the usage
-// simpler.
-auto testBinaryExpressionVec =
-    []<SingleExpressionResult Exp, SingleExpressionResult Op1,
-       SingleExpressionResult Op2>(
-        auto makeExpression, std::vector<Exp> expected, std::vector<Op1> op1,
-        std::vector<Op2> op2, source_location l = source_location::current()) {
-      auto t = generateLocationTrace(l, "testBinaryExpressionVec");
-
-      testNaryExpression(makeExpression, liftVector(expected), liftVector(op1),
-                         liftVector(op2));
-    };
-// Test an NARY expression, but the operands and expected result are passed in
-// via `std::vector`, not as a `VectorWithMemoryLimit`. This makes the usage
-// simpler.
+// Test an NARY expression, but the operands are passed in as a `std::tuple`.
+// This allows us to get the info about the actual point of the test failure via
+// the `source_location`. TODO<joka921> Rewrite all the tests to use this
+// facility.
+template <auto makeFunction>
 auto testNaryExpressionVec =
     []<VectorOrExpressionResult Exp, VectorOrExpressionResult... Ops>(
-        auto makeExpression, Exp expected, std::tuple<Ops...> ops,
+        Exp expected, std::tuple<Ops...> ops,
         source_location l = source_location::current()) {
       auto t = generateLocationTrace(l, "testBinaryExpressionVec");
 
       std::apply(
           [&](auto&... args) {
-            testNaryExpression(makeExpression, liftVector(expected),
-                               liftVector(args)...);
+            testNaryExpression(makeFunction, expected, args...);
           },
           ops);
     };
 
-auto testOr =
-    std::bind_front(testBinaryExpressionCommutative, &makeOrExpression);
-auto testAnd =
-    std::bind_front(testBinaryExpressionCommutative, &makeAndExpression);
-auto testPlus =
-    std::bind_front(testBinaryExpressionCommutative, &makeAddExpression);
-auto testMultiply =
-    std::bind_front(testBinaryExpressionCommutative, &makeMultiplyExpression);
-auto testMinus = std::bind_front(testBinaryExpression, &makeSubtractExpression);
-auto testDivide = std::bind_front(testBinaryExpression, &makeDivideExpression);
+auto testOr = testBinaryExpressionCommutative<&makeOrExpression>;
+auto testAnd = testBinaryExpressionCommutative<&makeAndExpression>;
+auto testPlus = testBinaryExpressionCommutative<&makeAddExpression>;
+auto testMultiply = testBinaryExpressionCommutative<&makeMultiplyExpression>;
+auto testMinus = std::bind_front(testNaryExpression, &makeSubtractExpression);
+auto testDivide = std::bind_front(testNaryExpression, &makeDivideExpression);
 
 }  // namespace
 
@@ -401,49 +398,13 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(times13, mixed, D(1.0 / 1.3));
 }
 
-// _____________________________________________________________________________________
-// TODO: The tests above could also be simplified (and made much more readable)
-// in this vein.
-auto testUnaryExpression =
-    []<SingleExpressionResult OperandType, SingleExpressionResult OutputType>(
-        auto makeFunction, std::vector<OperandType> operand,
-        std::vector<OutputType> expected,
-        source_location l = source_location::current()) {
-      auto trace = generateLocationTrace(l);
-      testNaryExpression(makeFunction, liftVector(expected),
-                         liftVector(operand));
-    };
-
-// An even more convenient helper for testing unary expressions. For an example
-// usage see the test for the `encodeForUri` expression below.
+// TODO<joka921> Comment.
 template <auto makeFunction>
-struct TestUnaryExpression {
-  // The operands and expected values are passed in as `std::vector`s.
-  template <SingleExpressionResult OperandType,
-            SingleExpressionResult OutputType>
-  void operator()(std::vector<OperandType> operand,
-                  std::vector<OutputType> expected,
-                  source_location l = source_location::current()) {
-    auto trace = generateLocationTrace(l);
-    testNaryExpression(makeFunction, liftVector(expected), liftVector(operand));
-  }
-
-  // The operands and expected values are passed in as `SingleExpressionResult`s
-  // directly.
-  template <SingleExpressionResult OperandType,
-            SingleExpressionResult OutputType>
-  void operator()(OperandType operand, OutputType expected,
-                  source_location l = source_location::current()) {
-    return operator()(std::vector{operand}, std::vector{expected}, l);
-  }
-
-  // The operands and expected are passed in as `std::string`. The arguments are
-  // automatically converted to `IdOrString` and then passed to the expression.
-  void operator()(std::string operand, std::string expected,
-                  source_location l = source_location::current()) {
-    return operator()(IdOrString{std::move(operand)},
-                      IdOrString{std::move(expected)}, l);
-  }
+auto testUnaryExpression = [](VectorOrExpressionResult auto const& operand,
+                              VectorOrExpressionResult auto const& expected,
+                              source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(l);
+  testNaryExpression(makeFunction, expected, operand);
 };
 
 TEST(SparqlExpression, dateOperators) {
@@ -451,14 +412,12 @@ TEST(SparqlExpression, dateOperators) {
   //  `HoursExpression`, `MinutesExpression`, and `SecondsExpression`.
   // Helper function that asserts that the date operators give the expected
   // result on the given date.
-  auto checkYear = std::bind_front(testUnaryExpression, &makeYearExpression);
-  auto checkMonth = std::bind_front(testUnaryExpression, &makeMonthExpression);
-  auto checkDay = std::bind_front(testUnaryExpression, &makeDayExpression);
-  auto checkHours = std::bind_front(testUnaryExpression, &makeHoursExpression);
-  auto checkMinutes =
-      std::bind_front(testUnaryExpression, &makeMinutesExpression);
-  auto checkSeconds =
-      std::bind_front(testUnaryExpression, &makeSecondsExpression);
+  auto checkYear = testUnaryExpression<&makeYearExpression>;
+  auto checkMonth = testUnaryExpression<&makeMonthExpression>;
+  auto checkDay = testUnaryExpression<&makeDayExpression>;
+  auto checkHours = testUnaryExpression<&makeHoursExpression>;
+  auto checkMinutes = testUnaryExpression<&makeMinutesExpression>;
+  auto checkSeconds = testUnaryExpression<&makeSecondsExpression>;
   auto check = [&checkYear, &checkMonth, &checkDay, &checkHours, &checkMinutes,
                 &checkSeconds](
                    const DateOrLargeYear& date, std::optional<int> expectedYear,
@@ -519,20 +478,19 @@ TEST(SparqlExpression, dateOperators) {
   checkHours(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
   checkMinutes(Ids{Id::makeFromInt(84)}, Ids{Id::makeUndefined()});
   checkSeconds(Ids{Id::makeFromDouble(120.0123)}, Ids{Id::makeUndefined()});
-  auto testYear = std::bind_front(testUnaryExpression, &makeYearExpression);
+  auto testYear = testUnaryExpression<&makeYearExpression>;
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
   testYear(IdOrStrings{"noDate"}, Ids{U});
 }
 
 // _____________________________________________________________________________________
-auto checkStrlen = std::bind_front(testUnaryExpression, &makeStrlenExpression);
-auto checkStr = std::bind_front(testUnaryExpression, &makeStrExpression);
+auto checkStrlen = testUnaryExpression<&makeStrlenExpression>;
+auto checkStr = testUnaryExpression<&makeStrExpression>;
 static auto makeStrlenWithStr = [](auto arg) {
   return makeStrlenExpression(makeStrExpression(std::move(arg)));
 };
-auto checkStrlenWithStrChild =
-    std::bind_front(testUnaryExpression, makeStrlenWithStr);
+auto checkStrlenWithStrChild = testUnaryExpression<makeStrlenWithStr>;
 TEST(SparqlExpression, stringOperators) {
   // Test `StrlenExpression` and `StrExpression`.
   checkStrlen(IdOrStrings{"one", "two", "three", ""},
@@ -578,10 +536,8 @@ TEST(SparqlExpression, stringOperators) {
 }
 
 // _____________________________________________________________________________________
-auto checkUcase =
-    std::bind_front(testUnaryExpression, &makeUppercaseExpression);
-auto checkLcase =
-    std::bind_front(testUnaryExpression, &makeLowercaseExpression);
+auto checkUcase = testUnaryExpression<&makeUppercaseExpression>;
+auto checkLcase = testUnaryExpression<&makeLowercaseExpression>;
 TEST(SparqlExpression, uppercaseAndLowercase) {
   checkLcase(IdOrStrings{"One", "tWÖ", U, I(12)},
              IdOrStrings{"one", "twö", U, U});
@@ -591,15 +547,14 @@ TEST(SparqlExpression, uppercaseAndLowercase) {
 
 // _____________________________________________________________________________________
 auto checkStrStarts =
-    std::bind_front(testBinaryExpressionVec, &makeStrStartsExpression);
-auto checkStrEnds =
-    std::bind_front(testBinaryExpressionVec, &makeStrEndsExpression);
+    std::bind_front(testNaryExpression, &makeStrStartsExpression);
+auto checkStrEnds = std::bind_front(testNaryExpression, &makeStrEndsExpression);
 auto checkContains =
-    std::bind_front(testBinaryExpressionVec, &makeContainsExpression);
+    std::bind_front(testNaryExpression, &makeContainsExpression);
 auto checkStrAfter =
-    std::bind_front(testBinaryExpressionVec, &makeStrAfterExpression);
+    std::bind_front(testNaryExpression, &makeStrAfterExpression);
 auto checkStrBefore =
-    std::bind_front(testBinaryExpressionVec, &makeStrBeforeExpression);
+    std::bind_front(testNaryExpression, &makeStrBeforeExpression);
 TEST(SparqlExpression, binaryStringOperations) {
   // Test STRSTARTS, STRENDS, CONTAINS, STRBEFORE, and STRAFTER.
   using S = IdOrStrings;
@@ -687,8 +642,7 @@ TEST(SparqlExpression, substr) {
 
 // _____________________________________________________________________________________
 TEST(SparqlExpression, unaryNegate) {
-  auto checkNegate =
-      std::bind_front(testUnaryExpression, &makeUnaryNegateExpression);
+  auto checkNegate = testUnaryExpression<&makeUnaryNegateExpression>;
   // Zero and NaN are considered to be false, so their negation is true
 
   checkNegate(
@@ -701,8 +655,7 @@ TEST(SparqlExpression, unaryNegate) {
 
 // _____________________________________________________________________________________
 TEST(SparqlExpression, unaryMinus) {
-  auto checkMinus =
-      std::bind_front(testUnaryExpression, &makeUnaryMinusExpression);
+  auto checkMinus = testUnaryExpression<&makeUnaryMinusExpression>;
   // Zero and NaN are considered to be false, so their negation is true
   checkMinus(
       Ids{B(true), B(false), I(0), I(3), D(0), D(12.8), D(naN), U, Voc(6)},
@@ -713,13 +666,11 @@ TEST(SparqlExpression, unaryMinus) {
 // _____________________________________________________________________________________
 TEST(SparqlExpression, builtInNumericFunctions) {
   // Test the built-in numeric functions (floor, abs, round, ceil).
-  auto bindUnary = [](auto f) {
-    return std::bind_front(testUnaryExpression, f);
-  };
-  auto checkFloor = bindUnary(&makeFloorExpression);
-  auto checkAbs = bindUnary(&makeAbsExpression);
-  auto checkRound = bindUnary(&makeRoundExpression);
-  auto checkCeil = bindUnary(&makeCeilExpression);
+  auto checkFloor = testUnaryExpression<&makeFloorExpression>;
+  auto checkAbs = testUnaryExpression<&makeAbsExpression>;
+  ;
+  auto checkRound = testUnaryExpression<&makeRoundExpression>;
+  auto checkCeil = testUnaryExpression<&makeCeilExpression>;
 
   std::vector<Id> input{B(true),  B(false), I(-3),   I(0),   I(3),
                         D(-13.6), D(-0.5),  D(-0.0), D(0.0), D(0.5),
@@ -744,33 +695,30 @@ TEST(SparqlExpression, builtInNumericFunctions) {
 // ________________________________________________________________________________________
 TEST(SparqlExpression, customNumericFunctions) {
   // Test the correctness of the math functions.
-  auto nan = std::numeric_limits<double>::quiet_NaN();
-  auto inf = std::numeric_limits<double>::infinity();
-  testUnaryExpression(makeLogExpression,
-                      std::vector<Id>{I(1), D(2), D(exp(1)), D(0)},
-                      std::vector<Id>{D(0), D(log(2)), D(1), D(-inf)});
-  testUnaryExpression(makeExpExpression,
-                      std::vector<Id>{I(0), D(1), D(2), D(-inf)},
-                      std::vector<Id>{D(1), D(exp(1)), D(exp(2)), D(0)});
-  testUnaryExpression(makeSqrtExpression,
-                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
-                      std::vector<Id>{D(0), D(1), D(sqrt(2)), D(nan)});
-  testUnaryExpression(makeSinExpression,
-                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
-                      std::vector<Id>{D(0), D(sin(1)), D(sin(2)), D(sin(-1))});
-  testUnaryExpression(makeCosExpression,
-                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
-                      std::vector<Id>{D(1), D(cos(1)), D(cos(2)), D(cos(-1))});
-  testUnaryExpression(makeTanExpression,
-                      std::vector<Id>{I(0), D(1), D(2), D(-1)},
-                      std::vector<Id>{D(0), D(tan(1)), D(tan(2)), D(tan(-1))});
+  testUnaryExpression<makeLogExpression>(
+      std::vector<Id>{I(1), D(2), D(exp(1)), D(0)},
+      std::vector<Id>{D(0), D(log(2)), D(1), D(-inf)});
+  testUnaryExpression<makeExpExpression>(
+      std::vector<Id>{I(0), D(1), D(2), D(-inf)},
+      std::vector<Id>{D(1), D(exp(1)), D(exp(2)), D(0)});
+  testUnaryExpression<makeSqrtExpression>(
+      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+      std::vector<Id>{D(0), D(1), D(sqrt(2)), D(naN)});
+  testUnaryExpression<makeSinExpression>(
+      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+      std::vector<Id>{D(0), D(sin(1)), D(sin(2)), D(sin(-1))});
+  testUnaryExpression<makeCosExpression>(
+      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+      std::vector<Id>{D(1), D(cos(1)), D(cos(2)), D(cos(-1))});
+  testUnaryExpression<makeTanExpression>(
+      std::vector<Id>{I(0), D(1), D(2), D(-1)},
+      std::vector<Id>{D(0), D(tan(1)), D(tan(2)), D(tan(-1))});
 }
 
 // ________________________________________________________________________________________
 TEST(SparqlExpression, geoSparqlExpressions) {
-  auto checkLat = std::bind_front(testUnaryExpression, &makeLatitudeExpression);
-  auto checkLong =
-      std::bind_front(testUnaryExpression, &makeLongitudeExpression);
+  auto checkLat = testUnaryExpression<&makeLatitudeExpression>;
+  auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
 
   checkLat(IdOrStrings{"POINT(24.3 26.8)", "NotAPoint", I(12)},
@@ -787,9 +735,8 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
 // ________________________________________________________________________________________
 TEST(SparqlExpression, ifAndCoalesce) {
-  auto checkIf = std::bind_front(testNaryExpressionVec, &makeIfExpression);
-  auto checkCoalesce =
-      std::bind_front(testNaryExpressionVec, makeCoalesceExpressionVariadic);
+  auto checkIf = testNaryExpressionVec<&makeIfExpression>;
+  auto checkCoalesce = testNaryExpressionVec<makeCoalesceExpressionVariadic>;
 
   const auto T = Id::makeFromBool(true);
   const auto F = Id::makeFromBool(false);
@@ -823,8 +770,7 @@ TEST(SparqlExpression, ifAndCoalesce) {
 
 // ________________________________________________________________________________________
 TEST(SparqlExpression, concatExpression) {
-  auto checkConcat =
-      std::bind_front(testNaryExpressionVec, makeConcatExpressionVariadic);
+  auto checkConcat = testNaryExpressionVec<makeConcatExpressionVariadic>;
 
   const auto T = Id::makeFromBool(true);
   checkConcat(IdOrStrings{"0null", "eins", "2zwei", "3drei", "", "5.35.2"},
@@ -856,8 +802,7 @@ TEST(SparqlExpression, concatExpression) {
 
 // ______________________________________________________________________________
 TEST(SparqlExpression, ReplaceExpression) {
-  auto checkReplace =
-      std::bind_front(testNaryExpressionVec, makeReplaceExpression);
+  auto checkReplace = testNaryExpressionVec<&makeReplaceExpression>;
   // A simple replace( no regexes involved).
   checkReplace(IdOrStrings{"null", "Eins", "zwEi", "drEi", U, U},
                std::tuple{IdOrStrings{"null", "eins", "zwei", "drei", U, U},
@@ -904,9 +849,7 @@ TEST(SparqlExpression, literalExpression) {
   // A similar test with a constant entry that is part of the vocabulary and can
   // therefore be converted to an ID.
   IriExpression iriExpr{"<x>"};
-  Id idOfX;
-  bool result = ctx.qec->getIndex().getId("<x>", &idOfX);
-  AD_CORRECTNESS_CHECK(result);
+  Id idOfX = ctx.x;
   for (size_t i = 0; i < 15; ++i) {
     ASSERT_EQ((ExpressionResult{IdOrString{idOfX}}),
               iriExpr.evaluate(&ctx.context));
@@ -915,7 +858,7 @@ TEST(SparqlExpression, literalExpression) {
 
 // ______________________________________________________________________________
 TEST(SparqlExpression, encodeForUri) {
-  auto checkEncodeForUri = TestUnaryExpression<&makeEncodeForUriExpression>{};
+  auto checkEncodeForUri = testUnaryExpression<&makeEncodeForUriExpression>;
   using IoS = IdOrString;
   checkEncodeForUri("Los Angeles", "Los%20Angeles");
   checkEncodeForUri("\"Los Angeles\"@en", "Los%20Angeles");
@@ -924,8 +867,9 @@ TEST(SparqlExpression, encodeForUri) {
   checkEncodeForUri("\"Los Angeles", "%22Los%20Angeles");
   checkEncodeForUri("L\"os \"Angeles", "L%22os%20%22Angeles");
   // Literals from the global and local vocab.
-  checkEncodeForUri(testContext().aelpha, IoS{"%C3%A4lpha"});
-  checkEncodeForUri(testContext().notInVocabA, IoS{"notInVocabA"});
+  checkEncodeForUri(testContext().aelpha, "%C3%A4lpha");
+  checkEncodeForUri(testContext().notInVocabA, "notInVocabA");
+  checkEncodeForUri(testContext().notInVocabAelpha, "notInVocab%C3%84lpha");
   // Entities from the local and global vocab (become undefined without STR()
   // around the expression).
   checkEncodeForUri(testContext().label, IoS{U});

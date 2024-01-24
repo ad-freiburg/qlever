@@ -91,6 +91,7 @@ SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
 // `make...` functions for n-ary expressions that have a compile-time known
 // number of children. This makes the testing easier, as we then can use the
 // same test helpers for all expressions.
+/*
 template <typename Function>
 requires std::is_invocable_r_v<SparqlExpression::Ptr, Function,
                                std::vector<SparqlExpression::Ptr>>
@@ -102,6 +103,18 @@ inline auto variadicExpressionFactory(Function function) {
     return std::invoke(function, std::move(vec));
   };
 }
+ */
+
+template <auto Function>
+requires std::is_invocable_r_v<SparqlExpression::Ptr, decltype(Function),
+                               std::vector<SparqlExpression::Ptr>>
+inline auto variadicExpressionFactory =
+    []<std::derived_from<SparqlExpression>... Exps>(
+        std::unique_ptr<Exps>... children) {
+      std::vector<SparqlExpression::Ptr> vec;
+      (..., (vec.push_back(std::move(children))));
+      return std::invoke(Function, std::move(vec));
+    };
 
 SparqlExpression::Ptr makeCoalesceExpression(
     std::vector<SparqlExpression::Ptr> children);
@@ -109,11 +122,11 @@ SparqlExpression::Ptr makeCoalesceExpression(
 // Construct a `CoalesceExpression` from a constant number of arguments. Used
 // for testing.
 inline auto makeCoalesceExpressionVariadic =
-    variadicExpressionFactory(&makeCoalesceExpression);
+    variadicExpressionFactory<&makeCoalesceExpression>;
 
 SparqlExpression::Ptr makeConcatExpression(
     std::vector<SparqlExpression::Ptr> children);
 inline auto makeConcatExpressionVariadic =
-    variadicExpressionFactory(&makeConcatExpression);
+    variadicExpressionFactory<&makeConcatExpression>;
 
 }  // namespace sparqlExpression
