@@ -66,9 +66,10 @@ class CoalesceExpression : public VariadicExpression {
               std::get<Id>(x) == Id::makeUndefined());
     };
 
-    auto visitConstantExpressionResult = [
-      ctx, &nextUnboundIndices, &unboundIndices, &isUnbound, &result
-    ]<SingleExpressionResult T>(T && childResult) requires isConstantResult<T> {
+    auto visitConstantExpressionResult =
+        [&nextUnboundIndices, &unboundIndices, &isUnbound, &result,
+         ctx ]<SingleExpressionResult T>(T && childResult)
+            requires isConstantResult<T> {
       // GCC 12 & 13 report this as potentially uninitialized
       // variable, which seems to be a false positive, so suppress the
       // warning here
