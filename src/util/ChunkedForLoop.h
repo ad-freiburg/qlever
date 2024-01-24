@@ -34,7 +34,6 @@ constexpr bool isIteratorWithBreak =
 template <typename Func>
 concept IteratorAction =
     std::is_invocable_v<Func, std::size_t> || isIteratorWithBreak<Func>;
-;
 }  // namespace detail
 
 /// Helper function to run a classic for-loop from `start` to `end`, where
