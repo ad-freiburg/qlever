@@ -11,7 +11,7 @@
 #if defined(__GNUC__) && (__GNUC__ == 12 || __GNUC__ == 13)
 #define DISABLE_WARNINGS         \
   _Pragma("GCC diagnostic push") \
-      _Pragma("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")
+      _Pragma("GCC diagnostic ignored \"-Werror=maybe-uninitialized\"")
 #define ENABLE_WARNINGS _Pragma("GCC diagnostic pop")
 #else
 #define DISABLE_WARNINGS
