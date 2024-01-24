@@ -8,6 +8,7 @@
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
+#include "engine/CountAvailablePredicates.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/MultiColumnJoin.h"
@@ -139,6 +140,23 @@ inline auto Bind = [](const QetMatcher& childMatcher,
 inline auto NeutralElementOperation = []() {
   return RootOperation<::NeutralElementOperation>(
       An<const ::NeutralElementOperation&>());
+};
+
+// Matcher for a `CountAvailablePredicates` operation. The case of 0 children
+// means that it's a full scan.
+inline auto CountAvailablePredicates =
+    [](size_t subjectColumnIdx, const Variable& predicateVar,
+       const Variable& countVar,
+       const std::same_as<QetMatcher> auto&... childMatchers)
+        requires(sizeof...(childMatchers) <= 1) {
+  return RootOperation<::CountAvailablePredicates>(AllOf(
+      AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
+                  Eq(subjectColumnIdx)),
+      AD_PROPERTY(::CountAvailablePredicates, predicateVariable,
+                  Eq(predicateVar)),
+      AD_PROPERTY(::CountAvailablePredicates, countVariable, Eq(countVar)),
+      AD_PROPERTY(Operation, getChildren,
+                  ElementsAre(Pointee(childMatchers)...))));
 };
 
 // Same as above, but the subject, predicate, and object are passed in as

@@ -14,16 +14,18 @@ inline auto makeDeleteFromDistributors =
     [](auto socketDistributors, QueryId queryId, bool alwaysDelete) {
       return [socketDistributors = std::move(socketDistributors),
               queryId = std::move(queryId), alwaysDelete]() {
-        auto it = socketDistributors->find(queryId);
-        if (it == socketDistributors->end()) {
-          return;
-        }
-        bool expired = it->second.pointer_.expired();
-        // The branch `both of them are true` is currently not covered by tests
-        // and also not coverable, because the manual `signalEnd` call always
-        // comes before the destructor.
-        if (alwaysDelete || expired) {
-          socketDistributors->erase(it);
+        if (auto pointer = socketDistributors.lock()) {
+          auto it = pointer->find(queryId);
+          if (it == pointer->end()) {
+            return;
+          }
+          bool expired = it->second.pointer_.expired();
+          // The branch `both of them are true` is currently not covered by
+          // tests and also not coverable, because the manual `signalEnd` call
+          // always comes before the destructor.
+          if (alwaysDelete || expired) {
+            pointer->erase(it);
+          }
         }
       };
     };
@@ -32,8 +34,9 @@ inline auto makeDeleteFromDistributors =
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
                                                    bool isSender) {
-  if (socketDistributors_->contains(queryId)) {
-    auto& reference = socketDistributors_->at(queryId);
+  auto& distributors = socketDistributors_.get();
+  if (distributors.contains(queryId)) {
+    auto& reference = distributors.at(queryId);
     if (auto ptr = reference.pointer_.lock()) {
       if (isSender) {
         // Ensure only single sender reference is acquired for a single session
@@ -42,19 +45,28 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
       }
       co_return ptr;
     } else {
-      socketDistributors_->erase(queryId);
+      distributors.erase(queryId);
     }
   }
 
   // The cleanup call for the distributor.
-  // We pass a copy of the `shared_pointer socketDistributors_` here,
+  // We pass a weak_ptr version of `shared_pointer socketDistributors_` here,
   // because in unit tests the callback might be invoked after this
   // `QueryHub` was destroyed.
   auto cleanupCall = [globalStrand = globalStrand_,
-                      socketDistributors = socketDistributors_, queryId,
+                      socketDistributors = socketDistributors_.getWeak(),
+                      queryId,
                       alreadyCalled = false](bool alwaysDelete) mutable {
     AD_CORRECTNESS_CHECK(!alreadyCalled);
     alreadyCalled = true;
+    // This if-clause causes `guard_` to prevent destruction of
+    // the io_context backing the global strand which is used here for
+    // scheduling. Otherwise, if the QueryHub is already destroyed, then
+    // just do nothing, no need for cleanup in this case.
+    auto pointer = socketDistributors.lock();
+    if (!pointer) {
+      return;
+    }
     net::dispatch(globalStrand,
                   makeDeleteFromDistributors(std::move(socketDistributors),
                                              std::move(queryId), alwaysDelete));
@@ -66,8 +78,7 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
 
   auto distributor = std::make_shared<QueryToSocketDistributor>(
       ioContext_, std::move(cleanupCall));
-  socketDistributors_->emplace(queryId,
-                               WeakReferenceHolder{distributor, isSender});
+  distributors.emplace(queryId, WeakReferenceHolder{distributor, isSender});
   co_return distributor;
 }
 

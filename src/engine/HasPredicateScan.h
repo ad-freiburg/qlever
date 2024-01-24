@@ -26,13 +26,29 @@ class HasPredicateScan : public Operation {
     SUBQUERY_S
   };
 
- private:
-  ScanType _type;
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  size_t _subtreeJoinColumn;
+  struct SubtreeAndColumnIndex {
+    std::shared_ptr<QueryExecutionTree> subtree_;
+    size_t subtreeJoinColumn_;
+  };
 
-  std::string _subject;
-  std::string _object;
+ private:
+  ScanType type_;
+  std::optional<SubtreeAndColumnIndex> subtree_;
+
+  QueryExecutionTree& subtree() {
+    auto* ptr = subtree_.value().subtree_.get();
+    AD_CORRECTNESS_CHECK(ptr != nullptr);
+    return *ptr;
+  }
+
+  const QueryExecutionTree& subtree() const {
+    return const_cast<HasPredicateScan&>(*this).subtree();
+  }
+
+  size_t subtreeColIdx() const { return subtree_.value().subtreeJoinColumn_; }
+
+  TripleComponent subject_;
+  TripleComponent object_;
 
  public:
   HasPredicateScan() = delete;
@@ -40,16 +56,12 @@ class HasPredicateScan : public Operation {
   // TODO: The last argument should be of type `Variable`.
   HasPredicateScan(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
-                   size_t subtreeJoinColumn, std::string objectVariable);
+                   size_t subtreeJoinColumn, Variable objectVariable);
 
   HasPredicateScan(QueryExecutionContext* qec, SparqlTriple triple);
 
  private:
   [[nodiscard]] string getCacheKeyImpl() const override;
-
-  void setSubject(const TripleComponent& subject);
-
-  void setObject(const TripleComponent& object);
 
  public:
   [[nodiscard]] string getDescriptor() const override;
@@ -73,38 +85,29 @@ class HasPredicateScan : public Operation {
  public:
   [[nodiscard]] ScanType getType() const;
 
-  [[nodiscard]] const std::string& getObject() const;
+  [[nodiscard]] const TripleComponent& getObject() const;
 
   vector<QueryExecutionTree*> getChildren() override {
-    if (_subtree) {
-      return {_subtree.get()};
+    if (subtree_) {
+      return {std::addressof(subtree())};
     } else {
       return {};
     }
   }
 
   // These are made static and public mainly for easier testing
-  static void computeFreeS(IdTable* resultTable, Id objectId,
-                           const std::vector<PatternID>& hasPattern,
-                           const CompactVectorOfStrings<Id>& hasPredicate,
+  static void computeFreeS(IdTable* resultTable, Id objectId, auto& hasPattern,
                            const CompactVectorOfStrings<Id>& patterns);
 
-  static void computeFreeO(IdTable* resultTable, Id subjectAsId,
-                           const std::vector<PatternID>& hasPattern,
-                           const CompactVectorOfStrings<Id>& hasPredicate,
-                           const CompactVectorOfStrings<Id>& patterns);
+  void computeFreeO(IdTable* resultTable, Id subjectAsId,
+                    const CompactVectorOfStrings<Id>& patterns) const;
 
-  static void computeFullScan(IdTable* resultTable,
-                              const std::vector<PatternID>& hasPattern,
-                              const CompactVectorOfStrings<Id>& hasPredicate,
+  static void computeFullScan(IdTable* resultTable, auto& hasPattern,
                               const CompactVectorOfStrings<Id>& patterns,
                               size_t resultSize);
 
-  template <int IN_WIDTH, int OUT_WIDTH>
-  static void computeSubqueryS(IdTable* result, const IdTable& _subtree,
-                               size_t subtreeColIndex,
-                               const std::vector<PatternID>& hasPattern,
-                               const CompactVectorOfStrings<Id>& hasPredicate,
+  template <int WIDTH>
+  ResultTable computeSubqueryS(IdTable* result,
                                const CompactVectorOfStrings<Id>& patterns);
 
  private:

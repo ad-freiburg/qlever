@@ -22,7 +22,7 @@ using TripleVec = std::vector<std::array<Id, 3>>;
 static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
 
 // Convert a PSOSorter to a vector of triples for easier handling
-TripleVec getVectorFromSorter(PatternCreatorNew::PSOSorter&& sorter) {
+TripleVec getVectorFromSorter(PatternCreator::PSOSorter&& sorter) {
   TripleVec triples;
   for (const auto& triple : sorter.sortedView()) {
     triples.push_back(static_cast<std::array<Id, 3>>(triple));
@@ -33,14 +33,14 @@ TripleVec getVectorFromSorter(PatternCreatorNew::PSOSorter&& sorter) {
 using ad_utility::source_location;
 }  // namespace
 
-TEST(PatternStatisticsNew, Initialization) {
+TEST(PatternStatistics, Initialization) {
   PatternStatistics patternStatistics{50, 25, 4};
   ASSERT_EQ(patternStatistics.numDistinctSubjectPredicatePairs_, 50u);
   ASSERT_FLOAT_EQ(patternStatistics.avgNumDistinctPredicatesPerSubject_, 2.0);
   ASSERT_FLOAT_EQ(patternStatistics.avgNumDistinctSubjectsPerPredicate_, 12.5);
 }
 
-TEST(PatternStatisticsNew, Serialization) {
+TEST(PatternStatistics, Serialization) {
   PatternStatistics patternStatistics{50, 25, 4};
   ad_utility::serialization::ByteBufferWriteSerializer writer;
   writer << patternStatistics;
@@ -56,7 +56,7 @@ TEST(PatternStatisticsNew, Serialization) {
 }
 
 // Create patterns from a small SPO-sorted sequence of triples.
-auto createExamplePatterns(PatternCreatorNew& creator) {
+auto createExamplePatterns(PatternCreator& creator) {
   using A = std::array<Id, 4>;
   std::vector<A> expected;
 
@@ -116,7 +116,7 @@ void assertPatternContents(const std::string& filename,
   uint64_t numDistinctSubjectPredicatePairs;
   CompactVectorOfStrings<Id> patterns;
 
-  PatternCreatorNew::readPatternsFromFile(
+  PatternCreator::readPatternsFromFile(
       filename, averageNumSubjectsPerPredicate, averageNumPredicatesPerSubject,
       numDistinctSubjectPredicatePairs, patterns);
 
@@ -149,9 +149,9 @@ void assertPatternContents(const std::string& filename,
   EXPECT_THAT(addedTriples, ::testing::ElementsAreArray(expectedTriples));
 }
 
-TEST(PatternCreatorNew, writeAndReadWithFinish) {
+TEST(PatternCreator, writeAndReadWithFinish) {
   std::string filename = "patternCreator.test.tmp";
-  PatternCreatorNew creator{filename, memForStxxl};
+  PatternCreator creator{filename, memForStxxl};
   auto hashPatternAsPSOPtr = createExamplePatterns(creator);
   creator.finish();
 

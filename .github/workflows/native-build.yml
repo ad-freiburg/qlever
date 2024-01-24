@@ -40,12 +40,12 @@ jobs:
           - compiler: clang
             compiler-version: 16
             asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
-            build-type: Release
+            build-type: RelWithDebInfo
             expensive-tests: false
           - compiler: clang
             compiler-version: 16
             ubsan-flags: " -fsanitize=undefined"
-            build-type: Release
+            build-type: RelWithDebInfo
             expensive-tests: false
           - compiler: clang
             compiler-version: 17
