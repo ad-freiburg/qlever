@@ -85,3 +85,21 @@ TEST(ChunkedForLoop, verifyIndexIsCorrectlyCounting) {
 
   EXPECT_EQ(counter, 19);
 }
+
+// _____________________________________________________________________________________________________________________
+TEST(ChunkedForLoop, verifyBreakWorksAsExpected) {
+  std::atomic_size_t counter = 0;
+  std::atomic_size_t chunkCounter = 0;
+  chunkedForLoop<7>(
+      7, 19,
+      [&](size_t index, const auto& breakLoop) {
+        counter++;
+        if (index >= 10) {
+          breakLoop();
+        }
+      },
+      [&]() { chunkCounter++; });
+
+  EXPECT_EQ(counter, 4);
+  EXPECT_EQ(chunkCounter, 1);
+}

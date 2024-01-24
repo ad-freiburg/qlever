@@ -99,7 +99,8 @@ class CoalesceExpression : public VariadicExpression {
       ad_utility::chunkedForLoop<CHUNK_SIZE>(
           0, ctx->size(),
           [&unboundIdxIt, &isUnbound, &nextUnboundIndices, &result,
-           &unboundIndices, &generatorIterator](size_t i) {
+           &unboundIndices,
+           &generatorIterator](size_t i, const auto& breakLoop) {
             // Skip all the indices where the result is already bound from a
             // previous child.
             if (i == *unboundIdxIt) {
@@ -111,6 +112,7 @@ class CoalesceExpression : public VariadicExpression {
               }
               ++unboundIdxIt;
               if (unboundIdxIt == unboundIndices.end()) {
+                breakLoop();
                 return;
               }
             }
