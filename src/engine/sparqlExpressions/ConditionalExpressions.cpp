@@ -118,7 +118,10 @@ class CoalesceExpression : public VariadicExpression {
             }
             ++generatorIterator;
           },
-          [ctx]() { ctx->cancellationHandle_->throwIfCancelled(""); });
+          [ctx]() {
+            ctx->cancellationHandle_->throwIfCancelled(
+                "CoalesceExpression vector expression result");
+          });
     };
     auto visitExpressionResult =
         [
