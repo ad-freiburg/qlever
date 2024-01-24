@@ -73,7 +73,7 @@ class CoalesceExpression : public VariadicExpression {
       // variable, which seems to be a false positive, so suppress the
       // warning here
       SUPPRESS_MAYBE_UNINITIALIZED(
-          IdOrString constantResult{AD_FWD(childResult)};)
+          IdOrString constantResult{AD_FWD(childResult)});
       if (isUnbound(constantResult)) {
         nextUnboundIndices = std::move(unboundIndices);
         return;
