@@ -91,10 +91,10 @@ TEST(ChunkedForLoop, verifyBreakWorksAsExpected) {
   std::atomic_size_t counter = 0;
   std::atomic_size_t chunkCounter = 0;
   chunkedForLoop<7>(
-      7, 19,
+      3, 19,
       [&](size_t index, const auto& breakLoop) {
         counter++;
-        if (index >= 10) {
+        if (index >= 6) {
           breakLoop();
         }
       },

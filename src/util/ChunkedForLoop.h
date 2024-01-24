@@ -12,22 +12,37 @@
 namespace ad_utility {
 
 namespace detail {
+
+/// Helper function that sets the current counter to end, forcing the loop to
+/// end in the next iteration, without having to check a boolean value on each
+/// iteration. In a classic for-loop this would be the break keyword, but this
+/// doesn't work here because the code is inside a nested function.
 inline auto getSetIndexToEndAction(std::size_t& current, std::size_t end) {
   return [&current, end]() { current = end; };
 }
 
+/// True if `Func` has a signature of `* func(size_t, const auto&)`
+/// where `*` can be any type. False otherwise.
 template <typename Func>
 constexpr bool isIteratorWithBreak =
     std::is_invocable_v<Func, std::size_t,
                         const decltype(getSetIndexToEndAction(
                             std::declval<std::size_t&>(), 0))&>;
 
+/// Helper concept that allows `chunkedForLoop` to offer an action with an
+/// optional second argument in `action`.
 template <typename Func>
 concept IteratorAction =
     std::is_invocable_v<Func, std::size_t> || isIteratorWithBreak<Func>;
 ;
 }  // namespace detail
 
+/// Helper function to run a classic for-loop from `start` to `end`, where
+/// `action` is called with the current index in the range and an optional
+/// invocable second argument that when called will cause the loop to exit in
+/// the next iteration, similar to the break keyword. `chunkOperation` is called
+/// every `CHUNK_SIZE` iteration steps, and at least a single time at the end if
+/// the range is not empty.
 template <std::size_t CHUNK_SIZE>
 inline void chunkedForLoop(std::size_t start, std::size_t end,
                            const detail::IteratorAction auto& action,
