@@ -20,6 +20,7 @@
 #include "gtest/gtest.h"
 #include "parser/Alias.h"
 #include "parser/ParsedQuery.h"
+#include "util/TypeIdentity.h"
 
 using std::string;
 using std::vector;
@@ -257,20 +258,21 @@ class GroupBy : public Operation {
         for (const auto& aggregate : alias.aggregateInfo_) {
           ++numAggregates;
 
-          auto addIf = [this]<typename T, HashMapAggregateType target>(
+          auto addIf = [this]<typename T>(
+                           std::type_identity<T>, HashMapAggregateType target,
                            const HashMapAggregateInformation& info) {
             if (info.aggregateType_.type_ == target)
               aggregationData_.emplace_back(
                   sparqlExpression::VectorWithMemoryLimit<T>{alloc_});
           };
 
-          addIf.template operator()<AvgAggregationData, AVG>(aggregate);
-          addIf.template operator()<CountAggregationData, COUNT>(aggregate);
-          addIf.template operator()<MinAggregationData, MIN>(aggregate);
-          addIf.template operator()<MaxAggregationData, MAX>(aggregate);
-          addIf.template operator()<SumAggregationData, SUM>(aggregate);
-          addIf.template operator()<GroupConcatAggregationData, GROUP_CONCAT>(
-              aggregate);
+          using namespace ad_utility::use_type_identity;
+          addIf(TI<AvgAggregationData>, AVG, aggregate);
+          addIf(TI<CountAggregationData>, COUNT, aggregate);
+          addIf(TI<MinAggregationData>, MIN, aggregate);
+          addIf(TI<MaxAggregationData>, MAX, aggregate);
+          addIf(TI<SumAggregationData>, SUM, aggregate);
+          addIf(TI<GroupConcatAggregationData>, GROUP_CONCAT, aggregate);
 
           aggregateTypeWithData_.emplace_back(aggregate.aggregateType_);
         }
