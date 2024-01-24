@@ -809,11 +809,10 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
 
 // _____________________________________________________________________________
 void IndexImpl::throwExceptionIfNoPatterns() const {
-  if (!usePatterns_) {
-    AD_THROW(
-        "The requested feature requires a loaded patterns file ("
-        "do not specify the --no-patterns option for this to work)");
-  }
+  AD_CONTRACT_CHECK(
+      usePatterns_,
+      "The requested feature requires a loaded patterns file ("
+      "do not specify the --no-patterns option for this to work)");
 }
 
 // _____________________________________________________________________________
@@ -1317,28 +1316,24 @@ const Permutation& IndexImpl::getPermutation(Permutation::Enum p) const {
 
 // __________________________________________________________________________
 Index::NumNormalAndInternal IndexImpl::numDistinctSubjects() const {
-  if (hasAllPermutations()) {
-    auto numActually = numSubjectsNormal_;
-    return {numActually, spo_.metaData().getNofDistinctC1() - numActually};
-  } else {
-    AD_THROW(
-        "Can only get # distinct subjects if all 6 permutations "
-        "have been registered on sever start (and index build time) "
-        "with the -a option.");
-  }
+  AD_CONTRACT_CHECK(
+      hasAllPermutations(),
+      "Can only get # distinct subjects if all 6 permutations "
+      "have been registered on sever start (and index build time) "
+      "with the -a option.");
+  auto numActually = numSubjectsNormal_;
+  return {numActually, spo_.metaData().getNofDistinctC1() - numActually};
 }
 
 // __________________________________________________________________________
 Index::NumNormalAndInternal IndexImpl::numDistinctObjects() const {
-  if (hasAllPermutations()) {
-    auto numActually = numObjectsNormal_;
-    return {numActually, osp_.metaData().getNofDistinctC1() - numActually};
-  } else {
-    AD_THROW(
-        "Can only get # distinct objects if all 6 permutations "
-        "have been registered on sever start (and index build time) "
-        "with the -a option.");
-  }
+  AD_CONTRACT_CHECK(
+      hasAllPermutations(),
+      "Can only get # distinct objects if all 6 permutations "
+      "have been registered on sever start (and index build time) "
+      "with the -a option.");
+  auto numActually = numObjectsNormal_;
+  return {numActually, osp_.metaData().getNofDistinctC1() - numActually};
 }
 
 // __________________________________________________________________________
