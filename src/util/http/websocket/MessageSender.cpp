@@ -15,15 +15,17 @@ MessageSender::MessageSender(
                                      auto coroutine =
                                          [](auto distributorAndOwningQueryId)
                                          -> net::awaitable<void> {
-                                       // signalEnd() removes the
-                                       // distributorAndOwningQueryId from the
-                                       // QueryHub. When the coroutine is
-                                       // destroyed afterwards the query id is
-                                       // unregistered from the registry by the
-                                       // destructor of `OwningQueryId`! This is
-                                       // the reason why the `OwningQueryId` is
-                                       // part of the struct but never actually
-                                       // accessed.
+                                       // signalEnd() schedules the removal of
+                                       // the distributor from the QueryHub.
+                                       // Once the coroutine is destroyed, the
+                                       // query id is unregistered from the
+                                       // registry by the destructor of
+                                       // `OwningQueryId`! This is the reason
+                                       // why the `OwningQueryId` is part of the
+                                       // struct but never actually accessed.
+                                       // This way the FIFO ordering of strands
+                                       // guarantee that id-reuse won't cause
+                                       // any problems.
                                        co_await distributorAndOwningQueryId
                                            .distributor_->signalEnd();
                                      };
