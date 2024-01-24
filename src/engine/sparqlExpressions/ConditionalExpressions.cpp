@@ -116,7 +116,7 @@ class CoalesceExpression : public VariadicExpression {
             }
             ++generatorIterator;
           },
-          []() {});
+          [ctx]() { ctx->cancellationHandle_->throwIfCancelled(""); });
     };
     auto visitExpressionResult =
         [
