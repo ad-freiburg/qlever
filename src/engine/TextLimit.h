@@ -6,7 +6,7 @@
 
 #include "./Operation.h"
 
-class TextLimitOperation : public Operation {
+class TextLimit : public Operation {
  private:
   const size_t n_;
   std::shared_ptr<QueryExecutionTree> child_;
@@ -15,13 +15,12 @@ class TextLimitOperation : public Operation {
   const ColumnIndex scoreColumn_;
 
  public:
-  TextLimitOperation(QueryExecutionContext* qec, const size_t& n,
-                     std::shared_ptr<QueryExecutionTree> child,
-                     const ColumnIndex& textRecordColumn,
-                     const ColumnIndex& entityColumn,
-                     const ColumnIndex& scoreColumn);
+  TextLimit(QueryExecutionContext* qec, const size_t& n,
+            std::shared_ptr<QueryExecutionTree> child,
+            const ColumnIndex& textRecordColumn,
+            const ColumnIndex& entityColumn, const ColumnIndex& scoreColumn);
 
-  ~TextLimitOperation() override = default;
+  ~TextLimit() override = default;
 
   string getCacheKeyImpl() const override;
 
