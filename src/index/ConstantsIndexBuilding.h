@@ -50,8 +50,9 @@ static const size_t BZIP2_MAX_TOTAL_BUFFER_SIZE = 1 << 30;
 static const size_t THRESHOLD_RELATION_CREATION = 2 << 20;
 
 // ________________________________________________________________
-static const std::string PARTIAL_VOCAB_FILE_NAME = ".tmp.partial-vocabulary.";
-static const std::string PARTIAL_MMAP_IDS = ".tmp.partial-ids-mmap.";
+static const std::string PARTIAL_VOCAB_FILE_NAME =
+    ".tmp.partial-vocabulary.words.";
+static const std::string PARTIAL_MMAP_IDS = ".tmp.partial-vocabulary.ids.";
 
 // ________________________________________________________________
 static const std::string TMP_BASENAME_COMPRESSION =

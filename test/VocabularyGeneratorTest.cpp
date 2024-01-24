@@ -172,8 +172,9 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
     auto internalVocabularyAction = [&file](const auto& word) {
       file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
     };
-    res = m.mergeVocabulary(_basePath, 2, TripleComponentComparator(),
-                            internalVocabularyAction, 1_GB);
+    res =
+        m.mergeVocabulary(_basePath, _basePath, 2, TripleComponentComparator(),
+                          internalVocabularyAction, 1_GB);
   }
 
   // No language tags in text file
@@ -222,7 +223,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
       auto internalVocabularyAction = [&file](const auto& word) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };
-      m.mergeVocabulary(basename, 1, v.getCaseComparator(),
+      m.mergeVocabulary(basename, basename, 1, v.getCaseComparator(),
                         internalVocabularyAction, 1_GB);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
@@ -274,7 +275,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
       auto internalVocabularyAction = [&file](const auto& word) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };
-      m.mergeVocabulary(basename, 1, v.getCaseComparator(),
+      m.mergeVocabulary(basename, basename, 1, v.getCaseComparator(),
                         internalVocabularyAction, 1_GB);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");

@@ -30,8 +30,9 @@
 // ___________________________________________________________________
 template <typename Comparator, typename InternalVocabularyAction>
 VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
-    const std::string& baseNameExternalVocabulary, size_t numFiles,
-    Comparator comparator, InternalVocabularyAction& internalVocabularyAction,
+    const std::string& baseNameIndex, const std::string& baseNameVocabulary,
+    size_t numFiles, Comparator comparator,
+    InternalVocabularyAction& internalVocabularyAction,
     ad_utility::MemorySize memoryToUse) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal. All internal IRIs or literals come before all external ones.
@@ -52,8 +53,8 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
   std::vector<cppcoro::generator<QueueWord>> generators;
 
   auto makeGenerator = [&](size_t fileIdx) -> cppcoro::generator<QueueWord> {
-    ad_utility::serialization::FileReadSerializer infile{absl::StrCat(
-        baseNameExternalVocabulary, PARTIAL_VOCAB_FILE_NAME, fileIdx)};
+    ad_utility::serialization::FileReadSerializer infile{
+        absl::StrCat(baseNameIndex, PARTIAL_VOCAB_FILE_NAME, fileIdx)};
     uint64_t numWords;
     infile >> numWords;
     TripleComponentWithIndex val;
@@ -64,7 +65,7 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     }
   };
   if (!_noIdMapsAndIgnoreExternalVocab) {
-    outfileExternal_ = ad_utility::makeOfstream(baseNameExternalVocabulary +
+    outfileExternal_ = ad_utility::makeOfstream(baseNameVocabulary +
                                                 EXTERNAL_LITS_TEXT_FILE_NAME);
   }
 
@@ -74,7 +75,7 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     generators.push_back(makeGenerator(i));
     if (!_noIdMapsAndIgnoreExternalVocab) {
       idVecs_.emplace_back(
-          0, baseNameExternalVocabulary + PARTIAL_MMAP_IDS + std::to_string(i));
+          0, baseNameIndex + PARTIAL_MMAP_IDS + std::to_string(i));
     }
   }
 

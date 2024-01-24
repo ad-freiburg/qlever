@@ -113,7 +113,8 @@ class VocabularyMerger {
   // This automatically resets the inner members after finishing, to leave the
   // external interface stateless
   template <typename Comp, typename InternalVocabularyAction>
-  VocabularyMetaData mergeVocabulary(const std::string& fileIdx,
+  VocabularyMetaData mergeVocabulary(const std::string& baseNameIndex,
+                                     const std::string& baseNameVocabulary,
                                      size_t numFiles, Comp comparator,
                                      InternalVocabularyAction& action,
                                      ad_utility::MemorySize memToUse);
