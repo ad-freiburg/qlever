@@ -53,8 +53,6 @@ template <typename Iterable>
 void VocabularyOnDisk::buildFromIterable(Iterable&& it,
                                          const string& fileName) {
   {
-    LOG(INFO) << "buildFromIterable: writing vocabulary to " << fileName
-              << std::endl;
     _file.open(fileName.c_str(), "w");
     ad_utility::MmapVector<IndexAndOffset> idsAndOffsets(
         fileName + _offsetSuffix, ad_utility::CreateTag{});
