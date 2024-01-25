@@ -123,14 +123,15 @@ std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
 }
 
 
-string SpatialJoin::asStringImpl(size_t indent) const {
-  std::ostringstream os;
-  for (size_t i = 0; i < indent; i++) {
-    os << " ";
+string SpatialJoin::getCacheKeyImpl() const {
+  if (childLeft && childRight) {
+    std::ostringstream os;
+    os << "SpatialJoin\nChild1:\n" << childLeft->getCacheKey() << "\n";
+    os << "Child2:\n" << childRight->getCacheKey() << "\n";
+    return std::move(os).str();
+  } else {
+    return "";
   }
-  os << "SpatialJoin\nChild1:\n" << childLeft->asString(indent) << "\n";
-  os << "Child2:\n" << childRight->asString(indent) << "\n";
-  return std::move(os).str();
 }
 
 string SpatialJoin::getDescriptor() const {

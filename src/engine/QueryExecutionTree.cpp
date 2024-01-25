@@ -191,7 +191,7 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
   } else if constexpr (std::is_same_v<Op, CartesianProductJoin>) {
     type_ = CARTESIAN_PRODUCT_JOIN;
   } else if constexpr (std::is_same_v<Op, SpatialJoin>) {
-    _type = SPATIAL_JOIN;
+    type_ = SPATIAL_JOIN;
   } else {
     static_assert(ad_utility::alwaysFalse<Op>,
                   "New type of operation that was not yet registered");

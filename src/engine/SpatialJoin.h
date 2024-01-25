@@ -26,8 +26,8 @@ class SpatialJoin : public Operation {
     shared_ptr<const ResultTable> geoJoinTest();
     virtual std::vector<QueryExecutionTree*> getChildren();
     // eindeutiger String für die Objekte der Klasse:
-    virtual string asStringImpl(size_t indent = 0) const; 
-    virtual string getDescriptor() const ; // für Menschen
+    string getCacheKeyImpl() const override; 
+    string getDescriptor() const override; // für Menschen
     virtual size_t getResultWidth() const; // wie viele Variablen man zurückgibt
     virtual size_t getCostEstimate();
     virtual uint64_t getSizeEstimateBeforeLimit();
@@ -36,7 +36,7 @@ class SpatialJoin : public Operation {
     [[nodiscard]] virtual vector<ColumnIndex> resultSortedOn() const;
     virtual ResultTable computeResult();
     virtual VariableToColumnMap computeVariableToColumnMap() const;
-    std::shared_ptr<dummyJoin> addChild(
+    std::shared_ptr<SpatialJoin> addChild(
           std::shared_ptr<QueryExecutionTree> child, Variable varOfChild);
     bool isConstructed();
   // don't make them private for testing purposes

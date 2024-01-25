@@ -876,8 +876,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           "necessary also rebuild the index.");
     }
 
-    if (node._triple._p._iri.find("Near") != std::string::npos ) {
-      pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node._triple,
+    if (node.triple_._p._iri.find("Near") != std::string::npos ) {
+      pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_,
           std::nullopt, std::nullopt));
       continue;
     }
@@ -1801,7 +1801,7 @@ auto QueryPlanner::createSpatialJoin(
   SubtreePlan otherSubtreePlan = aIsSpatialJoin ? b : a;
 
   std::shared_ptr<Operation> op = spatialSubtreePlan._qet->getRootOperation();
-  dummyJoin* spatialJoin = static_cast<dummyJoin*>(op.get());
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   if (spatialJoin->isConstructed()) {
     return std::nullopt;
@@ -1814,11 +1814,7 @@ auto QueryPlanner::createSpatialJoin(
   auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
 
   auto qec = spatialJoin->getExecutionContext();
-  SubtreePlan plan = makeSubtreePlan<dummyJoin>(newSpatialJoin);
-  //SubtreePlan plan = makeSubtreePlan<dummyJoin>(qec,
-    //    newSpatialJoin.triple.value(), newSpatialJoin.childLeft,
-      //  newSpatialJoin.childRight);
-  //SubtreePlan plan = makeSubtreePlan(op);
+  SubtreePlan plan = makeSubtreePlan<SpatialJoin>(newSpatialJoin);
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 }
