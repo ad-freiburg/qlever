@@ -58,7 +58,8 @@ class QueryExecutionTree {
     MINUS,
     NEUTRAL_ELEMENT,
     DUMMY,
-    CARTESIAN_PRODUCT_JOIN
+    CARTESIAN_PRODUCT_JOIN,
+    SPATIAL_JOIN
   };
 
   template <typename Op>

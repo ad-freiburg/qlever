@@ -33,6 +33,7 @@
 #include "engine/Values.h"
 #include "parser/Alias.h"
 #include "parser/SparqlParserHelpers.h"
+#include "engine/SpatialJoin.h"
 
 namespace p = parsedQuery;
 namespace {
@@ -873,6 +874,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           "and POS permutations were loaded. Rerun the server without "
           "the option --only-pso-and-pos-permutations and if "
           "necessary also rebuild the index.");
+    }
+
+    if (node._triple._p._iri.find("Near") != std::string::npos ) {
+      pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node._triple,
+          std::nullopt, std::nullopt));
+      continue;
     }
 
     if (node.triple_._p._iri == HAS_PREDICATE_PREDICATE) {
@@ -1758,6 +1765,14 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     candidates.push_back(std::move(opt.value()));
   }
 
+  // if one of the inputs is the spatial join and the other input is a matching
+  // geometry, add the geometry as a child to the spatial join instead of
+  // creating a normal join
+  if (auto opt = createSpatialJoin(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+    return candidates;
+  }
+
   // "NORMAL" CASE:
   // The join class takes care of sorting the subtrees if necessary
   SubtreePlan plan =
@@ -1766,6 +1781,46 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   candidates.push_back(std::move(plan));
 
   return candidates;
+}
+
+// _____________________________________________________________________________
+auto QueryPlanner::createSpatialJoin(
+    SubtreePlan a, SubtreePlan b,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+    -> std::optional<SubtreePlan> {
+  using enum QueryExecutionTree::OperationType;
+  const bool aIsSpatialJoin = a._qet->getType() == SPATIAL_JOIN;
+  const bool bIsSpatialJoin = b._qet->getType() == SPATIAL_JOIN;
+  
+  if (!(aIsSpatialJoin || bIsSpatialJoin)
+      || (aIsSpatialJoin && bIsSpatialJoin)) {
+    return std::nullopt;
+  }
+
+  SubtreePlan spatialSubtreePlan = aIsSpatialJoin ? a : b;
+  SubtreePlan otherSubtreePlan = aIsSpatialJoin ? b : a;
+
+  std::shared_ptr<Operation> op = spatialSubtreePlan._qet->getRootOperation();
+  dummyJoin* spatialJoin = static_cast<dummyJoin*>(op.get());
+
+  if (spatialJoin->isConstructed()) {
+    return std::nullopt;
+  }
+
+  ColumnIndex ind = aIsSpatialJoin ? jcs[0][1] : jcs[0][0];
+  Variable var = otherSubtreePlan._qet->
+                      getVariableAndInfoByColumnIndex(ind).first;
+
+  auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
+
+  auto qec = spatialJoin->getExecutionContext();
+  SubtreePlan plan = makeSubtreePlan<dummyJoin>(newSpatialJoin);
+  //SubtreePlan plan = makeSubtreePlan<dummyJoin>(qec,
+    //    newSpatialJoin.triple.value(), newSpatialJoin.childLeft,
+      //  newSpatialJoin.childRight);
+  //SubtreePlan plan = makeSubtreePlan(op);
+  mergeSubtreePlanIds(plan, a, b);
+  return plan;
 }
 
 // __________________________________________________________________________________________________________________
