@@ -125,7 +125,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
             numOccurrencesValueInBiggertTableJoinColumn.end()) {
           (numOccurrencesIterator->second)++;
         } else {
-          numOccurrencesValueInBiggertTableJoinColumn.emplace(val, 0UL);
+          numOccurrencesValueInBiggertTableJoinColumn.emplace(val, 1UL);
           biggerTableJoinColumnDistinctElements.emplace_back(val);
         }
       });
@@ -261,7 +261,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
                 numOccurrencesIterator != numOccurrencesMap.end()) {
               (numOccurrencesIterator->second)++;
             } else {
-              numOccurrencesMap.emplace(id, 0UL);
+              numOccurrencesMap.emplace(id, 1UL);
               distinctElementsVec.emplace_back(id);
             }
           }
