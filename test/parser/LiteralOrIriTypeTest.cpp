@@ -30,18 +30,17 @@ TEST(LiteralTypeTest, LiteralTypeTest) {
 
 TEST(LiteralTypeTest, LiteralTypeTestWithDatatype) {
   Literal literal(fromStringUnsafe("Hello World"),
-                  fromStringUnsafe("xsd:string"), LiteralDescriptor::DATATYPE);
+                  Iri(fromStringUnsafe("xsd:string")));
 
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_TRUE(literal.hasDatatype());
   EXPECT_THAT("Hello World", asStringView(literal.getContent()));
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
-  EXPECT_THAT("xsd:string", asStringView(literal.getDatatype()));
+  EXPECT_THAT("xsd:string", asStringView(literal.getDatatype().getContent()));
 }
 
 TEST(LiteralTypeTest, LiteralTypeTestWithLanguagetag) {
-  Literal literal(fromStringUnsafe("Hallo Welt"), fromStringUnsafe("de"),
-                  LiteralDescriptor::LANGUAGE_TAG);
+  Literal literal(fromStringUnsafe("Hallo Welt"), fromStringUnsafe("de"));
 
   EXPECT_TRUE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
@@ -80,8 +79,7 @@ TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteral) {
 
 TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndDatatype) {
   LiteralOrIri literal(Literal(fromStringUnsafe("Hello World"),
-                               fromStringUnsafe("xsd:string"),
-                               LiteralDescriptor::DATATYPE));
+                               Iri(fromStringUnsafe("xsd:string"))));
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -90,13 +88,12 @@ TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndDatatype) {
   EXPECT_TRUE(literal.hasDatatype());
   EXPECT_THAT("Hello World", asStringView(literal.getLiteralContent()));
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
-  EXPECT_THAT("xsd:string", asStringView(literal.getDatatype()));
+  EXPECT_THAT("xsd:string", asStringView(literal.getDatatype().getContent()));
 }
 
 TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndLanguageTag) {
-  LiteralOrIri literal(Literal(fromStringUnsafe("Hej världen"),
-                               fromStringUnsafe("se"),
-                               LiteralDescriptor::LANGUAGE_TAG));
+  LiteralOrIri literal(
+      Literal(fromStringUnsafe("Hej världen"), fromStringUnsafe("se")));
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -106,116 +103,4 @@ TEST(LiteralOrIriType, LiteralOrIriTypeWithLiteralAndLanguageTag) {
   EXPECT_THAT("Hej världen", asStringView(literal.getLiteralContent()));
   EXPECT_THAT("se", asStringView(literal.getLanguageTag()));
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
-}
-
-TEST(LiteralOrIriTypeFromString, CreateIriTypeFromString) {
-  std::string s = "<http://example.org/book/book1>";
-  LiteralOrIri iri = LiteralOrIri::parseRdf(s);
-  EXPECT_TRUE(iri.isIri());
-  EXPECT_FALSE(iri.isLiteral());
-  EXPECT_THAT("http://example.org/book/book1",
-              asStringView(iri.getIriContent()));
-}
-
-TEST(LiteralOrIriTypeFromString, CreateIriTypeFromStringInvalidCharacter) {
-  std::string s = "<http://example.org/book/book^1>";
-  EXPECT_THROW(LiteralOrIri::parseRdf(s), ad_utility::Exception);
-}
-
-TEST(LiteralOrIriTypeFromString, CreateLiteralTypeFromString) {
-  std::string s = "\"Hej världen\"";
-  LiteralOrIri literal = LiteralOrIri::parseRdf(s);
-  EXPECT_TRUE(literal.isLiteral());
-  EXPECT_FALSE(literal.hasLanguageTag());
-  EXPECT_FALSE(literal.hasDatatype());
-  EXPECT_THAT("Hej världen", asStringView(literal.getLiteralContent()));
-}
-
-TEST(LiteralOrIriTypeFromString, CreateLiteralTypeFromStringWithSingleQuote) {
-  std::string s = "\'Hej världen\'";
-  LiteralOrIri literal = LiteralOrIri::parseRdf(s);
-  EXPECT_TRUE(literal.isLiteral());
-  EXPECT_FALSE(literal.hasLanguageTag());
-  EXPECT_FALSE(literal.hasDatatype());
-  EXPECT_THAT("Hej världen", asStringView(literal.getLiteralContent()));
-}
-
-TEST(LiteralOrIriTypeFromString, CreateLiteralTypeWithLanguageTagFromString) {
-  std::string s = "\"Hej världen\"@se";
-  LiteralOrIri literal = LiteralOrIri::parseRdf(s);
-  EXPECT_TRUE(literal.isLiteral());
-  EXPECT_TRUE(literal.hasLanguageTag());
-  EXPECT_THAT("Hej världen", asStringView(literal.getLiteralContent()));
-  EXPECT_THAT("se", asStringView(literal.getLanguageTag()));
-}
-
-TEST(LiteralOrIriTypeFromString, CreateLiteralTypeWithDatatypeFromString) {
-  std::string s = "\"ABCD\"^^test:type";
-  LiteralOrIri literal = LiteralOrIri::parseRdf(s);
-  EXPECT_TRUE(literal.isLiteral());
-  EXPECT_FALSE(literal.hasLanguageTag());
-  EXPECT_THAT("ABCD", asStringView(literal.getLiteralContent()));
-  EXPECT_THAT("test:type", asStringView(literal.getDatatype()));
-}
-
-TEST(LiteralOrIriTypeFromString,
-     CreateLiteralTypeWithDatatypeFromStringWithThreeDoubleQuotes) {
-  std::string s = R"("""ABCD"""^^test:type)";
-  LiteralOrIri literal = LiteralOrIri::parseRdf(s);
-  EXPECT_TRUE(literal.isLiteral());
-  EXPECT_FALSE(literal.hasLanguageTag());
-  EXPECT_THAT("ABCD", asStringView(literal.getLiteralContent()));
-  EXPECT_THAT("test:type", asStringView(literal.getDatatype()));
-}
-
-TEST(LiteralOrIriTypeFromString,
-     CreateLiteralTypeWithDatatypeFromStringWithThreeSingleQuotes) {
-  std::string s = R"('''ABCD'''^^test:type)";
-  LiteralOrIri literal = LiteralOrIri::parseRdf(s);
-  EXPECT_TRUE(literal.isLiteral());
-  EXPECT_FALSE(literal.hasLanguageTag());
-  EXPECT_THAT("ABCD", asStringView(literal.getLiteralContent()));
-  EXPECT_THAT("test:type", asStringView(literal.getDatatype()));
-}
-
-TEST(LiteralOrIriTypeFromString, CreateLiteralTypeFromStringInvalidQuotation) {
-  std::string s = "\"Hej världen";
-  EXPECT_THROW(LiteralOrIri::parseRdf(s), ad_utility::Exception);
-  s = "Hej världen";
-  EXPECT_THROW(LiteralOrIri::parseRdf(s), ad_utility::Exception);
-  s = "\"\"\"Hej världen\"";
-  EXPECT_THROW(LiteralOrIri::parseRdf(s), ad_utility::Exception);
-  s = "\"Hej världen'";
-  EXPECT_THROW(LiteralOrIri::parseRdf(s), ad_utility::Exception);
-}
-
-TEST(LiteralOrIriToRDF, exportIriToRdfString) {
-  LiteralOrIri iri =
-      LiteralOrIri(Iri(fromStringUnsafe("https://example.org/books/book1")));
-  EXPECT_THAT("<https://example.org/books/book1>", iri.toRdf());
-}
-
-TEST(LiteralOrIriToRDF, exportLiteralWithoutDescriptorToRdfString) {
-  LiteralOrIri literal = LiteralOrIri(Literal(fromStringUnsafe("Hello World")));
-  EXPECT_THAT("\"Hello World\"", literal.toRdf());
-}
-
-TEST(LiteralOrIriToRDF, exportLiteralWithLanguageTagToRdfString) {
-  LiteralOrIri literal = LiteralOrIri(Literal(fromStringUnsafe("Hello World"),
-                                              fromStringUnsafe("en"),
-                                              LiteralDescriptor::LANGUAGE_TAG));
-  EXPECT_THAT("\"Hello World\"@en", literal.toRdf());
-}
-
-TEST(LiteralOrIriToRDF, exportLiteralWithDatatypeToRdfString) {
-  LiteralOrIri literal = LiteralOrIri(Literal(fromStringUnsafe("Hello World"),
-                                              fromStringUnsafe("test:type"),
-                                              LiteralDescriptor::DATATYPE));
-  EXPECT_THAT("\"Hello World\"^^test:type", literal.toRdf());
-}
-
-TEST(LiteralOrIriToRDF, importRDFStringAndExportItAsRDFString) {
-  std::string literalRdfString = "\"Hello World\"@en";
-  LiteralOrIri literal = LiteralOrIri::parseRdf(literalRdfString);
-  EXPECT_THAT(literalRdfString, literal.toRdf());
 }

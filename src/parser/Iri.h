@@ -24,10 +24,10 @@ class Iri {
   // Create a new iri object
   explicit Iri(NormalizedString iri);
 
+  // Create a new iri using a prefix
+  Iri(const Iri& prefix, const NormalizedString& suffix);
+
   // Return the string value of the iri object without any leading or trailing
   // angled brackets.
   NormalizedStringView getContent() const;
-
-  // Return the iri encoded as RDF term
-  std::string toRdf() const;
 };

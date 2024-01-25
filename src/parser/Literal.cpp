@@ -7,35 +7,35 @@
 #include <utility>
 
 // __________________________________________
-Literal::Literal(NormalizedString content)
-    : content_{std::move(content)}, descriptorType_{LiteralDescriptor::NONE} {}
+Literal::Literal(NormalizedString content) : content_{std::move(content)} {}
 
 // __________________________________________
-Literal::Literal(NormalizedString content,
-                 NormalizedString datatypeOrLanguageTag, LiteralDescriptor type)
-    : content_{std::move(content)},
-      descriptorValue_{std::move(datatypeOrLanguageTag)},
-      descriptorType_{type} {}
+Literal::Literal(NormalizedString content, Iri datatype)
+    : content_{std::move(content)}, descriptor_{std::move(datatype)} {}
+
+// __________________________________________
+Literal::Literal(NormalizedString content, NormalizedString languageTag)
+    : content_{std::move(content)}, descriptor_{std::move(languageTag)} {}
 
 // __________________________________________
 bool Literal::hasLanguageTag() const {
-  return descriptorType_ == LiteralDescriptor::LANGUAGE_TAG;
+  return std::holds_alternative<NormalizedString>(descriptor_);
 }
 
 // __________________________________________
 bool Literal::hasDatatype() const {
-  return descriptorType_ == LiteralDescriptor::DATATYPE;
+  return std::holds_alternative<Iri>(descriptor_);
 }
 
 // __________________________________________
 NormalizedStringView Literal::getContent() const { return content_; }
 
 // __________________________________________
-NormalizedStringView Literal::getDatatype() const {
+Iri Literal::getDatatype() const {
   if (!hasDatatype()) {
     AD_THROW("The literal does not have an explicit datatype.");
   }
-  return descriptorValue_;
+  return std::get<Iri>(descriptor_);
 }
 
 // __________________________________________
@@ -43,21 +43,5 @@ NormalizedStringView Literal::getLanguageTag() const {
   if (!hasLanguageTag()) {
     AD_THROW("The literal does not have an explicit language tag.");
   }
-  return descriptorValue_;
-}
-
-// __________________________________________
-std::string Literal::toRdf() const {
-  std::string rdf = "\"" + asStringView(content_) + "\"";
-
-  switch (descriptorType_) {
-    case LiteralDescriptor::NONE:
-      return rdf;
-    case LiteralDescriptor::LANGUAGE_TAG:
-      return rdf + "@" + asStringView(descriptorValue_);
-    case LiteralDescriptor::DATATYPE:
-      return rdf + "^^" + asStringView(descriptorValue_);
-  }
-
-  AD_THROW("Invalid value of descriptorType_");
+  return std::get<NormalizedString>(descriptor_);
 }

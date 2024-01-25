@@ -10,7 +10,9 @@
 Iri::Iri(NormalizedString iri) : iri_{std::move(iri)} {}
 
 // __________________________________________
-NormalizedStringView Iri::getContent() const { return iri_; }
+Iri::Iri(const Iri& prefix, const NormalizedString& suffix) {
+  iri_ = NormalizedString{prefix.getContent()} + suffix;
+}
 
 // __________________________________________
-std::string Iri::toRdf() const { return "<" + asStringView(iri_) + ">"; }
+NormalizedStringView Iri::getContent() const { return iri_; }

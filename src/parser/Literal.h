@@ -4,9 +4,8 @@
 
 #pragma once
 
+#include "Iri.h"
 #include "NormalizedString.h"
-
-enum class LiteralDescriptor { NONE, LANGUAGE_TAG, DATATYPE };
 
 class Literal {
   // A class to hold literal values.
@@ -17,23 +16,24 @@ class Literal {
   //  "Hello World"@en -> Hello World
   NormalizedString content_;
 
+  using LiteralDescriptorVariant =
+      std::variant<std::monostate, NormalizedString, Iri>;
+
   // Store the optional language tag or the optional datatype if applicable
   // without their prefixes.
   //  "Hello World"@en -> en
   //  "Hello World"^^test:type -> test:type
-  NormalizedString descriptorValue_;
-
-  // Store if the literal has a language tag, a datatype, or no
-  // descriptor
-  LiteralDescriptor descriptorType_;
+  LiteralDescriptorVariant descriptor_;
 
  public:
   // Create a new literal without any descriptor
   explicit Literal(NormalizedString content);
 
-  // Create a new literal with the given descriptor
-  Literal(NormalizedString content, NormalizedString datatypeOrLanguageTag,
-          LiteralDescriptor type);
+  // Create a new literal with a datatype
+  Literal(NormalizedString content, Iri datatype);
+
+  // Create a new literal with a language tag
+  Literal(NormalizedString content, NormalizedString languageTag);
 
   // Return true if the literal has an assigned language tag
   bool hasLanguageTag() const;
@@ -51,9 +51,5 @@ class Literal {
 
   // Return the datatype of the literal, if available, withour leading ^^
   // prefix. Throws an exception if the literal has no datatype.
-  NormalizedStringView getDatatype() const;
-
-  // Return the stored literal as valid rdf including quotation marks and, if
-  // applicable, descriptor prefix "@" or "^^".
-  std::string toRdf() const;
+  Iri getDatatype() const;
 };
