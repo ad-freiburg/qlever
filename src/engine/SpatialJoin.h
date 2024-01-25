@@ -5,7 +5,7 @@
 
 class SpatialJoin : public Operation {
   public:
-    SpatialJoin();
+    /*SpatialJoin();
     SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple);
     SpatialJoin(QueryExecutionContext* qec,
       std::shared_ptr<QueryExecutionTree> t1,
@@ -19,28 +19,28 @@ class SpatialJoin : public Operation {
       bool keepJoinColumn, IdTable leftChildTable,
       std::vector<std::optional<Variable>> variablesLeft,
       IdTable rightChildTable,
-      std::vector<std::optional<Variable>> variablesRight);
+      std::vector<std::optional<Variable>> variablesRight);*/
     SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
         std::optional<std::shared_ptr<QueryExecutionTree>> childLeft_,
-        std::optional<std::shared_ptr<QueryExecutionTree>> childRight_);
-    shared_ptr<const ResultTable> geoJoinTest();
-    virtual std::vector<QueryExecutionTree*> getChildren();
+        std::optional<std::shared_ptr<QueryExecutionTree>> childRight_,
+        int maxDist);
+    // shared_ptr<const ResultTable> geoJoinTest();
+    std::vector<QueryExecutionTree*> getChildren() override;
     // eindeutiger String für die Objekte der Klasse:
     string getCacheKeyImpl() const override; 
     string getDescriptor() const override; // für Menschen
-    virtual size_t getResultWidth() const; // wie viele Variablen man zurückgibt
-    virtual size_t getCostEstimate();
-    virtual uint64_t getSizeEstimateBeforeLimit();
-    virtual float getMultiplicity(size_t col);
-    virtual bool knownEmptyResult();
-    [[nodiscard]] virtual vector<ColumnIndex> resultSortedOn() const;
-    virtual ResultTable computeResult();
-    virtual VariableToColumnMap computeVariableToColumnMap() const;
+    size_t getResultWidth() const override; // wie viele Variablen man zurückgibt
+    size_t getCostEstimate() override;
+    uint64_t getSizeEstimateBeforeLimit() override;
+    float getMultiplicity(size_t col) override;
+    bool knownEmptyResult() override;
+    [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
+    ResultTable computeResult() override;
+    VariableToColumnMap computeVariableToColumnMap() const override;
     std::shared_ptr<SpatialJoin> addChild(
           std::shared_ptr<QueryExecutionTree> child, Variable varOfChild);
     bool isConstructed();
-  // don't make them private for testing purposes
-  // private:
+  private:
     std::shared_ptr<QueryExecutionTree> _left;
     std::shared_ptr<QueryExecutionTree> _right;
     ColumnIndex _leftJoinCol;
@@ -57,4 +57,6 @@ class SpatialJoin : public Operation {
     std::shared_ptr<QueryExecutionTree> childLeft = nullptr;
     std::shared_ptr<QueryExecutionTree> childRight = nullptr;
     std::optional<SparqlTriple> triple = std::nullopt;
+    int maxDist = 0;
+    bool addDistToResult = true;
 };
