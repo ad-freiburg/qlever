@@ -70,12 +70,7 @@ class CoalesceExpression : public VariadicExpression {
         [&nextUnboundIndices, &unboundIndices, &isUnbound, &result,
          ctx ]<SingleExpressionResult T>(T && childResult)
             requires isConstantResult<T> {
-      // GCC 12 & 13 report this as potentially uninitialized
-      // variable, which seems to be a false positive, so suppress the
-      // warning here
-      DISABLE_WARNINGS
       IdOrString constantResult{AD_FWD(childResult)};
-      ENABLE_WARNINGS
       if (isUnbound(constantResult)) {
         nextUnboundIndices = std::move(unboundIndices);
         return;
@@ -83,7 +78,14 @@ class CoalesceExpression : public VariadicExpression {
       ad_utility::chunkedForLoop<CHUNK_SIZE>(
           0, unboundIndices.size(),
           [&unboundIndices, &result, &constantResult](size_t idx) {
+            // GCC 12 & 13 report this as potential uninitialized
+            // use of a variable when compiling with -O3, which seems to
+            // be a false positive, so we suppress the warning here. See
+            // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=109561 for
+            // more information.
+            DISABLE_UNINITIALIZED_WARNINGS
             result[unboundIndices[idx]] = constantResult;
+            ENABLE_UNINITIALIZED_WARNINGS
           },
           [ctx]() {
             ctx->cancellationHandle_->throwIfCancelled(

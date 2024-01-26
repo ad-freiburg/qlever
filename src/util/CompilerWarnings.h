@@ -9,13 +9,13 @@
 /// versions that turn out to be false positives.
 
 #if defined(__GNUC__) && (__GNUC__ == 12 || __GNUC__ == 13)
-#define DISABLE_WARNINGS         \
-  _Pragma("GCC diagnostic push") \
+#define DISABLE_UNINITIALIZED_WARNINGS \
+  _Pragma("GCC diagnostic push")       \
       _Pragma("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")
-#define ENABLE_WARNINGS _Pragma("GCC diagnostic pop")
+#define ENABLE_UNINITIALIZED_WARNINGS _Pragma("GCC diagnostic pop")
 #else
-#define DISABLE_WARNINGS
-#define ENABLE_WARNINGS
+#define DISABLE_UNINITIALIZED_WARNINGS
+#define ENABLE_UNINITIALIZED_WARNINGS
 #endif
 
 #endif  // QLEVER_COMPILERWARNINGS_H
