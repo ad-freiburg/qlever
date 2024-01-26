@@ -344,23 +344,25 @@ NormalizedString normalizeLiteralWithoutQuotes(std::string_view input) {
   return toNormalizedString(returnValue);
 }
 
+// __________________________________________________________________________
 NormalizedString normalizeIriWithBrackets(std::string_view input) {
   std::string result;
   unescapeIriWithBrackets(input, result);
   return toNormalizedString(result);
 }
 
+// __________________________________________________________________________
 NormalizedString normalizeIriWithoutBrackets(std::string_view input) {
   std::string result;
   unescapeIriWithoutBrackets(input, result);
   return toNormalizedString(result);
 }
 
+// __________________________________________________________________________
 NormalizedString normalizeLanguageTag(std::string_view input) {
   if (input.starts_with('@')) {
     input.remove_prefix(1);
   }
-  // TODO Validate that [a-zA-Z]+ ('-' [a-zA-Z0-9]+)
   return toNormalizedString(input);
 }
 
