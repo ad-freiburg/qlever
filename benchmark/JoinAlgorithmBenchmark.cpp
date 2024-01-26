@@ -1797,16 +1797,44 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     const float maxSampleSizeRatio{std::ranges::max(ratios)};
 
     /*
+    @brief Calculate the number of rows (rounded down) in an `IdTable` with the
+    given memory size and number of columns.
+    */
+    auto memorySizeToIdTableRows = [](const ad_utility::MemorySize& m,
+                                      const size_t numColumns) {
+      AD_CORRECTNESS_CHECK(numColumns > 0);
+      AD_CORRECTNESS_CHECK(m.getBytes() > 0);
+      return (m.getBytes() / sizeof(IdTable::value_type)) / numColumns;
+    };
+
+    /*
     We work with the biggest possible smaller and bigger table. That should make
     any difference in execution time easier to find.
-    Note: Description strings are for the generation of error messages.
+    Note: Strings are for the generation of error messages.
     */
     const size_t ratioRows{getConfigVariables().minRatioRows_};
     constexpr std::string_view ratioRowsDescription{"'minRatioRows'"};
-    const size_t smallerTableNumRows{getConfigVariables().maxBiggerTableRows_ /
-                                     getConfigVariables().minRatioRows_};
-    constexpr std::string_view smallerTableNumRowsDescription{
-        "divison of 'maxBiggerTableRows' with 'minRatioRows'"};
+    size_t smallerTableNumRows{};
+    std::string smallerTableNumRowsDescription{};
+    std::string smallerTableNumRowsConfigurationOptions{};
+    if (const auto& maxMemory{getConfigVariables().maxMemory()};
+        maxMemory.has_value()) {
+      smallerTableNumRows =
+          memorySizeToIdTableRows(maxMemory.value(),
+                                  getConfigVariables().biggerTableNumColumns_) /
+          getConfigVariables().minRatioRows_;
+      smallerTableNumRowsDescription =
+          "division of the maximum number of rows, under the given 'maxMemory' "
+          "and 'biggerTableNumColumns', with 'minRatioRows'";
+      smallerTableNumRowsConfigurationOptions =
+          "'maxMemory' and 'biggerTableNumColumns'";
+    } else {
+      smallerTableNumRows = getConfigVariables().maxBiggerTableRows_ /
+                            getConfigVariables().minRatioRows_;
+      smallerTableNumRowsDescription =
+          "divison of 'maxBiggerTableRows' with 'minRatioRows'";
+      smallerTableNumRowsConfigurationOptions = "'maxBiggerTableRows'";
+    }
 
     /*
     Growth function. Simply walks through the sample size ratios, until it runs
@@ -1831,10 +1859,10 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     };
 
     /*
-    Calculate the expexcted value of the result size for the simplified creation
-    model of input tables join columns and overlaps, with the biggest sample
-    size ratio used for both input tables.
-    The simplified creation model assumes, that:
+    Calculate the expexcted number of rows in the result for the simplified
+    creation model of input tables join columns and overlaps, with the biggest
+    sample size ratio used for both input tables. The simplified creation model
+    assumes, that:
     - The join column elements of the smaller and bigger table are not disjoint
     at creation time. In reality, both join columns are created disjoint and any
     overlaps are inserted later.
@@ -1853,7 +1881,8 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     (rounded up) possible elements for entries. `|Number of rows in the bigger
     table| * sampleSizeRatio` (rounded up) for the bigger table.
 
-    In this simplified creation model the expected value of the result size is:
+    In this simplified creation model the expected number of rows in the result
+    is:
     (|Number of rows in the smaller table|*|Number of rows in the bigger table|)
     / (|Number of rows in the smaller table|*sampleSizeRatio(rounded up)+|Number
     of rows in the bigger table|*sampleSizeRatio(rounded up))
@@ -1905,18 +1934,34 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
       throw std::runtime_error(absl::StrCat(
           "size_t casting error: The calculated wanted result size in '",
           name(),
-          "' has to castable to size_t. Try increasing the values for the "
+          "' has to be castable to size_t. Try increasing the values for the "
           "configuration options 'minRatioRows' or the biggest entry in "
           "'benchmarkSampleSizeRatios'. Or decreasing the value of "
-          "'maxBiggerTableRows'."));
+          "'",
+          smallerTableNumRowsConfigurationOptions, "'."));
     }
-    const size_t sizeResult{static_cast<size_t>(
+    /*
+    If 'maxMemory' was set and our normal result is to big, we simply calculate
+    the number of rows, rounded down, that a result with the maximum memory size
+    would have.
+    */
+    size_t resultWantedNumRows{static_cast<size_t>(
         static_cast<double>(smallerTableNumRows * smallerTableNumRows *
                             ratioRows) /
         (std::ceil(static_cast<double>(smallerTableNumRows) *
                    maxSampleSizeRatio) +
          std::ceil(static_cast<double>(smallerTableNumRows * ratioRows) *
                    maxSampleSizeRatio)))};
+    const size_t resultNumColumns{getConfigVariables().smallerTableNumColumns_ +
+                                  getConfigVariables().biggerTableNumColumns_ -
+                                  1};
+    if (const auto& maxMemory{getConfigVariables().maxMemory()};
+        maxMemory.has_value() &&
+        maxMemory.value() < approximateMemoryNeededByIdTable(
+                                resultWantedNumRows, resultNumColumns)) {
+      resultWantedNumRows =
+          memorySizeToIdTableRows(maxMemory.value(), resultNumColumns);
+    }
 
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
@@ -1928,10 +1973,10 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
               " and the sample size ratio for the bigger table changes.");
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Bigger table sample size ratio",
-              stopFunction, getConfigVariables().overlapChance_, sizeResult,
-              getConfigVariables().randomSeed(), smallerTableSorted,
-              biggerTableSorted, ratioRows, smallerTableNumRows,
-              getConfigVariables().smallerTableNumColumns_,
+              stopFunction, getConfigVariables().overlapChance_,
+              resultWantedNumRows, getConfigVariables().randomSeed(),
+              smallerTableSorted, biggerTableSorted, ratioRows,
+              smallerTableNumRows, getConfigVariables().smallerTableNumColumns_,
               getConfigVariables().biggerTableNumColumns_,
               smallerTableSampleSizeRatio, growthFunction);
 
@@ -1952,7 +1997,7 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
                          "biggerTableJoinColumnSampleSizeRatio");
     meta.addKeyValuePair("ratioRows", ratioRows);
     meta.addKeyValuePair("smallerTableNumRows", smallerTableNumRows);
-    meta.addKeyValuePair("wantesResultTableSize", sizeResult);
+    meta.addKeyValuePair("wantesResultTableSize", resultWantedNumRows);
     meta.addKeyValuePair("benchmarkSampleSizeRatios",
                          getConfigVariables().benchmarkSampleSizeRatios_);
     GeneralInterfaceImplementation::addDefaultMetadata(&meta);
