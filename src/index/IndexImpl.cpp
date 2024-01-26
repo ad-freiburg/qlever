@@ -1431,10 +1431,10 @@ bool IndexImpl::getId(const string& element, Id* id) const {
 }
 
 // ___________________________________________________________________________
-std::pair<Id, Id> IndexImpl::prefix_range(const std::string& prefix) const {
+Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
+    std::string_view prefix) const {
   // TODO<joka921> Do we need prefix ranges for numbers?
-  auto [begin, end] = vocab_.prefix_range(prefix);
-  return {Id::makeFromVocabIndex(begin), Id::makeFromVocabIndex(end)};
+  return vocab_.prefixRanges(prefix);
 }
 
 // _____________________________________________________________________________

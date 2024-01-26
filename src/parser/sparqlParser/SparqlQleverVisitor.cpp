@@ -1707,6 +1707,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeIsLiteralExpression);
   } else if (functionName == "isnumeric") {
     return createUnary(&makeIsNumericExpression);
+  } else if (functionName == "bound") {
+    return createUnary(&makeBoundExpression);
   } else {
     reportError(
         ctx,

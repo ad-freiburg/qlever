@@ -31,6 +31,11 @@ using isBlankExpression = NARY<1, FV<std::identity, IsBlankNodeValueGetter>>;
 using isLiteralExpression = NARY<1, FV<std::identity, IsLiteralValueGetter>>;
 using isNumericExpression = NARY<1, FV<std::identity, IsNumericValueGetter>>;
 
+// bound is slightly different because `IsValidValueGetter` returns a bool and
+// not an `Id`.
+inline auto boolToId = [](bool b) { return Id::makeFromBool(b); };
+using boundExpression = NARY<1, FV<decltype(boolToId), IsValidValueGetter>>;
+
 }  // namespace detail
 
 SparqlExpression::Ptr makeIsIriExpression(SparqlExpression::Ptr arg) {
@@ -44,6 +49,9 @@ SparqlExpression::Ptr makeIsLiteralExpression(SparqlExpression::Ptr arg) {
 }
 SparqlExpression::Ptr makeIsNumericExpression(SparqlExpression::Ptr arg) {
   return std::make_unique<detail::isNumericExpression>(std::move(arg));
+}
+SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr arg) {
+  return std::make_unique<detail::boundExpression>(std::move(arg));
 }
 
 }  // namespace sparqlExpression

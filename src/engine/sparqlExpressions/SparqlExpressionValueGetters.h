@@ -141,8 +141,9 @@ struct IsSomethingValueGetter {
     return Id::makeFromBool(s.starts_with(prefix));
   }
   Id operator()(IdOrString s, const EvaluationContext* ctx) const {
-    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
-                      std::move(s));
+    return std::visit(
+        [self = this, ctx](auto el) { return self->operator()(el, ctx); },
+        std::move(s));
   }
 };
 using IsIriValueGetter =

@@ -77,6 +77,19 @@ struct Prefix {
 // CompressedString -> prefix compression is applied
 template <typename StringType, typename ComparatorType, typename IndexT>
 class Vocabulary {
+ public:
+  // The index ranges for a prefix + a function to check whether a given index
+  // is contained in one of them.
+  //
+  // NOTE: There are currently two ranges, one for the internal and one for the
+  // external vocabulary. It would be easy to add more ranges.
+  struct PrefixRanges {
+    std::array<std::pair<IndexT, IndexT>, 2> ranges_;
+    bool operator==(const PrefixRanges& ranges) const = default;
+    bool contain(IndexT index) const;
+  };
+
+ private:
   // The different type of data that is stored in the vocabulary
   enum class Datatypes { Literal, Iri, Float, Date };
 
@@ -91,7 +104,6 @@ class Vocabulary {
   static constexpr bool isCompressed_ =
       std::is_same_v<StringType, CompressedString>;
 
- private:
   // If a word starts with one of those prefixes it will be externalized
   vector<std::string> externalizedPrefixes_;
 
@@ -114,26 +126,11 @@ class Vocabulary {
       UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
   ExternalVocabulary externalVocabulary_;
 
-  // Internal type for storing the two ranges of a prefix (in
-  // `internalVocabulary_` and `externalVocabulary_`, respectively).
-  struct PrefixRanges {
-    IndexT rangeInternalBegin_;
-    IndexT rangeInternalEnd_;
-    IndexT rangeExternalBegin_;
-    IndexT rangeExternalEnd_;
-  };
-
   // ID ranges for IRIs, blank nodes, and literals. Used for the efficient
   // computation of the `isIRI`, `isBlankNode`, and `isLiteral` functions.
   PrefixRanges prefixRangesIris_;
   PrefixRanges prefixRangesBlankNodes_;
   PrefixRanges prefixRangesLiterals_;
-
-  // Set ranges for given prefix.
-  void setRangesForPrefix(PrefixRanges& ranges, std::string_view prefix);
-
-  // Check if given index is in range.
-  bool containedInRanges(IndexT index, const PrefixRanges& ranges) const;
 
  public:
   using SortLevel = typename ComparatorType::Level;
@@ -189,16 +186,16 @@ class Vocabulary {
   //! Return value signals if something was found at all.
   bool getId(const string& word, IndexType* idx) const;
 
-  // Get an Id range that matches a prefix.
-  // Return value also signals if something was found at all.
+  // Get the index range for the given prefix or `std::nullopt` if no word with
+  // the given prefix exists in the vocabulary.
   //
   // TODO<discovered by joka921>: This is only used for the text index, and
   // uses a range, where the last index is still within the range which is
   // against C++ conventions! Consider using the `prefix_range` function.
   //
-  // TODO: This currenly only looks in the internal vocabulary. Should we also
-  // look in the external vocabulary? And what exactly is this method needed
-  // for and do we need it at all?
+  // NOTE: Unlike `prefixRanges`, this only looks in the internal vocabulary,
+  // which is OK because for the text index, the external vocabulary is always
+  // empty.
   std::optional<IdRange<IndexType>> getIdRangeForFullTextPrefix(
       const string& word) const;
 
@@ -269,11 +266,8 @@ class Vocabulary {
     return internalVocabulary_.getComparator();
   }
 
-  /// returns the range of IDs where strings of the vocabulary start with the
-  /// prefix according to the collation level the first Id is included in the
-  /// range, the last one not. Currently only supports the Primary collation
-  /// level, due to limitations in the StringSortComparators
-  std::pair<IndexType, IndexType> prefix_range(const string& prefix) const;
+  /// Get prefix ranges for the given prefix.
+  PrefixRanges prefixRanges(std::string_view prefix) const;
 
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
     return getCaseComparator().getLocaleManager();

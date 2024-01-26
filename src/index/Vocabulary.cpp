@@ -23,27 +23,12 @@ using std::string;
 
 // ____________________________________________________________________________
 template <typename StringType, typename ComparatorType, typename IndexT>
-void Vocabulary<StringType, ComparatorType, IndexT>::setRangesForPrefix(
-    PrefixRanges& ranges, std::string_view prefix) {
-  // NOTE: If a prefix is not present in a vocabulary, `first` and `last`of
-  // the range returned by `prefix_range` will both be equal.
-  auto rangeInternal = internalVocabulary_.prefix_range(prefix);
-  auto rangeExternal = externalVocabulary_.prefix_range(prefix);
-  ranges.rangeInternalBegin_ = IndexType::make(rangeInternal.first);
-  ranges.rangeInternalEnd_ = IndexType::make(rangeInternal.second);
-  auto offset = internalVocabulary_.size();
-  ranges.rangeExternalBegin_ = IndexType::make(rangeExternal.first + offset);
-  ranges.rangeExternalEnd_ = IndexType::make(rangeExternal.second + offset);
-}
-
-// ____________________________________________________________________________
-template <typename StringType, typename ComparatorType, typename IndexT>
-bool Vocabulary<StringType, ComparatorType, IndexT>::containedInRanges(
-    IndexT index, const PrefixRanges& ranges) const {
-  return (ranges.rangeInternalBegin_ <= index &&
-          index < ranges.rangeInternalEnd_) ||
-         (ranges.rangeExternalBegin_ <= index &&
-          index < ranges.rangeExternalEnd_);
+bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
+    IndexT index) const {
+  return std::any_of(ranges_.begin(), ranges_.end(),
+                     [index](const std::pair<IndexT, IndexT>& range) {
+                       return range.first <= index && index < range.second;
+                     });
 }
 
 // ____________________________________________________________________________
@@ -71,21 +56,21 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::containedInRanges(
 // ____________________________________________________________________________
 template <typename StringType, typename ComparatorType, typename IndexT>
 bool Vocabulary<StringType, ComparatorType, IndexT>::isIri(IndexT index) const {
-  return containedInRanges(index, prefixRangesIris_);
+  return prefixRangesIris_.contain(index);
 }
 
 // ____________________________________________________________________________
 template <typename StringType, typename ComparatorType, typename IndexT>
 bool Vocabulary<StringType, ComparatorType, IndexT>::isBlankNode(
     IndexT index) const {
-  return containedInRanges(index, prefixRangesBlankNodes_);
+  return prefixRangesBlankNodes_.contain(index);
 }
 
 // ____________________________________________________________________________
 template <typename StringType, typename ComparatorType, typename IndexT>
 bool Vocabulary<StringType, ComparatorType, IndexT>::isLiteral(
     IndexT index) const {
-  return containedInRanges(index, prefixRangesLiterals_);
+  return prefixRangesLiterals_.contain(index);
 }
 
 // _____________________________________________________________________________
@@ -120,9 +105,9 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName,
   // NOTE: We only need this for the vocabulary of the main index, where
   // `I` is `VocabIndex`. However, since this is a negligible one-time cost,
   // it does not harm to do it for all vocabularies.
-  setRangesForPrefix(prefixRangesIris_, "<");
-  setRangesForPrefix(prefixRangesBlankNodes_, "_:");
-  setRangesForPrefix(prefixRangesLiterals_, "\"");
+  prefixRangesIris_ = prefixRanges("<");
+  prefixRangesBlankNodes_ = prefixRanges("_:");
+  prefixRangesLiterals_ = prefixRanges("\"");
 
   // TODO Code for debugging, remove it before committing TODO
   //
@@ -287,14 +272,14 @@ std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
     const string& word) const {
   AD_CONTRACT_CHECK(word[word.size() - 1] == PREFIX_CHAR);
   IdRange<I> range;
-  auto prefixRange = prefix_range(word.substr(0, word.size() - 1));
-  bool success = prefixRange.second > prefixRange.first;
+  auto [begin, end] =
+      internalVocabulary_.prefix_range(word.substr(0, word.size() - 1));
+  bool notEmpty = end > begin;
 
-  if (success) {
-    range = IdRange{prefixRange.first, prefixRange.second.decremented()};
+  if (notEmpty) {
+    range = IdRange{I::make(begin), I::make(end).decremented()};
     AD_CONTRACT_CHECK(range.first().get() < internalVocabulary_.size());
     AD_CONTRACT_CHECK(range.last().get() < internalVocabulary_.size());
-
     return range;
   }
   return std::nullopt;
@@ -353,10 +338,16 @@ bool Vocabulary<S, C, I>::getId(const string& word, IndexType* idx) const {
 
 // ___________________________________________________________________________
 template <typename S, typename C, typename I>
-auto Vocabulary<S, C, I>::prefix_range(const string& prefix) const
-    -> std::pair<IndexType, IndexType> {
-  auto [begin, end] = internalVocabulary_.prefix_range(prefix);
-  return {IndexType::make(begin), IndexType::make(end)};
+auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
+    -> Vocabulary<S, C, I>::PrefixRanges {
+  auto rangeInternal = internalVocabulary_.prefix_range(prefix);
+  auto rangeExternal = externalVocabulary_.prefix_range(prefix);
+  auto offset = internalVocabulary_.size();
+  std::pair<I, I> indexRangeInternal{I::make(rangeInternal.first),
+                                     I::make(rangeInternal.second)};
+  std::pair<I, I> indexRangeExternal{I::make(rangeExternal.first + offset),
+                                     I::make(rangeExternal.second + offset)};
+  return {indexRangeInternal, indexRangeExternal};
 }
 
 // _____________________________________________________________________________
@@ -373,6 +364,7 @@ std::optional<std::string_view> Vocabulary<S, C, I>::operator[](
 template std::optional<std::string_view>
 TextVocabulary::operator[]<std::string, void>(IndexType idx) const;
 
+/*
 // ___________________________________________________________________________
 template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::getRangesForDatatypes() const
@@ -409,6 +401,7 @@ void Vocabulary<S, C, I>::printRangesForDatatypes() {
     logRange(pair.second);
   }
 }
+*/
 
 template std::optional<string>
 RdfsVocabulary::indexToOptionalString<CompressedString>(IndexType idx) const;
@@ -428,7 +421,7 @@ template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
 template void RdfsVocabulary::initializeExternalizePrefixes<
     std::vector<std::string>>(const std::vector<std::string>& prefixes);
 
-template void RdfsVocabulary::printRangesForDatatypes();
+// template void RdfsVocabulary::printRangesForDatatypes();
 
 template void TextVocabulary::writeToFile<std::string, void>(
     const string& fileName) const;

@@ -269,7 +269,7 @@ class IndexImpl {
   bool getId(const string& element, Id* id) const;
 
   // ___________________________________________________________________________
-  std::pair<Id, Id> prefix_range(const std::string& prefix) const;
+  Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
   const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
@@ -703,37 +703,36 @@ class IndexImpl {
     std::vector<std::pair<Id, Id>> ignoredRanges;
     ignoredRanges.emplace_back(qlever::getBoundsForSpecialIds());
 
-    auto literalRange = getVocab().prefix_range("\"");
-    auto taggedPredicatesRange = getVocab().prefix_range("@");
-    auto internalEntitiesRange =
-        getVocab().prefix_range(INTERNAL_ENTITIES_URI_PREFIX);
+    auto literalRanges = getVocab().prefixRanges("\"");
+    auto taggedPredicatesRanges = getVocab().prefixRanges("@");
+    auto internalEntitiesRanges =
+        getVocab().prefixRanges(INTERNAL_ENTITIES_URI_PREFIX);
 
-    auto pushIgnoredRange = [&ignoredRanges](const auto& range) {
-      ignoredRanges.emplace_back(Id::makeFromVocabIndex(range.first),
-                                 Id::makeFromVocabIndex(range.second));
+    auto pushIgnoredRange = [&ignoredRanges](const auto& ranges) {
+      for (const auto& range : ranges.ranges_) {
+        ignoredRanges.emplace_back(Id::makeFromVocabIndex(range.first),
+                                   Id::makeFromVocabIndex(range.second));
+      }
     };
-    pushIgnoredRange(internalEntitiesRange);
+    pushIgnoredRange(internalEntitiesRanges);
     using enum Permutation::Enum;
     if (permutation == SPO || permutation == SOP) {
-      pushIgnoredRange(literalRange);
+      pushIgnoredRange(literalRanges);
     } else if (permutation == PSO || permutation == POS) {
-      pushIgnoredRange(taggedPredicatesRange);
+      pushIgnoredRange(taggedPredicatesRanges);
     }
 
     // A lambda that checks whether the `predicateId` is an internal ID like
     // `ql:has-pattern` or `@en@rdfs:label`.
-    auto isInternalPredicateId = [internalEntitiesRange,
-                                  taggedPredicatesRange](Id predicateId) {
+    auto isInternalPredicateId = [internalEntitiesRanges,
+                                  taggedPredicatesRanges](Id predicateId) {
       if (predicateId.getDatatype() == Datatype::Undefined) {
         return true;
       }
       AD_CORRECTNESS_CHECK(predicateId.getDatatype() == Datatype::VocabIndex);
-      auto idx = predicateId.getVocabIndex();
-      auto isInRange = [idx](const auto& range) {
-        return range.first <= idx && idx < range.second;
-      };
-      return (isInRange(internalEntitiesRange) ||
-              isInRange(taggedPredicatesRange));
+      auto index = predicateId.getVocabIndex();
+      return (internalEntitiesRanges.contain(index) ||
+              taggedPredicatesRanges.contain(index));
     };
 
     auto isTripleIgnored = [permutation,

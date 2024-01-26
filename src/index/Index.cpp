@@ -83,8 +83,8 @@ bool Index::getId(const std::string& element, Id* id) const {
 }
 
 // ____________________________________________________________________________
-std::pair<Id, Id> Index::prefix_range(const std::string& prefix) const {
-  return pimpl_->prefix_range(prefix);
+Index::Vocab::PrefixRanges Index::prefixRanges(std::string_view prefix) const {
+  return pimpl_->prefixRanges(prefix);
 }
 
 // ____________________________________________________________________________
