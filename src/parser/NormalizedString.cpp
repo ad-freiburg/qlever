@@ -4,19 +4,9 @@
 
 #include "NormalizedString.h"
 
-// __________________________________________
-NormalizedString fromStringUnsafe(std::string_view input) {
-  NormalizedString normalizedString;
-  normalizedString.resize(input.size());
-
-  std::transform(input.begin(), input.end(), normalizedString.begin(),
-                 [](char c) { return NormalizedChar{c}; });
-
-  return normalizedString;
-}
 
 // __________________________________________
-std::string_view asStringView(NormalizedStringView normalizedStringView) {
+std::string_view asStringViewUnsafe(NormalizedStringView normalizedStringView) {
   return {reinterpret_cast<const char*>(normalizedStringView.data()),
           normalizedStringView.size()};
 }
