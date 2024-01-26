@@ -48,7 +48,7 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
         benchmarkClassAndResults,
     const std::string& fileName, bool appendToJsonInFile = false) {
   // Convert to json.
-  nlohmann::json benchmarkClassAndBenchmarkResultsAsJson(
+  nlohmann::ordered_json benchmarkClassAndBenchmarkResultsAsJson(
       zipBenchmarkClassAndBenchmarkResultsToJson(benchmarkClassAndResults));
   AD_CORRECTNESS_CHECK(benchmarkClassAndBenchmarkResultsAsJson.is_array());
 
@@ -59,14 +59,14 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
   if (appendToJsonInFile && std::filesystem::exists(fileName) &&
       !std::filesystem::is_empty(fileName)) {
     /*
-    By parsing the file as json and working with `nlohmann::json`, instead of
-    the json string representation, we first make sure, that the file only
-    contains valid json, and secondly guarantee, that we generate a valid new
-    json.
-    Also not, that this is not a performance critical place, so we don't have to
-    risk errors for a better performance.
+    By parsing the file as json and working with `nlohmann::ordered_json`,
+    instead of the json string representation, we first make sure, that the file
+    only contains valid json, and secondly guarantee, that we generate a valid
+    new json. Also not, that this is not a performance critical place, so we
+    don't have to risk errors for a better performance.
     */
-    const nlohmann::json fileAsJson(fileToJson(fileName));
+    const nlohmann::ordered_json fileAsJson(
+        fileToJson<nlohmann::ordered_json>(fileName));
     if (!fileAsJson.is_array()) {
       throw std::runtime_error(
           absl::StrCat("The contents of the file ", fileName,
@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
   nlohmann::json jsonConfig(nlohmann::json::value_t::object);
 
   if (vm.count("configuration-json")) {
-    jsonConfig.update(fileToJson(jsonConfigurationFileName));
+    jsonConfig.update(fileToJson<nlohmann::json>(jsonConfigurationFileName));
   }
   if (vm.count("configuration-shorthand")) {
     jsonConfig.update(ad_utility::ConfigManager::parseShortHand(

@@ -13,17 +13,17 @@
 
 namespace ad_benchmark {
 /*
- * @brief Create a nlohmann::json array with all relevant informations
+ * @brief Create a nlohmann::ordered_json array with all relevant informations
  *  about the measurments taken by all the `BenchmarkResults`.
  */
-nlohmann::json benchmarkResultsToJson(
+nlohmann::ordered_json benchmarkResultsToJson(
     const std::vector<BenchmarkResults>& results);
 
 /*
-@brief Create a nlohmann::json array with all relevant informations
+@brief Create a nlohmann::ordered_json array with all relevant informations
 given by the pairs.
 */
-nlohmann::json zipBenchmarkClassAndBenchmarkResultsToJson(
+nlohmann::ordered_json zipBenchmarkClassAndBenchmarkResultsToJson(
     const std::vector<std::pair<const BenchmarkInterface*, BenchmarkResults>>&
         benchmarkClassAndBenchmarkResults);
 }  // namespace ad_benchmark

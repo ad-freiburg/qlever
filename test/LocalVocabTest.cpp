@@ -23,8 +23,6 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/ResultTable.h"
 #include "engine/Sort.h"
-#include "engine/TextOperationWithFilter.h"
-#include "engine/TextOperationWithoutFilter.h"
 #include "engine/TransitivePath.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
@@ -308,14 +306,6 @@ TEST(LocalVocab, propagation) {
 
   // TEXT operations.
   //
-  // NOTE: `TextOperationWithoutFilter` takes no arguments, so the local
-  // vocabulary of the operation remains empty (but it doesn't harm to check
-  // that that is indeed the case).
-  TextOperationWithFilter text1(
-      testQec, "someWord", {Variable{"?x"}, Variable{"?y"}, Variable{"?text"}},
-      Variable{"?text"}, qet(values1), 0);
-  checkLocalVocab(text1, std::vector<std::string>{"x", "y1", "y2"});
-  TextOperationWithoutFilter text2(testQec, {"someWord"}, {Variable{"?text"}},
-                                   Variable{"?text"});
-  checkLocalVocab(text2, {});
+  // TODO<joka921> Maybe add tests for the new TextIndexScanFor... classes,
+  // they never introduce any local vocab.
 }

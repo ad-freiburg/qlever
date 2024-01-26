@@ -37,9 +37,6 @@ class Variable {
   // Needed for consistency with the `Alias` class.
   [[nodiscard]] const std::string& targetVariable() const { return _name; }
 
-  // Convert `?someVariable` into `?ql_textscore_someVariable`
-  Variable getTextScoreVariable() const;
-
   // Converts `?someTextVar` and `?someEntityVar` into
   // `?ql_someTextVar_score_var_someEntityVar`.
   // Converts `?someTextVar` and `someFixedEntity` into
