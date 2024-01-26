@@ -726,21 +726,27 @@ TEST(SparqlExpression, customNumericFunctions) {
 
 // ____________________________________________________________________________
 TEST(SparqlExpression, isSomethingFunctions) {
-  const auto T = Id::makeFromBool(true);
-  const auto F = Id::makeFromBool(false);
-  // TODO(hannahbast): Without the \"\"lit, the last test fails. Why?
-  testUnaryExpression(makeIsIriExpression,
-                      IdOrStrings{"<i>", "\"\"l", "_:u", "x", I(42), D(1), U},
-                      Ids{T, F, F, F, F, F, F});
-  testUnaryExpression(makeIsBlankExpression,
-                      IdOrStrings{"<i>", "\"\"l", "_:u", "x", I(42), D(1), U},
-                      Ids{F, F, T, F, F, F, F});
-  testUnaryExpression(makeIsLiteralExpression,
-                      IdOrStrings{"<i>", "\"\"l", "_:u", "x", I(42), D(1), U},
-                      Ids{F, T, F, F, F, F, F});
-  testUnaryExpression(makeIsNumericExpression,
-                      IdOrStrings{"<i>", "\"\"l", "_:u", "x", I(42), D(1), U},
-                      Ids{F, F, F, F, T, T, F});
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  Id iri = testContext().x;
+  Id literal = testContext().zz;
+  Id blank = testContext().blank;
+  Id local = testContext().notInVocabA;
+  testUnaryExpression<makeIsIriExpression>(
+      Ids{iri, literal, blank, local, I(42), D(1), U},
+      Ids{T, F, F, F, F, F, F});
+  testUnaryExpression<makeIsBlankExpression>(
+      Ids{iri, literal, blank, local, I(42), D(1), U},
+      Ids{F, F, T, F, F, F, F});
+  testUnaryExpression<makeIsLiteralExpression>(
+      Ids{iri, literal, blank, local, I(42), D(1), U},
+      Ids{F, T, F, T, F, F, F});
+  testUnaryExpression<makeIsNumericExpression>(
+      Ids{iri, literal, blank, local, I(42), D(1), U},
+      Ids{F, F, F, F, T, T, F});
+  testUnaryExpression<makeBoundExpression>(
+      Ids{iri, literal, blank, local, I(42), D(1), U},
+      Ids{T, T, T, T, T, T, F});
 }
 
 // ____________________________________________________________________________

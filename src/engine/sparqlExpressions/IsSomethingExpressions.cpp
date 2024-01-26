@@ -24,15 +24,14 @@ namespace detail {
 //    `...Expression` (`std::move` the arguments into the constructor). The
 //    function should be declared in `NaryExpression.h`.
 
-// isIRI, isBlank, isLiteral, isNumeric. Note that the value getters already
-// return the correct `Id`, hence the `std::identity`.
+// Expressions for `isIRI`, `isBlank`, `isLiteral`, and `isNumeric`. Note that
+// the value getters already return the correct `Id`, hence `std::identity`.
 using isIriExpression = NARY<1, FV<std::identity, IsIriValueGetter>>;
 using isBlankExpression = NARY<1, FV<std::identity, IsBlankNodeValueGetter>>;
 using isLiteralExpression = NARY<1, FV<std::identity, IsLiteralValueGetter>>;
 using isNumericExpression = NARY<1, FV<std::identity, IsNumericValueGetter>>;
-
-// bound is slightly different because `IsValidValueGetter` returns a bool and
-// not an `Id`.
+// The expression for `bound` is slightly different because
+// `IsValidValueGetter` returns a `bool` and not an `Id`.
 inline auto boolToId = [](bool b) { return Id::makeFromBool(b); };
 using boundExpression = NARY<1, FV<decltype(boolToId), IsValidValueGetter>>;
 

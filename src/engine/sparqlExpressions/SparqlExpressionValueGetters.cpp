@@ -91,6 +91,35 @@ StringValueGetterImpl<removeQuotesAndAngleBrackets>::operator()(
 template struct sparqlExpression::detail::StringValueGetterImpl<true>;
 template struct sparqlExpression::detail::StringValueGetterImpl<false>;
 
+// TODO: I tried to implement it in the `.cpp` file, but I could not resolve
+// the resulting linker error ("undefined reference to
+// `IsSomethingValueGetter<...>::isBlanknode` etc.)
+/*
+template <auto isSomethingFunction, auto prefix>
+Id IsSomethingValueGetterImpl<isSomethingFunction, prefix>::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  if (id.getDatatype() == Datatype::VocabIndex) {
+    // See instantiations below for what `isSomethingFunction` is.
+    return Id::makeFromBool(std::invoke(isSomethingFunction,
+                                        context->_qec.getIndex().getVocab(),
+                                        id.getVocabIndex()));
+  } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
+    auto word = ExportQueryExecutionTrees::idToStringAndType<true>(
+        context->_qec.getIndex(), id, context->_localVocab);
+    return Id::makeFromBool(word.has_value() &&
+                            word.value().first.starts_with(prefix));
+  } else {
+    return Id::makeFromBool(false);
+  }
+}
+template struct sparqlExpression::detail::IsSomethingValueGetterImpl<
+    &Index::Vocab::isIri, isIriPrefix>;
+template struct sparqlExpression::detail::IsSomethingValueGetterImpl<
+    &Index::Vocab::isIri, isBlankPrefix>;
+template struct sparqlExpression::detail::IsSomethingValueGetterImpl<
+    &Index::Vocab::isLiteral, isLiteralPrefix>;
+*/
+
 // ____________________________________________________________________________
 std::optional<string> LiteralFromIdGetter::operator()(
     ValueId id, const sparqlExpression::EvaluationContext* context) const {

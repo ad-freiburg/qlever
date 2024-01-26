@@ -1,4 +1,4 @@
-// Copyright 2021, University of Freiburg,
+// Copyright 2021 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors:
 //   2021 -    Hannah Bast <bast@cs.uni-freiburg.de>
@@ -1632,7 +1632,7 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   // `NaryExpression.h`.
   auto createUnary = [&argList]<typename Function>(Function function)
       requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
-    AD_CORRECTNESS_CHECK(argList.size() == 1);
+    AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
     return function(std::move(argList[0]));
   };
   auto createBinary = [&argList]<typename Function>(Function function)
@@ -1708,7 +1708,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "isnumeric") {
     return createUnary(&makeIsNumericExpression);
   } else if (functionName == "bound") {
-    return createUnary(&makeBoundExpression);
+    return makeBoundExpression(
+        std::move(std::make_unique<VariableExpression>(visit(ctx->var()))));
   } else {
     reportError(
         ctx,

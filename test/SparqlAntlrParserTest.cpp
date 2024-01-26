@@ -1,8 +1,9 @@
-// Copyright 2021, University of Freiburg,
-// Chair of Algorithms and Data Structures.
+// Copyright 2021 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
 // Authors:
-//   2021-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-//   2022      Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
+//   2021 -    Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//   2022 -    Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
+//   2022 -    Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
@@ -1293,6 +1294,7 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("ISBLANK(?x)", matchUnary(&makeIsBlankExpression));
   expectBuiltInCall("ISLITERAL(?x)", matchUnary(&makeIsLiteralExpression));
   expectBuiltInCall("ISNUMERIC(?x)", matchUnary(&makeIsNumericExpression));
+  expectBuiltInCall("BOUND(?x)", matchUnary(&makeBoundExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
   expectBuiltInCall("COALESCE(?x)", matchUnary(makeCoalesceExpressionVariadic));
   expectBuiltInCall("COALESCE()", matchNary(makeCoalesceExpressionVariadic));

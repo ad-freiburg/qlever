@@ -1,10 +1,12 @@
-//  Copyright 2021, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Copyright 2021 - 2024, University of Freiburg
+//  Chair of Algorithms and Data Structures
+//  Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//           Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 #include <re2/re2.h>
 
+#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/ResultTable.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Id.h"
@@ -85,11 +87,11 @@ struct IsValidValueGetter {
   }
 };
 
-/// Return a boolean value that is used for AND, OR and NOT expressions.
-/// See section 17.2.2 of the Sparql Standard
+// Return a boolean value that is used for AND, OR and NOT expressions.
+// See section 17.2.2 of the Sparql Standard
 struct EffectiveBooleanValueGetter {
   enum struct Result { False, True, Undef };
-  // _________________________________________________________________________
+
   Result operator()(ValueId id, const EvaluationContext*) const;
 
   // Nonempty strings are true.
@@ -132,29 +134,42 @@ using StringValueGetterRaw = StringValueGetterImpl<false>;
 template <auto isSomethingFunction, auto prefix>
 struct IsSomethingValueGetter {
   Id operator()(ValueId id, const EvaluationContext* context) const {
-    return Id::makeFromBool(id.getDatatype() == Datatype::VocabIndex &&
-                            std::invoke(isSomethingFunction,
-                                        context->_qec.getIndex().getVocab(),
-                                        id.getVocabIndex()));
+    if (id.getDatatype() == Datatype::VocabIndex) {
+      // See instantiations below for what `isSomethingFunction` is.
+      return Id::makeFromBool(std::invoke(isSomethingFunction,
+                                          context->_qec.getIndex().getVocab(),
+                                          id.getVocabIndex()));
+    } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
+      // The `false` means: don't remove the quotes or angle brackets.
+      auto word = ExportQueryExecutionTrees::idToStringAndType<false>(
+          context->_qec.getIndex(), id, context->_localVocab);
+      return Id::makeFromBool(word.has_value() &&
+                              word.value().first.starts_with(prefix));
+    } else {
+      return Id::makeFromBool(false);
+    }
   }
+
   Id operator()(const std::string& s, const EvaluationContext*) const {
     return Id::makeFromBool(s.starts_with(prefix));
   }
+
   Id operator()(IdOrString s, const EvaluationContext* ctx) const {
     return std::visit(
         [self = this, ctx](auto el) { return self->operator()(el, ctx); },
         std::move(s));
   }
 };
+static constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};
+static constexpr auto isBlankPrefix = ad_utility::ConstexprSmallString<3>{"_:"};
+static constexpr auto isLiteralPrefix =
+    ad_utility::ConstexprSmallString<2>{"\""};
 using IsIriValueGetter =
-    IsSomethingValueGetter<&Index::Vocab::isIri,
-                           ad_utility::ConstexprSmallString<2>{"<"}>;
+    IsSomethingValueGetter<&Index::Vocab::isIri, isIriPrefix>;
 using IsBlankNodeValueGetter =
-    IsSomethingValueGetter<&Index::Vocab::isBlankNode,
-                           ad_utility::ConstexprSmallString<3>{"_:"}>;
+    IsSomethingValueGetter<&Index::Vocab::isBlankNode, isBlankPrefix>;
 using IsLiteralValueGetter =
-    IsSomethingValueGetter<&Index::Vocab::isLiteral,
-                           ad_utility::ConstexprSmallString<2>{"\""}>;
+    IsSomethingValueGetter<&Index::Vocab::isLiteral, isLiteralPrefix>;
 
 // Value getter for `isNumeric`. Regarding which datatypes count as numeric,
 // see https://www.w3.org/TR/sparql11-query/#operandDataTypes .
