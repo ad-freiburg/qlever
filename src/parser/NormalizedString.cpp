@@ -4,7 +4,6 @@
 
 #include "NormalizedString.h"
 
-
 // __________________________________________
 std::string_view asStringViewUnsafe(NormalizedStringView normalizedStringView) {
   return {reinterpret_cast<const char*>(normalizedStringView.data()),

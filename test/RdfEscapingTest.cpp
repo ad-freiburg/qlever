@@ -51,14 +51,16 @@ TEST(RdfEscapingTest, escapeForXml) {
 
 // ___________________________________________________________________________
 TEST(RdfEscapingTest, normalizeLiteralWithQuotesToNormalizedString) {
-  ASSERT_EQ("Hello \" \\World",
+  ASSERT_EQ(
+      "Hello \" \\World",
       asStringViewUnsafe(normalizeLiteralWithQuotes(R"("Hello \" \\World")")));
   ASSERT_THROW(normalizeLiteralWithQuotes("no quotes"), ad_utility::Exception);
 }
 
 // ___________________________________________________________________________
 TEST(RdfEscapingTest, normalizeLiteralWithoutQuotesToNormalizedString) {
-  ASSERT_EQ("Hello \" \\World",
+  ASSERT_EQ(
+      "Hello \" \\World",
       asStringViewUnsafe(normalizeLiteralWithoutQuotes(R"(Hello \" \\World)")));
 }
 
