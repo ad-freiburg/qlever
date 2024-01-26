@@ -682,21 +682,24 @@ class IndexImpl {
   // The index contains several triples that are not part of the "actual"
   // knowledge graph, but are added by QLever for internal reasons (e.g. for an
   // efficient implementation of language filters). For a given
-  // `Permutation::Enum`, returns the following `std::pair`: First: A
-  // `vector<pair<Id, Id>>` that denotes ranges in the first column
-  //        of the permutation that imply that a triple is added. For example
-  //        in the `SPO` and `SOP` permutation a literal subject means that the
-  //        triple was added (literals are not legal subjects in RDF), so the
-  //        pair `(idOfFirstLiteral, idOfLastLiteral + 1)` will be contained
-  //        in the vector.
-  // Second: A lambda that checks for a triple *that is not already excluded
+  // `Permutation::Enum`, returns the following `std::pair`:
+  //
+  // first:  A `vector<pair<Id, Id>>` that denotes ranges in the first column
+  //         of the permutation that imply that a triple is added. For example
+  //         in the `SPO` and `SOP` permutation a literal subject means that the
+  //         triple was added (literals are not legal subjects in RDF), so the
+  //         pair `(idOfFirstLiteral, idOfLastLiteral + 1)` will be contained
+  //         in the vector.
+  // second: A lambda that checks for a triple *that is not already excluded
   //         by the ignored ranges from the first argument* whether it still
   //         is an added triple. For example in the `Sxx` and `Oxx` permutation
   //         a triple where the predicate starts with '@' (instead of the usual
   //         '<' is an added triple from the language filter implementation.
+  //
   // Note: A triple from a given permutation is an added triple if and only if
   //       it's first column is contained in any of the ranges from `first` OR
   //       the lambda `second` returns true for that triple.
+  //
   // For example usages see `IndexScan.cpp` (the implementation of the full
   // index scan) and `GroupBy.cpp`.
   auto getIgnoredIdRanges(const Permutation::Enum permutation) const {

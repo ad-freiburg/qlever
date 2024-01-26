@@ -266,7 +266,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
   LOG(INFO) << "Adding " << hasPatternPredicateSortedByPSO->size()
-            << "triples to the POS and PSO permutation for "
+            << " triples to the POS and PSO permutation for "
                "`ql:has-pattern` ..."
             << std::endl;
   auto noPattern = Id::makeFromInt(NO_PATTERN);

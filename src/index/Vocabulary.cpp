@@ -32,28 +32,6 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
 }
 
 // ____________________________________________________________________________
-// template <typename StringType, typename ComparatorType, typename IndexT>
-// std::string Vocabulary<StringType, ComparatorType,
-//                        IndexT>::PrefixRangeInternalAndExternal::toString()
-//     const {
-//   std::ostringstream os;
-//   os << "[" << rangeInternalBegin_ << " - " << rangeInternalEnd_ << "]"
-//      << " [" << rangeExternalBegin_ << " - " << rangeExternalEnd_ << "]";
-//   return os.str();
-//   // std::string toString(auto getWordFunction) const {
-//   //   auto rangeToString = [&](auto begin, auto end) {
-//   //     return begin == end
-//   //                ? std::string("[EMPTY RANGE]")
-//   //                : absl::StrCat("[", getWordFunction(begin), " - ",
-//   //                               getWordFunction(end.decremented()), "]");
-//   //   };
-//   //   return absl::StrCat(
-//   //       rangeToString(rangeInternalBegin_, rangeInternalEnd_), " ",
-//   //       rangeToString(rangeExternalBegin_, rangeExternalEnd_));
-//   // }
-// }
-
-// ____________________________________________________________________________
 template <typename StringType, typename ComparatorType, typename IndexT>
 bool Vocabulary<StringType, ComparatorType, IndexT>::isIri(IndexT index) const {
   return prefixRangesIris_.contain(index);
@@ -108,28 +86,6 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName,
   prefixRangesIris_ = prefixRanges("<");
   prefixRangesBlankNodes_ = prefixRanges("_:");
   prefixRangesLiterals_ = prefixRanges("\"");
-
-  // TODO Code for debugging, remove it before committing TODO
-  //
-  // For debugging purposes, let's show the word ranges.
-  // LOG(INFO) << "Ranges for IRIs (indexes): " <<
-  // prefixIdRangesIRIs_.toString()
-  //           << std::endl;
-  // LOG(INFO) << "Ranges for blank nodes (indexes): "
-  //           << prefixIdRangesBlankNodes_.toString() << std::endl;
-  // LOG(INFO) << "Ranges for literals (indexes): "
-  //           << prefixIdRangesLiterals_.toString() << std::endl;
-  // auto getWordFunction = [this](auto index) {
-  //   return this->indexToOptionalString(index).value_or("NOT_IN_VOCAB");
-  // };
-  // LOG(INFO) << "Ranges for IRIs: "
-  //           << prefixIdRangesIris_.toString(getWordFunction) << std::endl;
-  // LOG(INFO) << "Ranges for blank nodes: "
-  //           << prefixIdRangesBlankNodes_.toString(getWordFunction) <<
-  //           std::endl;
-  // LOG(INFO) << "Ranges for literals: "
-  //           << prefixIdRangesLiterals_.toString(getWordFunction) <<
-  //           std::endl;
 }
 
 // _____________________________________________________________________________
@@ -185,12 +141,28 @@ bool Vocabulary<S, C, I>::shouldBeExternalized(const string& s) const {
 // ___________________________________________________________________
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldEntityBeExternalized(const string& word) const {
-  // Never externalize the internal URIs as they are sometimes added before or
+  // Never externalize the internal IRIs as they are sometimes added before or
   // after the externalization happens and we thus get inconsistent behavior
   // etc. for `ql:langtag`.
   if (word.starts_with(INTERNAL_ENTITIES_URI_PREFIX)) {
     return false;
   }
+  // Never externalize the special IRIs starting with `@` (for example,
+  // @en@rdfs:label). Otherwise, they will not be found with a setting like
+  // `"prefixes-external": ["@"]` or `"prefixes-external": [""]` in the
+  // `.settings.json` file.
+  //
+  // TODO: I tried it without the following three lines first, but that didn't
+  // when `"prefixes-external": ["@"]` or `"prefixes-external": [""]`. Why is
+  // that, is this related to `IndexImlp::getIgnoredIdRanges`? Anyway, it's
+  // error-prone that there are related things happening at two (or more)
+  // different places in the code and if they are not perfectly in sync, things
+  // go wrong.
+  if (word.starts_with("@")) {
+    return false;
+  }
+  // Otherwise, externalize if and only if there is a prefix match for one of
+  // `externalizedPrefixes_`.
   return std::ranges::any_of(externalizedPrefixes_, [&word](const auto& p) {
     return word.starts_with(p);
   });
@@ -363,45 +335,6 @@ std::optional<std::string_view> Vocabulary<S, C, I>::operator[](
 }
 template std::optional<std::string_view>
 TextVocabulary::operator[]<std::string, void>(IndexType idx) const;
-
-/*
-// ___________________________________________________________________________
-template <typename S, typename C, typename I>
-auto Vocabulary<S, C, I>::getRangesForDatatypes() const
-    -> ad_utility::HashMap<Datatypes, std::pair<IndexType, IndexType>> {
-  ad_utility::HashMap<Datatypes, std::pair<IndexType, IndexType>> result;
-  result[Datatypes::Literal] = prefix_range("\"");
-  result[Datatypes::Iri] = prefix_range("<");
-
-  return result;
-};
-
-template <typename S, typename C, typename I>
-template <typename, typename>
-void Vocabulary<S, C, I>::printRangesForDatatypes() {
-  auto ranges = getRangesForDatatypes();
-  auto logRange = [&](const auto& range) {
-    LOG(INFO) << range.first << " " << range.second << std::endl;
-    if (range.second > range.first) {
-      LOG(INFO) << indexToOptionalString(range.first).value() << std::endl;
-      LOG(INFO) << indexToOptionalString(range.second.decremented()).value()
-                << std::endl;
-    }
-    if (range.second.get() < internalVocabulary_.size()) {
-      LOG(INFO) << indexToOptionalString(range.second).value() << std::endl;
-    }
-
-    if (range.first.get() > 0) {
-      LOG(INFO) << indexToOptionalString(range.first.decremented()).value()
-                << std::endl;
-    }
-  };
-
-  for (const auto& pair : ranges) {
-    logRange(pair.second);
-  }
-}
-*/
 
 template std::optional<string>
 RdfsVocabulary::indexToOptionalString<CompressedString>(IndexType idx) const;
