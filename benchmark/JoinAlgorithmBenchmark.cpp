@@ -65,6 +65,14 @@ static constexpr bool isValuePreservingCast(const Source& source) {
 }
 
 /*
+@brief Return biggest possible value for the given arithmetic type.
+*/
+template <ad_utility::Arithmetic Type>
+consteval Type getMaxValue() {
+  return std::numeric_limits<Type>::max();
+}
+
+/*
 @brief Helper function for throwing overflow errors.
 
 @param reason What is the reason for the overflow?
@@ -80,7 +88,7 @@ void throwOverflowError(const std::string_view reason) {
   }
   throw std::runtime_error(absl::StrCat(
       typeName, " overflow error: The ", reason, " is bigger than the ",
-      typeName, " type maximum ", std::numeric_limits<Type>::max(),
+      typeName, " type maximum ", getMaxValue<Type>(),
       ". Try reducing the values for the configuration options."));
 }
 
@@ -193,7 +201,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 
           // Skip, if the addition would cause an overflow.
           if (newOverlapMatches >
-              std::numeric_limits<size_t>::max() - numOccurrences) {
+              getMaxValue<decltype(newOverlapMatches)>() - numOccurrences) {
             return;
           }
           id = newValue;
@@ -265,8 +273,8 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 
   // How many instances of a value are inside the join column of a table.
   using NumOccurencesMap = ad_utility::HashMap<ValueId, size_t>;
-  NumOccurencesMap numOccurrencesValueInSmallerTableJoinColumn{};
-  NumOccurencesMap numOccurrencesValueInBiggerTableJoinColumn{};
+  NumOccurencesMap numOccurrencesElementInSmallerTableJoinColumn{};
+  NumOccurencesMap numOccurrencesElementInBiggerTableJoinColumn{};
 
   // Collect the number of occurences and the distinct elements.
   for (size_t idx = 0; idx < smallerTableJoinColumnRef.size() ||
@@ -294,9 +302,9 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
           }
         };
     loopBody(smallerTableJoinColumnRef, smallerTableJoinColumnDistinctElements,
-             numOccurrencesValueInSmallerTableJoinColumn);
+             numOccurrencesElementInSmallerTableJoinColumn);
     loopBody(biggerTableJoinColumnRef, biggerTableJoinColumnDistinctElements,
-             numOccurrencesValueInBiggerTableJoinColumn);
+             numOccurrencesElementInBiggerTableJoinColumn);
   }
 
   // Seeds for the random generators, so that things are less similiar.
@@ -318,7 +326,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
                 smallerTableJoinColumnDistinctElements.end(), seeds.at(1));
   size_t newOverlapMatches{0};
   ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
-      smallerTableElementToNewValue{};
+      smallerTableElementToNewElement{};
   /*
   In case, our smallest overshot is still closer to `wantedNumNewOverlapMatches`
   than our biggest undershot.
@@ -334,34 +342,34 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   std::ranges::for_each(
       smallerTableJoinColumnDistinctElements,
       [&biggerTableJoinColumnDistinctElements, &randomBiggerTableElement,
-       &numOccurrencesValueInSmallerTableJoinColumn,
-       &numOccurrencesValueInBiggerTableJoinColumn, &wantedNumNewOverlapMatches,
-       &newOverlapMatches, &smallerTableElementToNewValue,
+       &numOccurrencesElementInSmallerTableJoinColumn,
+       &numOccurrencesElementInBiggerTableJoinColumn,
+       &wantedNumNewOverlapMatches, &newOverlapMatches,
+       &smallerTableElementToNewElement,
        &smallestOvershot](const ValueId& smallerTableId) {
         const auto& biggerTableId{biggerTableJoinColumnDistinctElements.at(
             randomBiggerTableElement())};
 
         // Skip this possibilty, if we have an overflow.
-        size_t overlapMatches{
-            numOccurrencesValueInSmallerTableJoinColumn.at(smallerTableId)};
+        size_t newMatches{
+            numOccurrencesElementInSmallerTableJoinColumn.at(smallerTableId)};
         if (const size_t numOccurencesBiggerTable{
-                numOccurrencesValueInBiggerTableJoinColumn.at(biggerTableId)};
-            overlapMatches >
-            std::numeric_limits<size_t>::max() / numOccurencesBiggerTable) {
+                numOccurrencesElementInBiggerTableJoinColumn.at(biggerTableId)};
+            newMatches > getMaxValue<size_t>() / numOccurencesBiggerTable) {
           return;
         } else {
-          overlapMatches *= numOccurencesBiggerTable;
+          newMatches *= numOccurencesBiggerTable;
         }
 
         // Just add as long as possible and always save the smallest overshot.
-        if (overlapMatches <= wantedNumNewOverlapMatches &&
-            newOverlapMatches <= wantedNumNewOverlapMatches - overlapMatches) {
-          smallerTableElementToNewValue.emplace(smallerTableId, biggerTableId);
-          newOverlapMatches += overlapMatches;
+        if (newMatches <= wantedNumNewOverlapMatches &&
+            newOverlapMatches <= wantedNumNewOverlapMatches - newMatches) {
+          smallerTableElementToNewElement.emplace(smallerTableId,
+                                                  biggerTableId);
+          newOverlapMatches += newMatches;
         } else if (!smallestOvershot.has_value() ||
-                   std::get<2>(smallestOvershot.value()) > overlapMatches) {
-          smallestOvershot.emplace(smallerTableId, biggerTableId,
-                                   overlapMatches);
+                   std::get<2>(smallestOvershot.value()) > newMatches) {
+          smallestOvershot.emplace(smallerTableId, biggerTableId, newMatches);
         }
       });
 
@@ -371,20 +379,20 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   */
   if (smallestOvershot.has_value() &&
       std::get<2>(smallestOvershot.value()) <=
-          std::numeric_limits<size_t>::max() - newOverlapMatches &&
+          getMaxValue<size_t>() - newOverlapMatches &&
       (std::get<2>(smallestOvershot.value()) + newOverlapMatches) -
               wantedNumNewOverlapMatches <
           wantedNumNewOverlapMatches - newOverlapMatches) {
     const auto& val{smallestOvershot.value()};
-    smallerTableElementToNewValue.emplace(std::get<0>(val), std::get<1>(val));
+    smallerTableElementToNewElement.emplace(std::get<0>(val), std::get<1>(val));
     newOverlapMatches += std::get<2>(val);
   }
 
   // Overwrite the designated values in the smaller table.
   std::ranges::for_each(
-      smallerTableJoinColumnRef, [&smallerTableElementToNewValue](auto& id) {
-        if (auto newValueIterator = smallerTableElementToNewValue.find(id);
-            newValueIterator != smallerTableElementToNewValue.end()) {
+      smallerTableJoinColumnRef, [&smallerTableElementToNewElement](auto& id) {
+        if (auto newValueIterator = smallerTableElementToNewElement.find(id);
+            newValueIterator != smallerTableElementToNewElement.end()) {
           id = newValueIterator->second;
         }
       });
@@ -510,9 +518,9 @@ ad_utility::MemorySize approximateMemoryNeededByIdTable(
   constexpr size_t memoryPerIdTableEntryInByte = sizeof(IdTable::value_type);
 
   // In case of overflow, throw an error.
-  if (numRows > std::numeric_limits<size_t>::max() / numColumns ||
+  if (numRows > getMaxValue<size_t>() / numColumns ||
       numRows * numColumns >
-          std::numeric_limits<size_t>::max() / memoryPerIdTableEntryInByte) {
+          getMaxValue<size_t>() / memoryPerIdTableEntryInByte) {
     throwOverflowError<size_t>(absl::StrCat("memory size of an 'IdTable' with ",
                                             numRows, " and ", numColumns,
                                             " columns"));
@@ -954,7 +962,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     config.addValidator(
         [](const std::vector<float>& vec) {
           return std::ranges::max(vec) <=
-                 std::numeric_limits<float>::max() - 1.f;
+                 getMaxValue<std::decay_t<decltype(vec)>::value_type>() - 1.f;
         },
         absl::StrCat(
             "All entries in '",
@@ -1106,14 +1114,15 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   for. Will be set as the name of the column, which will show the returned
   values of the growth function.
   @param stopFunction Before generating the next row, this function will be
-  called with the values of the function call arugments `overlap`, `ratioRows`,
+  called with the values of the function call arguments `overlap`, `ratioRows`,
   `smallerTableNumRows`, `smallerTableNumColumns`, `biggerTableNumColumns`,
   `smallerTableJoinColumnSampleSizeRatio` and
   `biggerTableJoinColumnSampleSizeRatio` for the to be generated row. Iff. this
   function returns true, the row will not be generated and the table generation
   stopped.
-  @param overlap The height of the probability for any join column entry of
-  smallerTable to be overwritten by a random join column entry of biggerTable.
+  @param overlap The height of the probability for any distinct join column
+  element of smallerTable to be overwritten by a random disintct join column
+  element of biggerTable. That is, all the occurrences of this element.
   @param resultTableNumRows How many rows the result of joining the two
   generated tables should have. The function argument `overlap` will be ignored,
   if a value for this parameter was given. Note: The actual result table size
@@ -1369,15 +1378,15 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     If there is no overflow
     `std::ceil(static_cast<float>(smallerTableNumRows) *
     smallerTableJoinColumnSampleSizeRatio) <=
-    std::floor(std::numeric_limits<float>::max())` must be true. Which is
+    std::floor(getMaxValue<float>())` must be true. Which is
     true, iff, `static_cast<float>(smallerTableNumRows) *
     smallerTableJoinColumnSampleSizeRatio <=
-    std::floor(std::numeric_limits<float>::max())` is true.
+    std::floor(getMaxValue<float>())` is true.
     We negate the second clause, transform it into an overflow safe expression
     and get our if clause.
     */
     if (static_cast<double>(smallerTableNumRows) >
-        std::floor(std::numeric_limits<double>::max()) /
+        std::floor(getMaxValue<double>()) /
             smallerTableJoinColumnSampleSizeRatio) {
       throwOverflowError<double>(
           absl::StrCat("multiplication of the number of smaller table rows (",
@@ -1392,7 +1401,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
     // Check for overflow.
     if (smallerTableJoinColumnUpperBound >
-        std::numeric_limits<size_t>::max() - 1) {
+        getMaxValue<decltype(smallerTableJoinColumnUpperBound)>() - 1) {
       throwOverflowError<double>(
           absl::StrCat("multiplication of the number of smaller table rows (",
                        smallerTableNumRows,
@@ -1410,13 +1419,13 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     neither overflow, nor underflow.
     */
     if (static_cast<double>(smallerTableNumRows) >
-        std::numeric_limits<double>::max() / static_cast<double>(ratioRows)) {
+        getMaxValue<double>() / static_cast<double>(ratioRows)) {
       throwOverflowError<double>(
           absl::StrCat(" the number of bigger table rows (",
                        smallerTableNumRows * ratioRows, ")"));
     } else if (static_cast<double>(smallerTableNumRows) *
                    static_cast<double>(ratioRows) >
-               std::floor(std::numeric_limits<double>::max()) /
+               std::floor(getMaxValue<double>()) /
                    biggerTableJoinColumnSampleSizeRatio) {
       throwOverflowError<double>(
           absl::StrCat("multiplication of the number of bigger table rows (",
@@ -1424,7 +1433,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                        ") with 'biggerTableJoinColumnSampleSizeRatio' (",
                        biggerTableJoinColumnSampleSizeRatio, ")"));
     } else if (biggerTableJoinColumnLowerBound - 1 >
-               std::numeric_limits<size_t>::max() -
+               getMaxValue<size_t>() -
                    static_cast<size_t>(
                        std::ceil(static_cast<double>(smallerTableNumRows) *
                                  static_cast<double>(ratioRows) *
@@ -1441,8 +1450,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           smallerTableNumRows * ratioRows,
           ") with 'biggerTableJoinColumnSampleSizeRatio' (",
           biggerTableJoinColumnSampleSizeRatio,
-          ") is bigger than the size_t type maximum ",
-          std::numeric_limits<size_t>::max(),
+          ") is bigger than the size_t type maximum ", getMaxValue<size_t>(),
           ". Try reducing the values for the configuration options."));
     }
     const size_t biggerTableJoinColumnUpperBound =
@@ -1519,7 +1527,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           set.
           */
           return table->getEntry<float>(rowIdx, toUnderlying(columnIdx)) >
-                 maxTime.value_or(std::numeric_limits<float>::max());
+                 maxTime.value_or(getMaxValue<decltype(maxTime)::value_type>());
         };
 
     // Hash join first, because merge/galloping join sorts all tables, if
@@ -1851,25 +1859,23 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     of rows in the bigger table|*sampleSizeRatio(rounded up))
     */
     if (static_cast<double>(smallerTableNumRows) >
-        std::numeric_limits<double>::max() /
-            static_cast<double>(smallerTableNumRows)) {
+        getMaxValue<double>() / static_cast<double>(smallerTableNumRows)) {
       throwOverflowError<double>(absl::StrCat(smallerTableNumRowsDescription,
                                               " ,multiplied with itself,"));
     } else if (static_cast<double>(smallerTableNumRows * smallerTableNumRows) >
-               std::numeric_limits<double>::max() /
-                   static_cast<double>(ratioRows)) {
+               getMaxValue<double>() / static_cast<double>(ratioRows)) {
       throwOverflowError<double>(
           absl::StrCat(smallerTableNumRowsDescription,
                        " ,multiplied with itself, and then multiplied with ",
                        ratioRowsDescription));
     } else if (static_cast<double>(smallerTableNumRows) >
-               std::numeric_limits<double>::max() / maxSampleSizeRatio) {
+               getMaxValue<double>() / maxSampleSizeRatio) {
       throwOverflowError<double>(
           absl::StrCat(smallerTableNumRowsDescription,
                        " ,multiplied with the biggest entry in "
                        "'benchmarkSampleSizeRatios'"));
     } else if (static_cast<double>(smallerTableNumRows * ratioRows) >
-               std::numeric_limits<double>::max() / maxSampleSizeRatio) {
+               getMaxValue<double>() / maxSampleSizeRatio) {
       throwOverflowError<double>(
           absl::StrCat(smallerTableNumRowsDescription,
                        " ,multiplied with the biggest entry in "
@@ -1877,7 +1883,7 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
                        ratioRowsDescription));
     } else if (std::ceil(static_cast<double>(smallerTableNumRows) *
                          maxSampleSizeRatio) >
-               std::numeric_limits<double>::max() -
+               getMaxValue<double>() -
                    std::ceil(
                        static_cast<double>(smallerTableNumRows * ratioRows) *
                        maxSampleSizeRatio)) {
