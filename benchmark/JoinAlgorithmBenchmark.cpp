@@ -969,11 +969,13 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         absl::StrCat(
             "All entries in '",
             benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
-            "' must be bigger than, or equal to, 0."),
+            "' must be smaller than, or equal to, ", getMaxValue<float>() - 1.f,
+            "."),
         absl::StrCat(
             "All entries in '",
             benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
-            "' must be bigger than, or equal to, 0."),
+            "' must be smaller than, or equal to, ", getMaxValue<float>() - 1.f,
+            "."),
         benchmarkSampleSizeRatios);
 
     /*
