@@ -653,20 +653,20 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
     decltype(auto) smallerTableNumRows =
         config.addOption("smallerTableNumRows",
-                         "Amount of rows for the smaller `IdTable` in "
-                         "the benchmarking class `Benchmarktables, where the "
+                         "Amount of rows for the smaller 'IdTable' in "
+                         "the benchmarking class 'Benchmarktables, where the "
                          "smaller table stays at the same amount  of rows and "
-                         "the bigger tables keeps getting bigger.`.",
+                         "the bigger tables keeps getting bigger.'.",
                          &configVariables_.smallerTableNumRows_, 1000UL);
 
     decltype(auto) minBiggerTableRows = config.addOption(
         "minBiggerTableRows",
-        "The minimum amount of rows for the bigger `IdTable` in benchmarking "
+        "The minimum amount of rows for the bigger 'IdTable' in benchmarking "
         "tables.",
         &configVariables_.minBiggerTableRows_, 100000UL);
     decltype(auto) maxBiggerTableRows = config.addOption(
         "maxBiggerTableRows",
-        "The maximum amount of rows for the bigger `IdTable` in benchmarking "
+        "The maximum amount of rows for the bigger 'IdTable' in benchmarking "
         "tables.",
         &configVariables_.maxBiggerTableRows_, 10000000UL);
 
@@ -681,24 +681,24 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     decltype(auto) overlapChance = config.addOption(
         "overlapChance",
         "Chance for all occurrences of a distinc element in the join column of "
-        "the smaller `IdTable` to be the same value as a distinc element in "
-        "the join column of the bigger `IdTable`. Must be in the range "
+        "the smaller 'IdTable' to be the same value as a distinc element in "
+        "the join column of the bigger 'IdTable'. Must be in the range "
         "$(0,100]$.",
         &configVariables_.overlapChance_, 42.f);
 
     decltype(auto) smallerTableSampleSizeRatio = config.addOption(
         "smallerTableJoinColumnSampleSizeRatio",
         "Join column entries of the smaller tables are picked from a sample "
-        "space with size `Amount of smaller table rows` via discrete uniform "
-        "distribution. This option adjusts the size to `Amount of rows * "
-        "ratio` (rounded up), which affects the possibility of duplicates.",
+        "space with size 'Amount of smaller table rows' via discrete uniform "
+        "distribution. This option adjusts the size to 'Amount of rows * "
+        "ratio' (rounded up), which affects the possibility of duplicates.",
         &configVariables_.smallerTableJoinColumnSampleSizeRatio_, 1.f);
     decltype(auto) biggerTableSampleSizeRatio = config.addOption(
         "biggerTableJoinColumnSampleSizeRatio",
         "Join column entries of the bigger tables are picked from a sample "
-        "space with size `Amount of bigger table rows` via discrete uniform "
-        "distribution. This option adjusts the size to `Amount of rows * "
-        "ratio` (rounded up), which affects the possibility of duplicates.",
+        "space with size 'Amount of bigger table rows' via discrete uniform "
+        "distribution. This option adjusts the size to 'Amount of rows * "
+        "ratio' (rounded up), which affects the possibility of duplicates.",
         &configVariables_.biggerTableJoinColumnSampleSizeRatio_, 1.f);
 
     decltype(auto) randomSeed = config.addOption(
@@ -711,22 +711,22 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     decltype(auto) minRatioRows = config.addOption(
         "minRatioRows",
         "The minimum row ratio between the smaller and the "
-        "bigger `IdTable` for a benchmark table in the benchmark class "
-        "`Benchmarktables, where the smaller table grows and the ratio between "
-        "tables stays the same.`",
+        "bigger 'IdTable' for a benchmark table in the benchmark class "
+        "'Benchmarktables, where the smaller table grows and the ratio between "
+        "tables stays the same.'",
         &configVariables_.minRatioRows_, 10UL);
     decltype(auto) maxRatioRows = config.addOption(
         "maxRatioRows",
         "The maximum row ratio between the smaller and the "
-        "bigger `IdTable` for a benchmark table in the benchmark class "
-        "`Benchmarktables, where the smaller table grows and the ratio between "
-        "tables stays the same.`",
+        "bigger 'IdTable' for a benchmark table in the benchmark class "
+        "'Benchmarktables, where the smaller table grows and the ratio between "
+        "tables stays the same.'",
         &configVariables_.maxRatioRows_, 1000UL);
 
     decltype(auto) maxMemoryInStringFormat = config.addOption(
         "maxMemory",
-        "Max amount of memory that any `IdTable` is allowed to take up. `0` "
-        "for unlimited memory. When set to anything else than `0`, "
+        "Max amount of memory that any 'IdTable' is allowed to take up. '0' "
+        "for unlimited memory. When set to anything else than '0', "
         "configuration option 'maxBiggerTableRows' is ignored. Example: 4kB, "
         "8MB, 24B, etc. ...",
         &configVariables_.configVariableMaxMemory_, "0B"s);
@@ -734,20 +734,20 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     decltype(auto) maxTimeSingleMeasurement = config.addOption(
         "maxTimeSingleMeasurement",
         "The maximal amount of time, in seconds, any function measurement is "
-        "allowed to take. `0` for unlimited time. Note: This can only be "
+        "allowed to take. '0' for unlimited time. Note: This can only be "
         "checked, after a measurement was taken.",
         &configVariables_.maxTimeSingleMeasurement_, 0.f);
 
     decltype(auto) benchmarkSampleSizeRatios = config.addOption(
         "benchmarkSampleSizeRatios",
-        "The sample size ratios for the benchmark class `Benchmarktables, "
-        "where only the sample size ratio changes.`, where the sample size "
+        "The sample size ratios for the benchmark class 'Benchmarktables, "
+        "where only the sample size ratio changes.', where the sample size "
         "ratio for the smaller and bigger table are set to every element "
         "combination in the cartesian product of this set with itself. "
-        "Example: For `{1.0, 2.0}` we would set both sample size ratios to "
-        "`1.0`, to `2.0`, the smaller table sample size ratio to `1.0` and the "
-        "bigger table sample size ratio to `2.0`, and the smaller table sample "
-        "size ratio to `2.0` and the bigger table sample size ratio to `1.0`.",
+        "Example: For '{1.0, 2.0}' we would set both sample size ratios to "
+        "'1.0', to '2.0', the smaller table sample size ratio to '1.0' and the "
+        "bigger table sample size ratio to '2.0', and the smaller table sample "
+        "size ratio to '2.0' and the bigger table sample size ratio to '1.0'.",
         &configVariables_.benchmarkSampleSizeRatios_,
         std::vector{0.1f, 1.f, 10.f});
 
@@ -1037,7 +1037,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           */
           const std::string descriptor{absl::StrCat(
               "'", option.getConfigOption().getIdentifier(),
-              "' must preserve its value when being cast to `double`.")};
+              "' must preserve its value when being cast to 'double'.")};
           config.addValidator(
               [](const auto& val) {
                 return isValuePreservingCast<double>(val);
