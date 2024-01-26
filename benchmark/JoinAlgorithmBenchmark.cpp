@@ -383,9 +383,11 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
       (std::get<2>(smallestOvershot.value()) + newOverlapMatches) -
               wantedNumNewOverlapMatches <
           wantedNumNewOverlapMatches - newOverlapMatches) {
-    const auto& val{smallestOvershot.value()};
-    smallerTableElementToNewElement.emplace(std::get<0>(val), std::get<1>(val));
-    newOverlapMatches += std::get<2>(val);
+    const auto& [smallerTableElement, biggerTableElement,
+                 newMatches]{smallestOvershot.value()};
+    smallerTableElementToNewElement.emplace(smallerTableElement,
+                                            biggerTableElement);
+    newOverlapMatches += newMatches;
   }
 
   // Overwrite the designated values in the smaller table.
@@ -1247,15 +1249,6 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       auto biggerTableJoinColumnSampleSizeRatioValue{
           returnOrCall(biggerTableJoinColumnSampleSizeRatio, rowIdx)};
 
-      // Do not generate the row, if the stop function is against it.
-      if (std::invoke(stopFunction, overlapValue, ratioRowsValue,
-                      smallerTableNumRowsValue, smallerTableNumColumnsValue,
-                      biggerTableNumColumnsValue,
-                      smallerTableJoinColumnSampleSizeRatioValue,
-                      biggerTableJoinColumnSampleSizeRatioValue)) {
-        break;
-      }
-
       // Add a new row without content.
       table.addRow();
       table.setEntry(
@@ -1266,11 +1259,16 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
               biggerTableJoinColumnSampleSizeRatio)(rowIdx));
 
       /*
-      Stop and delete the newest row, if the addition of measurements wasn't
-      successfull.
+      Stop and delete the newest row, if the stop function is against its
+      generation, or if the addition of measurements wasn't successfull.
       A partly filled row is of no use to anyone.
       */
-      if (!addMeasurementsToRowOfBenchmarkTable(
+      if (std::invoke(stopFunction, overlapValue, ratioRowsValue,
+                      smallerTableNumRowsValue, smallerTableNumColumnsValue,
+                      biggerTableNumColumnsValue,
+                      smallerTableJoinColumnSampleSizeRatioValue,
+                      biggerTableJoinColumnSampleSizeRatioValue) ||
+          !addMeasurementsToRowOfBenchmarkTable(
               &table, rowIdx, overlapValue, resultTableNumRows,
               std::invoke(seedGenerator), smallerTableSorted, biggerTableSorted,
               ratioRowsValue, smallerTableNumRowsValue,
