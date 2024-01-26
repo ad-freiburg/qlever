@@ -82,7 +82,8 @@ class HttpServer {
         // TODO<joka921> why is that?
         numServerThreads_{std::max(2, numServerThreads)},
         ioContext_{numServerThreads_},
-        webSocketHandler_{std::invoke(webSocketHandlerSupplier, ioContext_)} {
+        webSocketHandler_{
+            std::invoke(std::move(webSocketHandlerSupplier), ioContext_)} {
     try {
       tcp::endpoint endpoint{net::ip::make_address(ipAddress), port};
       // Open the acceptor.

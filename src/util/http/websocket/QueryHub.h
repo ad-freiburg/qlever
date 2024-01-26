@@ -7,6 +7,7 @@
 
 #include <absl/container/flat_hash_map.h>
 
+#include "util/PointerGuard.h"
 #include "util/http/beast.h"
 #include "util/http/websocket/QueryId.h"
 #include "util/http/websocket/QueryToSocketDistributor.h"
@@ -34,17 +35,27 @@ class QueryHub {
         : pointer_{std::move(pointer)}, started_{started} {}
   };
 
+  using MapType = absl::flat_hash_map<QueryId, WeakReferenceHolder>;
+
   net::io_context& ioContext_;
   /// Strand for synchronization
   net::strand<net::any_io_executor> globalStrand_;
-  std::shared_ptr<absl::flat_hash_map<QueryId, WeakReferenceHolder>>
-      socketDistributors_ =
-          std::make_shared<absl::flat_hash_map<QueryId, WeakReferenceHolder>>();
+  /// Guard to block destruction of the underlying io_context, to allow
+  /// to gracefully destroy objects that might depend on the io_context.
+  ad_utility::PointerGuard<MapType> socketDistributors_{
+      std::make_shared<MapType>()};
 
   // Expose internal API for testing
   friend net::awaitable<void>
   QueryHub_testCorrectReschedulingForEmptyPointerOnDestruct_coroutine(
       net::io_context&);
+  friend net::awaitable<void> QueryHub_verifyNoOpOnDestroyedQueryHub_coroutine(
+      net::io_context&);
+  friend net::awaitable<void>
+  QueryHub_verifyNoOpOnDestroyedQueryHubAfterSchedule_coroutine(
+      net::io_context&);
+  friend net::awaitable<void>
+  QueryHub_verifyNoErrorWhenQueryIdMissing_coroutine(net::io_context&);
 
   /// Implementation of createOrAcquireDistributorForSending and
   /// createOrAcquireDistributorForReceiving, without thread safety,

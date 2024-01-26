@@ -21,7 +21,7 @@ add_library(parser
         SelectClause.cpp
         GraphPatternOperation.cpp
         # The `Variable.cpp` from the subdirectory is linked here because otherwise we get linking errors.
-        GraphPattern.cpp data/VariableToColumnMapPrinters.cpp
+        GraphPattern.cpp data/Variable.cpp
         Iri.cpp
         Literal.cpp
         LiteralOrIri.cpp

@@ -32,11 +32,16 @@ void BenchmarkRegister::parseConfigWithAllRegisteredBenchmarks(
 
 // ____________________________________________________________________________
 std::vector<BenchmarkResults> BenchmarkRegister::runAllRegisteredBenchmarks() {
-  // Go through every registered instance of a benchmark class, measure their
-  // benchmarks and return the resulting `BenchmarkResults` in a new vector.
-  return ad_utility::transform(
-      registeredBenchmarks,
-      [](BenchmarkPointer& instance) { return instance->runAllBenchmarks(); });
+  /*
+  Go through every registered instance of a benchmark class, update the default
+  metadata oftheir general metadata, measure their benchmarks and return the
+  resulting `BenchmarkResults` in a new vector.
+  */
+  return ad_utility::transform(registeredBenchmarks,
+                               [](BenchmarkPointer& instance) {
+                                 instance->updateDefaultGeneralMetadata();
+                                 return instance->runAllBenchmarks();
+                               });
 }
 
 // ____________________________________________________________________________
@@ -89,5 +94,31 @@ auto BenchmarkResults::getTables() const -> std::vector<ResultTable> {
   return ad_utility::transform(
       resultTables_,
       [](const auto& pointer) -> ResultTable { return (*pointer); });
+}
+
+// ____________________________________________________________________________
+BenchmarkMetadata& BenchmarkInterface::getGeneralMetadata() {
+  return generalClassMetadata_;
+}
+
+// ____________________________________________________________________________
+const BenchmarkMetadata& BenchmarkInterface::getGeneralMetadata() const {
+  return generalClassMetadata_;
+}
+
+// ____________________________________________________________________________
+ad_utility::ConfigManager& BenchmarkInterface::getConfigManager() {
+  return manager_;
+}
+
+// ____________________________________________________________________________
+const ad_utility::ConfigManager& BenchmarkInterface::getConfigManager() const {
+  return manager_;
+}
+
+// ____________________________________________________________________________
+void BenchmarkInterface::updateDefaultGeneralMetadata() {
+  BenchmarkMetadata& meta{getGeneralMetadata()};
+  meta.addKeyValuePair("time-of-measurement", ad_utility::Log::getTimeStamp());
 }
 }  // namespace ad_benchmark

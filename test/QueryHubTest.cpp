@@ -109,6 +109,97 @@ ASYNC_TEST(QueryHub, simulateLifecycleWithDifferentQueryIds) {
 
 namespace ad_utility::websocket {
 
+// Ensures that nothing is scheduled when QueryHub is already destroyed
+ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHub) {
+  {
+    std::unique_ptr<QueryHub> queryHub = std::make_unique<QueryHub>(ioContext);
+    auto distributor = co_await queryHub->createOrAcquireDistributorForSending(
+        QueryId::idFromString("abc"));
+    std::atomic_flag blocker = false;
+    std::atomic_flag started = false;
+    // Add task to "block" execution
+    net::post(queryHub->globalStrand_, [&blocker, &started]() {
+      started.test_and_set();
+      started.notify_all();
+      blocker.wait(false);
+    });
+    ad_utility::JThread thread{
+        [&ioContext]() { EXPECT_EQ(1, ioContext.poll_one()); }};
+    // Destroy object
+    queryHub.reset();
+
+    // Wait for thread to start
+    started.wait(false);
+
+    co_await distributor->signalEnd();
+
+    // unblock global strand
+    blocker.test_and_set();
+    blocker.notify_all();
+  }
+  // Ensure no scheduled tasks left to run
+  EXPECT_EQ(ioContext.poll(), 0);
+}
+
+// _____________________________________________________________________________
+
+// Ensures that a scheduled task does not modify the map after destruction
+// of the QueryHub.
+ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHubAfterSchedule) {
+  std::weak_ptr<QueryHub::MapType> distributorMap;
+  {
+    std::unique_ptr<QueryHub> queryHub = std::make_unique<QueryHub>(ioContext);
+    auto distributor = co_await queryHub->createOrAcquireDistributorForSending(
+        QueryId::idFromString("abc"));
+    std::atomic_flag blocker = false;
+    std::atomic_flag started = false;
+    // Add task to "block" execution
+    net::post(queryHub->globalStrand_, [&blocker, &started]() {
+      started.test_and_set();
+      started.notify_all();
+      blocker.wait(false);
+    });
+    ad_utility::JThread thread{
+        [&ioContext]() { EXPECT_EQ(1, ioContext.poll_one()); }};
+
+    // Wait for thread to start
+    started.wait(false);
+
+    co_await distributor->signalEnd();
+    distributorMap = queryHub->socketDistributors_.getWeak();
+    // Destroy object
+    queryHub.reset();
+
+    // unblock global strand
+    blocker.test_and_set();
+    blocker.notify_all();
+  }
+  // Ensure 1 scheduled task left to run
+  EXPECT_EQ(ioContext.poll(), 1);
+  EXPECT_TRUE(distributorMap.expired());
+}
+
+// _____________________________________________________________________________
+
+ASYNC_TEST(QueryHub, verifyNoErrorWhenQueryIdMissing) {
+  QueryHub queryHub{ioContext};
+  auto queryId = QueryId::idFromString("abc");
+  auto distributor =
+      co_await queryHub.createOrAcquireDistributorForSending(queryId);
+  // Under normal conditions this would happen when
+  // `createOrAcquireDistributorForSending` is called after the reference count
+  // of the previous distributor with the same id reached zero, but before the
+  // destructor running the cleanup could remove the entry. Because this edge
+  // case is very hard to simulate under real conditions (dependent on
+  // scheduling of the operating system) we just fake it here to check the
+  // behaviour we desire.
+  queryHub.socketDistributors_.get().clear();
+  EXPECT_NO_THROW(co_await distributor->signalEnd());
+  EXPECT_TRUE(queryHub.socketDistributors_.get().empty());
+}
+
+// _____________________________________________________________________________
+
 ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");

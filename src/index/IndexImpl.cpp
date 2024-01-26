@@ -7,7 +7,6 @@
 #include "./IndexImpl.h"
 
 #include <algorithm>
-#include <cmath>
 #include <cstdio>
 #include <future>
 #include <optional>
@@ -23,10 +22,10 @@
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/Serializer/FileSerializer.h"
+#include "util/ThreadSafeQueue.h"
 #include "util/TupleHelpers.h"
 #include "util/TypeTraits.h"
 
@@ -188,7 +187,7 @@ auto fixBlockAfterPatternJoin(auto block) {
 
 // ____________________________________________________________________________
 std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
-    PatternCreatorNew::TripleSorter sortersFromPatternCreator,
+    PatternCreator::TripleSorter sortersFromPatternCreator,
     auto isQleverInternalId) {
   auto&& [hasPatternPredicateSortedByPSO, secondSorter] =
       sortersFromPatternCreator;
@@ -265,8 +264,8 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
   LOG(INFO) << "Adding " << hasPatternPredicateSortedByPSO->size()
-            << " additional triples to the POS and PSO permutation for the "
-               "`ql:has-pattern` predicate ..."
+            << "triples to the POS and PSO permutation for "
+               "`ql:has-pattern` ..."
             << std::endl;
   auto noPattern = Id::makeFromInt(NO_PATTERN);
   static_assert(NumColumnsIndexBuilding == 3);
@@ -788,12 +787,14 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
               << std::endl;
   }
 
+  // We have to load the patterns first to figure out if the patterns were built
+  // at all.
   if (usePatterns_) {
     try {
       PatternCreator::readPatternsFromFile(
           onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
           avgNumDistinctPredicatesPerSubject_,
-          numDistinctSubjectPredicatePairs_, patterns_, hasPattern_);
+          numDistinctSubjectPredicatePairs_, patterns_);
     } catch (const std::exception& e) {
       LOG(WARN) << "Could not load the patterns. The internal predicate "
                    "`ql:has-predicate` is therefore not available (and certain "
@@ -808,23 +809,10 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
 
 // _____________________________________________________________________________
 void IndexImpl::throwExceptionIfNoPatterns() const {
-  if (!usePatterns_) {
-    AD_THROW(
-        "The requested feature requires a loaded patterns file ("
-        "do not specify the --no-patterns option for this to work)");
-  }
-}
-
-// _____________________________________________________________________________
-const vector<PatternID>& IndexImpl::getHasPattern() const {
-  throwExceptionIfNoPatterns();
-  return hasPattern_;
-}
-
-// _____________________________________________________________________________
-const CompactVectorOfStrings<Id>& IndexImpl::getHasPredicate() const {
-  throwExceptionIfNoPatterns();
-  return hasPredicate_;
+  AD_CONTRACT_CHECK(
+      usePatterns_,
+      "The requested feature requires a loaded patterns file ("
+      "do not specify the --no-patterns option for this to work)");
 }
 
 // _____________________________________________________________________________
@@ -850,23 +838,6 @@ size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
   throwExceptionIfNoPatterns();
   return numDistinctSubjectPredicatePairs_;
 }
-
-// _____________________________________________________________________________
-template <class T>
-void IndexImpl::writeAsciiListFile(const string& filename, const T& ids) const {
-  std::ofstream f(filename);
-
-  for (size_t i = 0; i < ids.size(); ++i) {
-    f << ids[i] << ' ';
-  }
-  f.close();
-}
-
-template void IndexImpl::writeAsciiListFile<vector<Id>>(
-    const string& filename, const vector<Id>& ids) const;
-
-template void IndexImpl::writeAsciiListFile<vector<Score>>(
-    const string& filename, const vector<Score>& ids) const;
 
 // _____________________________________________________________________________
 bool IndexImpl::isLiteral(const string& object) const {
@@ -1034,12 +1005,19 @@ void IndexImpl::readConfiguration() {
   };
 
   loadDataMember("has-all-permutations", loadAllPermutations_, true);
-
   loadDataMember("num-predicates-normal", numPredicatesNormal_);
   // These might be missing if there are only two permutations.
   loadDataMember("num-subjects-normal", numSubjectsNormal_, 0);
   loadDataMember("num-objects-normal", numObjectsNormal_, 0);
   loadDataMember("num-triples-normal", numTriplesNormal_);
+
+  // Compute unique ID for this index.
+  //
+  // TODO: This is a simplistic way. It would be better to incorporate bytes
+  // from the index files.
+  indexId_ = absl::StrCat("#", getKbName(), ".", numTriplesNormal_, ".",
+                          numSubjectsNormal_, ".", numPredicatesNormal_, ".",
+                          numObjectsNormal_);
 }
 
 // ___________________________________________________________________________
@@ -1338,28 +1316,24 @@ const Permutation& IndexImpl::getPermutation(Permutation::Enum p) const {
 
 // __________________________________________________________________________
 Index::NumNormalAndInternal IndexImpl::numDistinctSubjects() const {
-  if (hasAllPermutations()) {
-    auto numActually = numSubjectsNormal_;
-    return {numActually, spo_.metaData().getNofDistinctC1() - numActually};
-  } else {
-    AD_THROW(
-        "Can only get # distinct subjects if all 6 permutations "
-        "have been registered on sever start (and index build time) "
-        "with the -a option.");
-  }
+  AD_CONTRACT_CHECK(
+      hasAllPermutations(),
+      "Can only get # distinct subjects if all 6 permutations "
+      "have been registered on sever start (and index build time) "
+      "with the -a option.");
+  auto numActually = numSubjectsNormal_;
+  return {numActually, spo_.metaData().getNofDistinctC1() - numActually};
 }
 
 // __________________________________________________________________________
 Index::NumNormalAndInternal IndexImpl::numDistinctObjects() const {
-  if (hasAllPermutations()) {
-    auto numActually = numObjectsNormal_;
-    return {numActually, osp_.metaData().getNofDistinctC1() - numActually};
-  } else {
-    AD_THROW(
-        "Can only get # distinct objects if all 6 permutations "
-        "have been registered on sever start (and index build time) "
-        "with the -a option.");
-  }
+  AD_CONTRACT_CHECK(
+      hasAllPermutations(),
+      "Can only get # distinct objects if all 6 permutations "
+      "have been registered on sever start (and index build time) "
+      "with the -a option.");
+  auto numActually = numObjectsNormal_;
+  return {numActually, osp_.metaData().getNofDistinctC1() - numActually};
 }
 
 // __________________________________________________________________________
@@ -1566,30 +1540,26 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-std::optional<PatternCreatorNew::TripleSorter> IndexImpl::createSPOAndSOP(
+std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     size_t numColumns, auto& isInternalId, BlocksOfTriples sortedTriples,
     NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
   auto numSubjectCounter =
       makeNumDistinctIdsCounter<0>(numSubjectsNormal, isInternalId);
-  std::optional<PatternCreatorNew::TripleSorter> result;
+  std::optional<PatternCreator::TripleSorter> result;
   if (usePatterns_) {
     // We will return the next sorter.
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 0);
     // For now (especially for testing) We build the new pattern format as well
     // as the old one to see that they match.
-    PatternCreatorNew patternCreator{
-        onDiskBase_ + ".index.patterns.new",
+    PatternCreator patternCreator{
+        onDiskBase_ + ".index.patterns",
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
-    PatternCreator patternCreatorOld{onDiskBase_ + ".index.patterns"};
-    auto pushTripleToPatterns = [&patternCreator, &patternCreatorOld,
+    auto pushTripleToPatterns = [&patternCreator,
                                  &isInternalId](const auto& triple) {
       bool ignoreForPatterns = std::ranges::any_of(triple, isInternalId);
       auto tripleArr = std::array{triple[0], triple[1], triple[2]};
       patternCreator.processTriple(tripleArr, ignoreForPatterns);
-      if (!ignoreForPatterns) {
-        patternCreatorOld.processTriple(tripleArr);
-      }
     };
     createPermutationPair(numColumns, AD_FWD(sortedTriples), spo_, sop_,
                           nextSorter.makePushCallback()...,

@@ -112,8 +112,6 @@ addLinkAndDiscoverTest(IndexMetaDataTest index)
 # TODO<qup42, joka921> fix this
 addLinkAndDiscoverTestSerial(IndexTest index)
 
-addLinkAndDiscoverTest(FTSAlgorithmsTest index)
-
 addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)
@@ -224,9 +222,6 @@ addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 addLinkAndDiscoverTest(VocabularyTest index)
 
 addLinkAndDiscoverTest(IteratorTest)
-
-# Here we also seem to have race conditions on the tests
-addLinkAndDiscoverTestSerial(PatternCreatorTest index)
 
 # Stxxl currently always uses a file ./-stxxl.disk for all indices, which
 # makes it impossible to run the test cases for the Index class in parallel.
@@ -386,3 +381,5 @@ addLinkAndDiscoverTest(ParseableDurationTest)
 addLinkAndDiscoverTest(ConstantsTest)
 
 addLinkAndDiscoverTest(JThreadTest)
+
+addLinkAndDiscoverTest(PointerGuardTest)

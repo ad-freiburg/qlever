@@ -392,7 +392,7 @@ IdTable CompressedRelationReader::scan(
       // block in parallel
 #pragma omp task
       {
-        if (!cancellationHandle->isCancelled()) {
+        if (!cancellationHandle->isCancelled("CompressedRelation scan")) {
           decompressLambda();
         }
       }
