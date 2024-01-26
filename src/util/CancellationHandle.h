@@ -121,6 +121,8 @@ class CancellationHandle {
   /// Make sure internal state is set back to
   /// `CancellationState::NOT_CANCELLED`, in order to prevent logging warnings
   /// in the console that would otherwise be triggered by the watchdog.
+  /// NOTE: The parameter state is expected to be one of `CHECK_WINDOW_MISSED`
+  /// or `WAITING_FOR_CHECK`, otherwise it will violate the correctness check.
   template <typename... ArgTypes>
   void pleaseWatchDog(CancellationState state,
                       const InvocableWithConvertibleReturnType<
@@ -128,20 +130,35 @@ class CancellationHandle {
                       ArgTypes&&... argTypes) requires WatchDogEnabled {
     using DurationType =
         std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
+    AD_CORRECTNESS_CHECK(!detail::isCancelled(state) &&
+                         state != CancellationState::NOT_CANCELLED);
 
-    if (state == CancellationState::CHECK_WINDOW_MISSED) {
-      LOG(WARN) << "Cancellation check missed deadline of "
-                << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
-                << " by "
-                << ParseableDuration{duration_cast<DurationType>(
-                       steady_clock::now() - startTimeoutWindow_.load())}
-                << ". Stage: "
-                << std::invoke(detailSupplier, AD_FWD(argTypes)...)
-                << std::endl;
-    }
-
-    cancellationState_.compare_exchange_strong(
-        state, CancellationState::NOT_CANCELLED, std::memory_order_relaxed);
+    bool windowMissed = state == CancellationState::CHECK_WINDOW_MISSED;
+    // Because we know `state` will be one of `CHECK_WINDOW_MISSED` or
+    // `WAITING_FOR_CHECK` at this point, we can skip the initial check.
+    do {
+      if (cancellationState_.compare_exchange_weak(
+              state, CancellationState::NOT_CANCELLED,
+              std::memory_order_relaxed)) {
+        if (windowMissed) {
+          LOG(WARN) << "The time since the last timeout check is at least "
+                    << ParseableDuration{duration_cast<DurationType>(
+                                             steady_clock::now() -
+                                             startTimeoutWindow_.load()) +
+                                         DESIRED_CANCELLATION_CHECK_INTERVAL}
+                    << ", should be at most "
+                    << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
+                    << ". Stage: "
+                    << std::invoke(detailSupplier, AD_FWD(argTypes)...)
+                    << std::endl;
+        }
+        break;
+      }
+      // If state is NOT_CANCELLED this means another thread already reported
+      // the missed deadline, so we don't report a second time or a cancellation
+      // kicked in and there is no need to continue the loop.
+    } while (!detail::isCancelled(state) &&
+             state != CancellationState::NOT_CANCELLED);
   }
 
   /// Internal function that starts the watch dog. It will set this
@@ -196,12 +213,18 @@ class CancellationHandle {
   /// Return true if this cancellation handle has been cancelled, false
   /// otherwise. Note: Make sure to not use this value to set any other atomic
   /// value with relaxed memory ordering, as this may lead to out-of-thin-air
-  /// values. It also does not interact with the watchdog at all, prefer
-  /// `throwIfCancelled` if possible.
-  AD_ALWAYS_INLINE bool isCancelled() const {
+  /// values. If the watchdog is enabled, this will please it and print
+  /// a warning with the passed detail string.
+  AD_ALWAYS_INLINE bool isCancelled(std::string_view details) {
     if constexpr (CancellationEnabled) {
-      return detail::isCancelled(
-          cancellationState_.load(std::memory_order_relaxed));
+      auto state = cancellationState_.load(std::memory_order_relaxed);
+      bool isCancelled = detail::isCancelled(state);
+      if constexpr (WatchDogEnabled) {
+        if (!isCancelled && state != CancellationState::NOT_CANCELLED) {
+          pleaseWatchDog(state, std::identity{}, details);
+        }
+      }
+      return isCancelled;
     } else {
       return false;
     }
@@ -234,6 +257,10 @@ class CancellationHandle {
   FRIEND_TEST(CancellationHandle,
               verifyCheckAfterDeadlineMissDoesReportProperly);
   FRIEND_TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel);
+  FRIEND_TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary);
+  FRIEND_TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog);
+  FRIEND_TEST(CancellationHandle,
+              verifyPleaseWatchDogDoesNotAcceptInvalidState);
 };
 
 using SharedCancellationHandle = std::shared_ptr<CancellationHandle<>>;
