@@ -575,10 +575,6 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
 
   std::vector<Variable> variablesXAndY{varX, varY};
 
-  std::vector<ColumnIndex> sortedColumns = {0};
-  Tree subtreeWithSort =
-      makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
-
   SparqlExpressionPimpl avgXPimpl = makeAvgPimpl(varX);
   SparqlExpressionPimpl avgDistinctXPimpl = makeAvgPimpl(varX, true);
   SparqlExpressionPimpl avgCountXPimpl = makeAvgCountPimpl(varX);
@@ -607,30 +603,33 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   // Enable optimization
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
 
-  // Must have exactly one variable to group by.
-  testFailure(emptyVariables, aliasesAvgX, subtreeWithSort, avgAggregate);
-  testFailure(variablesXAndY, aliasesAvgX, subtreeWithSort, avgAggregate);
-  // Top operation must be SORT
-  testFailure(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX,
+  // Must have exactly one variable to group by.^
+  testFailure(emptyVariables, aliasesAvgX, validJoinWhenGroupingByX,
+              avgAggregate);
+  testFailure(variablesXAndY, aliasesAvgX, validJoinWhenGroupingByX,
               avgAggregate);
   // Can not be a nested aggregate
-  testFailure(variablesOnlyX, aliasesAvgCountX, subtreeWithSort,
+  testFailure(variablesOnlyX, aliasesAvgCountX, validJoinWhenGroupingByX,
               avgCountAggregate);
   // Do not support distinct aggregates
-  testFailure(variablesOnlyX, aliasesAvgDistinctX, subtreeWithSort,
+  testFailure(variablesOnlyX, aliasesAvgDistinctX, validJoinWhenGroupingByX,
               avgDistinctAggregate);
   // Optimization has to be enabled
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
-  testFailure(variablesOnlyX, aliasesAvgX, subtreeWithSort, avgAggregate);
+  testFailure(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX,
+              avgAggregate);
 
   // Support for MIN & MAX & SUM
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
-  testSuccess(variablesOnlyX, aliasesMaxX, subtreeWithSort, maxAggregate);
-  testSuccess(variablesOnlyX, aliasesMinX, subtreeWithSort, minAggregate);
-  testSuccess(variablesOnlyX, aliasesSumX, subtreeWithSort, sumAggregate);
+  testSuccess(variablesOnlyX, aliasesMaxX, validJoinWhenGroupingByX,
+              maxAggregate);
+  testSuccess(variablesOnlyX, aliasesMinX, validJoinWhenGroupingByX,
+              minAggregate);
+  testSuccess(variablesOnlyX, aliasesSumX, validJoinWhenGroupingByX,
+              sumAggregate);
 
   // Check details of data structure are correct.
-  GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX, subtreeWithSort};
+  GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX};
   auto optimizedAggregateData =
       groupBy.checkIfHashMapOptimizationPossible(avgAggregate);
   ASSERT_TRUE(optimizedAggregateData.has_value());
@@ -663,22 +662,19 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
       qec, Permutation::Enum::PSO,
       SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
-  std::vector<ColumnIndex> sortedColumns = {1};
-  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
 
   SparqlExpressionPimpl avgYPimpl = makeAvgPimpl(varY);
   std::vector<Alias> aliasesAvgY{Alias{avgYPimpl, Variable{"?avg"}}};
 
   // Calculate result with optimization
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
-  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, sortedJoin};
+  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, join};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 
   // Clear cache, calculate result without optimization
   qec->clearCacheUnpinnedOnly();
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
-  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY,
-                                     sortedJoin};
+  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY, join};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
 
   // Compare results, using debugString as the result only contains 2 rows
@@ -846,10 +842,6 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
   Tree xyScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO, SparqlTriple{varX, {"<label>"}, varY});
 
-  // Optimization will not be used if subtree is not sort
-  std::vector<ColumnIndex> sortedColumns = {0};
-  Tree subtreeWithSort = makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
-
   auto groupConcatExpression1 = makeGroupConcatPimpl(varY);
   auto aliasGC1 = Alias{groupConcatExpression1, varZ};
 
@@ -859,7 +851,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
 
   // SELECT (GROUP_CONCAT(?y) as ?z) (GROUP_CONCAT(?y;seperator=",") as ?w)
   // WHERE {...} GROUP BY ?x
-  GroupBy groupBy{qec, variablesOnlyX, {aliasGC1, aliasGC2}, subtreeWithSort};
+  GroupBy groupBy{qec, variablesOnlyX, {aliasGC1, aliasGC2}, xyScan};
   auto result = groupBy.getResult();
   const auto& table = result->idTable();
 
@@ -940,10 +932,6 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
   Tree xyScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO, SparqlTriple{varX, {"<label>"}, varY});
 
-  // Optimization will not be used if subtree is not sort
-  std::vector<ColumnIndex> sortedColumns = {0};
-  Tree subtreeWithSort = makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
-
   auto minExpression = makeMinPimpl(varY);
   auto aliasMin = Alias{minExpression, varZ};
 
@@ -952,7 +940,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
   auto aliasMax = Alias{maxExpression, varW};
 
   // SELECT (MIN(?y) as ?z) (MAX(?y) as ?w) WHERE {...} GROUP BY ?x
-  GroupBy groupBy{qec, variablesOnlyX, {aliasMin, aliasMax}, subtreeWithSort};
+  GroupBy groupBy{qec, variablesOnlyX, {aliasMin, aliasMax}, xyScan};
   auto result = groupBy.getResult();
   const auto& table = result->idTable();
 
@@ -987,8 +975,6 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
       qec, Permutation::Enum::PSO,
       SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
-  std::vector<ColumnIndex> sortedColumns = {1};
-  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
 
   // (AVG(?y) as ?avg)
   Variable varAvg{"?avg"};
@@ -1052,15 +1038,14 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
 
   // Clear cache, calculate result without optimization
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
-  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY,
-                                     sortedJoin};
+  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY, join};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
 
   // Calculate result with optimization, after calculating it without,
   // since optimization changes tree
   qec->clearCacheUnpinnedOnly();
   RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
-  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, sortedJoin};
+  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, join};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 
   // Compare results, using debugString as the result only contains 2 rows

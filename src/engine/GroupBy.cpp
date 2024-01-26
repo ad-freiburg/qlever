@@ -709,11 +709,6 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
     return std::nullopt;
   }
 
-  auto* sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
-  if (!sort) {
-    return std::nullopt;
-  }
-
   // Only allow one group by variable
   if (_groupByVariables.size() != 1) {
     return std::nullopt;
