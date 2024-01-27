@@ -116,7 +116,7 @@ void Vocabulary<S, C, I>::createFromSet(
 // _____________________________________________________________________________
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::stringIsLiteral(const string& s) {
-  return s.size() > 0 && s[0] == '\"';
+  return s.starts_with('"');
 }
 
 // _____________________________________________________________________________

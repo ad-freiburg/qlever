@@ -1709,7 +1709,7 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeIsNumericExpression);
   } else if (functionName == "bound") {
     return makeBoundExpression(
-        std::move(std::make_unique<VariableExpression>(visit(ctx->var()))));
+        std::make_unique<VariableExpression>(visit(ctx->var())));
   } else {
     reportError(
         ctx,
