@@ -41,7 +41,6 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
     return std::make_shared<SpatialJoin>(getExecutionContext(), triple.value(),
           childLeft, childRight, maxDist);
   } else {
-    LOG(INFO) << "variable does not match" << varOfChild._name << std::endl;
     AD_THROW("variable does not match");
   }
 }
@@ -144,7 +143,6 @@ ResultTable SpatialJoin::computeResult() {
 
   // a maximum distance of 0 encodes infinity -> return cross product
   if (maxDist == 0) {
-    LOG(INFO) << "if case" << std::endl;
     IdTable idtable = IdTable(0, _allocator);
     idtable.setNumColumns(getResultWidth());
 
@@ -193,7 +191,6 @@ ResultTable SpatialJoin::computeResult() {
     std::vector<ColumnIndex> sortedBy = {0};
     return ResultTable(std::move(idtable), {}, std::move(lv));
   } else {
-    LOG(INFO) << "else case " << std::endl;
     std::shared_ptr<const ResultTable> res_left_ = childLeft->getResult();
     std::shared_ptr<const ResultTable> res_right_ = childRight->getResult();
     const IdTable* res_left = &res_left_->idTable();

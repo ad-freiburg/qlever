@@ -157,7 +157,6 @@ endif()
 ######################################
 # BOOST
 ######################################
-# set(Boost_INCLUDE_DIR /home/jonathan/Desktop/boost_installation/boost_1_82_0/boost_1_82_0)
 find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
