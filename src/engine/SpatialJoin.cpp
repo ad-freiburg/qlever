@@ -8,68 +8,6 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "util/GeoSparqlHelpers.h"
 
-// soll eine Klasse sein, welche aus dem nichts ein Ergebnis erzeugt
-
-// note that this class is taking some unnecessary parameters for testing
-/* SpatialJoin::SpatialJoin(QueryExecutionContext* qec,
-            std::shared_ptr<QueryExecutionTree> t1,
-            std::shared_ptr<QueryExecutionTree> t2,
-            ColumnIndex t1JoinCol, ColumnIndex t2JoinCol,
-            bool keepJoinColumn,
-            IdTable leftChildTable,
-            std::vector<std::optional<Variable>> variablesLeft,
-            IdTable rightChildTable,
-            std::vector<std::optional<Variable>> variablesRight)
-          : Operation(qec){ */
-  /* ValuesForTesting operationLeft = ValuesForTesting(qec,
-      std::move(leftChildTable), std::move(variablesLeft));
-  ValuesForTesting operationRight = ValuesForTesting(qec,
-      std::move(rightChildTable), std::move(variablesRight)); */
-  /*_left = ad_utility::makeExecutionTree<ValuesForTesting>(qec,
-      std::move(leftChildTable),variablesLeft);
-  _right = ad_utility::makeExecutionTree<ValuesForTesting>(qec,
-      std::move(rightChildTable), variablesRight);
-  _leftJoinCol = t1JoinCol;
-  _rightJoinCol = t2JoinCol;
-  _keepJoinColumn = keepJoinColumn;
-  _variablesLeft = std::move(variablesLeft);
-  _variablesRight = std::move(variablesRight);
-  _verbose_init = true;
-  std::cout << "test in constructor" << std::endl;
-}
-
-SpatialJoin::SpatialJoin(QueryExecutionContext* qec,
-            std::shared_ptr<QueryExecutionTree> t1,
-            std::shared_ptr<QueryExecutionTree> t2,
-            ColumnIndex t1JoinCol, ColumnIndex t2JoinCol,
-            bool keepJoinColumn)
-        : Operation(qec),
-        _left(t1),
-        _right(t2),
-        _leftJoinCol(t1JoinCol),
-        _rightJoinCol(t2JoinCol),
-        _keepJoinColumn(keepJoinColumn) {
-  std::cout << "another test in constructor" << std::endl;
-}
-
-SpatialJoin::SpatialJoin() {  // never use as qec of operation is not initialized
-    std::cout << "yet another test in constructor" << std::endl;
-}
-
-SpatialJoin::SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple) // delete this constructor
-      : Operation(qec) {
-  std::cout << "so many tests in constructor" << std::endl;
-  std::cout << triple._s << " " << triple._p << " " << triple._o
-            << " " << std::endl;
-    
-  if (triple._s.isVariable() && triple._o.isVariable()) {
-    leftChildVariable = triple._s.getVariable();
-    rightChildVariable = triple._o.getVariable();
-  } else {
-    AD_THROW("SpatialJoin needs two variables");
-  }
-} */
-
 SpatialJoin::SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
   std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
   std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
@@ -77,7 +15,6 @@ SpatialJoin::SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
             : Operation(qec) {
   this->triple = triple;
   this->maxDist = maxDist;
-  LOG(INFO) << "maxDist: " << maxDist << std::endl;
   if (childLeft) {
     this->childLeft = childLeft.value();
   }
@@ -110,9 +47,6 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
 }
 
 bool SpatialJoin::isConstructed() {
-  // if the spatialJoin has both children its construction is done. Then true
-  // is returned. This is needed in the QueryPlanner, so that the QueryPlanner
-  // stops trying to add children, after it is already constructed
   if (childLeft && childRight) {
     return true;
   }
@@ -160,7 +94,7 @@ size_t SpatialJoin::getResultWidth() const {
 }
 
 size_t SpatialJoin::getCostEstimate() {
-  return 1;  // dummy return for now
+  return 50000;  // dummy return for now
 }
 
 uint64_t SpatialJoin::getSizeEstimateBeforeLimit() {
@@ -180,10 +114,10 @@ vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
 }
 
 ResultTable SpatialJoin::computeResult() {
-  /* returns everything between the first two quotes. If the string does not
-  * contain two quotes, the string is returned as a whole
-  */
   auto betweenQuotes = [] (std::string extractFrom) {
+    /* returns everything between the first two quotes. If the string does not
+    * contain two quotes, the string is returned as a whole
+    */
     size_t pos1 = extractFrom.find("\"", 0);
     size_t pos2 = extractFrom.find("\"", pos1 + 1);
     if (pos1 != std::string::npos && pos2 != std::string::npos) {
@@ -195,13 +129,13 @@ ResultTable SpatialJoin::computeResult() {
   
   auto computeDist = [&](const IdTable* res_left, const IdTable* res_right,
                         size_t rowLeft, size_t rowRight,
-                        ColumnIndex leftJoinCol, ColumnIndex rightJoinCol) {
+                        ColumnIndex leftPointCol, ColumnIndex rightPointCol) {
     std::string point1 = ExportQueryExecutionTrees::idToStringAndType(
             getExecutionContext()->getIndex(),
-            res_left->at(rowLeft, leftJoinCol), {}).value().first;
+            res_left->at(rowLeft, leftPointCol), {}).value().first;
     std::string point2 = ExportQueryExecutionTrees::idToStringAndType(
             getExecutionContext()->getIndex(),
-            res_right->at(rowRight, rightJoinCol), {}).value().first;
+            res_right->at(rowRight, rightPointCol), {}).value().first;
     point1 = betweenQuotes(point1);
     point2 = betweenQuotes(point2);
     double dist = ad_utility::detail::wktDistImpl(point1, point2);
@@ -303,13 +237,13 @@ ResultTable SpatialJoin::computeResult() {
         size_t rescol = 0;
         double dist = computeDist(res_left, res_right, rowLeft, rowRight,
               leftJoinCol, rightJoinCol);
-        if (dist < maxDist) {  // no need to check if maxDist == 0, see if above
+        if (dist < maxDist) {
           result.emplace_back();
           if (addDistToResult) {
             result.at(resrow, rescol) = ValueId::makeFromDouble(dist);
             rescol += 1;
           }
-          // add other columns to result table
+          // add columns to result table
           rescol = addColumns(&result, res_left, resrow, rescol,
                               rowLeft);
           rescol = addColumns(&result, res_right, resrow, rescol,
@@ -321,31 +255,14 @@ ResultTable SpatialJoin::computeResult() {
     return ResultTable(std::move(result),
             std::vector<ColumnIndex>{}, LocalVocab{});
   }
-  LOG(INFO) << "this should never be reached" << std::endl;
-  IdTable idtable = IdTable(0, _allocator);
-  idtable.setNumColumns(getResultWidth());
-  return ResultTable(std::move(idtable), {}, {});
+  AD_THROW("SpatialJoin: this line should never be reached");
 }
 
-/*shared_ptr<const ResultTable> SpatialJoin::geoJoinTest() {
-  std::shared_ptr<ResultTable> res = std::make_shared<ResultTable>(
-    ResultTable(IdTable(1, _allocator),
-          std::vector<ColumnIndex>{}, LocalVocab{}));
-  return res;
-} */
 
 VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
-  // welche Variable kommt zu welcher Spalte
-  std::cout << "varColMap SpatialJoin " << std::endl;
   VariableToColumnMap variableToColumnMap;
   auto makeCol = makePossiblyUndefinedColumn;
   
-  /*Depending on the amount of children the operation returns a different
-  VariableToColumnMap. If the operation doesn't have both children it needs
-  to aggressively push the queryplanner to add the children, because the
-  operation can't exist without them. If it has both children, it can return
-  the variable to column map, which will be present, after the operation has
-  computed its result*/
   if (!(childLeft || childRight)) {
     // none of the children has been added
     variableToColumnMap[leftChildVariable.value()] = makeCol(ColumnIndex{0});
