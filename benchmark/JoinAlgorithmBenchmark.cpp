@@ -234,7 +234,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 @brief Create overlaps between the join columns of the IdTables until it is no
 longer possible to grow closer to the wanted number of overlap matches.
 Note: Because of runtime complexity concerns, not all overlap possibilities can
-be tried and the end result can be quite unoptimal.
+be tried and the end result can be unoptimal.
 
 @param smallerTable The table, where distinct join column elements will be
 overwritten.
@@ -327,26 +327,13 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   size_t newOverlapMatches{0};
   ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
       smallerTableElementToNewElement{};
-  /*
-  In case, our smallest overshot is still closer to `wantedNumNewOverlapMatches`
-  than our biggest undershot.
-  First value is the smaller table value, second value the bigger table value
-  and the `size_t` is the number of new matches created, when replacing the
-  smaller table value with the bigger table value in the smaller table join
-  column.
-  */
-  std::optional<std::tuple<std::reference_wrapper<const ValueId>,
-                           std::reference_wrapper<const ValueId>, size_t>>
-      smallestOvershot;
-  ;
   std::ranges::for_each(
       smallerTableJoinColumnDistinctElements,
       [&biggerTableJoinColumnDistinctElements, &randomBiggerTableElement,
        &numOccurrencesElementInSmallerTableJoinColumn,
        &numOccurrencesElementInBiggerTableJoinColumn,
        &wantedNumNewOverlapMatches, &newOverlapMatches,
-       &smallerTableElementToNewElement,
-       &smallestOvershot](const ValueId& smallerTableId) {
+       &smallerTableElementToNewElement](const ValueId& smallerTableId) {
         const auto& biggerTableId{biggerTableJoinColumnDistinctElements.at(
             randomBiggerTableElement())};
 
@@ -361,34 +348,15 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
           newMatches *= numOccurencesBiggerTable;
         }
 
-        // Just add as long as possible and always save the smallest overshot.
+        // Just add as long as the result is smaller/equal to the wanted number
+        // of overlaps.
         if (newMatches <= wantedNumNewOverlapMatches &&
             newOverlapMatches <= wantedNumNewOverlapMatches - newMatches) {
           smallerTableElementToNewElement.emplace(smallerTableId,
                                                   biggerTableId);
           newOverlapMatches += newMatches;
-        } else if (!smallestOvershot.has_value() ||
-                   std::get<2>(smallestOvershot.value()) > newMatches) {
-          smallestOvershot.emplace(smallerTableId, biggerTableId, newMatches);
         }
       });
-
-  /*
-  Add the smallest overshot, if it leaves us closer to the wanted amount of
-  matches and will not result in an overflow.
-  */
-  if (smallestOvershot.has_value() &&
-      std::get<2>(smallestOvershot.value()) <=
-          getMaxValue<size_t>() - newOverlapMatches &&
-      (std::get<2>(smallestOvershot.value()) + newOverlapMatches) -
-              wantedNumNewOverlapMatches <
-          wantedNumNewOverlapMatches - newOverlapMatches) {
-    const auto& [smallerTableElement, biggerTableElement,
-                 newMatches]{smallestOvershot.value()};
-    smallerTableElementToNewElement.emplace(smallerTableElement,
-                                            biggerTableElement);
-    newOverlapMatches += newMatches;
-  }
 
   // Overwrite the designated values in the smaller table.
   std::ranges::for_each(
