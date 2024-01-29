@@ -276,7 +276,7 @@ class GroupBy : public Operation {
           addIf(ti<GroupConcatAggregationData>, GROUP_CONCAT);
 
           AD_CORRECTNESS_CHECK(aggregationData_.size() ==
-                               aggregationDataSize + 1);
+                               ++aggregationDataSize);
 
           aggregateTypeWithData_.emplace_back(aggregate.aggregateType_);
         }
