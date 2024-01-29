@@ -17,6 +17,7 @@
 
 namespace net = boost::asio;
 
+/*
 using ad_utility::resumeOnOriginalExecutor;
 using namespace boost::asio::experimental::awaitable_operators;
 
@@ -270,3 +271,4 @@ TEST(AsioHelpers, resumeOnOriginalExecutorVoidOverloadWhenCancelled) {
 
   EXPECT_EQ(sanityCounter, 2);
 }
+ */

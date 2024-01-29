@@ -56,6 +56,7 @@ void MessageSender::operator()(std::string json) const {
                    std::string json) mutable -> net::awaitable<void> {
     // It is important `distributor` is kept alive during this call, thus
     // it is passed by value
+    AD_CORRECTNESS_CHECK(distributor);
     co_await distributor->addQueryStatusUpdate(std::move(json));
   };
   net::co_spawn(

@@ -113,8 +113,10 @@ namespace ad_utility::websocket {
 ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHub) {
   {
     std::unique_ptr<QueryHub> queryHub = std::make_unique<QueryHub>(ioContext);
+    EXPECT_FALSE(queryHub->globalStrand_.running_in_this_thread());
     auto distributor = co_await queryHub->createOrAcquireDistributorForSending(
         QueryId::idFromString("abc"));
+    EXPECT_FALSE(queryHub->globalStrand_.running_in_this_thread());
     std::atomic_flag blocker = false;
     std::atomic_flag started = false;
     // Add task to "block" execution
@@ -219,7 +221,7 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
       }})
       .get();
 
-  distributor = co_await queryHub.createOrAcquireDistributorInternalUnsafe(
+  distributor = queryHub.createOrAcquireDistributorInternalUnsafe(
       queryId, false);
   EXPECT_FALSE(!comparison.owner_before(distributor) &&
                !distributor.owner_before(comparison));
@@ -241,4 +243,5 @@ ASYNC_TEST(QueryHub, ensureOnlyOneSenderCanExist) {
       co_await queryHub.createOrAcquireDistributorForSending(queryId);
   EXPECT_THROW(co_await queryHub.createOrAcquireDistributorForSending(queryId),
                ad_utility::Exception);
+  LOG(INFO) << "After the end" << std::endl;
 }

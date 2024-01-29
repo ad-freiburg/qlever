@@ -31,7 +31,7 @@ inline auto makeDeleteFromDistributors =
     };
 
 // _____________________________________________________________________________
-net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+std::shared_ptr<QueryToSocketDistributor>
 QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
                                                    bool isSender) {
   auto& distributors = socketDistributors_.get();
@@ -43,7 +43,7 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
         AD_CONTRACT_CHECK(!reference.started_);
         reference.started_ = true;
       }
-      co_return ptr;
+      return ptr;
     } else {
       distributors.erase(queryId);
     }
@@ -79,7 +79,7 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
   auto distributor = std::make_shared<QueryToSocketDistributor>(
       ioContext_, std::move(cleanupCall));
   distributors.emplace(queryId, WeakReferenceHolder{distributor, isSender});
-  co_return distributor;
+  return distributor;
 }
 
 // _____________________________________________________________________________
@@ -87,24 +87,23 @@ template <bool isSender>
 net::awaitable<std::shared_ptr<
     QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
 QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
-  co_await net::post(net::bind_executor(globalStrand_, net::use_awaitable));
-  co_return co_await createOrAcquireDistributorInternalUnsafe(
-      std::move(queryId), isSender);
+  AD_CORRECTNESS_CHECK(!globalStrand_.running_in_this_thread());
+  auto x = co_await ad_utility::runOnExecutor(globalStrand_, [&]() {return createOrAcquireDistributorInternalUnsafe(std::move(queryId), isSender);});
+  AD_CORRECTNESS_CHECK(!globalStrand_.running_in_this_thread());
+  co_return std::move(x);
 }
 
 // _____________________________________________________________________________
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForSending(QueryId queryId) {
-  return resumeOnOriginalExecutor(
-      createOrAcquireDistributorInternal<true>(std::move(queryId)));
+  return createOrAcquireDistributorInternal<true>(std::move(queryId));
 }
 
 // _____________________________________________________________________________
 
 net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForReceiving(QueryId queryId) {
-  return resumeOnOriginalExecutor(
-      createOrAcquireDistributorInternal<false>(std::move(queryId)));
+  return createOrAcquireDistributorInternal<false>(std::move(queryId));
 }
 
 }  // namespace ad_utility::websocket

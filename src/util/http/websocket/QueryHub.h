@@ -60,7 +60,7 @@ class QueryHub {
   /// Implementation of createOrAcquireDistributorForSending and
   /// createOrAcquireDistributorForReceiving, without thread safety,
   /// exposed for testing
-  net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+  std::shared_ptr<QueryToSocketDistributor>
   createOrAcquireDistributorInternalUnsafe(QueryId, bool isSender);
 
   /// createOrAcquireDistributorInternalUnsafe, but dispatched on global strand

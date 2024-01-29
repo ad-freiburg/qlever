@@ -16,12 +16,15 @@
 using namespace ad_utility::httpUtils;
 using namespace boost::beast::http;
 
+#include <boost/asio/experimental/awaitable_operators.hpp>
+using namespace boost::asio::experimental::awaitable_operators;
 TEST(HttpServer, HttpTest) {
   // This test used to spuriously crash because of something that we (joka92,
   // RobinTF) currently consider to be a bug in Boost::ASIO. (See
   // `util/http/beast.h` for details). Repeat this test several times to make
   // such failures less spurious should they ever reoccur in the future.
-  for (size_t k = 0; k < 10; ++k) {
+  for (size_t k = 0; k < 20; ++k) {
+    LOG(INFO) << k << std::endl;
     // Create and run an HTTP server, which replies to each request with three
     // lines: the request method (GET, POST, or OTHER), a copy of the request
     // target (might be empty), and a copy of the request body (might be empty).
@@ -52,9 +55,9 @@ TEST(HttpServer, HttpTest) {
     // if they are.
     {
       std::vector<ad_utility::JThread> threads;
-      for (size_t i = 0; i < 2; ++i) {
+      for (size_t i = 0; i < 5; ++i) {
         threads.emplace_back([&]() {
-          for (size_t j = 0; j < 5; ++j) {
+          for (size_t j = 0; j < 20; ++j) {
             {
               HttpClient httpClient("localhost",
                                     std::to_string(httpServer.getPort()));
@@ -119,3 +122,42 @@ TEST(HttpServer, HttpTest) {
         HttpClient("localhost", std::to_string(httpServer.getPort())));
   }
 }
+
+/*
+TEST(RandConditionCancellation, bumm) {
+  for (size_t k = 0; k < 2; ++k) {
+    LOG(INFO) << k << std::endl;
+    net::io_context ctx;
+    auto strand = net::make_strand(ctx);
+    auto dummy = [&]() -> net::awaitable<void> {
+      co_return;
+    };
+
+    auto run = [&]() -> net::awaitable<void> {
+      auto inner = [&]() ->net::awaitable<void> {
+        for (size_t i = 0; i < 2000; ++i) {
+          co_await dummy();
+          std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+        }
+      };
+        co_await net::co_spawn(strand, inner(), net::use_awaitable);
+    };
+      auto cancel = []() -> net::awaitable<void> {
+      std::this_thread::sleep_for(std::chrono::milliseconds(3));
+      LOG(INFO) << "cancel" << std::endl;
+      co_return;
+    };
+
+    auto runAll = [&]() -> net::awaitable<void> {
+      co_await (run() || cancel());
+    };
+
+    net::co_spawn(ctx, runAll(), net::detached);
+
+    std::vector<ad_utility::JThread> threads;
+    for (size_t i = 0; i < 5; ++i) {
+      threads.emplace_back([&]() { ctx.run(); });
+    }
+  }
+}
+ */

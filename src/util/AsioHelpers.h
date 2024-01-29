@@ -7,7 +7,9 @@
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/dispatch.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <future>
 
 #include "util/Exception.h"
 
@@ -15,52 +17,72 @@ namespace ad_utility {
 
 namespace net = boost::asio;
 
-/// Helper function that ensures that co_await resumes on the executor
-/// this coroutine was co_spawned on.
-/// IMPORTANT: If the coroutine is cancelled, no guarantees are given. Make
-/// sure to keep that in mind when handling cancellation errors!
-template <typename T>
-inline net::awaitable<T> resumeOnOriginalExecutor(net::awaitable<T> awaitable) {
-  std::exception_ptr exceptionPtr;
-  try {
-    T result = co_await std::move(awaitable);
-    co_await net::post(net::use_awaitable);
-    co_return result;
-  } catch (...) {
-    exceptionPtr = std::current_exception();
+// Run `f` on the `executor` asynchronously and return an `awaitable` that returns the result of that invocation.
+// Note, that
+//  1. The returned `awaitable` will resume on the executor on which it is `co_await`ed which is often different from
+//     the inner `executor`. In other terms, only `f` is run on the executor, but no other state changes.
+//  2. Once started, `f` will always run to completion, even if the outer awaitable is cancelled. In other words if an
+//     expression `co_await runOnExecutor(exec, f)` is canceled, it is either cancelled before or after invoking `f`. Make sure to only schedule
+//     functions for which this behavior is okay (for example because they only
+//     run for a short time or because they have to run to completion anyway and
+//     are never canceled. The reason for this limitation lies in the mechanics of Boost::ASIO. It is not possible to change
+//     the executor within the same coroutine stack (which would be cancelable all the way through) without causing data
+//     races on the cancellation state, about which the thread sanitizer (correctly) complains.
+template <typename Executor, std::invocable F>
+    requires(!std::is_void_v<std::invoke_result_t<F>>)
+net::awaitable<std::invoke_result_t<F>> runOnExecutor(const Executor& exec, F f) {
+  using Res = std::invoke_result_t<F>;
+  std::variant<std::monostate, Res, std::exception_ptr> res;
+  std::atomic_flag flag(false);
+  net::dispatch(exec, [&]() {
+    try {
+      res = std::invoke(std::move(f));
+    } catch (...) {
+      res.template emplace<std::exception_ptr>(std::current_exception());
+    }
+    flag.test_and_set();
+  });
+  flag.wait(false);
+  if (std::holds_alternative<std::exception_ptr>(res)) {
+    std::rethrow_exception(std::get<std::exception_ptr>(res));
   }
-  auto cancellationState = co_await net::this_coro::cancellation_state;
-  if (cancellationState.cancelled() == net::cancellation_type::none) {
-    // use_awaitable always resumes the coroutine on the executor the coroutine
-    // was co_spawned on
-    co_await net::post(net::use_awaitable);
-  }
-  AD_CORRECTNESS_CHECK(exceptionPtr);
-  std::rethrow_exception(exceptionPtr);
+  co_return std::move(std::get<Res>(res));
 }
 
-// _____________________________________________________________________________
-
-/// Helper function that ensures that co_await resumes on the executor
-/// this coroutine was co_spawned on. Overload for void.
-inline net::awaitable<void> resumeOnOriginalExecutor(
-    net::awaitable<void> awaitable) {
-  std::exception_ptr exceptionPtr;
-  try {
-    co_await std::move(awaitable);
-  } catch (...) {
-    exceptionPtr = std::current_exception();
+template <typename Executor, std::invocable F>
+requires(std::is_void_v<std::invoke_result_t<F>>)
+net::awaitable<void> runOnExecutor(const Executor& exec, F f) {
+  std::optional<std::exception_ptr> ex;
+  std::atomic_flag flag(false);
+  net::dispatch(exec, [&]() {
+    try {
+      std::invoke(std::move(f));
+    } catch (...) {
+      ex = std::current_exception();
+    }
+    flag.test_and_set();
+  });
+  flag.wait(false);
+  if (ex) {
+    std::rethrow_exception(ex.value());
   }
-  if ((co_await net::this_coro::cancellation_state).cancelled() ==
-      net::cancellation_type::none) {
-    // use_awaitable always resumes the coroutine on the executor the coroutine
-    // was co_spawned on
-    co_await net::post(net::use_awaitable);
-  }
-  if (exceptionPtr) {
-    std::rethrow_exception(exceptionPtr);
-  }
+  co_return;
 }
+
+/*
+// Overload of `runOnExecutor` for functions that return `void`. For a detailed documentation see above.
+template <typename Executor, std::invocable F>
+requires(std::is_void_v<std::invoke_result_t<F>>)
+net::awaitable<void> runOnExecutor(const Executor& exec,
+                                                      F f) {
+  auto awaitable = [](F f) -> net::awaitable<void> {
+    std::invoke(f);
+    co_return;
+  };
+  co_await net::co_spawn(exec, awaitable(std::move(f)), net::use_awaitable);
+}
+     */
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_ASIOHELPERS_H

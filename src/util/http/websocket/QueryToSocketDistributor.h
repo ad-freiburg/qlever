@@ -48,10 +48,6 @@ class QueryToSocketDistributor {
   /// update to the data.
   net::awaitable<void> waitForUpdate() const;
 
-  /// Schedule a coroutine onto the strand of this instance.
-  /// Make sure to co_await this before accessing any member of this class.
-  net::awaitable<void> postToStrand() const;
-
  public:
   /// Constructor that builds a new strand from the provided io context and
   /// `cleanupCall`. The cleanup call is invoked with `true` as an argument when
@@ -59,6 +55,8 @@ class QueryToSocketDistributor {
   /// no explicit calls to `signalEnd()` before.
   explicit QueryToSocketDistributor(
       net::io_context& ioContext, const std::function<void(bool)>& cleanupCall);
+
+  ~QueryToSocketDistributor() { infiniteTimer_.cancel();}
 
   /// Appends specified data to the vector and signals all waiting websockets
   /// that new data is available
