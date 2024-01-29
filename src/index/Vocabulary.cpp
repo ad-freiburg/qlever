@@ -132,12 +132,7 @@ bool Vocabulary<S, C, I>::shouldEntityBeExternalized(const string& word) const {
   // `"prefixes-external": ["@"]` or `"prefixes-external": [""]` in the
   // `.settings.json` file.
   //
-  // TODO: I tried it without the following three lines first, but that didn't
-  // when `"prefixes-external": ["@"]` or `"prefixes-external": [""]`. Why is
-  // that, is this related to `IndexImlp::getIgnoredIdRanges`? Anyway, it's
-  // error-prone that there are related things happening at two (or more)
-  // different places in the code and if they are not perfectly in sync, things
-  // go wrong.
+  // TODO: This points to a bug or inconsistency elsewhere in the code.
   if (word.starts_with("@")) {
     return false;
   }

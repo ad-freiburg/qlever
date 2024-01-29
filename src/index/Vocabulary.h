@@ -112,12 +112,14 @@ class Vocabulary {
   static constexpr bool isCompressed_ =
       std::is_same_v<StringType, CompressedString>;
 
-  // If a word starts with one of those prefixes it will be externalized
-  vector<std::string> externalizedPrefixes_;
-
-  // If a word uses one of these language tags it will be internalized,
-  // defaults to English
+  // If a word uses one of these language tags it will be internalized.
   vector<std::string> internalizedLangs_{"en"};
+
+  // If a word starts with one of those prefixes, it will be externalized When
+  // a word matched both `externalizedPrefixes_` and `internalizedLangs_`, it
+  // will be externalized. Qlever-internal prefixes are currently not
+  // externalized.
+  vector<std::string> externalizedPrefixes_;
 
   using PrefixCompressedVocabulary =
       CompressedVocabulary<VocabularyInMemory, PrefixCompressor>;
@@ -133,12 +135,6 @@ class Vocabulary {
   using ExternalVocabulary =
       UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
   ExternalVocabulary externalVocabulary_;
-
-  // ID ranges for IRIs, blank nodes, and literals. Used for the efficient
-  // computation of the `isIRI`, `isBlankNode`, and `isLiteral` functions.
-  PrefixRanges prefixRangesIris_;
-  PrefixRanges prefixRangesBlankNodes_;
-  PrefixRanges prefixRangesLiterals_;
 
  public:
   using SortLevel = typename ComparatorType::Level;
