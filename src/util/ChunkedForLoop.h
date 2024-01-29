@@ -2,8 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef QLEVER_CHUNKEDFOREACH_H
-#define QLEVER_CHUNKEDFOREACH_H
+#ifndef QLEVER_CHUNKEDFORLOOP_H
+#define QLEVER_CHUNKEDFORLOOP_H
 
 #include <algorithm>
 #include <concepts>
@@ -17,7 +17,7 @@ namespace detail {
 /// end in the next iteration, without having to check a boolean value on each
 /// iteration. In a classic for-loop this would be the break keyword, but this
 /// doesn't work here because the code is inside a nested function.
-inline auto getSetIndexToEndAction(std::size_t& current, std::size_t end) {
+constexpr auto getSetIndexToEndAction(std::size_t& current, std::size_t end) {
   return [&current, end]() { current = end; };
 }
 
@@ -56,11 +56,11 @@ inline void chunkedForLoop(std::size_t start, std::size_t end,
       } else {
         std::invoke(action, start);
       }
-      start++;
+      ++start;
     }
     std::invoke(chunkOperation);
   }
 }
 }  // namespace ad_utility
 
-#endif  // QLEVER_CHUNKEDFOREACH_H
+#endif  // QLEVER_CHUNKEDFORLOOP_H

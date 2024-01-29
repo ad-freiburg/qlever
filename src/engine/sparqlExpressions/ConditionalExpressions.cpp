@@ -48,10 +48,7 @@ class CoalesceExpression : public VariadicExpression {
     // Initially all result are unbound.
     ad_utility::chunkedForLoop<CHUNK_SIZE>(
         0, ctx->size(),
-        [&unboundIndices](size_t i) {
-          // TODO<C++23> use `std::ranges::to<vector>(std::views::iota...)`.
-          unboundIndices.push_back(i);
-        },
+        [&unboundIndices](size_t i) { unboundIndices.push_back(i); },
         [ctx]() {
           ctx->cancellationHandle_->throwIfCancelled("CoalesceExpression");
         });

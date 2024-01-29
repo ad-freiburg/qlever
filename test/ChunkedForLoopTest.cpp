@@ -11,7 +11,7 @@
 using ad_utility::chunkedForLoop;
 
 TEST(ChunkedForLoop, testEmptyRange) {
-  std::atomic_bool flag = false;
+  bool flag = false;
   chunkedForLoop<1>(
       0, 0, [&](size_t) { flag = true; }, [&]() { flag = true; });
   chunkedForLoop<10>(
@@ -26,7 +26,7 @@ TEST(ChunkedForLoop, testEmptyRange) {
 
 // _____________________________________________________________________________________________________________________
 TEST(ChunkedForLoop, testReverseRange) {
-  std::atomic_bool flag = false;
+  bool flag = false;
   chunkedForLoop<1>(
       1, 0, [&](size_t) { flag = true; }, [&]() { flag = true; });
   chunkedForLoop<10>(
@@ -41,8 +41,8 @@ TEST(ChunkedForLoop, testReverseRange) {
 
 // _____________________________________________________________________________________________________________________
 TEST(ChunkedForLoop, verifyBiggerChunkSizeWorks) {
-  std::atomic_size_t counter = 0;
-  std::atomic_size_t chunkCounter = 0;
+  size_t counter = 0;
+  size_t chunkCounter = 0;
   chunkedForLoop<10>(
       0, 3, [&](size_t) { counter++; }, [&]() { chunkCounter++; });
 
@@ -52,8 +52,8 @@ TEST(ChunkedForLoop, verifyBiggerChunkSizeWorks) {
 
 // _____________________________________________________________________________________________________________________
 TEST(ChunkedForLoop, verifyEqualChunkSizeWorks) {
-  std::atomic_size_t counter = 0;
-  std::atomic_size_t chunkCounter = 0;
+  size_t counter = 0;
+  size_t chunkCounter = 0;
   chunkedForLoop<5>(
       3, 8, [&](size_t) { counter++; }, [&]() { chunkCounter++; });
 
@@ -63,8 +63,8 @@ TEST(ChunkedForLoop, verifyEqualChunkSizeWorks) {
 
 // _____________________________________________________________________________________________________________________
 TEST(ChunkedForLoop, verifySmallerChunkSizeWorks) {
-  std::atomic_size_t counter = 0;
-  std::atomic_size_t chunkCounter = 0;
+  size_t counter = 0;
+  size_t chunkCounter = 0;
   chunkedForLoop<7>(
       1, 98, [&](size_t) { counter++; }, [&]() { chunkCounter++; });
 
@@ -74,7 +74,7 @@ TEST(ChunkedForLoop, verifySmallerChunkSizeWorks) {
 
 // _____________________________________________________________________________________________________________________
 TEST(ChunkedForLoop, verifyIndexIsCorrectlyCounting) {
-  std::atomic_size_t counter = 7;
+  size_t counter = 7;
   chunkedForLoop<7>(
       7, 19,
       [&](size_t index) {
@@ -88,8 +88,8 @@ TEST(ChunkedForLoop, verifyIndexIsCorrectlyCounting) {
 
 // _____________________________________________________________________________________________________________________
 TEST(ChunkedForLoop, verifyBreakWorksAsExpected) {
-  std::atomic_size_t counter = 0;
-  std::atomic_size_t chunkCounter = 0;
+  size_t counter = 0;
+  size_t chunkCounter = 0;
   chunkedForLoop<7>(
       3, 19,
       [&](size_t index, const auto& breakLoop) {

@@ -488,6 +488,8 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
   std::pair undefRangeA{joinColumnL.begin(), joinColumnL.begin() + numUndefA};
   std::pair undefRangeB{joinColumnR.begin(), joinColumnR.begin() + numUndefB};
 
+  auto cancellationCallback = [this]() { checkCancellation(); };
+
   // Determine whether we should use the galloping join optimization.
   if (a.size() / b.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
       numUndefB == 0) {
@@ -497,12 +499,11 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
       addRow(rowB, rowA);
     };
     ad_utility::gallopingJoin(joinColumnR, joinColumnL, std::ranges::less{},
-                              inverseAddRow, {},
-                              [this]() { checkCancellation(); });
+                              inverseAddRow, {}, cancellationCallback);
   } else if (b.size() / a.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
              numUndefB == 0) {
     ad_utility::gallopingJoin(joinColumnL, joinColumnR, std::ranges::less{},
-                              addRow, {}, [this]() { checkCancellation(); });
+                              addRow, {}, cancellationCallback);
   } else {
     auto findSmallerUndefRangeLeft =
         [undefRangeA](
@@ -523,14 +524,13 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
       if (numUndefB == 0 && numUndefA == 0) {
         return ad_utility::zipperJoinWithUndef(
             joinColumnL, joinColumnR, std::ranges::less{}, addRow,
-            ad_utility::noop, ad_utility::noop, {},
-            [this]() { checkCancellation(); });
+            ad_utility::noop, ad_utility::noop, {}, cancellationCallback);
 
       } else {
         return ad_utility::zipperJoinWithUndef(
             joinColumnL, joinColumnR, std::ranges::less{}, addRow,
             findSmallerUndefRangeLeft, findSmallerUndefRangeRight, {},
-            [this]() { checkCancellation(); });
+            cancellationCallback);
       }
     }();
     AD_CORRECTNESS_CHECK(numOutOfOrder == 0);

@@ -5,7 +5,7 @@
 #ifndef QLEVER_COMPILERWARNINGS_H
 #define QLEVER_COMPILERWARNINGS_H
 
-/// Header file that allows suppressing specific warnings in certain compiler
+/// Helper macros that allow suppressing specific warnings in certain compiler
 /// versions that turn out to be false positives.
 
 #if defined(__GNUC__) && (__GNUC__ == 12 || __GNUC__ == 13)
