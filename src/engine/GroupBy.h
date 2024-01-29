@@ -258,21 +258,25 @@ class GroupBy : public Operation {
         for (const auto& aggregate : alias.aggregateInfo_) {
           ++numAggregates;
 
-          auto addIf = [this]<typename T>(
-                           std::type_identity<T>, HashMapAggregateType target,
-                           const HashMapAggregateInformation& info) {
-            if (info.aggregateType_.type_ == target)
+          using namespace ad_utility::use_type_identity;
+          auto addIf = [this, &aggregate]<typename T>(
+                           TI<T>, HashMapAggregateType target) {
+            if (aggregate.aggregateType_.type_ == target)
               aggregationData_.emplace_back(
                   sparqlExpression::VectorWithMemoryLimit<T>{alloc_});
           };
 
-          using namespace ad_utility::use_type_identity;
-          addIf(TI<AvgAggregationData>, AVG, aggregate);
-          addIf(TI<CountAggregationData>, COUNT, aggregate);
-          addIf(TI<MinAggregationData>, MIN, aggregate);
-          addIf(TI<MaxAggregationData>, MAX, aggregate);
-          addIf(TI<SumAggregationData>, SUM, aggregate);
-          addIf(TI<GroupConcatAggregationData>, GROUP_CONCAT, aggregate);
+          auto aggregationDataSize = aggregationData_.size();
+
+          addIf(ti<AvgAggregationData>, AVG);
+          addIf(ti<CountAggregationData>, COUNT);
+          addIf(ti<MinAggregationData>, MIN);
+          addIf(ti<MaxAggregationData>, MAX);
+          addIf(ti<SumAggregationData>, SUM);
+          addIf(ti<GroupConcatAggregationData>, GROUP_CONCAT);
+
+          AD_CORRECTNESS_CHECK(aggregationData_.size() ==
+                               aggregationDataSize + 1);
 
           aggregateTypeWithData_.emplace_back(aggregate.aggregateType_);
         }
