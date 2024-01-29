@@ -156,9 +156,15 @@ class Server {
 
   /// Run the SPARQL parser and then the query planner on the `query`. All
   /// computation is performed on the `threadPool_`.
-  net::awaitable<PlannedQuery> parseAndPlan(
-      const std::string& query, QueryExecutionContext& qec,
-      SharedCancellationHandle handle) const;
+  net::awaitable<PlannedQuery> parseAndPlan(const std::string& query,
+                                            QueryExecutionContext& qec,
+                                            SharedCancellationHandle handle,
+                                            TimeLimit timeLimit) const;
+
+  ///
+  auto setupCancellationHandle(const ad_utility::websocket::QueryId& queryId,
+                               TimeLimit timeLimit,
+                               net::any_io_executor executor) const;
 
   /// Check if the access token is valid. Return true if the access token
   /// exists and is valid. Return false if there's no access token passed.
