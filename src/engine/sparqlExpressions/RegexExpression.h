@@ -53,6 +53,10 @@ class RegexExpression : public SparqlExpression {
   ExpressionResult evaluateNonPrefixRegex(
       const Variable& variable,
       sparqlExpression::EvaluationContext* context) const;
+
+  /// Helper function to check if the `CancellationHandle` of the passed
+  /// `EvaluationContext` has been cancelled.
+  static void checkCancellation(sparqlExpression::EvaluationContext* context);
 };
 namespace detail {
 // Check if `regex` is a prefix regex which means that it starts with `^` and

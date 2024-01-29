@@ -187,7 +187,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
     lowerAndUpperIds.emplace_back(
         context->_qec.getIndex().prefix_range(prefix));
   }
-  context->cancellationHandle_->throwIfCancelled("RegexExpression");
+  checkCancellation(context);
   auto beg = context->_inputTable.begin() + context->_beginIndex;
   auto end = context->_inputTable.begin() + context->_endIndex;
   AD_CONTRACT_CHECK(end <= context->_inputTable.end());
@@ -211,7 +211,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
         resultSetOfIntervals.push_back(
             ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}});
       }
-      context->cancellationHandle_->throwIfCancelled("RegexExpression");
+      checkCancellation(context);
     }
     return std::reduce(resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
                        ad_utility::SetOfIntervals{},
@@ -226,7 +226,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
             return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
                    valueIdComparators::compareByBits(id, lowerUpper.second);
           })));
-      context->cancellationHandle_->throwIfCancelled("RegexExpression");
+      checkCancellation(context);
     }
     return result;
   }
@@ -250,7 +250,7 @@ ExpressionResult RegexExpression::evaluateNonPrefixRegex(
         result.push_back(Id::makeFromBool(
             RE2::PartialMatch(str.value(), std::get<RE2>(regex_))));
       }
-      context->cancellationHandle_->throwIfCancelled("RegexExpression");
+      checkCancellation(context);
     }
   };
   if (childIsStrExpression_) {
@@ -311,6 +311,12 @@ auto RegexExpression::getEstimatesForFilterExpression(
 
     return {sizeEstimate, costEstimate};
   }
+}
+
+// ____________________________________________________________________________
+void RegexExpression::checkCancellation(
+    sparqlExpression::EvaluationContext* context) {
+  context->cancellationHandle_->throwIfCancelled("RegexExpression");
 }
 
 }  // namespace sparqlExpression

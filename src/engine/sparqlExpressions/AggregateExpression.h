@@ -117,26 +117,27 @@ class AggregateExpression : public SparqlExpression {
 
     auto impl = [&valueGetter, context, &finalOperation,
                  &callFunction](auto&& inputs) {
+      auto checkCancellation = [context]() {
+        context->cancellationHandle_->throwIfCancelled(
+            "AggregateExpression evaluate on child operand");
+      };
       auto it = inputs.begin();
       AD_CORRECTNESS_CHECK(it != inputs.end());
 
       using ResultType = std::decay_t<decltype(callFunction(
           std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
       ResultType result = valueGetter(*it, context);
-      context->cancellationHandle_->throwIfCancelled(
-          "AggregateExpression evaluate on child operand");
+      checkCancellation();
       size_t numValues = 1;
 
       for (++it; it != inputs.end(); ++it) {
         result = callFunction(std::move(result),
                               valueGetter(std::move(*it), context));
-        context->cancellationHandle_->throwIfCancelled(
-            "AggregateExpression evaluate on child operand");
+        checkCancellation();
         ++numValues;
       }
       result = finalOperation(std::move(result), numValues);
-      context->cancellationHandle_->throwIfCancelled(
-          "AggregateExpression evaluate on child operand");
+      checkCancellation();
       return result;
     };
     auto result = [&]() {

@@ -457,4 +457,8 @@ class QueryPlanner {
   /// if this Planner is not associated with a queryExecutionContext we are only
   /// in the unit test mode
   [[nodiscard]] bool isInTestMode() const { return _qec == nullptr; }
+
+  /// Helper function to check if the assigned `cancellationHandle_` has
+  /// been cancelled yet.
+  void checkCancellation();
 };

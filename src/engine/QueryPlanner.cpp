@@ -107,7 +107,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   // Optimize the graph pattern tree
   std::vector<std::vector<SubtreePlan>> plans;
   plans.push_back(optimize(&pq._rootGraphPattern));
-  cancellationHandle_->throwIfCancelled("Query planning");
+  checkCancellation();
 
   // Add the query level modifications
 
@@ -118,12 +118,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   } else if (doGroupBy) {
     plans.emplace_back(getGroupByRow(pq, plans));
   }
-  cancellationHandle_->throwIfCancelled("Query planning");
+  checkCancellation();
 
   // HAVING
   if (!pq._havingClauses.empty()) {
     plans.emplace_back(getHavingRow(pq, plans));
-    cancellationHandle_->throwIfCancelled("Query planning");
+    checkCancellation();
   }
 
   // DISTINCT
@@ -131,7 +131,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
     const auto& selectClause = pq.selectClause();
     if (selectClause.distinct_) {
       plans.emplace_back(getDistinctRow(selectClause, plans));
-      cancellationHandle_->throwIfCancelled("Query planning");
+      checkCancellation();
     }
   }
 
@@ -141,7 +141,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
     // just add an order by / sort to every previous result if needed.
     // If the ordering is perfect already, just copy the plan.
     plans.emplace_back(getOrderByRow(pq, plans));
-    cancellationHandle_->throwIfCancelled("Query planning");
+    checkCancellation();
   }
 
   // Now find the cheapest execution plan and store that as the optimal
@@ -164,7 +164,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   for (auto& plan : lastRow) {
     plan._qet->setTextLimit(pq._limitOffset._textLimit);
   }
-  cancellationHandle_->throwIfCancelled("Query planning");
+  checkCancellation();
   return lastRow;
 }
 
@@ -466,7 +466,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         joinCandidates(arg);
       }
     });
-    cancellationHandle_->throwIfCancelled("Query planning");
+    checkCancellation();
   }
   // one last pass in case the last one was not an optional
   // if the last child was not an optional clause we still have unjoined
@@ -479,14 +479,14 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     candidateTriples._triples.clear();
     candidatePlans.clear();
     candidatePlans.push_back(std::move(lastRow));
-    cancellationHandle_->throwIfCancelled("Query planning");
+    checkCancellation();
   }
 
   // it might be, that we have not yet applied all the filters
   // (it might be, that the last join was optional and introduced new variables)
   if (!candidatePlans.empty()) {
     applyFiltersIfPossible(candidatePlans[0], rootPattern->_filters, true);
-    cancellationHandle_->throwIfCancelled("Query planning");
+    checkCancellation();
   }
 
   AD_CONTRACT_CHECK(candidatePlans.size() == 1 || candidatePlans.empty());
@@ -1363,7 +1363,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   for (auto& component : components | std::views::values) {
     lastDpRowFromComponents.push_back(runDynamicProgrammingOnConnectedComponent(
         std::move(component), filters, tg));
-    cancellationHandle_->throwIfCancelled("Query planning");
+    checkCancellation();
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();
   if (numConnectedComponents == 0) {
@@ -1944,4 +1944,9 @@ std::vector<size_t> QueryPlanner::QueryGraph::dfsForAllNodes() {
     }
   }
   return result;
+}
+
+// _______________________________________________________________
+void QueryPlanner::checkCancellation() {
+  cancellationHandle_->throwIfCancelled("Query planning");
 }
