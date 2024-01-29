@@ -185,7 +185,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   lowerAndUpperIds.reserve(actualPrefixes.size());
   for (const auto& prefix : actualPrefixes) {
     for (const auto& range :
-         context->_qec.getIndex().prefixRanges(prefix).ranges_) {
+         context->_qec.getIndex().prefixRanges(prefix).ranges()) {
       lowerAndUpperIds.emplace_back(Id::makeFromVocabIndex(range.first),
                                     Id::makeFromVocabIndex(range.second));
     }

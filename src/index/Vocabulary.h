@@ -70,9 +70,8 @@ struct Prefix {
   string fulltext_;
 };
 
-// A vocabulary. Wraps a vector of strings
-// and provides additional methods for retrieval.
-// Template parameters that are supported are:
+// A vocabulary. Wraps a vector of strings and provides additional methods for
+// retrieval. Template parameters that are supported are:
 // std::string -> no compression is applied
 // CompressedString -> prefix compression is applied
 template <typename StringType, typename ComparatorType, typename IndexT>
@@ -84,7 +83,16 @@ class Vocabulary {
   // NOTE: There are currently two ranges, one for the internal and one for the
   // external vocabulary. It would be easy to add more ranges.
   struct PrefixRanges {
-    std::array<std::pair<IndexT, IndexT>, 2> ranges_;
+   public:
+    using Ranges = std::array<std::pair<IndexT, IndexT>, 2>;
+
+   private:
+    Ranges ranges_{};
+
+   public:
+    PrefixRanges() = default;
+    explicit PrefixRanges(const Ranges& ranges);
+    const Ranges& ranges() const { return ranges_; }
     bool operator==(const PrefixRanges& ranges) const = default;
     bool contain(IndexT index) const;
   };
@@ -210,9 +218,13 @@ class Vocabulary {
 
   static bool stringIsLiteral(const string& s);
 
-  bool isIri(IndexT index) const;
-  bool isBlankNode(IndexT index) const;
-  bool isLiteral(IndexT index) const;
+  bool isIri(IndexT index) const { return prefixRangesIris_.contain(index); }
+  bool isBlankNode(IndexT index) const {
+    return prefixRangesBlankNodes_.contain(index);
+  }
+  bool isLiteral(IndexT index) const {
+    return prefixRangesLiterals_.contain(index);
+  }
 
   bool shouldBeExternalized(const string& word) const;
 

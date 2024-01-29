@@ -122,9 +122,8 @@ struct StringValueGetterImpl {
 
   std::optional<string> operator()(IdOrString s,
                                    const EvaluationContext* ctx) const {
-    return std::visit(
-        [self = this, ctx](auto el) { return self->operator()(el, ctx); },
-        std::move(s));
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
   }
 };
 using StringValueGetter = StringValueGetterImpl<true>;
@@ -133,31 +132,15 @@ using StringValueGetterRaw = StringValueGetterImpl<false>;
 // Value getters for `isIRI`, `isBlank`, and `isLiteral`.
 template <auto isSomethingFunction, auto prefix>
 struct IsSomethingValueGetter {
-  Id operator()(ValueId id, const EvaluationContext* context) const {
-    if (id.getDatatype() == Datatype::VocabIndex) {
-      // See instantiations below for what `isSomethingFunction` is.
-      return Id::makeFromBool(std::invoke(isSomethingFunction,
-                                          context->_qec.getIndex().getVocab(),
-                                          id.getVocabIndex()));
-    } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
-      // The `false` means: don't remove the quotes or angle brackets.
-      auto word = ExportQueryExecutionTrees::idToStringAndType<false>(
-          context->_qec.getIndex(), id, context->_localVocab);
-      return Id::makeFromBool(word.has_value() &&
-                              word.value().first.starts_with(prefix));
-    } else {
-      return Id::makeFromBool(false);
-    }
-  }
+  Id operator()(ValueId id, const EvaluationContext* context) const;
 
   Id operator()(const std::string& s, const EvaluationContext*) const {
     return Id::makeFromBool(s.starts_with(prefix));
   }
 
   Id operator()(IdOrString s, const EvaluationContext* ctx) const {
-    return std::visit(
-        [self = this, ctx](auto el) { return self->operator()(el, ctx); },
-        std::move(s));
+    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
+                      std::move(s));
   }
 };
 static constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};

@@ -23,32 +23,22 @@ using std::string;
 
 // ____________________________________________________________________________
 template <typename StringType, typename ComparatorType, typename IndexT>
+Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::PrefixRanges(
+    const Ranges& ranges)
+    : ranges_(ranges) {
+  for (const auto& range : ranges_) {
+    AD_CONTRACT_CHECK(range.first <= range.second);
+  }
+}
+
+// ____________________________________________________________________________
+template <typename StringType, typename ComparatorType, typename IndexT>
 bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
     IndexT index) const {
-  return std::any_of(ranges_.begin(), ranges_.end(),
-                     [index](const std::pair<IndexT, IndexT>& range) {
-                       return range.first <= index && index < range.second;
-                     });
-}
-
-// ____________________________________________________________________________
-template <typename StringType, typename ComparatorType, typename IndexT>
-bool Vocabulary<StringType, ComparatorType, IndexT>::isIri(IndexT index) const {
-  return prefixRangesIris_.contain(index);
-}
-
-// ____________________________________________________________________________
-template <typename StringType, typename ComparatorType, typename IndexT>
-bool Vocabulary<StringType, ComparatorType, IndexT>::isBlankNode(
-    IndexT index) const {
-  return prefixRangesBlankNodes_.contain(index);
-}
-
-// ____________________________________________________________________________
-template <typename StringType, typename ComparatorType, typename IndexT>
-bool Vocabulary<StringType, ComparatorType, IndexT>::isLiteral(
-    IndexT index) const {
-  return prefixRangesLiterals_.contain(index);
+  return std::ranges::any_of(
+      ranges_, [index](const std::pair<IndexT, IndexT>& range) {
+        return range.first <= index && index < range.second;
+      });
 }
 
 // _____________________________________________________________________________
@@ -319,7 +309,7 @@ auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
                                      I::make(rangeInternal.second)};
   std::pair<I, I> indexRangeExternal{I::make(rangeExternal.first + offset),
                                      I::make(rangeExternal.second + offset)};
-  return {indexRangeInternal, indexRangeExternal};
+  return PrefixRanges{{indexRangeInternal, indexRangeExternal}};
 }
 
 // _____________________________________________________________________________
@@ -353,8 +343,6 @@ template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
     const nlohmann::json& prefixes);
 template void RdfsVocabulary::initializeExternalizePrefixes<
     std::vector<std::string>>(const std::vector<std::string>& prefixes);
-
-// template void RdfsVocabulary::printRangesForDatatypes();
 
 template void TextVocabulary::writeToFile<std::string, void>(
     const string& fileName) const;

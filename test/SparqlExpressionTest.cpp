@@ -731,30 +731,20 @@ TEST(SparqlExpression, isSomethingFunctions) {
   Id iri = testContext().x;
   Id literal = testContext().zz;
   Id blank = testContext().blank;
-  Id localIri = testContext().notInVocabA;
-  // Test the operators that evaluate an `Id`.
-  testUnaryExpression<makeIsIriExpression>(
-      Ids{iri, literal, blank, localIri, I(42), D(1), U},
-      Ids{T, F, F, F, F, F, F});
-  testUnaryExpression<makeIsBlankExpression>(
-      Ids{iri, literal, blank, localIri, I(42), D(1), U},
-      Ids{F, F, T, F, F, F, F});
+  Id localLiteral = testContext().notInVocabA;
+
+  IdOrStrings testIdOrStrings{"<i>", "\"l\"",      "_:b", iri,  literal,
+                              blank, localLiteral, I(42), D(1), U};
+  testUnaryExpression<makeIsIriExpression>(testIdOrStrings,
+                                           Ids{T, F, F, T, F, F, F, F, F, F});
+  testUnaryExpression<makeIsBlankExpression>(testIdOrStrings,
+                                             Ids{F, F, T, F, F, T, F, F, F, F});
   testUnaryExpression<makeIsLiteralExpression>(
-      Ids{iri, literal, blank, localIri, I(42), D(1), U},
-      Ids{F, T, F, T, F, F, F});
+      testIdOrStrings, Ids{F, T, F, F, T, F, T, F, F, F});
   testUnaryExpression<makeIsNumericExpression>(
-      Ids{iri, literal, blank, localIri, I(42), D(1), U},
-      Ids{F, F, F, F, T, T, F});
-  testUnaryExpression<makeBoundExpression>(
-      Ids{iri, literal, blank, localIri, I(42), D(1), U},
-      Ids{T, T, T, T, T, T, F});
-  // Also test the operators that evaluate an `IdOrString` and `std::string`.
-  testUnaryExpression<makeIsIriExpression>(
-      IdOrStrings{"<iri>", "\"literal\"", "_:blank", I(42), D(1), U},
-      Ids{T, F, F, F, F, F});
-  testUnaryExpression<makeIsNumericExpression>(
-      IdOrStrings{"<iri>", "\"literal\"", "_:blank", I(42), D(1), U},
-      Ids{F, F, F, T, T, F});
+      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F});
+  testUnaryExpression<makeBoundExpression>(testIdOrStrings,
+                                           Ids{T, T, T, T, T, T, T, T, T, F});
 }
 
 // ____________________________________________________________________________

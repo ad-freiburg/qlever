@@ -669,7 +669,7 @@ class IndexImpl {
         getVocab().prefixRanges(INTERNAL_ENTITIES_URI_PREFIX);
 
     auto pushIgnoredRange = [&ignoredRanges](const auto& ranges) {
-      for (const auto& range : ranges.ranges_) {
+      for (const auto& range : ranges.ranges()) {
         ignoredRanges.emplace_back(Id::makeFromVocabIndex(range.first),
                                    Id::makeFromVocabIndex(range.second));
       }

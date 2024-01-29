@@ -134,7 +134,7 @@ TEST(Vocabulary, PrefixFilter) {
       VocabIndex::make(1u), VocabIndex::make(2u)};
   std::pair<VocabIndex, VocabIndex> expectedRangeExternal = {
       firstIndexExternal, firstIndexExternal};
-  RdfsVocabulary::PrefixRanges expectedRanges = {expectedRangeInternal,
-                                                 expectedRangeExternal};
+  RdfsVocabulary::PrefixRanges expectedRanges{
+      {expectedRangeInternal, expectedRangeExternal}};
   ASSERT_EQ(ranges, expectedRanges);
 }

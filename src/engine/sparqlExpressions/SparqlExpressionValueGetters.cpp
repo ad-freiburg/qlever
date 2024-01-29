@@ -94,9 +94,8 @@ template struct sparqlExpression::detail::StringValueGetterImpl<false>;
 // TODO: I tried to implement it in the `.cpp` file, but I could not resolve
 // the resulting linker error ("undefined reference to
 // `IsSomethingValueGetter<...>::isBlanknode` etc.)
-/*
 template <auto isSomethingFunction, auto prefix>
-Id IsSomethingValueGetterImpl<isSomethingFunction, prefix>::operator()(
+Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {
   if (id.getDatatype() == Datatype::VocabIndex) {
     // See instantiations below for what `isSomethingFunction` is.
@@ -104,7 +103,7 @@ Id IsSomethingValueGetterImpl<isSomethingFunction, prefix>::operator()(
                                         context->_qec.getIndex().getVocab(),
                                         id.getVocabIndex()));
   } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
-    auto word = ExportQueryExecutionTrees::idToStringAndType<true>(
+    auto word = ExportQueryExecutionTrees::idToStringAndType<false>(
         context->_qec.getIndex(), id, context->_localVocab);
     return Id::makeFromBool(word.has_value() &&
                             word.value().first.starts_with(prefix));
@@ -112,13 +111,12 @@ Id IsSomethingValueGetterImpl<isSomethingFunction, prefix>::operator()(
     return Id::makeFromBool(false);
   }
 }
-template struct sparqlExpression::detail::IsSomethingValueGetterImpl<
+template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isIri, isIriPrefix>;
-template struct sparqlExpression::detail::IsSomethingValueGetterImpl<
-    &Index::Vocab::isIri, isBlankPrefix>;
-template struct sparqlExpression::detail::IsSomethingValueGetterImpl<
+template struct sparqlExpression::detail::IsSomethingValueGetter<
+    &Index::Vocab::isBlankNode, isBlankPrefix>;
+template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isLiteral, isLiteralPrefix>;
-*/
 
 // ____________________________________________________________________________
 std::optional<string> LiteralFromIdGetter::operator()(
