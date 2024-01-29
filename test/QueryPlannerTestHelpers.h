@@ -148,7 +148,8 @@ inline auto CountAvailablePredicates =
     [](size_t subjectColumnIdx, const Variable& predicateVar,
        const Variable& countVar,
        const std::same_as<QetMatcher> auto&... childMatchers)
-        requires(sizeof...(childMatchers) <= 1) {
+        requires(sizeof...(childMatchers) <= 1)
+{
   return RootOperation<::CountAvailablePredicates>(AllOf(
       AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
                   Eq(subjectColumnIdx)),
@@ -239,10 +240,10 @@ inline auto TransitivePath =
 /// execution context, and return the resulting `QueryExecutionTree`
 QueryExecutionTree parseAndPlan(std::string query, QueryExecutionContext* qec) {
   ParsedQuery pq = SparqlParser::parseQuery(std::move(query));
-  ad_utility::CancellationHandle<> cancellationHandle;
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock a
   // queryExecutionContext.
-  return QueryPlanner{qec}.createExecutionTree(pq, cancellationHandle);
+  return QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()}
+      .createExecutionTree(pq);
 }
 
 // Check that the `QueryExecutionTree` that is obtained by parsing and planning

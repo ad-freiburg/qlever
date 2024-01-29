@@ -782,9 +782,9 @@ net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
     handle->resetWatchDogState();
     auto pq = SparqlParser::parseQuery(query);
     handle->throwIfCancelled("After parsing");
-    QueryPlanner qp(&qec);
+    QueryPlanner qp(&qec, handle);
     qp.setEnablePatternTrick(enablePatternTrick);
-    auto qet = qp.createExecutionTree(pq, *handle);
+    auto qet = qp.createExecutionTree(pq);
     handle->throwIfCancelled("After query planning");
     return PlannedQuery{std::move(pq), std::move(qet)};
   });

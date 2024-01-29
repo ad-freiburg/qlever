@@ -66,12 +66,18 @@ void mergeSubtreePlanIds(QueryPlanner::SubtreePlan& target,
 }  // namespace
 
 // _____________________________________________________________________________
-QueryPlanner::QueryPlanner(QueryExecutionContext* qec)
-    : _qec(qec), _internalVarCount(0), _enablePatternTrick(true) {}
+QueryPlanner::QueryPlanner(QueryExecutionContext* qec,
+                           CancellationHandle cancellationHandle)
+    : _qec(qec),
+      _internalVarCount(0),
+      _enablePatternTrick(true),
+      cancellationHandle_{std::move(cancellationHandle)} {
+  AD_CONTRACT_CHECK(cancellationHandle_);
+}
 
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
-    ParsedQuery& pq, CancellationHandle handle) {
+    ParsedQuery& pq) {
   // Look for ql:has-predicate to determine if the pattern trick should be used.
   // If the pattern trick is used, the ql:has-predicate triple will be removed
   // from the list of where clause triples. Otherwise, the ql:has-predicate
@@ -100,8 +106,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
 
   // Optimize the graph pattern tree
   std::vector<std::vector<SubtreePlan>> plans;
-  plans.push_back(optimize(&pq._rootGraphPattern, handle));
-  handle.throwIfCancelled("Query planning");
+  plans.push_back(optimize(&pq._rootGraphPattern));
+  cancellationHandle_->throwIfCancelled("Query planning");
 
   // Add the query level modifications
 
@@ -112,12 +118,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   } else if (doGroupBy) {
     plans.emplace_back(getGroupByRow(pq, plans));
   }
-  handle.throwIfCancelled("Query planning");
+  cancellationHandle_->throwIfCancelled("Query planning");
 
   // HAVING
   if (!pq._havingClauses.empty()) {
     plans.emplace_back(getHavingRow(pq, plans));
-    handle.throwIfCancelled("Query planning");
+    cancellationHandle_->throwIfCancelled("Query planning");
   }
 
   // DISTINCT
@@ -125,7 +131,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
     const auto& selectClause = pq.selectClause();
     if (selectClause.distinct_) {
       plans.emplace_back(getDistinctRow(selectClause, plans));
-      handle.throwIfCancelled("Query planning");
+      cancellationHandle_->throwIfCancelled("Query planning");
     }
   }
 
@@ -135,7 +141,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
     // just add an order by / sort to every previous result if needed.
     // If the ordering is perfect already, just copy the plan.
     plans.emplace_back(getOrderByRow(pq, plans));
-    handle.throwIfCancelled("Query planning");
+    cancellationHandle_->throwIfCancelled("Query planning");
   }
 
   // Now find the cheapest execution plan and store that as the optimal
@@ -158,21 +164,20 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   for (auto& plan : lastRow) {
     plan._qet->setTextLimit(pq._limitOffset._textLimit);
   }
-  handle.throwIfCancelled("Query planning");
+  cancellationHandle_->throwIfCancelled("Query planning");
   return lastRow;
 }
 
 // _____________________________________________________________________
-QueryExecutionTree QueryPlanner::createExecutionTree(
-    ParsedQuery& pq, CancellationHandle handle) {
-  auto lastRow = createExecutionTrees(pq, handle);
+QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
+  auto lastRow = createExecutionTrees(pq);
   auto minInd = findCheapestExecutionTree(lastRow);
   LOG(DEBUG) << "Done creating execution plan.\n";
   return *lastRow[minInd]._qet;
 }
 
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
-    ParsedQuery::GraphPattern* rootPattern, CancellationHandle handle) {
+    ParsedQuery::GraphPattern* rootPattern) {
   // here we collect a set of possible plans for each of our children.
   // always only holds plans for children that can be joined in an
   // arbitrary order
@@ -193,9 +198,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // and subsequently join in the correct order with the non-permuting plan.
   // Returns the last row of the DP table (a set of possible plans with possibly
   // different costs and different orderings.
-  auto optimizeCommutativ = [this, &handle](const auto& triples,
-                                            const auto& plans,
-                                            const auto& filters) {
+  auto optimizeCommutativ = [this](const auto& triples, const auto& plans,
+                                   const auto& filters) {
     auto tg = createTripleGraph(&triples);
     // always apply all filters to be safe.
     // TODO<joka921> it could be possible, to allow the DpTab to leave
@@ -203,13 +207,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     // carefully checked and I currently see no benefit.
     // TODO<joka921> In fact, for the case of REGEX filters, it could be
     // beneficial to postpone them if possible
-    return fillDpTab(tg, filters, plans, handle).back();
+    return fillDpTab(tg, filters, plans).back();
   };
 
   // find a single best candidate for a given graph pattern
-  auto optimizeSingle = [this](const auto pattern,
-                               CancellationHandle handle) -> SubtreePlan {
-    auto v = optimize(pattern, handle);
+  auto optimizeSingle = [this](const auto pattern) -> SubtreePlan {
+    auto v = optimize(pattern);
     if (v.empty()) {
       throw std::runtime_error(
           "grandchildren or lower of a Plan to be optimized may never be "
@@ -354,11 +357,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // go through the child patterns in order, set up all their candidatePlans
   // and then call the joinCandidates call back
   for (auto& child : rootPattern->_graphPatterns) {
-    child.visit([&optimizeSingle, &joinCandidates, this, &handle](auto&& arg) {
+    child.visit([&optimizeSingle, &joinCandidates, this](auto&& arg) {
       using T = std::decay_t<decltype(arg)>;
       if constexpr (std::is_same_v<T, p::Optional> ||
                     std::is_same_v<T, p::GroupGraphPattern>) {
-        auto candidates = optimize(&arg._child, handle);
+        auto candidates = optimize(&arg._child);
         if constexpr (std::is_same_v<T, p::Optional>) {
           for (auto& c : candidates) {
             c.type = SubtreePlan::OPTIONAL;
@@ -369,8 +372,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         // TODO<joka921> here we could keep all the candidates, and create a
         // "sorted union" by merging as additional candidates if the inputs
         // are presorted.
-        SubtreePlan left = optimizeSingle(&arg._child1, handle);
-        SubtreePlan right = optimizeSingle(&arg._child2, handle);
+        SubtreePlan left = optimizeSingle(&arg._child1);
+        SubtreePlan right = optimizeSingle(&arg._child2);
 
         // create a new subtree plan
         SubtreePlan candidate =
@@ -384,7 +387,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
 
         // For a subquery, make sure that one optimal result for each ordering
         // of the result (by a single column) is contained.
-        auto candidatesForSubquery = createExecutionTrees(arg.get(), handle);
+        auto candidatesForSubquery = createExecutionTrees(arg.get());
         // Make sure that variables that are not selected by the subquery are
         // not visible.
         auto setSelectedVariables = [&](SubtreePlan& plan) {
@@ -400,7 +403,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       } else if constexpr (std::is_same_v<T, p::TransPath>) {
         // TODO<kramerfl> This is obviously how you set up transitive paths.
         // maybe factor this out and comment it somewhere
-        auto candidatesIn = optimize(&arg._childGraphPattern, handle);
+        auto candidatesIn = optimize(&arg._childGraphPattern);
         std::vector<SubtreePlan> candidatesOut;
 
         for (auto& sub : candidatesIn) {
@@ -452,7 +455,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         // other operations above.
         joinCandidates(arg);
       } else if constexpr (std::is_same_v<T, p::Minus>) {
-        auto candidates = optimize(&arg._child, handle);
+        auto candidates = optimize(&arg._child);
         for (auto& c : candidates) {
           c.type = SubtreePlan::MINUS;
         }
@@ -463,7 +466,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         joinCandidates(arg);
       }
     });
-    handle.throwIfCancelled("Query planning");
+    cancellationHandle_->throwIfCancelled("Query planning");
   }
   // one last pass in case the last one was not an optional
   // if the last child was not an optional clause we still have unjoined
@@ -472,19 +475,18 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // joinCandidates lambda;
   if (candidatePlans.size() > 1 || !candidateTriples._triples.empty()) {
     auto tg = createTripleGraph(&candidateTriples);
-    auto lastRow =
-        fillDpTab(tg, rootPattern->_filters, candidatePlans, handle).back();
+    auto lastRow = fillDpTab(tg, rootPattern->_filters, candidatePlans).back();
     candidateTriples._triples.clear();
     candidatePlans.clear();
     candidatePlans.push_back(std::move(lastRow));
-    handle.throwIfCancelled("Query planning");
+    cancellationHandle_->throwIfCancelled("Query planning");
   }
 
   // it might be, that we have not yet applied all the filters
   // (it might be, that the last join was optional and introduced new variables)
   if (!candidatePlans.empty()) {
     applyFiltersIfPossible(candidatePlans[0], rootPattern->_filters, true);
-    handle.throwIfCancelled("Query planning");
+    cancellationHandle_->throwIfCancelled("Query planning");
   }
 
   AD_CONTRACT_CHECK(candidatePlans.size() == 1 || candidatePlans.empty());
@@ -831,8 +833,7 @@ void QueryPlanner::seedFromOrdinaryTriple(
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
-    const vector<vector<QueryPlanner::SubtreePlan>>& children,
-    CancellationHandle handle) {
+    const vector<vector<QueryPlanner::SubtreePlan>>& children) {
   vector<SubtreePlan> seeds;
   // add all child plans as seeds
   uint64_t idShift = tg._nodeMap.size();
@@ -872,8 +873,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     // If the predicate is a property path, we have to recursively set up the
     // index scans.
     if (node.triple_._p._operation != PropertyPath::Operation::IRI) {
-      for (SubtreePlan& plan :
-           seedFromPropertyPathTriple(node.triple_, handle)) {
+      for (SubtreePlan& plan : seedFromPropertyPathTriple(node.triple_)) {
         pushPlan(std::move(plan));
       }
       continue;
@@ -902,7 +902,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
 
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
-    const SparqlTriple& triple, CancellationHandle handle) {
+    const SparqlTriple& triple) {
   std::shared_ptr<ParsedQuery::GraphPattern> pattern =
       seedFromPropertyPath(triple._s, triple._p, triple._o);
 #if LOGLEVEL >= TRACE
@@ -912,7 +912,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
   LOG(TRACE) << std::move(out).str() << std::endl << std::endl;
 #endif
   pattern->recomputeIds();
-  return optimize(pattern.get(), handle);
+  return optimize(pattern.get());
 }
 
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
@@ -1334,6 +1334,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
                << std::endl;
     dpTab.emplace_back(vector<SubtreePlan>());
     for (size_t i = 1; i * 2 <= k; ++i) {
+      cancellationHandle_->throwIfCancelled("QueryPlanner producing plans");
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
       applyFiltersIfPossible(dpTab.back(), filters, false);
@@ -1348,12 +1349,11 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
 // _____________________________________________________________________________
 vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, const vector<SparqlFilter>& filters,
-    const vector<vector<QueryPlanner::SubtreePlan>>& children,
-    CancellationHandle handle) {
+    const vector<vector<QueryPlanner::SubtreePlan>>& children) {
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
   }
-  auto initialPlans = seedWithScansAndText(tg, children, handle);
+  auto initialPlans = seedWithScansAndText(tg, children);
   auto componentIndices = QueryGraph::computeConnectedComponents(initialPlans);
   ad_utility::HashMap<size_t, std::vector<SubtreePlan>> components;
   for (size_t i = 0; i < componentIndices.size(); ++i) {
@@ -1363,7 +1363,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   for (auto& component : components | std::views::values) {
     lastDpRowFromComponents.push_back(runDynamicProgrammingOnConnectedComponent(
         std::move(component), filters, tg));
-    handle.throwIfCancelled("Query planning");
+    cancellationHandle_->throwIfCancelled("Query planning");
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();
   if (numConnectedComponents == 0) {
