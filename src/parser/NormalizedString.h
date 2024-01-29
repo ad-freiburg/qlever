@@ -19,4 +19,8 @@ using NormalizedString = std::basic_string<NormalizedChar>;
 using NormalizedStringView = std::basic_string_view<NormalizedChar>;
 
 // Returns the given NormalizedStringView as a string_view.
-std::string_view asStringViewUnsafe(NormalizedStringView normalizedStringView);
+inline std::string_view asStringViewUnsafe(
+    NormalizedStringView normalizedStringView) {
+  return {reinterpret_cast<const char*>(normalizedStringView.data()),
+          normalizedStringView.size()};
+}

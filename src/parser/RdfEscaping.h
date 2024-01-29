@@ -10,8 +10,8 @@
 #include <sstream>
 #include <string>
 
-#include "NormalizedString.h"
 #include "global/TypedIndex.h"
+#include "parser/NormalizedString.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/StringUtils.h"

@@ -2,7 +2,7 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
-#include "Literal.h"
+#include "parser/Literal.h"
 
 #include <utility>
 
@@ -44,4 +44,33 @@ NormalizedStringView Literal::getLanguageTag() const {
     AD_THROW("The literal does not have an explicit language tag.");
   }
   return std::get<NormalizedString>(descriptor_);
+}
+
+// __________________________________________
+Literal Literal::literalWithQuotes(const std::string& contentWithQuotes) {
+  return Literal(RdfEscaping::normalizeLiteralWithQuotes(contentWithQuotes));
+}
+Literal Literal::literalWithoutQuotes(const std::string& contentWithoutQuotes) {
+  return Literal(
+      RdfEscaping::normalizeLiteralWithoutQuotes(contentWithoutQuotes));
+}
+Literal Literal::literalWithQuotesWithDatatype(
+    const std::string& contentWithQuotes, Iri datatype) {
+  return {RdfEscaping::normalizeLiteralWithQuotes(contentWithQuotes),
+          std::move(datatype)};
+}
+Literal Literal::literalWithoutQuotesWithDatatype(
+    const std::string& contentWithoutQuotes, Iri datatype) {
+  return {RdfEscaping::normalizeLiteralWithoutQuotes(contentWithoutQuotes),
+          std::move(datatype)};
+}
+Literal Literal::literalWithQuotesWithLanguageTag(
+    const std::string& contentWithQuotes, const std::string& languageTag) {
+  return {RdfEscaping::normalizeLiteralWithQuotes(contentWithQuotes),
+          RdfEscaping::normalizeLanguageTag(languageTag)};
+}
+Literal Literal::literalWithoutQuotesWithLanguageTag(
+    const std::string& contentWithoutQuotes, const std::string& languageTag) {
+  return {RdfEscaping::normalizeLiteralWithoutQuotes(contentWithoutQuotes),
+          RdfEscaping::normalizeLanguageTag(languageTag)};
 }

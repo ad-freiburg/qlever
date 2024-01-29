@@ -6,26 +6,31 @@
 
 #include <string>
 
-#include "NormalizedString.h"
+#include "parser/NormalizedString.h"
 
+// A class to hold IRIs. It does not store the leading or trailing
+// angled bracket.
+//
+// E.g. For the input "<http://example.org/books/book1>",
+// only "http://example.org/books/book1" is to be stored in the iri_ variable.
 class Iri {
-  // A class to hold IRIs. It does not store the leading or trailing
-  // angled bracket.
-  //
-  // E.g. For the input "<http://example.org/books/book1>",
-  // only "http://example.org/books/book1" is to be stored in the iri_ variable.
-
  private:
   // Store the string value of the IRI without any leading or trailing angled
   // brackets.
   NormalizedString iri_;
 
- public:
   // Create a new iri object
   explicit Iri(NormalizedString iri);
 
   // Create a new iri using a prefix
   Iri(const Iri& prefix, const NormalizedString& suffix);
+
+ public:
+  // Create a new iri given an iri with brackets
+  static Iri iriref(const std::string& stringWithBrackets);
+
+  // Create a new iri given a prefix iri and its suffix
+  static Iri prefixed(const Iri& prefix, const std::string& suffix);
 
   // Return the string value of the iri object without any leading or trailing
   // angled brackets.

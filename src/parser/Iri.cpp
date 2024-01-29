@@ -2,7 +2,7 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
-#include "Iri.h"
+#include "parser/Iri.h"
 
 #include <utility>
 
@@ -16,3 +16,13 @@ Iri::Iri(const Iri& prefix, const NormalizedString& suffix) {
 
 // __________________________________________
 NormalizedStringView Iri::getContent() const { return iri_; }
+
+// __________________________________________
+Iri Iri::iriref(const std::string& stringWithBrackets) {
+  return Iri{RdfEscaping::normalizeIriWithBrackets(stringWithBrackets)};
+}
+
+// __________________________________________
+Iri Iri::prefixed(const Iri& prefix, const std::string& suffix) {
+  return Iri{prefix, RdfEscaping::normalizeIriWithoutBrackets(suffix)};
+}

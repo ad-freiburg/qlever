@@ -163,14 +163,14 @@ std::string escapeNewlinesAndBackslashes(std::string_view literal) {
 }
 
 // ____________________________________________________________________________
-void literalUnescape(std::string_view input, std::string& res) {
+static void literalUnescape(std::string_view input, std::string& res) {
   detail::unescapeStringAndNumericEscapes<false, false>(
       input.begin(), input.end(), std::back_inserter(res));
 }
 
 // ____________________________________________________________________________
-void literalUnescapeWithQuotesRemoved(std::string_view input,
-                                      std::string& res) {
+static void literalUnescapeWithQuotesRemoved(std::string_view input,
+                                             std::string& res) {
   if (input.starts_with(R"(""")") || input.starts_with(R"(''')")) {
     AD_CONTRACT_CHECK(input.ends_with(input.substr(0, 3)));
     input.remove_prefix(3);
@@ -219,14 +219,15 @@ std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
 }
 
 // __________________________________________________________________________
-void unescapeIriWithoutBrackets(std::string_view input, std::string& res) {
+static void unescapeIriWithoutBrackets(std::string_view input,
+                                       std::string& res) {
   // Only numeric escapes are allowed for iriefs.
   RdfEscaping::detail::unescapeStringAndNumericEscapes<true, false>(
       input.begin(), input.end(), std::back_inserter(res));
 }
 
 // __________________________________________________________________________
-void unescapeIriWithBrackets(std::string_view input, std::string& res) {
+static void unescapeIriWithBrackets(std::string_view input, std::string& res) {
   AD_CONTRACT_CHECK(input.starts_with("<") && input.ends_with(">"));
   input.remove_prefix(1);
   input.remove_suffix(1);
@@ -321,11 +322,11 @@ std::string normalizedContentFromLiteralOrIri(std::string&& input) {
 
 // Internal function to cast a string_view to a NormalizedString.
 // Should not be used outside of this package.
-NormalizedString toNormalizedString(std::string_view input) {
+static NormalizedString toNormalizedString(std::string_view input) {
   NormalizedString normalizedString;
   normalizedString.resize(input.size());
-  std::transform(input.begin(), input.end(), normalizedString.begin(),
-                 [](char c) { return NormalizedChar{c}; });
+  std::ranges::transform(input.begin(), input.end(), normalizedString.begin(),
+                         [](char c) { return NormalizedChar{c}; });
 
   return normalizedString;
 }
