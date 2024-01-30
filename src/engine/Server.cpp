@@ -523,27 +523,30 @@ auto Server::cancelAfterDeadline(
   net::co_spawn(strand,
                 cancelAfterTimeout(std::move(cancellationHandle), timer),
                 net::detached);
-  return [strand, timer = std::move(timer)]() mutable {
-    // Only run if not moved from
+  return [strand, timer = std::move(timer), executed = false]() mutable {
+    // For some reason gcc 12/13 with -O3 thinks `executed` may be uninitialized
     DISABLE_UNINITIALIZED_WARNINGS
-    if (timer) {
-      ENABLE_UNINITIALIZED_WARNINGS
-      net::post(strand, [timer = std::move(timer)]() { timer->cancel(); });
-    }
+    AD_CORRECTNESS_CHECK(!executed);
+    ENABLE_UNINITIALIZED_WARNINGS
+    executed = true;
+    // Only run if not moved from
+    net::post(strand, [timer = std::move(timer)]() { timer->cancel(); });
   };
 }
 
 // _____________________________________________________________________________
 auto Server::setupCancellationHandle(
     const ad_utility::websocket::QueryId& queryId, TimeLimit timeLimit,
-    const net::any_io_executor& executor) const {
+    const net::any_io_executor& executor) const
+    -> ad_utility::isInstantiation<
+        CancellationHandleAndTimeoutTimerCancel> auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
   AD_CORRECTNESS_CHECK(cancellationHandle);
   cancellationHandle->startWatchDog();
   absl::Cleanup cancelCancellationHandle{
       cancelAfterDeadline(executor, cancellationHandle, timeLimit)};
-  return std::pair{std::move(cancellationHandle),
-                   std::move(cancelCancellationHandle)};
+  return CancellationHandleAndTimeoutTimerCancel{
+      std::move(cancellationHandle), std::move(cancelCancellationHandle)};
 }
 
 // ____________________________________________________________________________
@@ -645,7 +648,7 @@ boost::asio::awaitable<void> Server::processQuery(
     QueryExecutionContext qec(index_, &cache_, allocator_,
                               sortPerformanceEstimator_,
                               std::ref(messageSender), pinSubtrees, pinResult);
-    auto [cancellationHandle, cancelCancellationHandle] =
+    auto [cancellationHandle, cancelTimeoutOnDestruction] =
         setupCancellationHandle(messageSender.getQueryId(), timeLimit,
                                 co_await net::this_coro::executor);
 

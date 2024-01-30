@@ -21,19 +21,21 @@ constexpr auto getSetIndexToEndAction(std::size_t& current, std::size_t end) {
   return [&current, end]() { current = end; };
 }
 
+/// Helper type that represents the type of the lambda returned by
+/// `getSetIndexToEndAction`.
+using SetIndexToEndAction =
+    std::invoke_result_t<decltype(getSetIndexToEndAction), size_t&, size_t>;
+
 /// True if `Func` has a signature of `* func(size_t, const auto&)`
 /// where `*` can be any type. False otherwise.
 template <typename Func>
-constexpr bool isIteratorWithBreak =
-    std::is_invocable_v<Func, std::size_t,
-                        const decltype(getSetIndexToEndAction(
-                            std::declval<std::size_t&>(), 0))&>;
+concept IteratorWithBreak = std::invocable<Func, size_t, SetIndexToEndAction>;
 
 /// Helper concept that allows `chunkedForLoop` to offer an action with an
 /// optional second argument in `action`.
 template <typename Func>
 concept IteratorAction =
-    std::is_invocable_v<Func, std::size_t> || isIteratorWithBreak<Func>;
+    std::is_invocable_v<Func, std::size_t> || IteratorWithBreak<Func>;
 }  // namespace detail
 
 /// Helper function to run a classic for-loop from `start` to `end`, where
@@ -42,16 +44,16 @@ concept IteratorAction =
 /// the next iteration, similar to the break keyword. `chunkOperation` is called
 /// every `CHUNK_SIZE` iteration steps, and at least a single time at the end if
 /// the range is not empty.
-template <std::size_t CHUNK_SIZE>
+template <std::size_t CHUNK_SIZE, detail::IteratorAction Action>
 inline void chunkedForLoop(std::size_t start, std::size_t end,
-                           const detail::IteratorAction auto& action,
+                           const Action& action,
                            const std::invocable auto& chunkOperation) {
   static_assert(CHUNK_SIZE != 0, "Chunk size must be non-zero");
   using std::size_t;
   while (start < end) {
     size_t chunkEnd = std::min(end, start + CHUNK_SIZE);
     while (start < chunkEnd) {
-      if constexpr (detail::isIteratorWithBreak<decltype(action)>) {
+      if constexpr (detail::IteratorWithBreak<Action>) {
         std::invoke(action, start, detail::getSetIndexToEndAction(start, end));
       } else {
         std::invoke(action, start);

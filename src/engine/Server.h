@@ -18,6 +18,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
+#include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
 #include "util/http/streamable_body.h"
 #include "util/http/websocket/QueryHub.h"
@@ -82,6 +83,14 @@ class Server {
   using TimeLimit = std::chrono::seconds;
 
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
+
+  template <ad_utility::isInstantiation<absl::Cleanup> CancelTimeout>
+  struct CancellationHandleAndTimeoutTimerCancel {
+    SharedCancellationHandle handle_;
+    /// Function that when called cancels the timer that would otherwise
+    /// invoke the cancellation of the `handle_` via the time limit.
+    CancelTimeout cancelTimeout_;
+  };
 
   /// Parse the path and URL parameters from the given request. Supports both
   /// GET and POST request according to the SPARQL 1.1 standard.
@@ -161,10 +170,16 @@ class Server {
                                             SharedCancellationHandle handle,
                                             TimeLimit timeLimit) const;
 
-  ///
+  /// Acquire the `CancellationHandle` for the given `QueryId`, start the
+  /// watchdog and call `cancelAfterDeadline` to set the timeout after
+  /// `timeLimit`. Return an object of type
+  /// `CancellationHandleAndTimeoutTimerCancel`, where the `cancelTimeout_`
+  /// member can be invoked to cancel the imminent cancellation via timeout.
   auto setupCancellationHandle(const ad_utility::websocket::QueryId& queryId,
                                TimeLimit timeLimit,
-                               const net::any_io_executor& executor) const;
+                               const net::any_io_executor& executor) const
+      -> ad_utility::isInstantiation<
+          CancellationHandleAndTimeoutTimerCancel> auto;
 
   /// Check if the access token is valid. Return true if the access token
   /// exists and is valid. Return false if there's no access token passed.
