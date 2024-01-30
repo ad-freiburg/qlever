@@ -545,8 +545,10 @@ auto Server::setupCancellationHandle(
   cancellationHandle->startWatchDog();
   absl::Cleanup cancelCancellationHandle{
       cancelAfterDeadline(executor, cancellationHandle, timeLimit)};
-  return CancellationHandleAndTimeoutTimerCancel{
-      std::move(cancellationHandle), std::move(cancelCancellationHandle)};
+  // Clang apparently needs explicit type parameters
+  return CancellationHandleAndTimeoutTimerCancel<
+      decltype(cancelCancellationHandle)>{std::move(cancellationHandle),
+                                          std::move(cancelCancellationHandle)};
 }
 
 // ____________________________________________________________________________
