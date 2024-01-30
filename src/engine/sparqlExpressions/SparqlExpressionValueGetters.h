@@ -1,6 +1,8 @@
-//  Copyright 2021 - 2024, University of Freiburg
-//  Chair of Algorithms and Data Structures
-//  Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2021 - 2024
+// University of Freiburg
+// Chair of Algorithms and Data Structures
+//
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //           Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
@@ -107,8 +109,7 @@ struct EffectiveBooleanValueGetter {
 
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a string value.
-template <bool removeQuotesAndAngleBrackets>
-struct StringValueGetterImpl {
+struct StringValueGetter {
   std::optional<string> operator()(ValueId, const EvaluationContext*) const;
 
   std::optional<string> operator()(string s, const EvaluationContext*) const {
@@ -126,8 +127,6 @@ struct StringValueGetterImpl {
                       std::move(s));
   }
 };
-using StringValueGetter = StringValueGetterImpl<true>;
-using StringValueGetterRaw = StringValueGetterImpl<false>;
 
 // Value getters for `isIRI`, `isBlank`, and `isLiteral`.
 template <auto isSomethingFunction, auto prefix>

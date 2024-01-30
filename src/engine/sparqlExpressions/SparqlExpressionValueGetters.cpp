@@ -75,25 +75,20 @@ auto EffectiveBooleanValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
-template <bool removeQuotesAndAngleBrackets>
-std::optional<std::string>
-StringValueGetterImpl<removeQuotesAndAngleBrackets>::operator()(
+std::optional<std::string> StringValueGetter::operator()(
     Id id, const EvaluationContext* context) const {
-  auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType<
-      removeQuotesAndAngleBrackets>(context->_qec.getIndex(), id,
-                                    context->_localVocab);
+  // `true` means that we remove the quotes and angle brackets.
+  auto optionalStringAndType =
+      ExportQueryExecutionTrees::idToStringAndType<true>(
+          context->_qec.getIndex(), id, context->_localVocab);
   if (optionalStringAndType.has_value()) {
     return std::move(optionalStringAndType.value().first);
   } else {
     return std::nullopt;
   }
 }
-template struct sparqlExpression::detail::StringValueGetterImpl<true>;
-template struct sparqlExpression::detail::StringValueGetterImpl<false>;
 
-// TODO: I tried to implement it in the `.cpp` file, but I could not resolve
-// the resulting linker error ("undefined reference to
-// `IsSomethingValueGetter<...>::isBlanknode` etc.)
+// ____________________________________________________________________________
 template <auto isSomethingFunction, auto prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {
