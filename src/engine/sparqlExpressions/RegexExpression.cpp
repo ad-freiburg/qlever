@@ -315,7 +315,7 @@ auto RegexExpression::getEstimatesForFilterExpression(
 
 // ____________________________________________________________________________
 void RegexExpression::checkCancellation(
-    sparqlExpression::EvaluationContext* context) {
+    const sparqlExpression::EvaluationContext* context) {
   context->cancellationHandle_->throwIfCancelled("RegexExpression");
 }
 

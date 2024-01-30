@@ -220,9 +220,9 @@ class QueryPlanner {
 
   // Used to count the number of unique variables created using
   // generateUniqueVarName
-  size_t _internalVarCount;
+  size_t _internalVarCount = 0;
 
-  bool _enablePatternTrick;
+  bool _enablePatternTrick = true;
 
   CancellationHandle cancellationHandle_;
 
@@ -460,5 +460,5 @@ class QueryPlanner {
 
   /// Helper function to check if the assigned `cancellationHandle_` has
   /// been cancelled yet.
-  void checkCancellation();
+  void checkCancellation() const;
 };

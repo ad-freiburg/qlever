@@ -68,10 +68,7 @@ void mergeSubtreePlanIds(QueryPlanner::SubtreePlan& target,
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec,
                            CancellationHandle cancellationHandle)
-    : _qec(qec),
-      _internalVarCount(0),
-      _enablePatternTrick(true),
-      cancellationHandle_{std::move(cancellationHandle)} {
+    : _qec{qec}, cancellationHandle_{std::move(cancellationHandle)} {
   AD_CONTRACT_CHECK(cancellationHandle_);
 }
 
@@ -1949,6 +1946,6 @@ std::vector<size_t> QueryPlanner::QueryGraph::dfsForAllNodes() {
 }
 
 // _______________________________________________________________
-void QueryPlanner::checkCancellation() {
+void QueryPlanner::checkCancellation() const {
   cancellationHandle_->throwIfCancelled("Query planning");
 }

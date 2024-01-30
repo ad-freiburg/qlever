@@ -80,7 +80,9 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
   auto output = std::move(*outputIdTable).toStatic<WIDTH>();
 
   auto visitor =
-      [&]<sparqlExpression::SingleExpressionResult T>(T&& singleResult) {
+      [this, &output, &input,
+       &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
+          T&& singleResult) {
         if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
           auto totalSize = std::accumulate(
               singleResult._intervals.begin(), singleResult._intervals.end(),

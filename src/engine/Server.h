@@ -164,7 +164,7 @@ class Server {
   ///
   auto setupCancellationHandle(const ad_utility::websocket::QueryId& queryId,
                                TimeLimit timeLimit,
-                               net::any_io_executor executor) const;
+                               const net::any_io_executor& executor) const;
 
   /// Check if the access token is valid. Return true if the access token
   /// exists and is valid. Return false if there's no access token passed.

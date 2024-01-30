@@ -536,7 +536,7 @@ auto Server::cancelAfterDeadline(
 // _____________________________________________________________________________
 auto Server::setupCancellationHandle(
     const ad_utility::websocket::QueryId& queryId, TimeLimit timeLimit,
-    net::any_io_executor executor) const {
+    const net::any_io_executor& executor) const {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
   AD_CORRECTNESS_CHECK(cancellationHandle);
   cancellationHandle->startWatchDog();
@@ -665,6 +665,9 @@ boost::asio::awaitable<void> Server::processQuery(
     // (tsv, csv, octet-stream, turtle).
     auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
       auto responseGenerator = co_await computeInNewThread([&] {
+        // It might take some time until the thread pool is ready,
+        // so reset the state here. Ideally waiting for the thread pool
+        // would periodically check the cancellation state
         cancellationHandle->resetWatchDogState();
         return ExportQueryExecutionTrees::computeResultAsStream(
             plannedQuery.value().parsedQuery_, qet, mediaType);
@@ -791,7 +794,10 @@ net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
     SharedCancellationHandle handle, TimeLimit timeLimit) const {
   return computeInNewThread([&query, &qec,
                              enablePatternTrick = enablePatternTrick_,
-                             handle = std::move(handle), timeLimit]() {
+                             handle = std::move(handle), timeLimit]() mutable {
+    // It might take some time until the thread pool is ready,
+    // so reset the state here. Ideally waiting for the thread pool
+    // would periodically check the cancellation state
     handle->resetWatchDogState();
     auto pq = SparqlParser::parseQuery(query);
     handle->throwIfCancelled("After parsing");
