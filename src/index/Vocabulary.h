@@ -1,7 +1,8 @@
-// Copyright 2011, University of Freiburg,
+// Copyright 2011 - 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchholb>,
-//          Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+// Authors: Björn Buchhold <buchhold@gmail.com>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -266,7 +267,7 @@ class Vocabulary {
     return internalVocabulary_.getComparator();
   }
 
-  /// Get prefix ranges for the given prefix.
+  // Get prefix ranges for the given prefix.
   PrefixRanges prefixRanges(std::string_view prefix) const;
 
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
