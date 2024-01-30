@@ -523,9 +523,9 @@ auto Server::cancelAfterDeadline(
   net::co_spawn(strand,
                 cancelAfterTimeout(std::move(cancellationHandle), timer),
                 net::detached);
+  DISABLE_UNINITIALIZED_WARNINGS
+  // For some reason gcc 11-13 with -O3 think `executed` may be uninitialized
   return [strand, timer = std::move(timer), executed = false]() mutable {
-    // For some reason gcc 12/13 with -O3 thinks `executed` may be uninitialized
-    DISABLE_UNINITIALIZED_WARNINGS
     AD_CORRECTNESS_CHECK(!executed);
     ENABLE_UNINITIALIZED_WARNINGS
     executed = true;

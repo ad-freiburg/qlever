@@ -8,7 +8,7 @@
 /// Helper macros that allow suppressing specific warnings in certain compiler
 /// versions that turn out to be false positives.
 
-#if defined(__GNUC__) && (__GNUC__ == 12 || __GNUC__ == 13)
+#if defined(__GNUC__) && (__GNUC__ >= 11 && __GNUC__ <= 13)
 #define DISABLE_UNINITIALIZED_WARNINGS \
   _Pragma("GCC diagnostic push")       \
       _Pragma("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")

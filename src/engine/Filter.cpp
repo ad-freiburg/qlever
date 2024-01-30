@@ -79,8 +79,11 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
   const auto input = inputResultTable.idTable().asStaticView<WIDTH>();
   auto output = std::move(*outputIdTable).toStatic<WIDTH>();
 
+  // Clang 17 seems to think `this` is const when passed directly to the lambda.
+  Filter& self = *this;
+
   auto visitor =
-      [this, &output, &input,
+      [&self, &output, &input,
        &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
           T&& singleResult) {
         if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
@@ -90,11 +93,11 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
                 return sum + (interval.second - interval.first);
               });
           output.reserve(totalSize);
-          checkCancellation();
+          self.checkCancellation();
           for (auto [beg, end] : singleResult._intervals) {
             AD_CONTRACT_CHECK(end <= input.size());
             output.insertAtEnd(input.cbegin() + beg, input.cbegin() + end);
-            checkCancellation();
+            self.checkCancellation();
           }
           AD_CONTRACT_CHECK(output.size() == totalSize);
         } else {
@@ -113,7 +116,7 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
             if (EBV{}(resultValue, &evaluationContext) == EBV::Result::True) {
               output.push_back(input[i]);
             }
-            checkCancellation();
+            self.checkCancellation();
             ++i;
           }
         }
