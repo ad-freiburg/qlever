@@ -1116,6 +1116,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             .emplace_back(std::move(plan));
       }
     }
+    cancellationHandle_->throwIfCancelled("Creating join candidates");
   }
 
   // Duplicates are removed if the same triples are touched,
@@ -1131,6 +1132,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
       (void)key;  // silence unused warning
       size_t minIndex = findCheapestExecutionTree(value);
       prunedPlans.push_back(std::move(value[minIndex]));
+      cancellationHandle_->throwIfCancelled("Pruning candidates");
     }
   };
 
