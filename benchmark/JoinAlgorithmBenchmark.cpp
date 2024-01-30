@@ -109,7 +109,8 @@ struct SetOfIdTableColumnElements {
   /*
   Set the member variables for the given column.
   */
-  SetOfIdTableColumnElements(const std::span<const ValueId>& idTableColumnRef) {
+  explicit SetOfIdTableColumnElements(
+      const std::span<const ValueId>& idTableColumnRef) {
     std::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
       if (auto numOccurrencesIterator = numOccurrences_.find(id);
           numOccurrencesIterator != numOccurrences_.end()) {
@@ -1064,7 +1065,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             isTypeOrGrowthFunction<float> T7 = float>
   requires exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>
   ResultTable& makeGrowingBenchmarkTable(
-      BenchmarkResults* results, const std::string tableDescriptor,
+      BenchmarkResults* results, const std::string& tableDescriptor,
       std::string parameterName, StopFunction stopFunction, const T1& overlap,
       const std::optional<size_t>& resultTableNumRows,
       ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
@@ -1127,7 +1128,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     row names we will have, we just create a table without row.
     */
     ResultTable& table = results->addTable(
-        std::move(tableDescriptor), {},
+        tableDescriptor, {},
         {std::move(parameterName), "Time for sorting", "Merge/Galloping join",
          "Sorting + merge/galloping join", "Hash join",
          "Number of rows in resulting IdTable", "Speedup of hash join"});
@@ -1577,7 +1578,7 @@ class BmOnlySmallerTableSizeChanges final
         for (const size_t ratioRows : createExponentVectorUntilSize(
                  10, getConfigVariables().minRatioRows_,
                  getConfigVariables().maxRatioRows_)) {
-          std::string tableName = absl::StrCat(
+          const std::string tableName = absl::StrCat(
               "The amount of rows in the smaller table grows and the ratio, to "
               "the amount of rows in the bigger table, stays at ",
               ratioRows, ".");
@@ -1588,9 +1589,8 @@ class BmOnlySmallerTableSizeChanges final
               10, getConfigVariables().minBiggerTableRows_ / ratioRows);
 
           ResultTable& table = makeGrowingBenchmarkTable(
-              &results, std::move(tableName),
-              "Amount of rows in the smaller table", alwaysFalse,
-              getConfigVariables().overlapChance_, std::nullopt,
+              &results, tableName, "Amount of rows in the smaller table",
+              alwaysFalse, getConfigVariables().overlapChance_, std::nullopt,
               getConfigVariables().randomSeed(), smallerTableSorted,
               biggerTableSorted, ratioRows, growthFunction,
               getConfigVariables().smallerTableNumColumns_,
@@ -1866,12 +1866,12 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         for (const float smallerTableSampleSizeRatio : ratios) {
-          std::string tableName = absl::StrCat(
+          const std::string tableName = absl::StrCat(
               "Tables, where the sample size ratio of the smaller table is ",
               smallerTableSampleSizeRatio,
               " and the sample size ratio for the bigger table changes.");
           ResultTable& table = makeGrowingBenchmarkTable(
-              &results, std::move(tableName), "Bigger table sample size ratio",
+              &results, tableName, "Bigger table sample size ratio",
               stopFunction, getConfigVariables().overlapChance_,
               resultWantedNumRows, getConfigVariables().randomSeed(),
               smallerTableSorted, biggerTableSorted, ratioRows,
