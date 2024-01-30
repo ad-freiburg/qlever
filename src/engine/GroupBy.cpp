@@ -1133,6 +1133,8 @@ void GroupBy::createResultFromHashMap(
   size_t blockSize = 65536;
 
   for (size_t i = 0; i < numberOfGroups; i += blockSize) {
+    checkCancellation();
+
     evaluationContext._beginIndex = i;
     evaluationContext._endIndex = std::min(i + blockSize, numberOfGroups);
 
@@ -1191,6 +1193,8 @@ void GroupBy::computeGroupByForHashMapOptimization(
   size_t blockSize = 65536;
 
   for (size_t i = 0; i < subresult.size(); i += blockSize) {
+    checkCancellation();
+
     evaluationContext._beginIndex = i;
     evaluationContext._endIndex = std::min(i + blockSize, subresult.size());
 
