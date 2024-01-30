@@ -14,6 +14,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "util/AsioHelpers.h"
+#include "util/CompilerWarnings.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseableDuration.h"
@@ -523,7 +524,12 @@ auto Server::cancelAfterDeadline(
                 cancelAfterTimeout(std::move(cancellationHandle), timer),
                 net::detached);
   return [strand, timer = std::move(timer)]() mutable {
-    net::post(strand, [timer = std::move(timer)]() { timer->cancel(); });
+    // Only run if not moved from
+    DISABLE_UNINITIALIZED_WARNINGS
+    if (timer) {
+      ENABLE_UNINITIALIZED_WARNINGS
+      net::post(strand, [timer = std::move(timer)]() { timer->cancel(); });
+    }
   };
 }
 
