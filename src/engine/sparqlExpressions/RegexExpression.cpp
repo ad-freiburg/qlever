@@ -187,9 +187,9 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   lowerAndUpperIds.reserve(actualPrefixes.size());
   for (const auto& prefix : actualPrefixes) {
     const auto& ranges = context->_qec.getIndex().prefixRanges(prefix);
-    for (const auto& range : ranges.ranges()) {
-      lowerAndUpperIds.emplace_back(Id::makeFromVocabIndex(range.first),
-                                    Id::makeFromVocabIndex(range.second));
+    for (const auto& [begin, end] : ranges.ranges()) {
+      lowerAndUpperIds.emplace_back(Id::makeFromVocabIndex(begin),
+                                    Id::makeFromVocabIndex(end));
     }
   }
   auto beg = context->_inputTable.begin() + context->_beginIndex;

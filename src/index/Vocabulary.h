@@ -281,7 +281,6 @@ class Vocabulary {
   // _______________________________________________________________
   IndexType upper_bound(const string& word, const SortLevel level) const;
 
- public:
   const ExternalVocabulary& getExternalVocab() const {
     return externalVocabulary_;
   }
