@@ -1632,7 +1632,7 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   // `NaryExpression.h`.
   auto createUnary = [&argList]<typename Function>(Function function)
       requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
-    AD_CORRECTNESS_CHECK(argList.size() == 1);
+    AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
     return function(std::move(argList[0]));
   };
   auto createBinary = [&argList]<typename Function>(Function function)
@@ -1699,6 +1699,17 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "concat") {
     AD_CORRECTNESS_CHECK(ctx->expressionList());
     return makeConcatExpression(visit(ctx->expressionList()));
+  } else if (functionName == "isiri") {
+    return createUnary(&makeIsIriExpression);
+  } else if (functionName == "isblank") {
+    return createUnary(&makeIsBlankExpression);
+  } else if (functionName == "isliteral") {
+    return createUnary(&makeIsLiteralExpression);
+  } else if (functionName == "isnumeric") {
+    return createUnary(&makeIsNumericExpression);
+  } else if (functionName == "bound") {
+    return makeBoundExpression(
+        std::make_unique<VariableExpression>(visit(ctx->var())));
   } else {
     reportError(
         ctx,

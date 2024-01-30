@@ -1,7 +1,9 @@
-// Copyright 2011 - 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
+// Copyright 2011 - 2024
+// University of Freiburg
+// Chair of Algorithms and Data Structures
+//
 // Authors: Björn Buchhold <buchhold@gmail.com>
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
@@ -137,6 +139,12 @@ class Vocabulary {
       UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
   ExternalVocabulary externalVocabulary_;
 
+  // ID ranges for IRIs, blank nodes, and literals. Used for the efficient
+  // computation of the `isIRI`, `isBlankNode`, and `isLiteral` functions.
+  PrefixRanges prefixRangesIris_;
+  PrefixRanges prefixRangesBlankNodes_;
+  PrefixRanges prefixRangesLiterals_;
+
  public:
   using SortLevel = typename ComparatorType::Level;
   using IndexType = IndexT;
@@ -213,7 +221,15 @@ class Vocabulary {
   // only used during Index building, not needed for compressed vocabulary
   void createFromSet(const ad_utility::HashSet<std::string>& set);
 
-  static bool isLiteral(const string& word);
+  static bool stringIsLiteral(const string& s);
+
+  bool isIri(IndexT index) const { return prefixRangesIris_.contain(index); }
+  bool isBlankNode(IndexT index) const {
+    return prefixRangesBlankNodes_.contain(index);
+  }
+  bool isLiteral(IndexT index) const {
+    return prefixRangesLiterals_.contain(index);
+  }
 
   bool shouldBeExternalized(const string& word) const;
 

@@ -701,7 +701,7 @@ TEST(SparqlExpression, builtInNumericFunctions) {
   checkRound(input, round);
 }
 
-// ________________________________________________________________________________________
+// ___________________________________________________________________________
 TEST(SparqlExpression, customNumericFunctions) {
   // Test the correctness of the math functions.
   testUnaryExpression<makeLogExpression>(
@@ -724,7 +724,30 @@ TEST(SparqlExpression, customNumericFunctions) {
       std::vector<Id>{D(0), D(tan(1)), D(tan(2)), D(tan(-1))});
 }
 
-// ________________________________________________________________________________________
+// ____________________________________________________________________________
+TEST(SparqlExpression, isSomethingFunctions) {
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  Id iri = testContext().x;
+  Id literal = testContext().zz;
+  Id blank = testContext().blank;
+  Id localLiteral = testContext().notInVocabA;
+
+  IdOrStrings testIdOrStrings{"<i>", "\"l\"",      "_:b", iri,  literal,
+                              blank, localLiteral, I(42), D(1), U};
+  testUnaryExpression<makeIsIriExpression>(testIdOrStrings,
+                                           Ids{T, F, F, T, F, F, F, F, F, F});
+  testUnaryExpression<makeIsBlankExpression>(testIdOrStrings,
+                                             Ids{F, F, T, F, F, T, F, F, F, F});
+  testUnaryExpression<makeIsLiteralExpression>(
+      testIdOrStrings, Ids{F, T, F, F, T, F, T, F, F, F});
+  testUnaryExpression<makeIsNumericExpression>(
+      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F});
+  testUnaryExpression<makeBoundExpression>(testIdOrStrings,
+                                           Ids{T, T, T, T, T, T, T, T, T, F});
+}
+
+// ____________________________________________________________________________
 TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLat = testUnaryExpression<&makeLatitudeExpression>;
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;

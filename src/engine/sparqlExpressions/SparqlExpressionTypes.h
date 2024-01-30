@@ -277,10 +277,10 @@ struct NoCalculationWithSetOfIntervals {};
 
 /// A `Function` and one or more `ValueGetters`, that are applied to the
 /// operands of the function before passing them. The number of `ValueGetters`
-/// must either be 1 (the same `ValueGetter` is used for all the operands to the
-/// `Function`, or it must be equal to the number of operands to the `Function`.
-/// This invariant is checked in the `Operation` class template below,
-/// which uses this helper struct.
+/// must either be 1 (the same `ValueGetter` is used for all the operands to
+/// the `Function`), or it must be equal to the number of operands to the
+/// `Function`. This invariant is checked in the `Operation` class template
+/// below, which uses this helper struct.
 template <typename FunctionType, typename... ValueGettersTypes>
 struct FunctionAndValueGetters {
   using Function = FunctionType;
