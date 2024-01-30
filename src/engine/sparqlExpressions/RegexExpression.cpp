@@ -1,6 +1,8 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2022 - 2024
+// University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "./RegexExpression.h"
 
@@ -184,8 +186,11 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   std::vector<std::pair<Id, Id>> lowerAndUpperIds;
   lowerAndUpperIds.reserve(actualPrefixes.size());
   for (const auto& prefix : actualPrefixes) {
-    lowerAndUpperIds.emplace_back(
-        context->_qec.getIndex().prefix_range(prefix));
+    const auto& ranges = context->_qec.getIndex().prefixRanges(prefix);
+    for (const auto& [begin, end] : ranges.ranges()) {
+      lowerAndUpperIds.emplace_back(Id::makeFromVocabIndex(begin),
+                                    Id::makeFromVocabIndex(end));
+    }
   }
   auto beg = context->_inputTable.begin() + context->_beginIndex;
   auto end = context->_inputTable.begin() + context->_endIndex;

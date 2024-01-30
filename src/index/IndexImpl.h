@@ -269,7 +269,7 @@ class IndexImpl {
   bool getId(const string& element, Id* id) const;
 
   // ___________________________________________________________________________
-  std::pair<Id, Id> prefix_range(const std::string& prefix) const;
+  Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
   const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
@@ -639,58 +639,60 @@ class IndexImpl {
   // The index contains several triples that are not part of the "actual"
   // knowledge graph, but are added by QLever for internal reasons (e.g. for an
   // efficient implementation of language filters). For a given
-  // `Permutation::Enum`, returns the following `std::pair`: First: A
-  // `vector<pair<Id, Id>>` that denotes ranges in the first column
-  //        of the permutation that imply that a triple is added. For example
-  //        in the `SPO` and `SOP` permutation a literal subject means that the
-  //        triple was added (literals are not legal subjects in RDF), so the
-  //        pair `(idOfFirstLiteral, idOfLastLiteral + 1)` will be contained
-  //        in the vector.
-  // Second: A lambda that checks for a triple *that is not already excluded
+  // `Permutation::Enum`, returns the following `std::pair`:
+  //
+  // first:  A `vector<pair<Id, Id>>` that denotes ranges in the first column
+  //         of the permutation that imply that a triple is added. For example
+  //         in the `SPO` and `SOP` permutation a literal subject means that the
+  //         triple was added (literals are not legal subjects in RDF), so the
+  //         pair `(idOfFirstLiteral, idOfLastLiteral + 1)` will be contained
+  //         in the vector.
+  // second: A lambda that checks for a triple *that is not already excluded
   //         by the ignored ranges from the first argument* whether it still
   //         is an added triple. For example in the `Sxx` and `Oxx` permutation
   //         a triple where the predicate starts with '@' (instead of the usual
   //         '<' is an added triple from the language filter implementation.
+  //
   // Note: A triple from a given permutation is an added triple if and only if
   //       it's first column is contained in any of the ranges from `first` OR
   //       the lambda `second` returns true for that triple.
+  //
   // For example usages see `IndexScan.cpp` (the implementation of the full
   // index scan) and `GroupBy.cpp`.
   auto getIgnoredIdRanges(const Permutation::Enum permutation) const {
     std::vector<std::pair<Id, Id>> ignoredRanges;
     ignoredRanges.emplace_back(qlever::getBoundsForSpecialIds());
 
-    auto literalRange = getVocab().prefix_range("\"");
-    auto taggedPredicatesRange = getVocab().prefix_range("@");
-    auto internalEntitiesRange =
-        getVocab().prefix_range(INTERNAL_ENTITIES_URI_PREFIX);
+    auto literalRanges = getVocab().prefixRanges("\"");
+    auto taggedPredicatesRanges = getVocab().prefixRanges("@");
+    auto internalEntitiesRanges =
+        getVocab().prefixRanges(INTERNAL_ENTITIES_URI_PREFIX);
 
-    auto pushIgnoredRange = [&ignoredRanges](const auto& range) {
-      ignoredRanges.emplace_back(Id::makeFromVocabIndex(range.first),
-                                 Id::makeFromVocabIndex(range.second));
+    auto pushIgnoredRange = [&ignoredRanges](const auto& ranges) {
+      for (const auto& range : ranges.ranges()) {
+        ignoredRanges.emplace_back(Id::makeFromVocabIndex(range.first),
+                                   Id::makeFromVocabIndex(range.second));
+      }
     };
-    pushIgnoredRange(internalEntitiesRange);
+    pushIgnoredRange(internalEntitiesRanges);
     using enum Permutation::Enum;
     if (permutation == SPO || permutation == SOP) {
-      pushIgnoredRange(literalRange);
+      pushIgnoredRange(literalRanges);
     } else if (permutation == PSO || permutation == POS) {
-      pushIgnoredRange(taggedPredicatesRange);
+      pushIgnoredRange(taggedPredicatesRanges);
     }
 
     // A lambda that checks whether the `predicateId` is an internal ID like
     // `ql:has-pattern` or `@en@rdfs:label`.
-    auto isInternalPredicateId = [internalEntitiesRange,
-                                  taggedPredicatesRange](Id predicateId) {
+    auto isInternalPredicateId = [internalEntitiesRanges,
+                                  taggedPredicatesRanges](Id predicateId) {
       if (predicateId.getDatatype() == Datatype::Undefined) {
         return true;
       }
       AD_CORRECTNESS_CHECK(predicateId.getDatatype() == Datatype::VocabIndex);
-      auto idx = predicateId.getVocabIndex();
-      auto isInRange = [idx](const auto& range) {
-        return range.first <= idx && idx < range.second;
-      };
-      return (isInRange(internalEntitiesRange) ||
-              isInRange(taggedPredicatesRange));
+      auto index = predicateId.getVocabIndex();
+      return (internalEntitiesRanges.contain(index) ||
+              taggedPredicatesRanges.contain(index));
     };
 
     auto isTripleIgnored = [permutation,

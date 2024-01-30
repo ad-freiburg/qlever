@@ -1,8 +1,8 @@
-// Copyright 2011, University of Freiburg,
+// Copyright 2011 - 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchholb>,
-//          Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
-//
+// Authors: Björn Buchhold <buchhold@gmail.com>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -15,21 +15,21 @@
 #include <string_view>
 #include <vector>
 
-#include "../global/Constants.h"
-#include "../global/Id.h"
-#include "../global/Pattern.h"
-#include "../util/Exception.h"
-#include "../util/HashMap.h"
-#include "../util/HashSet.h"
-#include "../util/Log.h"
-#include "../util/StringUtils.h"
-#include "./CompressedString.h"
-#include "./StringSortComparator.h"
-#include "./vocabulary/CompressedVocabulary.h"
-#include "./vocabulary/PrefixCompressor.h"
-#include "./vocabulary/UnicodeVocabulary.h"
-#include "./vocabulary/VocabularyInMemory.h"
-#include "VocabularyOnDisk.h"
+#include "global/Constants.h"
+#include "global/Id.h"
+#include "global/Pattern.h"
+#include "index/CompressedString.h"
+#include "index/StringSortComparator.h"
+#include "index/VocabularyOnDisk.h"
+#include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/PrefixCompressor.h"
+#include "index/vocabulary/UnicodeVocabulary.h"
+#include "index/vocabulary/VocabularyInMemory.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
+#include "util/Log.h"
+#include "util/StringUtils.h"
 
 using std::string;
 using std::vector;
@@ -54,7 +54,7 @@ class IdRange {
   IndexT last_{};
 };
 
-//! Stream operator for convenience.
+// Stream operator for convenience.
 template <typename IndexType>
 inline std::ostream& operator<<(std::ostream& stream,
                                 const IdRange<IndexType>& idRange) {
@@ -71,13 +71,34 @@ struct Prefix {
   string fulltext_;
 };
 
-//! A vocabulary. Wraps a vector of strings
-//! and provides additional methods for retrieval.
-//! Template parameters that are supported are:
-//! std::string -> no compression is applied
-//! CompressedString -> prefix compression is applied
+// A vocabulary. Wraps a vector of strings and provides additional methods for
+// retrieval. Template parameters that are supported are:
+// std::string -> no compression is applied
+// CompressedString -> prefix compression is applied
 template <typename StringType, typename ComparatorType, typename IndexT>
 class Vocabulary {
+ public:
+  // The index ranges for a prefix + a function to check whether a given index
+  // is contained in one of them.
+  //
+  // NOTE: There are currently two ranges, one for the internal and one for the
+  // external vocabulary. It would be easy to add more ranges.
+  struct PrefixRanges {
+   public:
+    using Ranges = std::array<std::pair<IndexT, IndexT>, 2>;
+
+   private:
+    Ranges ranges_{};
+
+   public:
+    PrefixRanges() = default;
+    explicit PrefixRanges(const Ranges& ranges);
+    const Ranges& ranges() const { return ranges_; }
+    bool operator==(const PrefixRanges& ranges) const = default;
+    bool contain(IndexT index) const;
+  };
+
+ private:
   // The different type of data that is stored in the vocabulary
   enum class Datatypes { Literal, Iri, Float, Date };
 
@@ -89,6 +110,33 @@ class Vocabulary {
   using enable_if_uncompressed =
       std::enable_if_t<!std::is_same_v<T, CompressedString>>;
 
+  static constexpr bool isCompressed_ =
+      std::is_same_v<StringType, CompressedString>;
+
+  // If a word uses one of these language tags it will be internalized.
+  vector<std::string> internalizedLangs_{"en"};
+
+  // If a word starts with one of those prefixes, it will be externalized When
+  // a word matched both `externalizedPrefixes_` and `internalizedLangs_`, it
+  // will be externalized. Qlever-internal prefixes are currently not
+  // externalized.
+  vector<std::string> externalizedPrefixes_;
+
+  using PrefixCompressedVocabulary =
+      CompressedVocabulary<VocabularyInMemory, PrefixCompressor>;
+  using InternalCompressedVocabulary =
+      UnicodeVocabulary<PrefixCompressedVocabulary, ComparatorType>;
+  using InternalUncompressedVocabulary =
+      UnicodeVocabulary<VocabularyInMemory, ComparatorType>;
+  using InternalVocabulary =
+      std::conditional_t<isCompressed_, InternalCompressedVocabulary,
+                         InternalUncompressedVocabulary>;
+  InternalVocabulary internalVocabulary_;
+
+  using ExternalVocabulary =
+      UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
+  ExternalVocabulary externalVocabulary_;
+
  public:
   using SortLevel = typename ComparatorType::Level;
   using IndexType = IndexT;
@@ -99,10 +147,6 @@ class Vocabulary {
   Vocabulary() {}
   Vocabulary& operator=(Vocabulary&&) noexcept = default;
   Vocabulary(Vocabulary&&) noexcept = default;
-
-  // variable for dispatching
-  static constexpr bool isCompressed_ =
-      std::is_same_v<StringType, CompressedString>;
 
   virtual ~Vocabulary() = default;
 
@@ -147,12 +191,16 @@ class Vocabulary {
   //! Return value signals if something was found at all.
   bool getId(const string& word, IndexType* idx) const;
 
-  //! Get an Id range that matches a prefix.
-  //! Return value also signals if something was found at all.
-  //! CAVEAT! TODO<discovered by joka921>: This is only used for the text index,
-  //! and uses a range, where the last index is still within the range which is
-  //! against C++ conventions!
-  // consider using the prefixRange function.
+  // Get the index range for the given prefix or `std::nullopt` if no word with
+  // the given prefix exists in the vocabulary.
+  //
+  // TODO<discovered by joka921>: This is only used for the text index, and
+  // uses a range, where the last index is still within the range which is
+  // against C++ conventions! Consider using the `prefix_range` function.
+  //
+  // NOTE: Unlike `prefixRanges`, this only looks in the internal vocabulary,
+  // which is OK because for the text index, the external vocabulary is always
+  // empty.
   std::optional<IdRange<IndexType>> getIdRangeForFullTextPrefix(
       const string& word) const;
 
@@ -219,11 +267,8 @@ class Vocabulary {
     return internalVocabulary_.getComparator();
   }
 
-  /// returns the range of IDs where strings of the vocabulary start with the
-  /// prefix according to the collation level the first Id is included in the
-  /// range, the last one not. Currently only supports the Primary collation
-  /// level, due to limitations in the StringSortComparators
-  std::pair<IndexType, IndexType> prefix_range(const string& prefix) const;
+  // Get prefix ranges for the given prefix.
+  PrefixRanges prefixRanges(std::string_view prefix) const;
 
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
     return getCaseComparator().getLocaleManager();
@@ -236,30 +281,6 @@ class Vocabulary {
   // _______________________________________________________________
   IndexType upper_bound(const string& word, const SortLevel level) const;
 
- private:
-  // If a word starts with one of those prefixes it will be externalized
-  vector<std::string> externalizedPrefixes_;
-
-  // If a word uses one of these language tags it will be internalized,
-  // defaults to English
-  vector<std::string> internalizedLangs_{"en"};
-
-  using PrefixCompressedVocabulary =
-      CompressedVocabulary<VocabularyInMemory, PrefixCompressor>;
-  using InternalCompressedVocabulary =
-      UnicodeVocabulary<PrefixCompressedVocabulary, ComparatorType>;
-  using InternalUncompressedVocabulary =
-      UnicodeVocabulary<VocabularyInMemory, ComparatorType>;
-  using InternalVocabulary =
-      std::conditional_t<isCompressed_, InternalCompressedVocabulary,
-                         InternalUncompressedVocabulary>;
-  InternalVocabulary internalVocabulary_;
-
-  using ExternalVocabulary =
-      UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
-  ExternalVocabulary externalVocabulary_;
-
- public:
   const ExternalVocabulary& getExternalVocab() const {
     return externalVocabulary_;
   }

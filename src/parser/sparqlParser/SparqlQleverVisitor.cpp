@@ -1,4 +1,4 @@
-// Copyright 2021, University of Freiburg,
+// Copyright 2021 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors:
 //   2021 -    Hannah Bast <bast@cs.uni-freiburg.de>
