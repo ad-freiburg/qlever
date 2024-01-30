@@ -130,11 +130,8 @@ TEST(Vocabulary, PrefixFilter) {
   auto ranges = vocabulary.prefixRanges("\"exp");
   auto firstIndexExternal =
       VocabIndex::make(vocabulary.getInternalVocab().size());
-  std::pair<VocabIndex, VocabIndex> expectedRangeInternal = {
-      VocabIndex::make(1u), VocabIndex::make(2u)};
-  std::pair<VocabIndex, VocabIndex> expectedRangeExternal = {
-      firstIndexExternal, firstIndexExternal};
   RdfsVocabulary::PrefixRanges expectedRanges{
-      {expectedRangeInternal, expectedRangeExternal}};
+      {std::pair{VocabIndex::make(1u), VocabIndex::make(2u)},
+       {std::pair{firstIndexExternal, firstIndexExternal}}}};
   ASSERT_EQ(ranges, expectedRanges);
 }

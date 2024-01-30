@@ -1,7 +1,10 @@
-// Copyright 2011, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchholb>,
-//          Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+// Copyright 2011 - 2024
+// University of Freiburg
+// Chair of Algorithms and Data Structures
+//
+// Authors: Björn Buchhold <buchhold@gmail.com>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -112,12 +115,14 @@ class Vocabulary {
   static constexpr bool isCompressed_ =
       std::is_same_v<StringType, CompressedString>;
 
-  // If a word starts with one of those prefixes it will be externalized
-  vector<std::string> externalizedPrefixes_;
-
-  // If a word uses one of these language tags it will be internalized,
-  // defaults to English
+  // If a word uses one of these language tags it will be internalized.
   vector<std::string> internalizedLangs_{"en"};
+
+  // If a word starts with one of those prefixes, it will be externalized When
+  // a word matched both `externalizedPrefixes_` and `internalizedLangs_`, it
+  // will be externalized. Qlever-internal prefixes are currently not
+  // externalized.
+  vector<std::string> externalizedPrefixes_;
 
   using PrefixCompressedVocabulary =
       CompressedVocabulary<VocabularyInMemory, PrefixCompressor>;
@@ -278,7 +283,7 @@ class Vocabulary {
     return internalVocabulary_.getComparator();
   }
 
-  /// Get prefix ranges for the given prefix.
+  // Get prefix ranges for the given prefix.
   PrefixRanges prefixRanges(std::string_view prefix) const;
 
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
@@ -292,7 +297,6 @@ class Vocabulary {
   // _______________________________________________________________
   IndexType upper_bound(const string& word, const SortLevel level) const;
 
- public:
   const ExternalVocabulary& getExternalVocab() const {
     return externalVocabulary_;
   }
