@@ -4,8 +4,10 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 
+#include "engine/GrbMatrix.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
@@ -54,6 +56,36 @@ struct TransitivePathSide {
     // TODO<C++23> use std::ranges::starts_with
     return (!sortedOn.empty() && sortedOn[0] == col);
   }
+};
+
+// This struct keeps track of the mapping between Ids and matrix indices
+struct IdMapping {
+  constexpr static auto hash = [](Id id) {
+    return std::hash<uint64_t>{}(id.getBits());
+  };
+  std::unordered_map<Id, size_t, decltype(hash), std::equal_to<Id>> idMap_{};
+
+  std::vector<Id> indexMap_;
+
+  size_t nextIndex_ = 0;
+
+  bool isContained(Id id) { return idMap_.contains(id); }
+
+  size_t addId(Id id) {
+    if (!idMap_.contains(id)) {
+      idMap_.insert({id, nextIndex_});
+      indexMap_.push_back(id);
+      nextIndex_++;
+      return nextIndex_ - 1;
+    }
+    return idMap_[id];
+  }
+
+  Id getId(size_t index) const { return indexMap_.at(index); }
+
+  size_t getIndex(const Id& id) const { return idMap_.at(id); }
+
+  size_t size() const { return indexMap_.size(); }
 };
 
 class TransitivePath : public Operation {
@@ -206,20 +238,18 @@ class TransitivePath : public Operation {
       bool isLeft) const;
 
   /**
-   * @brief Compute the transitive hull starting at the given nodes,
-   * using the given Map.
+   * @brief Compute the transitive hull of the graph. If given startNodes,
+   * compute the transitive hull starting at the startNodes.
    *
-   * @param edges Adjacency lists, mapping Ids (nodes) to their connected
-   * Ids.
-   * @param nodes A list of Ids. These Ids are used as starting points for the
-   * transitive hull. Thus, this parameter guides the performance of this
-   * algorithm.
-   * @param target Optional target Id. If supplied, only paths which end
-   * in this Id are added to the hull.
-   * @return Map Maps each Id to its connected Ids in the transitive hull
+   * @param graph Boolean, square, sparse, adjacency matrix. Row i, column j is
+   * true, iff. there is an edge going from i to j in the graph.
+   * @param startNodes Boolean, sparse, adjacency matrix, marking the start
+   * nodes. There is one row for each start node. The number of columns has to
+   * be equal to the number of columns of the graph matrix.
+   * @return An adjacency matrix containing the transitive hull
    */
-  Map transitiveHull(const Map& edges, const std::vector<Id>& startNodes,
-                     std::optional<Id> target) const;
+  GrbMatrix transitiveHull(const GrbMatrix& graph,
+                           std::optional<GrbMatrix> startNodes) const;
 
   /**
    * @brief Fill the given table with the transitive hull and use the
@@ -241,11 +271,6 @@ class TransitivePath : public Operation {
    * @param skipCol This column contains the Ids of the start side in the
    * startSideTable and will be skipped.
    */
-  template <size_t WIDTH, size_t START_WIDTH>
-  static void fillTableWithHull(IdTableStatic<WIDTH>& table, const Map& hull,
-                                std::vector<Id>& nodes, size_t startSideCol,
-                                size_t targetSideCol,
-                                const IdTable& startSideTable, size_t skipCol);
 
   /**
    * @brief Fill the given table with the transitive hull.
@@ -259,62 +284,105 @@ class TransitivePath : public Operation {
    * @param targetSideCol The column of the result table for the targetSide of
    * the hull
    */
+
+  /**
+   * @brief Fill the IdTable with the given transitive hull.
+   *
+   * @tparam WIDTH The number of columns of the result table.
+   * @param table The result table which will be filled.
+   * @param hull The transitive hull. Represented by a sparse, boolean adjacency
+   * matrix
+   * @param mapping IdMapping, which maps Ids to matrix indices and vice versa.
+   * @param startSideCol The column of the result table for the startSide of the
+   * hull
+   * @param targetSideCol The column of the result table for the targetSide of
+   * the hull
+   */
   template <size_t WIDTH>
-  static void fillTableWithHull(IdTableStatic<WIDTH>& table, const Map& hull,
+  static void fillTableWithHull(IdTableStatic<WIDTH>& table,
+                                const GrbMatrix& hull, const IdMapping& mapping,
                                 size_t startSideCol, size_t targetSideCol);
 
   /**
-   * @brief Prepare a Map and a nodes vector for the transitive hull
-   * computation.
+   * @brief Fill the IdTable with the given transitive hull. This function is
+   * used in case the hull computation has one (or more) Ids as start nodes.
    *
-   * @tparam SUB_WIDTH Number of columns of the sub table
-   * @tparam SIDE_WIDTH Number of columns of the startSideTable
-   * @param sub The sub table result
-   * @param startSide The TransitivePathSide where the edges start
-   * @param targetSide The TransitivePathSide where the edges end
-   * @param startSideTable An IdTable containing the Ids for the startSide
-   * @return std::pair<Map, std::vector<Id>> A Map and Id vector (nodes) for the
-   * transitive hull computation
+   * @tparam WIDTH The number of columns of the result table.
+   * @param table The result table which will be filled.
+   * @param hull The transitive hull. Represented by a sparse, boolean adjacency
+   * matrix
+   * @param mapping IdMapping, which maps Ids to matrix indices and vice versa.
+   * @param startNodes Ids of the start nodes.
+   * @param startSideCol The column of the result table for the startSide of the
+   * hull
+   * @param targetSideCol The column of the result table for the targetSide of
+   * the hull
    */
-  template <size_t SUB_WIDTH, size_t SIDE_WIDTH>
-  std::pair<Map, std::vector<Id>> setupMapAndNodes(
-      const IdTable& sub, const TransitivePathSide& startSide,
-      const TransitivePathSide& targetSide,
-      const IdTable& startSideTable) const;
+  template <size_t WIDTH>
+  static void fillTableWithHull(IdTableStatic<WIDTH>& table,
+                                const GrbMatrix& hull, const IdMapping& mapping,
+                                std::span<const Id> startNodes,
+                                size_t startSideCol, size_t targetSideCol);
 
   /**
-   * @brief Prepare a Map and a nodes vector for the transitive hull
-   * computation.
+   * @brief Fill the IdTable with the given transitive hull. This function is
+   * used if the start side was already bound and there is an IdTable from which
+   * data has to be copied to the result table.
    *
-   * @tparam SUB_WIDTH Number of columns of the sub table
-   * @param sub The sub table result
-   * @param startSide The TransitivePathSide where the edges start
-   * @param targetSide The TransitivePathSide where the edges end
-   * @return std::pair<Map, std::vector<Id>> A Map and Id vector (nodes) for the
-   * transitive hull computation
+   * @tparam WIDTH The number of columns of the result table.
+   * @tparam START_WIDTH The number of columns of the start table.
+   * @param table The result table which will be filled.
+   * @param hull The transitive hull. Represented by a sparse, boolean adjacency
+   * matrix
+   * @param mapping IdMapping, which maps Ids to matrix indices and vice versa.
+   * @param startNodes Ids of the start nodes.
+   * @param startSideCol The column of the result table for the startSide of the
+   * hull
+   * @param targetSideCol The column of the result table for the targetSide of
+   * the hull
+   * @param skipCol This column contains the Ids of the start side in the
+   * startSideTable and will be skipped.
    */
-  template <size_t SUB_WIDTH>
-  std::pair<Map, std::vector<Id>> setupMapAndNodes(
-      const IdTable& sub, const TransitivePathSide& startSide,
-      const TransitivePathSide& targetSide) const;
+  template <size_t WIDTH, size_t START_WIDTH>
+  static void fillTableWithHull(IdTableStatic<WIDTH>& table,
+                                const GrbMatrix& hull, const IdMapping& mapping,
+                                const IdTable& startSideTable,
+                                std::span<const Id> startNodes,
+                                size_t startSideCol, size_t targetSideCol,
+                                size_t skipCol);
 
-  // initialize the map from the subresult
-  template <size_t SUB_WIDTH>
-  Map setupEdgesMap(const IdTable& dynSub, const TransitivePathSide& startSide,
-                    const TransitivePathSide& targetSide) const;
+  GrbMatrix getTargetRow(GrbMatrix& hull, size_t targetIndex) const;
 
-  // initialize a vector for the starting nodes (Ids)
-  template <size_t WIDTH>
-  static std::span<const Id> setupNodes(const IdTable& table, size_t col);
+  /**
+   * @brief Create a boolean, sparse adjacency matrix from the given edges. The
+   * edges are given as lists, where one list contains the start node of the
+   * edge and the other list contains the target node of the edge.
+   * Also create an IdMapping, which maps the given Ids to matrix indices.
+   *
+   * @param startCol Column from the IdTable, which contains edge start nodes
+   * @param targetCol Column from the IdTable, which contains edge target nodes
+   * @param numRows Number of rows in the IdTable
+   */
+  std::tuple<GrbMatrix, IdMapping> setupMatrix(std::span<const Id> startCol,
+                                               std::span<const Id> targetCol,
+                                               size_t numRows) const;
+
+  /**
+   * @brief Create a boolean, sparse, adjacency matrix which holds the starting
+   * nodes for the transitive hull computation.
+   *
+   * @param startIds List of Ids where the transitive hull computation should
+   * start
+   * @param numRows Number of rows in the IdTable where startIds comes from
+   * @param mapping An IdMapping between Ids and matrix indices
+   * @return Matrix with one row for each start node
+   */
+  GrbMatrix setupStartNodeMatrix(std::span<const Id> startIds, size_t numRows,
+                                 IdMapping mapping) const;
 
   // Copy the columns from the input table to the output table
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
   static void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                           IdTableStatic<OUTPUT_WIDTH>& outputTable,
                           size_t inputRow, size_t outputRow, size_t skipCol);
-
-  // A small helper function: Insert the `value` to the set at `map[key]`.
-  // As the sets all have an allocator with memory limit, this construction is a
-  // little bit more involved, so this can be a separate helper function.
-  void insertIntoMap(Map& map, Id key, Id value) const;
 };
