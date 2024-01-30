@@ -93,6 +93,36 @@ void throwOverflowError(const std::string_view reason) {
 }
 
 /*
+A struct holding a list of all unique elements inside an `IdTable` column and
+how often they occur inside this column.
+Note: Can not be updated after creation.
+*/
+struct SetOfIdTableColumnElements {
+  /*
+  The list of all unique elements is also included inside `numOccurrences_`.
+  However, accessing a hash map entry based on index position takes linear time,
+  instead of constant.
+  */
+  std::vector<std::reference_wrapper<const ValueId>> uniqueElements_{};
+  ad_utility::HashMap<ValueId, size_t> numOccurrences_{};
+
+  /*
+  Set the member variables for the given column.
+  */
+  SetOfIdTableColumnElements(const std::span<const ValueId>& idTableColumnRef) {
+    std::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
+      if (auto numOccurrencesIterator = numOccurrences_.find(id);
+          numOccurrencesIterator != numOccurrences_.end()) {
+        (numOccurrencesIterator->second)++;
+      } else {
+        numOccurrences_.emplace(id, 1UL);
+        uniqueElements_.emplace_back(id);
+      }
+    });
+  }
+};
+
+/*
 @brief Create an overlap between the join columns of the IdTables, by randomly
 choosing distinct elements from the join column of the smaller table and
 overiding all their occurrences in the join column with randomly choosen
@@ -129,34 +159,8 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   AD_CONTRACT_CHECK(smallerTableJoinColumnRef.size() <=
                     biggerTableJoinColumnRef.size());
 
-  /*
-  All the distinct elements in the join column of the bigger table.
-  Needed, so that I can randomly (uniform distribution) choose a distinct
-  element in O(1).
-  */
-  std::vector<std::reference_wrapper<const ValueId>>
-      biggerTableJoinColumnDistinctElements;
-
-  /*
-  How many instances of a value are inside the join column of the bigger
-  table.
-  */
-  ad_utility::HashMap<ValueId, size_t>
-      numOccurrencesValueInBiggertTableJoinColumn{};
-  std::ranges::for_each(
-      biggerTableJoinColumnRef,
-      [&numOccurrencesValueInBiggertTableJoinColumn,
-       &biggerTableJoinColumnDistinctElements](const ValueId& val) {
-        if (auto numOccurrencesIterator =
-                numOccurrencesValueInBiggertTableJoinColumn.find(val);
-            numOccurrencesIterator !=
-            numOccurrencesValueInBiggertTableJoinColumn.end()) {
-          (numOccurrencesIterator->second)++;
-        } else {
-          numOccurrencesValueInBiggertTableJoinColumn.emplace(val, 1UL);
-          biggerTableJoinColumnDistinctElements.emplace_back(val);
-        }
-      });
+  // Collect and count the table elements.
+  SetOfIdTableColumnElements biggerTableJoinColumnSet(biggerTableJoinColumnRef);
 
   // Seeds for the random generators, so that things are less similiar.
   const std::array<ad_utility::RandomSeed, 2> seeds =
@@ -167,7 +171,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   in the bigger table.
   */
   ad_utility::SlowRandomIntGenerator<size_t> randomBiggerTableElement(
-      0, biggerTableJoinColumnDistinctElements.size() - 1, seeds.at(0));
+      0, biggerTableJoinColumnSet.uniqueElements_.size() - 1, seeds.at(0));
 
   // Generator for checking, if an overlap should be created.
   ad_utility::RandomDoubleGenerator randomDouble(0, 100, seeds.at(1));
@@ -184,9 +188,8 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   std::ranges::for_each(
       smallerTableJoinColumnRef,
       [&randomDouble, &probabilityToCreateOverlap,
-       &smallerTableElementToNewElement,
-       &numOccurrencesValueInBiggertTableJoinColumn, &randomBiggerTableElement,
-       &newOverlapMatches, &biggerTableJoinColumnDistinctElements](auto& id) {
+       &smallerTableElementToNewElement, &randomBiggerTableElement,
+       &newOverlapMatches, &biggerTableJoinColumnSet](auto& id) {
         /*
         If a value has no hash map value, with which it will be overwritten, we
         either assign it its own value, or an element from the bigger table.
@@ -197,7 +200,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
           // Values, that are only found in the smaller table, are added to the
           // hash map with value 0.
           const size_t numOccurrences{
-              numOccurrencesValueInBiggertTableJoinColumn[newValue]};
+              biggerTableJoinColumnSet.numOccurrences_[newValue]};
 
           // Skip, if the addition would cause an overflow.
           if (newOverlapMatches >
@@ -214,7 +217,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
           an entry in the hash map for the new values.
           */
           smallerTableElementToNewElement.emplace(
-              id, biggerTableJoinColumnDistinctElements.at(
+              id, biggerTableJoinColumnSet.uniqueElements_.at(
                       randomBiggerTableElement()));
         } else {
           /*
@@ -261,50 +264,11 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   AD_CONTRACT_CHECK(smallerTableJoinColumnRef.size() <=
                     biggerTableJoinColumnRef.size());
 
-  /*
-  All the distinct elements in the join columns. Needed, so that we can randomly
-  choose them with an uniform distribution.
-  */
-  using DistinctElementsVector =
-      std::vector<std::reference_wrapper<const ValueId>>;
-  DistinctElementsVector smallerTableJoinColumnDistinctElements;
-  DistinctElementsVector biggerTableJoinColumnDistinctElements;
-
-  // How many instances of a value are inside the join column of a table.
-  using NumOccurencesMap = ad_utility::HashMap<ValueId, size_t>;
-  NumOccurencesMap numOccurrencesElementInSmallerTableJoinColumn{};
-  NumOccurencesMap numOccurrencesElementInBiggerTableJoinColumn{};
-
-  // Collect the number of occurences and the distinct elements.
-  for (size_t idx = 0; idx < smallerTableJoinColumnRef.size() ||
-                       idx < biggerTableJoinColumnRef.size();
-       idx++) {
-    const auto loopBody =
-        [&idx](const std::span<const ValueId>& joinColumnReference,
-               DistinctElementsVector& distinctElementsVec,
-               NumOccurencesMap& numOccurrencesMap) {
-          // Only do anything, if the index is not to far yet.
-          if (idx < joinColumnReference.size()) {
-            const auto& id{joinColumnReference[idx]};
-
-            /*
-            Use the hash map of the occurrences, to keep track of, if we already
-            'encountered' a value.
-            */
-            if (auto numOccurrencesIterator = numOccurrencesMap.find(id);
-                numOccurrencesIterator != numOccurrencesMap.end()) {
-              (numOccurrencesIterator->second)++;
-            } else {
-              numOccurrencesMap.emplace(id, 1UL);
-              distinctElementsVec.emplace_back(id);
-            }
-          }
-        };
-    loopBody(smallerTableJoinColumnRef, smallerTableJoinColumnDistinctElements,
-             numOccurrencesElementInSmallerTableJoinColumn);
-    loopBody(biggerTableJoinColumnRef, biggerTableJoinColumnDistinctElements,
-             numOccurrencesElementInBiggerTableJoinColumn);
-  }
+  // Collect and count the table elements.
+  const SetOfIdTableColumnElements biggerTableJoinColumnSet(
+      biggerTableJoinColumnRef);
+  SetOfIdTableColumnElements smallerTableJoinColumnSet(
+      smallerTableJoinColumnRef);
 
   // Seeds for the random generators, so that things are less similiar.
   const std::array<ad_utility::RandomSeed, 2> seeds =
@@ -315,32 +279,31 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   in the bigger table.
   */
   ad_utility::SlowRandomIntGenerator<size_t> randomBiggerTableElement(
-      0, biggerTableJoinColumnDistinctElements.size() - 1, seeds.at(0));
+      0, biggerTableJoinColumnSet.uniqueElements_.size() - 1, seeds.at(0));
 
   /*
   Assign distinct join column elements of the smaller table to be overwritten by
   the bigger table, until we created enough new overlap matches.
   */
-  randomShuffle(smallerTableJoinColumnDistinctElements.begin(),
-                smallerTableJoinColumnDistinctElements.end(), seeds.at(1));
+  randomShuffle(smallerTableJoinColumnSet.uniqueElements_.begin(),
+                smallerTableJoinColumnSet.uniqueElements_.end(), seeds.at(1));
   size_t newOverlapMatches{0};
   ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
       smallerTableElementToNewElement{};
   std::ranges::for_each(
-      smallerTableJoinColumnDistinctElements,
-      [&biggerTableJoinColumnDistinctElements, &randomBiggerTableElement,
-       &numOccurrencesElementInSmallerTableJoinColumn,
-       &numOccurrencesElementInBiggerTableJoinColumn,
-       &wantedNumNewOverlapMatches, &newOverlapMatches,
-       &smallerTableElementToNewElement](const ValueId& smallerTableId) {
-        const auto& biggerTableId{biggerTableJoinColumnDistinctElements.at(
+      smallerTableJoinColumnSet.uniqueElements_,
+      [&randomBiggerTableElement, &wantedNumNewOverlapMatches,
+       &newOverlapMatches, &smallerTableElementToNewElement,
+       &biggerTableJoinColumnSet,
+       &smallerTableJoinColumnSet](const ValueId& smallerTableId) {
+        const auto& biggerTableId{biggerTableJoinColumnSet.uniqueElements_.at(
             randomBiggerTableElement())};
 
         // Skip this possibilty, if we have an overflow.
         size_t newMatches{
-            numOccurrencesElementInSmallerTableJoinColumn.at(smallerTableId)};
+            smallerTableJoinColumnSet.numOccurrences_.at(smallerTableId)};
         if (const size_t numOccurencesBiggerTable{
-                numOccurrencesElementInBiggerTableJoinColumn.at(biggerTableId)};
+                biggerTableJoinColumnSet.numOccurrences_.at(biggerTableId)};
             newMatches > getMaxValue<size_t>() / numOccurencesBiggerTable) {
           return;
         } else {
