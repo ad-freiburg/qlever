@@ -78,12 +78,11 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
 
   const auto input = inputResultTable.idTable().asStaticView<WIDTH>();
   auto output = std::move(*outputIdTable).toStatic<WIDTH>();
-
-  // Clang 17 seems to think `this` is const when passed directly to the lambda.
-  Filter& self = *this;
+  // Clang 17 seems to incorrectly deduce the type, so try to trick it
+  std::remove_const_t<decltype(output)>& output2 = output;
 
   auto visitor =
-      [&self, &output, &input,
+      [this, &output2, &input,
        &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
           T&& singleResult) {
         if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
@@ -92,14 +91,14 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
               0ul, [](const auto& sum, const auto& interval) {
                 return sum + (interval.second - interval.first);
               });
-          output.reserve(totalSize);
-          self.checkCancellation();
+          output2.reserve(totalSize);
+          checkCancellation();
           for (auto [beg, end] : singleResult._intervals) {
             AD_CONTRACT_CHECK(end <= input.size());
-            output.insertAtEnd(input.cbegin() + beg, input.cbegin() + end);
-            self.checkCancellation();
+            output2.insertAtEnd(input.cbegin() + beg, input.cbegin() + end);
+            checkCancellation();
           }
-          AD_CONTRACT_CHECK(output.size() == totalSize);
+          AD_CONTRACT_CHECK(output2.size() == totalSize);
         } else {
           // All other results are converted to boolean values via the
           // `EffectiveBooleanValueGetter`. This means for example, that zero,
@@ -114,9 +113,9 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
           using EBV = sparqlExpression::detail::EffectiveBooleanValueGetter;
           for (auto&& resultValue : resultGenerator) {
             if (EBV{}(resultValue, &evaluationContext) == EBV::Result::True) {
-              output.push_back(input[i]);
+              output2.push_back(input[i]);
             }
-            self.checkCancellation();
+            checkCancellation();
             ++i;
           }
         }
