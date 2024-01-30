@@ -31,6 +31,7 @@ void basicConstructorTest() {
     T varForConfigOption;
     OptionType opt("testOption", "", &varForConfigOption);
     ASSERT_EQ(&opt, &ProxyType<T>(opt).getConfigOption());
+    static_assert(std::same_as<T, typename ProxyType<T>::value_type>);
 
     // Is there an exception, if we give a config option of the wrong type?
     doForTypeInConfigOptionValueType([&opt]<typename WrongT>() {
