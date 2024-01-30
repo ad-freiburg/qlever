@@ -7,6 +7,7 @@
 #include "parser/Iri.h"
 #include "parser/NormalizedString.h"
 
+namespace ad_utility::triple_component {
 // A class to hold literal values.
 class Literal {
  private:
@@ -82,3 +83,4 @@ class Literal {
   static Literal literalWithoutQuotesWithLanguageTag(
       const std::string& contentWithoutQuotes, const std::string& languageTag);
 };
+}  // namespace ad_utility::triple_component

@@ -37,7 +37,7 @@ bool LiteralOrIri::isLiteral() const {
 }
 
 // __________________________________________
-const Literal& LiteralOrIri::getLiteral() const {
+const LiteralOrIri::Literal& LiteralOrIri::getLiteral() const {
   if (!isLiteral()) {
     AD_THROW(
         "LiteralOrIri object does not contain an Literal object and "

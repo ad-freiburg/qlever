@@ -6,6 +6,7 @@
 
 #include <utility>
 
+namespace ad_utility::triple_component {
 // __________________________________________
 Literal::Literal(NormalizedString content) : content_{std::move(content)} {}
 
@@ -74,3 +75,4 @@ Literal Literal::literalWithoutQuotesWithLanguageTag(
   return {RdfEscaping::normalizeLiteralWithoutQuotes(contentWithoutQuotes),
           RdfEscaping::normalizeLanguageTag(languageTag)};
 }
+}  // namespace ad_utility::triple_component
