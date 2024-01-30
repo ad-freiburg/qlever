@@ -6,6 +6,7 @@
 
 #include <utility>
 
+namespace ad_utility::triple_component {
 // __________________________________________
 Iri::Iri(NormalizedString iri) : iri_{std::move(iri)} {}
 
@@ -26,3 +27,5 @@ Iri Iri::iriref(const std::string& stringWithBrackets) {
 Iri Iri::prefixed(const Iri& prefix, const std::string& suffix) {
   return Iri{prefix, RdfEscaping::normalizeIriWithoutBrackets(suffix)};
 }
+
+}  // namespace ad_utility::triple_component

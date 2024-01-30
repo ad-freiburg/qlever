@@ -11,9 +11,7 @@
 #include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
 
-namespace {
-using Literal = ad_utility::triple_component::Literal;
-}
+using namespace ad_utility::triple_component;
 
 TEST(IriTest, IriCreation) {
   Iri iri = Iri::iriref("<http://www.wikidata.org/entity/Q3138>");

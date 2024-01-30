@@ -8,6 +8,8 @@
 
 #include "parser/NormalizedString.h"
 
+namespace ad_utility::triple_component {
+
 // A class to hold IRIs. It does not store the leading or trailing
 // angled bracket.
 //
@@ -36,3 +38,5 @@ class Iri {
   // angled brackets.
   NormalizedStringView getContent() const;
 };
+
+}  // namespace ad_utility::triple_component

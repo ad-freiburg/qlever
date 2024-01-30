@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+namespace ad_utility::triple_component {
 // __________________________________________
 LiteralOrIri::LiteralOrIri(Iri iri) : data_{std::move(iri)} {}
 
@@ -37,7 +38,7 @@ bool LiteralOrIri::isLiteral() const {
 }
 
 // __________________________________________
-const LiteralOrIri::Literal& LiteralOrIri::getLiteral() const {
+const Literal& LiteralOrIri::getLiteral() const {
   if (!isLiteral()) {
     AD_THROW(
         "LiteralOrIri object does not contain an Literal object and "
@@ -126,3 +127,4 @@ LiteralOrIri LiteralOrIri::prefixedIri(const Iri& prefix,
                                        const std::string& suffix) {
   return LiteralOrIri{Iri::prefixed(prefix, suffix)};
 }
+}  // namespace ad_utility::triple_component

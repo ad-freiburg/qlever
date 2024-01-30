@@ -9,10 +9,9 @@
 #include "parser/Iri.h"
 #include "parser/Literal.h"
 
+namespace ad_utility::triple_component {
 // A wrapper class that can contain either an Iri or a Literal object.
 class LiteralOrIri {
-  using Literal = ad_utility::triple_component::Literal;
-
  private:
   using LiteralOrIriVariant = std::variant<Literal, Iri>;
   LiteralOrIriVariant data_;
@@ -103,3 +102,4 @@ class LiteralOrIri {
   // Create a new iri given a prefix iri and its suffix
   static LiteralOrIri prefixedIri(const Iri& prefix, const std::string& suffix);
 };
+}  // namespace ad_utility::triple_component
