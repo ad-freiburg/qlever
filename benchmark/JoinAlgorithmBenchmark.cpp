@@ -1508,22 +1508,20 @@ class BmOnlyBiggerTableSizeChanges final
 
   BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
+    const std::string& tableName = absl::StrCat(
+        "Smaller table stays at ", getConfigVariables().smallerTableNumRows_,
+        " rows, ratio to rows of bigger table grows.");
+
+    // Returns the ratio used for the measurements in a given row.
+    auto growthFunction = createDefaultGrowthLambda(
+        10, getConfigVariables().minBiggerTableRows_ /
+                getConfigVariables().smallerTableNumRows_);
 
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
-        const std::string& tableName =
-            absl::StrCat("Smaller table stays at ",
-                         getConfigVariables().smallerTableNumRows_,
-                         " rows, ratio to rows of bigger table grows.");
-
-        // Returns the ratio used for the measurements in a given row.
-        auto growthFunction = createDefaultGrowthLambda(
-            10, getConfigVariables().minBiggerTableRows_ /
-                    getConfigVariables().smallerTableNumRows_);
-
         ResultTable& table = makeGrowingBenchmarkTable(
-            &results, std::move(tableName), "Row ratio", alwaysFalse,
+            &results, tableName, "Row ratio", alwaysFalse,
             getConfigVariables().overlapChance_, std::nullopt,
             getConfigVariables().randomSeed(), smallerTableSorted,
             biggerTableSorted, growthFunction,
@@ -1637,19 +1635,18 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
   BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
+    const std::string tableName =
+        "Both tables always have the same amount of rows and that amount "
+        "grows.";
+
+    // Returns the amount of rows in the smaller `IdTable`, used for the
+    // measurements in a given row.
+    auto growthFunction =
+        createDefaultGrowthLambda(10, getConfigVariables().minBiggerTableRows_);
 
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
-        const std::string tableName =
-            "Both tables always have the same amount of rows and that amount "
-            "grows.";
-
-        // Returns the amount of rows in the smaller `IdTable`, used for the
-        // measurements in a given row.
-        auto growthFunction = createDefaultGrowthLambda(
-            10, getConfigVariables().minBiggerTableRows_);
-
         ResultTable& table = makeGrowingBenchmarkTable(
             &results, tableName, "Amount of rows", alwaysFalse,
             getConfigVariables().overlapChance_, std::nullopt,
