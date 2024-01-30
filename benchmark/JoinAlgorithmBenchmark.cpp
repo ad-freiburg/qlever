@@ -702,9 +702,28 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                (canBeEqual && valueToCheck == minimumValue);
       };
     };
+    auto generateBiggerEqualLambdaDesc =
+        [](const ad_utility::isInstantiation<
+               ad_utility::ConstConfigOptionProxy> auto& option,
+           const auto& minimumValue, bool canBeEqual) {
+          return absl::StrCat("'", option.getConfigOption().getIdentifier(),
+                              "' must be bigger than",
+                              canBeEqual ? ", or equal to," : "", " ",
+                              minimumValue, ".");
+        };
 
     // Object with a `operator()` for the `<=` operator.
     auto lessEqualLambda = std::less_equal<size_t>{};
+    auto generateLessEqualLambdaDesc =
+        [](const ad_utility::isInstantiation<
+               ad_utility::ConstConfigOptionProxy> auto& lhs,
+           const ad_utility::isInstantiation<
+               ad_utility::ConstConfigOptionProxy> auto& rhs) {
+          return absl::StrCat("'", lhs.getConfigOption().getIdentifier(),
+                              "' must be smaller than, or equal to, "
+                              "'",
+                              rhs.getConfigOption().getIdentifier(), "'.");
+        };
 
     // Adding the validators.
 
@@ -773,23 +792,15 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // Is `smallerTableNumRows` a valid value?
     config.addValidator(
         generateBiggerEqualLambda(1UL, true),
-        absl::StrCat("'", smallerTableNumRows.getConfigOption().getIdentifier(),
-                     "' must be at least 1."),
-        absl::StrCat("'", smallerTableNumRows.getConfigOption().getIdentifier(),
-                     "' must be at least 1."),
+        generateBiggerEqualLambdaDesc(smallerTableNumRows, 1UL, true),
+        generateBiggerEqualLambdaDesc(smallerTableNumRows, 1UL, true),
         smallerTableNumRows);
 
     // Is `smallerTableNumRows` smaller than `minBiggerTableRows`?
     config.addValidator(
         lessEqualLambda,
-        absl::StrCat("'", smallerTableNumRows.getConfigOption().getIdentifier(),
-                     "' must be smaller than, or equal to, '",
-                     minBiggerTableRows.getConfigOption().getIdentifier(),
-                     "'."),
-        absl::StrCat("'", smallerTableNumRows.getConfigOption().getIdentifier(),
-                     "' must be smaller than, or equal to, '",
-                     minBiggerTableRows.getConfigOption().getIdentifier(),
-                     "'."),
+        generateLessEqualLambdaDesc(smallerTableNumRows, minBiggerTableRows),
+        generateLessEqualLambdaDesc(smallerTableNumRows, minBiggerTableRows),
         smallerTableNumRows, minBiggerTableRows);
 
     // Is `minBiggerTableRows` big enough, to deliver interesting measurements?
@@ -799,94 +810,68 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             true),
         absl::StrCat(
             "'", minBiggerTableRows.getConfigOption().getIdentifier(),
-            "' is to small. Interessting measurement values "
+            "' is to small. Interesting measurement values "
             "start at ",
             minBiggerTableRows.getConfigOption().getDefaultValueAsString(),
             " rows, or more."),
         absl::StrCat(
-            "'", minBiggerTableRows.getConfigOption().getIdentifier(),
-            "' is to small. Interessting measurement values "
-            "start at ",
-            minBiggerTableRows.getConfigOption().getDefaultValueAsString(),
-            " rows, or more."),
+            generateBiggerEqualLambdaDesc(
+                minBiggerTableRows,
+                minBiggerTableRows.getConfigOption().getDefaultValueAsString(),
+                true),
+            " Interesting measurement values only appear from that point "
+            "onwards."),
         minBiggerTableRows);
 
     // Is `minBiggerTableRows` smaller, or equal, to `maxBiggerTableRows`?
     config.addValidator(
         lessEqualLambda,
-        absl::StrCat("'", minBiggerTableRows.getConfigOption().getIdentifier(),
-                     "' must be smaller than, or equal to, "
-                     "'",
-                     maxBiggerTableRows.getConfigOption().getIdentifier(),
-                     "'."),
-        absl::StrCat("'", minBiggerTableRows.getConfigOption().getIdentifier(),
-                     "' must be smaller than, or equal to, "
-                     "'",
-                     maxBiggerTableRows.getConfigOption().getIdentifier(),
-                     "'."),
+        generateLessEqualLambdaDesc(minBiggerTableRows, maxBiggerTableRows),
+        generateLessEqualLambdaDesc(minBiggerTableRows, maxBiggerTableRows),
         minBiggerTableRows, maxBiggerTableRows);
 
     // Do we have at least 1 column?
     config.addValidator(
         generateBiggerEqualLambda(1UL, true),
-        absl::StrCat("'",
-                     smallerTableNumColumns.getConfigOption().getIdentifier(),
-                     "' must be at least 1."),
-        absl::StrCat("'",
-                     smallerTableNumColumns.getConfigOption().getIdentifier(),
-                     "' must be at least 1."),
+        generateBiggerEqualLambdaDesc(smallerTableNumColumns, 1UL, true),
+        generateBiggerEqualLambdaDesc(smallerTableNumColumns, 1UL, true),
         smallerTableNumColumns);
     config.addValidator(
         generateBiggerEqualLambda(1UL, true),
-        absl::StrCat("'",
-                     biggerTableNumColumns.getConfigOption().getIdentifier(),
-                     "' must be at least 1."),
-        absl::StrCat("'",
-                     biggerTableNumColumns.getConfigOption().getIdentifier(),
-                     "' must be at least 1."),
+        generateBiggerEqualLambdaDesc(biggerTableNumColumns, 1UL, true),
+        generateBiggerEqualLambdaDesc(biggerTableNumColumns, 1UL, true),
         biggerTableNumColumns);
 
     // Is `overlapChance_` bigger than 0?
     config.addValidator(
         generateBiggerEqualLambda(0.f, false),
-        absl::StrCat("'", overlapChance.getConfigOption().getIdentifier(),
-                     "' must be bigger than 0."),
-        absl::StrCat("'", overlapChance.getConfigOption().getIdentifier(),
-                     "' must be bigger than 0."),
+        generateBiggerEqualLambdaDesc(overlapChance, 0.f, false),
+        generateBiggerEqualLambdaDesc(overlapChance, 0.f, false),
         overlapChance);
 
     // Are the sample size ratios bigger than 0?
     config.addValidator(
         generateBiggerEqualLambda(0.f, false),
-        absl::StrCat(
-            "'", smallerTableSampleSizeRatio.getConfigOption().getIdentifier(),
-            "' must be bigger than 0."),
-        absl::StrCat(
-            "'", smallerTableSampleSizeRatio.getConfigOption().getIdentifier(),
-            "' must be bigger than 0."),
+        generateBiggerEqualLambdaDesc(smallerTableSampleSizeRatio, 0.f, false),
+        generateBiggerEqualLambdaDesc(smallerTableSampleSizeRatio, 0.f, false),
         smallerTableSampleSizeRatio);
     config.addValidator(
         generateBiggerEqualLambda(0.f, false),
-        absl::StrCat(
-            "'", biggerTableSampleSizeRatio.getConfigOption().getIdentifier(),
-            "' must be bigger than 0."),
-        absl::StrCat(
-            "'", biggerTableSampleSizeRatio.getConfigOption().getIdentifier(),
-            "' must be bigger than 0."),
+        generateBiggerEqualLambdaDesc(biggerTableSampleSizeRatio, 0.f, false),
+        generateBiggerEqualLambdaDesc(biggerTableSampleSizeRatio, 0.f, false),
         biggerTableSampleSizeRatio);
+    const std::string benchmarkSampleSizeRatioBiggerThanZeroValidatorDesc{
+        absl::StrCat(
+            "All entries in '",
+            benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
+            "' must be bigger than, or equal to, 0.")};
     config.addValidator(
         [](const std::vector<float>& vec) {
           return std::ranges::all_of(
               vec, [](const float ratio) { return ratio >= 0.f; });
         },
-        absl::StrCat(
-            "All entries in '",
-            benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
-            "' must be bigger than, or equal to, 0."),
-        absl::StrCat(
-            "All entries in '",
-            benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
-            "' must be bigger than, or equal to, 0."),
+        benchmarkSampleSizeRatioBiggerThanZeroValidatorDesc,
+        benchmarkSampleSizeRatioBiggerThanZeroValidatorDesc,
         benchmarkSampleSizeRatios);
 
     /*
@@ -895,21 +880,19 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     vector plus 1.
     So, of course, that has to be possible.
     */
+    const std::string benchmarkSampleSizeRatiosMaxSizeValidatorDesc{
+        absl::StrCat(
+            "All entries in '",
+            benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
+            "' must be smaller than, or equal to, ", getMaxValue<float>() - 1.f,
+            ".")};
     config.addValidator(
         [](const std::vector<float>& vec) {
           return std::ranges::max(vec) <=
                  getMaxValue<std::decay_t<decltype(vec)>::value_type>() - 1.f;
         },
-        absl::StrCat(
-            "All entries in '",
-            benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
-            "' must be smaller than, or equal to, ", getMaxValue<float>() - 1.f,
-            "."),
-        absl::StrCat(
-            "All entries in '",
-            benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
-            "' must be smaller than, or equal to, ", getMaxValue<float>() - 1.f,
-            "."),
+        benchmarkSampleSizeRatiosMaxSizeValidatorDesc,
+        benchmarkSampleSizeRatiosMaxSizeValidatorDesc,
         benchmarkSampleSizeRatios);
 
     /*
@@ -917,49 +900,34 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     Note: The static cast is needed, because a random generator seed is always
     `unsigned int`.
     */
+    const std::string randomSeedMaxSizeValidatorDesc{
+        absl::StrCat("'", randomSeed.getConfigOption().getIdentifier(),
+                     "' must be smaller than, or equal to, ",
+                     ad_utility::RandomSeed::max().get(), ".")};
     config.addValidator(
         [maxSeed = static_cast<size_t>(ad_utility::RandomSeed::max().get())](
             const size_t seed) { return seed <= maxSeed; },
-        absl::StrCat("'", randomSeed.getConfigOption().getIdentifier(),
-                     "' must be smaller than, or equal to, ",
-                     ad_utility::RandomSeed::max().get(), "."),
-        absl::StrCat("'", randomSeed.getConfigOption().getIdentifier(),
-                     "' must be smaller than, or equal to, ",
-                     ad_utility::RandomSeed::max().get(), "."),
+        randomSeedMaxSizeValidatorDesc, randomSeedMaxSizeValidatorDesc,
         randomSeed);
 
     // Is `maxTimeSingleMeasurement` a positive number?
     config.addValidator(
         generateBiggerEqualLambda(0.f, true),
-        absl::StrCat("'",
-                     maxTimeSingleMeasurement.getConfigOption().getIdentifier(),
-                     "' must be bigger than, or equal to, 0."),
-        absl::StrCat("'",
-                     maxTimeSingleMeasurement.getConfigOption().getIdentifier(),
-                     "' must be bigger than, or equal to, 0."),
+        generateBiggerEqualLambdaDesc(maxTimeSingleMeasurement, 0.f, true),
+        generateBiggerEqualLambdaDesc(maxTimeSingleMeasurement, 0.f, true),
         maxTimeSingleMeasurement);
 
     // Is the ratio of rows at least 10?
-    config.addValidator(
-        generateBiggerEqualLambda(10UL, true),
-        absl::StrCat("'", minRatioRows.getConfigOption().getIdentifier(),
-                     "' must be at least 10."),
-        absl::StrCat("'", minRatioRows.getConfigOption().getIdentifier(),
-                     "' must be at least 10."),
-        minRatioRows);
+    config.addValidator(generateBiggerEqualLambda(10UL, true),
+                        generateBiggerEqualLambdaDesc(minRatioRows, 10UL, true),
+                        generateBiggerEqualLambdaDesc(minRatioRows, 10UL, true),
+                        minRatioRows);
 
     // Is `minRatioRows` smaller than `maxRatioRows`?
-    config.addValidator(
-        lessEqualLambda,
-        absl::StrCat("'", minRatioRows.getConfigOption().getIdentifier(),
-                     "' must be smaller than, or equal to, "
-                     "'",
-                     maxRatioRows.getConfigOption().getIdentifier(), "'."),
-        absl::StrCat("'", minRatioRows.getConfigOption().getIdentifier(),
-                     "' must be smaller than, or equal to, "
-                     "'",
-                     maxRatioRows.getConfigOption().getIdentifier(), "'."),
-        minRatioRows, maxRatioRows);
+    config.addValidator(lessEqualLambda,
+                        generateLessEqualLambdaDesc(minRatioRows, maxRatioRows),
+                        generateLessEqualLambdaDesc(minRatioRows, maxRatioRows),
+                        minRatioRows, maxRatioRows);
 
     // Can the options be cast to double, while keeping their values? (Needed
     // for calculations later.)
