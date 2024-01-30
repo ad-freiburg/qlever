@@ -13,6 +13,7 @@
 #include <memory>
 #include <vector>
 
+#include "util/AsioHelpers.h"
 #include "util/UniqueCleanup.h"
 
 namespace ad_utility::websocket {
@@ -27,6 +28,7 @@ namespace net = boost::asio;
 class QueryToSocketDistributor {
   /// Strand to synchronize all operations on this class
   net::strand<net::any_io_executor> strand_;
+  mutable AsyncMutex mutex_;
   mutable net::deadline_timer infiniteTimer_;
   /// Vector that stores the actual data, so all websockets can read it at
   /// their own pace.
@@ -56,7 +58,7 @@ class QueryToSocketDistributor {
   explicit QueryToSocketDistributor(
       net::io_context& ioContext, const std::function<void(bool)>& cleanupCall);
 
-  ~QueryToSocketDistributor() { infiniteTimer_.cancel();}
+  ~QueryToSocketDistributor() { infiniteTimer_.cancel(); }
 
   /// Appends specified data to the vector and signals all waiting websockets
   /// that new data is available

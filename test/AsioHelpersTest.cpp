@@ -9,13 +9,39 @@
 #include <boost/asio/deadline_timer.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
+#include <boost/asio/experimental/parallel_group.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/strand.hpp>
 
 #include "util/AsioHelpers.h"
+#include "util/jthread.h"
 
 namespace net = boost::asio;
+
+TEST(AsioHelpers, asyncMutex) {
+  net::io_context ctx;
+  ad_utility::AsyncMutex mutex{ctx.get_executor()};
+  size_t counter = 0;
+
+  auto increaseAwaitable = [&counter, &mutex]() -> net::awaitable<void> {
+    auto guard = co_await mutex.asyncLockGuard(net::use_awaitable);
+    ++counter;
+    co_return;
+    // mutex.unlock();
+  };
+  for (size_t i = 0; i < 3000; ++i) {
+    // net::make_parallel_group();
+    net::co_spawn(ctx, increaseAwaitable, net::detached);
+    // net::post(ctx, increase);
+  }
+  std::vector<ad_utility::JThread> threads;
+  for (size_t i = 0; i < 20; ++i) {
+    threads.emplace_back([&ctx]() { ctx.run(); });
+  }
+  threads.clear();
+  EXPECT_EQ(counter, 3000);
+}
 
 /*
 using ad_utility::resumeOnOriginalExecutor;

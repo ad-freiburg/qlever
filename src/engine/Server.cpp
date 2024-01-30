@@ -773,7 +773,8 @@ boost::asio::awaitable<void> Server::processQuery(
 // _____________________________________________________________________________
 template <typename Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function) const {
-    return ad_utility::runOnExecutor(threadPool_.get_executor(), std::move(function));
+  return ad_utility::runOnExecutor(threadPool_.get_executor(),
+                                   std::move(function));
 }
 
 // _____________________________________________________________________________

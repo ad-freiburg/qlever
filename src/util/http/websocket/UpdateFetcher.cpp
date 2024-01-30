@@ -14,8 +14,7 @@ net::awaitable<UpdateFetcher::PayloadType> UpdateFetcher::waitForEvent() {
         co_await queryHub_.createOrAcquireDistributorForReceiving(queryId_);
   }
 
-  auto data = co_await
-      distributor_->waitForNextDataPiece(nextIndex_);
+  auto data = co_await distributor_->waitForNextDataPiece(nextIndex_);
   if (data) {
     nextIndex_++;
   }
