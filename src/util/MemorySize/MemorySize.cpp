@@ -5,8 +5,8 @@
 
 #include "util/MemorySize/MemorySize.h"
 
-#include <absl/strings/str_cat.h>
 #include <absl/strings/charconv.h>
+#include <absl/strings/str_cat.h>
 
 #include <charconv>
 #include <ctre-unicode.hpp>
