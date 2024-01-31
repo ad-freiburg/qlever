@@ -7,18 +7,13 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <cinttypes>
-#include <ranges>
+#include <charconv>
+#include <ctre-unicode.hpp>
 #include <string_view>
 
-#include "util/Cache.h"
+#include "util/Algorithm.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
-#include "util/Exception.h"
-#include "util/HashMap.h"
-#include "util/MemorySize/MemorySizeParser.h"
-#include "util/MemorySize/generated/MemorySizeLanguageLexer.h"
-#include "util/MemorySize/generated/MemorySizeLanguageParser.h"
 
 namespace ad_utility {
 // _____________________________________________________________________________
@@ -63,7 +58,39 @@ std::string MemorySize::asString() const {
 
 // _____________________________________________________________________________
 MemorySize MemorySize::parse(std::string_view str) {
-  return MemorySizeParser::parseMemorySize(str);
+  if (auto matcher =
+          ctre::match<"(\\d+(?:\\.\\d+)?) ([kKmMgGtT][bB]?|[bB])">(str)) {
+    auto amountString = matcher.get<1>().to_view();
+    double amount;
+    std::from_chars(amountString.begin(), amountString.end(), amount);
+    auto unitString = matcher.get<2>().to_view();
+    switch (unitString.at(0)) {
+      case 'b':
+      case 'B':
+        if (ad_utility::contains(amountString, '.')) {
+          break;
+        }
+        return MemorySize::bytes(static_cast<size_t>(amount));
+      case 'k':
+      case 'K':
+        return MemorySize::kilobytes(amount);
+      case 'm':
+      case 'M':
+        return MemorySize::megabytes(amount);
+      case 'g':
+      case 'G':
+        return MemorySize::gigabytes(amount);
+      case 't':
+      case 'T':
+        return MemorySize::terabytes(amount);
+      default:
+        // Whatever this is, it is false.
+        AD_FAIL();
+    }
+  }
+  throw std::runtime_error(absl::StrCat(
+      "'", str,
+      R"(' could not be parsed as a memory size. Examples for valid memory sizes are "4 B", "3.21 MB", "2.392 TB".)"));
 }
 
 // _____________________________________________________________________________
