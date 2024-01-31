@@ -10,7 +10,6 @@
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
 
-
 using std::pair;
 using std::vector;
 
