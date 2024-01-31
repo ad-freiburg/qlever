@@ -94,10 +94,13 @@ class Server {
   };
 
   // Clang doesn't seem to be able to automatically deduce the type correctly.
+  // and GCC 11 thinks deduction guides are not allowed within classes.
+#ifdef __clang__
   template <ad_utility::isInstantiation<absl::Cleanup> CancelTimeout>
   CancellationHandleAndTimeoutTimerCancel(SharedCancellationHandle,
                                           CancelTimeout)
       -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
+#endif
 
   /// Parse the path and URL parameters from the given request. Supports both
   /// GET and POST request according to the SPARQL 1.1 standard.

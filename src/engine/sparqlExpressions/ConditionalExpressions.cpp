@@ -82,13 +82,13 @@ class CoalesceExpression : public VariadicExpression {
             // more information.
             DISABLE_UNINITIALIZED_WARNINGS
             result[unboundIndices[idx]] = constantResult;
-            ENABLE_UNINITIALIZED_WARNINGS
           },
           [ctx]() {
             ctx->cancellationHandle_->throwIfCancelled(
                 "CoalesceExpression constant expression result");
           });
     };
+    ENABLE_UNINITIALIZED_WARNINGS
 
     // For a single child result, write the result at the indices where the
     // result so far is unbound, and the child result is bound. While doing so,
