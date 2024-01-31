@@ -4,7 +4,9 @@
 
 #pragma once
 
+extern "C" {
 #include <GraphBLAS.h>
+}
 
 #include <memory>
 #include <vector>
