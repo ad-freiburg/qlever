@@ -87,10 +87,17 @@ class Server {
   template <ad_utility::isInstantiation<absl::Cleanup> CancelTimeout>
   struct CancellationHandleAndTimeoutTimerCancel {
     SharedCancellationHandle handle_;
-    /// Function that when called cancels the timer that would otherwise
-    /// invoke the cancellation of the `handle_` via the time limit.
+    /// Object of type `absl::Cleanup` that when destroyed cancels the timer
+    /// that would otherwise invoke the cancellation of the `handle_` via the
+    /// time limit.
     CancelTimeout cancelTimeout_;
   };
+
+  // Clang doesn't seem to be able to automatically deduce the type correctly.
+  template <ad_utility::isInstantiation<absl::Cleanup> CancelTimeout>
+  CancellationHandleAndTimeoutTimerCancel(SharedCancellationHandle,
+                                          CancelTimeout)
+      -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
 
   /// Parse the path and URL parameters from the given request. Supports both
   /// GET and POST request according to the SPARQL 1.1 standard.
@@ -131,12 +138,11 @@ class Server {
 
   json composeCacheStatsJson() const;
 
-  // Perform the following steps: Acquire a token from the
-  // queryProcessingSemaphore_, run `function`, and release the token. These
-  // steps are performed on a new thread (not one of the server threads).
-  // Returns an awaitable of the return value of `function`
+  /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
+  /// it's completion, wrapping the result.
   template <typename Function, typename T = std::invoke_result_t<Function>>
-  Awaitable<T> computeInNewThread(Function function) const;
+  Awaitable<T> computeInNewThread(Function function,
+                                  SharedCancellationHandle handle) const;
 
   /// This method extracts a client-defined query id from the passed HTTP
   /// request if it is present. If it is not present or empty, a new

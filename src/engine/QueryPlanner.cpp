@@ -1105,15 +1105,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
              << b.size() << " plans...\n";
   for (const auto& ai : a) {
     for (const auto& bj : b) {
-      LOG(TRACE) << "Creating join candidates for " << ai._qet->getCacheKey()
-                 << "\n and " << bj._qet->getCacheKey() << '\n';
-      auto v = createJoinCandidates(ai, bj, tg);
-      for (auto& plan : v) {
+      for (auto& plan : createJoinCandidates(ai, bj, tg)) {
         candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
             .emplace_back(std::move(plan));
       }
+      cancellationHandle_->throwIfCancelled("Creating join candidates");
     }
-    cancellationHandle_->throwIfCancelled("Creating join candidates");
   }
 
   // Duplicates are removed if the same triples are touched,

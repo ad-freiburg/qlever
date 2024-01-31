@@ -545,10 +545,8 @@ auto Server::setupCancellationHandle(
   cancellationHandle->startWatchDog();
   absl::Cleanup cancelCancellationHandle{
       cancelAfterDeadline(executor, cancellationHandle, timeLimit)};
-  // Clang apparently needs explicit type parameters
-  return CancellationHandleAndTimeoutTimerCancel<
-      decltype(cancelCancellationHandle)>{std::move(cancellationHandle),
-                                          std::move(cancelCancellationHandle)};
+  return CancellationHandleAndTimeoutTimerCancel{
+      std::move(cancellationHandle), std::move(cancelCancellationHandle)};
 }
 
 // ____________________________________________________________________________
@@ -669,14 +667,12 @@ boost::asio::awaitable<void> Server::processQuery(
     // Common code for sending responses for the streamable media types
     // (tsv, csv, octet-stream, turtle).
     auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
-      auto responseGenerator = co_await computeInNewThread([&] {
-        // It might take some time until the thread pool is ready,
-        // so reset the state here. Ideally waiting for the thread pool
-        // would periodically check the cancellation state
-        cancellationHandle->resetWatchDogState();
-        return ExportQueryExecutionTrees::computeResultAsStream(
-            plannedQuery.value().parsedQuery_, qet, mediaType);
-      });
+      auto responseGenerator = co_await computeInNewThread(
+          [&plannedQuery, &qet, mediaType] {
+            return ExportQueryExecutionTrees::computeResultAsStream(
+                plannedQuery.value().parsedQuery_, qet, mediaType);
+          },
+          cancellationHandle);
 
       // The `streamable_body` that is used internally turns all exceptions that
       // occur while generating the results into "broken pipe". We store the
@@ -712,11 +708,13 @@ boost::asio::awaitable<void> Server::processQuery(
       case qleverJson:
       case sparqlJson: {
         // Normal case: JSON response
-        auto responseString = co_await computeInNewThread([&, maxSend] {
-          return ExportQueryExecutionTrees::computeResultAsJSON(
-              plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
-              mediaType.value());
-        });
+        auto responseString = co_await computeInNewThread(
+            [&plannedQuery, &qet, &requestTimer, maxSend, mediaType] {
+              return ExportQueryExecutionTrees::computeResultAsJSON(
+                  plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
+                  mediaType.value());
+            },
+            cancellationHandle);
         co_await sendJson(std::move(responseString), responseStatus);
       } break;
       default:
@@ -784,40 +782,45 @@ boost::asio::awaitable<void> Server::processQuery(
 
 // _____________________________________________________________________________
 template <typename Function, typename T>
-Awaitable<T> Server::computeInNewThread(Function function) const {
-  auto runOnExecutor = [](auto executor, Function func) -> net::awaitable<T> {
+Awaitable<T> Server::computeInNewThread(Function function,
+                                        SharedCancellationHandle handle) const {
+  auto runOnExecutor =
+      [](auto executor, Function func,
+         SharedCancellationHandle handle) -> net::awaitable<T> {
     co_await net::post(net::bind_executor(executor, net::use_awaitable));
+    // It might take some time until the thread pool is ready,
+    // so reset the state here. Ideally waiting for the thread pool
+    // would periodically check the cancellation state
+    handle->resetWatchDogState();
     co_return std::invoke(func);
   };
-  return ad_utility::resumeOnOriginalExecutor(
-      runOnExecutor(threadPool_.get_executor(), std::move(function)));
+  return ad_utility::resumeOnOriginalExecutor(runOnExecutor(
+      threadPool_.get_executor(), std::move(function), std::move(handle)));
 }
 
 // _____________________________________________________________________________
 net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
     const std::string& query, QueryExecutionContext& qec,
     SharedCancellationHandle handle, TimeLimit timeLimit) const {
-  return computeInNewThread([&query, &qec,
-                             enablePatternTrick = enablePatternTrick_,
-                             handle = std::move(handle), timeLimit]() mutable {
-    // It might take some time until the thread pool is ready,
-    // so reset the state here. Ideally waiting for the thread pool
-    // would periodically check the cancellation state
-    handle->resetWatchDogState();
-    auto pq = SparqlParser::parseQuery(query);
-    handle->throwIfCancelled("After parsing");
-    QueryPlanner qp(&qec, handle);
-    qp.setEnablePatternTrick(enablePatternTrick);
-    auto qet = qp.createExecutionTree(pq);
-    handle->throwIfCancelled("After query planning");
-    PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
+  auto handleCopy = handle;
+  return computeInNewThread(
+      [&query, &qec, enablePatternTrick = enablePatternTrick_,
+       handle = std::move(handle), timeLimit]() mutable {
+        auto pq = SparqlParser::parseQuery(query);
+        handle->throwIfCancelled("After parsing");
+        QueryPlanner qp(&qec, handle);
+        qp.setEnablePatternTrick(enablePatternTrick);
+        auto qet = qp.createExecutionTree(pq);
+        handle->throwIfCancelled("After query planning");
+        PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
 
-    plannedQuery.queryExecutionTree_.getRootOperation()
-        ->recursivelySetCancellationHandle(std::move(handle));
-    plannedQuery.queryExecutionTree_.getRootOperation()
-        ->recursivelySetTimeConstraint(timeLimit);
-    return plannedQuery;
-  });
+        plannedQuery.queryExecutionTree_.getRootOperation()
+            ->recursivelySetCancellationHandle(std::move(handle));
+        plannedQuery.queryExecutionTree_.getRootOperation()
+            ->recursivelySetTimeConstraint(timeLimit);
+        return plannedQuery;
+      },
+      std::move(handleCopy));
 }
 
 // _____________________________________________________________________________
