@@ -47,32 +47,40 @@ using ad_utility::testing::IntId;
 // exact contents.
 struct TestContext {
   static const inline std::string turtleInput =
-      "<x> <label> \"alpha\" . <x> <label> \"Alpha\". <x> <label> \"älpha\" . "
+      "<x> <label> \"alpha\" . "
+      "<x> <label> \"Alpha\" . "
+      "<x> <label> \"älpha\" . "
       "<x> <label> \"A\" . "
-      "<x> "
-      "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
-      "\"zz\"@en";
+      "<x> <label> \"Beta\" . "
+      "<x> <is-a> <y> . "
+      "<y> <is-a> <x> . "
+      "<z> <is-a> _:blank . "
+      "<z> <label> \"zz\"@en";
   QueryExecutionContext* qec = ad_utility::testing::getQec(turtleInput);
   VariableToColumnMap varToColMap;
   LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
-  sparqlExpression::EvaluationContext context{*qec, varToColMap, table,
-                                              qec->getAllocator(), localVocab};
+  sparqlExpression::EvaluationContext context{
+      *qec,       varToColMap,
+      table,      qec->getAllocator(),
+      localVocab, std::make_shared<ad_utility::CancellationHandle<>>()};
   std::function<Id(const std::string&)> getId =
       ad_utility::testing::makeGetId(qec->getIndex());
   // IDs of literals and entities in the vocabulary of the index.
-  Id x, label, alpha, aelpha, A, Beta, zz;
+  Id x, label, alpha, aelpha, A, Beta, zz, blank;
   // IDs of literals (the first two) and entities (the latter two) in the local
   // vocab.
   Id notInVocabA, notInVocabB, notInVocabC, notInVocabD, notInVocabAelpha;
   TestContext() {
-    // First get some IDs for strings from the vocabulary to later reuse them
+    // First get some IDs for strings from the vocabulary to later reuse them.
+    // Note the `u_` inserted for the blank node (see 'BlankNode.cpp').
     x = getId("<x>");
     alpha = getId("\"alpha\"");
     aelpha = getId("\"älpha\"");
     A = getId("\"A\"");
     Beta = getId("\"Beta\"");
     zz = getId("\"zz\"@en");
+    blank = getId("_:u_blank");
 
     notInVocabA = Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained("\"notInVocabA\""));

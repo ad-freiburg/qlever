@@ -155,6 +155,7 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
                                                 context);
         }
       }
+      context->cancellationHandle_->throwIfCancelled("RelationalExpression");
       return std::nullopt;
     };
     std::optional<ExpressionResult> resultFromBinarySearch;
@@ -195,6 +196,7 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
     ad_utility::visitWithVariantsAndParameters(impl, base(*itA), base(*itB));
     ++itA;
     ++itB;
+    context->cancellationHandle_->throwIfCancelled("RelationalExpression");
   }
 
   if constexpr (resultIsConstant) {
