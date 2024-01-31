@@ -6,6 +6,7 @@
 #pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Random.h"
 
 namespace sparqlExpression {
@@ -28,9 +29,16 @@ class RandomExpression : public SparqlExpression {
       return Id::makeFromInt(randInt() >> Id::numDatatypeBits);
     }
 
-    for (size_t i = 0; i < numElements; ++i) {
-      result.push_back(Id::makeFromInt(randInt() >> Id::numDatatypeBits));
-    }
+    // 1000 is an arbitrarily chosen interval at which to check for
+    // cancellation.
+    ad_utility::chunkedForLoop<1000>(
+        0, numElements,
+        [&result, &randInt](size_t) {
+          result.push_back(Id::makeFromInt(randInt() >> Id::numDatatypeBits));
+        },
+        [context]() {
+          context->cancellationHandle_->throwIfCancelled("RandomExpression");
+        });
     return result;
   }
 

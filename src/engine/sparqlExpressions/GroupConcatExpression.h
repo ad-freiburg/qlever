@@ -26,10 +26,10 @@ class GroupConcatExpression : public SparqlExpression {
 
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override {
-    auto impl = [context,
-                 this](SingleExpressionResult auto&& el) -> ExpressionResult {
+    auto impl =
+        [this, context](SingleExpressionResult auto&& el) -> ExpressionResult {
       std::string result;
-      auto groupConcatImpl = [&result, this, context](auto generator) {
+      auto groupConcatImpl = [this, &result, context](auto generator) {
         // TODO<joka921> Make this a configurable constant.
         result.reserve(20000);
         for (auto& inp : generator) {
@@ -40,11 +40,14 @@ class GroupConcatExpression : public SparqlExpression {
             }
             result.append(s.value());
           }
+          context->cancellationHandle_->throwIfCancelled(
+              "GroupConcatExpression");
         }
       };
       auto generator =
           detail::makeGenerator(AD_FWD(el), context->size(), context);
       if (distinct_) {
+        context->cancellationHandle_->throwIfCancelled("GroupConcatExpression");
         groupConcatImpl(detail::getUniqueElements(context, context->size(),
                                                   std::move(generator)));
       } else {

@@ -18,8 +18,11 @@
 using std::vector;
 
 class QueryPlanner {
+  using CancellationHandle = ad_utility::SharedCancellationHandle;
+
  public:
-  explicit QueryPlanner(QueryExecutionContext* qec);
+  explicit QueryPlanner(QueryExecutionContext* qec,
+                        CancellationHandle cancellationHandle);
 
   // Create the best execution tree for the given query according to the
   // optimization algorithm and cost estimates of the QueryPlanner.
@@ -217,9 +220,11 @@ class QueryPlanner {
 
   // Used to count the number of unique variables created using
   // generateUniqueVarName
-  size_t _internalVarCount;
+  size_t _internalVarCount = 0;
 
-  bool _enablePatternTrick;
+  bool _enablePatternTrick = true;
+
+  CancellationHandle cancellationHandle_;
 
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
@@ -427,11 +432,11 @@ class QueryPlanner {
   [[nodiscard]] vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
       const vector<vector<SubtreePlan>>& children);
-  std::vector<QueryPlanner::SubtreePlan>
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
   // are not in fact connected (via their variables).
+  std::vector<QueryPlanner::SubtreePlan>
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
       const vector<SparqlFilter>& filters, const TripleGraph& tg) const;
@@ -452,4 +457,8 @@ class QueryPlanner {
   /// if this Planner is not associated with a queryExecutionContext we are only
   /// in the unit test mode
   [[nodiscard]] bool isInTestMode() const { return _qec == nullptr; }
+
+  /// Helper function to check if the assigned `cancellationHandle_` has
+  /// been cancelled yet.
+  void checkCancellation() const;
 };

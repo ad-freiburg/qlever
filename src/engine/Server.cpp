@@ -14,6 +14,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "util/AsioHelpers.h"
+#include "util/CompilerWarnings.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseableDuration.h"
@@ -522,24 +523,30 @@ auto Server::cancelAfterDeadline(
   net::co_spawn(strand,
                 cancelAfterTimeout(std::move(cancellationHandle), timer),
                 net::detached);
-  return [strand, timer = std::move(timer)]() mutable {
+  DISABLE_UNINITIALIZED_WARNINGS
+  // For some reason gcc 11-13 with -O3 think `executed` may be uninitialized
+  return [strand, timer = std::move(timer), executed = false]() mutable {
+    AD_CORRECTNESS_CHECK(!executed);
+    ENABLE_UNINITIALIZED_WARNINGS
+    executed = true;
+    // Only run if not moved from
     net::post(strand, [timer = std::move(timer)]() { timer->cancel(); });
   };
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 auto Server::setupCancellationHandle(
-    const net::any_io_executor& executor,
-    const ad_utility::websocket::QueryId& queryId,
-    const std::shared_ptr<Operation>& rootOperation, TimeLimit timeLimit) const
-    -> ad_utility::InvocableWithExactReturnType<void> auto {
+    const ad_utility::websocket::QueryId& queryId, TimeLimit timeLimit,
+    const net::any_io_executor& executor) const
+    -> ad_utility::isInstantiation<
+        CancellationHandleAndTimeoutTimerCancel> auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
-  cancellationHandle->startWatchDog();
   AD_CORRECTNESS_CHECK(cancellationHandle);
-  rootOperation->recursivelySetCancellationHandle(
-      std::move(cancellationHandle));
-  rootOperation->recursivelySetTimeConstraint(timeLimit);
-  return cancelAfterDeadline(executor, cancellationHandle, timeLimit);
+  cancellationHandle->startWatchDog();
+  absl::Cleanup cancelCancellationHandle{
+      cancelAfterDeadline(executor, cancellationHandle, timeLimit)};
+  return CancellationHandleAndTimeoutTimerCancel{
+      std::move(cancellationHandle), std::move(cancelCancellationHandle)};
 }
 
 // ____________________________________________________________________________
@@ -641,13 +648,14 @@ boost::asio::awaitable<void> Server::processQuery(
     QueryExecutionContext qec(index_, &cache_, allocator_,
                               sortPerformanceEstimator_,
                               std::ref(messageSender), pinSubtrees, pinResult);
+    auto [cancellationHandle, cancelTimeoutOnDestruction] =
+        setupCancellationHandle(messageSender.getQueryId(), timeLimit,
+                                co_await net::this_coro::executor);
 
-    plannedQuery = co_await parseAndPlan(query, qec);
+    plannedQuery =
+        co_await parseAndPlan(query, qec, cancellationHandle, timeLimit);
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
-    absl::Cleanup cancelCancellationHandle{setupCancellationHandle(
-        co_await net::this_coro::executor, messageSender.getQueryId(),
-        qet.getRootOperation(), timeLimit)};
     auto timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
         qet.getRootOperation()->getRuntimeInfoWholeQuery();
@@ -659,12 +667,12 @@ boost::asio::awaitable<void> Server::processQuery(
     // Common code for sending responses for the streamable media types
     // (tsv, csv, octet-stream, turtle).
     auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
-      auto responseGenerator = co_await computeInNewThread([&] {
-        queryRegistry_.getCancellationHandle(messageSender.getQueryId())
-            ->resetWatchDogState();
-        return ExportQueryExecutionTrees::computeResultAsStream(
-            plannedQuery.value().parsedQuery_, qet, mediaType);
-      });
+      auto responseGenerator = co_await computeInNewThread(
+          [&plannedQuery, &qet, mediaType] {
+            return ExportQueryExecutionTrees::computeResultAsStream(
+                plannedQuery.value().parsedQuery_, qet, mediaType);
+          },
+          cancellationHandle);
 
       // The `streamable_body` that is used internally turns all exceptions that
       // occur while generating the results into "broken pipe". We store the
@@ -700,11 +708,13 @@ boost::asio::awaitable<void> Server::processQuery(
       case qleverJson:
       case sparqlJson: {
         // Normal case: JSON response
-        auto responseString = co_await computeInNewThread([&, maxSend] {
-          return ExportQueryExecutionTrees::computeResultAsJSON(
-              plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
-              mediaType.value());
-        });
+        auto responseString = co_await computeInNewThread(
+            [&plannedQuery, &qet, &requestTimer, maxSend, mediaType] {
+              return ExportQueryExecutionTrees::computeResultAsJSON(
+                  plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
+                  mediaType.value());
+            },
+            cancellationHandle);
         co_await sendJson(std::move(responseString), responseStatus);
       } break;
       default:
@@ -772,26 +782,45 @@ boost::asio::awaitable<void> Server::processQuery(
 
 // _____________________________________________________________________________
 template <typename Function, typename T>
-Awaitable<T> Server::computeInNewThread(Function function) const {
-  auto runOnExecutor = [](auto executor, Function func) -> net::awaitable<T> {
+Awaitable<T> Server::computeInNewThread(Function function,
+                                        SharedCancellationHandle handle) const {
+  auto runOnExecutor =
+      [](auto executor, Function func,
+         SharedCancellationHandle handle) -> net::awaitable<T> {
     co_await net::post(net::bind_executor(executor, net::use_awaitable));
+    // It might take some time until the thread pool is ready,
+    // so reset the state here. Ideally waiting for the thread pool
+    // would periodically check the cancellation state
+    handle->resetWatchDogState();
     co_return std::invoke(func);
   };
-  return ad_utility::resumeOnOriginalExecutor(
-      runOnExecutor(threadPool_.get_executor(), std::move(function)));
+  return ad_utility::resumeOnOriginalExecutor(runOnExecutor(
+      threadPool_.get_executor(), std::move(function), std::move(handle)));
 }
 
 // _____________________________________________________________________________
 net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
-    const std::string& query, QueryExecutionContext& qec) const {
+    const std::string& query, QueryExecutionContext& qec,
+    SharedCancellationHandle handle, TimeLimit timeLimit) const {
+  auto handleCopy = handle;
   return computeInNewThread(
-      [&query, &qec, enablePatternTrick = enablePatternTrick_]() {
+      [&query, &qec, enablePatternTrick = enablePatternTrick_,
+       handle = std::move(handle), timeLimit]() mutable {
         auto pq = SparqlParser::parseQuery(query);
-        QueryPlanner qp(&qec);
+        handle->throwIfCancelled("After parsing");
+        QueryPlanner qp(&qec, handle);
         qp.setEnablePatternTrick(enablePatternTrick);
         auto qet = qp.createExecutionTree(pq);
-        return PlannedQuery{std::move(pq), std::move(qet)};
-      });
+        handle->throwIfCancelled("After query planning");
+        PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
+
+        plannedQuery.queryExecutionTree_.getRootOperation()
+            ->recursivelySetCancellationHandle(std::move(handle));
+        plannedQuery.queryExecutionTree_.getRootOperation()
+            ->recursivelySetTimeConstraint(timeLimit);
+        return plannedQuery;
+      },
+      std::move(handleCopy));
 }
 
 // _____________________________________________________________________________

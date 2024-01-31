@@ -205,8 +205,13 @@ TEST(SparqlExpressionParser, First) {
       ad_utility::testing::makeAllocator()};
   IdTable table{alloc};
   LocalVocab localVocab;
-  sparqlExpression::EvaluationContext input{*ad_utility::testing::getQec(), map,
-                                            table, alloc, localVocab};
+  sparqlExpression::EvaluationContext input{
+      *ad_utility::testing::getQec(),
+      map,
+      table,
+      alloc,
+      localVocab,
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   auto result = resultAsExpression->evaluate(&input);
   AD_CONTRACT_CHECK(std::holds_alternative<Id>(result));
   ASSERT_EQ(std::get<Id>(result).getDatatype(), Datatype::Int);
