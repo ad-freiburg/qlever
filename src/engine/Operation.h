@@ -219,8 +219,7 @@ class Operation {
   // Check if the cancellation flag has been set and throw an exception if
   // that's the case. This will be called at strategic places on code that
   // potentially can take a (too) long time. This function is designed to be
-  // as lightweight as possible because of that. The `detailSupplier` allows to
-  // pass a message to add to any potential exception that might be thrown.
+  // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
       ad_utility::source_location location =
           ad_utility::source_location::current()) const {
