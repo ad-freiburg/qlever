@@ -322,7 +322,7 @@ Awaitable<void> Server::process(
     logCommand(cmd, "dump active queries");
     nlohmann::json json;
     for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
-      json[nlohmann::json(std::move(key))] = std::move(value);
+      json[nlohmann::json(key)] = std::move(value);
     }
     response = createJsonResponse(json, request);
   }
