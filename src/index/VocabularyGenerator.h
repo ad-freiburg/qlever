@@ -90,7 +90,6 @@ class VocabularyMerger {
   // The result (mostly metadata) which we'll return.
   VocabularyMetaData metaData_;
   std::optional<TripleComponentWithIndex> lastTripleComponent_ = std::nullopt;
-  std::ofstream outfileExternal_;
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> idVecs_;
 
@@ -112,10 +111,11 @@ class VocabularyMerger {
   // Argument comparator gives the way to order strings (case-sensitive or not)
   // This automatically resets the inner members after finishing, to leave the
   // external interface stateless
-  template <typename Comp, typename InternalVocabularyAction>
+  template <typename Comp, typename InternalVocabularyAction, typename ExternalVocabularyAction>
   VocabularyMetaData mergeVocabulary(const std::string& fileIdx,
                                      size_t numFiles, Comp comparator,
                                      InternalVocabularyAction& action,
+                                     ExternalVocabularyAction& externalAction,
                                      ad_utility::MemorySize memToUse);
 
  private:
@@ -149,16 +149,15 @@ class VocabularyMerger {
   // write the queu words in the buffer to their corresponding idPairVecs.
   // Requires that all the QueueWords that are ever passed are ordered
   // alphabetically (Also across multiple calls)
-  template <typename InternalVocabularyAction>
+  template <typename InternalVocabularyAction, typename ExternalVocabularyAction>
   void writeQueueWordsToIdVec(
       const std::vector<QueueWord>& buffer,
-      InternalVocabularyAction& internalVocabularyAction, const auto& lessThan);
+      InternalVocabularyAction& internalVocabularyAction, ExternalVocabularyAction& externalVocabularyAction, const auto& lessThan);
 
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
     metaData_ = VocabularyMetaData{};
     lastTripleComponent_ = std::nullopt;
-    outfileExternal_ = std::ofstream();
     idVecs_.clear();
   }
 

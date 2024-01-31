@@ -10,10 +10,8 @@
 #include <iterator>
 #include <type_traits>
 #include <utility>
+#include <coroutine>
 
-// Coroutines are still experimental in clang libcpp, therefore adapt the
-// appropriate namespaces by including the convenience header.
-#include "util/Coroutines.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 

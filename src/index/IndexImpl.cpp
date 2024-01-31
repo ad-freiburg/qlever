@@ -53,15 +53,10 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
 
-  LOG(INFO) << "Converting external vocabulary to binary format ..."
-            << std::endl;
-  vocab_.externalizeLiteralsFromTextFile(
-      onDiskBase_ + EXTERNAL_LITS_TEXT_FILE_NAME,
-      onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
-  deleteTemporaryFile(onDiskBase_ + EXTERNAL_LITS_TEXT_FILE_NAME);
   // clear vocabulary to save ram (only information from partial binary files
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
+  // TODO<joka921> The vocab should be empty anyway, so why bother clearing it?
   vocab_.clear();
   auto firstSorter = convertPartialToGlobalIds(
       *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
@@ -473,9 +468,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                              << '\n';
         };
     m._noIdMapsAndIgnoreExternalVocab = true;
+    auto externalActionCompression = ad_utility::noop;
     auto mergeResult = m.mergeVocabulary(
         onDiskBase_ + TMP_BASENAME_COMPRESSION, numFiles, std::less<>(),
-        internalVocabularyActionCompression, memoryLimitIndexBuilding());
+        internalVocabularyActionCompression, externalActionCompression, memoryLimitIndexBuilding());
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
@@ -504,8 +500,13 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto internalVocabularyAction = [&wordWriter](const auto& word) {
       wordWriter.push(word.data(), word.size());
     };
+
+    auto wordWriterExternal = vocab_.getExternalVocab().getUnderlyingVocabulary().getWordWriter(onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+    auto externalVocabularyAction = [&wordWriterExternal](const auto& word) {
+      wordWriterExternal.push(word);
+    };
     return v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
-                             internalVocabularyAction,
+                             internalVocabularyAction, externalVocabularyAction,
                              memoryLimitIndexBuilding());
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;

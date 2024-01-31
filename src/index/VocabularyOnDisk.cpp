@@ -48,6 +48,38 @@ std::optional<string> VocabularyOnDisk::operator[](uint64_t idx) const {
   return result;
 }
 
+ad_utility::CoroToStateMachine<std::string_view>
+VocabularyOnDisk::getWordWriter(std::string outFileName) {
+  {
+    _file.open(outFileName.c_str(), "w");
+    ad_utility::MmapVector<IndexAndOffset> idsAndOffsets(
+        outFileName + _offsetSuffix, ad_utility::CreateTag{});
+    uint64_t currentOffset = 0;
+    std::optional<uint64_t> previousId = std::nullopt;
+    uint64_t currentIndex = 0;
+    while (co_await ad_utility::valueWasPushedTag) {
+      const auto& word = co_await ad_utility::nextValueTag;
+      AD_CONTRACT_CHECK(!previousId.has_value() ||
+                        previousId.value() < currentIndex);
+      idsAndOffsets.push_back(IndexAndOffset{currentIndex, currentOffset});
+      currentOffset += _file.write(word.data(), word.size());
+      previousId = currentIndex;
+    }
+
+    // End offset of last vocabulary entry, also consistent with the empty
+    // vocabulary.
+    if (previousId.has_value()) {
+      idsAndOffsets.push_back(
+          IndexAndOffset{previousId.value() + 1, currentOffset});
+    } else {
+      idsAndOffsets.push_back(IndexAndOffset{_highestIdx + 1, currentOffset});
+    }
+    _file.close();
+  }  // After this close, the destructor of MmapVector is called, whoch dumps
+  // everything to disk.
+  open(outFileName);
+}
+
 // _____________________________________________________________________________
 template <typename Iterable>
 void VocabularyOnDisk::buildFromIterable(Iterable&& it,
