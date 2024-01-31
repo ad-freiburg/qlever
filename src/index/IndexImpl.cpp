@@ -53,11 +53,6 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
 
-  // clear vocabulary to save ram (only information from partial binary files
-  // used from now on). This will preserve information about externalized
-  // Prefixes etc.
-  // TODO<joka921> The vocab should be empty anyway, so why bother clearing it?
-  vocab_.clear();
   auto firstSorter = convertPartialToGlobalIds(
       *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
       NUM_TRIPLES_PER_PARTIAL_VOCAB);
@@ -317,7 +312,7 @@ void IndexImpl::createFromFile(const string& filename) {
     auto secondSorter = makeSorter<SecondPermutation>("second");
     createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                std::move(firstSorterWithUnique), secondSorter);
-    firstSorter.clear();
+    firstSorter.clearUnderlying();
 
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
     createSecondPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
@@ -333,7 +328,7 @@ void IndexImpl::createFromFile(const string& filename) {
     auto patternOutput =
         createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                    std::move(firstSorterWithUnique));
-    firstSorter.clear();
+    firstSorter.clearUnderlying();
     auto thirdSorterPtr = buildOspWithPatterns(std::move(patternOutput.value()),
                                                isQleverInternalId);
     createThirdPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
@@ -508,9 +503,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       wordWriter.push(word.data(), word.size());
     };
 
-    auto wordWriterExternal =
-        vocab_.getExternalVocab().getUnderlyingVocabulary().getWordWriter(
-            onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+    auto wordWriterExternal = vocab_.makeWordWriterForExternalVocabulary(
+        onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
     auto externalVocabularyAction = [&wordWriterExternal](const auto& word) {
       wordWriterExternal.push(word);
     };

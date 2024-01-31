@@ -507,14 +507,11 @@ class CompressedExternalIdTableSorterTypeErased {
       std::optional<size_t> blocksize = std::nullopt) = 0;
 
   // Clear the complete sorter s.t. it can be reused. This deletes the contents
-  // of the underlying file. Note: We have to make the detour using the
-  // `clearImpl` function because of conflicting names from multiple
-  // inheritance.
-  virtual void clear() final { clearImpl(); }
+  // of the underlying file. Note:  We need a name that is distinct from `clear`
+  // because of name collisions in the multiple inheritance of the
+  // implementation.
+  virtual void clearUnderlying() = 0;
   virtual ~CompressedExternalIdTableSorterTypeErased() = default;
-
- private:
-  virtual void clearImpl() = 0;
 };
 
 // This class allows the external (on-disk) sorting of an `IdTable` that is too
@@ -657,14 +654,8 @@ class CompressedExternalIdTableSorter
     return getSortedBlocks<0>(blocksize);
   }
 
-  using CompressedExternalIdTableBase<NumStaticCols,
-                                      BlockSorter<Comparator>>::clear;
-
  private:
-  void clearImpl() override {
-    CompressedExternalIdTableBase<NumStaticCols,
-                                  BlockSorter<Comparator>>::clear();
-  }
+  void clearUnderlying() override { this->clear(); }
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return a generator that yields the sorted elements. This
   // function may be called exactly once.

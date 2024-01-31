@@ -43,15 +43,15 @@ class CoroToStateMachine {
     // Don't suspend at the beginning, such that everything before the first
     // `co_await ValueWasPushed{}` is run eagerly and behaves like a
     // "constructor".
-    constexpr std::suspend_never initial_suspend() noexcept { return {}; }
+    constexpr std::suspend_never initial_suspend() const noexcept { return {}; }
 
     // We need to suspend at the end so that the `promise_type` is not
     // immediately destroyed and we can properly propagate exceptions in the
     // destructor or `finish`
-    constexpr std::suspend_always final_suspend() noexcept { return {}; }
+    constexpr std::suspend_always final_suspend() const noexcept { return {}; }
 
     void unhandled_exception() { exception_ = std::current_exception(); }
-    void return_void() {}
+    void return_void() const noexcept {}
 
     // Create the actual `CoroToStateMachine` object, which gets a
     // `coroutine_handle` to access the `promise_type` object. Note: We only
@@ -64,7 +64,7 @@ class CoroToStateMachine {
     }
 
     // Rethrow an exception that occured in the coroutine.
-    void rethrow_if_exception() {
+    void rethrow_if_exception() const {
       if (exception_) {
         std::rethrow_exception(exception_);
       }
@@ -76,10 +76,10 @@ class CoroToStateMachine {
     // is stored in the promise type (`push`), or `isFinished` is true
     // (`finish`);
     struct ValueWasPushedAwaitable {
-      promise_type* promise_type_;
-      bool await_ready() { return false; }
-      void await_suspend(std::coroutine_handle<>) {}
-      bool await_resume() { return !promise_type_->isFinished_; }
+      promise_type* promise_;
+      static bool await_ready() { return false; }
+      static void await_suspend(std::coroutine_handle<>) {}
+      bool await_resume() const { return !promise_->isFinished_; }
     };
 
     // Transform the tag into an object that is aware of the
@@ -93,28 +93,27 @@ class CoroToStateMachine {
     // recent value that was passed to `push`.
     struct NextValueAwaitable {
       promise_type* promise_;
-      bool await_ready() { return true; }
-      void await_suspend(std::coroutine_handle<>) {}
-      ReferenceType await_resume() { return promise_->nextValue_; }
+      static bool await_ready() { return true; }
+      static void await_suspend(std::coroutine_handle<>) {}
+      ReferenceType await_resume() const { return promise_->nextValue_; }
     };
     NextValueAwaitable await_transform(detail::NextValueTag) { return {this}; }
   };
 
  private:
   using Handle = std::coroutine_handle<promise_type>;
-  Handle _coro = nullptr;
-  bool _isFinished = false;
+  Handle coro_ = nullptr;
+  bool isFinished_ = false;
 
  public:
   // Constructor that gets a handle to the coroutine frame.
-  CoroToStateMachine(Handle handle) : _coro{handle} {
+  CoroToStateMachine(Handle handle) : coro_{handle} {
     // Rethrow the exceptions from the constructor part.
-    if (_coro.done()) {
-      _coro.promise().rethrow_if_exception();
+    if (coro_.done()) {
+      coro_.promise().rethrow_if_exception();
     }
   }
 
- public:
   // Push the next value to the coroutine loop. Make the `co_await
   // valueWasPushed` return true and store the next value that will be retrieved
   // by `co_await nextValue`.Depending on the `isConst` parameter, `push` may
@@ -125,13 +124,13 @@ class CoroToStateMachine {
  private:
   template <typename T>
   void pushImpl(T&& value) {
-    _coro.promise().nextValue_ = AD_FWD(value);
-    _coro.promise().isFinished_ = false;
-    AD_EXPENSIVE_CHECK(_coro);
-    if (_coro.done()) {
+    coro_.promise().nextValue_ = AD_FWD(value);
+    coro_.promise().isFinished_ = false;
+    AD_EXPENSIVE_CHECK(coro_);
+    if (coro_.done()) {
       finish();
     }
-    _coro.resume();
+    coro_.resume();
   }
 
  public:
@@ -139,23 +138,23 @@ class CoroToStateMachine {
   // `co_await valueWasPushed` returns false such that the coroutine runs to
   // completion.
   void finish() {
-    if (!_coro || _coro.promise().isFinished_) {
+    if (!coro_ || coro_.promise().isFinished_) {
       return;
     }
-    _coro.promise().isFinished_ = true;
-    if (!_coro.done()) {
-      _coro.resume();
+    coro_.promise().isFinished_ = true;
+    if (!coro_.done()) {
+      coro_.resume();
     }
-    AD_EXPENSIVE_CHECK(_coro.done());
-    _coro.promise().rethrow_if_exception();
+    AD_EXPENSIVE_CHECK(coro_.done());
+    coro_.promise().rethrow_if_exception();
   }
 
   // The destructor implicitly calls `finish` if it hasn't been called
   // explicitly before.
   ~CoroToStateMachine() {
     finish();
-    if (_coro) {
-      _coro.destroy();
+    if (coro_) {
+      coro_.destroy();
     }
   }
 
@@ -165,8 +164,8 @@ class CoroToStateMachine {
   // or swap).
   CoroToStateMachine() = default;
   CoroToStateMachine(CoroToStateMachine&& rhs) noexcept
-      : _coro{std::exchange(rhs._coro, nullptr)} {}
-  void swap(CoroToStateMachine& rhs) noexcept { std::swap(_coro, rhs._coro); }
+      : coro_{std::exchange(rhs.coro_, nullptr)} {}
+  void swap(CoroToStateMachine& rhs) noexcept { std::swap(coro_, rhs.coro_); }
   CoroToStateMachine& operator=(CoroToStateMachine rhs) {
     swap(rhs);
     return *this;

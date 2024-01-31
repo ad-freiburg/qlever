@@ -237,13 +237,6 @@ class Vocabulary {
 
   bool shouldLiteralBeExternalized(const string& word) const;
 
-  // only still needed for text vocabulary
-  void externalizeLiteralsFromTextFile(const string& textFileName,
-                                       const string& outFileName) {
-    externalVocabulary_.getUnderlyingVocabulary().buildFromTextFile(
-        textFileName, outFileName);
-  }
-
   static string getLanguage(const string& literal);
 
   // initialize compression with a list of prefixes
@@ -305,6 +298,13 @@ class Vocabulary {
 
   const InternalVocabulary& getInternalVocab() const {
     return internalVocabulary_;
+  }
+
+  // Get a writer for the external vocab that has a `push` method to which the
+  // single words have to be pushed one by one to add words to the vocabulary.
+  auto makeWordWriterForExternalVocabulary(const std::string& filename) {
+    return externalVocabulary_.getUnderlyingVocabulary().getWordWriter(
+        filename);
   }
 
   auto makeUncompressingWordWriter(const std::string& filename) {
