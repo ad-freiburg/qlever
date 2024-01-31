@@ -213,7 +213,6 @@ void TransitivePath::computeTransitivePathBound(
   TransitivePath::fillTableWithHull<RES_WIDTH, SIDE_WIDTH>(
       res, *hull, mapping, startSideTable, startNodes, startSide.outputCol_,
       targetSide.outputCol_, startSide.treeAndCol_.value().second);
-  GrbMatrix::finalize();
 
   *dynRes = std::move(res).toDynamic();
 }
@@ -259,7 +258,6 @@ void TransitivePath::computeTransitivePath(
         res, *hull, mapping, startSide.outputCol_, targetSide.outputCol_);
   }
 
-  GrbMatrix::finalize();
   *dynRes = std::move(res).toDynamic();
 }
 
@@ -398,7 +396,9 @@ GrbMatrix TransitivePath::transitiveHull(
   size_t nvals = result->nvals();
   while (nvals > previousNvals && pathLength < maxDist_) {
     previousNvals = result->nvals();
+    // Row major, Column major
     result->accumulateMultiply(graph);
+    // Add check cancellation
     nvals = result->nvals();
     pathLength++;
   }
