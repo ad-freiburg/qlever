@@ -222,15 +222,9 @@ class Operation {
   // as lightweight as possible because of that. The `detailSupplier` allows to
   // pass a message to add to any potential exception that might be thrown.
   AD_ALWAYS_INLINE void checkCancellation(
-      const ad_utility::InvocableWithConvertibleReturnType<
-          std::string_view> auto& detailSupplier) const {
-    cancellationHandle_->throwIfCancelled(detailSupplier);
-  }
-
-  // Same as checkCancellation, but with the descriptor of this operation
-  // as string.
-  AD_ALWAYS_INLINE void checkCancellation() const {
-    cancellationHandle_->throwIfCancelled(&Operation::getDescriptor, this);
+      ad_utility::source_location location =
+          ad_utility::source_location::current()) const {
+    cancellationHandle_->throwIfCancelled(location);
   }
 
   std::chrono::milliseconds remainingTime() const;

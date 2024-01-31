@@ -460,5 +460,6 @@ class QueryPlanner {
 
   /// Helper function to check if the assigned `cancellationHandle_` has
   /// been cancelled yet.
-  void checkCancellation() const;
+  void checkCancellation(ad_utility::source_location location =
+                             ad_utility::source_location::current()) const;
 };

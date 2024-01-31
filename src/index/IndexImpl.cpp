@@ -1455,7 +1455,7 @@ IdTable IndexImpl::scan(
                              : std::nullopt;
   if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
     size_t numColumns = col1String.has_value() ? 1 : 2;
-    cancellationHandle->throwIfCancelled("IndexImpl scan");
+    cancellationHandle->throwIfCancelled();
     return IdTable{numColumns, allocator_};
   }
   return scan(col0Id.value(), col1Id, permutation, additionalColumns,

@@ -40,7 +40,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   std::mutex blockIteratorMutex;
   auto readAndDecompressBlock =
       [&]() -> std::optional<std::pair<size_t, DecompressedBlock>> {
-    checkCancellation(cancellationHandle);
+    cancellationHandle->throwIfCancelled();
     std::unique_lock lock{blockIteratorMutex};
     if (blockIterator == endBlock) {
       return std::nullopt;
@@ -77,7 +77,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       queueSize, numThreads, readAndDecompressBlock);
   for (IdTable& block : queue) {
     popTimer.stop();
-    checkCancellation(cancellationHandle);
+    cancellationHandle->throwIfCancelled();
     ++details.numBlocksRead_;
     details.numElementsRead_ += block.numRows();
     co_yield block;
@@ -110,7 +110,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   auto getIncompleteBlock = [&](auto it) {
     auto result = readPossiblyIncompleteBlock(metadata, col1Id, *it,
                                               std::ref(details), columnIndices);
-    checkCancellation(cancellationHandle);
+    cancellationHandle->throwIfCancelled();
     return result;
   };
 
@@ -327,13 +327,13 @@ IdTable CompressedRelationReader::scan(
     firstBlockResult = readIncompleteBlock(*beginBlock);
     totalResultSize += firstBlockResult.value().size();
     ++beginBlock;
-    checkCancellation(cancellationHandle);
+    cancellationHandle->throwIfCancelled();
   }
   if (beginBlock < endBlock) {
     lastBlockResult = readIncompleteBlock(*(endBlock - 1));
     totalResultSize += lastBlockResult.value().size();
     endBlock--;
-    checkCancellation(cancellationHandle);
+    cancellationHandle->throwIfCancelled();
   }
 
   // Determine the total size of the result.
@@ -343,7 +343,7 @@ IdTable CompressedRelationReader::scan(
                                        return count + block.numRows_;
                                      });
   result.resize(totalResultSize);
-  checkCancellation(cancellationHandle);
+  cancellationHandle->throwIfCancelled();
 
   size_t rowIndexOfNextBlockStart = 0;
   // Lambda that appends a possibly incomplete block (the first or last block)
@@ -365,7 +365,7 @@ IdTable CompressedRelationReader::scan(
       };
 
   addIncompleteBlockIfExists(firstBlockResult);
-  checkCancellation(cancellationHandle);
+  cancellationHandle->throwIfCancelled();
 
   // Insert the complete blocks from the middle in parallel
   if (beginBlock < endBlock) {
@@ -394,7 +394,7 @@ IdTable CompressedRelationReader::scan(
       // block in parallel
 #pragma omp task
       {
-        if (!cancellationHandle->isCancelled("CompressedRelation scan")) {
+        if (!cancellationHandle->isCancelled()) {
           decompressLambda();
         }
       }
@@ -403,11 +403,11 @@ IdTable CompressedRelationReader::scan(
       rowIndexOfNextBlockStart += block.numRows_;
     }  // end of parallel region
   }
-  checkCancellation(cancellationHandle);
+  cancellationHandle->throwIfCancelled();
   // Add the last block.
   addIncompleteBlockIfExists(lastBlockResult);
   AD_CORRECTNESS_CHECK(rowIndexOfNextBlockStart == result.size());
-  checkCancellation(cancellationHandle);
+  cancellationHandle->throwIfCancelled();
   return result;
 }
 

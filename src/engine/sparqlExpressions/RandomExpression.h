@@ -37,7 +37,7 @@ class RandomExpression : public SparqlExpression {
           result.push_back(Id::makeFromInt(randInt() >> Id::numDatatypeBits));
         },
         [context]() {
-          context->cancellationHandle_->throwIfCancelled("RandomExpression");
+          context->cancellationHandle_->throwIfCancelled();
         });
     return result;
   }

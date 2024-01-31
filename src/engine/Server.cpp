@@ -807,11 +807,11 @@ net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
        handle = std::move(handle), timeLimit]() mutable {
         auto pq = SparqlParser::parseQuery(query);
-        handle->throwIfCancelled("After parsing");
+        handle->throwIfCancelled();
         QueryPlanner qp(&qec, handle);
         qp.setEnablePatternTrick(enablePatternTrick);
         auto qet = qp.createExecutionTree(pq);
-        handle->throwIfCancelled("After query planning");
+        handle->throwIfCancelled();
         PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
 
         plannedQuery.queryExecutionTree_.getRootOperation()

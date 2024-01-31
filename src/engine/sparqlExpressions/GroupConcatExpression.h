@@ -40,14 +40,13 @@ class GroupConcatExpression : public SparqlExpression {
             }
             result.append(s.value());
           }
-          context->cancellationHandle_->throwIfCancelled(
-              "GroupConcatExpression");
+          context->cancellationHandle_->throwIfCancelled();
         }
       };
       auto generator =
           detail::makeGenerator(AD_FWD(el), context->size(), context);
       if (distinct_) {
-        context->cancellationHandle_->throwIfCancelled("GroupConcatExpression");
+        context->cancellationHandle_->throwIfCancelled();
         groupConcatImpl(detail::getUniqueElements(context, context->size(),
                                                   std::move(generator)));
       } else {
