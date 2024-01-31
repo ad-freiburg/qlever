@@ -11,6 +11,7 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
+#include "util/HashMap.h"
 
 using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
 struct TransitivePathSide {
@@ -60,10 +61,7 @@ struct TransitivePathSide {
 
 // This struct keeps track of the mapping between Ids and matrix indices
 struct IdMapping {
-  constexpr static auto hash = [](Id id) {
-    return std::hash<uint64_t>{}(id.getBits());
-  };
-  std::unordered_map<Id, size_t, decltype(hash), std::equal_to<Id>> idMap_{};
+  ad_utility::HashMap<Id, size_t> idMap_{};
 
   std::vector<Id> indexMap_;
 
