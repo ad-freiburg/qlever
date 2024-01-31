@@ -3,7 +3,6 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <list>
 #include <utility>
 #include <vector>
 
@@ -11,7 +10,6 @@
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
 
-using std::list;
 
 using std::pair;
 using std::vector;
