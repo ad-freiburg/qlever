@@ -6,6 +6,7 @@
 #include "util/MemorySize/MemorySize.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/charconv.h>
 
 #include <charconv>
 #include <ctre-unicode.hpp>
@@ -58,12 +59,12 @@ std::string MemorySize::asString() const {
 
 // _____________________________________________________________________________
 MemorySize MemorySize::parse(std::string_view str) {
-  if (auto matcher =
-          ctre::match<"(\\d+(?:\\.\\d+)?) ([kKmMgGtT][bB]?|[bB])">(str)) {
-    auto amountString = matcher.get<1>().to_view();
+  if (auto matcher = ctre::match<
+          "(?<amount>\\d+(?:\\.\\d+)?) ?(?<unit>[kKmMgGtT][bB]?|[bB])">(str)) {
+    auto amountString = matcher.get<"amount">().to_view();
     double amount;
-    std::from_chars(amountString.begin(), amountString.end(), amount);
-    auto unitString = matcher.get<2>().to_view();
+    absl::from_chars(amountString.begin(), amountString.end(), amount);
+    auto unitString = matcher.get<"unit">().to_view();
     switch (unitString.at(0)) {
       case 'b':
       case 'B':

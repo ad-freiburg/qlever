@@ -288,6 +288,39 @@ TEST(MemorySize, Parse) {
                                                      {42_TB, "42 t"}},
       doTest);
 
+  // Check if string is truly optional
+  std::ranges::for_each(
+      std::vector<MemorySizeAndStringRepresentation>{{42_B, "42B"},
+                                                     {42_B, "42b"},
+                                                     {42_kB, "42KB"},
+                                                     {42_kB, "42Kb"},
+                                                     {42_kB, "42kB"},
+                                                     {42_kB, "42kb"},
+                                                     {42_MB, "42MB"},
+                                                     {42_MB, "42Mb"},
+                                                     {42_MB, "42mB"},
+                                                     {42_MB, "42mb"},
+                                                     {42_GB, "42GB"},
+                                                     {42_GB, "42Gb"},
+                                                     {42_GB, "42gB"},
+                                                     {42_GB, "42gb"},
+                                                     {42_TB, "42TB"},
+                                                     {42_TB, "42Tb"},
+                                                     {42_TB, "42tB"},
+                                                     {42_TB, "42tb"}},
+      doTest);
+
+  std::ranges::for_each(
+      std::vector<MemorySizeAndStringRepresentation>{{42_kB, "42K"},
+                                                     {42_kB, "42k"},
+                                                     {42_MB, "42M"},
+                                                     {42_MB, "42m"},
+                                                     {42_GB, "42G"},
+                                                     {42_GB, "42g"},
+                                                     {42_TB, "42T"},
+                                                     {42_TB, "42t"}},
+      doTest);
+
   // We only take memory units up to `TB`. Not further.
   std::ranges::for_each(std::vector{"42 P", "42 PB"}, doExceptionTest);
 }
