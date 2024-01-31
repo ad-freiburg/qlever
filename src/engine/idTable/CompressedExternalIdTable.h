@@ -658,7 +658,8 @@ class CompressedExternalIdTableSorter
   }
 
   using CompressedExternalIdTableBase<NumStaticCols,
-      BlockSorter<Comparator>>::clear;
+                                      BlockSorter<Comparator>>::clear;
+
  private:
   void clearImpl() override {
     CompressedExternalIdTableBase<NumStaticCols,
