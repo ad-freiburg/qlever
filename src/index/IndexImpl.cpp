@@ -264,7 +264,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
   LOG(INFO) << "Adding " << hasPatternPredicateSortedByPSO->size()
-            << "triples to the POS and PSO permutation for "
+            << " triples to the POS and PSO permutation for "
                "`ql:has-pattern` ..."
             << std::endl;
   auto noPattern = Id::makeFromInt(NO_PATTERN);
@@ -841,7 +841,7 @@ size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
 
 // _____________________________________________________________________________
 bool IndexImpl::isLiteral(const string& object) const {
-  return decltype(vocab_)::isLiteral(object);
+  return decltype(vocab_)::stringIsLiteral(object);
 }
 
 // _____________________________________________________________________________
@@ -1407,10 +1407,10 @@ bool IndexImpl::getId(const string& element, Id* id) const {
 }
 
 // ___________________________________________________________________________
-std::pair<Id, Id> IndexImpl::prefix_range(const std::string& prefix) const {
+Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
+    std::string_view prefix) const {
   // TODO<joka921> Do we need prefix ranges for numbers?
-  auto [begin, end] = vocab_.prefix_range(prefix);
-  return {Id::makeFromVocabIndex(begin), Id::makeFromVocabIndex(end)};
+  return vocab_.prefixRanges(prefix);
 }
 
 // _____________________________________________________________________________
