@@ -505,7 +505,16 @@ class CompressedExternalIdTableSorterTypeErased {
   // nullopt`, the size of the returned blocks will be chosen automatically.
   virtual cppcoro::generator<IdTableStatic<0>> getSortedOutput(
       std::optional<size_t> blocksize = std::nullopt) = 0;
+
+  // Clear the complete sorter s.t. it can be reused. This deletes the contents
+  // of the underlying file. Note: We have to make the detour using the
+  // `clearImpl` function because of conflicting names from multiple
+  // inheritance.
+  virtual void clear() final { clearImpl(); }
   virtual ~CompressedExternalIdTableSorterTypeErased() = default;
+
+ private:
+  virtual void clearImpl() = 0;
 };
 
 // This class allows the external (on-disk) sorting of an `IdTable` that is too
@@ -648,7 +657,13 @@ class CompressedExternalIdTableSorter
     return getSortedBlocks<0>(blocksize);
   }
 
+  using CompressedExternalIdTableBase<NumStaticCols,
+      BlockSorter<Comparator>>::clear;
  private:
+  void clearImpl() override {
+    CompressedExternalIdTableBase<NumStaticCols,
+                                  BlockSorter<Comparator>>::clear();
+  }
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return a generator that yields the sorted elements. This
   // function may be called exactly once.

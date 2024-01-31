@@ -28,10 +28,12 @@
 #include "util/Timer.h"
 
 // ___________________________________________________________________
-template <typename Comparator, typename InternalVocabularyAction, typename ExternalVocabularyAction>
+template <typename Comparator, typename InternalVocabularyAction,
+          typename ExternalVocabularyAction>
 VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, Comparator comparator,
-    InternalVocabularyAction& internalVocabularyAction, ExternalVocabularyAction& externalVocabularyAction,
+    InternalVocabularyAction& internalVocabularyAction,
+    ExternalVocabularyAction& externalVocabularyAction,
     ad_utility::MemorySize memoryToUse) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal. All internal IRIs or literals come before all external ones.
@@ -102,8 +104,10 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
       // asynchronously write the next batch of sorted
       // queue words
       auto writeTask = [this, buf = std::move(sortedBuffer),
-                        &internalVocabularyAction, &externalVocabularyAction, &lessThan]() {
-        this->writeQueueWordsToIdVec(buf, internalVocabularyAction, externalVocabularyAction, lessThan);
+                        &internalVocabularyAction, &externalVocabularyAction,
+                        &lessThan]() {
+        this->writeQueueWordsToIdVec(buf, internalVocabularyAction,
+                                     externalVocabularyAction, lessThan);
       };
       sortedBuffer.clear();
       sortedBuffer.reserve(_bufferSize);
@@ -125,7 +129,8 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction, externalVocabularyAction, lessThan);
+    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction,
+                           externalVocabularyAction, lessThan);
   }
 
   auto metaData = std::move(metaData_);
@@ -138,7 +143,8 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 template <typename InternalVocabularyAction, typename ExternalVocabularyAction>
 void VocabularyMerger::writeQueueWordsToIdVec(
     const std::vector<QueueWord>& buffer,
-    InternalVocabularyAction& internalVocabularyAction, ExternalVocabularyAction& externalVocabularyAction, const auto& lessThan) {
+    InternalVocabularyAction& internalVocabularyAction,
+    ExternalVocabularyAction& externalVocabularyAction, const auto& lessThan) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
   // smaller grained buffer for the actual inner write

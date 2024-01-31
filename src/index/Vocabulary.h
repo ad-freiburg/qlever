@@ -301,9 +301,7 @@ class Vocabulary {
     return externalVocabulary_;
   }
   // TODO<joka921> Maybe only export the wordWriter.
-  ExternalVocabulary& getExternalVocab() {
-    return externalVocabulary_;
-  }
+  ExternalVocabulary& getExternalVocab() { return externalVocabulary_; }
 
   const InternalVocabulary& getInternalVocab() const {
     return internalVocabulary_;

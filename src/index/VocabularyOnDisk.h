@@ -12,8 +12,8 @@
 #include "../util/Iterators.h"
 #include "../util/MmapVector.h"
 #include "./vocabulary/VocabularyTypes.h"
-#include "util/Consumerator.h"
 #include "StringSortComparator.h"
+#include "util/Consumerator.h"
 
 using std::string;
 using std::vector;
@@ -55,7 +55,8 @@ class VocabularyOnDisk {
   void buildFromVector(const vector<string>& words, const string& fileName);
   void buildFromTextFile(const string& textFileName, const string& outFileName);
 
-  ad_utility::CoroToStateMachine<std::string_view> getWordWriter(std::string outFileName);
+  ad_utility::CoroToStateMachine<std::string_view> getWordWriter(
+      std::string outFileName);
 
   /// Build from a vector of pairs of `(string, id)`. This requires the IDs to
   /// be contiguous.

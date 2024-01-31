@@ -13,9 +13,9 @@
 
 #include <boost/iostreams/device/back_inserter.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
+#include <coroutine>
 #include <exception>
 #include <sstream>
-#include <coroutine>
 
 #include "util/Concepts.h"
 #include "util/Exception.h"

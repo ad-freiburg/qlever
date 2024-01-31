@@ -256,6 +256,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
   createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
                               std::move(blockGenerator), *thirdSorter);
+  secondSorter->clear();
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
   LOG(INFO) << "Adding " << hasPatternPredicateSortedByPSO->size()
@@ -269,6 +270,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
     // useful for generic unit testing, but not needed otherwise.
     thirdSorter->push(std::array{row[0], row[1], row[2], row[2], noPattern});
   }
+  hasPatternPredicateSortedByPSO->clear();
   return thirdSorter;
 }
 // _____________________________________________________________________________
@@ -298,9 +300,10 @@ void IndexImpl::createFromFile(const string& filename) {
            id.getDatatype() == Datatype::Undefined;
   };
 
+  auto& firstSorter = *indexBuilderData.sorter_;
   // For the first permutation, perform a unique.
   auto firstSorterWithUnique =
-      ad_utility::uniqueBlockView(indexBuilderData.sorter_->getSortedOutput());
+      ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
 
   if (!loadAllPermutations_) {
     // Only two permutations, no patterns, in this case the `firstSorter` is a
@@ -314,6 +317,8 @@ void IndexImpl::createFromFile(const string& filename) {
     auto secondSorter = makeSorter<SecondPermutation>("second");
     createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                std::move(firstSorterWithUnique), secondSorter);
+    firstSorter.clear();
+
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
     createSecondPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                 secondSorter.getSortedBlocks<0>(), thirdSorter);
@@ -328,6 +333,7 @@ void IndexImpl::createFromFile(const string& filename) {
     auto patternOutput =
         createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                    std::move(firstSorterWithUnique));
+    firstSorter.clear();
     auto thirdSorterPtr = buildOspWithPatterns(std::move(patternOutput.value()),
                                                isQleverInternalId);
     createThirdPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
@@ -471,7 +477,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto externalActionCompression = ad_utility::noop;
     auto mergeResult = m.mergeVocabulary(
         onDiskBase_ + TMP_BASENAME_COMPRESSION, numFiles, std::less<>(),
-        internalVocabularyActionCompression, externalActionCompression, memoryLimitIndexBuilding());
+        internalVocabularyActionCompression, externalActionCompression,
+        memoryLimitIndexBuilding());
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
@@ -501,7 +508,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       wordWriter.push(word.data(), word.size());
     };
 
-    auto wordWriterExternal = vocab_.getExternalVocab().getUnderlyingVocabulary().getWordWriter(onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+    auto wordWriterExternal =
+        vocab_.getExternalVocab().getUnderlyingVocabulary().getWordWriter(
+            onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
     auto externalVocabularyAction = [&wordWriterExternal](const auto& word) {
       wordWriterExternal.push(word);
     };

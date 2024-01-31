@@ -48,6 +48,7 @@ std::optional<string> VocabularyOnDisk::operator[](uint64_t idx) const {
   return result;
 }
 
+// _____________________________________________________________________________
 ad_utility::CoroToStateMachine<std::string_view>
 VocabularyOnDisk::getWordWriter(std::string outFileName) {
   {
@@ -64,6 +65,7 @@ VocabularyOnDisk::getWordWriter(std::string outFileName) {
       idsAndOffsets.push_back(IndexAndOffset{currentIndex, currentOffset});
       currentOffset += _file.write(word.data(), word.size());
       previousId = currentIndex;
+      ++currentIndex;
     }
 
     // End offset of last vocabulary entry, also consistent with the empty

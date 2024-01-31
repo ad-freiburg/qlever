@@ -172,13 +172,15 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
     auto internalVocabularyAction = [&file](const auto& word) {
       file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
     };
-    auto fileExternal = ad_utility::makeOfstream(_basePath + EXTERNAL_VOCAB_SUFFIX);
+    auto fileExternal =
+        ad_utility::makeOfstream(_basePath + EXTERNAL_VOCAB_SUFFIX);
     auto externalVocabularyAction = [&fileExternal](const auto& word) {
       fileExternal << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
     };
 
     res = m.mergeVocabulary(_basePath, 2, TripleComponentComparator(),
-                            internalVocabularyAction, externalVocabularyAction, 1_GB);
+                            internalVocabularyAction, externalVocabularyAction,
+                            1_GB);
   }
 
   // No language tags in text file
@@ -227,12 +229,14 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
       auto internalVocabularyAction = [&file](const auto& word) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };
-      auto fileExternal = ad_utility::makeOfstream(basename + EXTERNAL_VOCAB_SUFFIX);
+      auto fileExternal =
+          ad_utility::makeOfstream(basename + EXTERNAL_VOCAB_SUFFIX);
       auto externalVocabularyAction = [&fileExternal](const auto& word) {
         fileExternal << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };
       m.mergeVocabulary(basename, 1, v.getCaseComparator(),
-                        internalVocabularyAction, externalVocabularyAction, 1_GB);
+                        internalVocabularyAction, externalVocabularyAction,
+                        1_GB);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
     EXPECT_EQ(V(0), idMap[V(5)]);
@@ -283,12 +287,14 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
       auto internalVocabularyAction = [&file](const auto& word) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };
-      auto fileExternal = ad_utility::makeOfstream(basename + EXTERNAL_VOCAB_SUFFIX);
+      auto fileExternal =
+          ad_utility::makeOfstream(basename + EXTERNAL_VOCAB_SUFFIX);
       auto externalVocabularyAction = [&fileExternal](const auto& word) {
         fileExternal << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };
       m.mergeVocabulary(basename, 1, v.getCaseComparator(),
-                        internalVocabularyAction, externalVocabularyAction, 1_GB);
+                        internalVocabularyAction, externalVocabularyAction,
+                        1_GB);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
     EXPECT_EQ(V(0), idMap[V(6)]);

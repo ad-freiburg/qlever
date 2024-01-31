@@ -13,8 +13,8 @@
 // Without explicitly including the `<utility>` header, an error occurs when
 // compiling the `boost::asio` code included below with gcc 12. We hope and
 // expect that this will go away with future version of `boost::asio`.
-#include <utility>
 #include <coroutine>
+#include <utility>
 
 // libc++ needs <experimental/coroutine>, libstdc++ needs <coroutine>
 #ifndef BOOST_ASIO_HAS_CO_AWAIT
