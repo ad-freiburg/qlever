@@ -10,6 +10,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "util/ExceptionHandling.h"
 #include "util/Forward.h"
 
 namespace ad_utility {
@@ -59,8 +60,10 @@ class CoroToStateMachine {
     // to a `CoroToStateMachine` object. This way, the exceptions that occur in
     // the "constructor" part of the coroutine make the construction of the
     // coroutine throw directly.
-    std::coroutine_handle<promise_type> get_return_object() {
-      return std::coroutine_handle<promise_type>::from_promise(*this);
+    // std::coroutine_handle<promise_type> get_return_object() {
+    CoroToStateMachine get_return_object() {
+      return CoroToStateMachine{
+          std::coroutine_handle<promise_type>::from_promise(*this)};
     }
 
     // Rethrow an exception that occured in the coroutine.
@@ -76,28 +79,28 @@ class CoroToStateMachine {
     // is stored in the promise type (`push`), or `isFinished` is true
     // (`finish`);
     struct ValueWasPushedAwaitable {
-      promise_type* promise_;
-      static bool await_ready() { return false; }
-      static void await_suspend(std::coroutine_handle<>) {}
-      bool await_resume() const { return !promise_->isFinished_; }
+      promise_type& promise_;
+      bool await_ready() const { return false; }
+      void await_suspend(std::coroutine_handle<>) const {}
+      bool await_resume() const { return !promise_.isFinished_; }
     };
 
     // Transform the tag into an object that is aware of the
     // `promise_type` and knows which coroutine it belongs to.
     ValueWasPushedAwaitable await_transform(detail::ValueWasPushedTag) {
-      return {this};
+      return {*this};
     }
 
     // The following code has these effects:
     // `co_await nextValueTag` immediately returns a reference to the most
     // recent value that was passed to `push`.
     struct NextValueAwaitable {
-      promise_type* promise_;
-      static bool await_ready() { return true; }
-      static void await_suspend(std::coroutine_handle<>) {}
-      ReferenceType await_resume() const { return promise_->nextValue_; }
+      promise_type& promise_;
+      bool await_ready() const { return true; }
+      void await_suspend(std::coroutine_handle<>) const {}
+      ReferenceType await_resume() const { return promise_.nextValue_; }
     };
-    NextValueAwaitable await_transform(detail::NextValueTag) { return {this}; }
+    NextValueAwaitable await_transform(detail::NextValueTag) { return {*this}; }
   };
 
  private:
@@ -107,7 +110,8 @@ class CoroToStateMachine {
 
  public:
   // Constructor that gets a handle to the coroutine frame.
-  CoroToStateMachine(Handle handle) : coro_{handle} {
+  // Note: The implicit conversion is required by the machinery.
+  explicit(false) CoroToStateMachine(Handle handle) : coro_{handle} {
     // Rethrow the exceptions from the constructor part.
     if (coro_.done()) {
       coro_.promise().rethrow_if_exception();
@@ -152,10 +156,14 @@ class CoroToStateMachine {
   // The destructor implicitly calls `finish` if it hasn't been called
   // explicitly before.
   ~CoroToStateMachine() {
-    finish();
-    if (coro_) {
-      coro_.destroy();
-    }
+    ad_utility::terminateIfThrows(
+        [this]() {
+          finish();
+          if (coro_) {
+            coro_.destroy();
+          }
+        },
+        "The finish method of a Consumerator, called inside the destructor.");
   }
 
   // Default constructor, move and swap operations.

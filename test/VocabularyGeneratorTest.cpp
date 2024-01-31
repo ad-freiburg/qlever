@@ -193,7 +193,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   ASSERT_TRUE(
       areBinaryFilesEqual(_pathVocabExp, _basePath + INTERNAL_VOCAB_SUFFIX));
   ASSERT_TRUE(areBinaryFilesEqual(_pathExternalVocabExp,
-                                  _basePath + EXTERNAL_LITS_TEXT_FILE_NAME));
+                                  _basePath + EXTERNAL_VOCAB_SUFFIX));
 
   IdPairMMapVecView mapping0(_basePath + PARTIAL_MMAP_IDS + std::to_string(0));
   ASSERT_TRUE(vocabTestCompare(mapping0, _expMapping0));
