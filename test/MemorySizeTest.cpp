@@ -239,7 +239,7 @@ TEST(MemorySize, Parse) {
   doExceptionTest("4.2 B");
   doExceptionTest("-4.2 B");
 
-  // Nothing should work with negativ numbers.
+  // Nothing should work with negative numbers.
   std::ranges::for_each(generalAsStringTestCases(), doExceptionTest,
                         [](const MemorySizeAndStringRepresentation& testCase) {
                           return absl::StrCat("-",
@@ -288,7 +288,7 @@ TEST(MemorySize, Parse) {
                                                      {42_TB, "42 t"}},
       doTest);
 
-  // Check if string is truly optional
+  // Check if whitespace between unit and amount is truly optional
   std::ranges::for_each(
       std::vector<MemorySizeAndStringRepresentation>{{42_B, "42B"},
                                                      {42_B, "42b"},
@@ -319,6 +319,12 @@ TEST(MemorySize, Parse) {
                                                      {42_GB, "42g"},
                                                      {42_TB, "42T"},
                                                      {42_TB, "42t"}},
+      doTest);
+
+  // Test if multiple spaces are fine too
+  std::ranges::for_each(
+      std::vector<MemorySizeAndStringRepresentation>{{42_kB, "42    K"},
+                                                     {42_kB, "42  k"}},
       doTest);
 
   // We only take memory units up to `TB`. Not further.
