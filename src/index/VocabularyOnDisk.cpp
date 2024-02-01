@@ -49,8 +49,8 @@ std::optional<string> VocabularyOnDisk::operator[](uint64_t idx) const {
 }
 
 // _____________________________________________________________________________
-ad_utility::CoroToStateMachine<std::string_view>
-VocabularyOnDisk::getWordWriter(std::string outFileName) {
+ad_utility::Consumerator<std::string_view> VocabularyOnDisk::getWordWriter(
+    std::string outFileName) {
   _file.open(outFileName.c_str(), "w");
   ad_utility::MmapVector<IndexAndOffset> idsAndOffsets(
       outFileName + _offsetSuffix, ad_utility::CreateTag{});
@@ -132,27 +132,6 @@ void VocabularyOnDisk::buildFromStringsAndIds(
     const vector<std::pair<std::string, uint64_t>>& wordsAndIds,
     const string& fileName) {
   return buildFromIterable(wordsAndIds, fileName);
-}
-
-// _____________________________________________________________________________
-void VocabularyOnDisk::buildFromTextFile(const string& textFileName,
-                                         const string& outFileName) {
-  auto infile = ad_utility::makeIfstream(textFileName);
-  auto lineGenerator = [](auto infile)
-      -> cppcoro::generator<std::pair<std::string_view, uint64_t>> {
-    std::string word;
-    uint64_t index = 0;
-    while (std::getline(infile, word)) {
-      // The temporary file for the to-be-externalized vocabulary strings is
-      // line-based, just like the normal vocabulary file. Therefore, newlines
-      // and backslashes are escaped there. When we read from this file, we have
-      // to unescape these.
-      word = RdfEscaping::unescapeNewlinesAndBackslashes(word);
-      co_yield std::pair{std::string_view{word}, index};
-      index++;
-    }
-  }(std::move(infile));
-  buildFromIterable(std::move(lineGenerator), outFileName);
 }
 
 // _____________________________________________________________________________

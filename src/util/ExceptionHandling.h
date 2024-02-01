@@ -89,4 +89,21 @@ void terminateIfThrows(F&& f, std::string_view message,
     logAndTerminate(msg);
   }
 }
+
+struct ThrowIfSafe {
+ private:
+  int numExceptionsDuringConstruction_ = std::uncaught_exceptions();
+
+ public:
+  void throwIfSafe(auto&& f, auto&&... args) {
+    try {
+      std::invoke(AD_FWD(f), AD_FWD(args)...);
+    } catch (...) {
+      if (std::uncaught_exceptions() == numExceptionsDuringConstruction_) {
+        throw;
+      }
+      // TODO<joka921> Log if an exception occured.
+    }
+  }
+};
 }  // namespace ad_utility

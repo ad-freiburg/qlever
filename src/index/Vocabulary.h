@@ -158,11 +158,13 @@ class Vocabulary {
 
   virtual ~Vocabulary() = default;
 
+  /*
   //! clear all the contents, but not the settings for prefixes etc
   void clear() {
     internalVocabulary_.close();
     externalVocabulary_.close();
   }
+   */
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName, const string& extLitsFileName = "");
 
@@ -293,8 +295,6 @@ class Vocabulary {
   const ExternalVocabulary& getExternalVocab() const {
     return externalVocabulary_;
   }
-  // TODO<joka921> Maybe only export the wordWriter.
-  ExternalVocabulary& getExternalVocab() { return externalVocabulary_; }
 
   const InternalVocabulary& getInternalVocab() const {
     return internalVocabulary_;

@@ -10,12 +10,13 @@
 #include <type_traits>
 #include <utility>
 
-#include "util/ExceptionHandling.h"
+#include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
 namespace ad_utility {
 
-// Two empty structs used as tags for the `CoroToStateMachine`
+// Two empty structs used as tags for the `Consumerator`
 namespace detail {
 struct ValueWasPushedTag {};
 struct NextValueTag {};
@@ -24,7 +25,7 @@ struct NextValueTag {};
 static constexpr detail::ValueWasPushedTag valueWasPushedTag;
 static constexpr detail::NextValueTag nextValueTag;
 template <typename ReferenceType>
-class CoroToStateMachine {
+class Consumerator {
   static_assert(std::is_reference_v<ReferenceType> ||
                     (std::is_trivially_copyable_v<ReferenceType> &&
                      sizeof(ReferenceType) < 32),
@@ -37,8 +38,30 @@ class CoroToStateMachine {
  public:
   struct promise_type {
     bool isFinished_ = false;
+    using ValueType = std::remove_reference_t<ReferenceType>;
+    using PointerType = std::add_pointer_t<ReferenceType>;
+    static constexpr bool isLvalueRef =
+        std::is_lvalue_reference_v<ReferenceType>;
+    using StoredType = std::conditional_t<isLvalueRef, PointerType, ValueType>;
 
-    ReferenceType nextValue_;
+   private:
+    StoredType nextValue_;
+
+   public:
+    ReferenceType getValue() {
+      if constexpr (isLvalueRef) {
+        return *nextValue_;
+      } else {
+        return std::move(nextValue_);
+      }
+    }
+    void setValue(ReferenceType value) {
+      if constexpr (isLvalueRef) {
+        nextValue_ = std::addressof(value);
+      } else {
+        nextValue_ = AD_FWD(value);
+      }
+    }
     std::exception_ptr exception_;
 
     // Don't suspend at the beginning, such that everything before the first
@@ -54,15 +77,15 @@ class CoroToStateMachine {
     void unhandled_exception() { exception_ = std::current_exception(); }
     void return_void() const noexcept {}
 
-    // Create the actual `CoroToStateMachine` object, which gets a
+    // Create the actual `Consumerator` object, which gets a
     // `coroutine_handle` to access the `promise_type` object. Note: We only
     // return a `coroutine_handle` here that will later be implicitly converted
-    // to a `CoroToStateMachine` object. This way, the exceptions that occur in
+    // to a `Consumerator` object. This way, the exceptions that occur in
     // the "constructor" part of the coroutine make the construction of the
     // coroutine throw directly.
     // std::coroutine_handle<promise_type> get_return_object() {
-    CoroToStateMachine get_return_object() {
-      return CoroToStateMachine{
+    Consumerator get_return_object() {
+      return Consumerator{
           std::coroutine_handle<promise_type>::from_promise(*this)};
     }
 
@@ -98,7 +121,7 @@ class CoroToStateMachine {
       promise_type& promise_;
       bool await_ready() const { return true; }
       void await_suspend(std::coroutine_handle<>) const {}
-      ReferenceType await_resume() const { return promise_.nextValue_; }
+      ReferenceType await_resume() const { return promise_.getValue(); }
     };
     NextValueAwaitable await_transform(detail::NextValueTag) { return {*this}; }
   };
@@ -107,11 +130,12 @@ class CoroToStateMachine {
   using Handle = std::coroutine_handle<promise_type>;
   Handle coro_ = nullptr;
   bool isFinished_ = false;
+  ThrowIfSafe throwIfSafe_;
 
  public:
   // Constructor that gets a handle to the coroutine frame.
   // Note: The implicit conversion is required by the machinery.
-  explicit(false) CoroToStateMachine(Handle handle) : coro_{handle} {
+  explicit(false) Consumerator(Handle handle) : coro_{handle} {
     // Rethrow the exceptions from the constructor part.
     if (coro_.done()) {
       coro_.promise().rethrow_if_exception();
@@ -128,13 +152,13 @@ class CoroToStateMachine {
  private:
   template <typename T>
   void pushImpl(T&& value) {
-    coro_.promise().nextValue_ = AD_FWD(value);
+    coro_.promise().setValue(AD_FWD(value));
     coro_.promise().isFinished_ = false;
     AD_EXPENSIVE_CHECK(coro_);
+    coro_.resume();
     if (coro_.done()) {
       finish();
     }
-    coro_.resume();
   }
 
  public:
@@ -150,31 +174,29 @@ class CoroToStateMachine {
       coro_.resume();
     }
     AD_EXPENSIVE_CHECK(coro_.done());
-    coro_.promise().rethrow_if_exception();
+    auto ptr = std::move(coro_.promise().exception_);
+    coro_.destroy();
+    coro_ = nullptr;
+    if (ptr) {
+      std::rethrow_exception(ptr);
+    }
   }
 
   // The destructor implicitly calls `finish` if it hasn't been called
   // explicitly before.
-  ~CoroToStateMachine() {
-    ad_utility::terminateIfThrows(
-        [this]() {
-          finish();
-          if (coro_) {
-            coro_.destroy();
-          }
-        },
-        "The finish method of a Consumerator, called inside the destructor.");
+  ~Consumerator() noexcept(false) {
+    throwIfSafe_.throwIfSafe([this] { finish(); });
   }
 
   // Default constructor, move and swap operations.
   // Note: default-constructed and moved-from objects are invalid and may not be
   // accessed until a valid object has been assigned again (via move assignment
   // or swap).
-  CoroToStateMachine() = default;
-  CoroToStateMachine(CoroToStateMachine&& rhs) noexcept
+  Consumerator() = default;
+  Consumerator(Consumerator&& rhs) noexcept
       : coro_{std::exchange(rhs.coro_, nullptr)} {}
-  void swap(CoroToStateMachine& rhs) noexcept { std::swap(coro_, rhs.coro_); }
-  CoroToStateMachine& operator=(CoroToStateMachine rhs) {
+  void swap(Consumerator& rhs) noexcept { std::swap(coro_, rhs.coro_); }
+  Consumerator& operator=(Consumerator rhs) {
     swap(rhs);
     return *this;
   }

@@ -50,12 +50,14 @@ class VocabularyOnDisk {
   static constexpr std::string_view _offsetSuffix = ".idsAndOffsets.mmap";
 
  public:
-  /// Build from a vector of strings, or from a textFile with one word per line.
+  /// Build from a vector of strings with one word per line.
   /// These functions will assign the contiguous Ids [0 .. #numWords).
   void buildFromVector(const vector<string>& words, const string& fileName);
-  void buildFromTextFile(const string& textFileName, const string& outFileName);
 
-  ad_utility::CoroToStateMachine<std::string_view> getWordWriter(
+  // Return a consumerator that can be used to build the vocabulary. Repeated
+  // calls to `push` will add the pushed words to the vocabulary with the
+  // contiguous Ids [0, 1, ...].
+  ad_utility::Consumerator<std::string_view> getWordWriter(
       std::string outFileName);
 
   /// Build from a vector of pairs of `(string, id)`. This requires the IDs to
