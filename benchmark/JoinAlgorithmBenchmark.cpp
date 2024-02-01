@@ -639,6 +639,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "non-deterministic random value, which changes with every execution.",
         &configVariables_.randomSeed_,
         static_cast<size_t>(std::random_device{}()));
+    using randomSeedValueType = decltype(randomSeed)::value_type;
 
     decltype(auto) minRatioRows = config.addOption(
         "minRatioRows",
@@ -686,6 +687,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                 "    ")),
         &configVariables_.benchmarkSampleSizeRatios_,
         std::vector{0.1f, 1.f, 10.f});
+    using benchmarkSampleSizeRatiosValueType =
+        decltype(benchmarkSampleSizeRatios)::value_type;
 
     // Helper function for generating lambdas for validators.
 
@@ -867,9 +870,12 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
             "' must be bigger than, or equal to, 0.")};
     config.addValidator(
-        [](const std::vector<float>& vec) {
+        [](const benchmarkSampleSizeRatiosValueType& vec) {
           return std::ranges::all_of(
-              vec, [](const float ratio) { return ratio >= 0.f; });
+              vec,
+              [](const benchmarkSampleSizeRatiosValueType::value_type ratio) {
+                return ratio >= 0.f;
+              });
         },
         benchmarkSampleSizeRatioBiggerThanZeroValidatorDesc,
         benchmarkSampleSizeRatioBiggerThanZeroValidatorDesc,
@@ -885,12 +891,15 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         absl::StrCat(
             "All entries in '",
             benchmarkSampleSizeRatios.getConfigOption().getIdentifier(),
-            "' must be smaller than, or equal to, ", getMaxValue<float>() - 1.f,
+            "' must be smaller than, or equal to, ",
+            getMaxValue<benchmarkSampleSizeRatiosValueType::value_type>() -
+                static_cast<benchmarkSampleSizeRatiosValueType::value_type>(1),
             ".")};
     config.addValidator(
-        [](const std::vector<float>& vec) {
+        [](const benchmarkSampleSizeRatiosValueType& vec) {
           return std::ranges::max(vec) <=
-                 getMaxValue<std::decay_t<decltype(vec)>::value_type>() - 1.f;
+                 getMaxValue<benchmarkSampleSizeRatiosValueType::value_type>() -
+                     1.f;
         },
         benchmarkSampleSizeRatiosMaxSizeValidatorDesc,
         benchmarkSampleSizeRatiosMaxSizeValidatorDesc,
@@ -906,8 +915,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                      "' must be smaller than, or equal to, ",
                      ad_utility::RandomSeed::max().get(), ".")};
     config.addValidator(
-        [maxSeed = static_cast<size_t>(ad_utility::RandomSeed::max().get())](
-            const size_t seed) { return seed <= maxSeed; },
+        [maxSeed = static_cast<randomSeedValueType>(
+             ad_utility::RandomSeed::max().get())](
+            const randomSeedValueType& seed) { return seed <= maxSeed; },
         randomSeedMaxSizeValidatorDesc, randomSeedMaxSizeValidatorDesc,
         randomSeed);
 
