@@ -23,7 +23,7 @@ std::string runQueryStreamableResult(const std::string& kg,
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
   qec->clearCacheUnpinnedOnly();
-  QueryPlanner qp{qec};
+  QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
   auto tsvGenerator =
@@ -43,7 +43,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
   qec->clearCacheUnpinnedOnly();
-  QueryPlanner qp{qec};
+  QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};

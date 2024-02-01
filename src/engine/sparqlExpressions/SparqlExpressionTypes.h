@@ -180,32 +180,23 @@ struct EvaluationContext {
   // as part of a GROUP BY clause.
   bool _isPartOfGroupBy = false;
 
+  ad_utility::SharedCancellationHandle cancellationHandle_;
+
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
                     const VariableToColumnMap& variableToColumnMap,
                     const IdTable& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const LocalVocab& localVocab)
+                    const LocalVocab& localVocab,
+                    ad_utility::SharedCancellationHandle cancellationHandle)
       : _qec{qec},
         _variableToColumnMap{variableToColumnMap},
         _inputTable{inputTable},
         _allocator{allocator},
-        _localVocab{localVocab} {}
-
-  /// Constructor for evaluating an expression on a part of the input
-  /// (only considers the rows [beginIndex, endIndex) from the input.
-  EvaluationContext(const QueryExecutionContext& qec,
-                    const VariableToColumnMap& map, const IdTable& inputTable,
-                    size_t beginIndex, size_t endIndex,
-                    const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const LocalVocab& localVocab)
-      : _qec{qec},
-        _variableToColumnMap{map},
-        _inputTable{inputTable},
-        _beginIndex{beginIndex},
-        _endIndex{endIndex},
-        _allocator{allocator},
-        _localVocab{localVocab} {}
+        _localVocab{localVocab},
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(cancellationHandle_);
+  }
 
   bool isResultSortedBy(const Variable& variable) {
     if (_columnsByWhichResultIsSorted.empty()) {

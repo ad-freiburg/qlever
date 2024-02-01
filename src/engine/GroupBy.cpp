@@ -241,7 +241,8 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), *inTable,
-      getExecutionContext()->getAllocator(), *outLocalVocab);
+      getExecutionContext()->getAllocator(), *outLocalVocab,
+      cancellationHandle_);
 
   // In a GROUP BY evaluation, the expressions need to know which variables are
   // grouped, and to which columns the results of the aliases are written. The
@@ -1121,7 +1122,7 @@ void GroupBy::createResultFromHashMap(
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), *result,
-      getExecutionContext()->getAllocator(), *localVocab);
+      getExecutionContext()->getAllocator(), *localVocab, cancellationHandle_);
 
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};
@@ -1184,7 +1185,7 @@ void GroupBy::computeGroupByForHashMapOptimization(
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), subresult,
-      getExecutionContext()->getAllocator(), *localVocab);
+      getExecutionContext()->getAllocator(), *localVocab, cancellationHandle_);
 
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};

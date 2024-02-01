@@ -384,4 +384,6 @@ addLinkAndDiscoverTest(JThreadTest)
 
 addLinkAndDiscoverTest(PointerGuardTest)
 
+addLinkAndDiscoverTest(ChunkedForLoopTest)
+
 addLinkAndDiscoverTest(ConsumeratorTest)

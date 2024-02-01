@@ -1468,7 +1468,8 @@ TEST(GroupBy, AddedHavingRows) {
       " VALUES (?x ?y) {(0 1) (0 3) (0 5) (1 4) (1 3) } }"
       "GROUP BY ?x HAVING (?count > 2)";
   auto pq = SparqlParser::parseQuery(query);
-  QueryPlanner qp{ad_utility::testing::getQec()};
+  QueryPlanner qp{ad_utility::testing::getQec(),
+                  std::make_shared<ad_utility::CancellationHandle<>>()};
   auto tree = qp.createExecutionTree(pq);
 
   auto res = tree.getResult();

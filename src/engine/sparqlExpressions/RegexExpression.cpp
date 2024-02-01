@@ -192,6 +192,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
                                     Id::makeFromVocabIndex(end));
     }
   }
+  checkCancellation(context);
   auto beg = context->_inputTable.begin() + context->_beginIndex;
   auto end = context->_inputTable.begin() + context->_endIndex;
   AD_CONTRACT_CHECK(end <= context->_inputTable.end());
@@ -215,6 +216,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
         resultSetOfIntervals.push_back(
             ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}});
       }
+      checkCancellation(context);
     }
     return std::reduce(resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
                        ad_utility::SetOfIntervals{},
@@ -229,6 +231,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
             return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
                    valueIdComparators::compareByBits(id, lowerUpper.second);
           })));
+      checkCancellation(context);
     }
     return result;
   }
@@ -252,6 +255,7 @@ ExpressionResult RegexExpression::evaluateNonPrefixRegex(
         result.push_back(Id::makeFromBool(
             RE2::PartialMatch(str.value(), std::get<RE2>(regex_))));
       }
+      checkCancellation(context);
     }
   };
   if (childIsStrExpression_) {
@@ -312,6 +316,12 @@ auto RegexExpression::getEstimatesForFilterExpression(
 
     return {sizeEstimate, costEstimate};
   }
+}
+
+// ____________________________________________________________________________
+void RegexExpression::checkCancellation(
+    const sparqlExpression::EvaluationContext* context) {
+  context->cancellationHandle_->throwIfCancelled("RegexExpression");
 }
 
 }  // namespace sparqlExpression
