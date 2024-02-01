@@ -180,3 +180,15 @@ TEST(LiteralOrIri, GetContent) {
               asStringViewUnsafe(literalWithLanguageTag.getContent()));
   EXPECT_THAT("ABC", asStringViewUnsafe(literalWithDatatype.getContent()));
 }
+
+TEST(LiteralOrIri, EnsureLiteralsAreEncoded) {
+  LiteralOrIri literal1 =
+      LiteralOrIri::literalWithQuotes(R"("This is to be \"\t encoded")");
+  EXPECT_THAT("This is to be \"\t encoded",
+              asStringViewUnsafe(literal1.getContent()));
+
+  LiteralOrIri literal2 =
+      LiteralOrIri::literalWithoutQuotes(R"(This is to be \"\t encoded)");
+  EXPECT_THAT("This is to be \"\t encoded",
+              asStringViewUnsafe(literal2.getContent()));
+}
